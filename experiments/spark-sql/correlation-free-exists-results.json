@@ -1,0 +1,4780 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/280",
+  "created_utc": "2026-09-27T01:10:53.460488+00:00",
+  "integration_base": "bce0216c43032f01818d92a71f8e28d147f481fe",
+  "candidate_is_optional": true,
+  "runtime_change": "Prepare every EXISTS subquery while keeping unused-output pruning conditional on its surviving correlation. Preserve empty local input and early arithmetic boundaries.",
+  "agreement": {
+    "before": {
+      "agreement": 4319,
+      "total": 4656
+    },
+    "after": {
+      "agreement": 4365,
+      "total": 4656
+    }
+  },
+  "owned": {
+    "ids": [
+      "ce_int_values_false_False_true",
+      "ce_int_values_false_True_true",
+      "ce_double_values_false_False_true",
+      "ce_double_values_false_True_true",
+      "ce_decimal_values_false_False_true",
+      "ce_decimal_values_false_True_true",
+      "ce_div_false_False_true",
+      "ce_div_false_True_true",
+      "ce_divide_false_False_true",
+      "ce_divide_false_True_true",
+      "ce_modulo_false_False_true",
+      "ce_modulo_false_True_true"
+    ],
+    "fixed_success_failure": 12,
+    "strict_fixed": 10,
+    "independent_checks": [
+      {
+        "id": "ce_int_values_false_False_true",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: CAST(btrim(Utf8(\"bad\"), Utf8(\"\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f \u007f\")) AS Int32) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_int_values_false_False_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: spark_cast_string_to_int32(Utf8(\"bad\")) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_int_false_False_true",
+        "expected": {
+          "error_contains": "cast"
+        },
+        "actual": {
+          "status": "execution_error",
+          "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: CAST(btrim(Utf8(\"bad\"), Utf8(\"\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f \u007f\")) AS Int32) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_int_false_False_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: spark_cast_string_to_int32(Utf8(\"bad\")) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#4@0 ASC]\n  SortExec: expr=[#4@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #4, mark@1 as #5]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_int_values_false_True_true",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, NOT EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: CAST(btrim(Utf8(\"bad\"), Utf8(\"\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f \u007f\")) AS Int32) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, NOT mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_int_values_false_True_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, NOT EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: spark_cast_string_to_int32(Utf8(\"bad\")) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, NOT mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_int_false_True_true",
+        "expected": {
+          "error_contains": "cast"
+        },
+        "actual": {
+          "status": "execution_error",
+          "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, NOT EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: CAST(btrim(Utf8(\"bad\"), Utf8(\"\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f \u007f\")) AS Int32) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_int_false_True_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, NOT EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: spark_cast_string_to_int32(Utf8(\"bad\")) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#4@0 ASC]\n  SortExec: expr=[#4@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #4, NOT mark@1 as #5]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_double_values_false_False_true",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: spark_cast_string_to_float64(Utf8(\"bad\")) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_double_values_false_False_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: spark_cast_string_to_float64(Utf8(\"bad\")) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_double_false_False_true",
+        "expected": {
+          "error_contains": "cast"
+        },
+        "actual": {
+          "status": "execution_error",
+          "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: [CAST_INVALID_INPUT] Cannot cast string \"bad\" to Float64",
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: spark_cast_string_to_float64(Utf8(\"bad\")) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_double_false_False_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: spark_cast_string_to_float64(Utf8(\"bad\")) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#4@0 ASC]\n  SortExec: expr=[#4@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #4, mark@1 as #5]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_double_values_false_True_true",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, NOT EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: spark_cast_string_to_float64(Utf8(\"bad\")) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, NOT mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_double_values_false_True_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, NOT EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: spark_cast_string_to_float64(Utf8(\"bad\")) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, NOT mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_double_false_True_true",
+        "expected": {
+          "error_contains": "cast"
+        },
+        "actual": {
+          "status": "execution_error",
+          "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: [CAST_INVALID_INPUT] Cannot cast string \"bad\" to Float64",
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, NOT EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: spark_cast_string_to_float64(Utf8(\"bad\")) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_double_false_True_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, NOT EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: spark_cast_string_to_float64(Utf8(\"bad\")) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#4@0 ASC]\n  SortExec: expr=[#4@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #4, NOT mark@1 as #5]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_decimal_values_false_False_true",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: spark_cast_string_to_decimal(Utf8(\"bad\")) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_decimal_values_false_False_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: spark_cast_string_to_decimal(Utf8(\"bad\")) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_decimal_false_False_true",
+        "expected": {
+          "error_contains": "cast"
+        },
+        "actual": {
+          "status": "execution_error",
+          "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: Cannot cast Some(\"bad\") to DECIMAL(10,2)",
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: spark_cast_string_to_decimal(Utf8(\"bad\")) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_decimal_false_False_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: spark_cast_string_to_decimal(Utf8(\"bad\")) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#4@0 ASC]\n  SortExec: expr=[#4@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #4, mark@1 as #5]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_decimal_values_false_True_true",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, NOT EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: spark_cast_string_to_decimal(Utf8(\"bad\")) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, NOT mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_decimal_values_false_True_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, NOT EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: spark_cast_string_to_decimal(Utf8(\"bad\")) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, NOT mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_decimal_false_True_true",
+        "expected": {
+          "error_contains": "cast"
+        },
+        "actual": {
+          "status": "execution_error",
+          "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nExecution error: Cannot cast Some(\"bad\") to DECIMAL(10,2)",
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, NOT EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: spark_cast_string_to_decimal(Utf8(\"bad\")) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_decimal_false_True_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, NOT EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: spark_cast_string_to_decimal(Utf8(\"bad\")) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#4@0 ASC]\n  SortExec: expr=[#4@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #4, NOT mark@1 as #5]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_div_values_false_False_true",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: spark_integer_divide(Int32(7), Int32(0)) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_div_values_false_False_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: spark_integer_divide(Int32(7), nullif(Int32(0), Int32(0))) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_div_false_False_true",
+        "expected": {
+          "error_contains": "divide by zero"
+        },
+        "actual": {
+          "status": "execution_error",
+          "error": "spark_decimal_null_propagation\ncaused by\nArrow error: Divide by zero error",
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: spark_integer_divide(Int32(7), Int32(0)) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_div_false_False_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: spark_integer_divide(Int32(7), nullif(Int32(0), Int32(0))) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#4@0 ASC]\n  SortExec: expr=[#4@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #4, mark@1 as #5]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_div_values_false_True_true",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, NOT EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: spark_integer_divide(Int32(7), Int32(0)) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, NOT mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_div_values_false_True_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, NOT EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: spark_integer_divide(Int32(7), nullif(Int32(0), Int32(0))) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, NOT mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_div_false_True_true",
+        "expected": {
+          "error_contains": "divide by zero"
+        },
+        "actual": {
+          "status": "execution_error",
+          "error": "spark_decimal_null_propagation\ncaused by\nArrow error: Divide by zero error",
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, NOT EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: spark_integer_divide(Int32(7), Int32(0)) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_div_false_True_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, NOT EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: spark_integer_divide(Int32(7), nullif(Int32(0), Int32(0))) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#4@0 ASC]\n  SortExec: expr=[#4@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #4, NOT mark@1 as #5]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_divide_values_false_False_true",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: fused_decimal_divide(Decimal128(Some(70),2,1), CAST(Int32(0) AS Decimal128(1, 0))) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_divide_values_false_False_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: fused_decimal_divide(Decimal128(Some(70),2,1), CAST(Int32(0) AS Decimal128(1, 0))) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_divide_false_False_true",
+        "expected": {
+          "error_contains": "divide by zero"
+        },
+        "actual": {
+          "status": "execution_error",
+          "error": "spark_decimal_null_propagation\ncaused by\nArrow error: Divide by zero error",
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: fused_decimal_divide(Decimal128(Some(70),2,1), CAST(Int32(0) AS Decimal128(1, 0))) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_divide_false_False_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: fused_decimal_divide(Decimal128(Some(70),2,1), CAST(Int32(0) AS Decimal128(1, 0))) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#4@0 ASC]\n  SortExec: expr=[#4@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #4, mark@1 as #5]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_divide_values_false_True_true",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, NOT EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: fused_decimal_divide(Decimal128(Some(70),2,1), CAST(Int32(0) AS Decimal128(1, 0))) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, NOT mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_divide_values_false_True_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, NOT EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: fused_decimal_divide(Decimal128(Some(70),2,1), CAST(Int32(0) AS Decimal128(1, 0))) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, NOT mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_divide_false_True_true",
+        "expected": {
+          "error_contains": "divide by zero"
+        },
+        "actual": {
+          "status": "execution_error",
+          "error": "spark_decimal_null_propagation\ncaused by\nArrow error: Divide by zero error",
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, NOT EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: fused_decimal_divide(Decimal128(Some(70),2,1), CAST(Int32(0) AS Decimal128(1, 0))) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_divide_false_True_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, NOT EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: fused_decimal_divide(Decimal128(Some(70),2,1), CAST(Int32(0) AS Decimal128(1, 0))) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#4@0 ASC]\n  SortExec: expr=[#4@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #4, NOT mark@1 as #5]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_modulo_values_false_False_true",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: Int32(7) % Int32(0) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_modulo_values_false_False_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: Int32(NULL) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_modulo_false_False_true",
+        "expected": {
+          "error_contains": "divide by zero"
+        },
+        "actual": {
+          "status": "execution_error",
+          "error": "spark_decimal_null_propagation\ncaused by\nArrow error: Divide by zero error",
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: Int32(7) % Int32(0) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_modulo_false_False_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "false"
+            ],
+            [
+              "0",
+              "false"
+            ],
+            [
+              "1",
+              "false"
+            ],
+            [
+              "4",
+              "false"
+            ]
+          ],
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: Int32(NULL) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#4@0 ASC]\n  SortExec: expr=[#4@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #4, mark@1 as #5]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_modulo_values_false_True_true",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, NOT EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: Int32(7) % Int32(0) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, NOT mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_modulo_values_false_True_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #5 ASC NULLS FIRST\n  Projection: o.#1 AS #5, NOT EXISTS (<subquery>) AS r AS #6\n    Subquery:\n      Projection: Int32(NULL) AS v AS #4\n        Filter: t.#3 = outer_ref(o.#1) AND Boolean(false)\n          SubqueryAlias: t\n            Projection: #2 AS #3\n              Projection: column1 AS #2\n                Values: (Int32(0)), (Int32(1)), (Int32(2))\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#5@0 ASC]\n  SortExec: expr=[#5@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #5, NOT mark@1 as #6]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_modulo_false_True_true",
+        "expected": {
+          "error_contains": "divide by zero"
+        },
+        "actual": {
+          "status": "execution_error",
+          "error": "spark_decimal_null_propagation\ncaused by\nArrow error: Divide by zero error",
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, NOT EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: Int32(7) % Int32(0) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))"
+        },
+        "agrees": true
+      },
+      {
+        "id": "ce_modulo_false_True_false",
+        "expected": {
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ]
+        },
+        "actual": {
+          "status": "ok",
+          "types": [
+            "Int64",
+            "Boolean"
+          ],
+          "rows": [
+            [
+              null,
+              "true"
+            ],
+            [
+              "0",
+              "true"
+            ],
+            [
+              "1",
+              "true"
+            ],
+            [
+              "4",
+              "true"
+            ]
+          ],
+          "logical_plan": "Sort: #4 ASC NULLS FIRST\n  Projection: o.#1 AS #4, NOT EXISTS (<subquery>) AS r AS #5\n    Subquery:\n      Projection: Int32(NULL) AS v AS #3\n        Filter: range.#2 = outer_ref(o.#1) AND Boolean(false)\n          Projection: range.id AS #2\n            TableScan: range\n    SubqueryAlias: o\n      Projection: #0 AS #1\n        Projection: column1 AS #0\n          Values: (CAST(Int32(0) AS Int64)), (CAST(Int32(1) AS Int64)), (CAST(Int32(4) AS Int64)), (CAST(NULL AS Int64))",
+          "logical_nullable": [
+            true,
+            false
+          ],
+          "physical_nullable": [
+            true,
+            false
+          ],
+          "physical_plan": "SortPreservingMergeExec: [#4@0 ASC]\n  SortExec: expr=[#4@0 ASC], preserve_partitioning=[true]\n    ProjectionExec: expr=[#1@0 as #4, NOT mark@1 as #5]\n      NestedLoopJoinExec: join_type=RightMark\n        EmptyExec\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #1]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+        },
+        "agrees": true
+      }
+    ]
+  },
+  "remaining_by_owner": {
+    "141_relational_boundary_review": 92,
+    "142_grouping_boundary_review": 14,
+    "149_modulo_error_condition": 36,
+    "149_stage_error_condition": 2,
+    "approved_in_null_policy": 147
+  },
+  "schema": {
+    "before": {
+      "logical_nullable_difference": 129,
+      "physical_nullable_difference": 225
+    },
+    "after": {
+      "logical_nullable_difference": 129,
+      "physical_nullable_difference": 225
+    }
+  },
+  "lost_strict": [],
+  "remaining_ids": {
+    "141_relational_boundary_review": [
+      "only_div_union_exists_true",
+      "only_div_union_count_true",
+      "only_int_union_exists_true",
+      "only_int_union_count_true",
+      "only_double_union_exists_true",
+      "only_double_union_count_true",
+      "only_decimal_union_exists_true",
+      "only_decimal_union_count_true",
+      "bind_correlated_False_True_true",
+      "bind_correlated_False_True_false",
+      "bind_correlated_True_True_true",
+      "bind_correlated_True_True_false",
+      "ce_int_limit1_False_true",
+      "ce_int_limit1_False_false",
+      "ce_int_limit1_True_true",
+      "ce_int_limit1_True_false",
+      "ce_int_offset_False_true",
+      "ce_int_offset_False_false",
+      "ce_int_offset_True_true",
+      "ce_int_offset_True_false",
+      "ce_int_union_False_true",
+      "ce_int_union_False_false",
+      "ce_int_union_True_true",
+      "ce_int_union_True_false",
+      "ce_double_limit1_False_true",
+      "ce_double_limit1_False_false",
+      "ce_double_limit1_True_true",
+      "ce_double_limit1_True_false",
+      "ce_double_offset_False_true",
+      "ce_double_offset_False_false",
+      "ce_double_offset_True_true",
+      "ce_double_offset_True_false",
+      "ce_double_union_False_true",
+      "ce_double_union_False_false",
+      "ce_double_union_True_true",
+      "ce_double_union_True_false",
+      "ce_decimal_limit1_False_true",
+      "ce_decimal_limit1_False_false",
+      "ce_decimal_limit1_True_true",
+      "ce_decimal_limit1_True_false",
+      "ce_decimal_offset_False_true",
+      "ce_decimal_offset_False_false",
+      "ce_decimal_offset_True_true",
+      "ce_decimal_offset_True_false",
+      "ce_decimal_union_False_true",
+      "ce_decimal_union_False_false",
+      "ce_decimal_union_True_true",
+      "ce_decimal_union_True_false",
+      "ce_div_limit1_False_true",
+      "ce_div_limit1_False_false",
+      "ce_div_limit1_True_true",
+      "ce_div_limit1_True_false",
+      "ce_div_offset_False_true",
+      "ce_div_offset_False_false",
+      "ce_div_offset_True_true",
+      "ce_div_offset_True_false",
+      "ce_div_union_False_true",
+      "ce_div_union_False_false",
+      "ce_div_union_True_true",
+      "ce_div_union_True_false",
+      "ce_divide_limit1_False_true",
+      "ce_divide_limit1_False_false",
+      "ce_divide_limit1_True_true",
+      "ce_divide_limit1_True_false",
+      "ce_divide_offset_False_true",
+      "ce_divide_offset_False_false",
+      "ce_divide_offset_True_true",
+      "ce_divide_offset_True_false",
+      "ce_divide_union_False_true",
+      "ce_divide_union_False_false",
+      "ce_divide_union_True_true",
+      "ce_divide_union_True_false",
+      "ce_modulo_limit1_False_true",
+      "ce_modulo_limit1_False_false",
+      "ce_modulo_limit1_True_true",
+      "ce_modulo_limit1_True_false",
+      "ce_modulo_offset_False_true",
+      "ce_modulo_offset_False_false",
+      "ce_modulo_offset_True_true",
+      "ce_modulo_offset_True_false",
+      "ce_modulo_union_False_true",
+      "ce_modulo_union_False_false",
+      "ce_modulo_union_True_true",
+      "ce_modulo_union_True_false",
+      "ce_int_live_sort_false",
+      "ce_double_live_sort_false",
+      "ce_decimal_live_sort_false",
+      "ce_div_live_sort_false",
+      "ce_divide_live_sort_false",
+      "ce_modulo_live_sort_false",
+      "cf_control_scalar_False_true",
+      "cf_control_scalar_True_true"
+    ],
+    "142_grouping_boundary_review": [
+      "group_control_grouping_sets_empty_true",
+      "group_control_grouping_sets_empty_false",
+      "group_control_rollup_error_true",
+      "only_scout_div_range_having_key_exists_true",
+      "only_scout_div_range_having_key_limited_count_true",
+      "only_div_having_key_exists_true",
+      "only_double_having_key_exists_true",
+      "only_double_having_key_count_true",
+      "only_control_volatile_true",
+      "only_control_volatile_false",
+      "only_control_rollup_true",
+      "only_control_sets_true",
+      "anti_boolean_group_null_False_is_null_true",
+      "anti_boolean_group_null_True_is_null_true"
+    ],
+    "149_modulo_error_condition": [
+      "modulo_one_row_in_true",
+      "modulo_range_in_true",
+      "modulo_range0_in_true",
+      "modulo_range_false_in_true",
+      "modulo_values_exists_true",
+      "modulo_values_in_true",
+      "modulo_values_limit0_exists_true",
+      "modulo_values_limit0_in_true",
+      "modulo_alias_range_in_true",
+      "modulo_in_dead_case_true",
+      "modulo_in_null_case_true",
+      "modulo_in_coalesce_true",
+      "modulo_in_not_true",
+      "ce_modulo_false_False_true",
+      "ce_modulo_false_True_true",
+      "ce_modulo_distinct_False_true",
+      "ce_modulo_distinct_True_true",
+      "ce_modulo_values_False_true",
+      "ce_modulo_values_True_true",
+      "ce_modulo_values_limit0_False_true",
+      "ce_modulo_values_limit0_True_true",
+      "ce_modulo_live_predicate_true",
+      "ce_modulo_live_having_true",
+      "ce_modulo_live_sort_true",
+      "ce_modulo_nested_scalar_true",
+      "ce_modulo_in_control_true",
+      "cf_modulo_local_or_true_False_true",
+      "cf_modulo_local_or_true_True_true",
+      "cf_modulo_range_false_left_False_true",
+      "cf_modulo_range_false_left_True_true",
+      "cf_modulo_range_nested_false_False_true",
+      "cf_modulo_range_nested_false_True_true",
+      "cf_modulo_range_not_true_False_true",
+      "cf_modulo_range_not_true_True_true",
+      "cf_modulo_range_or_true_False_true",
+      "cf_modulo_range_or_true_True_true"
+    ],
+    "149_stage_error_condition": [
+      "anti_boolean_group_null_False_case_true",
+      "anti_boolean_group_null_True_case_true"
+    ],
+    "approved_in_null_policy": [
+      "int_cast_one_row_in_false",
+      "int_cast_range_in_false",
+      "int_cast_values_in_false",
+      "int_cast_alias_range_in_false",
+      "double_cast_one_row_in_false",
+      "double_cast_range_in_false",
+      "double_cast_values_in_false",
+      "double_cast_alias_range_in_false",
+      "decimal_cast_one_row_in_false",
+      "decimal_cast_range_in_false",
+      "decimal_cast_values_in_false",
+      "decimal_cast_alias_range_in_false",
+      "div_one_row_in_false",
+      "div_range_in_false",
+      "div_values_in_false",
+      "div_alias_range_in_false",
+      "divide_one_row_in_false",
+      "divide_range_in_false",
+      "divide_values_in_false",
+      "divide_alias_range_in_false",
+      "modulo_one_row_in_false",
+      "modulo_range_in_false",
+      "modulo_values_in_false",
+      "modulo_alias_range_in_false",
+      "projected_in_null_true",
+      "projected_in_null_false",
+      "projected_not_in_null_true",
+      "projected_not_in_null_false",
+      "not_in_empty_false",
+      "null_in_empty_false",
+      "bad_left_in_empty_false",
+      "distinct_int_in_control_false",
+      "distinct_double_in_control_false",
+      "distinct_decimal_in_control_false",
+      "distinct_div_in_control_false",
+      "group_int_in_false",
+      "group_double_in_false",
+      "group_decimal_in_false",
+      "group_div_in_false",
+      "only_div_range_live_in_false",
+      "only_div_local_live_in_false",
+      "only_int_range_live_in_false",
+      "only_int_local_live_in_false",
+      "only_double_range_live_in_false",
+      "only_double_local_live_in_false",
+      "only_decimal_range_live_in_false",
+      "only_decimal_local_live_in_false",
+      "bind_column_empty_left_null_false",
+      "bind_column_local_empty_left_null_false",
+      "bind_column_nullable_in_true",
+      "bind_column_nullable_in_false",
+      "bind_column_nullable_not_in_true",
+      "bind_column_nullable_not_in_false",
+      "bind_column_nullable_match_true",
+      "bind_column_nullable_match_false",
+      "bind_computed_empty_left_null_false",
+      "bind_computed_local_empty_left_null_false",
+      "bind_computed_nullable_in_true",
+      "bind_computed_nullable_in_false",
+      "bind_computed_nullable_not_in_true",
+      "bind_computed_nullable_not_in_false",
+      "bind_computed_nullable_match_true",
+      "bind_computed_nullable_match_false",
+      "bind_div_range_in_false",
+      "bind_div_range_not_in_false",
+      "bind_div_range_match_false",
+      "bind_div_empty_left_null_false",
+      "bind_div_local_in_false",
+      "bind_div_local_not_in_false",
+      "bind_div_local_match_false",
+      "bind_div_local_empty_left_null_false",
+      "bind_div_nullable_in_false",
+      "bind_div_nullable_not_in_false",
+      "bind_div_nullable_match_false",
+      "bind_cast_range_in_false",
+      "bind_cast_range_not_in_false",
+      "bind_cast_range_match_false",
+      "bind_cast_empty_left_null_false",
+      "bind_cast_local_in_false",
+      "bind_cast_local_not_in_false",
+      "bind_cast_local_match_false",
+      "bind_cast_local_empty_left_null_false",
+      "bind_cast_nullable_in_false",
+      "bind_cast_nullable_not_in_false",
+      "bind_cast_nullable_match_false",
+      "bind_aggregate_empty_shape_in_true",
+      "bind_aggregate_empty_shape_in_false",
+      "bind_aggregate_empty_shape_not_in_true",
+      "bind_aggregate_empty_shape_not_in_false",
+      "bind_aggregate_empty_shape_match_true",
+      "bind_aggregate_empty_shape_match_false",
+      "bind_offset_empty_shape_left_null_false",
+      "bind_nullable_shape_in_true",
+      "bind_nullable_shape_in_false",
+      "bind_nullable_shape_not_in_true",
+      "bind_nullable_shape_not_in_false",
+      "bind_case_shape_in_false",
+      "bind_case_shape_not_in_false",
+      "bind_case_shape_match_false",
+      "bind_batch1_nullable_true",
+      "bind_batch1_nullable_false",
+      "bind_batch1_case_false",
+      "bind_batch64_nullable_true",
+      "bind_batch64_nullable_false",
+      "bind_batch64_case_false",
+      "anti_null_value_true",
+      "anti_null_value_false",
+      "anti_null_miss_value_true",
+      "anti_null_miss_value_false",
+      "anti_empty_null_False_false",
+      "anti_empty_null_True_false",
+      "anti_ordered_null_value_true",
+      "anti_ordered_null_value_false",
+      "anti_offset_empty_null_False_false",
+      "anti_offset_empty_null_True_false",
+      "anti_group_null_value_false",
+      "anti_cast_null_value_false",
+      "anti_alias_value_true",
+      "anti_alias_value_false",
+      "anti_correlated_=_null_false",
+      "anti_correlated_<_null_false",
+      "anti_boundary_1919_true",
+      "anti_boundary_1919_false",
+      "anti_boolean_null_miss_False_coalesce_true_true",
+      "anti_boolean_null_miss_False_coalesce_true_false",
+      "anti_boolean_null_miss_False_is_null_true",
+      "anti_boolean_null_miss_False_is_null_false",
+      "anti_boolean_null_miss_False_case_true",
+      "anti_boolean_null_miss_False_case_false",
+      "anti_boolean_null_miss_True_coalesce_true_true",
+      "anti_boolean_null_miss_True_coalesce_true_false",
+      "anti_boolean_null_miss_True_is_null_true",
+      "anti_boolean_null_miss_True_is_null_false",
+      "anti_boolean_null_miss_True_case_true",
+      "anti_boolean_null_miss_True_case_false",
+      "anti_boolean_group_null_False_coalesce_true_false",
+      "anti_boolean_group_null_False_is_null_false",
+      "anti_boolean_group_null_False_case_false",
+      "anti_boolean_group_null_True_coalesce_true_false",
+      "anti_boolean_group_null_True_is_null_false",
+      "anti_boolean_group_null_True_case_false",
+      "ce_int_in_control_false",
+      "ce_double_in_control_false",
+      "ce_decimal_in_control_false",
+      "ce_div_in_control_false",
+      "ce_divide_in_control_false",
+      "ce_modulo_in_control_false"
+    ]
+  },
+  "corpus": {
+    "queries": 2328,
+    "retained": 2218,
+    "added": 110,
+    "fresh_retained_observations": 4436
+  },
+  "independent": {
+    "independent": 156,
+    "independent_legacy": 320,
+    "independent_boundaries": 8
+  },
+  "changed_outcomes": 54,
+  "changed_main_error_payloads": 22,
+  "changed_main_error_texts": 22,
+  "shared_success_nullable_changes": 0,
+  "retained_casts": {
+    "early-arithmetic": {
+      "before": 842,
+      "after": 842,
+      "total": 844,
+      "lost": []
+    },
+    "null-subquery": {
+      "before": 816,
+      "after": 816,
+      "total": 862,
+      "lost": []
+    },
+    "null-conditional": {
+      "before": 36,
+      "after": 36,
+      "total": 36,
+      "lost": []
+    },
+    "string-modulo": {
+      "before": 638,
+      "after": 638,
+      "total": 646,
+      "lost": []
+    },
+    "decimal": {
+      "before": 445,
+      "after": 445,
+      "total": 454,
+      "lost": []
+    },
+    "dead": {
+      "before": 340,
+      "after": 340,
+      "total": 346,
+      "lost": []
+    },
+    "strict": {
+      "before": 496,
+      "after": 496,
+      "total": 496,
+      "lost": []
+    },
+    "float": {
+      "before": 488,
+      "after": 488,
+      "total": 488,
+      "lost": []
+    },
+    "legacy": {
+      "before": 562,
+      "after": 562,
+      "total": 562,
+      "lost": []
+    },
+    "previous-owned": {
+      "before": 126,
+      "after": 126,
+      "total": 126,
+      "lost": []
+    },
+    "classification": {
+      "before": 125,
+      "after": 125,
+      "total": 128,
+      "lost": []
+    },
+    "empty-scalar": {
+      "before": 294,
+      "after": 294,
+      "total": 296,
+      "lost": []
+    },
+    "scalar-arithmetic": {
+      "before": 536,
+      "after": 536,
+      "total": 586,
+      "lost": []
+    },
+    "scalar-cast": {
+      "before": 731,
+      "after": 731,
+      "total": 750,
+      "lost": []
+    },
+    "predicate": {
+      "before": 372,
+      "after": 372,
+      "total": 416,
+      "lost": []
+    },
+    "correlated-exists": {
+      "before": 4147,
+      "after": 4157,
+      "total": 4436,
+      "lost": []
+    }
+  },
+  "historical": {
+    "groups": 37,
+    "total": 6784,
+    "before_agreement": 6603,
+    "after_agreement": 6603,
+    "changed_outcomes": 0,
+    "lost": 0,
+    "retained_errors": 911,
+    "changed_error_payloads": 1,
+    "changed_error_texts": 1
+  },
+  "strict_div": {
+    "before": 350,
+    "after": 350,
+    "total": 350
+  },
+  "integer": {
+    "agreement": 616,
+    "total": 616,
+    "unchanged_full_errors": 131
+  },
+  "tests": {
+    "function": 314,
+    "planner": 60,
+    "runner": 28
+  },
+  "native_regression": {
+    "same_embedded_test": true,
+    "baseline_exit": 101,
+    "candidate_exit": 0,
+    "shapes": 144
+  },
+  "delta": {
+    "before_after": {
+      "match": 116
+    },
+    "spark": {
+      "match": 47,
+      "difference": 58,
+      "pending_host_adapter": 11
+    },
+    "adapters": 18
+  },
+  "performance": {
+    "owner": 161,
+    "equivalent_pairs": 26,
+    "candidate_only": 4,
+    "physical_plans": {
+      "equal": [
+        "correlated_derived_false_nullsfalse",
+        "ordinary_numeric_nullsfalse",
+        "ordinary_cast_nullsfalse",
+        "native_numeric_nullsfalse",
+        "uncorrelated_exists_nullsfalse",
+        "correlated_valid_nullsfalse",
+        "correlated_bad_nullsfalse",
+        "correlated_legacy_nullsfalse",
+        "correlated_not_nullsfalse",
+        "correlated_row_cast_nullsfalse",
+        "correlated_empty_nullsfalse",
+        "correlated_local_false_nullsfalse",
+        "correlated_dead_case_nullsfalse",
+        "correlated_derived_false_nullstrue",
+        "ordinary_numeric_nullstrue",
+        "ordinary_cast_nullstrue",
+        "native_numeric_nullstrue",
+        "uncorrelated_exists_nullstrue",
+        "correlated_valid_nullstrue",
+        "correlated_bad_nullstrue",
+        "correlated_legacy_nullstrue",
+        "correlated_not_nullstrue",
+        "correlated_row_cast_nullstrue",
+        "correlated_empty_nullstrue",
+        "correlated_local_false_nullstrue",
+        "correlated_dead_case_nullstrue"
+      ],
+      "changed": [],
+      "candidate_only": [
+        "local_bad_false_nullsfalse",
+        "local_bad_false_not_nullsfalse",
+        "local_bad_false_nullstrue",
+        "local_bad_false_not_nullstrue"
+      ]
+    },
+    "protocol": {
+      "order": [
+        "before",
+        "after",
+        "after",
+        "before",
+        "after",
+        "before",
+        "before",
+        "after"
+      ],
+      "cpu": 2,
+      "platform": "Linux-6.19.14-200.fc43.x86_64-x86_64-with-glibc2.42",
+      "cpuinfo": "processor\t: 0\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 0\ncpu cores\t: 8\napicid\t\t: 0\ninitial apicid\t: 0\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.50\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+      "rows": 262144,
+      "batch_size": 8192,
+      "warmups": 4,
+      "samples": 21,
+      "reference_sha256": "f12d5cf16e205df124bfb31804d6ef5c7f8974fc7e16f13b73e1d723e06ab3b8",
+      "ansi_mode": "Both ANSI modes where specified; correlation-free local EXISTS, retained correlated EXISTS unused/live/empty projections, ordinary numeric/CAST and native SQL controls; Spark analyzer enabled only for Spark queries",
+      "scope": "Focused compatibility-PR cost check, not final performance acceptance.",
+      "binaries": {
+        "before": "8bd72e923ddd22ee798d24125e3530d024cf90e82b34d4ee8a09caa4fc265398",
+        "after": "21a46a8ec268d263f873d2f7d0d52f2b27ce5fa6777304d8724d5003ba98d98e"
+      }
+    },
+    "same_binary_calibration": false,
+    "instructions_allocations_memory_measured": false,
+    "measurements": [
+      {
+        "id": "local_bad_false_nullsfalse",
+        "before": {
+          "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+          "phase": "planning"
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.569297,
+              0.579427,
+              0.570981,
+              0.580979
+            ],
+            "median_ms": 0.575204
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.288596,
+              0.289538,
+              0.291721,
+              0.29085
+            ],
+            "median_ms": 0.290194
+          }
+        },
+        "ratios": {},
+        "comparison": "Baseline fails planning/execution/output verification; candidate timing only. All candidate rows match independent SQL expectations."
+      },
+      {
+        "id": "local_bad_false_not_nullsfalse",
+        "before": {
+          "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+          "phase": "planning"
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.612778,
+              0.61921,
+              0.609111,
+              0.61371
+            ],
+            "median_ms": 0.613244
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.291291,
+              0.294127,
+              0.294647,
+              0.291692
+            ],
+            "median_ms": 0.29290950000000004
+          }
+        },
+        "ratios": {},
+        "comparison": "Baseline fails planning/execution/output verification; candidate timing only. All candidate rows match independent SQL expectations."
+      },
+      {
+        "id": "correlated_derived_false_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.599243,
+              0.604533,
+              0.604753,
+              0.607408
+            ],
+            "median_ms": 0.604643
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.290269,
+              0.291682,
+              0.291512,
+              0.289057
+            ],
+            "median_ms": 0.2908905
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.614802,
+              0.617086,
+              0.608981,
+              0.616936
+            ],
+            "median_ms": 0.615869
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.287303,
+              0.290128,
+              0.291441,
+              0.289828
+            ],
+            "median_ms": 0.28997799999999996
+          }
+        },
+        "ratios": {
+          "planning": 1.018566327568499,
+          "execution": 0.9968630807812561
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "ordinary_numeric_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 9459146358092476667,
+            "data_type": "Float64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.37167,
+              0.369727,
+              0.371319,
+              0.369126
+            ],
+            "median_ms": 0.370523
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.354017,
+              0.357925,
+              0.356733,
+              0.357454
+            ],
+            "median_ms": 0.3570935
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 9459146358092476667,
+            "data_type": "Float64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.379565,
+              0.375749,
+              0.370959,
+              0.379686
+            ],
+            "median_ms": 0.377657
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.355711,
+              0.357624,
+              0.35554,
+              0.35566
+            ],
+            "median_ms": 0.3556855
+          }
+        },
+        "ratios": {
+          "planning": 1.019253865482035,
+          "execution": 0.9960570550850127
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "ordinary_cast_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 11823848471260901745,
+            "data_type": "Float64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.298094,
+              0.299066,
+              0.298304,
+              0.298354
+            ],
+            "median_ms": 0.298329
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.866502,
+              3.890736,
+              3.867284,
+              3.871691
+            ],
+            "median_ms": 3.8694875
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 11823848471260901745,
+            "data_type": "Float64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.303263,
+              0.302442,
+              0.298845,
+              0.302191
+            ],
+            "median_ms": 0.3023165
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.883123,
+              3.874496,
+              3.872993,
+              3.879055
+            ],
+            "median_ms": 3.8767755
+          }
+        },
+        "ratios": {
+          "planning": 1.01336611593241,
+          "execution": 1.0018834535581262
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "native_numeric_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 10541556853442269111,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.185224,
+              0.192327,
+              0.186607,
+              0.189302
+            ],
+            "median_ms": 0.1879545
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.084888,
+              0.085679,
+              0.084417,
+              0.084968
+            ],
+            "median_ms": 0.084928
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 10541556853442269111,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.189722,
+              0.190684,
+              0.187648,
+              0.191706
+            ],
+            "median_ms": 0.190203
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.084608,
+              0.084797,
+              0.084357,
+              0.08582
+            ],
+            "median_ms": 0.0847025
+          }
+        },
+        "ratios": {
+          "planning": 1.0119630016839183,
+          "execution": 0.9973448097211756
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "uncorrelated_exists_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.526438,
+              0.530004,
+              0.527019,
+              0.534012
+            ],
+            "median_ms": 0.5285115
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.305166,
+              0.30642,
+              0.301841,
+              0.303744
+            ],
+            "median_ms": 0.30445500000000003
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.530876,
+              0.537549,
+              0.525737,
+              0.53833
+            ],
+            "median_ms": 0.5342125
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.301239,
+              0.307261,
+              0.306038,
+              0.306489
+            ],
+            "median_ms": 0.3062635
+          }
+        },
+        "ratios": {
+          "planning": 1.0107868986767552,
+          "execution": 1.0059401225140003
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "correlated_valid_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.607949,
+              0.611766,
+              0.612428,
+              0.60822
+            ],
+            "median_ms": 0.609993
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.602251,
+              3.599796,
+              3.575311,
+              3.631104
+            ],
+            "median_ms": 3.6010235
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.612127,
+              0.619421,
+              0.611496,
+              0.61928
+            ],
+            "median_ms": 0.6157035
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.584789,
+              3.604525,
+              3.629361,
+              3.606689
+            ],
+            "median_ms": 3.605607
+          }
+        },
+        "ratios": {
+          "planning": 1.0093615828378357,
+          "execution": 1.0012728325710731
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "correlated_bad_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.610775,
+              0.609933,
+              0.615884,
+              0.610324
+            ],
+            "median_ms": 0.6105495
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.615395,
+              3.614343,
+              3.577114,
+              3.620685
+            ],
+            "median_ms": 3.6148689999999997
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.614271,
+              0.622586,
+              0.606196,
+              0.616044
+            ],
+            "median_ms": 0.6151575
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.594587,
+              3.589998,
+              3.619874,
+              3.613061
+            ],
+            "median_ms": 3.6038240000000004
+          }
+        },
+        "ratios": {
+          "planning": 1.0075472996047004,
+          "execution": 0.9969445642428538
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "correlated_legacy_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.563437,
+              0.564699,
+              0.568345,
+              0.565621
+            ],
+            "median_ms": 0.56516
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.614804,
+              3.603453,
+              3.568789,
+              3.630373
+            ],
+            "median_ms": 3.6091284999999997
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.569258,
+              0.575609,
+              0.563286,
+              0.57613
+            ],
+            "median_ms": 0.5724335
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.593495,
+              3.59125,
+              3.646423,
+              3.622979
+            ],
+            "median_ms": 3.608237
+          }
+        },
+        "ratios": {
+          "planning": 1.012869806780381,
+          "execution": 0.999752987459438
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "correlated_not_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.616004,
+              0.615193,
+              0.619661,
+              0.619611
+            ],
+            "median_ms": 0.6178075000000001
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.637928,
+              3.614684,
+              3.578006,
+              3.62837
+            ],
+            "median_ms": 3.621527
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.623728,
+              0.62994,
+              0.616074,
+              0.622356
+            ],
+            "median_ms": 0.623042
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.584658,
+              3.590639,
+              3.618901,
+              3.604715
+            ],
+            "median_ms": 3.597677
+          }
+        },
+        "ratios": {
+          "planning": 1.0084727038762074,
+          "execution": 0.9934143801772015
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "correlated_row_cast_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.674223,
+              0.670105,
+              0.673822,
+              0.669493
+            ],
+            "median_ms": 0.6719634999999999
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.630343,
+              3.600929,
+              3.586641,
+              3.625945
+            ],
+            "median_ms": 3.6134370000000002
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.681075,
+              0.684081,
+              0.681816,
+              0.685523
+            ],
+            "median_ms": 0.6829485
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.603403,
+              3.615926,
+              3.616757,
+              3.648156
+            ],
+            "median_ms": 3.6163415
+          }
+        },
+        "ratios": {
+          "planning": 1.0163476141189216,
+          "execution": 1.000803805352079
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "correlated_empty_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.591238,
+              0.593623,
+              0.597149,
+              0.60321
+            ],
+            "median_ms": 0.595386
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.265556,
+              3.25753,
+              3.217587,
+              3.274533
+            ],
+            "median_ms": 3.261543
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.602349,
+              0.60824,
+              0.594054,
+              0.607689
+            ],
+            "median_ms": 0.605019
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.263592,
+              3.259354,
+              3.271567,
+              3.259144
+            ],
+            "median_ms": 3.261473
+          }
+        },
+        "ratios": {
+          "planning": 1.0161794197377836,
+          "execution": 0.999978537765714
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "correlated_local_false_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.552256,
+              0.559549,
+              0.555011,
+              0.55486
+            ],
+            "median_ms": 0.5549355
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.294287,
+              0.288737,
+              0.289117,
+              0.29075
+            ],
+            "median_ms": 0.2899335
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.573074,
+              0.579797,
+              0.569518,
+              0.576
+            ],
+            "median_ms": 0.574537
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.290379,
+              0.292774,
+              0.289989,
+              0.290029
+            ],
+            "median_ms": 0.290204
+          }
+        },
+        "ratios": {
+          "planning": 1.0353221230215042,
+          "execution": 1.0009329725609493
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "correlated_dead_case_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.676015,
+              0.677919,
+              0.67814,
+              0.681746
+            ],
+            "median_ms": 0.6780295000000001
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.63968,
+              3.605407,
+              3.59674,
+              3.625343
+            ],
+            "median_ms": 3.6153750000000002
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.681285,
+              0.681536,
+              0.67252,
+              0.677749
+            ],
+            "median_ms": 0.679517
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.580872,
+              3.576403,
+              3.622809,
+              3.602251
+            ],
+            "median_ms": 3.5915615
+          }
+        },
+        "ratios": {
+          "planning": 1.002193857346915,
+          "execution": 0.9934132697161429
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "local_bad_false_nullstrue",
+        "before": {
+          "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+          "phase": "planning"
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.56571,
+              0.569327,
+              0.566152,
+              0.568446
+            ],
+            "median_ms": 0.567299
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.291321,
+              0.291261,
+              0.293575,
+              0.293746
+            ],
+            "median_ms": 0.292448
+          }
+        },
+        "ratios": {},
+        "comparison": "Baseline fails planning/execution/output verification; candidate timing only. All candidate rows match independent SQL expectations."
+      },
+      {
+        "id": "local_bad_false_not_nullstrue",
+        "before": {
+          "error": "Optimizer rule 'simplify_expressions' failed\ncaused by\nArrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+          "phase": "planning"
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.590557,
+              0.590496,
+              0.583855,
+              0.595877
+            ],
+            "median_ms": 0.5905265
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.292614,
+              0.293826,
+              0.29604,
+              0.295609
+            ],
+            "median_ms": 0.29471749999999997
+          }
+        },
+        "ratios": {},
+        "comparison": "Baseline fails planning/execution/output verification; candidate timing only. All candidate rows match independent SQL expectations."
+      },
+      {
+        "id": "correlated_derived_false_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.589876,
+              0.587482,
+              0.592982,
+              0.590537
+            ],
+            "median_ms": 0.5902065
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.290179,
+              0.291532,
+              0.293055,
+              0.292333
+            ],
+            "median_ms": 0.29193250000000004
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.587331,
+              0.59222,
+              0.581571,
+              0.588784
+            ],
+            "median_ms": 0.5880575
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.289968,
+              0.289388,
+              0.292363,
+              0.292293
+            ],
+            "median_ms": 0.2911305
+          }
+        },
+        "ratios": {
+          "planning": 0.996358901503118,
+          "execution": 0.9972527896003356
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "ordinary_numeric_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 26214,
+            "digest": 6527729684995801334,
+            "data_type": "Float64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.497965,
+              0.502794,
+              0.502132,
+              0.497113
+            ],
+            "median_ms": 0.5000485
+          },
+          "execution": {
+            "process_medians_ms": [
+              1.825451,
+              1.810884,
+              1.815984,
+              1.821163
+            ],
+            "median_ms": 1.8185735
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 26214,
+            "digest": 6527729684995801334,
+            "data_type": "Float64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.500109,
+              0.501993,
+              0.495591,
+              0.501632
+            ],
+            "median_ms": 0.5008705
+          },
+          "execution": {
+            "process_medians_ms": [
+              1.812035,
+              1.882547,
+              1.804682,
+              1.813468
+            ],
+            "median_ms": 1.8127515
+          }
+        },
+        "ratios": {
+          "planning": 1.0016438405474668,
+          "execution": 0.9967985896638216
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "ordinary_cast_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 11823848471260901745,
+            "data_type": "Float64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.278778,
+              0.277976,
+              0.272676,
+              0.274009
+            ],
+            "median_ms": 0.2759925
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.891458,
+              3.901757,
+              3.883784,
+              3.893241
+            ],
+            "median_ms": 3.8923495
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 11823848471260901745,
+            "data_type": "Float64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.282355,
+              0.281363,
+              0.279019,
+              0.284699
+            ],
+            "median_ms": 0.28185899999999997
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.929078,
+              3.900204,
+              3.899032,
+              3.907307
+            ],
+            "median_ms": 3.9037555
+          }
+        },
+        "ratios": {
+          "planning": 1.021256012391641,
+          "execution": 1.002930363781567
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "native_numeric_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 26214,
+            "digest": 12374517144315239167,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.189472,
+              0.189853,
+              0.186907,
+              0.185314
+            ],
+            "median_ms": 0.1881895
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.086069,
+              0.086621,
+              0.086331,
+              0.08614
+            ],
+            "median_ms": 0.08623549999999999
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 26214,
+            "digest": 12374517144315239167,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.190695,
+              0.192618,
+              0.186997,
+              0.190595
+            ],
+            "median_ms": 0.190645
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.084897,
+              0.085709,
+              0.085719,
+              0.086
+            ],
+            "median_ms": 0.085714
+          }
+        },
+        "ratios": {
+          "planning": 1.0130480180881505,
+          "execution": 0.993952606525155
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "uncorrelated_exists_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.502143,
+              0.506701,
+              0.502333,
+              0.502724
+            ],
+            "median_ms": 0.5025284999999999
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.309094,
+              0.299817,
+              0.305166,
+              0.305427
+            ],
+            "median_ms": 0.30529649999999997
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.507363,
+              0.510468,
+              0.504437,
+              0.511991
+            ],
+            "median_ms": 0.5089155000000001
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.30152,
+              0.303674,
+              0.30677,
+              0.301891
+            ],
+            "median_ms": 0.3027825
+          }
+        },
+        "ratios": {
+          "planning": 1.0127097269110112,
+          "execution": 0.9917653821776536
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "correlated_valid_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 4465800364555498335,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.593303,
+              0.592761,
+              0.595877,
+              0.595677
+            ],
+            "median_ms": 0.59449
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.869578,
+              3.861732,
+              3.841425,
+              3.891347
+            ],
+            "median_ms": 3.8656550000000003
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 4465800364555498335,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.599784,
+              0.595716,
+              0.601067,
+              0.600446
+            ],
+            "median_ms": 0.600115
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.737752,
+              3.756698,
+              3.826798,
+              3.772076
+            ],
+            "median_ms": 3.764387
+          }
+        },
+        "ratios": {
+          "planning": 1.0094618917054954,
+          "execution": 0.9738031459092961
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "correlated_bad_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 4465800364555498335,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.595637,
+              0.593913,
+              0.588834,
+              0.588654
+            ],
+            "median_ms": 0.5913735
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.778128,
+              3.783417,
+              3.788487,
+              3.800809
+            ],
+            "median_ms": 3.785952
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 4465800364555498335,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.595606,
+              0.597079,
+              0.591339,
+              0.599544
+            ],
+            "median_ms": 0.5963425
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.750867,
+              3.750106,
+              3.81188,
+              3.746589
+            ],
+            "median_ms": 3.7504865
+          }
+        },
+        "ratios": {
+          "planning": 1.0084024732254657,
+          "execution": 0.9906323429351456
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "correlated_legacy_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 4465800364555498335,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.564128,
+              0.56554,
+              0.563788,
+              0.563597
+            ],
+            "median_ms": 0.563958
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.780432,
+              3.804386,
+              3.78501,
+              3.80051
+            ],
+            "median_ms": 3.7927600000000004
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 4465800364555498335,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.583574,
+              0.585698,
+              0.580518,
+              0.584195
+            ],
+            "median_ms": 0.5838845
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.745798,
+              3.765373,
+              3.842767,
+              3.789579
+            ],
+            "median_ms": 3.777476
+          }
+        },
+        "ratios": {
+          "planning": 1.0353333049624265,
+          "execution": 0.9959702169396428
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "correlated_not_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 14688390868974702568,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.61407,
+              0.614531,
+              0.61925,
+              0.61401
+            ],
+            "median_ms": 0.6143005
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.772597,
+              3.796351,
+              3.797273,
+              3.788637
+            ],
+            "median_ms": 3.792494
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 14688390868974702568,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.625872,
+              0.638666,
+              0.614181,
+              0.631653
+            ],
+            "median_ms": 0.6287625
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.747792,
+              3.787184,
+              3.825425,
+              3.77959
+            ],
+            "median_ms": 3.783387
+          }
+        },
+        "ratios": {
+          "planning": 1.0235422240418166,
+          "execution": 0.9975986778093782
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "correlated_row_cast_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 4465800364555498335,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.684321,
+              0.682317,
+              0.687718,
+              0.687276
+            ],
+            "median_ms": 0.6857985
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.796541,
+              3.794739,
+              3.826408,
+              3.820897
+            ],
+            "median_ms": 3.808719
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 4465800364555498335,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.682929,
+              0.683639,
+              0.675245,
+              0.680835
+            ],
+            "median_ms": 0.681882
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.754514,
+              3.771275,
+              3.841896,
+              3.780552
+            ],
+            "median_ms": 3.7759135
+          }
+        },
+        "ratios": {
+          "planning": 0.9942891388651331,
+          "execution": 0.991386736590439
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "correlated_empty_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.591769,
+              0.598181,
+              0.601367,
+              0.601096
+            ],
+            "median_ms": 0.5996385
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.272428,
+              3.267609,
+              3.281285,
+              3.279261
+            ],
+            "median_ms": 3.2758445
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.608901,
+              0.604373,
+              0.597399,
+              0.605144
+            ],
+            "median_ms": 0.6047585
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.237323,
+              3.251219,
+              3.318033,
+              3.24123
+            ],
+            "median_ms": 3.2462245
+          }
+        },
+        "ratios": {
+          "planning": 1.0085384777661874,
+          "execution": 0.9909580567697887
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "correlated_local_false_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.55432,
+              0.555642,
+              0.557555,
+              0.552776
+            ],
+            "median_ms": 0.554981
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.300648,
+              0.288415,
+              0.288576,
+              0.288255
+            ],
+            "median_ms": 0.2884955
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.578184,
+              0.579476,
+              0.569828,
+              0.577833
+            ],
+            "median_ms": 0.5780085
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.290991,
+              0.296711,
+              0.291371,
+              0.293315
+            ],
+            "median_ms": 0.292343
+          }
+        },
+        "ratios": {
+          "planning": 1.0414924114519237,
+          "execution": 1.0133364298576581
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "correlated_dead_case_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 4465800364555498335,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.672298,
+              0.676205,
+              0.695352,
+              0.677429
+            ],
+            "median_ms": 0.676817
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.794698,
+              3.784369,
+              3.801581,
+              3.823632
+            ],
+            "median_ms": 3.7981395
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 4465800364555498335,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.688318,
+              0.687347,
+              0.676456,
+              0.687437
+            ],
+            "median_ms": 0.687392
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.764362,
+              3.8065,
+              3.832749,
+              3.773419
+            ],
+            "median_ms": 3.7899595
+          }
+        },
+        "ratios": {
+          "planning": 1.0156246075379312,
+          "execution": 0.9978463139650348
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      }
+    ],
+    "status": "Bounded comparison; prior costs, attribution and final performance acceptance remain open."
+  },
+  "provenance": {
+    "build": {
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "--config",
+        "/home/hanbo/.cache/delta-reader-spark-planning/correlation-free-exists-bce0216/override.toml",
+        "-j",
+        "3",
+        "--example",
+        "decimal_probe",
+        "--bin",
+        "delta-reader-sail-extraction-probe",
+        "--message-format=json"
+      ],
+      "sources": {
+        "math.rs": "580a2838b15e6e280e209076936df3a37870014f9275a99cd1eb97ea4e4089d4",
+        "lateral.rs": "c6d964b9c13939768314b48a591d23959f168ea3060059cc46f97e39a32dd047",
+        "cast.rs": "30f3ae9e61a7b0af2aeed023e562662e330866134d9cce0281a0f88dd33af8de",
+        "common.rs": "ed214fc9d84c7a0e1c680074614b4309783b9029ca862583423fa1e5c016f034",
+        "function-Cargo.toml": "17aabfe61876632a6b26a4dffb3b0dcd603a5344e023b66e58bcb85b61b7871b",
+        "scalar-mod.rs": "cfaa4c666296ef5553deb7dfbe8b98cc562267b4ff9d346c2c6f34a10c800776",
+        "Cargo.lock": "273c79133f7f724ccd25039958ee4fd76f83f75efafca9936248fab6ab0527ba",
+        "decimal_bench.rs": "8292aed9e59abdf8453139ec63a3984c265be1af777bd1611ecd00a8072ff208",
+        "string-cast.rs": "8747f822bffa967aac7c4eb5231c94afc471a7b8a65a37ce931453d53aeac78c",
+        "float-cast.rs": "55a7685ecb1ebd8e618ee36d9450ca5c04cf1e59f0c3fec74a5d7ea702301f49",
+        "lib.rs": "6bf466af2a8dd1d1a489dadeda579e7596a0bade27f023e1465bf831cb0f5948",
+        "main.rs": "5fe8cfee49f51245e1c909333150f74817fff432f77178ebfe28f07393fef353",
+        "decimal_probe.rs": "67b5dfdc2968f8524ebee27d9083e61694058a7aec38cd80af275d7228f5ae2c",
+        "decimal-null.rs": "ca45e3716671a6c6a88e47b3b724c506cc32c4a012da0ad0ed35da3a753ae415",
+        "function-mod.rs": "9128640c3ff748fc89463409b835a5784b28003df1685633cc697625426959ea",
+        "function-scalar-mod.rs": "0959ff30b6347ebe34ab237361207ebe7066f529e108b1310e2e58c70d3fde1a",
+        "delta_lifecycle.rs": "40c810540be9a6917152d002bf9a99f552e15793a927b270c1fc756386fa3ff8",
+        "resolver-subquery.rs": "7f2d78b68f28bb6eaa1b0657498a1fcb4e56f14377bd6d4be2992202a08a9958",
+        "analyzer-expression.rs": "9ed9520375854bfd7efa2eb32fc648367d47f3b29418d62cc3822906695956b9",
+        "analyzer-parser.rs": "c63265070fb332d7a118e14c9ff0c31b618269b6edbe76c578ee4d764a53a1a4",
+        "math-mod.rs": "a6aa195940c3d52f9f8b706f8309194cb917462e27efd8f2c43d667dedd7d043",
+        "decimal-utils.rs": "57fc7be75785d2a531ee8cbf85fabd5a364f76eddab9654ca1ad08943b03ed12",
+        "decimal-round.rs": "2ced18332150ae4059513f27f5e78a5b16bb7a8a2f9970053b5ff5f4a14183f8",
+        "conditional.rs": "b32379a2f19e82602633640ffb51fb322cb3d710b413afe3ca67f97f49acbda4",
+        "small-int-divide.rs": "700a3b1799999b57761155ec04448c3c64c090cc7168ec067b194cc1b30cd131",
+        "resolver-predicate.rs": "8e557784330a1ec772f5ed10f0d90487bccfc2180557d35299133f5bfbce3fe0",
+        "function-predicate.rs": "84ad8b51af5296ad1a70b75673929c101bd7837746dcff4b08b9a1105837af6d",
+        "arrow-mod": "dc7ac7e9f2da115db7d69d42f35278eca0e07f279afb9d383e02d3e012758a25",
+        "arrow-decimal": "c6e92ec74227110b992b8f56d12c2ab7cac02e51381d86554067f2ab68949a3f",
+        "join-selection": "b038353506545b8ccbe550a3ec35b98cde772466203f48d725e64d6462db5b2c",
+        "unwrap-cast": "7cbbb654de8021c3da5d5498242b2781b20ae00406f412aa33dfa2d068a98592",
+        "expr-simplifier": "f334d9e21c70da2b919e02385225b33c96b2dbecc8607a59795b671f7b651c42",
+        "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+        "decorrelate": "5bb207eeda0253b825d26aff07a69b7fcce6b73b0bde65cfad4fc0c8122b9146",
+        "nested-loop": "433a1602170b0c8f3b49242e5550814f44e2012fef00f717b588592eae739454",
+        "physical-test-lock": null,
+        "parser-keywords": "00ea0489fd6db80e88e6aa32e01c1a7744d68b26aefe52c10706fb97add0f8e9",
+        "native-in-list": "05531b629e19d0888b1a9ef9a59a095342724c3957d7634078888294bff1361a",
+        "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+        "native-primitive-filter": "7e425346b65c117d35884f726ab6d4698ee51adbc764f429f13d17adb99d14b1",
+        "native-strategy": "012a6734cf493cd04e5d45e04a7c8e709c7e4c9907d80f001f7d51dcf04b7954",
+        "native-array-filter": "bd40f11b951d917a6da7837b668799d18938ce495cf3e92397891d2ff2225e35",
+        "native-case": "afb733aeedf8b68365fa42440af2a0e416d1e234135248d9cdd7b28b3169cad7",
+        "expr-common": "239912fa400ab30a58d49b6917cb2d3877eb302ff5d852fe5d06ab24c6cab461",
+        "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+        "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+        "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+        "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+        "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+        "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+        "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+        "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+        "native-static-filter": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+        "restored-build-source-7": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+        "restored-build-source-8": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+        "restored-build-source-9": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+        "restored-build-source-10": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+        "restored-build-source-11": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+        "restored-build-source-12": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+        "restored-build-source-13": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+        "restored-build-source-14": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+        "restored-build-source-15": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+        "restored-build-source-16": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+        "restored-build-source-17": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+        "restored-build-source-18": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+        "resolver-join.rs": "d2b8a313f3a7c6e68278f7092b247a6809db812cc1a0be763cdfd8c8ed047aa1",
+        "resolver-attribute.rs": "72fb30467a52d0dba630d0b356fb20e64ef43626a3fc79808e7607986981852b",
+        "resolver-project.rs": "b935f0b4f1613d9a99681beca4c9d86b12f59fc5811a42873e35083e4b9e388f",
+        "resolver-function.rs": "9a40a9a0d5e094fca2c3a5f6d283bef6e3e2b42c5611f7b0f1927d1a04edf896",
+        "resolver-wildcard.rs": "6c0bb4f83f9fbd7e9ad6a3d462b76f15b6c118f450931b09931d07622fdbb619",
+        "resolver-schema.rs": "cca179abd37b71efb60ddea11f4b003bbd7ee7ae65f3d06ea912a97902f58eba",
+        "scalar-struct.rs": "1cd70f4e816ce6fe94c5a7f73d59f828a436fc013a75795e63d4fa96c48cc6a8",
+        "resolver-aggregate.rs": "1b115906b14e6889186b854107e5efd6a07955961963c4c96c16c859cf89f66e",
+        "native-aggregates.rs": "6994a655702184bba801f54fb2ea343a3ba215f723d8954b1496720ffa077eca",
+        "resolver-sort.rs": "cd80b7163cd752c63bae021a5cf16954d161f53a92134bc67e4c83f053fb6d07",
+        "native-binary": "66ba58d025ab8127b8232b85028a0c93d96e224f2c92e9a11b8e7ff0a5c8f088",
+        "lifecycle-support-0": "a5198533aa09d88946a7182176d0dca681e3969171dfccd152846e29f24a69cf",
+        "lifecycle-support-1": "1bf27a74912e13dfacfa38315b76be566b9b8ce7a8e7f098c44a3ebe9195f180",
+        "checked.rs": "6a6d15a2255937a3d4a48b1a2d7b59040bc57588bf1b1f32e593f8e5edbacb19",
+        "native-scalar-function.rs": "c3853b994aa861c5d7f0b30fd777d878c0b7300b2848de6b913f437289366c21",
+        "udf.rs": "b7f05300615df5c0f87495f5dbcee8974b6e36f027b070d05f79c147044ef0ed",
+        "expression-mod.rs": "4849b82f17d5b10b725b976deb0c943e3b8cd48e1618de5b114e2fa07aeda36e",
+        "overflow-bench.rs": "971ad5fe8fb00a9640585c66de320ba4fa1125b82ca9f2fa5a13cd4029b60256",
+        "native-column.rs": "75d22bef42f5dcd487ac06d1c0e0505407d9480d95b0423278e8ca693a3c9660",
+        "arrow-arithmetic.rs": "008110fe975edfc942333d2e3bcb94af5f2de9b1e456d7d5cf696a4da7b4fc50",
+        "arrow-arity.rs": "5be993560d41ad908accd1324b1529614accd0af859dd0d886c109052270e360",
+        "scatter-utils.rs": "aec739c4df4c1a01a1f09a16efddabd69e5f283e4490c3a2570504f10cfcbcf8",
+        "filter.rs": "e7c12f8e8a298bdcb92c0d34fd5f1a7442ecc76416b637c06382270cc8ffea4d",
+        "bround.rs": "a61cbf4c2e43ef954cadfc2b34de95b0c7fa7fd4d09e50cf263f0be3b9ba6f87",
+        "integer-round.rs": "e6dc484a88cd2d0b38756ecda79a76c69ea8e6e85984cea1107166a8c7b424b7",
+        "float-round.rs": "c62f0456753a6aa55f32c18a48576a01318b7336d61cc7c412adc91ad17b9cce",
+        "integer-cast.rs": "963b9ac541b0057933461fb76356803f80d6b01b70f511b9cb068389997045e6",
+        "floating-cast.rs": "c0970aa7b4b52e86dae57e6d1b8b41ee0e86d71adcaba3f36ea86a7db032164d",
+        "lexical-number.rs": "7d6b9673a13cf3ff9420b1efef8d8e4216727091ff07f701c0dbbbf9a044e4c8",
+        "lexical-binary.rs": "73cae5e3d170e2f6e088b15d013f75b90c8d1de2ee38f8d2567114cd85fa26f9",
+        "expr-schema.rs": "c0e20755a3dc54f939f9e5ae460a26f435c07437626893507bc3eaa227a18557",
+        "physical-planner.rs": "79ccdee0dc51999227c7fbb3f9d110a8d7a724b5bf6616302c957fe895bc5e2c",
+        "physical-scalar.rs": "7a904c657b01cdff372da9f6458672433df046fdb329b6bf4ec4c53f5289d180",
+        "physical-subquery.rs": "2a5aa2a04747a5159fbca4a4087d11330ba49f5482c949f369f7ab37f653617a",
+        "physical-projection": "0c2892359085f4b0d98f2ce88180f962948cd1b516ce1d9249c837ea557e97da",
+        "physical-hash-join": "af0098badfa9b9c8ce1cff4f1bcfdb8f38d423681715b06aff778c76345529b1"
+      },
+      "binaries": {
+        "probe": "aaef692877e1ba04fc266a1615727fc98257f99a2449074edf4da25efde65652",
+        "runner": "bdc2a24811c12550e8e3b78dede219ab9927eff4db90dbed04de960765773f44"
+      },
+      "baseline_archives": {
+        "correlated-exists": {
+          "path": "correlated-exists-runs.json.gz",
+          "sha256": "31d71d8fef38065ef7498d09998b63a441f34a4776a5ea49ce93a4417a2886ed",
+          "files": 672,
+          "compressed_bytes": 7907076
+        }
+      },
+      "integration_base": "bce0216c43032f01818d92a71f8e28d147f481fe",
+      "changed_runtime_sources": [
+        "decimal-null.rs"
+      ]
+    },
+    "libraries": {
+      "artifacts_per_build": [
+        505,
+        505
+      ],
+      "named_libraries": [
+        414,
+        414
+      ],
+      "same_package_feature_signatures": true,
+      "changed": [
+        "sail_plan"
+      ]
+    },
+    "baseline_binaries": {
+      "probe": "1baa47357e2b3e7e5403a7e2aee650e49ad3aff332f6ee9902e304eca0c0d6ad",
+      "runner": "f1ec4a16d12bba7f720c20b16b8664c46eb546eab70ecdebec41628ee8d1c46d"
+    },
+    "spark": "4.2.0",
+    "sail": "0.7.1",
+    "datafusion": "54.1.0",
+    "arrow": "58.4.0",
+    "java": "21",
+    "timezone": "UTC",
+    "allowPrecisionLoss": true,
+    "correctness_ansi": [
+      true,
+      false
+    ],
+    "native_partitions": 2,
+    "native_batch_size": "Per-case: 1 default, retained 2 and explicit 2/64 controls"
+  },
+  "repository_files": {
+    "CORRELATION_FREE_EXISTS.md": "206417c10ee74d4ae679102140508df0fbeb431650726de4d2fc97ef7bfca718",
+    "README.md": "b925eaf798e1e1fd8689389bee3b07b5771f0c91bfbf19775394bc148c327119",
+    "bigint_div_overflow.py": "fbd40d0634454ee8b744e7df8951d406a1b4ca2c65d78c824dd5189521e965f3",
+    "correlated-exists-results.json": "b75ba80331582b97f55fa813667400eca26c53f844b98f96f1c9a3a14110a974",
+    "correlation-free-exists.jsonl": "4564245869adfcebc963ff83b978ade4a89f029adf4122181de870f524b48613",
+    "decimal_arithmetic_types.py": "f355276a7660aba73f528e5b1fb959ef439332e66913f952ef0c70be633de317",
+    "decimal_bround.py": "90f12456275c926ddf64e17453912c75243c8a348b7db8bb570796e2af6a74d4",
+    "decimal_division.py": "42f54687ba4ac8ff811f7c227404f0ab4bb0483bd31c4959c167b6b71935e1ec",
+    "division_cast_classification.py": "049f9c0e9a4d8002584b3af5036afa032189896eea8567c60b4f581a8308e27d",
+    "early_arithmetic.py": "38a5663f408c844c13629bfac01ab0ae9a94a3d83d11292b8e4b1413160fe762",
+    "float_bround.py": "80d227e9b16391fa193990c40d9560ec3368cbfb545dd1f0343c1edfc5e643ce",
+    "integer_overflow.py": "2364a1ea92dc5d55a424e1049f3c657a6821c6350eb355f48f99b834bd593c76",
+    "integer_round.py": "88ccca74ef38a616cbe3137dca5d41880a0d33a966c7087da534f0592d111271",
+    "modulo_null_guard.py": "1de2534e63053b48cf71f3845226eb21c8ff2868cf94cfba6416d5ca046b7e2f",
+    "oracle.py": "ff7e117a861e47b10c38dcd2cf47ae581acf91f12542b453746df01b20e9ec68",
+    "reference.py": "41e799f66e70378dd7a5f87139c1815cd029ff011bf61eb2fec0c54a338dee2e",
+    "round_arguments.py": "9a02b260046ef32181866887021ea6cc11462f6b230614ba795cefa4c90907bb",
+    "sail-correlation-free-exists.patch": "665ebbe95c68be9754e6b9a59839d092843adb3473016c126bd97d6c71791272",
+    "string_division_coercion.py": "675bd82b1371f53eac368e46a67a26ef3e7ff97b91b9c80a86efd137a90a688d",
+    "string_modulo_coercion.py": "77602db3b22da6a98e7b978f9b9b89a4250d270a0d542b3002229cf67fd97069"
+  },
+  "archive": {
+    "path": "correlation-free-exists-runs.json.gz",
+    "sha256": "d22bec27ae8f0eb8f6cf81890d51db05a4a398beb147fb9178235df8b113b300",
+    "files": 675,
+    "compressed_bytes": 6766152
+  }
+}
