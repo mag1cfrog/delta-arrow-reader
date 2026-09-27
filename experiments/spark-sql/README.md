@@ -446,3 +446,5 @@ See [three-valued IN/NOT IN filtering](NOT_IN_NULL_FILTER.md) for the optional R
 See [correlated EXISTS preparation](CORRELATED_EXISTS.md) for the optional Rust repair, guarded projection pruning, retained error boundaries and bounded cost comparison.
 
 See [EXISTS preparation after correlation simplification](CORRELATION_FREE_EXISTS.md) for the optional Rust follow-up to PR 279, its empty-local and early-arithmetic boundaries, full compatibility evidence and bounded performance measurements.
+
+See [empty local input before scalar preparation](EMPTY_LOCAL_SCALAR.md) for the optional Rust follow-up to PR 281, its shared SELECT/IN/EXISTS repair, complete compatibility evidence and bounded performance measurements.

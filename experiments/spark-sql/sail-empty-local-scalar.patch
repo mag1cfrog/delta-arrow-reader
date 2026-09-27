@@ -1,0 +1,133 @@
+--- a/crates/sail-plan/src/decimal_null.rs
++++ b/crates/sail-plan/src/decimal_null.rs
+@@ -150,7 +150,32 @@
+             plan
+         };
+         let plan = if check_cast || check_arithmetic {
+-            plan.transform_up_with_subqueries(|node| {
++            plan.transform_down_up_with_subqueries(|node| {
++                // Local empty conversion precedes preparing scalar children.
++                // Keep the existing postorder work for all remaining nodes.
++                if let LogicalPlan::Projection(project) = &node
++                    && project.expr.iter().any(Expr::contains_scalar_subquery)
++                    && prepare.local_batch(&project.input)?.is_some_and(|batch| batch.num_rows() == 0)
++                {
++                    // IN/scalar lowering still needs a named output expression.
++                    let expr = project.schema.iter().map(|(qualifier, field)| {
++                        Ok(lit(ScalarValue::try_new_null(field.data_type())?)
++                            .alias_qualified(qualifier.cloned(), field.name()))
++                    }).collect::<Result<Vec<_>>>()?;
++                    let input = LogicalPlan::EmptyRelation(
++                        datafusion_expr::logical_plan::EmptyRelation {
++                            produce_one_row: false,
++                            schema: Arc::clone(project.input.schema()),
++                        },
++                    );
++                    return Ok(Transformed::yes(LogicalPlan::Projection(
++                        datafusion_expr::logical_plan::Projection::try_new_with_schema(
++                            expr, Arc::new(input), Arc::clone(&project.schema),
++                        )?,
++                    )));
++                }
++                Ok(Transformed::no(node))
++            }, |node| {
+                 let schema = if !node.inputs().is_empty() {
+                     Arc::new(datafusion_expr::utils::merge_schema(&node.inputs()))
+                 } else if let LogicalPlan::TableScan(scan) = &node {
+@@ -1265,15 +1290,15 @@
+             }
+             LogicalPlan::Projection(project) if input.is_some() => {
+                 let input = input.unwrap();
++                if input.num_rows() == 0 {
++                    return Ok(Some(RecordBatch::new_empty(Arc::clone(
++                        project.schema.inner(),
++                    ))));
++                }
+                 if !project.expr.iter().try_fold(true, |valid, e| {
+                     Ok::<_, datafusion_common::DataFusionError>(valid && row_expression(e, true)?)
+                 })? {
+                     return Ok(None);
+-                }
+-                if input.num_rows() == 0 {
+-                    return Ok(Some(RecordBatch::new_empty(Arc::clone(
+-                        project.schema.inner(),
+-                    ))));
+                 }
+                 let columns = project
+                     .expr
+@@ -3561,3 +3586,75 @@
+     }
+     Ok(())
+ }
++
++#[tokio::test]
++async fn empty_local_projection_precedes_scalar_preparation()
++-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
++    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
++    use datafusion::arrow::array::AsArray;
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::SessionContext;
++
++    let ctx = SessionContext::new_with_state(
++        SessionStateBuilder::new()
++            .with_default_features()
++            .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
++            .with_query_planner(Arc::new(SparkQueryPlanner))
++            .build(),
++    );
++    for ansi in [true, false] {
++        for expression in [
++            "CAST('bad' AS INT)", "CAST('bad' AS DOUBLE)",
++            "CAST('bad' AS DECIMAL(10,2))", "7 DIV 0", "7.0 / 0", "7 % 0",
++        ] {
++            for context in ["exists", "not_exists", "in", "not_in", "scalar_null"] {
++                for (input, predicate, fails, present) in [
++                    ("VALUES(0),(1),(2) t(id)", "id=k AND false", false, [false; 3]),
++                    ("VALUES(0),(1),(2) t(id)", "id=k", true, [false, true, false]),
++                    ("range(3)", "id=k AND false", true, [false; 3]),
++                ] {
++                    if fails && !matches!(context, "exists" | "not_exists") {
++                        continue;
++                    }
++                    let subquery = format!(
++                        "SELECT (SELECT {expression} FROM range(1)) FROM {input} WHERE {predicate}"
++                    );
++                    let predicate = match context {
++                        "exists" => format!("EXISTS({subquery})"),
++                        "not_exists" => format!("NOT EXISTS({subquery})"),
++                        "in" => format!("k IN ({subquery})"),
++                        "not_in" => format!("k NOT IN ({subquery})"),
++                        _ => format!("({subquery}) IS NULL"),
++                    };
++                    let sql = format!(
++                        "SELECT k, {predicate} AS r FROM VALUES(0),(4),(CAST(NULL AS BIGINT)) o(k) \
++                         ORDER BY k NULLS FIRST"
++                    );
++                    let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++                    let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                    let config = PlanConfig { ansi_mode: ansi, ..Default::default() };
++                    let named = PlanResolver::new(&ctx, Arc::new(config))
++                        .resolve_named_plan(spec).await?;
++                    let result = async {
++                        ctx.execute_logical_plan(named.plan).await?.collect().await
++                    }.await;
++                    if ansi && fails {
++                        let error = result.unwrap_err().to_string().to_lowercase();
++                        let cause = if expression.starts_with("CAST") { "cast" } else { "divide by zero" };
++                        assert!(error.contains(cause), "{sql}: {error}");
++                    } else {
++                        let batches = result?;
++                        let actual: Vec<_> = batches.iter().flat_map(|batch| {
++                            batch.column(1).as_boolean().iter()
++                        }).collect();
++                        let expected: Vec<_> = present.into_iter().map(|v| {
++                            Some(v != matches!(context, "not_exists" | "not_in" | "scalar_null"))
++                        }).collect();
++                        assert_eq!(actual, expected, "{sql}, ANSI={ansi}");
++                    }
++                }
++            }
++        }
++    }
++    Ok(())
++}
