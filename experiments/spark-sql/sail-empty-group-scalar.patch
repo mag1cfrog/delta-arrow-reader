@@ -1,0 +1,119 @@
+--- a/crates/sail-plan/src/decimal_null.rs
++++ b/crates/sail-plan/src/decimal_null.rs
+@@ -1347,6 +1347,28 @@
+                     .into_array(input.num_rows())?;
+                 filter_record_batch(input, mask.as_boolean())?
+             }
++            LogicalPlan::Aggregate(aggregate)
++                if input.is_some_and(|batch| batch.num_rows() == 0) =>
++            {
++                // Reuse native empty propagation; global/empty grouping-set
++                // totals still produce rows. No aggregate is evaluated here.
++                let mut aggregate = aggregate.clone();
++                aggregate.input = Arc::new(LogicalPlan::EmptyRelation(
++                    datafusion_expr::logical_plan::EmptyRelation {
++                        produce_one_row: false,
++                        schema: Arc::clone(aggregate.input.schema()),
++                    },
++                ));
++                let config = OptimizerContext::new_with_config_options(
++                    Arc::clone(self.props.config_options.as_ref().unwrap()),
++                );
++                let prepared = datafusion::optimizer::propagate_empty_relation::PropagateEmptyRelation::new()
++                    .rewrite(LogicalPlan::Aggregate(aggregate), &config)?;
++                if !matches!(prepared.data, LogicalPlan::EmptyRelation(empty) if !empty.produce_one_row) {
++                    return Ok(None);
++                }
++                RecordBatch::new_empty(Arc::clone(plan.schema().inner()))
++            }
+             LogicalPlan::Sort(_) if input.is_some_and(|b| b.num_rows() == 0) => {
+                 input.unwrap().clone()
+             }
+@@ -3658,3 +3680,87 @@
+     }
+     Ok(())
+ }
++
++#[tokio::test]
++async fn empty_group_preparation_preserves_grand_totals()
++-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
++    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
++    use datafusion::arrow::array::AsArray;
++    use datafusion::common::ScalarValue;
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::SessionContext;
++
++    let ctx = SessionContext::new_with_state(
++        SessionStateBuilder::new()
++            .with_default_features()
++            .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
++            .with_query_planner(Arc::new(SparkQueryPlanner))
++            .build(),
++    );
++    for ansi in [true, false] {
++        for expression in [
++            "CAST('bad' AS INT)", "CAST('bad' AS DOUBLE)",
++            "CAST('bad' AS DECIMAL(10,2))", "7 DIV 0", "7.0 / 0", "7 % 0",
++        ] {
++            for negated in [false, true] {
++                let prefix = if negated { "NOT " } else { "" };
++                for (input, predicate, grouping, extra, fails, present) in [
++                    ("VALUES(0),(1),(2) t(id)", "id=k AND false", " GROUP BY id", "", false, [false; 3]),
++                    ("VALUES(0),(1),(2) t(id)", "id=k", " GROUP BY id", "", true, [false, true, false]),
++                    ("range(3)", "id=k AND false", " GROUP BY id", "", true, [false; 3]),
++                    ("VALUES(0),(1),(2) t(id)", "false", "", ", count(*)", true, [true; 3]),
++                ] {
++                    let sql = format!(
++                        "SELECT k, {prefix}EXISTS(SELECT (SELECT {expression} FROM range(1)){extra} \
++                         FROM {input} WHERE {predicate}{grouping}) AS r \
++                         FROM VALUES(0),(4),(CAST(NULL AS BIGINT)) o(k) ORDER BY k NULLS FIRST"
++                    );
++                    let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++                    let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                    let config = PlanConfig { ansi_mode: ansi, ..Default::default() };
++                    let named = PlanResolver::new(&ctx, Arc::new(config))
++                        .resolve_named_plan(spec).await?;
++                    let result = async {
++                        ctx.execute_logical_plan(named.plan).await?.collect().await
++                    }.await;
++                    if ansi && fails {
++                        let error = result.unwrap_err().to_string().to_lowercase();
++                        let cause = if expression.starts_with("CAST") { "cast" } else { "divide by zero" };
++                        assert!(error.contains(cause), "{sql}: {error}");
++                    } else {
++                        let batches = result?;
++                        let actual: Vec<_> = batches.iter().flat_map(|batch| {
++                            batch.column(1).as_boolean().iter()
++                        }).collect();
++                        let expected: Vec<_> = present.into_iter().map(|v| Some(v != negated)).collect();
++                        assert_eq!(actual, expected, "{sql}, ANSI={ansi}");
++                    }
++                }
++            }
++        }
++        for (grouping, total) in [
++            ("", true), (" GROUP BY id", false),
++            (" GROUP BY GROUPING SETS(())", true),
++            (" GROUP BY GROUPING SETS((id),())", true),
++            (" GROUP BY ROLLUP(id)", true), (" GROUP BY CUBE(id)", true),
++        ] {
++            let sql = format!(
++                "SELECT count(CAST('7' AS INT)) AS n FROM VALUES(0),(1) t(id) WHERE false{grouping}"
++            );
++            let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++            let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++            let config = PlanConfig { ansi_mode: ansi, ..Default::default() };
++            let named = PlanResolver::new(&ctx, Arc::new(config)).resolve_named_plan(spec).await?;
++            let batches = ctx.execute_logical_plan(named.plan).await?.collect().await?;
++            let mut actual = Vec::new();
++            for batch in batches {
++                for row in 0..batch.num_rows() {
++                    actual.push(ScalarValue::try_from_array(batch.column(0), row)?);
++                }
++            }
++            let expected = if total { vec![ScalarValue::Int64(Some(0))] } else { vec![] };
++            assert_eq!(actual, expected, "{sql}, ANSI={ansi}");
++        }
++    }
++    Ok(())
++}

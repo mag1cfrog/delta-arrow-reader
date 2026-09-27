@@ -448,3 +448,5 @@ See [correlated EXISTS preparation](CORRELATED_EXISTS.md) for the optional Rust 
 See [EXISTS preparation after correlation simplification](CORRELATION_FREE_EXISTS.md) for the optional Rust follow-up to PR 279, its empty-local and early-arithmetic boundaries, full compatibility evidence and bounded performance measurements.
 
 See [empty local input before scalar preparation](EMPTY_LOCAL_SCALAR.md) for the optional Rust follow-up to PR 281, its shared SELECT/IN/EXISTS repair, complete compatibility evidence and bounded performance measurements.
+
+See [empty keyed groups before scalar preparation](EMPTY_GROUP_SCALAR.md) for the optional Rust follow-up to PR 283, its shared empty-input proof and preserved grand totals, full compatibility evidence and bounded performance measurements.
