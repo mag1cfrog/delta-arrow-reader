@@ -228,9 +228,9 @@
   },
   "archive": {
     "path": "arithmetic-schema-errors-runs.json.gz",
-    "sha256": "bc8a5e5b18773ca2fe581021695741ea06a6f302192fbb382fc4c981276e9c44",
+    "sha256": "cfea1cd84f6cb7e7c96a8d4842f6bde5feff3276d36329191ce3f8b3a0237f25",
     "files": 406,
-    "bytes": 2245523
+    "bytes": 2241194
   },
   "diagnostic_review": {
     "before_head": "85c536c2b679ba1f76ec97ce9947d34cd1efd73a",
@@ -266,6 +266,7 @@
     "preserved_round_conditions": 8,
     "independent_controls": 6,
     "source_proof": "diagnostic-review/source-proof.json",
-    "note": "Ambiguous and unclassified causes receive no matching credit. No raw capture, engine, schema or stage changes."
+    "note": "Ambiguous and unclassified causes receive no matching credit. No raw capture, engine, schema or stage changes.",
+    "collection_summary": "replay-summary.json historical_schema_errors is the unchanged collection-time summary, before diagnostic review. Current comparisons are in *-complete-check.json and dimension-summary.json."
   }
 }
