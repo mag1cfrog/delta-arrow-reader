@@ -1,0 +1,95 @@
+--- a/crates/sail-plan/src/decimal_null.rs
++++ b/crates/sail-plan/src/decimal_null.rs
+@@ -168,12 +168,13 @@
+                         .transform_up(|mut expr| {
+                             // EXISTS needs only row presence. Keep local VALUES
+                             // checks before pruning its unused output expressions.
+-                            let exists = matches!(&expr, Expr::Exists(_));
++                            let mut prune_exists_output = false;
+                             let predicate = match &mut expr {
+-                                Expr::Exists(exists)
+-                                    if exists.subquery.outer_ref_columns.is_empty()
+-                                        || prepare.correlated_exists_uses_inner_columns(&exists.subquery.subquery)? =>
+-                                {
++                                Expr::Exists(exists) => {
++                                    // Losing the correlation stops output pruning,
++                                    // not local-input or arithmetic preparation.
++                                    prune_exists_output = exists.subquery.outer_ref_columns.is_empty()
++                                        || prepare.correlated_exists_uses_inner_columns(&exists.subquery.subquery)?;
+                                     // Remaining scalar subqueries are prepared even
+                                     // when EXISTS will discard their parent projection.
+                                     exists.subquery.subquery.apply_with_subqueries(|node| {
+@@ -202,7 +203,7 @@
+                                 let prepared = prepare.cast_reachability(
+                                     Arc::unwrap_or_clone(Arc::clone(&subquery.subquery)),
+                                     options,
+-                                    exists,
++                                    prune_exists_output,
+                                 )?;
+                                 // LIMIT 0 may sit below a projection or alias.
+                                 // Reuse native empty propagation before constant checks.
+@@ -3499,3 +3500,64 @@
+     }
+     Ok(())
+ }
++
++#[tokio::test]
++async fn correlation_free_exists_prepares_output()
++-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
++    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
++    use datafusion::arrow::array::AsArray;
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::SessionContext;
++
++    let ctx = SessionContext::new_with_state(
++        SessionStateBuilder::new()
++            .with_default_features()
++            .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
++            .with_query_planner(Arc::new(SparkQueryPlanner))
++            .build(),
++    );
++    for ansi in [true, false] {
++        for expression in [
++            "CAST('bad' AS INT)", "CAST('bad' AS DOUBLE)",
++            "CAST('bad' AS DECIMAL(10,2))", "7 DIV 0", "7.0 / 0", "7 % 0",
++        ] {
++            for negated in [false, true] {
++                let prefix = if negated { "NOT " } else { "" };
++                for (input, predicate, fails, present) in [
++                    ("VALUES(0),(1),(2) t(id)", "id=k AND false", false, [false; 3]),
++                    ("range(3)", "id=k AND false", true, [false; 3]),
++                    ("range(3)", "id=k", false, [false, true, false]),
++                    ("range(3)", "id=k AND (1=2)", false, [false; 3]),
++                    ("range(3)", "id=k AND CAST(NULL AS BOOLEAN)", false, [false; 3]),
++                    ("VALUES(0),(1),(2) t(id)", "id=k", true, [false, true, false]),
++                ] {
++                    let sql = format!(
++                        "SELECT k, {prefix}EXISTS(SELECT {expression} FROM {input} WHERE {predicate}) AS r \
++                         FROM VALUES(0),(4),(CAST(NULL AS BIGINT)) o(k) ORDER BY k NULLS FIRST"
++                    );
++                    let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++                    let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                    let config = PlanConfig { ansi_mode: ansi, ..Default::default() };
++                    let named = PlanResolver::new(&ctx, Arc::new(config))
++                        .resolve_named_plan(spec).await?;
++                    let result = async {
++                        ctx.execute_logical_plan(named.plan).await?.collect().await
++                    }.await;
++                    if ansi && fails {
++                        let error = result.unwrap_err().to_string().to_lowercase();
++                        let cause = if expression.starts_with("CAST") { "cast" } else { "divide by zero" };
++                        assert!(error.contains(cause), "{sql}: {error}");
++                    } else {
++                        let batches = result?;
++                        let actual: Vec<_> = batches.iter().flat_map(|batch| {
++                            batch.column(1).as_boolean().iter()
++                        }).collect();
++                        let expected: Vec<_> = present.into_iter().map(|v| Some(v != negated)).collect();
++                        assert_eq!(actual, expected, "{sql}, ANSI={ansi}");
++                    }
++                }
++            }
++        }
++    }
++    Ok(())
++}
