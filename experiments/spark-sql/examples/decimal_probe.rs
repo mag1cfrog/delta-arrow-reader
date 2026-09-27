@@ -1,6 +1,9 @@
 use std::{error::Error, fs, sync::Arc};
 
-use arrow::{array::Array, util::display::array_value_to_string};
+use arrow::{
+    array::Array, datatypes::Schema, ipc::writer::StreamWriter,
+    util::display::array_value_to_string,
+};
 use datafusion::{
     execution::SessionStateBuilder,
     prelude::{SessionConfig, SessionContext},
@@ -9,6 +12,12 @@ use sail_plan::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::
 use serde_json::{Value, json};
 
 type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
+
+fn schema_ipc(schema: &Schema) -> Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    StreamWriter::try_new(&mut bytes, schema)?.finish()?;
+    Ok(bytes)
+}
 
 async fn observe(case: &Value, include_physical_plan: bool) -> Result<Value> {
     let ctx = SessionContext::new_with_state(
@@ -39,6 +48,9 @@ async fn observe(case: &Value, include_physical_plan: bool) -> Result<Value> {
         Err(e) => return Ok(json!({"status":"planning_error","error":e.to_string()})),
     };
     let logical_plan = named.plan.display_indent().to_string();
+    // Preserve Arrow's complete schema separately from the public output names.
+    let output_names = named.fields;
+    let logical_schema_ipc = schema_ipc(named.plan.schema().as_arrow())?;
     let logical_nullable = named
         .plan
         .schema()
@@ -47,6 +59,7 @@ async fn observe(case: &Value, include_physical_plan: bool) -> Result<Value> {
         .map(|f| f.is_nullable())
         .collect::<Vec<_>>();
     let mut physical_plan = None;
+    let mut physical_schema_ipc = None;
     let executed: datafusion::common::Result<_> = async {
         let frame = ctx.execute_logical_plan(named.plan).await?;
         let physical = frame.create_physical_plan().await?;
@@ -58,6 +71,9 @@ async fn observe(case: &Value, include_physical_plan: bool) -> Result<Value> {
             );
         }
         let schema = physical.schema();
+        physical_schema_ipc = Some(
+            schema_ipc(&schema).map_err(|e| datafusion::common::DataFusionError::External(e))?,
+        );
         let batches = datafusion::physical_plan::collect(physical, ctx.task_ctx()).await?;
         Ok((schema, batches))
     }
@@ -65,7 +81,9 @@ async fn observe(case: &Value, include_physical_plan: bool) -> Result<Value> {
     let (schema, batches) = match executed {
         Ok(result) => result,
         Err(e) => {
-            let mut actual = json!({"status":"execution_error","error":e.to_string(),"logical_plan":logical_plan});
+            let mut actual = json!({"status":"execution_error","error":e.to_string(),"logical_plan":logical_plan,
+                "output_names":output_names,"logical_schema_ipc":logical_schema_ipc,
+                "physical_schema_ipc":physical_schema_ipc});
             if let Some(plan) = physical_plan {
                 actual["physical_plan"] = json!(plan);
             }
@@ -96,6 +114,7 @@ async fn observe(case: &Value, include_physical_plan: bool) -> Result<Value> {
         }
     }
     let mut actual = json!({"status":"ok","types":types,"rows":rows,"logical_plan":logical_plan,
+        "output_names":output_names,"logical_schema_ipc":logical_schema_ipc,"physical_schema_ipc":physical_schema_ipc,
         "logical_nullable":logical_nullable,"physical_nullable":schema.fields().iter().map(|f| f.is_nullable()).collect::<Vec<_>>()});
     if let Some(plan) = physical_plan {
         actual["physical_plan"] = json!(plan);
@@ -129,4 +148,46 @@ async fn main() -> Result<()> {
         serde_json::to_vec_pretty(&json!({"cases":cases,"results":results}))?,
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arrow::{
+        datatypes::{DataType, Field},
+        ipc::reader::StreamReader,
+    };
+    use std::{collections::HashMap, io::Cursor};
+
+    #[tokio::test]
+    async fn captures_complete_schemas_without_changing_output_names() -> Result<()> {
+        let field = Field::new("internal", DataType::Decimal128(38, 18), true)
+            .with_metadata(HashMap::from([("origin".into(), "fixture".into())]));
+        let schema = Schema::new_with_metadata(
+            vec![field],
+            HashMap::from([("schema_origin".into(), "fixture".into())]),
+        );
+        let reader = StreamReader::try_new(Cursor::new(schema_ipc(&schema)?), None)?;
+        assert_eq!(reader.schema().as_ref(), &schema);
+        for sql in [
+            "SELECT CAST(1 AS DECIMAL(10,2)) AS same, CAST(NULL AS INT) AS same",
+            "SELECT CAST(id AS DECIMAL(10,2)) AS r FROM range(0)",
+            "SELECT CAST('bad' AS INT) AS r FROM range(1)",
+        ] {
+            let actual = observe(&json!({"sql":sql,"ansi":true}), true).await?;
+            assert!(actual["logical_schema_ipc"].is_array(), "{actual}");
+            if actual["status"] == "ok" {
+                assert!(actual["physical_schema_ipc"].is_array(), "{actual}");
+                if sql.contains("AS same") {
+                    assert_eq!(actual["output_names"], json!(["same", "same"]));
+                } else {
+                    assert_eq!(actual["rows"], json!([]));
+                }
+            } else {
+                assert_eq!(actual["status"], "execution_error");
+                assert!(actual["error"].as_str().unwrap().contains("bad"));
+            }
+        }
+        Ok(())
+    }
 }
