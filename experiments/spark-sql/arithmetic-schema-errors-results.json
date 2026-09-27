@@ -125,9 +125,9 @@
     },
     "error_cause": {
       "not_applicable": 5879,
-      "unclassified": 258,
-      "match": 634,
-      "difference": 13
+      "match": 603,
+      "ambiguous": 82,
+      "unclassified": 220
     },
     "schemas": {
       "logical": {
@@ -198,7 +198,7 @@
   },
   "tests": {
     "native_probe_checks": 1,
-    "python_new_and_retained_comparator_checks": 8
+    "python_new_and_retained_comparator_checks": 10
   },
   "performance": "The same selected query-runtime libraries are linked. This changes probe capture cost only; no product-performance result is claimed. Accepted runtime cost evidence and open performance owners are unchanged.",
   "pending": [
@@ -209,7 +209,7 @@
     "Default-build adoption remains with issue 165. No new compatibility exception is accepted."
   ],
   "code_sha256": {
-    "arithmetic_schema_errors.py": "dc7444fdbf1f4affadf484ed43458bf78c9e1e8e7875c1243382c2baae87e5ab",
+    "arithmetic_schema_errors.py": "2b1d74ab424c55f1982ff19129dce729de53cd7e6c896690275ca6af5769d39b",
     "decimal_division.py": "42f54687ba4ac8ff811f7c227404f0ab4bb0483bd31c4959c167b6b71935e1ec",
     "division_cast_classification.py": "049f9c0e9a4d8002584b3af5036afa032189896eea8567c60b4f581a8308e27d",
     "early_arithmetic.py": "38a5663f408c844c13629bfac01ab0ae9a94a3d83d11292b8e4b1413160fe762",
@@ -223,12 +223,49 @@
     "round_arguments.py": "9a02b260046ef32181866887021ea6cc11462f6b230614ba795cefa4c90907bb",
     "string_division_coercion.py": "675bd82b1371f53eac368e46a67a26ef3e7ff97b91b9c80a86efd137a90a688d",
     "string_modulo_coercion.py": "77602db3b22da6a98e7b978f9b9b89a4250d270a0d542b3002229cf67fd97069",
-    "test_arithmetic_schema_errors.py": "02cb676481a73a82700b55530f453be2bb2ab65988bbbdaf60d2c1cb4a9e1ff9"
+    "test_arithmetic_schema_errors.py": "b0083f32fa7aae773bb277376ac5ff4249e1318e4612925817cf25cf5c421ff8",
+    "decimal_arithmetic_types.py": "f355276a7660aba73f528e5b1fb959ef439332e66913f952ef0c70be633de317"
   },
   "archive": {
     "path": "arithmetic-schema-errors-runs.json.gz",
-    "sha256": "0801da9ba29785efb3bbf3f07f93afb38f45676ffbfffde3a63081c49fba3556",
-    "files": 382,
-    "bytes": 2143306
+    "sha256": "bc8a5e5b18773ca2fe581021695741ea06a6f302192fbb382fc4c981276e9c44",
+    "files": 406,
+    "bytes": 2245523
+  },
+  "diagnostic_review": {
+    "before_head": "85c536c2b679ba1f76ec97ce9947d34cd1efd73a",
+    "before_archive": {
+      "path": "arithmetic-schema-errors-runs.json.gz",
+      "sha256": "0801da9ba29785efb3bbf3f07f93afb38f45676ffbfffde3a63081c49fba3556",
+      "files": 382,
+      "bytes": 2143306
+    },
+    "changed_observations": 122,
+    "transitions": [
+      {
+        "before": "difference",
+        "after": "ambiguous",
+        "count": 11
+      },
+      {
+        "before": "difference",
+        "after": "match",
+        "count": 2
+      },
+      {
+        "before": "match",
+        "after": "ambiguous",
+        "count": 71
+      },
+      {
+        "before": "unclassified",
+        "after": "match",
+        "count": 38
+      }
+    ],
+    "preserved_round_conditions": 8,
+    "independent_controls": 6,
+    "source_proof": "diagnostic-review/source-proof.json",
+    "note": "Ambiguous and unclassified causes receive no matching credit. No raw capture, engine, schema or stage changes."
   }
 }

@@ -4,12 +4,40 @@ import argparse
 from collections import Counter
 import json
 from pathlib import Path
+import re
 
 import pyarrow as pa
 
-from early_arithmetic import cause
+from decimal_arithmetic_types import cause as decimal_cause
+from early_arithmetic import cause as arithmetic_cause
 from extracted import spark_field
 from oracle import schema_dimensions
+
+
+def ambiguous_decimal_cast(actual):
+    return not actual.get("condition") and re.fullmatch(
+        r"Execution error: Cannot cast Some\(.*\) to DECIMAL\(\d+,-?\d+\)",
+        actual.get("error", "").rsplit("\ncaused by\n", 1)[-1],
+    ) is not None
+
+
+def cause(actual):
+    # The selected string-to-Decimal adapter erases parsing, source-range and
+    # target-precision failures into the same message. Do not infer one cause.
+    if ambiguous_decimal_cast(actual):
+        return None
+    known = arithmetic_cause(actual)
+    if actual.get("condition") or known not in (None, "CAST_INVALID_INPUT"):
+        return known
+    text = actual.get("error", "").rsplit("\ncaused by\n", 1)[-1]
+    if text == "Arrow error: Arithmetic overflow: Spark decimal division result exceeds its precision":
+        return "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION"
+    # Reuse the Decimal classifier only for Arrow's own CAST/range messages.
+    # A nested range message inside ROUND keeps its already known condition.
+    if text.startswith(("Arrow error: Cast error: Cannot cast to Decimal128(",
+                        "Arrow error: Invalid argument error: ")):
+        return decimal_cause(actual) or known
+    return known
 
 
 def native_schema(actual, phase):
@@ -52,7 +80,8 @@ def compare(reference, candidate):
         if expected["status"] != "ok" and actual["status"] != "ok":
             causes = [cause(expected), cause(actual)]
             row["error_causes"] = causes
-            row["error_cause_check"] = ("unclassified" if None in causes else
+            row["error_cause_check"] = ("ambiguous" if any(ambiguous_decimal_cast(a) for a in (expected, actual)) else
+                                       "unclassified" if None in causes else
                                        "match" if causes[0] == causes[1] else "difference")
             # Inferred cause equality does not verify SQLSTATE, message
             # parameters, first-invalid input, or an engine's typed error API.
