@@ -440,3 +440,5 @@ The recursive data_type_to_null_literal helper had no external caller. Removing 
 Ten unused payload structs/enums for inline UDFs, Python grouped operations and watermark/state operations are removed. Rejected variants retain only their child inputs or arguments. Existing rejection tests passed before and after removal with missing tables/columns and exact unsupported-operation messages, confirming rejection still precedes input or argument resolution. This removes 129 vendored production-source lines and 25 net runner-test lines. All 116 import-baseline observations and retained library suites pass; dependencies, vendored tests and reference comparison totals are unchanged.
 
 - [NULL-discarded scalar subqueries](NULL_SUBQUERIES.md): preserve subquery preparation and ROUND execution while discarding dead outer scalar work.
+
+See [three-valued IN/NOT IN filtering](NOT_IN_NULL_FILTER.md) for the optional Rust repair, independent SQL checks, rejected candidates and measured local costs.

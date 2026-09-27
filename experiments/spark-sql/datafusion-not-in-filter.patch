@@ -1,0 +1,179 @@
+--- a/src/decorrelate_predicate_subquery.rs
++++ b/src/decorrelate_predicate_subquery.rs
+@@ -80,7 +80,7 @@
+             for expr in projection.expr {
+                 let original_name = expr.schema_name().to_string();
+                 let (new_input, mut rewritten_expr) =
+-                    rewrite_inner_subqueries(cur_input, expr, config, true)?;
++                    rewrite_inner_subqueries(cur_input, expr, config)?;
+                 if has_subquery(&rewritten_expr) {
+                     return Ok(Transformed::no(LogicalPlan::Projection(
+                         original_projection,
+@@ -135,7 +135,7 @@
+                 // The subquery expression is embedded within another expression
+                 SubqueryPredicate::Embedded(expr) => {
+                     let (plan, expr_without_subqueries) =
+-                        rewrite_inner_subqueries(cur_input, expr, config, false)?;
++                        rewrite_inner_subqueries(cur_input, expr, config)?;
+                     cur_input = plan;
+                     other_exprs.push(expr_without_subqueries);
+                 }
+@@ -170,7 +170,6 @@
+     outer: LogicalPlan,
+     expr: Expr,
+     config: &dyn OptimizerConfig,
+-    materialize_in_value: bool,
+ ) -> Result<(LogicalPlan, Expr)> {
+     let mut cur_input = outer;
+     let alias = config.alias_generator();
+@@ -191,22 +190,13 @@
+             subquery: Subquery { subquery, .. },
+             negated,
+         }) => {
+-            let rewritten = if materialize_in_value {
+-                in_subquery_value_mark_join(
+-                    &cur_input,
+-                    &subquery,
+-                    *expr.clone(),
+-                    negated,
+-                    alias,
+-                )?
+-            } else {
+-                let in_predicate = subquery
+-                    .head_output_expr()?
+-                    .map_or(plan_err!("single expression required."), |output_expr| {
+-                        Ok(Expr::eq(*expr.clone(), output_expr))
+-                    })?;
+-                mark_join(&cur_input, &subquery, Some(&in_predicate), negated, alias)?
+-            };
++            let rewritten = in_subquery_value_mark_join(
++                &cur_input,
++                &subquery,
++                *expr.clone(),
++                negated,
++                alias,
++            )?;
+             match rewritten {
+                 Some((plan, exists_expr)) => {
+                     cur_input = plan;
+@@ -473,9 +463,14 @@
+             replace_qualified_name(filter, &all_correlated_cols, &alias).map(Some)
+         })?;
+ 
++    // A column-free IN value cannot become a hash join key. Preserve UNKNOWN
++    // explicitly because nested-loop anti joins do not use the null-aware flag.
++    let null_aware_filter = join_type == JoinType::LeftAnti
++        && matches!(in_predicate_opt, Some(Expr::BinaryExpr(expr))
++            if expr.left.column_refs().is_empty());
+     let join_filter = match (join_filter_opt, in_predicate_opt.cloned()) {
+         (
+-            Some(join_filter),
++            correlated_filter,
+             Some(Expr::BinaryExpr(BinaryExpr {
+                 left,
+                 op: Operator::Eq,
+@@ -483,22 +478,18 @@
+             })),
+         ) => {
+             let right_col = create_col_from_scalar_expr(right.deref(), alias)?;
+-            let in_predicate = Expr::eq(left.deref().clone(), Expr::Column(right_col));
+-            in_predicate.and(join_filter)
++            let in_predicate = Expr::eq(*left, Expr::Column(right_col));
++            let in_predicate = if null_aware_filter {
++                in_predicate.is_not_false()
++            } else {
++                in_predicate
++            };
++            match correlated_filter {
++                Some(filter) => in_predicate.and(filter),
++                None => in_predicate,
++            }
+         }
+         (Some(join_filter), _) => join_filter,
+-        (
+-            _,
+-            Some(Expr::BinaryExpr(BinaryExpr {
+-                left,
+-                op: Operator::Eq,
+-                right,
+-            })),
+-        ) => {
+-            let right_col = create_col_from_scalar_expr(right.deref(), alias)?;
+-
+-            Expr::eq(left.deref().clone(), Expr::Column(right_col))
+-        }
+         (None, None) => lit(true),
+         _ => return Ok(None),
+     };
+@@ -558,7 +549,8 @@
+     //
+     // Additionally, if the join keys are non-nullable on both sides, we don't need
+     // null-aware semantics because NULLs cannot exist in the data.
+-    let null_aware = join_type == JoinType::LeftAnti
++    let null_aware = !null_aware_filter
++        && join_type == JoinType::LeftAnti
+         && in_predicate_opt.is_some()
+         && join_keys_may_be_null(&join_filter, left.schema(), sub_query_alias.schema())?;
+ 
+@@ -2360,3 +2352,61 @@
+     }
+     Ok(())
+ }
++
++#[cfg(test)]
++#[test]
++fn column_free_not_in_preserves_unknown() -> datafusion_common::Result<()> {
++    use crate::{
++        Optimizer, OptimizerContext,
++        decorrelate_predicate_subquery::DecorrelatePredicateSubquery,
++        push_down_filter::PushDownFilter,
++    };
++    use arrow::datatypes::{DataType, Field, Schema};
++    use datafusion_common::{ScalarValue, tree_node::{TreeNode, TreeNodeRecursion}};
++    use datafusion_expr::{
++        Expr, LogicalPlan, LogicalPlanBuilder, builder::table_source, col,
++        in_subquery, lit, not_in_subquery, out_ref_col,
++    };
++    use std::sync::Arc;
++
++    for null_left in [false, true] {
++        for nullable_right in [false, true] {
++            for correlated in [false, true] {
++                for negated in [false, true] {
++                    let outer = LogicalPlanBuilder::scan(
++                        "o", table_source(&Schema::new(vec![Field::new("x", DataType::Int64, true)])), None,
++                    )?.build()?;
++                    let mut inner = LogicalPlanBuilder::scan(
++                        "t", table_source(&Schema::new(vec![Field::new("v", DataType::Int64, nullable_right)])), None,
++                    )?;
++                    if correlated {
++                        inner = inner.filter(col("t.v").eq(out_ref_col(DataType::Int64, "o.x")))?;
++                    }
++                    let inner = Arc::new(inner.project(vec![col("t.v")])?.build()?);
++                    let lhs = if null_left { lit(ScalarValue::Int64(None)) } else { lit(7_i64) };
++                    let predicate = if negated { not_in_subquery(lhs, inner) } else { in_subquery(lhs, inner) };
++                    let plan = LogicalPlanBuilder::from(outer).filter(predicate)?.build()?;
++                    let mut unknown_checks = 0;
++                    let optimized = Optimizer::with_rules(vec![
++                        Arc::new(DecorrelatePredicateSubquery::new()),
++                        Arc::new(PushDownFilter::new()),
++                    ]).optimize(plan, &OptimizerContext::new(), |_, _| {})?;
++                    optimized.apply(|node| {
++                        for expr in node.expressions() {
++                            expr.apply(|expr| {
++                                if matches!(expr, Expr::IsNotFalse(_)) { unknown_checks += 1; }
++                                Ok(TreeNodeRecursion::Continue)
++                            })?;
++                        }
++                        if negated && let LogicalPlan::Join(join) = node {
++                            assert!(!join.null_aware, "filter must encode NULL handling without the hash-only flag");
++                        }
++                        Ok(TreeNodeRecursion::Continue)
++                    })?;
++                    assert_eq!(unknown_checks, usize::from(negated), "{}", optimized.display_indent());
++                }
++            }
++        }
++    }
++    Ok(())
++}

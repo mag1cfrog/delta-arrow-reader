@@ -1,0 +1,41 @@
+--- a/src/expr_schema.rs
++++ b/src/expr_schema.rs
+@@ -366,7 +366,10 @@
+             | Expr::IsNotUnknown(_)
+             | Expr::Exists { .. } => Ok(false),
+             Expr::SetComparison(_) => Ok(true),
+-            Expr::InSubquery(InSubquery { expr, .. }) => expr.nullable(input_schema),
++            Expr::InSubquery(InSubquery { expr, subquery, .. }) => {
++                Ok(expr.nullable(input_schema)?
++                    || subquery.subquery.schema().field(0).is_nullable())
++            }
+             // No input rows still produce a scalar NULL.
+             Expr::ScalarSubquery(_) => Ok(true),
+             Expr::BinaryExpr(BinaryExpr { left, right, .. }) => {
+@@ -1234,3 +1237,26 @@
+         assert_eq!(meta, expr.metadata(&schema).unwrap());
+     }
+ }
++
++#[cfg(test)]
++#[test]
++fn in_subquery_nullability_includes_right_output() -> datafusion_common::Result<()> {
++    use arrow::datatypes::{DataType, Field, Schema};
++    use datafusion_common::{DFSchema, ScalarValue};
++    use crate::{ExprSchemable, LogicalPlanBuilder, builder::table_source, col, in_subquery, lit, not_in_subquery};
++    use std::sync::Arc;
++    for left_null in [false, true] {
++        for right_null in [false, true] {
++            let subquery = Arc::new(LogicalPlanBuilder::scan(
++                "t", table_source(&Schema::new(vec![Field::new("v", DataType::Int64, right_null)])), None,
++            )?.project(vec![col("t.v")])?.build()?);
++            let value = if left_null { lit(ScalarValue::Int64(None)) } else { lit(7_i64) };
++            for expr in [in_subquery(value.clone(), subquery.clone()), not_in_subquery(value, subquery)] {
++                let expected = left_null || right_null;
++                assert_eq!(expr.nullable(&DFSchema::empty())?, expected);
++                assert_eq!(expr.to_field(&DFSchema::empty())?.1.is_nullable(), expected);
++            }
++        }
++    }
++    Ok(())
++}

@@ -1,0 +1,91 @@
+--- a/src/projection.rs
++++ b/src/projection.rs
+@@ -45,7 +45,7 @@
+ use datafusion_common::tree_node::{
+     Transformed, TransformedResult, TreeNode, TreeNodeRecursion,
+ };
+-use datafusion_common::{DataFusionError, JoinSide, Result, internal_err};
++use datafusion_common::{DataFusionError, JoinSide, JoinType, Result, internal_err};
+ use datafusion_execution::TaskContext;
+ use datafusion_expr::ExpressionPlacement;
+ use datafusion_physical_expr::equivalence::ProjectionMapping;
+@@ -644,6 +644,7 @@
+ }
+ 
+ pub fn try_pushdown_through_join(
++    join_type: JoinType,
+     projection: &ProjectionExec,
+     join_left: &Arc<dyn ExecutionPlan>,
+     join_right: &Arc<dyn ExecutionPlan>,
+@@ -651,6 +652,13 @@
+     schema: &SchemaRef,
+     filter: Option<&JoinFilter>,
+ ) -> Result<Option<JoinData>> {
++    // ponytail: this mapper assumes concatenated left/right output columns.
++    // Semi/anti/mark joins use embedded projection until child pushdown maps
++    // their actual output indices.
++    if !matches!(join_type, JoinType::Inner | JoinType::Left | JoinType::Right | JoinType::Full) {
++        return Ok(None);
++    }
++
+     // Convert projected expressions to columns. We can not proceed if this is not possible.
+     let Some(projection_as_columns) = physical_to_column_exprs(projection.expr()) else {
+         return Ok(None);
+@@ -1801,3 +1809,37 @@
+         Ok(())
+     }
+ }
++
++#[cfg(test)]
++#[test]
++fn projected_join_preserves_output_column_mapping() -> datafusion_common::Result<()> {
++    use arrow::datatypes::{DataType, Field, Schema};
++    use datafusion_common::JoinType;
++    use datafusion_physical_expr::expressions::Column;
++    use crate::{ExecutionPlan, empty::EmptyExec, joins::NestedLoopJoinExec, projection::ProjectionExec};
++    use std::sync::Arc;
++
++    for join_type in [JoinType::RightMark, JoinType::RightSemi, JoinType::RightAnti,
++                      JoinType::LeftMark, JoinType::LeftSemi, JoinType::LeftAnti,
++                      JoinType::Inner, JoinType::Left, JoinType::Right, JoinType::Full] {
++        for rename in [false, true] {
++            let left = Arc::new(EmptyExec::new(Arc::new(Schema::new(vec![Field::new("l", DataType::Int64, true)]))));
++            let right = Arc::new(EmptyExec::new(Arc::new(Schema::new(vec![
++                Field::new("r0", DataType::Int64, true),
++                Field::new("r1", DataType::Int64, true),
++                Field::new("r2", DataType::Int64, true),
++            ]))));
++            let join = Arc::new(NestedLoopJoinExec::try_new(left, right, None, &join_type, None)?);
++            let schema = join.schema();
++            let expr = schema.fields().iter().enumerate().take(schema.fields().len().saturating_sub(1))
++                .map(|(i,f)| (Arc::new(Column::new(f.name(),i)) as Arc<dyn datafusion_physical_expr::PhysicalExpr>,
++                             if rename { format!("output_{i}") } else { f.name().clone() }))
++                .collect::<Vec<_>>();
++            let projection = ProjectionExec::try_new(expr, join.clone())?;
++            if let Some(rewritten) = join.try_swapping_with_projection(&projection)? {
++                assert_eq!(rewritten.schema(),projection.schema(),"{join_type:?}, rename={rename}");
++            }
++        }
++    }
++    Ok(())
++}
+--- a/src/joins/hash_join/exec.rs
++++ b/src/joins/hash_join/exec.rs
+@@ -1510,6 +1510,7 @@
+             join_filter,
+             join_on,
+         }) = try_pushdown_through_join(
++            *self.join_type(),
+             projection,
+             self.left(),
+             self.right(),
+--- a/src/joins/nested_loop_join.rs
++++ b/src/joins/nested_loop_join.rs
+@@ -739,6 +739,7 @@
+             join_filter,
+             ..
+         }) = try_pushdown_through_join(
++            *self.join_type(),
+             projection,
+             self.left(),
+             self.right(),
