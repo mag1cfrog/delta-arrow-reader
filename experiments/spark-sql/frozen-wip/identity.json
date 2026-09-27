@@ -1,0 +1,13 @@
+{
+  "status": "UNREVIEWED_UNFINISHED_NOT_ADOPTED",
+  "issue": 293,
+  "repo_head": "bde063e527547f20e687548cd8cda098c1b0fb88",
+  "private_directory": "/home/hanbo/.cache/delta-reader-spark-planning/local-projection-order-2a82385",
+  "sha256": {
+    "before-crate/src/decimal_null.rs": "818af1a613d206840874e8a96c1c4288fec8c8c9fc21b5aec74fc2ef58b7722d",
+    "after-crate/src/decimal_null.rs": "654bb7e8e7316ab6277e87720d9e264b6084171bcece919abca3e70588bcac1b",
+    "focused-summary.json": "113ecd95263dc175024c759767a64df01103ea74926cb5b0e57055278a33d416",
+    "test-results.json": "16e4857d44ae6e2eea17fca407fcaf9f531dac6dd926c81cfab9816cd63843b8",
+    "replay-summary.json": "ea652f7f676f29d417a29b4603b2846bda53ac52df1f0c1f1ed4c40ddcdb7a9c"
+  }
+}

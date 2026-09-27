@@ -1,5 +1,11 @@
 # Spark SQL extraction experiment
 
+> Frozen by maintainer decision on 2026-09-27 UTC. This is an unfinished
+> engineering experiment, not a supported Spark-compatible frontend.
+> Autonomous work has stopped; Python bindings do not depend on completion.
+> See [the freeze record](FROZEN.md). Instructions and next steps below are
+> historical reproduction notes, not authorization to resume the backlog.
+
 The [owning issue](https://github.com/mag1cfrog/delta-arrow-reader/issues/113) defines the scope, coverage and reduction rules. This directory contains the test corpus, an independent Apache Spark oracle and a vendored Rust runner over real Delta tables.
 
 The [arithmetic schema/error audit](ARITHMETIC_SCHEMA_ERRORS.md) adds complete Arrow schema capture and separate field/error comparisons to the retained 37 replay groups. All 6,784 prior native records remain unchanged. Missing evidence, unclassified errors and existing differences remain visible under the arithmetic validation issue.
