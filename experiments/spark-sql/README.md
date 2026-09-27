@@ -442,3 +442,5 @@ Ten unused payload structs/enums for inline UDFs, Python grouped operations and 
 - [NULL-discarded scalar subqueries](NULL_SUBQUERIES.md): preserve subquery preparation and ROUND execution while discarding dead outer scalar work.
 
 See [three-valued IN/NOT IN filtering](NOT_IN_NULL_FILTER.md) for the optional Rust repair, independent SQL checks, rejected candidates and measured local costs.
+
+See [correlated EXISTS preparation](CORRELATED_EXISTS.md) for the optional Rust repair, guarded projection pruning, retained error boundaries and bounded cost comparison.
