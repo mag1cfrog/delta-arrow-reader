@@ -165,6 +165,14 @@ scheduling, and optional DataFusion integration.
 It does not write Delta tables, manage transactions, create a Tokio runtime, or
 provide Delta Funnel orchestration, reporting, or Python APIs.
 
+## Project direction
+
+The core remains a read-only Delta-to-Arrow reader with optional DataFusion
+integration. [Python Reader bindings](https://mag1cfrog.github.io/delta-arrow-reader/project-direction/)
+are planned independently of SQL compatibility. The
+[Spark/Sail experiment](https://mag1cfrog.github.io/delta-arrow-reader/spark-sql-experiment/)
+is frozen and is not a supported Spark-compatible frontend.
+
 ## Documentation
 
 - [Streaming reader quickstart](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
