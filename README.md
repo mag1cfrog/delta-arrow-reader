@@ -1,5 +1,9 @@
 # Delta Arrow Reader
 
+> This branch preserves the frozen Spark/Sail experiment. It is not the
+> supported Reader release or a Spark-compatible frontend. See the
+> [freeze record](experiments/spark-sql/FROZEN.md) and use `main` for core work.
+
 <h3 align="center">
   <strong>Delta Lake in. Arrow batches out. No Spark required.</strong>
 </h3>
