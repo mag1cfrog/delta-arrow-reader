@@ -197,10 +197,18 @@ evaluation.
 
 ## Issue disposition at closeout
 
-The following 62 issues were updated and read back after the change. All 24
-roadmap/adoption closures use GitHub `not_planned`; none represents completed
-compatibility. The 34 unresolved Spark issues remain open with `deferred`.
-Already completed leaves and core/upstream investigations were left unchanged.
+The following 62 issues were updated and read back after the change. The initial
+closeout closed 24 roadmap/adoption tasks and left 34 unresolved experiment issues
+open with `deferred`. The maintainer then clarified that these stopped experiment
+tasks should also leave the active backlog. All 58 Spark issues now use GitHub
+`closed` / `not_planned`. Their unresolved findings, unchecked criteria and evidence
+remain intact; none is represented as completed compatibility. The 34 former
+backlog items no longer carry the `deferred` label.
+
+The 12 remaining open issues are five core/upstream investigations (#44, #45,
+#129, #200, #223), six core Reader Python tasks (#101, #102, #105, #106, #107,
+#109), and the optional DataFusion Python FFI investigation (#112). Already
+completed leaves and these retained issues were left unchanged.
 
 | Issue | Retained scope | State after closeout |
 | --- | --- | --- |
@@ -209,31 +217,31 @@ Already completed leaves and core/upstream investigations were left unchanged.
 | [#109](https://github.com/mag1cfrog/delta-arrow-reader/issues/109) | ci(python): build platform wheels and publish through release-plz | Open: core Reader Python plan |
 | [#112](https://github.com/mag1cfrog/delta-arrow-reader/issues/112) | design(python): investigate optional DataFusion provider FFI integration | Open: deferred |
 | [#113](https://github.com/mag1cfrog/delta-arrow-reader/issues/113) | feat(sql): track Spark SQL frontend compatibility and adoption | Closed: not planned |
-| [#116](https://github.com/mag1cfrog/delta-arrow-reader/issues/116) | fix(sql): preserve NULL semantics in ARRAY_CONTAINS | Open: deferred |
-| [#117](https://github.com/mag1cfrog/delta-arrow-reader/issues/117) | perf(sql): reduce shared Float64 addition dispatch overhead | Open: deferred |
-| [#137](https://github.com/mag1cfrog/delta-arrow-reader/issues/137) | test(sql): verify identifier and statement-boundary semantics | Open: deferred |
-| [#138](https://github.com/mag1cfrog/delta-arrow-reader/issues/138) | fix(sql): support Spark wildcard EXCEPT projections | Open: deferred |
-| [#139](https://github.com/mag1cfrog/delta-arrow-reader/issues/139) | fix(sql): honor per-query Spark case-sensitive name resolution | Open: deferred |
-| [#140](https://github.com/mag1cfrog/delta-arrow-reader/issues/140) | fix(sql): execute retained nested correlated scalar subqueries | Open: deferred |
-| [#141](https://github.com/mag1cfrog/delta-arrow-reader/issues/141) | test(sql): complete retained relational-query compatibility coverage | Open: deferred |
-| [#142](https://github.com/mag1cfrog/delta-arrow-reader/issues/142) | test(sql): resolve aggregation and window coverage gaps | Open: deferred |
-| [#149](https://github.com/mag1cfrog/delta-arrow-reader/issues/149) | test(sql): verify retained arithmetic schemas and error conditions | Open: deferred |
-| [#150](https://github.com/mag1cfrog/delta-arrow-reader/issues/150) | test(sql): resolve remaining NULL and conditional behavior findings | Open: deferred |
-| [#151](https://github.com/mag1cfrog/delta-arrow-reader/issues/151) | test(sql): verify string binary and concatenation semantics | Open: deferred |
-| [#152](https://github.com/mag1cfrog/delta-arrow-reader/issues/152) | fix(sql): preserve DATE_DIFF result width and date arithmetic | Open: deferred |
-| [#153](https://github.com/mag1cfrog/delta-arrow-reader/issues/153) | test(sql): verify timestamp formatting parsing and type contracts | Open: deferred |
-| [#154](https://github.com/mag1cfrog/delta-arrow-reader/issues/154) | fix(sql): preserve Spark DST gap and overlap conversions | Open: deferred |
-| [#155](https://github.com/mag1cfrog/delta-arrow-reader/issues/155) | fix(sql): preserve non-ANSI ELEMENT_AT bounds behavior | Open: deferred |
-| [#156](https://github.com/mag1cfrog/delta-arrow-reader/issues/156) | test(sql): verify nested values maps and explode contracts | Open: deferred |
-| [#157](https://github.com/mag1cfrog/delta-arrow-reader/issues/157) | perf(sql): evaluate retained analyzer and planning costs | Open: deferred |
-| [#158](https://github.com/mag1cfrog/delta-arrow-reader/issues/158) | perf(sql): evaluate division rounding and allocator-sensitive controls | Open: deferred |
-| [#159](https://github.com/mag1cfrog/delta-arrow-reader/issues/159) | perf(sql): evaluate cast buffer ownership and conversion fallbacks | Open: deferred |
-| [#160](https://github.com/mag1cfrog/delta-arrow-reader/issues/160) | perf(sql): evaluate floating comparison and IN costs | Open: deferred |
-| [#161](https://github.com/mag1cfrog/delta-arrow-reader/issues/161) | perf(sql): evaluate floating joins projected IN and COUNT costs | Open: deferred |
-| [#162](https://github.com/mag1cfrog/delta-arrow-reader/issues/162) | perf(sql): evaluate grouping normalization IDs and bit permutation | Open: deferred |
-| [#163](https://github.com/mag1cfrog/delta-arrow-reader/issues/163) | perf(sql): evaluate DOUBLE arithmetic and final Decimal conversion | Open: deferred |
-| [#164](https://github.com/mag1cfrog/delta-arrow-reader/issues/164) | perf(sql): validate the selected runtime on real Delta streams | Open: deferred |
-| [#165](https://github.com/mag1cfrog/delta-arrow-reader/issues/165) | build(sql): reproduce the selected Spark runtime and integration checks | Open: deferred |
+| [#116](https://github.com/mag1cfrog/delta-arrow-reader/issues/116) | fix(sql): preserve NULL semantics in ARRAY_CONTAINS | Closed: not planned |
+| [#117](https://github.com/mag1cfrog/delta-arrow-reader/issues/117) | perf(sql): reduce shared Float64 addition dispatch overhead | Closed: not planned |
+| [#137](https://github.com/mag1cfrog/delta-arrow-reader/issues/137) | test(sql): verify identifier and statement-boundary semantics | Closed: not planned |
+| [#138](https://github.com/mag1cfrog/delta-arrow-reader/issues/138) | fix(sql): support Spark wildcard EXCEPT projections | Closed: not planned |
+| [#139](https://github.com/mag1cfrog/delta-arrow-reader/issues/139) | fix(sql): honor per-query Spark case-sensitive name resolution | Closed: not planned |
+| [#140](https://github.com/mag1cfrog/delta-arrow-reader/issues/140) | fix(sql): execute retained nested correlated scalar subqueries | Closed: not planned |
+| [#141](https://github.com/mag1cfrog/delta-arrow-reader/issues/141) | test(sql): complete retained relational-query compatibility coverage | Closed: not planned |
+| [#142](https://github.com/mag1cfrog/delta-arrow-reader/issues/142) | test(sql): resolve aggregation and window coverage gaps | Closed: not planned |
+| [#149](https://github.com/mag1cfrog/delta-arrow-reader/issues/149) | test(sql): verify retained arithmetic schemas and error conditions | Closed: not planned |
+| [#150](https://github.com/mag1cfrog/delta-arrow-reader/issues/150) | test(sql): resolve remaining NULL and conditional behavior findings | Closed: not planned |
+| [#151](https://github.com/mag1cfrog/delta-arrow-reader/issues/151) | test(sql): verify string binary and concatenation semantics | Closed: not planned |
+| [#152](https://github.com/mag1cfrog/delta-arrow-reader/issues/152) | fix(sql): preserve DATE_DIFF result width and date arithmetic | Closed: not planned |
+| [#153](https://github.com/mag1cfrog/delta-arrow-reader/issues/153) | test(sql): verify timestamp formatting parsing and type contracts | Closed: not planned |
+| [#154](https://github.com/mag1cfrog/delta-arrow-reader/issues/154) | fix(sql): preserve Spark DST gap and overlap conversions | Closed: not planned |
+| [#155](https://github.com/mag1cfrog/delta-arrow-reader/issues/155) | fix(sql): preserve non-ANSI ELEMENT_AT bounds behavior | Closed: not planned |
+| [#156](https://github.com/mag1cfrog/delta-arrow-reader/issues/156) | test(sql): verify nested values maps and explode contracts | Closed: not planned |
+| [#157](https://github.com/mag1cfrog/delta-arrow-reader/issues/157) | perf(sql): evaluate retained analyzer and planning costs | Closed: not planned |
+| [#158](https://github.com/mag1cfrog/delta-arrow-reader/issues/158) | perf(sql): evaluate division rounding and allocator-sensitive controls | Closed: not planned |
+| [#159](https://github.com/mag1cfrog/delta-arrow-reader/issues/159) | perf(sql): evaluate cast buffer ownership and conversion fallbacks | Closed: not planned |
+| [#160](https://github.com/mag1cfrog/delta-arrow-reader/issues/160) | perf(sql): evaluate floating comparison and IN costs | Closed: not planned |
+| [#161](https://github.com/mag1cfrog/delta-arrow-reader/issues/161) | perf(sql): evaluate floating joins projected IN and COUNT costs | Closed: not planned |
+| [#162](https://github.com/mag1cfrog/delta-arrow-reader/issues/162) | perf(sql): evaluate grouping normalization IDs and bit permutation | Closed: not planned |
+| [#163](https://github.com/mag1cfrog/delta-arrow-reader/issues/163) | perf(sql): evaluate DOUBLE arithmetic and final Decimal conversion | Closed: not planned |
+| [#164](https://github.com/mag1cfrog/delta-arrow-reader/issues/164) | perf(sql): validate the selected runtime on real Delta streams | Closed: not planned |
+| [#165](https://github.com/mag1cfrog/delta-arrow-reader/issues/165) | build(sql): reproduce the selected Spark runtime and integration checks | Closed: not planned |
 | [#166](https://github.com/mag1cfrog/delta-arrow-reader/issues/166) | docs(sql): record the tested Spark support and adoption decision | Closed: not planned |
 | [#167](https://github.com/mag1cfrog/delta-arrow-reader/issues/167) | track(sql): Spark SQL compatibility | Closed: not planned |
 | [#168](https://github.com/mag1cfrog/delta-arrow-reader/issues/168) | track(sql): Spark SQL performance validation | Closed: not planned |
@@ -257,19 +265,20 @@ Already completed leaves and core/upstream investigations were left unchanged.
 | [#186](https://github.com/mag1cfrog/delta-arrow-reader/issues/186) | track(sql): P06 Grouping ordering and windows | Closed: not planned |
 | [#187](https://github.com/mag1cfrog/delta-arrow-reader/issues/187) | track(sql): P07 Arithmetic and final Decimal conversion | Closed: not planned |
 | [#188](https://github.com/mag1cfrog/delta-arrow-reader/issues/188) | track(sql): P08 Real Delta query and stream profile | Closed: not planned |
-| [#189](https://github.com/mag1cfrog/delta-arrow-reader/issues/189) | test(sql): verify retained execution-extension contracts | Open: deferred |
-| [#190](https://github.com/mag1cfrog/delta-arrow-reader/issues/190) | test(sql): verify retained Delta-provider integration | Open: deferred |
-| [#191](https://github.com/mag1cfrog/delta-arrow-reader/issues/191) | test(sql): verify retained planning and stream lifecycle | Open: deferred |
-| [#192](https://github.com/mag1cfrog/delta-arrow-reader/issues/192) | test(sql): verify explicit unsupported-operation rejection | Open: deferred |
-| [#202](https://github.com/mag1cfrog/delta-arrow-reader/issues/202) | perf(sql): decide checked integer kernel optimization | Open: deferred |
-| [#203](https://github.com/mag1cfrog/delta-arrow-reader/issues/203) | perf(sql): reduce checked arithmetic argument ownership | Open: deferred |
-| [#204](https://github.com/mag1cfrog/delta-arrow-reader/issues/204) | perf(sql): finish checked integer NULL filtering and query validation | Open: deferred |
-| [#206](https://github.com/mag1cfrog/delta-arrow-reader/issues/206) | perf(sql): attribute BROUND query costs after Decimal support | Open: deferred |
-| [#293](https://github.com/mag1cfrog/delta-arrow-reader/issues/293) | fix(sql): preserve row order across local CAST outputs | Open: deferred |
+| [#189](https://github.com/mag1cfrog/delta-arrow-reader/issues/189) | test(sql): verify retained execution-extension contracts | Closed: not planned |
+| [#190](https://github.com/mag1cfrog/delta-arrow-reader/issues/190) | test(sql): verify retained Delta-provider integration | Closed: not planned |
+| [#191](https://github.com/mag1cfrog/delta-arrow-reader/issues/191) | test(sql): verify retained planning and stream lifecycle | Closed: not planned |
+| [#192](https://github.com/mag1cfrog/delta-arrow-reader/issues/192) | test(sql): verify explicit unsupported-operation rejection | Closed: not planned |
+| [#202](https://github.com/mag1cfrog/delta-arrow-reader/issues/202) | perf(sql): decide checked integer kernel optimization | Closed: not planned |
+| [#203](https://github.com/mag1cfrog/delta-arrow-reader/issues/203) | perf(sql): reduce checked arithmetic argument ownership | Closed: not planned |
+| [#204](https://github.com/mag1cfrog/delta-arrow-reader/issues/204) | perf(sql): finish checked integer NULL filtering and query validation | Closed: not planned |
+| [#206](https://github.com/mag1cfrog/delta-arrow-reader/issues/206) | perf(sql): attribute BROUND query costs after Decimal support | Closed: not planned |
+| [#293](https://github.com/mag1cfrog/delta-arrow-reader/issues/293) | fix(sql): preserve row order across local CAST outputs | Closed: not planned |
 
 Issue #149 was already near the issue-body length limit. Its original body is
-unchanged; the [decision comment](https://github.com/mag1cfrog/delta-arrow-reader/issues/149#issuecomment-5853462495)
-and `deferred` label record the freeze.
+unchanged; the [initial freeze comment](https://github.com/mag1cfrog/delta-arrow-reader/issues/149#issuecomment-5853462495)
+and [closure clarification](https://github.com/mag1cfrog/delta-arrow-reader/issues/149#issuecomment-5853638073)
+record both decisions without dropping evidence.
 
 Native roadmap relationships were also changed and verified: #113 no longer
 blocks #102; #112 no longer blocks #109; #113 and #112 are no longer children of
