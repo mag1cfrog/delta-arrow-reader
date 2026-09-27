@@ -1,0 +1,190 @@
+{
+  "issue": 149,
+  "implementation_owner": 289,
+  "status": "reviewable reference slice; numeric local CAST correction and C04 acceptance remain open",
+  "integration_base": "885cf21575cb2dff651f7de60df0082afc6bd2dc",
+  "scope": "Four retained first-error queries, four repeats in each of two processes per engine, eight single-cause controls and both ANSI modes.",
+  "versions": {
+    "spark": "4.2.0",
+    "sail": "0.7.1",
+    "datafusion": "54.1.0",
+    "arrow": "58.4.0",
+    "pyarrow": "25.0.1"
+  },
+  "probe": {
+    "sha256": "73c0dfdd834cc3a3ccd1a078af3fbf4a30edd42b065bdb428547a96df638fa73",
+    "source_sha256": "b16afa371401d107470ca21645b88a2deb5db19f2e0215473ed697b7d06bf42b",
+    "unchanged_library_artifacts": 505
+  },
+  "spark_settings": {
+    "spark.ui.enabled": "false",
+    "spark.driver.bindAddress": "127.0.0.1",
+    "spark.driver.host": "127.0.0.1",
+    "spark.sql.shuffle.partitions": "2",
+    "spark.sql.session.timeZone": "UTC",
+    "spark.sql.decimalOperations.allowPrecisionLoss": "true",
+    "master": "local[2]",
+    "ansi": [
+      "true",
+      "false"
+    ]
+  },
+  "native_settings": {
+    "partitions": 2,
+    "batch_size": "per-case, default 1",
+    "timezone": "UTC",
+    "ansi": [
+      true,
+      false
+    ]
+  },
+  "summary": {
+    "processes_per_engine": 2,
+    "observations_per_engine": 96,
+    "successful_observations": 48,
+    "error_cause_categories": {
+      "known_cause_match": 24,
+      "ambiguous": 24
+    },
+    "legacy_numeric_comparison": [
+      {
+        "process": 0,
+        "agreement": 48,
+        "total": 48
+      },
+      {
+        "process": 1,
+        "agreement": 47,
+        "total": 48
+      }
+    ],
+    "unordered_output_variations": [
+      {
+        "process": 1,
+        "id": "bigint_overflow_false"
+      }
+    ],
+    "first_errors": {
+      "existing-cast/high_scale_batch1_true": {
+        "native_selected_control": {
+          "high_scale_positive": 5,
+          "high_scale_negative": 3
+        },
+        "spark_signature": {
+          "condition": "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+          "parameters": {
+            "config": "\"spark.sql.ansi.enabled\"",
+            "precision": "38",
+            "scale": "38",
+            "value": "1"
+          },
+          "sqlstate": "22003"
+        },
+        "spark_count": 8
+      },
+      "existing-string/max_integer_cast_batch4_true": {
+        "native_selected_control": {
+          "max_integer_target_range": 8
+        },
+        "spark_signature": {
+          "condition": "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+          "parameters": {
+            "config": "\"spark.sql.ansi.enabled\"",
+            "precision": "38",
+            "scale": "0",
+            "value": "99999999999999999999999999999999999999.5"
+          },
+          "sqlstate": "22003"
+        },
+        "spark_count": 8
+      },
+      "existing-unicode/round_overflow_cast_batch1_true": {
+        "native_selected_control": {
+          "unicode_positive": 8
+        },
+        "spark_signature": {
+          "condition": "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+          "parameters": {
+            "config": "\"spark.sql.ansi.enabled\"",
+            "precision": "2",
+            "scale": "1",
+            "value": "9.95"
+          },
+          "sqlstate": "22003"
+        },
+        "spark_count": 8
+      },
+      "bigint/scalar_array_-9223372036854775808_true": {
+        "native_selected_control": {
+          "bigint_overflow": 8
+        },
+        "spark_signature": {
+          "condition": "ARITHMETIC_OVERFLOW",
+          "parameters": {
+            "alternative": " Use 'try_divide' to tolerate overflow and return NULL instead.",
+            "config": "\"spark.sql.ansi.enabled\"",
+            "message": "Overflow in integral divide"
+          },
+          "sqlstate": "22003"
+        },
+        "spark_count": 8
+      }
+    }
+  },
+  "dependencies": {
+    "original_reference": {
+      "path": "division-cast-classification-runs.json.gz",
+      "sha256": "8d9ed31b80c933b29058d0be7efb04e5f39c8a1924f171ab6e6ab5f88f081fda",
+      "files": 152,
+      "compressed_bytes": 547387
+    },
+    "selected_runtime": {
+      "path": "empty-input-scalar-runs.json.gz",
+      "sha256": "399c09734a73b99d9f2b0efe9c0ebf62e335fb8cd4a3ae9a1f5a7e6b1cdb1b2c",
+      "files": 689,
+      "compressed_bytes": 8744330
+    },
+    "spark_sources": {
+      "path": "early-arithmetic-runs.json.gz",
+      "sha256": "151735ad17cda5e9fcf83997a7bcd683e4c27c77b7099735eb5e7ebe8aaee6f7",
+      "files": 700,
+      "compressed_bytes": 4133592
+    },
+    "schema_probe": {
+      "path": "arithmetic-schema-errors-runs.json.gz",
+      "sha256": "cfea1cd84f6cb7e7c96a8d4842f6bde5feff3276d36329191ce3f8b3a0237f25",
+      "files": 406,
+      "bytes": 2241194
+    }
+  },
+  "code_sha256": {
+    "arithmetic_schema_errors.py": "2b1d74ab424c55f1982ff19129dce729de53cd7e6c896690275ca6af5769d39b",
+    "decimal_arithmetic_types.py": "f355276a7660aba73f528e5b1fb959ef439332e66913f952ef0c70be633de317",
+    "decimal_division.py": "42f54687ba4ac8ff811f7c227404f0ab4bb0483bd31c4959c167b6b71935e1ec",
+    "division_cast_classification.py": "049f9c0e9a4d8002584b3af5036afa032189896eea8567c60b4f581a8308e27d",
+    "early_arithmetic.py": "38a5663f408c844c13629bfac01ab0ae9a94a3d83d11292b8e4b1413160fe762",
+    "extracted.py": "1386974b4fbfff0bf1713fab4b06a63aa4114caa0298c0dd92bb5d2e9b1901dc",
+    "float_bround.py": "80d227e9b16391fa193990c40d9560ec3368cbfb545dd1f0343c1edfc5e643ce",
+    "inventory.py": "fde3e573e73ee819f78cf38389d74d8c92fb89a3427b930362ec886763549939",
+    "modulo_null_guard.py": "1de2534e63053b48cf71f3845226eb21c8ff2868cf94cfba6416d5ca046b7e2f",
+    "oracle.py": "ff7e117a861e47b10c38dcd2cf47ae581acf91f12542b453746df01b20e9ec68",
+    "reference.py": "41e799f66e70378dd7a5f87139c1815cd029ff011bf61eb2fec0c54a338dee2e",
+    "round_arguments.py": "9a02b260046ef32181866887021ea6cc11462f6b230614ba795cefa4c90907bb",
+    "string_division_coercion.py": "675bd82b1371f53eac368e46a67a26ef3e7ff97b91b9c80a86efd137a90a688d",
+    "string_modulo_coercion.py": "77602db3b22da6a98e7b978f9b9b89a4250d270a0d542b3002229cf67fd97069",
+    "test_arithmetic_schema_errors.py": "b0083f32fa7aae773bb277376ac5ff4249e1318e4612925817cf25cf5c421ff8",
+    "arithmetic-first-errors.jsonl": "a86ae7d15c667dbc4503898ddb4857d5f737e05098a25ae477d8472fc481f541"
+  },
+  "remaining": [
+    "Issue 289 owns the local numeric CAST first-input correction. No error-order waiver is accepted.",
+    "Stable source input selection does not establish string CAST cause, SQLSTATE or message-parameter equivalence.",
+    "Schema/nullability and later focused-corpus coverage remain with issue 149; default-build adoption remains with issue 165."
+  ],
+  "performance": "Runtime libraries and probe are unchanged. Reuse selected-runtime costs; bounded costs for the numeric CAST repair belong with its implementation and existing issue 159.",
+  "archive": {
+    "path": "arithmetic-first-errors-runs.json.gz",
+    "sha256": "752b65ed27f551add080cd4196c466383e345a50dee50d6eb7043f05576d6a8f",
+    "files": 39,
+    "bytes": 147805
+  }
+}

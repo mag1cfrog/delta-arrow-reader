@@ -4,6 +4,8 @@ The [owning issue](https://github.com/mag1cfrog/delta-arrow-reader/issues/113) d
 
 The [arithmetic schema/error audit](ARITHMETIC_SCHEMA_ERRORS.md) adds complete Arrow schema capture and separate field/error comparisons to the retained 37 replay groups. All 6,784 prior native records remain unchanged. Missing evidence, unclassified errors and existing differences remain visible under the arithmetic validation issue.
 
+The [first-error reference](ARITHMETIC_FIRST_ERRORS.md) reviews its four retained local-query reporting questions and records the remaining Decimal narrowing preparation correction.
+
 The [decimal division patch evaluation](DECIMAL_DIVISION.md) tests a small subset of an unmerged Sail arithmetic PR. Its candidate remains an optional patch and does not change the checkpoint below.
 
 The [ANSI integer overflow fix](INTEGER_OVERFLOW.md) establishes the optional correctness baseline for signed-integer arithmetic. Its remaining performance costs are separate follow-up work; the default checkpoint below remains unchanged.

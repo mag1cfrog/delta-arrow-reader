@@ -35,6 +35,8 @@ Of 905 paired errors, 603 have the same known cause classification, 82 have ambi
 
 `*-complete-check.json` records each comparison; `schema-differences.json` and `error-families.json` group exact IDs for review. The counts do not represent independent defects or full Spark compatibility.
 
+`replay-summary.json` retains the collection-time summaries under `historical_schema_errors`. Those precede the diagnostic correction below; use `*-complete-check.json`, `dimension-summary.json` and the top-level result report for current comparisons.
+
 ## Decimal diagnostic correction
 
 Independent review R1 found that the original comparator treated every `Cannot cast` message as invalid syntax. The selected Rust string-to-Decimal adapter uses the same message for malformed input, source range rejection and target precision overflow. For example, `CAST('bad' AS DECIMAL(10,2))` and `CAST('99999999.995' AS DECIMAL(10,2))` have distinct Spark conditions but the same native diagnostic format. Its payload alone cannot establish the cause.
