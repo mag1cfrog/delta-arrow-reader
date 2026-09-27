@@ -1,0 +1,100 @@
+--- a/crates/sail-plan/src/decimal_null.rs
++++ b/crates/sail-plan/src/decimal_null.rs
+@@ -628,14 +628,19 @@
+             || f.func.inner().is::<SparkCastStringToDecimal>())))
+ }
+ 
+-// Spark removes a redundant LIMIT before replacing LIMIT 0 with an empty plan.
+-// Preserve string-CAST failures before pruning, without reevaluating
+-// the numeric-column cases already owned by the existing integer precheck.
+-fn string_cast(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
++// Preserve string and Decimal-to-Decimal failures before local pruning.
++// Other numeric casts retain the existing arithmetic precheck.
++fn early_cast(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
+     expr.exists(|expr| match expr {
+-        Expr::Cast(cast) => Ok(!null_literal(&cast.expr)
+-            && row_expression(&cast.expr, true)?
+-            && cast.expr.get_type(schema)?.is_string()),
++        Expr::Cast(cast) => {
++            if null_literal(&cast.expr) || !row_expression(&cast.expr, true)? {
++                return Ok(false);
++            }
++            let source = cast.expr.get_type(schema)?;
++            Ok(source.is_string()
++                || matches!((source, cast.field.data_type()),
++                    (DataType::Decimal128(_, _), DataType::Decimal128(_, _))))
++        }
+         Expr::ScalarFunction(f)
+             if f.func
+                 .inner()
+@@ -928,7 +933,7 @@
+                     let mut casts = false;
+                     let mut evaluable = true;
+                     for expr in &project.expr {
+-                        casts |= string_cast(expr, project.input.schema())?;
++                        casts |= early_cast(expr, project.input.schema())?;
+                         evaluable &= row_expression(expr, true)?;
+                     }
+                     if casts
+@@ -3868,3 +3873,61 @@
+     }
+     Ok(())
+ }
++
++#[tokio::test]
++async fn local_decimal_cast_preserves_source_error_order()
++-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
++    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
++    use datafusion::arrow::array::AsArray;
++    use datafusion::arrow::datatypes::{DataType, Decimal128Type};
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::{SessionConfig, SessionContext};
++
++    for batch_size in [1, 2, 4] {
++        let ctx = SessionContext::new_with_state(
++            SessionStateBuilder::new()
++                .with_config(SessionConfig::new().with_batch_size(batch_size).with_target_partitions(2))
++                .with_default_features()
++                .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
++                .with_query_planner(Arc::new(SparkQueryPlanner))
++                .build(),
++        );
++        for reverse in [false, true] {
++            let positive = "(1,CAST('1' AS DECIMAL(38,0)))";
++            let negative = "(2,CAST('-1' AS DECIMAL(38,0)))";
++            let middle = if reverse { format!("{negative},{positive}") } else { format!("{positive},{negative}") };
++            for ansi in [true, false] {
++                for cast in ["CAST", "TRY_CAST"] {
++                    let sql = format!(
++                        "SELECT {cast}(v AS DECIMAL(38,38)) AS r FROM VALUES \
++                         (0,CAST('0' AS DECIMAL(38,0))),{middle},\
++                         (3,CAST(NULL AS DECIMAL(38,0))) t(id,v) ORDER BY id"
++                    );
++                    let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++                    let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                    let config = PlanConfig { ansi_mode: ansi, ..Default::default() };
++                    let named = PlanResolver::new(&ctx, Arc::new(config)).resolve_named_plan(spec).await?;
++                    let physical = async {
++                        ctx.execute_logical_plan(named.plan).await?.create_physical_plan().await
++                    }.await;
++                    if ansi && cast == "CAST" {
++                        let error = physical.expect_err("local CAST must fail before physical execution").to_string();
++                        assert!(error.starts_with("spark_decimal_null_propagation\ncaused by\n"), "{error}");
++                        let value = if reverse { "-1.00000000000000000000000000000000000000" } else { "1.00000000000000000000000000000000000000" };
++                        assert!(error.contains(&format!(": {value} is too ")), "{sql}: {error}");
++                    } else {
++                        let physical = physical?;
++                        assert_eq!(physical.schema().field(0).data_type(), &DataType::Decimal128(38, 38));
++                        let batches = datafusion::physical_plan::collect(physical, ctx.task_ctx()).await?;
++                        let mut actual = Vec::new();
++                        for batch in batches {
++                            actual.extend(batch.column(0).as_primitive::<Decimal128Type>().iter());
++                        }
++                        assert_eq!(actual, vec![Some(0), None, None, None], "{sql}, ANSI={ansi}");
++                    }
++                }
++            }
++        }
++    }
++    Ok(())
++}
