@@ -458,3 +458,5 @@ See [empty keyed groups before scalar preparation](EMPTY_GROUP_SCALAR.md) for th
 See [scalar children of empty filters and aggregates](EMPTY_INPUT_SCALAR.md) for the optional Rust follow-up to PR 285, its HAVING/aggregate-argument repair and preserved COUNT fields, complete compatibility evidence and bounded performance measurements.
 
 See [local Decimal CAST preparation](LOCAL_DECIMAL_CAST.md) for the optional Rust correction to first narrowing failures, source-order and reachability controls, retained schema/error evidence and bounded planning costs.
+
+See [the C04 coverage and open schema/error index](ARITHMETIC_COVERAGE.md) for the 67 accepted groups, separate diagnostic/schema dimensions and the retained multi-output first-error counterexample.
