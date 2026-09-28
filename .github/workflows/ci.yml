@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      selective_read: ${{ steps.filter.outputs.selective_read }}
 
     steps:
       - uses: actions/checkout@v5
@@ -160,11 +161,12 @@ jobs:
   selective-read-fixtures:
     name: Public Fixture Smoke
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.selective_read == 'true'
     runs-on: ubuntu-latest
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target/selective-read
       RUSTFLAGS: -C target-cpu=x86-64
+      PYTHONDONTWRITEBYTECODE: '1'
     defaults:
       run:
         working-directory: benches/selective_read
@@ -207,6 +209,15 @@ jobs:
           assert manifest["status"] == "complete"
           assert manifest["generator"]["executable_sha256"] == expected_hash
           PY
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.6'
+      - name: Validate independent oracle and public query results
+        env:
+          SELECTIVE_READ_FIXTURES: ${{ runner.temp }}/selective-read-smoke
+        run: |
+          python -m pip install --require-hashes -r oracle-requirements.txt
+          python -m unittest -v test_oracle
 
   ci:
     name: CI
@@ -242,7 +253,8 @@ jobs:
             exit 1
           fi
 
-          if [ "${{ needs.selective-read-fixtures.result }}" != "success" ]; then
+          if [ "${{ needs.changes.outputs.selective_read }}" = "true" ] && \
+             [ "${{ needs.selective-read-fixtures.result }}" != "success" ]; then
             echo "Public Fixture Smoke did not pass: ${{ needs.selective-read-fixtures.result }}"
             exit 1
           fi
