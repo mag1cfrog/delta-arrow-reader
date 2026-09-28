@@ -2,6 +2,7 @@
 
 import argparse
 from collections import Counter
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from decimal import Decimal
 import json
@@ -13,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from urllib.parse import parse_qs, unquote, urlsplit
 
 import storage
@@ -27,9 +29,9 @@ def timestamp(value):
     return seconds * 10**9 + int((match[2] or "").ljust(9, "0"))
 
 
-def metrics(directory):
+def metrics(directory, timeout=10):
     endpoint = storage.state(directory)["endpoint"]
-    with storage.HTTP.open(endpoint + "/minio/metrics/v3/api/requests", timeout=10) as response:
+    with storage.HTTP.open(endpoint + "/minio/metrics/v3/api/requests", timeout=timeout) as response:
         text = response.read().decode()
     result = {"requests": {}, "response_bytes": 0, "active": 0, "rejected": 0, "canceled": 0}
     found = False
@@ -183,8 +185,8 @@ class Trace:
         self.before = baseline
         self.started_ns = time.time_ns()
 
-    def finish(self):
-        deadline = time.monotonic() + 60
+    def finish(self, deadline=None):
+        deadline = time.monotonic() + 60 if deadline is None else deadline
         while metrics(self.directory)["active"]:
             if time.monotonic() >= deadline:
                 raise TimeoutError("pending S3 requests did not finish")
@@ -233,8 +235,8 @@ def capture(directory, output, payload):
     try:
         trace.begin()
         print(json.dumps({"ready": True}), flush=True)
-        assert sys.stdin.readline().strip() == "finish", "capture control disconnected"
-        summary = trace.finish()
+        control = json.loads(sys.stdin.readline())
+        summary = trace.finish(control["deadline"])
     except Exception as error:
         summary = {"status": "operational_failure", "failure_reason": str(error)}
     finally:
@@ -278,21 +280,43 @@ def summarize(output, record):
     return summary
 
 
-def invoke(directory, binary, payload, output, fixtures=None, reference=None, *, traced=None):
+def drain(directory, unit, deadline):
+    """Prove both the reader scope and server requests have stopped before reuse."""
+    while True:
+        if time.monotonic() >= deadline:
+            raise TimeoutError("reader scope or server requests exceeded the cleanup deadline")
+        name = storage.properties(unit)["ControlGroup"]
+        group = Path("/sys/fs/cgroup" + name) if name else None
+        try:
+            populated = group is not None and "populated 1" in (group / "cgroup.events").read_text()
+        except FileNotFoundError:
+            populated = False
+        if not populated and not metrics(directory, min(10, max(.001, deadline - time.monotonic())))["active"]:
+            if time.monotonic() < deadline:
+                return
+        time.sleep(.02)
+
+
+def invoke(directory, binary, payload, output, fixtures=None, reference=None, *, traced=None, _locked=False):
     if traced is None:
         traced = payload["purpose"] == "io"
     assert not traced or payload["purpose"] == "io", "detailed tracing requires an I/O diagnostic without plan export"
     config = storage.state(directory)
     table = urlsplit(payload["table_uri"])
     assert table.scheme == "s3" and table.netloc == storage.BUCKET and table.path.strip("/")
-    with storage.exclusive(directory):
+    with nullcontext() if _locked else storage.exclusive(directory):
         storage.verify_server(directory)
+        assert metrics(directory)["active"] == 0, "pending server requests before reader launch"
+        if output.exists():
+            raise FileExistsError(output)
         observer = None
         # The shared helper creates the invocation directory. The observer has a
         # separate new sibling directory, so even startup failure is retained.
         trace_output = output.with_name(output.name + "-io")
         trace_output.mkdir()
         save(trace_output / "request.json", payload)
+        unit = "selective-read-" + uuid.uuid4().hex + ".scope"
+        deadline = time.monotonic() + 60
         if traced:
             log = (trace_output / "observer.stderr.log").open("x")
             observer = subprocess.Popen([sys.executable, "-B", str(Path(__file__).resolve()), "capture", "--state", str(directory.resolve()),
@@ -305,26 +329,33 @@ def invoke(directory, binary, payload, output, fixtures=None, reference=None, *,
                 raise RuntimeError("observer failed to become ready; inspect its artifacts")
         try:
             result = run.invoke(binary, payload, output, fixtures, reference, env=storage.reader_environment(directory),
-                                command_prefix=storage.reader_prefix(directory))
+                                command_prefix=storage.reader_prefix(directory, unit), supervised=True, defer_validation=True)
+            started = result.get("supervision", {}).get("cleanup_started_monotonic_ns")
+            deadline = (started / 10**9 if started is not None else time.monotonic()) + 60
+            if result.get("supervision", {}).get("returncode", 0) is None:
+                deadline = time.monotonic()  # The watchdog already exhausted process cleanup.
             if (output / "limits.json").exists():
                 limits = json.loads((output / "limits.json").read_text())
-                group = Path("/sys/fs/cgroup" + limits["control_group"])
-                deadline = time.monotonic() + 60
-                while (group / "cgroup.events").exists():
-                    try:
-                        populated = "populated 1" in (group / "cgroup.events").read_text()
-                    except FileNotFoundError:
-                        break
-                    if not populated:
-                        break
-                    if time.monotonic() >= deadline:
-                        raise TimeoutError("reader scope still has live processes after shutdown")
-                    time.sleep(.02)
                 result["external_resource_limits"] = limits
+            if result["status"] != "success":
+                subprocess.run(["systemctl", "--user", "kill", "--signal=KILL", unit], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                drain(directory, unit, deadline)
+                result["cleanup"] = {"status": "passed", "scope_unit": unit, "drained_monotonic_ns": time.monotonic_ns()}
+            except (OSError, ValueError, AssertionError, subprocess.SubprocessError) as error:
+                subprocess.run(["systemctl", "--user", "kill", "--signal=KILL", unit], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                result["cleanup"] = {"status": "operational_failure", "scope_unit": unit, "failure_reason": str(error)}
+                result.update(status="timeout" if isinstance(error, TimeoutError) else "operational_failure", failure_reason=str(error))
+        except Exception as error:
+            subprocess.run(["systemctl", "--user", "kill", "--signal=KILL", unit], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            result = {"status": "operational_failure", "failure_reason": type(error).__name__ + ": " + str(error),
+                      "cleanup": {"status": "unverified", "scope_unit": unit}}
+            output.mkdir(exist_ok=True)
         finally:
             if observer is not None:
                 try:
-                    observer.communicate("finish\n", timeout=75)
+                    observer.communicate(json.dumps({"deadline": deadline}) + "\n",
+                                         timeout=max(1, deadline - time.monotonic()) + 15)
                 except subprocess.TimeoutExpired:
                     os.killpg(observer.pid, 9)
                     observer.wait()
@@ -347,9 +378,12 @@ def invoke(directory, binary, payload, output, fixtures=None, reference=None, *,
                 assert io["requests"] == sum(proof["reader_counters"]["requests"].values())
                 result["storage_io"] = io
                 result.setdefault("external_metrics", {}).update(requests=io["requests"], response_bytes=io["response_bytes"],
-                    touched_parquet_objects=len(io["touched_parquet_objects"]), reason="whole-process CPU/RSS are supplied by the campaign scheduler")
+                    touched_parquet_objects=len(io["touched_parquet_objects"]), reason=None)
         else:
             result["storage_capture"] = {"status": "disabled", "reason": "no detailed tracing in this invocation"}
+            result.setdefault("external_metrics", {})["reason"] = "request/byte metrics require a separate I/O diagnostic"
+        if result["status"] == "success" and payload["purpose"] == "validation":
+            run.check_result(result, output, fixtures, reference)
         # Preserve the reader's raw record and the shared helper's observation.
         save(output / "storage-observation.json", result)
         return result

@@ -3,6 +3,7 @@
 import hashlib
 import importlib.metadata
 import json
+import os
 from pathlib import Path
 import platform
 import re
@@ -117,3 +118,13 @@ def observation(request):
 def event(record, name, query_index=None):
     if record["purpose"] in ("diagnostic", "io"):
         record["diagnostic_events"].append({"event": name, "time_ns": time_ns(), "query_index": query_index})
+
+
+def checkpoint(record, phase, query_index=None, query=None):
+    """Notify the process watchdog outside query clocks; never emit per-batch I/O."""
+    descriptor = os.environ.get("SELECTIVE_READ_CONTROL_FD")
+    if descriptor is not None:
+        message = {"phase": phase, "query_index": query_index, "query": query,
+                   "initialization_ns": record["initialization_ns"]}
+        data = (json.dumps(message, separators=(",", ":")) + "\n").encode()
+        require(len(data) <= 4096 and os.write(int(descriptor), data) == len(data), "watchdog pipe write failed")

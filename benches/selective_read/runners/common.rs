@@ -245,6 +245,24 @@ fn event(record: &mut Value, name: &str, index: Option<usize>) {
     }
 }
 
+fn checkpoint(record: &Value, phase: &str, index: Option<usize>, query: Value) -> Result<()> {
+    if let Ok(descriptor) = std::env::var("SELECTIVE_READ_CONTROL_FD") {
+        let descriptor: u32 = descriptor.parse()?;
+        let message = json!({"phase": phase, "query_index": index, "query": query,
+            "initialization_ns": record["initialization_ns"]});
+        let mut bytes = serde_json::to_vec(&message)?;
+        bytes.push(b'\n');
+        if bytes.len() > 4096 {
+            return Err("watchdog message exceeds pipe atomic-write bound".into());
+        }
+        let mut pipe = File::options()
+            .write(true)
+            .open(format!("/proc/self/fd/{descriptor}"))?;
+        pipe.write_all(&bytes)?;
+    }
+    Ok(())
+}
+
 fn storage_settings(request: &Request) -> Result<Value> {
     if url::Url::parse(&request.table_uri)?.scheme() != "s3" {
         return Ok(json!({"credentials": "none"}));
@@ -278,6 +296,16 @@ async fn execute(
     cleanup_start: &mut Option<Instant>,
 ) -> Result<()> {
     record["phase"] = json!("snapshot_open");
+    checkpoint(
+        record,
+        if request.reuse() {
+            "initialization"
+        } else {
+            "open"
+        },
+        None,
+        Value::Null,
+    )?;
     let session_start = Instant::now();
     event(record, "snapshot_open", None);
     crate::register(&context, request).await?;
@@ -288,6 +316,9 @@ async fn execute(
     let mut durations = Vec::new();
     for index in 0..request.query_count() {
         record["phase"] = json!("query");
+        if request.reuse() {
+            checkpoint(record, "query", Some(index), Value::Null)?;
+        }
         let start = if request.reuse() {
             Instant::now()
         } else {
@@ -349,6 +380,15 @@ async fn execute(
             }
             *cleanup_start = Some(Instant::now());
         }
+        checkpoint(
+            record,
+            "query_end",
+            Some(index),
+            json!({"query_index": index,
+            "output_rows": rows, "output_batches": batches,
+            "completion_ns": if request.timed() { Some(completion) } else { None },
+            "first_batch_ns": if request.timed() { first } else { None }}),
+        )?;
         drop(stream);
         durations.push(completion);
         let mut query = json!({"query_index": index, "output_rows": rows, "output_batches": batches,
@@ -478,6 +518,7 @@ fn run(request_path: &Path, output: &Path) -> Result<bool> {
         }
     }
     let cleanup_start = cleanup_start.unwrap_or_else(Instant::now);
+    checkpoint(&record, "cleanup", None, Value::Null)?;
     // Drop waits for runtime cleanup; the campaign launcher owns the cleanup deadline.
     drop(runtime);
     event(&mut record, "cleanup_complete", None);

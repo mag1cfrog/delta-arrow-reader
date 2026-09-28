@@ -16,7 +16,7 @@ import pyarrow as pa
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from run import digest, save
-from python_common import correctness, event, json_hash, observation, require, runtime_metadata, sha, validate
+from python_common import checkpoint, correctness, event, json_hash, observation, require, runtime_metadata, sha, validate
 
 CONFIG = {"threads": 8, "memory_limit": "4GiB", "enable_external_file_cache": False,
           "autoload_known_extensions": False, "autoinstall_known_extensions": False,
@@ -116,6 +116,7 @@ def execute(connection, request, output, record):
     timed = request["purpose"] == "timing"
     reuse = request["execution_mode"] == "reuse"
     record["phase"] = "snapshot_open"
+    checkpoint(record, "initialization" if reuse else "open")
     session_start = clock()
     event(record, "snapshot_open")
     attach(connection, request)
@@ -124,6 +125,8 @@ def execute(connection, request, output, record):
         record["initialization_ns"] = initialization
     for index in range(10 if reuse else 1):
         record["phase"] = "query"
+        if reuse:
+            checkpoint(record, "query", index)
         start = clock() if reuse else session_start
         event(record, "query_start", index)
         rows = batches = 0
@@ -153,6 +156,8 @@ def execute(connection, request, output, record):
                     elif request["purpose"] in ("diagnostic", "io"):
                         record["diagnostic_session_ns"] = clock() - session_start
                     record["_cleanup_start"] = clock()
+                checkpoint(record, "query_end", index, {"query_index": index, "output_rows": rows, "output_batches": batches,
+                    "completion_ns": completion if timed else None, "first_batch_ns": first if timed else None})
             del relation
         except Exception:
             record["partial_query"] = {"query_index": index, "output_rows": rows, "output_batches": batches,
@@ -228,6 +233,7 @@ def run(request_path, output):
             record["capability"]["status"] = "unsupported" if record["status"] == "unsupported" else "probe_failed"
     finally:
         cleanup = record.pop("_cleanup_start", clock())
+        checkpoint(record, "cleanup")
         if connection is not None:
             try:
                 connection.close()
