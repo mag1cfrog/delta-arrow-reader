@@ -7,7 +7,7 @@ use std::{
     io::{BufReader, BufWriter, Read, Write},
     path::{Path, PathBuf},
     sync::Arc,
-    time::Instant,
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 use datafusion::{
@@ -77,7 +77,7 @@ impl Request {
         if !matches!(self.execution_mode.as_str(), "open" | "reuse")
             || !matches!(
                 self.purpose.as_str(),
-                "timing" | "validation" | "diagnostic"
+                "timing" | "validation" | "diagnostic" | "io"
             )
             || self.comparison_revision != 2
             || self.protocol_sha256 != digest(PROTOCOL)
@@ -233,6 +233,43 @@ fn nanos(start: Instant) -> u64 {
     start.elapsed().as_nanos().try_into().unwrap_or(u64::MAX)
 }
 
+fn event(record: &mut Value, name: &str, index: Option<usize>) {
+    if record["purpose"] == "diagnostic" || record["purpose"] == "io" {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("valid UTC clock");
+        record["diagnostic_events"]
+            .as_array_mut()
+            .expect("event list")
+            .push(json!({"event": name, "time_ns": now.as_nanos() as u64, "query_index": index}));
+    }
+}
+
+fn storage_settings(request: &Request) -> Result<Value> {
+    if url::Url::parse(&request.table_uri)?.scheme() != "s3" {
+        return Ok(json!({"credentials": "none"}));
+    }
+    let endpoint = std::env::var("AWS_ENDPOINT_URL")
+        .or_else(|_| std::env::var("AWS_ENDPOINT"))
+        .ok();
+    if let Some(value) = &endpoint {
+        let uri = url::Url::parse(value)?;
+        if !matches!(uri.scheme(), "http" | "https")
+            || !uri.username().is_empty()
+            || uri.password().is_some()
+            || uri.query().is_some()
+            || uri.fragment().is_some()
+        {
+            return Err("invalid AWS endpoint".into());
+        }
+    }
+    Ok(json!({"endpoint": endpoint,
+        "region": std::env::var("AWS_REGION").or_else(|_| std::env::var("AWS_DEFAULT_REGION")).ok(),
+        "allow_http": std::env::var("AWS_ALLOW_HTTP").ok(),
+        "virtual_hosted_style": std::env::var("AWS_VIRTUAL_HOSTED_STYLE_REQUEST").ok(),
+        "credentials": "AWS environment; values omitted"}))
+}
+
 async fn execute(
     request: &Request,
     context: SessionContext,
@@ -242,6 +279,7 @@ async fn execute(
 ) -> Result<()> {
     record["phase"] = json!("snapshot_open");
     let session_start = Instant::now();
+    event(record, "snapshot_open", None);
     crate::register(&context, request).await?;
     let initialization = nanos(session_start);
     if request.timed() && request.reuse() {
@@ -255,6 +293,7 @@ async fn execute(
         } else {
             session_start
         };
+        event(record, "query_start", Some(index));
         let options = SQLOptions::new()
             .with_allow_ddl(false)
             .with_allow_dml(false)
@@ -301,9 +340,12 @@ async fn execute(
             // Drop each batch before polling the next one; timed mode retains no output values.
         }
         let completion = nanos(start);
+        event(record, "stream_complete", Some(index));
         if index + 1 == request.query_count() {
             if request.timed() {
                 record["session_elapsed_ns"] = json!(nanos(session_start));
+            } else if matches!(request.purpose.as_str(), "diagnostic" | "io") {
+                record["diagnostic_session_ns"] = json!(nanos(session_start));
             }
             *cleanup_start = Some(Instant::now());
         }
@@ -345,7 +387,7 @@ async fn execute(
         } else {
             record["open_query_ns"] = json!(durations[0]);
         }
-    } else {
+    } else if request.purpose != "io" {
         record["provider_evidence"] = crate::provider_evidence(&context, request.reuse()).await?;
     }
     record["capability"] = json!({"status": "supported", "scope": "requested query and snapshot", "evidence_run_id": request.run_id});
@@ -390,7 +432,7 @@ fn run(request_path: &Path, output: &Path) -> Result<bool> {
         .collect::<BTreeMap<_, _>>();
     let settings = json!({"datafusion": options, "provider": crate::provider_settings(&context, request.reuse())?,
         "resource_budget": request.resource_budget, "table_uri": request.table_uri,
-        "execution_mode": request.execution_mode, "output_delivery": "streaming"});
+        "execution_mode": request.execution_mode, "output_delivery": "streaming", "storage": storage_settings(&request)?});
     let input_identity = identity(
         &request,
         &file_digest(&build_path)?,
@@ -404,6 +446,7 @@ fn run(request_path: &Path, output: &Path) -> Result<bool> {
         "capability": {"status": "not_checked", "scope": "requested query and snapshot"},
         "correctness": null, "provider_evidence": null, "queries": [], "partial_query": null,
         "open_query_ns": null, "initialization_ns": null, "session_elapsed_ns": null,
+        "diagnostic_events": [], "diagnostic_session_ns": null,
         "initialization_plus_query1_ns": null, "initialization_plus_all_queries_ns": null, "cleanup_ns": null,
         "external_metrics": {"requests": null, "response_bytes": null, "touched_parquet_objects": null,
             "process_cpu_ns": null, "peak_rss_bytes": null, "reason": "storage observer and process scheduler are separate roadmap slices"},
@@ -437,6 +480,7 @@ fn run(request_path: &Path, output: &Path) -> Result<bool> {
     let cleanup_start = cleanup_start.unwrap_or_else(Instant::now);
     // Drop waits for runtime cleanup; the campaign launcher owns the cleanup deadline.
     drop(runtime);
+    event(&mut record, "cleanup_complete", None);
     if request.timed() {
         record["cleanup_ns"] = json!(nanos(cleanup_start));
         if record["status"] == "success" {

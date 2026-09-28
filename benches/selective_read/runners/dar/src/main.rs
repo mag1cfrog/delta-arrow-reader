@@ -38,7 +38,30 @@ fn provider_settings(_: &SessionContext, reuse: bool) -> common::Result<Value> {
 
 async fn register(context: &SessionContext, request: &common::Request) -> common::Result<()> {
     let scan = options()?;
+    // Kernel's store_from_url_opts does not construct its S3 builder from the
+    // environment. Pass the same supported options used by the other adapters.
+    let mut storage = delta_arrow_reader::DeltaStorageOptions::new();
+    if url::Url::parse(&request.table_uri)?.scheme() == "s3" {
+        let variables: [(&str, &[&str]); 7] = [
+            ("aws_access_key_id", &["AWS_ACCESS_KEY_ID"]),
+            ("aws_secret_access_key", &["AWS_SECRET_ACCESS_KEY"]),
+            ("aws_session_token", &["AWS_SESSION_TOKEN"]),
+            ("aws_region", &["AWS_REGION", "AWS_DEFAULT_REGION"]),
+            ("aws_endpoint", &["AWS_ENDPOINT_URL", "AWS_ENDPOINT"]),
+            ("aws_allow_http", &["AWS_ALLOW_HTTP"]),
+            (
+                "aws_virtual_hosted_style_request",
+                &["AWS_VIRTUAL_HOSTED_STYLE_REQUEST"],
+            ),
+        ];
+        for (key, names) in variables {
+            if let Some(value) = names.iter().find_map(|name| std::env::var(name).ok()) {
+                storage.insert(key.to_owned(), value);
+            }
+        }
+    }
     let table = DeltaTableBuilder::new(&request.table_uri)
+        .with_storage_options(storage)
         .with_snapshot_selection(DeltaSnapshotSelection::Version(request.snapshot_version))
         .with_execution_options(scan.execution_options)
         .with_warmup(if request.reuse() {

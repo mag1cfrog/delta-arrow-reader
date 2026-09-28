@@ -14,8 +14,9 @@ DuckDB uses a separate Python environment and its official Delta extension.
 Polars and Daft each use an isolated environment with their native Delta scans
 and lazy expressions. The Python readers do not change the library's dependencies.
 
-These commands exercise individual invocations. The campaign scheduler, fixed
-CPU affinity, process memory limit, storage observations, and statistical report
+These commands exercise individual invocations. The
+[storage launcher](selective-read-storage.md) supplies CPU affinity, process
+memory limits, and S3 observations. The campaign scheduler and statistical report
 are separate roadmap steps. A successful invocation is not a published speedup.
 Missing external observations remain null in the record.
 
@@ -187,23 +188,26 @@ location. Validate that location separately; a certificate for a local URL
 cannot authorize timing a remote URL. Storage credentials stay in the reader's
 environment, outside request and build records.
 
+DAR passes the AWS environment's access key, secret, optional session token,
+region, endpoint, HTTP permission and addressing style to `DeltaStorageOptions`.
+Its Kernel object-store constructor does not read those environment variables
+itself. delta-rs uses its native AWS environment configuration. Both record the
+non-secret endpoint, region and addressing options in the correctness identity.
+
 DuckDB reads `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, optional
 `AWS_SESSION_TOKEN`, and `AWS_REGION` (falling back to `AWS_DEFAULT_REGION`,
 then `us-east-1`). `AWS_ENDPOINT_URL` selects an HTTP(S) endpoint and path-style
 S3 addressing, suitable for MinIO. The adapter creates an in-memory secret
-before the clock; it does not save credential values. Shared remote-storage
-validation and observation belong to the storage-observer slice.
+before the clock; it does not save credential values.
 
 Polars accepts the same AWS variables and endpoint, passes them through native
 storage options, and disables automatic credential-provider discovery. Records
-contain the region and endpoint but omit secret values. The local check verifies
-configuration before table I/O; remote execution still needs the shared storage
-observer's integration checks.
+contain the region and endpoint but omit secret values.
 
 Daft accepts the same AWS variables and endpoint through its native `IOConfig`.
 Unspecified credentials use the native provider chain. The adapter records the
-region and endpoint without secret values. Its local check verifies configuration
-before table I/O; remote execution needs the same later integration checks.
+region and endpoint without secret values. The storage guide checks all five
+readers' actual endpoint traffic and remote output.
 
 ## Reuse and diagnostics
 
@@ -243,6 +247,15 @@ provider evidence. Its headline timers are null. delta-rs evidence checks the
 built provider's pushdown and Arrow view options. DAR records its Direct
 backend options; generic DataFusion Parquet settings alone do not describe
 that backend's behavior.
+
+Use `purpose: "io"` with the storage launcher for request diagnostics. It consumes
+the query stream and records lifecycle timestamps without exporting plans or
+provider evidence. This prevents auxiliary `EXPLAIN` or schema requests from
+inflating observed query I/O. Headline timers stay null; `diagnostic_session_ns`
+exists only to measure tracing overhead in separate diagnostic invocations.
+UTC events mark snapshot opening, each query start and completed stream, and
+object/runtime cleanup. The outer launcher records process entry and exit and
+waits for the reader scope and server requests to drain.
 
 ### DuckDB execution settings
 
@@ -388,10 +401,12 @@ independent validation result. Existing destinations are never overwritten.
 | `initialization_plus_query1_ns`, `initialization_plus_all_queries_ns` | Reuse totals that retain initialization cost |
 | `session_elapsed_ns` | Enclosing open/reuse interval, including gaps between queries |
 | `cleanup_ns` | Work after the final stream completes, including provider/runtime shutdown |
+| `diagnostic_events`, `diagnostic_process` | UTC nanoseconds for untimed lifecycle events and the enclosing process |
+| `diagnostic_session_ns` | Untimed open/reuse interval for the observer overhead check; never a headline timing sample |
 | `external_metrics`, `external_resource_limits` | Null with reasons until the storage observer and process scheduler supply them |
 
 Times are integer nanoseconds. First-batch time is null with reason
-`empty result` for an empty timed query. Validation and diagnostic invocations
+`empty result` for an empty timed query. Validation, plan and I/O diagnostics
 leave headline timers null. Failures remain visible and cannot produce a speedup.
 Rust and DuckDB explicitly shut down their runtimes/connections. Polars and Daft release
 query and snapshot objects; its global native runtimes end with the process.

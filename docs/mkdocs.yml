@@ -48,6 +48,7 @@ nav:
       - Generate public fixtures: benchmarks/selective-read-fixtures.md
       - Validate public results: benchmarks/selective-read-oracle.md
       - Run the reader comparisons: benchmarks/selective-read-runners.md
+      - Observe storage requests: benchmarks/selective-read-storage.md
       - Focused benchmarks:
           - Selective S3 case study: benchmarks/selective-s3.md
           - Lazy and eager scan metadata: benchmarks/eager-metadata.md
