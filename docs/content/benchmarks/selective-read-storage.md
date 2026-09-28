@@ -199,9 +199,10 @@ median difference and ratio. These few smoke samples check observer cost; use th
 campaign's repetitions and statistics before drawing performance conclusions.
 Never combine diagnostic I/O and untraced latency as one measured sample.
 
-This check is manual and adds no CI job or step. The campaign scheduler supplies
-query deadlines, whole-process CPU/RSS measurements, repetitions and reporting
-in the next roadmap slice. Keep credentials, state data and generated artifacts
+This check is manual and adds no CI job or step. The
+[campaign scheduler](selective-read-campaign.md) supplies repetitions and
+reporting. The shared launcher enforces phase deadlines and records whole-process
+CPU/RSS for both individual invocations and campaigns. Keep credentials, state data and generated artifacts
 outside the repository; publish only reviewed, sanitized records.
 
 Stop the owned service when finished:

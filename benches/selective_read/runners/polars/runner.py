@@ -28,7 +28,7 @@ import pyarrow as pa
 
 sys.path.insert(0, str(HERE))
 from run import digest, save
-from python_common import correctness, event, json_hash, observation, require, runtime_metadata, scan_sql, sha, validate
+from python_common import checkpoint, correctness, event, json_hash, observation, require, runtime_metadata, scan_sql, sha, validate
 
 DELTA_OPTIONS = {"without_files": False, "log_buffer_size": 8, "skip_stats": False}
 COLLECT_OPTIONS = {"chunk_size": 8192, "maintain_order": False, "lazy": False, "engine": "streaming"}
@@ -93,6 +93,7 @@ def execute(request, options, output, record):
     timed = request["purpose"] == "timing"
     reuse = request["execution_mode"] == "reuse"
     record["phase"] = "snapshot_open"
+    checkpoint(record, "initialization" if reuse else "open")
     session_start = clock()
     event(record, "snapshot_open")
     source = scan(request, options)
@@ -105,6 +106,8 @@ def execute(request, options, output, record):
         record["initialization_ns"] = initialization
     for index in range(10 if reuse else 1):
         record["phase"] = "query"
+        if reuse:
+            checkpoint(record, "query", index)
         start = clock() if reuse else session_start
         event(record, "query_start", index)
         rows = batches = 0
@@ -135,6 +138,8 @@ def execute(request, options, output, record):
                     elif request["purpose"] in ("diagnostic", "io"):
                         record["diagnostic_session_ns"] = clock() - session_start
                     record["_cleanup_start"] = clock()
+                checkpoint(record, "query_end", index, {"query_index": index, "output_rows": rows, "output_batches": batches,
+                    "completion_ns": completion if timed else None, "first_batch_ns": first if timed else None})
                 del stream
         except Exception:
             record["partial_query"] = {"query_index": index, "output_rows": rows, "output_batches": batches,
@@ -216,6 +221,7 @@ def run(request_path, output):
             record["capability"]["status"] = "unsupported" if unsupported else "probe_failed"
     finally:
         cleanup = record.pop("_cleanup_start", clock())
+        checkpoint(record, "cleanup")
         if request["purpose"] == "timing":
             record["cleanup_ns"] = clock() - cleanup
         event(record, "cleanup_complete")

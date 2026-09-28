@@ -263,9 +263,9 @@ def reader_environment(directory):
     return env
 
 
-def reader_prefix(directory):
+def reader_prefix(directory, unit=None):
     cpus = state(directory)["cpus"]["reader"]
-    return ["systemd-run", "--user", "--scope", "--quiet", "--collect", "-p", "MemoryMax=8G", "-p", "MemorySwapMax=0",
+    return ["systemd-run", "--user", "--scope", "--quiet", "--collect", *(["--unit", unit] if unit else []), "-p", "MemoryMax=8G", "-p", "MemorySwapMax=0",
             "taskset", "--cpu-list", ",".join(map(str, cpus)), sys.executable, "-B", str(Path(__file__).resolve()),
             "reader", "--state", str(directory.resolve()), "--"]
 
