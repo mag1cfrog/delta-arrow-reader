@@ -128,7 +128,9 @@ def launch(command, payload, output, stdout, stderr, env=None, *, query_seconds=
                     if kill_deadline is None:
                         if progress.cleanup_started_ns is None:
                             progress.cleanup_started_ns = time.monotonic_ns()
-                        kill_deadline = progress.cleanup_started_ns / 10**9 + cleanup_seconds
+                        # Reap a killed child for resource accounting. This grace
+                        # never extends the original successful-cleanup deadline.
+                        kill_deadline = time.monotonic() + cleanup_seconds
                     elif time.monotonic() >= kill_deadline:
                         failure = {"status": "timeout", "failure_reason": "reader did not exit after SIGKILL; cleanup unverified"}
                         break
