@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      selective_read: ${{ steps.filter.outputs.selective_read }}
 
     steps:
       - uses: actions/checkout@v5
@@ -160,7 +161,7 @@ jobs:
   selective-read-fixtures:
     name: Public Fixture Smoke
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.selective_read == 'true'
     runs-on: ubuntu-latest
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target/selective-read
@@ -252,7 +253,8 @@ jobs:
             exit 1
           fi
 
-          if [ "${{ needs.selective-read-fixtures.result }}" != "success" ]; then
+          if [ "${{ needs.changes.outputs.selective_read }}" = "true" ] && \
+             [ "${{ needs.selective-read-fixtures.result }}" != "success" ]; then
             echo "Public Fixture Smoke did not pass: ${{ needs.selective-read-fixtures.result }}"
             exit 1
           fi

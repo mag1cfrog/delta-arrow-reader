@@ -11,5 +11,12 @@
     "src/**",
     "tests/**",
     "benches/**"
+  ],
+  "selective_read": [
+    ".cargo/**",
+    ".github/path-filters.json",
+    ".github/workflows/ci.yml",
+    "benches/selective_read/**",
+    "docs/content/benchmarks/selective-read-protocol.md"
   ]
 }
