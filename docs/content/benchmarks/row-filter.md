@@ -47,6 +47,10 @@ This benchmark isolates predicate decoding and evaluation. It does not measure
 an end-to-end Delta query, output-column decoding, or data-page I/O after rows
 have been selected.
 
+The wide predicate projection is an artificial control, not a delta-rs
+baseline. The [within-file controls](selective-read-within-file.md) compare
+all five readers with a narrow predicate and wide output on common inputs.
+
 ## Run the benchmark
 
 Run five repetitions and save the raw CSV output:

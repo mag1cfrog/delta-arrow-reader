@@ -11,36 +11,25 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use arrow::array::{Array, ArrayRef, Int32Array, StringArray};
-use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
+use arrow::array::{Array, Int32Array, StringArray};
+use arrow::datatypes::SchemaRef;
 use arrow::record_batch::RecordBatch;
 use delta_arrow_reader::{
-    DeltaComparison, DeltaPredicate, DeltaScalar, DeltaTable, DeltaTableBuilder,
+    DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaScalar, DeltaTable, DeltaTableBuilder,
 };
 use futures_util::StreamExt;
 use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 use serde_json::json;
 
+#[path = "selective_read/src/control_rows.rs"]
+mod control_rows;
+use control_rows::{payload_name, payload_value, schema as benchmark_schema};
+
 const DEFAULT_REPETITIONS: usize = 3;
 const MAX_REPETITIONS: usize = 128;
 const DATA_FILE: &str = "part.parquet";
 const MATCH_VALUE: &str = "match";
-const OTHER_VALUE: &str = "other";
-const PAYLOAD_FILLER: &str = concat!(
-    "abcdefghijklmnopqrstuvwxyz0123456789",
-    "abcdefghijklmnopqrstuvwxyz0123456789",
-    "abcdefghijklmnopqrstuvwxyz0123456789",
-    "abcdefghijklmnopqrstuvwxyz0123456789",
-    "abcdefghijklmnopqrstuvwxyz0123456789",
-    "abcdefghijklmnopqrstuvwxyz0123456789",
-    "abcdefghijklmnopqrstuvwxyz0123456789",
-    "abcdefghijklmnopqrstuvwxyz0123456789",
-    "abcdefghijklmnopqrstuvwxyz0123456789",
-    "abcdefghijklmnopqrstuvwxyz0123456789",
-    "abcdefghijklmnopqrstuvwxyz0123456789",
-    "abcdefghijklmnopqrstuvwxyz0123456789",
-);
 const BENCHMARK_SHAPE: FixtureShape = FixtureShape {
     row_groups: 2,
     rows_per_group: 4_096,
@@ -269,6 +258,7 @@ impl Drop for Fixture {
 struct LoadedCase {
     fixture: Fixture,
     table: DeltaTable,
+    result_fingerprint: String,
 }
 
 impl LoadedCase {
@@ -280,7 +270,22 @@ impl LoadedCase {
     ) -> Result<Self, Box<dyn Error>> {
         let fixture = Fixture::create(temp_root, shape, case, retain)?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
-        Ok(Self { fixture, table })
+        let mut loaded = Self {
+            fixture,
+            table,
+            result_fingerprint: String::new(),
+        };
+        let mut stream = scan_stream(&loaded).await?;
+        let mut ids = Vec::new();
+        let mut hash = 14_695_981_039_346_656_037_u64;
+        while let Some(batch) = stream.next().await {
+            validate_and_hash_batch(&batch?, shape, &mut ids, &mut hash)?;
+        }
+        if ids != shape.expected_ids(case.layout) {
+            return Err(io::Error::other("fixture returned unexpected row IDs").into());
+        }
+        loaded.result_fingerprint = format!("fnv1a64:{hash:016x}");
+        Ok(loaded)
     }
 }
 
@@ -355,10 +360,7 @@ async fn run(config: &Config, shape: FixtureShape) -> Result<(), Box<dyn Error>>
     Ok(())
 }
 
-async fn measure_case(
-    loaded: &LoadedCase,
-    repetition: usize,
-) -> Result<Measurement, Box<dyn Error>> {
+async fn scan_stream(loaded: &LoadedCase) -> Result<DeltaBatchStream, Box<dyn Error>> {
     let projection = std::iter::once("row_id".to_owned())
         .chain((0..loaded.fixture.shape.payload_columns).map(payload_name))
         .collect::<Vec<_>>();
@@ -374,26 +376,32 @@ async fn measure_case(
         .with_target_partitions(1)?
         .build()
         .await?;
-    let mut stream = scan.into_stream();
+    Ok(scan.into_stream())
+}
+
+async fn measure_case(
+    loaded: &LoadedCase,
+    repetition: usize,
+) -> Result<Measurement, Box<dyn Error>> {
+    let mut stream = scan_stream(loaded).await?;
     let metrics = stream.metrics();
     let started = Instant::now();
     let mut first_batch_micros = None;
-    let mut ids = Vec::new();
-    let mut hash = 14_695_981_039_346_656_037_u64;
+    let mut rows = 0;
 
     while let Some(batch) = stream.next().await {
         let batch = batch?;
         first_batch_micros.get_or_insert_with(|| saturating_u64(started.elapsed().as_micros()));
-        validate_and_hash_batch(&batch, loaded.fixture.shape, &mut ids, &mut hash)?;
+        rows += batch.num_rows();
     }
     let total_micros = saturating_u64(started.elapsed().as_micros());
     let expected_ids = loaded
         .fixture
         .shape
         .expected_ids(loaded.fixture.case.layout);
-    if ids != expected_ids {
+    if rows != expected_ids.len() {
         return Err(io::Error::other(format!(
-            "{} fixture returned unexpected row IDs",
+            "{} fixture returned an unexpected row count",
             loaded.fixture.case.layout.name()
         ))
         .into());
@@ -403,8 +411,8 @@ async fn measure_case(
         case: loaded.fixture.case,
         repetition,
         data_file_bytes: loaded.fixture.data_file_bytes,
-        qualifying_rows: ids.len(),
-        result_fingerprint: format!("fnv1a64:{hash:016x}"),
+        qualifying_rows: rows,
+        result_fingerprint: loaded.result_fingerprint.clone(),
         first_batch_micros: first_batch_micros
             .ok_or_else(|| io::Error::other("scan returned no batches"))?,
         total_micros,
@@ -493,57 +501,18 @@ fn validate_and_hash_batch(
     Ok(())
 }
 
-fn benchmark_schema(payload_columns: usize) -> SchemaRef {
-    let mut fields = vec![
-        Field::new("row_id", DataType::Int32, false),
-        Field::new("event_id", DataType::Utf8, false),
-    ];
-    fields.extend(
-        (0..payload_columns).map(|index| Field::new(payload_name(index), DataType::Utf8, true)),
-    );
-    Arc::new(Schema::new(fields))
-}
-
 fn benchmark_batch(
     schema: SchemaRef,
     first_row: usize,
     shape: FixtureShape,
     layout: MatchLayout,
 ) -> Result<RecordBatch, Box<dyn Error>> {
-    let rows = first_row..first_row.saturating_add(shape.rows_per_group);
-    let row_ids = rows
-        .clone()
-        .map(i32::try_from)
-        .collect::<Result<Vec<_>, _>>()?;
-    let mut columns = Vec::with_capacity(shape.payload_columns.saturating_add(2));
-    columns.push(Arc::new(Int32Array::from(row_ids.clone())) as ArrayRef);
-    columns.push(
-        Arc::new(StringArray::from_iter_values(rows.clone().map(|row| {
-            if layout.matches(row % shape.rows_per_group, shape) {
-                MATCH_VALUE
-            } else {
-                OTHER_VALUE
-            }
-        }))) as ArrayRef,
-    );
-    for payload_index in 0..shape.payload_columns {
-        columns.push(Arc::new(StringArray::from_iter(
-            row_ids
-                .iter()
-                .map(|row_id| payload_value(*row_id, payload_index)),
-        )));
-    }
-    Ok(RecordBatch::try_new(schema, columns)?)
-}
-
-fn payload_value(row_id: i32, payload_index: usize) -> Option<String> {
-    let row_id_usize = usize::try_from(row_id).ok()?;
-    (!(row_id_usize + payload_index).is_multiple_of(17))
-        .then(|| format!("payload-{payload_index:03}-{row_id:08}-{PAYLOAD_FILLER}"))
-}
-
-fn payload_name(index: usize) -> String {
-    format!("payload_{index:03}")
+    Ok(control_rows::batch(
+        schema,
+        first_row,
+        shape.rows_per_group,
+        |row| layout.matches(row % shape.rows_per_group, shape),
+    )?)
 }
 
 fn write_delta_log(root: &Path, shape: FixtureShape, data_file_bytes: u64) -> io::Result<()> {

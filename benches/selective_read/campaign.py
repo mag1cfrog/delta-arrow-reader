@@ -215,7 +215,7 @@ def execute(args):
         binaries[reader], builds[reader] = binary, build
     prepared = matrix.load(args.matrix, fixtures) if args.matrix else None
     if prepared:
-        require(not (args.case or args.reference or args.session), "--matrix supplies all cases and references; do not mix case/session overrides")
+        require(not (args.case or args.reference or args.session or args.no_sessions), "--matrix supplies all cases and references; do not mix case/session overrides")
         for reader, build in builds.items():
             if reader in prepared["translation_locks"]:
                 require(build["lockfile_sha256"] == prepared["translation_locks"][reader], "native translation lock changed")
@@ -226,7 +226,7 @@ def execute(args):
         require(metadata["case_id"] not in references, "duplicate reference case")
         references[metadata["case_id"]] = reference.resolve()
     jobs = [{"id": case, "case_id": case, "execution_mode": "open"} for case in sorted(cases or set(args.case or DEFAULT_CASES))]
-    if not prepared:
+    if not prepared and not args.no_sessions:
         jobs += [{"id": session, "case_id": SESSIONS[session], "execution_mode": "reuse"} for session in sorted(set(args.session or SESSIONS))]
     config = storage.state(state)
     previous_affinity = os.sched_getaffinity(0)
@@ -343,5 +343,7 @@ if __name__ == "__main__":
     parser.add_argument("--reference", type=Path, action="append", default=[])
     parser.add_argument("--case", action="append", help="repeat for selected cases; default: both compound layouts")
     parser.add_argument("--matrix", type=Path, help="prepared 30-case matrix; replaces case/reference/session defaults")
-    parser.add_argument("--session", choices=SESSIONS, action="append", help="repeat for selected sessions; default: all three")
+    sessions = parser.add_mutually_exclusive_group()
+    sessions.add_argument("--session", choices=SESSIONS, action="append", help="repeat for selected sessions; default: all three")
+    sessions.add_argument("--no-sessions", action="store_true", help="run only the isolated cases")
     sys.exit(execute(parser.parse_args()))

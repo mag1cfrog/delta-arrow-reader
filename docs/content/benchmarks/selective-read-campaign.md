@@ -59,11 +59,11 @@ other prepared cases. The default isolated cases are the compound query on the
 clustered and shuffled original tables.
 
 The three session aliases are `reuse.li`, `reuse.wide` and `reuse.files4096`.
-Omitting `--session` requests all three. The 4,096-file fixture and its reference
-arrive in the later file-organization slice. Until then, its five inventory
-entries say `preparation_failed`, and the campaign exits with an incomplete
-status. It never substitutes a smaller table or calls the readers unsupported.
-The example explicitly selects the two sessions available in the smoke fixture.
+Omitting `--session` requests all three. Use `--no-sessions` for only isolated
+cases; it cannot be combined with `--session` or `--matrix`. The 4,096-file
+session needs the [file-organization fixture](selective-read-files.md).
+Missing fixtures produce `preparation_failed` inventory entries and an
+incomplete campaign. The example selects the two sessions in the smoke fixture.
 
 A failed correctness gate excludes that reader only from that case and mode.
 Native feature rejection is `unsupported`; a missing build, crash or malformed

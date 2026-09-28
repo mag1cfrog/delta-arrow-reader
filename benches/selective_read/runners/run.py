@@ -36,9 +36,13 @@ def request(fixtures, case_id, execution_mode, purpose, run_id, table_uri=None, 
     if manifest["status"] != "complete" or manifest["protocol"] != "selective-read-v1":
         raise ValueError("incomplete or unknown fixture manifest")
     fixture_id, query = case_id.rsplit(".", 1)
-    table = next(t for t in manifest["tables"] if t["id"] == fixture_id)
-    source = next(s for s in manifest["sources"] if s["scale_factor"] == table["scale_factor"])
-    sql = source["wide_queries" if fixture_id.startswith("wide.") else "queries"][query]
+    table = next((t for t in manifest["tables"] if case_id in t.get("queries", {})), None)
+    if table is not None:
+        sql = table["queries"][case_id]
+    else:
+        table = next(t for t in manifest["tables"] if t["id"] == fixture_id)
+        source = next(s for s in manifest["sources"] if s["scale_factor"] == table["scale_factor"])
+        sql = source["wide_queries" if fixture_id.startswith("wide.") else "queries"][query]
     location = (fixtures / table["path"]).resolve()
     if not location.is_relative_to(fixtures.resolve()):
         raise ValueError("table path escapes fixture root")
