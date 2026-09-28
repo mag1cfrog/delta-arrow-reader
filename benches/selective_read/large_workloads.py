@@ -15,7 +15,9 @@ SCALES = (1, 10, 30, 100, 300)
 READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft")
 SESSIONS = {"reuse.large.date30": "large.wide.shuffled.date30-wide",
             "reuse.large.compound": "large.wide.clustered.eq2-in20"}
-SOURCES = (HERE / "oracle.py", Path(__file__), HERE / "matrix.py", HERE / "runners/run.py")
+FILE_SESSIONS = {"reuse.large.files4096" + suffix: "large.files4096.eq2-in20" + suffix for suffix in ("", ".dv")}
+SOURCES = (HERE / "oracle.py", Path(__file__), HERE / "matrix.py", HERE / "runners/run.py",
+           HERE / "wide_files.py", HERE / "file_organizations.py")
 
 
 def shapes():
@@ -26,7 +28,12 @@ def shapes():
             **{k: oracle.WIDE_CASES[k] for k in ("eq1", "eq2", "eq2-in20", "eq2-in20-keys")}}
 
 
-def definitions():
+def definitions(family="data"):
+    require(family in ("data", "files"), "unknown workload family")
+    if family == "files":
+        return {f"large.{name}.eq2-in20{suffix}": ("files", fixture + suffix, "eq2-in20")
+                for name, fixture in (("files.normal", "wide.clustered"), ("files4096", "wide.files4096"))
+                for suffix in ("", ".dv")}
     cases = {}
     for layout in ("clustered", "shuffled"):
         for name in shapes():
@@ -44,7 +51,7 @@ def identity(path):
 
 def query_fields(case, manifest):
     import oracle
-    role, fixture, name = definitions()[case]
+    role, fixture, name = (definitions() | definitions("files"))[case]
     table = next(t for t in manifest["tables"] if t["id"] == fixture)
     source = next(s for s in manifest["sources"] if s["scale_factor"] == table["scale_factor"])
     projection, predicate, limit = shapes()[name]
@@ -73,12 +80,14 @@ def query_fields(case, manifest):
                          "row_groups": [len(f["row_groups"]) for f in table["files"]]}}
 
 
-def define(fixtures, controls, binaries, output, disk_limit_mib, elapsed_limit_seconds, smoke=False):
+def define(fixtures, controls, binaries, output, disk_limit_mib, elapsed_limit_seconds, smoke=False, family="data"):
     """Freeze candidate inputs; publication/environment selection belongs to the pilot."""
     require(type(disk_limit_mib) is int and disk_limit_mib > 0
             and type(elapsed_limit_seconds) is int and 0 < elapsed_limit_seconds < 2**31, "finite oracle limits required")
     inputs, scales = {}, {}
-    for role, roots in (("data", fixtures), ("control", controls)):
+    expected = definitions(family)
+    require(family != "files" or len(fixtures) == 1 and not controls, "file organizations require one paired fixture and no scale control")
+    for role, roots in ((("files", fixtures),) if family == "files" else (("data", fixtures), ("control", controls))):
         for root in roots:
             root = root.resolve()
             manifest = json.loads((root / "manifest.json").read_text())
@@ -88,8 +97,11 @@ def define(fixtures, controls, binaries, output, disk_limit_mib, elapsed_limit_s
             else:
                 require(manifest["profile"] == "large" and manifest["protocol_sha256"] == digest(AMENDMENT)
                         and manifest["base_protocol_sha256"] == digest(PROTOCOL), "large fixture amendment differs")
+            if family == "files":
+                import wide_files
+                wide_files.geometry(manifest, large=True, smoke=smoke)
             for table in manifest["tables"]:
-                if table["id"] not in {v[1] for v in definitions().values()}:
+                if table["id"] not in {v[1] for v in expected.values()}:
                     continue
                 key = role, table["id"]
                 require(key not in inputs, "duplicate workload fixture: " + str(key))
@@ -97,14 +109,16 @@ def define(fixtures, controls, binaries, output, disk_limit_mib, elapsed_limit_s
                 scale = table["scale_factor"]
                 require(role not in scales or scales[role] == scale, "mixed source scales in one role")
                 scales[role] = scale
-    require(set(scales) == {"data", "control"}, "data and preceding-scale fixtures required")
-    if smoke:
+    if family == "files":
+        require(scales == {"files": .01} if smoke else set(scales) == {"files"} and scales["files"] in SCALES[1:], "invalid file-pair scale")
+    elif smoke:
         require(scales == {"data": .01, "control": .01}, "smoke scale must be SF0.01")
     else:
+        require(set(scales) == {"data", "control"}, "data and preceding-scale fixtures required")
         require(scales["data"] in SCALES[1:] and scales["control"] == SCALES[SCALES.index(scales["data"]) - 1],
                 "control must use the immediately preceding ladder rung")
     cases = []
-    for case, (role, fixture, _) in definitions().items():
+    for case, (role, fixture, _) in expected.items():
         require((role, fixture) in inputs, "missing workload fixture: " + str((role, fixture)))
         root, manifest = inputs[role, fixture]
         row = query_fields(case, manifest)
@@ -135,7 +149,8 @@ def define(fixtures, controls, binaries, output, disk_limit_mib, elapsed_limit_s
               "protocol_sha256": digest(AMENDMENT), "base_protocol_sha256": digest(PROTOCOL),
               "scope": "smoke" if smoke else "candidate", "publication_ready": False,
               "source_sha256": {str(p.relative_to(HERE)): digest(p) for p in SOURCES},
-              "scales": scales, "readers": list(READERS), "cases": cases, "sessions": SESSIONS,
+              "family": family, "scales": scales, "readers": list(READERS), "cases": cases,
+              "sessions": FILE_SESSIONS if family == "files" else SESSIONS,
               "oracle_limits": {"memory_bytes": 16 * 1024**3, "disk_bytes": disk_limit_mib * 1024**2,
                                 "elapsed_seconds": elapsed_limit_seconds},
               "translations": translations}
@@ -152,14 +167,20 @@ def load(path):
     require(value["source_sha256"] == {str(p.relative_to(HERE)): digest(p) for p in SOURCES}, "workload harness sources changed")
     require(value["scope"] in ("smoke", "candidate") and value["publication_ready"] is False,
             "formal workload freeze is not implemented by this slice")
-    require(value["readers"] == list(READERS) and value["sessions"] == SESSIONS, "workload readers/sessions changed")
-    require(len(value["cases"]) == 18 and {r["case_id"] for r in value["cases"]} == set(definitions()), "large workload must have exactly 18 cases")
+    family = value.get("family", "data")
+    expected = definitions(family)
+    require(value["readers"] == list(READERS) and value["sessions"] == (FILE_SESSIONS if family == "files" else SESSIONS), "workload readers/sessions changed")
+    require(len(value["cases"]) == len(expected) and {r["case_id"] for r in value["cases"]} == set(expected), "incomplete workload family")
     scales = value["scales"]
-    require(scales == {"data": .01, "control": .01} if value["scope"] == "smoke" else
+    if family == "files":
+        require(scales == {"files": .01} if value["scope"] == "smoke" else
+                set(scales) == {"files"} and scales["files"] in SCALES[1:], "invalid file-pair scale")
+    else:
+        require(scales == {"data": .01, "control": .01} if value["scope"] == "smoke" else
             set(scales) == {"data", "control"} and scales["data"] in SCALES[1:]
             and scales["control"] == SCALES[SCALES.index(scales["data"]) - 1], "invalid source-scale controls")
     for row in value["cases"]:
-        role, fixture, name = definitions()[row["case_id"]]
+        role, fixture, name = expected[row["case_id"]]
         projection, predicate, limit = shapes()[name]
         require(row["role"] == role and row["fixture_id"] == fixture and row["scale_factor"] == scales[role]
                 and row["projection"] == list(projection) and row["predicate"] == predicate and row["limit"] == limit,
@@ -173,7 +194,7 @@ def load(path):
     import matrix
     for reader, translation in value["translations"].items():
         require(translation["lock_sha256"] == digest(HERE / "runners" / reader / "lock.json"), "translation lock changed")
-        require(set(translation["expressions"]) == set(definitions()), "incomplete native translations")
+        require(set(translation["expressions"]) == set(expected), "incomplete native translations")
         for case, expression in translation["expressions"].items():
             require(matrix.sha(expression["native_expression"]) == expression["sha256"], "native expression changed")
             row = next(r for r in value["cases"] if r["case_id"] == case)
@@ -185,7 +206,11 @@ def binding(value, fixtures, case_id):
     row = next(r for r in value["cases"] if r["case_id"] == case_id)
     path = Path(fixtures) / "manifest.json"
     require(digest(path) == row["fixture_manifest_sha256"], "workload fixture identity changed")
-    expected = query_fields(case_id, json.loads(path.read_text()))
+    manifest = json.loads(path.read_text())
+    if value.get("family") == "files":
+        import wide_files
+        wide_files.geometry(manifest, large=True, smoke=value["scope"] == "smoke")
+    expected = query_fields(case_id, manifest)
     require(all(row[k] == v for k, v in expected.items()), "workload SQL, literals, scale or geometry changed")
     return row
 
@@ -212,7 +237,7 @@ def report(campaign, output):
     for job, entries in inventory.items():
         require(set(entries) == set(READERS), "all five reader statuses are required")
         case = jobs[job]["case_id"]
-        require(case in definitions() and (jobs[job]["execution_mode"] == "open" and job == case or
+        require(case in definitions(frozen.get("family", "data")) and (jobs[job]["execution_mode"] == "open" and job == case or
                 jobs[job]["execution_mode"] == "reuse" and frozen["sessions"].get(job) == case), "unknown workload job")
     require(len({r["run_id"] for r in observations}) == len(observations), "duplicate observation")
     for row in observations:
@@ -232,6 +257,16 @@ def report(campaign, output):
              "native_phases": {"planning_ns": None, "scan_ns": None,
                                "unavailable_reason": "adapters do not expose comparable separate phase clocks"}}
             for job in config["jobs"] for reader in READERS]
+    for row in rows:
+        gate = row["gate"]
+        row["oracle"] = None
+        if gate.get("reference"):
+            reference = Path(gate["reference"]) / "reference.json"
+            require(digest(reference) == gate["reference_sha256"], "reference metadata changed")
+            metadata = json.loads(reference.read_text())
+            require(comparison_identity(metadata) == comparison, "reference workload changed")
+            row["oracle"] = {k: metadata[k] for k in ("source_rows", "physical_qualifying_rows", "qualifying_rows",
+                "deleted_qualifying_rows", "output_rows", "projected_logical_bytes", "candidate_files", "matching_files", "wide_file_geometry") if k in metadata}
     result = {"status": summary["status"], **comparison, "campaign_id": config["campaign_id"],
               "scope": frozen["scope"], "publication_ready": False, "rows": rows,
               "observations_sha256": digest(campaign / "observations.jsonl"),
@@ -251,7 +286,8 @@ if __name__ == "__main__":
         print(json.dumps({"status": result["status"], "entries": len(result["rows"])}))
         sys.exit(0 if result["status"] == "complete" else 1)
     parser.add_argument("--fixtures", type=Path, action="append", required=True)
-    parser.add_argument("--control-fixtures", type=Path, action="append", required=True)
+    parser.add_argument("--control-fixtures", type=Path, action="append", default=[])
+    parser.add_argument("--family", choices=("data", "files"), default="data")
     parser.add_argument("--binary", type=Path, action="append", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--disk-limit-mib", type=int, required=True)
@@ -259,4 +295,4 @@ if __name__ == "__main__":
     parser.add_argument("--smoke", action="store_true", help="bounded SF0.01 contract check, never a scale-control result")
     args = parser.parse_args()
     define(args.fixtures, args.control_fixtures, args.binary, args.output,
-           args.disk_limit_mib, args.elapsed_limit_seconds, args.smoke)
+           args.disk_limit_mib, args.elapsed_limit_seconds, args.smoke, args.family)

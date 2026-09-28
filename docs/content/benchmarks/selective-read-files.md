@@ -157,3 +157,116 @@ The generator's bounded Rust check covers fractional file boundaries, exact
 values, reproducible hashes, and missing/extra rows. The oracle checks cover
 changed values, invalid pruning geometry, and both file-organization query
 shapes. This experiment adds no CI workflow or benchmark timing job.
+
+## Wide tables with paired deletion vectors
+
+The wide comparison keeps all 80 stored columns and projects the 69-column
+compound query. Its legacy pair uses SF1 and revision 2. The new revision 3
+family adds normal file boundaries at the same source scale as the 4,096-file
+repack, with both DV states on each organization.
+
+| Family | Cases | Reuse profiles |
+| --- | --- | --- |
+| Legacy SF1 | `wide.files4096.eq2-in20`, `wide.files4096.eq2-in20.dv` | None added |
+| Large file organizations | `large.files.normal.eq2-in20`, `large.files.normal.eq2-in20.dv`, `large.files4096.eq2-in20`, `large.files4096.eq2-in20.dv` | `reuse.large.files4096`, `reuse.large.files4096.dv` |
+
+Prepare the legacy pair from an existing development fixture:
+
+```sh
+target/selective-read/release/selective-read-fixtures \
+  --profile development --wide-files-from ../selective-read-development \
+  --output ../wide-files-legacy
+
+../selective-read-oracle-venv/bin/python -B benches/selective_read/wide_files.py \
+  --fixtures ../wide-files-legacy --output ../wide-files-legacy-references
+```
+
+The output also retains the normal-boundary parent for the independent ordered
+comparison. The two legacy cases keep their original deletion rule: the public
+hash rule, each repacked file's smallest nonmatching logical key, and the
+smallest matching key overall. They remain small-file mechanism controls.
+
+For the large pair, first generate a clustered wide parent at an explicit
+scale using the [large fixture profile](selective-read-fixtures.md). Check
+capacity before preparing its file organizations:
+
+```sh
+target/selective-read/release/selective-read-fixtures \
+  --profile large --scale-factor 10 --fixture wide.files4096 \
+  --wide-files-from ../wide-clustered-sf10 \
+  --disk-limit-mib 196608 --elapsed-limit-seconds 1800 \
+  --preflight --output ../wide-files-large
+```
+
+The example starts at SF10; it does not select the publication scale or promise
+that 192 GiB is sufficient. The capacity plan includes the retained source and
+parent, normal/repacked base and DV copies, metadata, a staged MinIO copy, exact
+SQLite references and validation exports. Preparation stops when the declared
+budget or available disk is insufficient. Build storage is accounted separately.
+Run the same command without `--preflight` only when those checks pass.
+
+The large deletion set is shared across both organizations. It combines the
+public hash rule, the smallest nonmatching key in every file of either
+organization, and the smallest matching key overall. Every file must have a
+nonempty real DV, while at least one matching row is deleted and one survives.
+The DV snapshots keep their base Parquet bytes and physical row counts.
+
+Page and column geometry for the repacked files is stored in adjacent
+`*.parquet.geometry.json` files. Each manifest entry binds that file's SHA-256,
+size, Parquet identity and row-group boundaries. This keeps preparation memory
+bounded while retaining all physical details and all 80 columns' Delta
+statistics. Geometry sidecars are oracle inputs; they are not uploaded as
+Delta data objects or supplied to readers as a selected file list.
+
+Freeze the four cases with the existing workload command:
+
+```sh
+../selective-read-oracle-venv/bin/python -B benches/selective_read/large_workloads.py \
+  --family files --fixtures ../wide-files-large \
+  --binary ../selective-read-polars-build/selective-read-polars \
+  --binary ../selective-read-daft-build/selective-read-daft \
+  --disk-limit-mib 196608 --elapsed-limit-seconds 1800 \
+  --output ../wide-files-workload
+
+../selective-read-oracle-venv/bin/python -B benches/selective_read/wide_files.py \
+  --workload ../wide-files-workload/workload.json \
+  --fixtures ../wide-files-large --output ../wide-files-large-references
+```
+
+The file family requires one common source scale, exactly 4,096 repacked files,
+a median actual file size of at least 64 MiB and at least 99% independently
+excludable files. The full sorted size distribution is retained. The oracle
+checks every stored column across the two organizations, independently derives
+the shared deletion union, and verifies exact live values and multiplicity.
+References include candidate/matching/excluded files and DV coverage for each
+category. The paired organizations must produce identical exact live results.
+
+For a bounded manual check, generate with `--profile smoke --wide-files-from
+../selective-read-smoke --large-file-pair` and freeze with `--family files
+--smoke`. Use smaller explicit disk and time ceilings. It still uses 4,096 files,
+but its tiny files do not satisfy large-data geometry. SF1 cannot be relabeled
+as a large pair. The first qualifying SF10/SF30/SF100/SF300 rung, its resource
+feasibility and the final publication manifest are selected in
+[#345](https://github.com/mag1cfrog/delta-arrow-reader/issues/345).
+
+Upload the prepared tables with the existing storage command. Supply all five
+binaries and all four references to `campaign.py`, together with
+`--workload ../wide-files-workload/workload.json`. Without case overrides it
+selects all four cases and both new reuse profiles. Use `--no-sessions` and
+the two explicit legacy case/reference arguments for a revision 2 campaign.
+The five native capability and exact-correctness gates apply to every case;
+errors, timeouts and unsupported DVs remain explicit results.
+
+Use `large_workloads.py report` for the new family. The report includes exact
+reference counts and file/DV geometry alongside the existing initialization,
+query, session and separate I/O observations. Native planning/scan clocks remain
+null with reasons where unavailable. Compare file organizations only at their
+shared scale. DV and ordinary snapshots have different live output, so their
+ratio is not a pure bitmap cost. All these candidate reports retain
+`publication_ready: false` until the pilot and formal freeze are complete.
+
+The bounded Rust check uses eight rows with different file boundaries to prove
+that a normal-file minimum missing from the repacked minima joins the shared
+set. Python checks reject undersized files and mixed scales. Actual 4,096-file
+generation, native reader checks and large geometry acceptance stay outside CI;
+this extension adds no CI job or step.

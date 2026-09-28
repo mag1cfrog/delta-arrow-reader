@@ -104,6 +104,8 @@ struct Config {
     controls: bool,
     dv_from: Vec<PathBuf>,
     dv_table: Option<String>,
+    wide_files_from: Option<PathBuf>,
+    large_file_pair: bool,
     large: Option<large::Options>,
 }
 
@@ -118,6 +120,8 @@ impl Config {
         let mut controls = false;
         let mut dv_from = Vec::new();
         let mut dv_table = None;
+        let mut wide_files_from = None;
+        let mut large_file_pair = false;
         let mut large_args = std::collections::BTreeMap::new();
         let mut preflight = false;
         while let Some(arg) = args.next() {
@@ -129,6 +133,7 @@ impl Config {
                      Generate fixed within-file controls: --controls\n\
                      Add paired DV snapshots: --dv-from PUBLIC_FIXTURES --dv-from CONTROLS\n\
                      Single wide DV pair: --dv-from FIXTURE_DIRECTORY --dv-table wide.clustered|wide.shuffled\n\
+                     Wide file organizations: --wide-files-from FIXTURE_DIRECTORY [--large-file-pair]\n\
                      Large: --scale-factor 1|10|30|100|300 --fixture source|li.clustered|li.shuffled|wide.clustered|wide.shuffled\n\
                      Large limits (required): --disk-limit-mib N --elapsed-limit-seconds N\n\
                      Large options: --source-from FIXTURE_DIRECTORY --preflight\n\
@@ -144,6 +149,10 @@ impl Config {
                 preflight = true;
                 continue;
             }
+            if arg == "--large-file-pair" {
+                large_file_pair = true;
+                continue;
+            }
             let value = args
                 .next()
                 .ok_or_else(|| format!("missing value for {arg}"))?;
@@ -153,6 +162,7 @@ impl Config {
                 "--repack-from" => repack_from = Some(PathBuf::from(value)),
                 "--dv-from" => dv_from.push(PathBuf::from(value)),
                 "--dv-table" => dv_table = Some(value),
+                "--wide-files-from" => wide_files_from = Some(PathBuf::from(value)),
                 "--scale-factor" | "--fixture" | "--source-from" | "--elapsed-limit-seconds" => {
                     if large_args.insert(arg.clone(), value).is_some() {
                         return Err(format!("duplicate option: {arg}").into());
@@ -183,6 +193,17 @@ impl Config {
                 return Err("large requires --disk-limit-mib and cannot combine controls/repack preparation".into());
             }
             let options = large::Options::parse(large_args, preflight)?;
+            if wide_files_from.is_some() {
+                if options.fixture != "wide.files4096"
+                    || options.scale == 1
+                    || options.source_from.is_some()
+                {
+                    return Err("large file pairs require --fixture wide.files4096, SF10 or above, and no --source-from".into());
+                }
+                large_file_pair = true;
+            } else if options.fixture == "wide.files4096" {
+                return Err("wide.files4096 requires --wide-files-from".into());
+            }
             if !dv_from.is_empty()
                 && (dv_table.as_deref() != Some(options.fixture.as_str())
                     || options.source_from.is_some())
@@ -196,6 +217,14 @@ impl Config {
             }
             None
         };
+        if large_file_pair && wide_files_from.is_none() {
+            return Err("--large-file-pair requires --wide-files-from".into());
+        }
+        if large_file_pair && profile != Profile::Large && profile != Profile::Smoke {
+            return Err(
+                "large file pairs require a large profile or an explicit smoke check".into(),
+            );
+        }
         if let Some(table) = &dv_table
             && (dv_from.len() != 1
                 || !["wide.clustered", "wide.shuffled"].contains(&table.as_str()))
@@ -207,9 +236,12 @@ impl Config {
         if usize::from(controls)
             + usize::from(repack_from.is_some())
             + usize::from(!dv_from.is_empty())
+            + usize::from(wide_files_from.is_some())
             > 1
         {
-            return Err("--controls, --repack-from, and --dv-from are mutually exclusive".into());
+            return Err(
+                "controls, repack, DV and wide-file preparation are mutually exclusive".into(),
+            );
         }
         let sort_memory =
             sort_memory.unwrap_or(if profile == Profile::Smoke { 512 } else { 4096 } * MIB);
@@ -236,6 +268,8 @@ impl Config {
             controls,
             dv_from,
             dv_table,
+            wide_files_from,
+            large_file_pair,
             large,
         })
     }
@@ -303,6 +337,9 @@ async fn generate(config: &Config) -> Result<Value> {
     }
     if !config.dv_from.is_empty() {
         return dv::generate(config, capacity);
+    }
+    if let Some(input) = &config.wide_files_from {
+        return repack::wide_pair(config, input, capacity);
     }
     if config.controls {
         return controls::generate(config);

@@ -233,7 +233,7 @@ def base_case(case_id, large=False):
     for suffix in (".dv", ".feature-only"):
         if case_id.endswith(suffix):
             case = case_id.removesuffix(suffix)
-            require((case in DV_CASES or large and case in ("wide.clustered.date30-wide", "wide.shuffled.date30-wide"))
+            require((case in DV_CASES or case == "wide.files4096.eq2-in20" or large and case in ("wide.clustered.date30-wide", "wide.shuffled.date30-wide"))
                     if suffix == ".dv" else case == "row-groups.select", "unknown DV case")
             return case, suffix
     return case_id, ""
@@ -274,7 +274,7 @@ def case_input(fixtures, case_id, duplicate_literal=False, workload=None):
         return manifest, table, None, CONTROL_PROJECTION, "control-match", None, [], sql
     fixture_id, query = case.rsplit(".", 1)
     wide = fixture_id.startswith("wide.")
-    require(fixture_id in ("li.clustered", "li.shuffled", "wide.clustered", "wide.shuffled", "files64", "files4096"),
+    require(fixture_id in ("li.clustered", "li.shuffled", "wide.clustered", "wide.shuffled", "wide.files4096", "files64", "files4096"),
             "unsupported fixture")
     if fixture_id.startswith("files"):
         require(query in ("empty", "eq2-in20"), "unknown file-organization query")
@@ -359,11 +359,20 @@ def objects(fixtures, table, source):
     for group in ([source] if source is not None else []) + [table]:
         logs = group.get("delta_logs", [group["delta_log"]] if group["delta_log"] else [])
         dvs = [f["deletion_vector"] for f in group["files"] if "deletion_vector" in f]
-        for item in group["files"] + logs + dvs:
+        geometries = [f["geometry"] for f in group["files"] if "geometry" in f]
+        for item in group["files"] + logs + dvs + geometries:
             descriptor = {k: item[k] for k in ("path", "bytes", "sha256")}
             descriptor["path"] = str(Path(group["path"]) / item["path"])
             verify_object(fixtures, descriptor)
             verified.append(descriptor)
+        for item in group["files"]:
+            if "geometry" in item:
+                require(item["geometry"]["path"] == item["path"] + ".geometry.json", "invalid geometry sidecar path")
+                details = load_json(inside(fixtures, str(Path(group["path"]) / item["geometry"]["path"])))
+                require(details["parquet_sha256"] == item["sha256"]
+                        and [{k: g[k] for k in ("first_row", "rows")} for g in details["row_groups"]] == item["row_groups"]
+                        and all([c["column"] for c in g["columns"]] == [f["name"] for f in group["schema"]["fields"]]
+                                for g in details["row_groups"]), "geometry sidecar differs from Parquet identity or groups")
     logs = table.get("delta_logs", [table["delta_log"]])
     require([item["path"] for item in logs] == [f"_delta_log/{v:020}.json" for v in range(table["snapshot_version"] + 1)]
             and logs[-1] == table["delta_log"], "wrong snapshot logs")
@@ -526,11 +535,19 @@ def prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota):
     fixtures, output = Path(fixtures).resolve(), Path(output)
     manifest, table, source, projection, predicate, limit, literals, sql = case_input(fixtures, case_id, duplicate_literal, workload)
     verified = objects(fixtures, table, source)
-    case, suffix = base_case(case_id.removeprefix("large.").removeprefix("scale-control."), workload is not None)
+    query_case = case_id
+    if workload is not None:
+        import large_workloads
+        query_case = large_workloads.binding(large_workloads.load(workload), fixtures, case_id)["query_case_id"]
+    case, suffix = base_case(query_case, workload is not None)
     geometry = control_geometry(fixtures, table, case) if source is None else None
     saved_keys = [tuple(key) for item in table["files"] for key in item.get("deletion_vector", {}).get("logical_ids", [])]
     require(len(saved_keys) == len(set(saved_keys)), "duplicate deleted logical ID")
     saved_keys = set(saved_keys)
+    extra = set()
+    if "wide_file_pair" in manifest:
+        import wide_files
+        extra = wide_files.extra_keys(fixtures, manifest)
     expected_deletions = set()
     deleted_qualifying = 0
     output.mkdir(parents=True, exist_ok=False)
@@ -569,7 +586,7 @@ def prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota):
                 passed = prefix_matches(row, predicates)
                 for index in range(passed + 1):
                     counts[index] += 1
-                if table["deletion_vectors"] and deleted(row):
+                if table["deletion_vectors"] and (deleted(row) or key in extra):
                     expected_deletions.add(key)
                     deleted_qualifying += passed == len(predicates)
                     continue
@@ -610,7 +627,7 @@ def prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota):
                 if source is None:
                     require(row["row_id"] == actual_rows + count and row["event_id"] == ("match" if control_matches(case, row["row_id"]) else "other"), "control row order or match placement changed")
                 is_deleted = count in by_ordinal
-                require(is_deleted == (table["deletion_vectors"] and deleted(row)), "physical deletion ordinal differs from rule")
+                require(is_deleted == (table["deletion_vectors"] and (deleted(row) or bool(extra) and tuple(row[name] for name in KEYS) in extra)), "physical deletion ordinal differs from rule")
                 if is_deleted:
                     key = (row["row_id"],) if source is None else tuple(row[name] for name in KEYS)
                     require(by_ordinal[count] == key, "physical ordinal refers to the wrong logical row")
@@ -656,6 +673,11 @@ def prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota):
         "verified_objects": verified, "reference_sha256": digest_file(reference_db),
         **({"within_file_geometry": geometry} if geometry else {}),
     }
+    if "wide_file_pair" in manifest:
+        require(live_qualifying > 0 and (not table["deletion_vectors"] or deleted_qualifying > 0), "wide pair needs a deleted match and a survivor")
+        metadata["wide_file_geometry"] = {"file_bytes_sorted": sorted(f["bytes"] for f in table["files"]),
+            "excluded_files": sorted({f["path"] for f in table["files"]} - set(candidates)),
+            "dv_coverage": wide_files.coverage(table, candidates, matching)}
     if workload is not None:
         import large_workloads
         frozen = large_workloads.load(workload)
