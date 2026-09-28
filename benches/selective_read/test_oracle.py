@@ -14,6 +14,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 import oracle
+import file_organizations
 
 
 ARROW_TYPES = {"int64": pa.int64(), "int32": pa.int32(), "date32": pa.date32(),
@@ -182,6 +183,76 @@ class OracleTests(unittest.TestCase):
             self.assertEqual(repeated["reference_sha256"], original["reference_sha256"])
             self.assertNotEqual(repeated["canonical_sql_sha256"], original["canonical_sql_sha256"])
             self.assertEqual(repeated["output_rows"], original["output_rows"])
+
+    def test_repacked_values_and_pruning_regressions(self):
+        table = self.result_table("li.clustered.all-full")
+        self.assertEqual(file_organizations.same_rows(table.to_batches(7), table.to_batches(33)), 152)
+        for bad in (table.slice(1), table.set_column(1, "l_partkey", pa.array([0] * 152, type=pa.int64()))):
+            with self.assertRaisesRegex(ValueError, "repacked"):
+                file_organizations.same_rows(table.to_batches(7), bad.to_batches(33))
+        good = {"case_id": "files4096.eq2-in20", "output_rows": 20, "active_files": 4096,
+                "candidate_files": ["part-0"], "matching_files": ["part-0"]}
+        file_organizations.pruning(good)
+        for changes in ({"candidate_files": []}, {"candidate_files": ["part-0"] * 4096}, {"output_rows": 0}):
+            with self.assertRaises(ValueError):
+                file_organizations.pruning(good | changes)
+        file_organizations.pruning(good | {"case_id": "files64.empty", "output_rows": 0,
+                                          "candidate_files": [], "matching_files": []})
+        with self.assertRaisesRegex(ValueError, "exclude every file"):
+            file_organizations.pruning(good | {"case_id": "files64.empty"})
+        manifest_path = self.fixtures / "manifest.json"
+        original = manifest_path.read_bytes()
+        try:
+            manifest = json.loads(original)
+            base = next(t for t in manifest["tables"] if t["id"] == "li.clustered")
+            manifest["tables"].append(base | {"id": "files64"})
+            write_json(manifest_path, manifest)
+            for query in ("empty", "eq2-in20"):
+                result = oracle.prepare(self.fixtures, "files64." + query, self.root / ("repack-" + query))
+                self.assertEqual(result["reference_sha256"], self.references["li.clustered." + query][1]["reference_sha256"])
+        finally:
+            manifest_path.write_bytes(original)
+
+    def test_file_organization_report_keeps_failures(self):
+        import campaign
+        from check_campaign import observation
+        with tempfile.TemporaryDirectory(dir=self.root) as temporary:
+            root = Path(temporary)
+            references = root / "references"
+            references.mkdir()
+            cases = []
+            for case in file_organizations.CASES:
+                directory = references / case
+                directory.mkdir()
+                empty = case.endswith(".empty")
+                metadata = {"case_id": case, "output_rows": 0 if empty else 20,
+                            "active_files": int(case.split(".")[0][5:]),
+                            "candidate_files": [] if empty else ["part-0"], "matching_files": [] if empty else ["part-0"]}
+                write_json(directory / "reference.json", metadata)
+                cases.append(metadata | {"reference_metadata_sha256": oracle.digest_file(directory / "reference.json")})
+            jobs = [{"id": c, "case_id": c, "execution_mode": "open"} for c in file_organizations.CASES]
+            jobs.append({"id": "reuse.files4096", "case_id": "files4096.eq2-in20", "execution_mode": "reuse"})
+            write_json(references / "file-organizations.json", {"status": "complete", "profile": "smoke", "tables": [], "cases": cases,
+                       "fixture_manifest_sha256": oracle.digest_file(self.fixtures / "manifest.json")})
+            inventory = {j["id"]: {r: {"status": "unsupported" if r == "daft" else "success", "runnable": r != "daft",
+                         "reference_sha256": oracle.digest_file(references / j["case_id"] / "reference.json")} for r in campaign.READERS} for j in jobs}
+            slots = campaign.schedule(inventory, "test")
+            rows = [{**slot, "status": "success", "artifacts": str(root / slot["run_id"]), "observation": observation(100)} for slot in slots]
+            next(r for r in rows if r["reader_id"] == "polars" and r["stage"] == "timing")["status"] = "timeout"
+            summary = {"status": "incomplete", "integrity_passed": True, "timer_resolution": {"ratio_floor_ns": 1},
+                       "jobs": campaign.summarize(inventory, slots, rows, 1)}
+            for name, value in (("campaign", {"fixtures": str(self.fixtures), "jobs": jobs}), ("inventory", inventory), ("schedule", slots), ("summary", summary)):
+                write_json(root / (name + ".json"), value)
+            write_json(root / "frozen.json", {n: oracle.digest_file(root / n) for n in ("campaign.json", "inventory.json", "schedule.json")})
+            (root / "observations.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+            self.assertEqual(file_organizations.report(root, references, root / "report"), {"status": "incomplete", "entries": 25})
+            result = json.loads((root / "report/file-organizations-report.json").read_text())["rows"]
+            self.assertEqual(sum(r["gate"]["status"] == "unsupported" for r in result), 5)
+            self.assertTrue(any(r["result"]["sample_statuses"].get("timeout") == 1 and not r["result"]["eligible"] for r in result))
+            summary["jobs"][jobs[0]["id"]]["delta-arrow-reader"]["metrics"] = {}
+            write_json(root / "summary.json", summary)
+            with self.assertRaisesRegex(ValueError, "raw observations"):
+                file_organizations.report(root, references, root / "bad-report")
 
     @unittest.skipUnless(os.environ.get("SELECTIVE_READ_FIXTURES"), "set SELECTIVE_READ_FIXTURES to generated smoke inputs")
     def test_generated_public_smoke(self):

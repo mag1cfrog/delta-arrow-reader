@@ -1,6 +1,7 @@
 //! Public input preparation for selective-read-v1; no reader timings.
 
 mod fixtures;
+mod repack;
 
 use std::collections::BTreeSet;
 use std::env;
@@ -24,7 +25,11 @@ use fixtures::{BATCH_ROWS, Budget, MIB, Result, TableWriter, original_schema};
 
 const PROTOCOL: &str = include_str!("../../../docs/content/benchmarks/selective-read-protocol.md");
 const LOCKFILE: &str = include_str!("../Cargo.lock");
-const GENERATOR_SOURCE: &str = concat!(include_str!("main.rs"), include_str!("fixtures.rs"));
+const GENERATOR_SOURCE: &str = concat!(
+    include_str!("main.rs"),
+    include_str!("fixtures.rs"),
+    include_str!("repack.rs")
+);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Profile {
@@ -79,6 +84,7 @@ struct Config {
     output: PathBuf,
     sort_memory: u64,
     disk_limit: Option<u64>,
+    repack_from: Option<PathBuf>,
 }
 
 impl Config {
@@ -88,11 +94,13 @@ impl Config {
         let mut output = None;
         let mut sort_memory = None;
         let mut disk_limit = None;
+        let mut repack_from = None;
         while let Some(arg) = args.next() {
             if arg == "--help" || arg == "-h" {
                 println!(
                     "selective-read-fixtures --profile smoke|development|report --output NEW_DIRECTORY\n\
                      Optional preparation limits: --sort-memory-mib N --disk-limit-mib N\n\
+                     Repack existing clustered rows: --repack-from FIXTURE_DIRECTORY\n\
                      Existing output directories are never overwritten."
                 );
                 std::process::exit(0);
@@ -103,6 +111,7 @@ impl Config {
             match arg.as_str() {
                 "--profile" => profile = Profile::parse(&value)?,
                 "--output" => output = Some(PathBuf::from(value)),
+                "--repack-from" => repack_from = Some(PathBuf::from(value)),
                 "--sort-memory-mib" => {
                     sort_memory = Some(
                         value
@@ -144,6 +153,7 @@ impl Config {
             output,
             sort_memory,
             disk_limit,
+            repack_from,
         })
     }
 }
@@ -168,6 +178,9 @@ fn main() -> Result<()> {
 }
 
 async fn generate(config: &Config) -> Result<Value> {
+    if let Some(input) = &config.repack_from {
+        return repack::generate(config, input);
+    }
     let started = Instant::now();
     let output_parent = config
         .output
@@ -331,15 +344,7 @@ async fn generate(config: &Config) -> Result<Value> {
         "protocol": "selective-read-v1",
         "protocol_sha256": fixtures::hash_bytes(PROTOCOL.as_bytes()),
         "profile": config.profile.name(), "status": "complete",
-        "generator": {
-            "tpchgen": "3.0.0", "tpchgen_git": "4f6bf4c5ab40511c8fdef5888fc8d022e5e546d7",
-            "arrow": "58.4.0", "parquet": "58.4.0", "datafusion_sort": "54.1.0",
-            "source_sha256": fixtures::hash_bytes(GENERATOR_SOURCE.as_bytes()),
-            "lockfile_sha256": fixtures::hash_bytes(LOCKFILE.as_bytes()),
-            // Read the running inode even when a concurrent build replaces its pathname.
-            "executable_sha256": fixtures::hash_file(Path::new("/proc/self/exe"))?,
-            "target": format!("{}-{}", env::consts::ARCH, env::consts::OS)
-        },
+        "generator": generator_identity()?,
         "recipe": {
             "source": "LineItemGenerator::new(scale_factor, 1, 1); default distributions, seeds, text pool",
             "reference_order": "original generator order",
@@ -375,6 +380,18 @@ async fn generate(config: &Config) -> Result<Value> {
         &serde_json::to_vec_pretty(&manifest)?,
     )?;
     Ok(manifest)
+}
+
+fn generator_identity() -> Result<Value> {
+    Ok(json!({
+            "tpchgen": "3.0.0", "tpchgen_git": "4f6bf4c5ab40511c8fdef5888fc8d022e5e546d7",
+            "arrow": "58.4.0", "parquet": "58.4.0", "datafusion_sort": "54.1.0",
+            "source_sha256": fixtures::hash_bytes(GENERATOR_SOURCE.as_bytes()),
+            "lockfile_sha256": fixtures::hash_bytes(LOCKFILE.as_bytes()),
+            // Read the running inode even when a concurrent build replaces its pathname.
+            "executable_sha256": fixtures::hash_file(Path::new("/proc/self/exe"))?,
+            "target": format!("{}-{}", env::consts::ARCH, env::consts::OS)
+    }))
 }
 
 async fn sorted_table(

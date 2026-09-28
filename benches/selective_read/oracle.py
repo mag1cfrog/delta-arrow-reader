@@ -216,20 +216,23 @@ def case_input(fixtures, case_id, duplicate_literal=False):
     require(pa.__version__ == "25.0.1", "oracle requires pyarrow==25.0.1")
     manifest = load_json(Path(fixtures) / "manifest.json")
     require(manifest["status"] == "complete" and manifest["protocol"] == "selective-read-v1", "incomplete or unknown fixtures")
-    parts = case_id.split(".")
-    require(len(parts) == 3 and parts[0] in ("li", "wide") and parts[1] in ("clustered", "shuffled"), "unsupported case; controls and DVs follow in later slices")
-    fixture_id, query = ".".join(parts[:2]), parts[2]
+    fixture_id, query = case_id.rsplit(".", 1)
+    wide = fixture_id.startswith("wide.")
+    require(fixture_id in ("li.clustered", "li.shuffled", "wide.clustered", "wide.shuffled", "files64", "files4096"),
+            "unsupported fixture; within-file controls and DVs follow in later slices")
+    if fixture_id.startswith("files"):
+        require(query in ("empty", "eq2-in20"), "unknown file-organization query")
     table = next(t for t in manifest["tables"] if t["id"] == fixture_id)
     require(type(table["snapshot_version"]) is int and table["snapshot_version"] == 0 and table["deletion_vectors"] is False, "oracle slice requires no-DV snapshot 0")
     source = next(s for s in manifest["sources"] if s["scale_factor"] == table["scale_factor"])
-    shapes = WIDE_CASES if parts[0] == "wide" else ORIGINAL_CASES
+    shapes = WIDE_CASES if wide else ORIGINAL_CASES
     require(query in shapes, "unknown public query")
     projection, predicate, limit = shapes[query]
     literals = source["in_literals"]
     require(literals and all(type(v) is int for v in literals) and literals == sorted(set(literals)), "invalid frozen IN literals")
     require(len(literals) == 20 or (manifest["profile"] == "smoke" and len(literals) < 20), "wrong frozen literal count")
     canonical = sql_for(projection, predicate, limit, literals)
-    require(canonical == source["wide_queries" if parts[0] == "wide" else "queries"][query], "manifest SQL differs from frozen case")
+    require(canonical == source["wide_queries" if wide else "queries"][query], "manifest SQL differs from frozen case")
     if duplicate_literal:
         require(predicate in ("eq2-in1", "eq2-in20"), "duplicate literal requires an IN case")
         selected = literals[:1] if predicate == "eq2-in1" else literals

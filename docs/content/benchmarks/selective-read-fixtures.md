@@ -12,9 +12,10 @@ derivative with 64 deterministic nullable columns. Each layout contains the
 same logical rows. These inputs let later measurements distinguish file
 skipping from the cost of reading and returning columns.
 
-This step creates ordinary snapshots without deletion vectors. Reader runners,
-an independent query oracle, file-count controls, and measured comparisons have
-separate roadmap issues under
+This step creates ordinary snapshots without deletion vectors. Use
+[Compare file organizations](selective-read-files.md) to repack the clustered
+SF1 rows into 64 and 4,096 files and run the five-reader comparison. Reader
+runners, the independent query oracle, and other comparisons have separate issues under
 [the benchmark plan](https://github.com/mag1cfrog/delta-arrow-reader/issues/312).
 Preparation times are not reader benchmark results.
 
