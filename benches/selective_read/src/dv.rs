@@ -147,11 +147,16 @@ pub fn variant(
     .lines()
     .map(serde_json::from_str::<Value>)
     .collect::<std::result::Result<Vec<_>, _>>()?;
+    let identity_profile = if profile == Profile::Large {
+        format!("large-sf{}", base["scale_factor"].as_f64().ok_or("scale")?)
+    } else {
+        profile.name().to_owned()
+    };
     let table_id = Uuid::new_v5(
         &Uuid::NAMESPACE_URL,
         format!(
             "https://github.com/mag1cfrog/delta-arrow-reader/selective-read-v1/{}/{id}",
-            profile.name()
+            identity_profile
         )
         .as_bytes(),
     );
@@ -212,11 +217,15 @@ pub fn variant(
     Ok(table)
 }
 
-pub fn generate(config: &Config) -> Result<Value> {
+pub fn generate(config: &Config, capacity: Option<Value>) -> Result<Value> {
     let started = Instant::now();
     let mut parents = Vec::new();
     let mut tables = BTreeMap::new();
     let mut sources = BTreeMap::new();
+    let selected: Vec<_> = config
+        .dv_table
+        .as_deref()
+        .map_or_else(|| TABLES.to_vec(), |id| vec![id]);
     for input in &config.dv_from {
         let bytes = fs::read(input.join("manifest.json"))?;
         let parent: Value = serde_json::from_slice(&bytes)?;
@@ -245,7 +254,7 @@ pub fn generate(config: &Config) -> Result<Value> {
         }
         for table in parent["tables"].as_array().ok_or("tables")? {
             let id = table["id"].as_str().ok_or("id")?;
-            if TABLES.contains(&id)
+            if selected.contains(&id)
                 && tables
                     .insert(id.to_owned(), (input, table.clone()))
                     .is_some()
@@ -258,10 +267,18 @@ pub fn generate(config: &Config) -> Result<Value> {
                 "protocol_sha256": parent["protocol_sha256"], "generator": parent["generator"]}),
         );
     }
-    if tables.len() != TABLES.len() {
+    if tables.len() != selected.len() {
         return Err(
             "DV preparation needs public fixtures plus row-group/localized-page controls".into(),
         );
+    }
+    if let Some(options) = &config.large
+        && (sources.len() != 1
+            || sources
+                .values()
+                .any(|(_, s)| s["scale_factor"] != f64::from(options.scale)))
+    {
+        return Err("large DV parent scale differs from the requested scale".into());
     }
     let parent = config
         .output
@@ -274,7 +291,12 @@ pub fn generate(config: &Config) -> Result<Value> {
         .disk_limit
         .unwrap_or(config.profile.disk_bytes())
         .min(available.saturating_sub(512 * MIB));
-    let budget = Arc::new(Budget::new(disk_limit / 2));
+    let output_limit = capacity.as_ref().map_or(Ok(disk_limit / 2), |plan| {
+        plan["output_limit_bytes"]
+            .as_u64()
+            .ok_or("large DV output budget")
+    })?;
+    let budget = Arc::new(Budget::new(output_limit));
     fs::create_dir(&config.output)?;
     for (path, (input, source)) in &sources {
         fs::create_dir_all(config.output.join(path))?;
@@ -290,7 +312,7 @@ pub fn generate(config: &Config) -> Result<Value> {
         repack::verified_files(&config.output.join(path), source)?;
     }
     let mut prepared = Vec::new();
-    for id in TABLES {
+    for id in selected {
         eprintln!("preparing {id} and DV pair");
         let (input, mut table) = tables.remove(id).ok_or("base table")?;
         if table["path"] != id
@@ -331,6 +353,7 @@ pub fn generate(config: &Config) -> Result<Value> {
                 .find(|(_, s)| s["scale_factor"] == table["scale_factor"])
                 .ok_or("source scale")?;
             let cases: &[&str] = match id {
+                _ if config.dv_table.is_some() => &["date30-wide"],
                 "li.clustered" => &["date7-full", "date7-limit"],
                 "li.shuffled" => &["date7-full"],
                 _ => &["eq2-in20"],
@@ -340,10 +363,27 @@ pub fn generate(config: &Config) -> Result<Value> {
             } else {
                 "queries"
             }];
+            let date30 = if config.dv_table.is_some() {
+                let all = queries["all-wide"]
+                    .as_str()
+                    .ok_or("missing wide source SQL")?;
+                json!(format!(
+                    "{all} WHERE l_shipdate >= DATE '1995-03-01' AND l_shipdate < DATE '1995-03-31'"
+                ))
+            } else {
+                Value::Null
+            };
             table["queries"] = Value::Object(
                 cases
                     .iter()
-                    .map(|case| (format!("{id}.{case}"), queries[case].clone()))
+                    .map(|case| {
+                        let sql = if *case == "date30-wide" {
+                            date30.clone()
+                        } else {
+                            queries[case].clone()
+                        };
+                        (format!("{id}.{case}"), sql)
+                    })
                     .collect(),
             );
         }
@@ -370,13 +410,16 @@ pub fn generate(config: &Config) -> Result<Value> {
         &config.output.join("generator-Cargo.lock"),
         LOCKFILE.as_bytes(),
     )?;
-    let manifest = json!({"protocol": "selective-read-v1", "protocol_sha256": fixtures::hash_bytes(PROTOCOL.as_bytes()),
+    let mut manifest = json!({"protocol": "selective-read-v1", "protocol_sha256": fixtures::hash_bytes(PROTOCOL.as_bytes()),
         "profile": config.profile.name(), "status": "complete", "generator": generator_identity()?,
         "dv_writer": "delta_kernel 0.25.0 StreamingDeletionVectorWriter portable Roaring", "parents": parents,
         "sources": sources.values().map(|(_, s)| s).collect::<Vec<_>>(), "tables": prepared,
         "preparation": {"memory_limit_bytes": config.profile.memory_bytes(), "disk_limit_bytes": disk_limit,
-            "output_limit_bytes": disk_limit / 2, "free_disk_before_bytes": available,
+            "output_limit_bytes": output_limit, "free_disk_before_bytes": available,
             "peak_rss_bytes": fixtures::peak_rss()?, "elapsed_ms": started.elapsed().as_millis()}});
+    if let Some(plan) = capacity {
+        large::finish_manifest(&mut manifest, config, plan, &budget)?;
+    }
     budget.write(
         &config.output.join("manifest.json"),
         &serde_json::to_vec_pretty(&manifest)?,

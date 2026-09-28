@@ -4,9 +4,12 @@ This is a single invocation, not a performance campaign or resource scheduler.
 """
 
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 from pathlib import Path
+import re
+import resource
 import subprocess
 import sys
 import time
@@ -14,6 +17,11 @@ import time
 
 HERE = Path(__file__).resolve().parent
 PROTOCOL = HERE.parents[2] / "docs/content/benchmarks/selective-read-protocol.md"
+AMENDMENT = PROTOCOL.with_name("selective-read-large-workloads.md")
+if (HERE / "protocol.md").exists():
+    PROTOCOL, AMENDMENT = HERE / "protocol.md", HERE / "large-workloads.md"
+COMPARISON_FIELDS = ("comparison_revision", "protocol_sha256")
+LARGE_IDENTITY_FIELDS = ("base_protocol_sha256", "workload_manifest_sha256")
 BUDGET = {"worker_threads": 8, "max_blocking_threads": 64, "target_partitions": 8,
           "batch_rows": 8192, "datafusion_pool_bytes": 4 * 1024**3,
           "process_memory_bytes": 8 * 1024**3, "logical_cpus": 8}
@@ -30,16 +38,45 @@ def save(path, value):
         out.write("\n")
 
 
-def request(fixtures, case_id, execution_mode, purpose, run_id, table_uri=None, correctness=None):
+def comparison_identity(value):
+    revision = value["comparison_revision"]
+    if type(revision) is not int or revision not in (2, 3):
+        raise ValueError("unknown comparison revision")
+    fields = COMPARISON_FIELDS + (LARGE_IDENTITY_FIELDS if revision == 3 else ())
+    expected = digest(AMENDMENT if revision == 3 else PROTOCOL)
+    if value["protocol_sha256"] != expected:
+        raise ValueError("stale comparison protocol")
+    if revision == 3:
+        if value.get("base_protocol_sha256") != digest(PROTOCOL) or not isinstance(value.get("workload_manifest_sha256"), str) or not re.fullmatch(
+                "[0-9a-f]{64}", value["workload_manifest_sha256"]):
+            raise ValueError("missing or stale large-workload identity")
+    elif any(value.get(key) is not None for key in LARGE_IDENTITY_FIELDS):
+        raise ValueError("revision 2 cannot carry revision 3 identities")
+    return {key: value[key] for key in fields}
+
+
+def request(fixtures, case_id, execution_mode, purpose, run_id, table_uri=None, correctness=None, *, workload=None):
     manifest_path = fixtures / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
     if manifest["status"] != "complete" or manifest["protocol"] != "selective-read-v1":
         raise ValueError("incomplete or unknown fixture manifest")
-    fixture_id, query = case_id.rsplit(".", 1)
-    table = next((t for t in manifest["tables"] if case_id in t.get("queries", {})), None)
-    if table is not None:
-        sql = table["queries"][case_id]
+    comparison = {"comparison_revision": 2, "protocol_sha256": digest(PROTOCOL)}
+    if workload is not None:
+        sys.path.insert(0, str(HERE.parent))
+        import large_workloads
+        frozen = large_workloads.load(workload)
+        row = large_workloads.binding(frozen, fixtures, case_id)
+        comparison = large_workloads.identity(workload)
+        table = next(t for t in manifest["tables"] if t["id"] == row["fixture_id"])
+        sql = row["canonical_sql"]
     else:
+        if manifest["profile"] == "large":
+            raise ValueError("large fixtures require an explicit revision 3 workload manifest")
+        fixture_id, query = case_id.rsplit(".", 1)
+        table = next((t for t in manifest["tables"] if case_id in t.get("queries", {})), None)
+    if workload is None and table is not None:
+        sql = table["queries"][case_id]
+    elif workload is None:
         table = next(t for t in manifest["tables"] if t["id"] == fixture_id)
         source = next(s for s in manifest["sources"] if s["scale_factor"] == table["scale_factor"])
         sql = source["wide_queries" if fixture_id.startswith("wide.") else "queries"][query]
@@ -48,8 +85,8 @@ def request(fixtures, case_id, execution_mode, purpose, run_id, table_uri=None, 
         raise ValueError("table path escapes fixture root")
     return {
         "table_uri": table_uri or location.as_uri(), "snapshot_version": table["snapshot_version"],
-        "case_id": case_id, "canonical_sql": sql, "comparison_revision": 2,
-        "protocol_sha256": digest(PROTOCOL), "fixture_manifest_sha256": digest(manifest_path),
+        "case_id": case_id, "canonical_sql": sql, **comparison,
+        "fixture_manifest_sha256": digest(manifest_path),
         "profile": manifest["profile"], "execution_mode": execution_mode, "purpose": purpose,
         "resource_budget": BUDGET, "correctness_file": str(correctness.resolve()) if correctness else None,
         "campaign_id": None, "run_id": run_id, "repetition": None, "order": None,
@@ -73,11 +110,34 @@ def check_result(record, output, fixtures, reference):
                              "artifact_sha256": digest(output / "correctness.json")}
 
 
+@contextmanager
+def export_limit(payload, reference):
+    if payload.get("comparison_revision") != 3 or payload["purpose"] != "validation":
+        yield None
+        return
+    metadata = json.loads((reference / "reference.json").read_text())
+    if comparison_identity(metadata) != comparison_identity(payload):
+        raise ValueError("export/reference workload mismatch")
+    # At most ten exports coexist in a reuse validation; reserve half the declared
+    # oracle allowance for them and the other half for exact SQLite comparison.
+    limit = (metadata["oracle_limits"]["disk_bytes"] - 8 * 1024**2) // (20 if payload["execution_mode"] == "reuse" else 2)
+    if limit <= 0:
+        raise ValueError("insufficient validation export allowance")
+    previous = resource.getrlimit(resource.RLIMIT_FSIZE)
+    if previous[0] != resource.RLIM_INFINITY:
+        limit = min(limit, previous[0])
+    resource.setrlimit(resource.RLIMIT_FSIZE, (limit, previous[1]))
+    try:
+        yield limit
+    finally:
+        resource.setrlimit(resource.RLIMIT_FSIZE, previous)
+
+
 def invoke(binary, payload, output, fixtures=None, reference=None, *, env=None, command_prefix=(), supervised=False, defer_validation=False):
     output.mkdir()
     save(output / "request.json", payload)
     supervision = None
-    with (output / "stdout.jsonl").open("x") as stdout, (output / "stderr.log").open("x") as stderr:
+    with (output / "stdout.jsonl").open("x") as stdout, (output / "stderr.log").open("x") as stderr, export_limit(payload, reference) as export_bytes:
         started = time.time_ns()
         command = [*command_prefix, str(binary.resolve()), str((output / "request.json").resolve()), str((output / "reader").resolve())]
         if supervised:
@@ -107,6 +167,8 @@ def invoke(binary, payload, output, fixtures=None, reference=None, *, env=None, 
     if returncode and record["status"] == "success":
         record["status"] = "operational_failure"
         record["failure_reason"] = f"reader exited with status {returncode} after writing its record"
+    if export_bytes is not None:
+        record["validation_export_limit_bytes_per_file"] = export_bytes
     if supervision:
         record["supervision"] = supervision
         if supervision["status"] != "success":
@@ -132,6 +194,7 @@ def main():
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--fixtures", type=Path, required=True)
     parser.add_argument("--case", required=True)
+    parser.add_argument("--workload", type=Path, help="explicit revision 3 workload manifest")
     parser.add_argument("--execution", choices=("open", "reuse"), default="open")
     parser.add_argument("--purpose", choices=("validation", "timing", "diagnostic", "io"), required=True)
     parser.add_argument("--reference", type=Path)
@@ -144,7 +207,7 @@ def main():
     if args.purpose == "timing" and args.correctness is None:
         parser.error("timing requires --correctness")
     payload = request(args.fixtures, args.case, args.execution, args.purpose, args.output.name,
-                      args.table_uri, args.correctness)
+                      args.table_uri, args.correctness, workload=args.workload)
     record = invoke(args.binary, payload, args.output, args.fixtures, args.reference)
     print(json.dumps({"status": record["status"], "observation": str(args.output / "observation.json")}))
     return 0 if record["status"] == "success" else 1

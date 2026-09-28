@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import resource
 import secrets
 import shutil
 import subprocess
@@ -277,6 +278,7 @@ def exec_reader(directory, arguments):
     name = next(line.removeprefix("0::") for line in Path("/proc/self/cgroup").read_text().splitlines() if line.startswith("0::"))
     group = Path("/sys/fs/cgroup" + name)
     limits = {"cpu_affinity": sorted(os.sched_getaffinity(0)), "control_group": name,
+              "max_file_size_bytes": resource.getrlimit(resource.RLIMIT_FSIZE)[0],
               "process_memory_bytes": int((group / "memory.max").read_text()),
               "swap_bytes": int((group / "memory.swap.max").read_text()), "verified_ns": time.time_ns(),
               "enforcement": "systemd user scope and taskset"}

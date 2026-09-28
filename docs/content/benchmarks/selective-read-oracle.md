@@ -148,3 +148,36 @@ exact Decimal/date boundaries, changed values at equal row counts, wrong types,
 null changes, duplicated/missing rows, duplicate IN literals, wrong snapshots,
 stale artifacts, and valid alternative LIMIT subsets. No reader speed threshold
 is part of these checks.
+
+## Large-workload references
+
+Pass `--workload PATH/workload.json` to prepare a revision 3 reference. The
+[large query guide](selective-read-matrix.md#large-workload-candidates) describes
+the 18 case bindings and two native reuse profiles. Revision 3 binds the base
+protocol, amendment, and concrete workload-manifest hashes. Large-profile
+fixtures require this explicit workload; omitting it cannot create a revision 2
+result. Existing revision 2 inputs keep their original cases.
+
+The workload declares finite oracle disk and elapsed-time ceilings. Preparation
+and checking enforce a 16 GiB virtual-address-space ceiling and a native process
+alarm, and check free disk before scanning. SQLite page quotas bound the reference
+and temporary comparison indexes. Reader validation exports have a per-file
+limit inherited by the reader process; ten exports share the allowance in a
+reuse session. Exhaustion is a failed operation, not an unsupported reader.
+After reserving 8 MiB for metadata, one quarter goes to the reference index,
+one quarter to its temporary comparison index, and half to all exports in the
+current reader session. The checker counts sibling query exports together.
+
+The reference scans full source and fixture rows. It independently derives the
+scale's IN literals, compares exact values and multiplicity, and checks DV
+logical keys against physical ordinals. Each large date30 DV case must remove
+at least one qualifying row and retain a qualifying survivor. Reference metadata
+includes physical/live/qualifying counts and projected logical bytes, defined
+as non-null fixed-width values plus actual UTF-8 string bytes. This excludes
+null bitmaps, offsets, IPC framing, and compressed storage overhead.
+
+Prepare one case, validate the five readers and required reuse mode, retain its
+certificates and manifests, then retire reproducible exports/indexes before the
+next case. The limits cover one staged case; they do not authorize keeping all
+18 references and every reader export at once. Hashing, export, and oracle work
+remain outside performance query clocks.

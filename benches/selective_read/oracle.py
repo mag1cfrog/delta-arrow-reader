@@ -6,7 +6,7 @@ payloads; disk-backed SQLite orders exact rows and checks multiplicity.
 
 import argparse
 import base64
-from contextlib import closing
+from contextlib import closing, contextmanager
 from datetime import date
 from decimal import Decimal
 import hashlib
@@ -14,6 +14,9 @@ import json
 from pathlib import Path
 import platform
 import re
+import resource
+import shutil
+import signal
 import sqlite3
 import sys
 import tempfile
@@ -145,6 +148,8 @@ def conditions(predicate, literals):
         return [("l_shipdate", "<", date(1990, 1, 1))]
     if predicate == "date7":
         return [("l_shipdate", ">=", date(1995, 3, 15)), ("l_shipdate", "<", date(1995, 3, 22))]
+    if predicate == "date30":
+        return [("l_shipdate", ">=", date(1995, 3, 1)), ("l_shipdate", "<", date(1995, 3, 31))]
     if predicate == "q6":
         return [
             ("l_shipdate", ">=", date(1994, 1, 1)), ("l_shipdate", "<", date(1995, 1, 1)),
@@ -210,6 +215,7 @@ def sql_for(projection, predicate, limit, literals):
     filters = {
         "all": "", "empty": "l_shipdate < DATE '1990-01-01'",
         "date7": "l_shipdate >= DATE '1995-03-15' AND l_shipdate < DATE '1995-03-22'",
+        "date30": "l_shipdate >= DATE '1995-03-01' AND l_shipdate < DATE '1995-03-31'",
         "eq1": eq1, "eq2": eq2,
         "eq2-in1": f"{eq2} AND l_partkey IN ({literals[0]})",
         "eq2-in20": f"{eq2} AND l_partkey IN ({', '.join(map(str, literals))})",
@@ -223,20 +229,28 @@ def sql_for(projection, predicate, limit, literals):
     return sql
 
 
-def base_case(case_id):
+def base_case(case_id, large=False):
     for suffix in (".dv", ".feature-only"):
         if case_id.endswith(suffix):
             case = case_id.removesuffix(suffix)
-            require(case in DV_CASES if suffix == ".dv" else case == "row-groups.select", "unknown DV case")
+            require((case in DV_CASES or large and case in ("wide.clustered.date30-wide", "wide.shuffled.date30-wide"))
+                    if suffix == ".dv" else case == "row-groups.select", "unknown DV case")
             return case, suffix
     return case_id, ""
 
 
-def case_input(fixtures, case_id, duplicate_literal=False):
+def case_input(fixtures, case_id, duplicate_literal=False, workload=None):
     require(pa.__version__ == "25.0.1", "oracle requires pyarrow==25.0.1")
     manifest = load_json(Path(fixtures) / "manifest.json")
     require(manifest["status"] == "complete" and manifest["protocol"] == "selective-read-v1", "incomplete or unknown fixtures")
-    case, suffix = base_case(case_id)
+    row = None
+    if workload is not None:
+        import large_workloads
+        row = large_workloads.binding(large_workloads.load(workload), fixtures, case_id)
+        require(not duplicate_literal, "revision 3 query variants need a separate workload identity")
+    else:
+        require(manifest["profile"] != "large", "large fixtures require a revision 3 workload manifest")
+    case, suffix = base_case(row["query_case_id"] if row else case_id, row is not None)
     fixture_id = CONTROL_CASES[case] if case in CONTROL_CASES else case.rsplit(".", 1)[0]
     table = next(t for t in manifest["tables"] if t["id"] == fixture_id + suffix)
     require(type(table["snapshot_version"]) is int and table["snapshot_version"] == bool(suffix)
@@ -265,16 +279,16 @@ def case_input(fixtures, case_id, duplicate_literal=False):
     if fixture_id.startswith("files"):
         require(query in ("empty", "eq2-in20"), "unknown file-organization query")
     source = next(s for s in manifest["sources"] if s["scale_factor"] == table["scale_factor"])
-    shapes = WIDE_CASES if wide else ORIGINAL_CASES
+    shapes = large_workloads.shapes() if row else WIDE_CASES if wide else ORIGINAL_CASES
     require(query in shapes, "unknown public query")
     projection, predicate, limit = shapes[query]
     literals = source["in_literals"]
     require(literals and all(type(v) is int for v in literals) and literals == sorted(set(literals)), "invalid frozen IN literals")
     require(len(literals) == 20 or (manifest["profile"] == "smoke" and len(literals) < 20), "wrong frozen literal count")
     canonical = sql_for(projection, predicate, limit, literals)
-    require(canonical == source["wide_queries" if wide else "queries"][query], "manifest SQL differs from frozen case")
+    require(canonical == (row["canonical_sql"] if row else source["wide_queries" if wide else "queries"][query]), "manifest SQL differs from frozen case")
     if suffix:
-        require(table["queries"][case_id] == canonical, "variant SQL changed")
+        require(table["queries"][row["query_case_id"] if row else case_id] == canonical, "variant SQL changed")
     if duplicate_literal:
         require(predicate in ("eq2-in1", "eq2-in20"), "duplicate literal requires an IN case")
         selected = literals[:1] if predicate == "eq2-in1" else literals
@@ -282,7 +296,7 @@ def case_input(fixtures, case_id, duplicate_literal=False):
     return manifest, table, source, projection, predicate, limit, literals, canonical
 
 
-def record(row, projection, derive_payloads=False):
+def record(row, projection, derive_payloads=False, logical_bytes=None):
     values = []
     for name in projection:
         if derive_payloads and name.startswith("payload_"):
@@ -290,6 +304,9 @@ def record(row, projection, derive_payloads=False):
         else:
             value = row[name]
         require(value is not None or name in PAYLOADS + CONTROL_PAYLOADS, f"unexpected null: {name}")
+        if logical_bytes is not None and value is not None:
+            kind = TYPES[name]
+            logical_bytes[0] += len(value.encode()) if kind == "string" else 8 if kind == "int64" else 4 if kind in ("int32", "date32") else 16
         if isinstance(value, Decimal):
             value = format(value, ".2f")
         elif isinstance(value, date):
@@ -299,13 +316,17 @@ def record(row, projection, derive_payloads=False):
     return *key, json_bytes(values)
 
 
-def database(path):
+def database(path, max_bytes=None):
     db = sqlite3.connect(path, uri=True)
     db.execute("PRAGMA cache_size=-65536")
     db.execute("PRAGMA mmap_size=0")
     db.execute("PRAGMA temp_store=FILE")
     # These databases are disposable until their completion manifest is written.
     db.execute("PRAGMA journal_mode=OFF")
+    if max_bytes is not None:
+        pages = max_bytes // db.execute("PRAGMA page_size").fetchone()[0]
+        require(pages >= 2, "insufficient SQLite disk allowance")
+        db.execute(f"PRAGMA max_page_count={pages}")
     db.execute("CREATE TABLE rows (order_key INTEGER NOT NULL, line_number INTEGER NOT NULL, value BLOB NOT NULL, PRIMARY KEY (order_key, line_number)) WITHOUT ROWID")
     return db
 
@@ -369,7 +390,10 @@ def objects(fixtures, table, source):
                 by_path[added["path"]] = added
     require(set(by_path) == {f["path"] for f in table["files"]}, "Delta file inventory differs from manifest")
     if table["snapshot_version"]:
-        table_uuid = uuid.uuid5(uuid.NAMESPACE_URL, f"https://github.com/mag1cfrog/delta-arrow-reader/selective-read-v1/{load_json(Path(fixtures) / 'manifest.json')['profile']}/{table['id']}")
+        profile = load_json(Path(fixtures) / 'manifest.json')['profile']
+        if profile == "large":
+            profile = f"large-sf{int(table['scale_factor'])}"
+        table_uuid = uuid.uuid5(uuid.NAMESPACE_URL, f"https://github.com/mag1cfrog/delta-arrow-reader/selective-read-v1/{profile}/{table['id']}")
         require(metadata is not None and metadata["id"] == str(table_uuid)
                 and json.loads(metadata["schemaString"]) == table["schema"]
                 and metadata["configuration"]["delta.enableDeletionVectors"] == "true", "invalid DV table metadata")
@@ -463,11 +487,46 @@ def control_geometry(fixtures, table, case_id):
             "counter_unavailable_reason": "geometry describes opportunities; common adapters do not expose comparable decoded group/page counters"}
 
 
-def prepare(fixtures, case_id, output, duplicate_literal=False):
+@contextmanager
+def bounded(root, limits):
+    """Native process deadline and SQLite quotas; used only for explicit revision 3."""
+    if limits is None:
+        yield None
+        return
+    require(sys.platform == "linux", "bounded large oracle requires Linux")
+    root = Path(root).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    require(shutil.disk_usage(root).free >= limits["disk_bytes"] + 512 * 1024**2,
+            "oracle disk allowance exceeds available space")
+    old_memory = resource.getrlimit(resource.RLIMIT_AS)
+    old_handler = signal.getsignal(signal.SIGALRM)
+    require(signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0), "oracle cannot replace another process deadline")
+    memory = min(limits["memory_bytes"], old_memory[0]) if old_memory[0] != resource.RLIM_INFINITY else limits["memory_bytes"]
+    resource.setrlimit(resource.RLIMIT_AS, (memory, old_memory[1]))
+    signal.signal(signal.SIGALRM, signal.SIG_DFL)
+    signal.alarm(limits["elapsed_seconds"])
+    try:
+        yield limits["disk_bytes"] - 8 * 1024**2  # Completion metadata allowance.
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
+        resource.setrlimit(resource.RLIMIT_AS, old_memory)
+
+
+def prepare(fixtures, case_id, output, duplicate_literal=False, workload=None):
+    limits = None
+    if workload is not None:
+        import large_workloads
+        limits = large_workloads.load(workload)["oracle_limits"]
+    with bounded(Path(output).parent, limits) as quota:
+        return prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota)
+
+
+def prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota):
     fixtures, output = Path(fixtures).resolve(), Path(output)
-    manifest, table, source, projection, predicate, limit, literals, sql = case_input(fixtures, case_id, duplicate_literal)
+    manifest, table, source, projection, predicate, limit, literals, sql = case_input(fixtures, case_id, duplicate_literal, workload)
     verified = objects(fixtures, table, source)
-    case, suffix = base_case(case_id)
+    case, suffix = base_case(case_id.removeprefix("large.").removeprefix("scale-control."), workload is not None)
     geometry = control_geometry(fixtures, table, case) if source is None else None
     saved_keys = [tuple(key) for item in table["files"] for key in item.get("deletion_vector", {}).get("logical_ids", [])]
     require(len(saved_keys) == len(set(saved_keys)), "duplicate deleted logical ID")
@@ -480,6 +539,7 @@ def prepare(fixtures, case_id, output, duplicate_literal=False):
     counts = [0] * (len(predicates) + 1)
     found_literals = set()
     previous_key = None
+    projected_bytes = [0]
 
     def expected_rows():
         nonlocal previous_key, deleted_qualifying
@@ -514,15 +574,17 @@ def prepare(fixtures, case_id, output, duplicate_literal=False):
                     deleted_qualifying += passed == len(predicates)
                     continue
                 if passed == len(predicates):
-                    yield record(row, projection, derive_payloads=True)
+                    yield record(row, projection, derive_payloads=True, logical_bytes=projected_bytes)
             require(file_rows == item["rows"], "reference file row count changed")
 
-    with closing(database(reference_db)) as db:
+    with closing(database(reference_db, quota // 4 if quota is not None else None)) as db:
         insert_rows(db, expected_rows())
     require(counts[0] == (source or table)["rows"] == table["rows"], "source/table row counts disagree")
     require(sorted(found_literals) == literals, "frozen IN literals disagree with full source")
     require(expected_deletions == saved_keys, "saved logical deletions disagree with the independent source rule")
     live_qualifying = counts[-1] - deleted_qualifying
+    if workload is not None and table["deletion_vectors"]:
+        require(deleted_qualifying > 0 and live_qualifying > 0, "large DV anchor needs qualifying deletions and survivors")
     if suffix:
         summary = table["deletion_summary"]
         affected = sum("deletion_vector" in item for item in table["files"])
@@ -564,7 +626,7 @@ def prepare(fixtures, case_id, output, duplicate_literal=False):
                 matching.append(item["path"])
 
     with tempfile.TemporaryDirectory(prefix="oracle-", dir=output) as scratch:
-        with closing(database(Path(scratch) / "actual.sqlite")) as db:
+        with closing(database(Path(scratch) / "actual.sqlite", quota // 4 if quota is not None else None)) as db:
             insert_rows(db, fixture_rows())
             # Validate all qualifying fixture rows even for a LIMIT case.
             compare(db, reference_db, live_qualifying)
@@ -594,6 +656,14 @@ def prepare(fixtures, case_id, output, duplicate_literal=False):
         "verified_objects": verified, "reference_sha256": digest_file(reference_db),
         **({"within_file_geometry": geometry} if geometry else {}),
     }
+    if workload is not None:
+        import large_workloads
+        frozen = large_workloads.load(workload)
+        row = large_workloads.binding(frozen, fixtures, case_id)
+        metadata.update(large_workloads.identity(workload), workload_manifest=str(Path(workload).resolve()),
+                        oracle_limits=frozen["oracle_limits"], native_expression_sha256=row["native_expression_sha256"],
+                        projected_logical_bytes=projected_bytes[0],
+                        projected_logical_bytes_definition="non-null fixed-width values and actual UTF-8 string bytes; excludes null bitmaps, offsets and IPC framing")
     # Completion marker last. Partial preparations cannot be accepted by check().
     (output / "reference.json").write_bytes(json_bytes(metadata))
     return metadata
@@ -604,10 +674,29 @@ IDENTITY_FIELDS = ("comparison_revision", "protocol_sha256", "fixture_manifest_s
 
 
 def check(reference, fixtures, result, identity):
+    metadata = load_json(Path(reference) / "reference.json")
+    limits = metadata.get("oracle_limits") if metadata.get("comparison_revision") == 3 else None
+    if metadata.get("comparison_revision") == 3:
+        import large_workloads
+        frozen = large_workloads.load(Path(metadata["workload_manifest"]))
+        require(limits == frozen["oracle_limits"], "oracle limits differ from the workload")
+    with bounded(Path(reference).parent, limits) as quota:
+        return check_rows(reference, fixtures, result, identity, quota)
+
+
+def check_rows(reference, fixtures, result, identity, quota):
     reference, fixtures, result, identity = map(Path, (reference, fixtures, result, identity))
     metadata = load_json(reference / "reference.json")
     require(metadata["format"] == "selective-read-reference-v1" and metadata["status"] == "complete", "incomplete reference")
-    require(metadata["comparison_revision"] == REVISION and metadata["protocol_sha256"] == digest_file(PROTOCOL), "stale comparison protocol")
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "runners"))
+    from run import comparison_identity
+    comparison = comparison_identity(metadata)
+    if metadata["comparison_revision"] == 3:
+        import large_workloads
+        path = Path(metadata["workload_manifest"])
+        require(comparison == large_workloads.identity(path), "stale workload manifest")
+        row = large_workloads.binding(large_workloads.load(path), fixtures, metadata["case_id"])
+        require(metadata["canonical_sql"] == row["canonical_sql"] and metadata["projection"] == row["projection"], "reference workload query changed")
     require(metadata["oracle_sha256"] == digest_file(__file__) and metadata["pyarrow"] == pa.__version__ == "25.0.1", "stale oracle build")
     require(metadata["fixture_manifest_sha256"] == digest_file(fixtures / "manifest.json"), "stale fixture manifest")
     require(metadata["reference_sha256"] == digest_file(reference / "reference.sqlite"), "reference database changed")
@@ -615,27 +704,36 @@ def check(reference, fixtures, result, identity):
         verify_object(fixtures, item)
     provenance = load_json(identity)
     require(provenance["reader_id"] in READERS, "unknown reader identity")
-    for name in IDENTITY_FIELDS:
+    identity_fields = tuple(dict.fromkeys((*IDENTITY_FIELDS, *comparison)))
+    for name in identity_fields:
         require(type(provenance[name]) is type(metadata[name]) and provenance[name] == metadata[name], f"result identity mismatch: {name}")
     for name in ("reader_build_sha256", "reader_config_sha256", "result_sha256"):
         require(re.fullmatch(r"[0-9a-f]{64}", provenance[name]) is not None, f"invalid {name}")
     expression = provenance["native_expression_sha256"]
     require(expression is None or re.fullmatch(r"[0-9a-f]{64}", expression) is not None, "invalid native expression hash")
     require(provenance["reader_id"] not in ("polars", "daft") or expression is not None, "missing native expression identity")
+    if metadata["comparison_revision"] == 3:
+        require(expression == row["native_expression_sha256"].get(provenance["reader_id"]), "native translation differs from workload")
     require(digest_file(result) == provenance["result_sha256"], "result checksum mismatch")
     projection = metadata["projection"]
+    if quota is not None:
+        exports = list(result.parent.glob("query-*.arrow")) if re.fullmatch(r"query-\d+\.arrow", result.name) else [result]
+        require((reference / "reference.sqlite").stat().st_size <= quota // 4
+                and sum(p.stat().st_size for p in exports) <= quota // 2,
+                "reference/session exports exhaust the oracle disk allowance")
+        quota //= 4
     with result.open("rb") as source, pa.ipc.open_stream(source) as stream:
         check_schema(stream.schema, projection)
         reported_nullability = {field.name: field.nullable for field in stream.schema}
         with tempfile.TemporaryDirectory(prefix="oracle-check-", dir=reference.parent) as scratch:
-            with closing(database(Path(scratch) / "actual.sqlite")) as db:
+            with closing(database(Path(scratch) / "actual.sqlite", quota)) as db:
                 insert_rows(db, (record(row, projection) for batch in stream
                                 for offset in range(0, batch.num_rows, BATCH_ROWS)
                                 for row in batch.slice(offset, BATCH_ROWS).to_pylist()))
                 count = compare(db, reference / "reference.sqlite", metadata["output_rows"])
         require(not source.read(1), "trailing bytes after Arrow stream")
     return {
-        "status": "passed", **{name: metadata[name] for name in IDENTITY_FIELDS},
+        "status": "passed", **{name: metadata[name] for name in identity_fields},
         **{name: provenance[name] for name in ("reader_id", "reader_build_sha256", "reader_config_sha256", "native_expression_sha256", "result_sha256")},
         "oracle_sha256": metadata["oracle_sha256"], "reference_sha256": metadata["reference_sha256"],
         "identity_sha256": digest_file(identity), "output_rows": count,
@@ -651,13 +749,14 @@ def main():
     prepare_parser.add_argument("--case", required=True)
     prepare_parser.add_argument("--output", type=Path, required=True)
     prepare_parser.add_argument("--duplicate-in-literal", action="store_true")
+    prepare_parser.add_argument("--workload", type=Path)
     check_parser = commands.add_parser("check", help="validate an untimed Arrow IPC stream and identity JSON")
     for name in ("reference", "fixtures", "result", "identity"):
         check_parser.add_argument(f"--{name}", type=Path, required=True)
     args = parser.parse_args()
     try:
         if args.command == "prepare":
-            output = prepare(args.fixtures, args.case, args.output, args.duplicate_in_literal)
+            output = prepare(args.fixtures, args.case, args.output, args.duplicate_in_literal, args.workload)
         else:
             output = check(args.reference, args.fixtures, args.result, args.identity)
     except (ValueError, KeyError, TypeError, StopIteration, OSError, sqlite3.Error, pa.ArrowException) as error:

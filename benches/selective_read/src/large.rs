@@ -134,6 +134,7 @@ pub fn preflight(config: &Config) -> Result<Value> {
     let saved = options
         .source_from
         .as_ref()
+        .or(config.dv_from.first())
         .map(|input| saved_source(input, f64::from(options.scale)))
         .transpose()?;
     // TPC-H has 1.5 million orders/SF and at most seven lineitems/order. Byte coefficients
@@ -161,6 +162,19 @@ pub fn preflight(config: &Config) -> Result<Value> {
     } else {
         rows * table_row_bytes
     };
+    let existing_table = if let Some(input) = config.dv_from.first() {
+        let parent: Value = serde_json::from_slice(&fs::read(input.join("manifest.json"))?)?;
+        parent["tables"]
+            .as_array()
+            .ok_or("tables")?
+            .iter()
+            .find(|t| t["id"] == options.fixture)
+            .ok_or("selected DV base missing")?["bytes"]
+            .as_u64()
+            .ok_or("DV base bytes")?
+    } else {
+        0
+    };
     let metadata = u64::from(options.scale) * 64 * MIB;
     let sum = |parts: &[u64]| -> Result<u64> {
         parts.iter().try_fold(0_u64, |sum, part| {
@@ -168,10 +182,16 @@ pub fn preflight(config: &Config) -> Result<Value> {
                 .ok_or_else(|| "capacity arithmetic overflow".into())
         })
     };
-    let output = sum(&[source, table, metadata])?;
-    let spill = if table == 0 { 0 } else { rows * 512 };
+    let existing = sum(&[existing_source, existing_table])?;
+    let copies = if config.dv_from.is_empty() { 1 } else { 2 };
+    let output = sum(&[source, table * copies, metadata * copies])?;
+    let spill = if table == 0 || !config.dv_from.is_empty() {
+        0
+    } else {
+        rows * 512
+    };
     let headroom = config.sort_memory + 64 * MIB;
-    let preparation = sum(&[existing_source, output, spill, headroom])?;
+    let preparation = sum(&[existing, output, spill, headroom])?;
     // Later stages retain one fixture and MinIO copy, and one exact result at a time.
     // Reference and comparison SQLite allowances include indexes and journal headroom.
     let reference = if table == 0 {
@@ -180,10 +200,10 @@ pub fn preflight(config: &Config) -> Result<Value> {
         rows * if table_row_bytes == 768 { 4096 } else { 1024 }
     };
     let export = table;
-    let validation = sum(&[existing_source, output, table, reference * 2, export])?;
-    let derivatives = sum(&[existing_source, source, table * 3, metadata * 3])?;
+    let validation = sum(&[existing, output, table, reference * 2, export])?;
+    let derivatives = sum(&[existing, source, table * 3, metadata * 3])?;
     let peak = preparation.max(validation).max(derivatives);
-    let additional = peak - existing_source;
+    let additional = peak - existing;
     let parent = config
         .output
         .parent()
@@ -199,7 +219,7 @@ pub fn preflight(config: &Config) -> Result<Value> {
         "allowances": {"new_source_bytes_per_row": 256, "table_bytes_per_row": table_row_bytes,
             "sort_spill_bytes_per_row": 512, "sqlite_bytes_per_row_per_database": if table_row_bytes == 768 { 4096 } else { 1024 },
             "metadata_bytes_per_sf": 64 * MIB},
-        "estimated_bytes": {"existing_source": existing_source, "source_copy_or_generation": source,
+        "estimated_bytes": {"existing_source": existing_source, "existing_dv_base": existing_table, "source_copy_or_generation": source,
             "selected_table": table, "metadata": metadata, "sort_spill": spill,
             "minio_copy": table, "reference_sqlite": reference, "validation_export": export,
             "comparison_sqlite": reference, "two_later_repack_dv_copies": table * 2},

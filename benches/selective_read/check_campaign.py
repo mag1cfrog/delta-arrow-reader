@@ -53,6 +53,12 @@ def observation(value, reuse=False):
 def check():
     assert campaign.distribution([1, 2, 3, 4]) == {"samples": 4, "median": 2.5, "q1": 1.75, "q3": 3.25, "iqr": 1.5}
     expected = {1: 10, 2: 12, 3: 12, 4: 16, 5: 10}
+    comparison = {"comparison_revision": 3, "protocol_sha256": run.digest(run.AMENDMENT),
+                  "base_protocol_sha256": run.digest(run.PROTOCOL), "workload_manifest_sha256": "1" * 64}
+    entries = {r: {"runnable": True, "status": "success"} for r in campaign.READERS}
+    slots = campaign.schedule({s: entries for s in campaign.large_workloads.SESSIONS}, "revision3", comparison)
+    assert all(run.comparison_identity(slot) == comparison for slot in slots)
+    assert all(s["job_id"] in campaign.large_workloads.SESSIONS for s in slots)
     for count in range(6):
         for subset in combinations(campaign.READERS, count):
             entries = {r: {"runnable": r in subset, "status": "success" if r in subset else "unsupported"} for r in campaign.READERS}

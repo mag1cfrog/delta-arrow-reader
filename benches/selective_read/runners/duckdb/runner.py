@@ -15,7 +15,7 @@ import pyarrow as pa
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from run import digest, save
+from run import comparison_identity, digest, save
 from python_common import checkpoint, correctness, event, json_hash, observation, require, runtime_metadata, sha, validate
 
 CONFIG = {"threads": 8, "memory_limit": "4GiB", "enable_external_file_cache": False,
@@ -218,7 +218,8 @@ def run(request_path, output):
                     "resource_budget": request["resource_budget"], "table_uri": request["table_uri"],
                     "execution_mode": request["execution_mode"], "output_delivery": "streaming"}
         identity = {"reader_id": "duckdb", "reader_build_sha256": digest(build_path), "reader_config_sha256": json_hash(settings),
-                    **{name: request[name] for name in ("comparison_revision", "protocol_sha256", "fixture_manifest_sha256", "case_id", "snapshot_version")},
+                    **comparison_identity(request),
+                    **{name: request[name] for name in ("fixture_manifest_sha256", "case_id", "snapshot_version")},
                     "canonical_sql_sha256": sha(request["canonical_sql"].encode()), "native_expression_sha256": None}
         record.update(identity=identity, settings=settings, build_record=str(build_path), phase="correctness_gate")
         record["correctness"] = correctness(request, identity)

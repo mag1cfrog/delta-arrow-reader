@@ -12,7 +12,7 @@ import sysconfig
 from time import time_ns
 from urllib.parse import urlsplit
 
-from run import BUDGET, digest
+from run import BUDGET, LARGE_IDENTITY_FIELDS, comparison_identity, digest
 
 HERE = Path(__file__).resolve().parent
 REQUEST_FIELDS = set("table_uri snapshot_version case_id canonical_sql comparison_revision protocol_sha256 "
@@ -61,7 +61,10 @@ def runtime_metadata(engine):
 
 
 def validate(request):
-    require(isinstance(request, dict) and set(request) == REQUEST_FIELDS, "unknown or missing request fields")
+    require(isinstance(request, dict), "expected request object")
+    extra = set(LARGE_IDENTITY_FIELDS) if request.get("comparison_revision") == 3 else set()
+    require(set(request) == REQUEST_FIELDS | extra, "unknown or missing request fields")
+    comparison_identity(request)
     uri = urlsplit(request["table_uri"])
     require(uri.scheme in ("file", "s3") and not (uri.username or uri.password or uri.query or uri.fragment)
             and (uri.scheme != "file" or (uri.netloc in ("", "localhost") and uri.path.startswith("/")))
@@ -69,8 +72,6 @@ def validate(request):
     require(type(request["snapshot_version"]) is int and 0 <= request["snapshot_version"] < 2**64,
             "invalid snapshot version")
     require(request["execution_mode"] in ("open", "reuse") and request["purpose"] in ("validation", "timing", "diagnostic", "io")
-            and type(request["comparison_revision"]) is int and request["comparison_revision"] == 2
-            and request["protocol_sha256"] == digest(HERE / "protocol.md")
             and re.fullmatch("[0-9a-f]{64}", request["fixture_manifest_sha256"])
             and request["resource_budget"] == BUDGET, "request differs from the frozen protocol")
     for field in ("case_id", "run_id", "canonical_sql", "profile"):
@@ -101,6 +102,8 @@ def correctness(request, identity):
 
 def observation(request):
     return {"format": "selective-read-observation-v1", "status": "success", "failure_reason": None,
+            "native_phases": {"planning_ns": None, "scan_ns": None,
+                              "unavailable_reason": "native APIs do not expose comparable separate planning/scan clocks"},
             "diagnostic_events": [], "diagnostic_session_ns": None,
             "phase": "setup", "queries": [], "partial_query": None, "provider_evidence": None,
             "capability": {"status": "not_checked", "scope": "requested query and snapshot"}, "correctness": None,

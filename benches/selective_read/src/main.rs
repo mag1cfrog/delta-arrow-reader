@@ -103,6 +103,7 @@ struct Config {
     repack_from: Option<PathBuf>,
     controls: bool,
     dv_from: Vec<PathBuf>,
+    dv_table: Option<String>,
     large: Option<large::Options>,
 }
 
@@ -116,6 +117,7 @@ impl Config {
         let mut repack_from = None;
         let mut controls = false;
         let mut dv_from = Vec::new();
+        let mut dv_table = None;
         let mut large_args = std::collections::BTreeMap::new();
         let mut preflight = false;
         while let Some(arg) = args.next() {
@@ -126,6 +128,7 @@ impl Config {
                      Repack existing clustered rows: --repack-from FIXTURE_DIRECTORY\n\
                      Generate fixed within-file controls: --controls\n\
                      Add paired DV snapshots: --dv-from PUBLIC_FIXTURES --dv-from CONTROLS\n\
+                     Single wide DV pair: --dv-from FIXTURE_DIRECTORY --dv-table wide.clustered|wide.shuffled\n\
                      Large: --scale-factor 1|10|30|100|300 --fixture source|li.clustered|li.shuffled|wide.clustered|wide.shuffled\n\
                      Large limits (required): --disk-limit-mib N --elapsed-limit-seconds N\n\
                      Large options: --source-from FIXTURE_DIRECTORY --preflight\n\
@@ -149,6 +152,7 @@ impl Config {
                 "--output" => output = Some(PathBuf::from(value)),
                 "--repack-from" => repack_from = Some(PathBuf::from(value)),
                 "--dv-from" => dv_from.push(PathBuf::from(value)),
+                "--dv-table" => dv_table = Some(value),
                 "--scale-factor" | "--fixture" | "--source-from" | "--elapsed-limit-seconds" => {
                     if large_args.insert(arg.clone(), value).is_some() {
                         return Err(format!("duplicate option: {arg}").into());
@@ -175,16 +179,31 @@ impl Config {
         }
         let output = output.ok_or("--output is required")?;
         let large = if profile == Profile::Large {
-            if controls || repack_from.is_some() || !dv_from.is_empty() || disk_limit.is_none() {
-                return Err("large requires --disk-limit-mib and cannot combine controls/repack/DV preparation".into());
+            if controls || repack_from.is_some() || disk_limit.is_none() {
+                return Err("large requires --disk-limit-mib and cannot combine controls/repack preparation".into());
             }
-            Some(large::Options::parse(large_args, preflight)?)
+            let options = large::Options::parse(large_args, preflight)?;
+            if !dv_from.is_empty()
+                && (dv_table.as_deref() != Some(options.fixture.as_str())
+                    || options.source_from.is_some())
+            {
+                return Err("large DV preparation requires --dv-table matching --fixture and no --source-from".into());
+            }
+            Some(options)
         } else {
             if !large_args.is_empty() || preflight {
                 return Err("scale, fixture, source reuse, elapsed limit and preflight require --profile large".into());
             }
             None
         };
+        if let Some(table) = &dv_table
+            && (dv_from.len() != 1
+                || !["wide.clustered", "wide.shuffled"].contains(&table.as_str()))
+        {
+            return Err(
+                "--dv-table requires one --dv-from and a wide clustered/shuffled table".into(),
+            );
+        }
         if usize::from(controls)
             + usize::from(repack_from.is_some())
             + usize::from(!dv_from.is_empty())
@@ -216,6 +235,7 @@ impl Config {
             repack_from,
             controls,
             dv_from,
+            dv_table,
             large,
         })
     }
@@ -282,7 +302,7 @@ async fn generate(config: &Config) -> Result<Value> {
         }
     }
     if !config.dv_from.is_empty() {
-        return dv::generate(config);
+        return dv::generate(config, capacity);
     }
     if config.controls {
         return controls::generate(config);
