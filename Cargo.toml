@@ -20,6 +20,7 @@ exclude = [
     "benches/range_planning.rs",
     "benches/range_planning/**",
     "benches/row_filter.rs",
+    "benches/selective_read/**",
     "benches/scan_scheduling.rs",
     "benches/scan_scheduling.py",
     "benches/test_scan_scheduling.py",

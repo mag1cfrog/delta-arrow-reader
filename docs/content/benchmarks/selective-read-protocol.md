@@ -169,7 +169,9 @@ Fixture IDs are `li.clustered`, `li.shuffled`, `wide.clustered`, `wide.shuffled`
 `files64`, `files4096`, `row-groups`, `pages.localized`, and `pages.scattered`.
 DV and feature-only fixtures append `.dv` and `.feature-only` to their base
 fixture IDs. Reference files use the same public writer settings under
-`source/part-00000.parquet`, and so on, in original generator order.
+`sf{scale}/source/part-00000.parquet`, and so on, in original generator order.
+The scale directory keeps the report profile's SF10 and SF1 references separate.
+See [Generate public fixtures](selective-read-fixtures.md) for preparation commands.
 
 ### Preparation budget
 
