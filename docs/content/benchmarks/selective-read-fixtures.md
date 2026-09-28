@@ -18,6 +18,13 @@ separate roadmap issues under
 [the benchmark plan](https://github.com/mag1cfrog/delta-arrow-reader/issues/312).
 Preparation times are not reader benchmark results.
 
+The comparison now includes DAR, delta-rs, DuckDB, Polars, and Daft. Its paired
+wide 4,096-file workload, with and without DVs, is prepared in a later slice
+from these same public rows. This generator supplies the base inputs. Comparison
+revision 2 retains their physical generation rules and checksums; keep the
+manifest's original protocol hash and record the active comparison revision
+separately when validating and measuring them.
+
 ## Generate a profile
 
 Run these commands from the repository root on `x86_64-unknown-linux-gnu`.

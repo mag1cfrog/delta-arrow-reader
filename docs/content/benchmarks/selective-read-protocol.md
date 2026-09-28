@@ -5,7 +5,8 @@ description: Frozen inputs, query families, reader settings, and measurement con
 
 # Public selective-read benchmark protocol
 
-Protocol ID: `selective-read-v1`. Frozen on September 27, 2026, for
+Protocol family: `selective-read-v1`. Comparison revision: **2**, September 27,
+2026. Originally frozen for
 [#313](https://github.com/mag1cfrog/delta-arrow-reader/issues/313), under
 the [benchmark roadmap](https://github.com/mag1cfrog/delta-arrow-reader/issues/312).
 This is the implementation contract for that roadmap. It contains no new
@@ -14,9 +15,19 @@ and measurements are delivered by the subsequent native sub-issues.
 
 The comparison tests how much work each reader avoids through file skipping,
 within-file pruning, predicate decoding, projection, and early termination.
-Its primary matrix has 30 public cases without deletion vectors (DVs), followed
-by seven no-DV controls and seven DV extensions. Three metadata-reuse session
-profiles are reported separately. No minimum speedup is a completion criterion.
+The five comparison readers are DAR, delta-rs, DuckDB, Polars, and Daft, each at
+a fixed version. All belong in the formal report, including explicit unsupported
+results. The 46 cases include 30 public queries, seven file/within-file controls,
+seven deletion-vector (DV) and feature-only variants, and a new paired workload combining 4,096 files, 69 output
+columns, compound filtering, and real deletion vectors. Both DV states
+are part of the main evidence. Three metadata-reuse session profiles are
+reported separately. No minimum speedup is a completion criterion.
+
+Revision 2 expands comparison coverage without changing the original fixture
+generation rules or object identities. A saved generator manifest keeps its
+original protocol hash as provenance. New validation and measurement records
+also identify comparison revision 2 and this document's hash; an old fixture
+manifest alone cannot satisfy the new correctness gate.
 
 ## Questions and existing evidence
 
@@ -46,6 +57,10 @@ aggregation benchmark.
 | --- | --- |
 | DAR starting source | Version 0.6.1, commit `d5557f36bc51831abadc7d9a98c3b24381530b69`; root `Cargo.lock` |
 | delta-rs | Rust release `1.0.0`, commit `41f1ce23377f088298a3ed196ad6c8e40cb9bfed`; `deltalake = "=1.0.0"`, default features off, `datafusion,s3,rustls` on |
+| DuckDB | Python package `duckdb==1.5.5`; Delta extension source `45c40878601b54b4188b09e08732fe0d576ad222` |
+| Polars | `polars==1.44.2`, `polars-runtime-32==1.44.2`, Python `deltalake==1.6.6` |
+| Daft | `daft==0.7.25`, Python `deltalake==1.6.6`; local native runner |
+| Python runners | CPython `3.14.6`, `pyarrow==25.0.1`, Linux x86-64 wheels |
 | Common Rust toolchain | `1.98.1`, target `x86_64-unknown-linux-gnu` |
 | Source generator | `tpchgen = "=3.0.0"`, upstream commit `4f6bf4c5ab40511c8fdef5888fc8d022e5e546d7` |
 | Fixture writer | Arrow and Parquet Rust crates `=58.4.0`; use the generator's core row API, without an Arrow 59 dependency |
@@ -65,7 +80,7 @@ provider. The starting graphs use DataFusion 54.1.0 / Arrow 58.4.0 for DAR and
 DataFusion 55 / Arrow 59 for delta-rs. Matching their major versions would
 require changing a product and is outside this comparison.
 
-Both runners use `--release --locked`, `opt-level=3`, `codegen-units=16`,
+These two Rust runners use `--release --locked`, `opt-level=3`, `codegen-units=16`,
 `lto=false`, `debug=false`, `strip=none`, `panic=unwind`, and
 `incremental=false`. Set `RUSTFLAGS=-C target-cpu=x86-64`; do not use native CPU
 tuning, PGO, or a different allocator on one side. Use eight build jobs. Save
@@ -73,6 +88,27 @@ tuning, PGO, or a different allocator on one side. Use eight build jobs. Save
 lockfile hashes, executable hashes, and the full measured DAR and harness Git
 commits. The starting DAR pin is not a claim that later runner code already
 exists at that commit. Product changes require a separately identified revision.
+
+Add one thin Python runner per additional reader, each in a separate locked
+environment. The package releases are
+[DuckDB 1.5.5](https://pypi.org/project/duckdb/1.5.5/),
+[Polars 1.44.2](https://pypi.org/project/polars/1.44.2/), and
+[Daft 0.7.25](https://pypi.org/project/daft/0.7.25/).
+Commit complete dependency locks with artifact hashes in their adapter PRs.
+Record the interpreter build, wheel/platform tags, and every resolved package.
+Pin and verify DuckDB's loaded extensions by source revision, binary SHA-256,
+and DuckDB ABI; install/load them before the query clock, without table I/O.
+Do not download a mutable extension during a campaign. Python `deltalake`
+versions and Rust `deltalake` versions use different package release numbers;
+record the underlying dependencies rather than treating the numbers as equal.
+
+Use each product's supported Delta entry point: DuckDB's Delta extension,
+Polars `scan_delta`, and Daft `read_deltalake`. Preserve their normal predicate
+and projection optimizations. The adapter PR freezes its exact API path and
+settings and probes snapshot selection, types, DVs, streaming, and reuse before
+timing. An engine's own Delta reader may use delta-rs internally; record this
+dependency. The harness must not substitute another engine's execution or
+precompute a selected file list for a candidate.
 
 ## Data and physical layout
 
@@ -82,11 +118,12 @@ exists at that commit. Product changes require a separately identified revision.
 | --- | --- | --- | --- |
 | `smoke` | SF 0.01 | SF 0.01 | Bounded public-data validation, separate smoke literal rule below |
 | `development` | SF 1 | SF 1 | Validate all public query shapes |
-| `report` | SF 10 | SF 1 | Published primary comparison |
+| `report` | SF 10 | SF 1 | Published comparison |
 
-File-count derivatives always use original SF1 data. Mechanism controls have
+File-count derivatives use SF1: original lineitem for the 64/4,096-file controls
+and the wide derivative for the new 4,096-file DV pair. Mechanism controls have
 the fixed synthetic geometry below and no TPC-H scale factor. Profiles do not
-multiply the 44 report case definitions into additional reported cases.
+multiply the 46 report case definitions into additional reported cases.
 
 Generate rows with `tpchgen::generators::LineItemGenerator::new(sf, 1, 1)`, using
 the pinned default distributions, seeds, and text pool. Save source rows in
@@ -166,7 +203,8 @@ Save schemas, relative object paths, sizes, log bytes, and hashes. Location and
 upload timestamps are recorded separately and do not affect fixture identity.
 
 Fixture IDs are `li.clustered`, `li.shuffled`, `wide.clustered`, `wide.shuffled`,
-`files64`, `files4096`, `row-groups`, `pages.localized`, and `pages.scattered`.
+`files64`, `files4096`, `wide.files4096`, `row-groups`, `pages.localized`, and
+`pages.scattered`.
 DV and feature-only fixtures append `.dv` and `.feature-only` to their base
 fixture IDs. Reference files use the same public writer settings under
 `sf{scale}/source/part-00000.parquet`, and so on, in original generator order.
@@ -219,7 +257,7 @@ These predicate names expand to the following SQL:
 | `q6` | `l_shipdate >= DATE '1994-01-01' AND l_shipdate < DATE '1995-01-01' AND l_discount BETWEEN CAST('0.05' AS DECIMAL(15,2)) AND CAST('0.07' AS DECIMAL(15,2)) AND l_quantity < CAST('24.00' AS DECIMAL(15,2))` |
 | `control-match` | `event_id = 'match'` |
 
-Before either reader is timed, take the first 20 distinct ascending `l_partkey`
+Before any reader is timed, take the first 20 distinct ascending `l_partkey`
 values from source rows satisfying `eq2`, independently for each scale. The
 one-value case takes the first of those values. Render decimal integer literals
 in ascending order and save both the list and fully expanded SQL. Development
@@ -233,7 +271,7 @@ and never report it as a 20-value performance case. As an untimed correctness
 check, repeat the first literal at the end of each list and verify that duplicate
 `IN` literals do not duplicate output rows.
 
-### Primary public cases: 30 without DVs
+### Public predicate and projection cases: 30 without DVs
 
 Each original query expands to two IDs, `li.clustered.{query}` and
 `li.shuffled.{query}`. Each wide query expands to `wide.clustered.{query}` and
@@ -264,7 +302,9 @@ TPC-H query number. Use `date7-full`, `date7-keys`, and `date7-limit` in artifac
 | `all-wide` | `wide69` | None | None |
 
 The first runnable milestone is `li.clustered.eq2-in20` and
-`li.shuffled.eq2-in20`, at SF1, passing the independent oracle with both readers.
+`li.shuffled.eq2-in20`, at SF1, passing the independent oracle with DAR and
+delta-rs. The three subsequent adapter PRs add the remaining readers to the
+same contract; the milestone does not reduce the final five-reader scope.
 The wide predicate progression reports row counts after each predicate step.
 The matched narrow/wide pair reads the same wide files with the same filter.
 
@@ -312,7 +352,7 @@ remain separate mechanism A/Bs, not delta-rs substitutes or extra public cases.
 Use the [range-planning experiment](range-planning.md) to explain byte/request
 tradeoffs without introducing a new cross-reader network matrix.
 
-### DV extensions: seven cases
+### DV and feature-only variants: seven cases
 
 The following six case IDs append `.dv` to their no-DV base ID:
 
@@ -331,7 +371,7 @@ little-endian, modulo 1,000 equal zero. This preserves the deletion set across
 layouts. Controlled rule: delete rows with `event_id='other' AND row_id % 1000=0`.
 Controlled paired outputs therefore stay identical.
 
-Each extension has its own table prefix, the same Parquet bytes as its base,
+Each DV variant has its own table prefix, the same Parquet bytes as its base,
 and snapshot version 1 adding reader/writer protocol 3/7 with `deletionVectors`
 in both feature lists and `delta.enableDeletionVectors=true` in table
 configuration. Attach descriptors only to files with a nonempty
@@ -349,25 +389,88 @@ the same enabled table property, original row set, and Parquet files. Record act
 DV-bearing file coverage, and changed output volume for each DV case. Add
 untimed checks for matching-row deletions and page/group/batch boundaries.
 
-The delta-rs source audit is context for these extensions. Version 1.0.0
+The delta-rs source audit is context for these cases. Version 1.0.0
 [retains Kernel file skipping](https://github.com/delta-io/delta-rs/blob/41f1ce23377f088298a3ed196ad6c8e40cb9bfed/crates/core/src/delta_datafusion/table_provider/next/scan/plan.rs#L268-L296).
 Its [Parquet predicate and limit setup](https://github.com/delta-io/delta-rs/blob/41f1ce23377f088298a3ed196ad6c8e40cb9bfed/crates/core/src/delta_datafusion/table_provider/next/scan/mod.rs#L699-L772)
 depends on DVs in surviving files. These guards do not establish a full scan
 or explain DAR's no-DV performance; compare runtime work before attributing cost.
 
+### Many files, wide output, compound filtering, and DVs: two cases
+
+Repack clustered wide SF1 rows into exactly 4,096 files using the same ordinal
+boundaries as the original file-count controls. Keep all 80 columns and their
+statistics, the public writer settings, and the SF1 literal list. This fixture
+combines the historical workload's dimensions in one query.
+
+| Case ID | Fixture / snapshot | Projection | Predicate |
+| --- | --- | --- | --- |
+| `wide.files4096.eq2-in20` | `wide.files4096`, version 0, no DVs | `wide69` | `eq2-in20` |
+| `wide.files4096.eq2-in20.dv` | `wide.files4096.dv`, version 1, real DVs | `wide69` | `eq2-in20` |
+
+Both snapshots retain identical Parquet objects and conservative file
+statistics. Independently evaluate those statistics before timing: at least
+99% of files must be excludable, and qualifying rows must remain. Save the
+expected candidate, matching, and excluded file sets. This is a fixture
+geometry requirement, not a required result from any reader.
+
+For the DV snapshot, delete the union of:
+
+1. The public logical-row hash rule above.
+2. The lexicographically smallest `(l_orderkey, l_linenumber)` not satisfying
+   `eq2-in20` in each file.
+3. The lexicographically smallest matching logical key in the complete fixture.
+
+Evaluate this fixed rule from full source rows before any reader measurements.
+Fail preparation if a file lacks a nonmatching row, if no matching row is
+deleted, or if no qualifying live row remains. Every file must have a nonempty
+DV, including both excludable files and files with surviving matches. Use the
+same DV encoding, descriptor, and oracle rules as the other variants. Save
+deletions by logical key and physical ordinal, actual density, and coverage
+separately for expected excluded/candidate/matching files.
+
+Show this pair together in the main report for all five readers. Validate real
+matching-row deletion, including a negative check that rejects a reader which
+ignores DVs. Report files touched, Parquet/log/DV bytes and requests, total time,
+planning time where exposed, and live output rows. Fewer returned rows make this
+a selective read comparison with deletions, not a measurement of bitmap cost alone. A
+reader without support stays in the table with its probe evidence; it does
+not receive a timing ratio. A reduced smoke fixture may test the code paths
+but cannot stand in for the 4,096-file geometry check.
+
 ## Reader configuration and cache policy
 
 Use the same immutable objects and explicit snapshot version per case. No
-pre-filtered file list, per-case tuning, SQL rewrite, or unmeasured table open
-is allowed. Stream batches to completion and count rows without collecting,
-hashing, sorting, printing, or retaining them in measured mode.
+pre-filtered file list, per-case tuning, or unmeasured table open is allowed.
+Canonical SQL defines the semantics. Native Polars/Daft expressions may express
+that same projection, predicate, and limit; freeze the translation and its hash,
+and verify it with the independent oracle. Do not replace output with an
+aggregate, change literals, or move filtering into the harness.
+
+Consume the supported batch stream to completion and count rows without
+hashing, sorting, printing, or retaining results in measured mode. If a pinned
+API requires materialization, declare that execution mode before timing,
+include the full materialization cost, and set streaming first-batch time to
+null with a reason. Never label a batch sliced from a collected result as
+streaming latency. Prefer a supported streaming API when available; the harness
+must not add full-result collection to a streaming reader.
 
 | Shared setting | Value |
 | --- | --- |
-| Reader CPU budget | Eight logical CPUs, fixed affinity for both readers |
+| Reader CPU budget | Eight logical CPUs, identical fixed affinity for all readers |
+| Reader process memory | 8 GiB cgroup limit, including native allocations |
+| Result cache / harness object-data cache | None |
+| Output handling | Consume all projected values through the declared batch/materialization API; count rows |
+
+The following settings apply to the two Rust/DataFusion runners. Each other
+adapter fixes its native thread, memory, streaming, and cache settings within
+the same CPU/process-memory budget. Record resolved defaults and effective
+limits; DataFusion option names do not configure DuckDB, Polars, or Daft.
+
+| Rust/DataFusion setting | Value |
+| --- | --- |
 | Tokio worker / maximum blocking threads | 8 / 64 |
 | DataFusion target partitions / batch size | 8 / 8,192 |
-| Reader process memory / DataFusion pool | 8 GiB cgroup limit / 4 GiB pool |
+| DataFusion pool | 4 GiB |
 | `execution.parquet.pruning` / `enable_page_index` | `true` / `true` |
 | `execution.parquet.pushdown_filters` / `reorder_filters` | `true` / `true` |
 | `execution.parquet.schema_force_view_types` | `true` |
@@ -375,7 +478,7 @@ hashing, sorting, printing, or retaining them in measured mode.
 | `optimizer.repartition_file_scans` | `true` |
 | DataFusion file metadata cache | 64 MiB limit per new runtime |
 | DataFusion file-statistics / list-files caches | Disabled with zero limits |
-| Result cache / extra object-data cache | None |
+| Extra object-data cache | None |
 
 DataFusion settings above use the `datafusion.` prefix when serialized. Keep
 other options at the pinned versions' defaults and save their complete resolved
@@ -402,10 +505,21 @@ are enabled in the resulting config. Keep its normal supported pruning paths.
 
 Every process starts with fresh client connections, runtime, and application
 caches. Reuse sessions retain their snapshot/provider/session and native caches
-for ten executions; each execution plans the SQL anew. Do not reuse a prepared
+for ten executions; each execution plans the query anew. Do not reuse a prepared
 physical plan. DAR's Direct backend does not gain a footer cache merely by
 setting DataFusion's cache limit. Disclose which caches each provider actually
 uses and any remaining metadata requests.
+
+Probe each reader's pinned API against no-DV, feature-only, and real-DV snapshots,
+including wrong-version and matching-row-deletion checks. Record capability
+per case and usage mode before constructing the campaign schedule. A rejected
+Delta feature is `unsupported` with the probe/error evidence; a wrong result is
+`validation_failed`, and a crash, installation failure, or timeout is a failure.
+Missing internal counters do not make an otherwise correct query unsupported.
+Keep all five readers visible. Unsupported DVs do not exclude a reader from
+no-DV cases or reduce the DV coverage required of the report. Reuse uses only
+native supported facilities and may have a different capability result from
+open-and-query.
 
 Use a dedicated single-node, single-data-directory MinIO on local Linux,
 bound to loopback HTTP, with a fixed bucket and path-style requests. Assign the
@@ -425,7 +539,8 @@ Describe results as local S3-compatible reads, not measurements of AWS S3.
 ## Correctness gate
 
 The oracle reads saved source rows or all reference Parquet rows, bypassing
-both tested Delta providers' pruning and DV paths. Evaluate the fixed predicates
+all five tested readers' pruning and DV paths. None of the candidate engines
+serves as the reference engine. Evaluate the fixed predicates
 and projections independently using exact Decimal/date semantics. Apply the
 saved logical deletion set for DV cases. Compute qualifying rows, selectivity
 after each predicate step, expected matching files, and statistics-based
@@ -449,22 +564,26 @@ across layouts for unlimited queries.
 Validation and diagnostic plans are separate invocations. Save oracle status
 against the protocol, fixture, SQL, and executable hashes; a changed input or
 build invalidates the gate. Failed or unsupported cases remain visible and
-cannot produce speedups.
+cannot produce speedups. Record the canonical SQL and any native-expression
+translation hashes so an adapter change invalidates its previous validation.
 
 ## Timing and observations
 
 ### Open-and-query and reuse boundaries
 
 Create the process/runtime and parse arguments before starting the monotonic
-query clock, with no table I/O. Start `open_query_ns` immediately before opening
-the snapshot; include provider construction, registration, SQL parsing/planning,
-and consumption through end-of-stream. `first_batch_ns` uses that same start
-and stops at the first nonempty batch. It is null for empty results. Count rows
-as batches pass and drop each batch before requesting the next.
+query clock, with no table I/O. Python imports and extension loading belong to
+this setup. Start `open_query_ns` immediately before opening the snapshot;
+include provider construction, registration, query parsing/planning, and
+consumption through end-of-stream, or complete materialization/consumption for
+a declared materializing API. `first_batch_ns` uses that same start and stops
+at the first nonempty streamed batch. It is null for empty results or an API
+without streaming delivery, with the reason recorded. Count rows as batches
+pass and drop each batch before requesting the next.
 
 For reuse, start `initialization_ns` before snapshot load and end it after eager
 metadata/provider registration. Then execute ten queries with that registration,
-recording each interval from SQL planning through end-of-stream and its first
+recording each interval from query planning through end-of-stream and its first
 nonempty batch time. Report initialization plus query 1 and initialization plus
 all ten queries. Also retain the enclosing session elapsed time so bookkeeping
 gaps are visible. Ten queries in one process are one independent session sample.
@@ -484,12 +603,29 @@ RSS include them and are labeled accordingly.
 
 ### Repetition and cache history
 
-For each case or session, execute one unreported warmup pair A/B followed by
-one B/A pair, each using fresh processes. Then measure ten fresh-process pairs,
-alternating A/B and B/A, yielding ten samples per reader and five of each
-order. A is DAR and B is delta-rs. Reuse `benches/run_order.py`'s two-candidate
-orders when constructing the schedule; persist the expanded schedule before
-running. Visit cases in lexical case-ID order, then sessions in lexical order.
+Start from the fixed candidate order `delta-arrow-reader, delta-rs, duckdb,
+polars, daft`. Freeze each case/session's runnable subset after capability and
+correctness checks. Keep excluded readers and their statuses in the inventory.
+Warm up each runnable reader once in that order and once in reverse order,
+using a fresh process for each invocation.
+
+Reuse `benches/run_order.py::balanced_orders` on the runnable subset. One cycle
+contains `2*N` rounds for `N` readers, with each reader appearing once per round
+and each position and ordered adjacency represented twice per cycle. Repeat
+complete cycles until each reader has at least ten measured process samples:
+
+| Runnable readers | Complete cycles | Samples per reader |
+| --- | --- | --- |
+| 5 | 1 | 10 |
+| 4 | 2 | 16 |
+| 3 | 2 | 12 |
+| 2 | 3 | 12 |
+| 1 | 5 | 10; no comparative ratio |
+
+A case with no runnable readers has status records and no timing schedule.
+Persist the expanded schedule before running. Do not delete failed slots or
+rebalance after seeing timings. Visit cases in lexical case-ID order, then
+sessions in lexical order. This replaces revision 1's two-reader A/B schedule.
 
 Do not run queries concurrently across processes. Each query and each reuse
 initialization has a 1,800-second deadline; cleanup has a 60-second deadline. Keep partial observations,
@@ -499,16 +635,21 @@ generation, verification, charting, and unrelated load stay outside the campaign
 
 Report median, Q1, Q3, and `IQR=Q3-Q1`, using linear interpolation at index
 `(n-1)*p` in sorted samples. Compute a speedup only for matching cases that
-passed correctness checks and have all ten successful samples on both sides:
-`median(delta-rs) / median(DAR)`. Retain losses and ties; durations below timer
-resolution do not yield a numeric speedup.
+passed correctness checks and have every scheduled sample succeed on both sides:
+`median(comparator) / median(DAR)` for each of delta-rs, DuckDB, Polars, and Daft.
+Use the schedule above rather than assuming ten samples when fewer readers
+support the case. Retain losses and ties; durations below timer resolution do
+not yield a numeric speedup.
 
 ### Common I/O and metric definitions
 
-Timing runs have no detailed request tracing. Run two separate diagnostic pairs
-(A/B, then B/A) per case/session after the timing campaign, with the same settings
-and one preceding warmup pair in each order. Give them distinct run IDs. This
-keeps trace overhead out of headline timings. Report diagnostic latency and
+Timing runs have no detailed request tracing. Run two separate diagnostic rounds
+per case/session after the timing campaign, in the runnable subset's fixed
+order and then reverse order. Precede them with one warmup round in each order,
+using the same settings and fresh processes. Give all runs distinct IDs. These
+two diagnostic observations per reader are descriptive, not a second balanced
+timing campaign. This keeps trace overhead out of headline timings. Report
+diagnostic latency and
 observer overhead on the same queries, but do not join their bytes and timings
 as though they belonged to a single observation.
 
@@ -540,17 +681,41 @@ are null with a reason, never zero.
 Each raw JSONL observation must identify protocol revision/hash, campaign and
 run ID, timing/diagnostic mode, case/profile/session and query index, repetition
 and order, reader/source/build/config identity, fixture manifest/hash, snapshot,
-expanded SQL/hash, correctness prerequisite, status/error, output rows, timers,
+expanded SQL/hash, native-expression hash when applicable, capability/probe
+identity, execution mode, correctness prerequisite, status/error, output rows, timers,
 resource metrics, and linked diagnostic artifacts. Store nanoseconds and bytes
 as integers. Preserve raw logs and complete resolved settings without secrets.
 
 ## Changes and delivery gate
 
-The frozen inventory is `18 + 12 + 4 + 1 + 2 + 6 + 1 = 44` cross-reader cases,
-plus three reuse profiles. #314 supplies the generator and physical manifests;
-#315 the oracle; #316 the locked runners; #317 common I/O; and #318 scheduling.
-The remaining native sub-issues integrate query families, controls, DVs,
-reproduction, and publication in the order recorded by the parent.
+The frozen inventory is `18 + 12 + 4 + 1 + 2 + 6 + 1 + 2 = 46` cases:
+38 without DVs, seven with real DVs, and one feature-only control. Account for
+all `46 * 5 = 230` case/reader entries and `3 * 5 = 15` reuse-profile/reader
+entries, including unsupported and failed entries with evidence. These counts
+are inventory entries, not repetitions or a promise that every reader supports
+every feature. Missing implementations, omitted cases, and failed correctness
+gates prevent a successful report; operational failures remain visible in the
+published artifacts and never produce ratios.
+
+#314 supplies base fixtures and #315 the independent oracle. #316 establishes
+the shared record contract and the two Rust runners. DuckDB
+[#327](https://github.com/mag1cfrog/delta-arrow-reader/issues/327), Polars
+[#328](https://github.com/mag1cfrog/delta-arrow-reader/issues/328), and Daft
+[#329](https://github.com/mag1cfrog/delta-arrow-reader/issues/329) each have an
+adapter PR before the common I/O and scheduling slices (#317 and #318).
+Query families (#319), file organization (#320), within-file controls (#321),
+and DV variants (#322) follow.
+[#330](https://github.com/mag1cfrog/delta-arrow-reader/issues/330) combines the
+file-repacking and DV helpers for the wide 4,096-file pair. Reproduction (#323)
+and publication
+(#324) depend on all five adapters and that pair. The parent records the exact
+native sub-issue order and dependencies.
+
+Present both DV states of the wide 4,096-file workload together with the
+predicate/projection progression, file/within-file controls, and reuse results.
+Do not make DV support a prerequisite for describing no-DV pruning, or demote
+complex DV workloads because another reader lacks support. Report which layer
+avoids work using common observations and qualified internal counters.
 
 Generated literals, object checksums, actual page metadata, dependency
 inventories, and machine identities are outputs of these fixed rules, not
