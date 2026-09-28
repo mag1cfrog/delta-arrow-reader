@@ -336,7 +336,8 @@ async fn generate(config: &Config) -> Result<Value> {
             "arrow": "58.4.0", "parquet": "58.4.0", "datafusion_sort": "54.1.0",
             "source_sha256": fixtures::hash_bytes(GENERATOR_SOURCE.as_bytes()),
             "lockfile_sha256": fixtures::hash_bytes(LOCKFILE.as_bytes()),
-            "executable_sha256": fixtures::hash_file(&env::current_exe()?)?,
+            // Read the running inode even when a concurrent build replaces its pathname.
+            "executable_sha256": fixtures::hash_file(Path::new("/proc/self/exe"))?,
             "target": format!("{}-{}", env::consts::ARCH, env::consts::OS)
         },
         "recipe": {

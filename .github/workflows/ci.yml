@@ -187,8 +187,26 @@ jobs:
       - run: cargo fmt -- --check
       - run: cargo clippy --release --locked --all-targets -j8 -- -D warnings
       - run: cargo test --release --locked -j8
-      - name: Check CLI preparation limits
-        run: cargo run --release --locked -j8 -- --profile smoke --sort-memory-mib 16 --output "${RUNNER_TEMP}/selective-read-smoke"
+      - name: Check CLI limits and executable replacement
+        run: |
+          cargo build --release --locked -j8
+          python3 - <<'PY'
+          import hashlib, json, os, shutil, subprocess
+          from pathlib import Path
+
+          probe = Path(os.environ["RUNNER_TEMP"]) / "fixture-cli"
+          shutil.copyfile(Path(os.environ["CARGO_TARGET_DIR"]) / "release/selective-read-fixtures", probe)
+          probe.chmod(0o755)
+          with probe.open("rb") as source:
+              expected_hash = hashlib.file_digest(source, "sha256").hexdigest()
+          output = probe.with_name("selective-read-smoke")
+          process = subprocess.Popen([str(probe), "--profile", "smoke", "--sort-memory-mib", "16", "--output", str(output)])
+          probe.unlink()  # Simulate a rebuild removing the running executable's old pathname.
+          assert process.wait() == 0
+          manifest = json.loads((output / "manifest.json").read_text())
+          assert manifest["status"] == "complete"
+          assert manifest["generator"]["executable_sha256"] == expected_hash
+          PY
 
   ci:
     name: CI
