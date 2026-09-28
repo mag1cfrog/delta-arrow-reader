@@ -14,6 +14,7 @@ from urllib.parse import unquote, urlsplit
 import observe
 import storage
 import run
+import matrix
 from run import digest, save
 from supervise import integer, require
 
@@ -212,23 +213,34 @@ def execute(args):
         require(reader in READERS and reader not in binaries, "unknown or duplicate reader")
         require(digest(binary) == build["executable_sha256"], "reader executable changed")
         binaries[reader], builds[reader] = binary, build
-    references = {}
+    prepared = matrix.load(args.matrix, fixtures) if args.matrix else None
+    if prepared:
+        require(not (args.case or args.reference or args.session), "--matrix supplies all cases and references; do not mix case/session overrides")
+        for reader, build in builds.items():
+            if reader in prepared["translation_locks"]:
+                require(build["lockfile_sha256"] == prepared["translation_locks"][reader], "native translation lock changed")
+    cases = {row["case_id"]: row for row in prepared["cases"]} if prepared else {}
+    references = {case: Path(row["reference"]) for case, row in cases.items() if row["status"] == "prepared"}
     for reference in args.reference:
         metadata = json.loads((reference / "reference.json").read_text())
         require(metadata["case_id"] not in references, "duplicate reference case")
         references[metadata["case_id"]] = reference.resolve()
-    jobs = [{"id": case, "case_id": case, "execution_mode": "open"} for case in sorted(set(args.case or DEFAULT_CASES))]
-    jobs += [{"id": session, "case_id": SESSIONS[session], "execution_mode": "reuse"} for session in sorted(set(args.session or SESSIONS))]
+    jobs = [{"id": case, "case_id": case, "execution_mode": "open"} for case in sorted(cases or set(args.case or DEFAULT_CASES))]
+    if not prepared:
+        jobs += [{"id": session, "case_id": SESSIONS[session], "execution_mode": "reuse"} for session in sorted(set(args.session or SESSIONS))]
     config = storage.state(state)
     previous_affinity = os.sched_getaffinity(0)
     os.sched_setaffinity(0, config["cpus"]["observer"])
     resolution = timer_resolution()
     sources = [Path(__file__), HERE / "observe.py", HERE / "storage.py", HERE / "oracle.py", HERE.parent / "run_order.py",
                HERE / "runners/run.py", HERE / "runners/supervise.py", run.PROTOCOL]
+    if prepared:
+        sources += [HERE / "matrix.py", matrix.CATALOG, matrix.EXPRESSIONS, args.matrix.resolve()]
     hashes = {str(p): digest(p) for p in sources}
     save(output / "campaign.json", {"campaign_id": campaign_id, "comparison_revision": 2,
          "protocol_sha256": digest(run.PROTOCOL), "fixtures": str(fixtures), "upload": str(args.upload.resolve()),
          "upload_sha256": digest(args.upload), "server": config, "reader_builds": builds, "jobs": jobs,
+         "matrix": {"path": str(args.matrix.resolve()), "sha256": digest(args.matrix)} if prepared else None,
          "source_sha256": hashes, "timer_resolution": resolution, "started_ns": time.time_ns(),
          "cache_policy": "fresh clients, reused MinIO/OS caches, no flushes; complete warmup/run history in observations.jsonl",
          "scope": "requested cases/sessions only; not the complete 46-case publication report"})
@@ -253,6 +265,8 @@ def execute(args):
                         abort_reason = "previous invocation did not prove process/server cleanup: " + slot["run_id"]
                     try:
                         validate(record, payload, slot["reader_id"], gate)
+                        if prepared:
+                            matrix.check_translation(record, cases[job["case_id"]])
                     except (ValueError, KeyError, TypeError) as error:
                         record = dict(record, status="operational_failure", failure_reason="invalid observation: " + str(error))
                 except Exception as error:
@@ -270,6 +284,8 @@ def execute(args):
             for job in jobs:
                 entries = inventory[job["id"]] = {}
                 try:
+                    if prepared:
+                        require(cases[job["case_id"]]["status"] == "prepared", cases[job["case_id"]].get("failure_reason", "missing matrix reference"))
                     payload = run.request(fixtures, job["case_id"], job["execution_mode"], "validation", "pending")
                     location = Path(unquote(urlsplit(payload["table_uri"]).path)).relative_to(fixtures)
                     payload["table_uri"] = receipt["table_root"] + "/" + str(location)
@@ -326,5 +342,6 @@ if __name__ == "__main__":
     parser.add_argument("--binary", type=Path, action="append", default=[])
     parser.add_argument("--reference", type=Path, action="append", default=[])
     parser.add_argument("--case", action="append", help="repeat for selected cases; default: both compound layouts")
+    parser.add_argument("--matrix", type=Path, help="prepared 30-case matrix; replaces case/reference/session defaults")
     parser.add_argument("--session", choices=SESSIONS, action="append", help="repeat for selected sessions; default: all three")
     sys.exit(execute(parser.parse_args()))

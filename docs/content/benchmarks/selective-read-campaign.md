@@ -10,6 +10,10 @@ MinIO server. It checks each case and execution mode against the independent
 oracle, saves the runnable subset and full schedule, then runs warmups, timing
 samples and separate diagnostics. All five readers remain in the inventory.
 
+For all 30 public predicate/projection cases, use the
+[query matrix guide](selective-read-matrix.md). Its `--matrix` argument supplies
+the full case list and references without adding the default reuse sessions.
+
 ## Prepare the inputs
 
 Use the Linux host, pinned builds, verified upload and oracle environment from

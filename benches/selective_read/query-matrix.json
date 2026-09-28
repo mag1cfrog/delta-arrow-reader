@@ -1,0 +1,1097 @@
+{
+  "comparison_revision": 2,
+  "format": "selective-read-query-matrix-v1",
+  "native_expressions_sha256": "b99a11d89cb0450a0bc55ede1e3a257652d8430be26eea728c1a25115687e765",
+  "protocol_sha256": "affe5fde898c1e39c03792fadbfd79d17b6af8a16dbdaa48988869a4567d5efe",
+  "scales": {
+    "0.01": {
+      "in_literals": [
+        246,
+        371,
+        612,
+        648,
+        1906
+      ],
+      "literal_provenance": {
+        "generator": {
+          "arrow": "58.4.0",
+          "datafusion_sort": "54.1.0",
+          "executable_sha256": "8741158d272d2ce5556f7f83ef0c9e26712c43128ed2a67e635092a7009b7945",
+          "lockfile_sha256": "564fb9f39e8c13fbd19a22ea449c1a8652a0facaef13bb438777a13fb691fa1c",
+          "parquet": "58.4.0",
+          "source_sha256": "9eff57c625a5963bf73bc1cee99129d2ea7baa2d7eb9df2ff59a1a680004b371",
+          "target": "x86_64-linux",
+          "tpchgen": "3.0.0",
+          "tpchgen_git": "4f6bf4c5ab40511c8fdef5888fc8d022e5e546d7"
+        },
+        "manifest_sha256": "75b4119bce0dfe65adee0de728f3e25aca566e11719efa6c8c5a4cd4561395ad",
+        "profile": "smoke",
+        "source_objects_sha256": "a499031ac572bb5238fffcfebd1cba51bceb09f438202cef75757a388463cba8"
+      },
+      "queries": {
+        "li": {
+          "all-full": {
+            "native_expression_sha256": {
+              "daft": "894759a96d8e5b98eda65423452ae4c8c4ee0f942ef7c97bcd6691bb23e4423e",
+              "polars": "348ce6f1bc8395a2cd64557d56128f1053049aef2066ac8e3e0e0a7b4be18648"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench",
+            "sql_sha256": "1dc353297dac1e9b188a617e856719b53e90da25f0058e62e3026f10e437cd12"
+          },
+          "all-keys": {
+            "native_expression_sha256": {
+              "daft": "4645b67aed136e86b51e89f911e26a74e21731a14751361e2d6879636c00b33e",
+              "polars": "f2b9fef42151fe81d7a80ed3068f2019033c43954adc64ffd452a1a1fd2c62d8"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber FROM bench",
+            "sql_sha256": "8b6a34228022de73ca66c81eea4da055afa4b888a2bdbd4f7c2d4342211a82d9"
+          },
+          "date7-full": {
+            "native_expression_sha256": {
+              "daft": "d2d19eaa344b330bea85bd71b4de8ce131e9675b24f798e0fa6e9aa839a7843a",
+              "polars": "5da405bc724bb4eee4f4536b19e2fb3b8e04a74f4153d0e17782b4057ddb543b"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench WHERE l_shipdate >= DATE '1995-03-15' AND l_shipdate < DATE '1995-03-22'",
+            "sql_sha256": "e179aba5d1d8b7a0b0cd62adfb81eb979a627b6443b1c02acf228f6865fe52e4"
+          },
+          "date7-keys": {
+            "native_expression_sha256": {
+              "daft": "a73414bdf1ec01bb4366babb7ccf9ea42089a16b2fc851a5400faf80c648167d",
+              "polars": "cf960a01f854c50bceab13b9dee71cd3721f84c14268ba4ad947a8d968f5284b"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber FROM bench WHERE l_shipdate >= DATE '1995-03-15' AND l_shipdate < DATE '1995-03-22'",
+            "sql_sha256": "ca17dccd180f4eaa564eaed79a8ac3c040b7ab47329dd7e59ea8add810ff9e77"
+          },
+          "date7-limit": {
+            "native_expression_sha256": {
+              "daft": "ccd3023474c30f9966472f413e125969e3f772839de4075e9b99df790fc87edf",
+              "polars": "8e43af9c41c25f5c715f850a88a6931a80b5c6873d4bca1fae17710617696b85"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench WHERE l_shipdate >= DATE '1995-03-15' AND l_shipdate < DATE '1995-03-22' LIMIT 100",
+            "sql_sha256": "8757c653777e20b5d4b400652aa07f18ba3c4346215ba979725b677759a1ba2c"
+          },
+          "empty": {
+            "native_expression_sha256": {
+              "daft": "0d5473002310e9a16788b2286841b2b8ad99e23fbfca4f1127b8f775d4106791",
+              "polars": "dbd5e69a0decdd60fe06348539fef55fe7868d417806eccf71c129edda1900c5"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench WHERE l_shipdate < DATE '1990-01-01'",
+            "sql_sha256": "33885de3e118419a0fd4d4909c41eac9f9e643ee74e8e403b7235719114ef3a2"
+          },
+          "eq2-in1": {
+            "native_expression_sha256": {
+              "daft": "8a866c7550119534fa53593568e444f86ea7bd98028af7bd4cbc714941468252",
+              "polars": "e970a0d0c47aa16ebc909cf77031605ba54a2cf513538cf80354bb6f79672074"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR' AND l_partkey IN (246)",
+            "sql_sha256": "4077e7f71906784a6e322615ee5927bbe273b2475392397bcb6c8bf2e48983a9"
+          },
+          "eq2-in20": {
+            "native_expression_sha256": {
+              "daft": "e2ea226864bc1db93627576d62af243de9694872197e59eff4e8b23a55f7f87c",
+              "polars": "f4976423f56d9733534f6a338ddbb0910fb06e1df8958e231be950ccd05126e9"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR' AND l_partkey IN (246, 371, 612, 648, 1906)",
+            "sql_sha256": "0656f3315704eaddf0e4ee3de4723bb527e067fe21b6a1528ea80a76c5d96262"
+          },
+          "q6-scan": {
+            "native_expression_sha256": {
+              "daft": "9d4fb5fa851fa944d520be8cb3890df144dca75238b442a544f9e974673c69a2",
+              "polars": "58649814c58b7ff1357d4a80670a8775d40630b88b7ad593edd0b227b4115caa"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_extendedprice, l_discount FROM bench WHERE l_shipdate >= DATE '1994-01-01' AND l_shipdate < DATE '1995-01-01' AND l_discount BETWEEN CAST('0.05' AS DECIMAL(15,2)) AND CAST('0.07' AS DECIMAL(15,2)) AND l_quantity < CAST('24.00' AS DECIMAL(15,2))",
+            "sql_sha256": "7d275e26264f889108da7708778852e66f75bddc8186f39a20cb0bde3b11142e"
+          }
+        },
+        "wide": {
+          "all-wide": {
+            "native_expression_sha256": {
+              "daft": "379cf126f32fb6554f9d5a19227c5a3ac099003126a430ebd926a8cff82b089b",
+              "polars": "803f3dc9d5d0673abdffc349b6276bea7f4ed7f9505b8380f3847ae710d14075"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_shipdate, l_shipmode, l_partkey, payload_00, payload_01, payload_02, payload_03, payload_04, payload_05, payload_06, payload_07, payload_08, payload_09, payload_10, payload_11, payload_12, payload_13, payload_14, payload_15, payload_16, payload_17, payload_18, payload_19, payload_20, payload_21, payload_22, payload_23, payload_24, payload_25, payload_26, payload_27, payload_28, payload_29, payload_30, payload_31, payload_32, payload_33, payload_34, payload_35, payload_36, payload_37, payload_38, payload_39, payload_40, payload_41, payload_42, payload_43, payload_44, payload_45, payload_46, payload_47, payload_48, payload_49, payload_50, payload_51, payload_52, payload_53, payload_54, payload_55, payload_56, payload_57, payload_58, payload_59, payload_60, payload_61, payload_62, payload_63 FROM bench",
+            "sql_sha256": "a24b7567d1d94c146f5cc6eb42263abc03dc227e048b9d8a95a7757f7c861f2d"
+          },
+          "eq1": {
+            "native_expression_sha256": {
+              "daft": "255203b0564e18e19121ee6798da7ccce2d0187e60c988e0ad8b4193911b4a9d",
+              "polars": "0f0f330073f15849b1b7d0439853dadd8999008e439fa25fa9945b3571d69fa0"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_shipdate, l_shipmode, l_partkey, payload_00, payload_01, payload_02, payload_03, payload_04, payload_05, payload_06, payload_07, payload_08, payload_09, payload_10, payload_11, payload_12, payload_13, payload_14, payload_15, payload_16, payload_17, payload_18, payload_19, payload_20, payload_21, payload_22, payload_23, payload_24, payload_25, payload_26, payload_27, payload_28, payload_29, payload_30, payload_31, payload_32, payload_33, payload_34, payload_35, payload_36, payload_37, payload_38, payload_39, payload_40, payload_41, payload_42, payload_43, payload_44, payload_45, payload_46, payload_47, payload_48, payload_49, payload_50, payload_51, payload_52, payload_53, payload_54, payload_55, payload_56, payload_57, payload_58, payload_59, payload_60, payload_61, payload_62, payload_63 FROM bench WHERE l_shipdate = DATE '1995-03-15'",
+            "sql_sha256": "7cb0075c6b8045134bdbded91476336773507e42e41337b5d430832f70519a37"
+          },
+          "eq2": {
+            "native_expression_sha256": {
+              "daft": "7477bf39a9c8beaf261dfa4d877b7056c4d31a142d49431f4d557686977b2998",
+              "polars": "a51ccb6731d37177d847b65f69b98f539de630ab3f9e60a43639a115e906473a"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_shipdate, l_shipmode, l_partkey, payload_00, payload_01, payload_02, payload_03, payload_04, payload_05, payload_06, payload_07, payload_08, payload_09, payload_10, payload_11, payload_12, payload_13, payload_14, payload_15, payload_16, payload_17, payload_18, payload_19, payload_20, payload_21, payload_22, payload_23, payload_24, payload_25, payload_26, payload_27, payload_28, payload_29, payload_30, payload_31, payload_32, payload_33, payload_34, payload_35, payload_36, payload_37, payload_38, payload_39, payload_40, payload_41, payload_42, payload_43, payload_44, payload_45, payload_46, payload_47, payload_48, payload_49, payload_50, payload_51, payload_52, payload_53, payload_54, payload_55, payload_56, payload_57, payload_58, payload_59, payload_60, payload_61, payload_62, payload_63 FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR'",
+            "sql_sha256": "2fd1903e859929e688a906c0219717cccf59e2cf5c8e5eabb64ed643fa76ebe9"
+          },
+          "eq2-in1": {
+            "native_expression_sha256": {
+              "daft": "72343b79ccb7eacf3c28deca916568ecb4c99bb0ffe0b495e4252b172be208c3",
+              "polars": "a84efde8dbe4dc2122815e435b746b5f7ba352ecdcdf4817e258bc4b77f7b61c"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_shipdate, l_shipmode, l_partkey, payload_00, payload_01, payload_02, payload_03, payload_04, payload_05, payload_06, payload_07, payload_08, payload_09, payload_10, payload_11, payload_12, payload_13, payload_14, payload_15, payload_16, payload_17, payload_18, payload_19, payload_20, payload_21, payload_22, payload_23, payload_24, payload_25, payload_26, payload_27, payload_28, payload_29, payload_30, payload_31, payload_32, payload_33, payload_34, payload_35, payload_36, payload_37, payload_38, payload_39, payload_40, payload_41, payload_42, payload_43, payload_44, payload_45, payload_46, payload_47, payload_48, payload_49, payload_50, payload_51, payload_52, payload_53, payload_54, payload_55, payload_56, payload_57, payload_58, payload_59, payload_60, payload_61, payload_62, payload_63 FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR' AND l_partkey IN (246)",
+            "sql_sha256": "7985eb09e8c5c193f9d00b9173129ce2fb7829c8af87b20176e2085da8e1a0d4"
+          },
+          "eq2-in20": {
+            "native_expression_sha256": {
+              "daft": "6d1d226147b54f8acd0712ed99ded899b345bf54193349f6c0d6978fc3f09914",
+              "polars": "1025dc31014b437e106c89b6f50325fc5bfb3fcc2114060e186786ab0a1009d4"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_shipdate, l_shipmode, l_partkey, payload_00, payload_01, payload_02, payload_03, payload_04, payload_05, payload_06, payload_07, payload_08, payload_09, payload_10, payload_11, payload_12, payload_13, payload_14, payload_15, payload_16, payload_17, payload_18, payload_19, payload_20, payload_21, payload_22, payload_23, payload_24, payload_25, payload_26, payload_27, payload_28, payload_29, payload_30, payload_31, payload_32, payload_33, payload_34, payload_35, payload_36, payload_37, payload_38, payload_39, payload_40, payload_41, payload_42, payload_43, payload_44, payload_45, payload_46, payload_47, payload_48, payload_49, payload_50, payload_51, payload_52, payload_53, payload_54, payload_55, payload_56, payload_57, payload_58, payload_59, payload_60, payload_61, payload_62, payload_63 FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR' AND l_partkey IN (246, 371, 612, 648, 1906)",
+            "sql_sha256": "f6aaac4c4395d3b095c80367191396aca4bec7b03de2d42cb828e9a3bdc8c791"
+          },
+          "eq2-in20-keys": {
+            "native_expression_sha256": {
+              "daft": "dd086d37ad815db8fa223b5ca611dbe6c67ba7079ec8efa029011f9f5ad5b6ad",
+              "polars": "cecc5a1ad1f7db3baf4983475bed48f2cf42e199c493c9ed9686647303071704"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR' AND l_partkey IN (246, 371, 612, 648, 1906)",
+            "sql_sha256": "7fee9338fffd042b3d186b4d7011d333bf2c7bfcc863f8893bf3fef661c75895"
+          }
+        }
+      },
+      "source_rows": 60175
+    },
+    "1": {
+      "in_literals": [
+        3023,
+        3394,
+        3827,
+        5599,
+        6525,
+        6659,
+        6820,
+        8647,
+        8701,
+        8807,
+        10347,
+        10359,
+        11233,
+        11600,
+        12194,
+        12829,
+        13125,
+        14494,
+        14903,
+        15875
+      ],
+      "literal_provenance": {
+        "generator": {
+          "arrow": "58.4.0",
+          "datafusion_sort": "54.1.0",
+          "executable_sha256": "750e500a3c697eb7b17d1d612c264ce0edc7d31b3a4b1e1bbe2013231e1f34ac",
+          "lockfile_sha256": "dbb91313507b5ec682ca5fd585957599ba4a2501b8281eab38b312f064603da0",
+          "parquet": "58.4.0",
+          "source_sha256": "bc69b138e49c2807293f3705a43737cf9eb7411b2e5599487eff759e424777ee",
+          "target": "x86_64-linux",
+          "tpchgen": "3.0.0",
+          "tpchgen_git": "4f6bf4c5ab40511c8fdef5888fc8d022e5e546d7"
+        },
+        "manifest_sha256": "e8a21355ba45dd7b2c6fb5fc7e8566e838913cd956c3b1606196546fcbe64b11",
+        "profile": "development",
+        "source_objects_sha256": "fc2cab0b4d4d1ed1e0623f61dc339cd6f50398a50453aa22fa55317ea0155cd9"
+      },
+      "queries": {
+        "li": {
+          "all-full": {
+            "native_expression_sha256": {
+              "daft": "894759a96d8e5b98eda65423452ae4c8c4ee0f942ef7c97bcd6691bb23e4423e",
+              "polars": "348ce6f1bc8395a2cd64557d56128f1053049aef2066ac8e3e0e0a7b4be18648"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench",
+            "sql_sha256": "1dc353297dac1e9b188a617e856719b53e90da25f0058e62e3026f10e437cd12"
+          },
+          "all-keys": {
+            "native_expression_sha256": {
+              "daft": "4645b67aed136e86b51e89f911e26a74e21731a14751361e2d6879636c00b33e",
+              "polars": "f2b9fef42151fe81d7a80ed3068f2019033c43954adc64ffd452a1a1fd2c62d8"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber FROM bench",
+            "sql_sha256": "8b6a34228022de73ca66c81eea4da055afa4b888a2bdbd4f7c2d4342211a82d9"
+          },
+          "date7-full": {
+            "native_expression_sha256": {
+              "daft": "d2d19eaa344b330bea85bd71b4de8ce131e9675b24f798e0fa6e9aa839a7843a",
+              "polars": "5da405bc724bb4eee4f4536b19e2fb3b8e04a74f4153d0e17782b4057ddb543b"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench WHERE l_shipdate >= DATE '1995-03-15' AND l_shipdate < DATE '1995-03-22'",
+            "sql_sha256": "e179aba5d1d8b7a0b0cd62adfb81eb979a627b6443b1c02acf228f6865fe52e4"
+          },
+          "date7-keys": {
+            "native_expression_sha256": {
+              "daft": "a73414bdf1ec01bb4366babb7ccf9ea42089a16b2fc851a5400faf80c648167d",
+              "polars": "cf960a01f854c50bceab13b9dee71cd3721f84c14268ba4ad947a8d968f5284b"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber FROM bench WHERE l_shipdate >= DATE '1995-03-15' AND l_shipdate < DATE '1995-03-22'",
+            "sql_sha256": "ca17dccd180f4eaa564eaed79a8ac3c040b7ab47329dd7e59ea8add810ff9e77"
+          },
+          "date7-limit": {
+            "native_expression_sha256": {
+              "daft": "ccd3023474c30f9966472f413e125969e3f772839de4075e9b99df790fc87edf",
+              "polars": "8e43af9c41c25f5c715f850a88a6931a80b5c6873d4bca1fae17710617696b85"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench WHERE l_shipdate >= DATE '1995-03-15' AND l_shipdate < DATE '1995-03-22' LIMIT 100",
+            "sql_sha256": "8757c653777e20b5d4b400652aa07f18ba3c4346215ba979725b677759a1ba2c"
+          },
+          "empty": {
+            "native_expression_sha256": {
+              "daft": "0d5473002310e9a16788b2286841b2b8ad99e23fbfca4f1127b8f775d4106791",
+              "polars": "dbd5e69a0decdd60fe06348539fef55fe7868d417806eccf71c129edda1900c5"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench WHERE l_shipdate < DATE '1990-01-01'",
+            "sql_sha256": "33885de3e118419a0fd4d4909c41eac9f9e643ee74e8e403b7235719114ef3a2"
+          },
+          "eq2-in1": {
+            "native_expression_sha256": {
+              "daft": "e4eb21a4307e3115985d66fba3b033ecf94cbd150eb6a976d7a26d0e043cfb1b",
+              "polars": "b8f043af3d2557d1a3c01bf9f824cc8c447aa88d662e0247aa351812b17ff8a4"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR' AND l_partkey IN (3023)",
+            "sql_sha256": "1bb5628eb91387928129e297b522ab2665505a695207de1e45cc07d84378bf7f"
+          },
+          "eq2-in20": {
+            "native_expression_sha256": {
+              "daft": "ce3f6ee231f9e6aaff086d44931be9d28421cb6dde932aeefa1c7ecc4f7c286c",
+              "polars": "fed0f9736eace8d84179a85cc5dec16297dc464223503caa24c5d2bbd71df80e"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR' AND l_partkey IN (3023, 3394, 3827, 5599, 6525, 6659, 6820, 8647, 8701, 8807, 10347, 10359, 11233, 11600, 12194, 12829, 13125, 14494, 14903, 15875)",
+            "sql_sha256": "981d54d5ec8b011735be8e3e73c9c9c1e923f3c8a1d388133a308cd48f792c1f"
+          },
+          "q6-scan": {
+            "native_expression_sha256": {
+              "daft": "9d4fb5fa851fa944d520be8cb3890df144dca75238b442a544f9e974673c69a2",
+              "polars": "58649814c58b7ff1357d4a80670a8775d40630b88b7ad593edd0b227b4115caa"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_extendedprice, l_discount FROM bench WHERE l_shipdate >= DATE '1994-01-01' AND l_shipdate < DATE '1995-01-01' AND l_discount BETWEEN CAST('0.05' AS DECIMAL(15,2)) AND CAST('0.07' AS DECIMAL(15,2)) AND l_quantity < CAST('24.00' AS DECIMAL(15,2))",
+            "sql_sha256": "7d275e26264f889108da7708778852e66f75bddc8186f39a20cb0bde3b11142e"
+          }
+        },
+        "wide": {
+          "all-wide": {
+            "native_expression_sha256": {
+              "daft": "379cf126f32fb6554f9d5a19227c5a3ac099003126a430ebd926a8cff82b089b",
+              "polars": "803f3dc9d5d0673abdffc349b6276bea7f4ed7f9505b8380f3847ae710d14075"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_shipdate, l_shipmode, l_partkey, payload_00, payload_01, payload_02, payload_03, payload_04, payload_05, payload_06, payload_07, payload_08, payload_09, payload_10, payload_11, payload_12, payload_13, payload_14, payload_15, payload_16, payload_17, payload_18, payload_19, payload_20, payload_21, payload_22, payload_23, payload_24, payload_25, payload_26, payload_27, payload_28, payload_29, payload_30, payload_31, payload_32, payload_33, payload_34, payload_35, payload_36, payload_37, payload_38, payload_39, payload_40, payload_41, payload_42, payload_43, payload_44, payload_45, payload_46, payload_47, payload_48, payload_49, payload_50, payload_51, payload_52, payload_53, payload_54, payload_55, payload_56, payload_57, payload_58, payload_59, payload_60, payload_61, payload_62, payload_63 FROM bench",
+            "sql_sha256": "a24b7567d1d94c146f5cc6eb42263abc03dc227e048b9d8a95a7757f7c861f2d"
+          },
+          "eq1": {
+            "native_expression_sha256": {
+              "daft": "255203b0564e18e19121ee6798da7ccce2d0187e60c988e0ad8b4193911b4a9d",
+              "polars": "0f0f330073f15849b1b7d0439853dadd8999008e439fa25fa9945b3571d69fa0"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_shipdate, l_shipmode, l_partkey, payload_00, payload_01, payload_02, payload_03, payload_04, payload_05, payload_06, payload_07, payload_08, payload_09, payload_10, payload_11, payload_12, payload_13, payload_14, payload_15, payload_16, payload_17, payload_18, payload_19, payload_20, payload_21, payload_22, payload_23, payload_24, payload_25, payload_26, payload_27, payload_28, payload_29, payload_30, payload_31, payload_32, payload_33, payload_34, payload_35, payload_36, payload_37, payload_38, payload_39, payload_40, payload_41, payload_42, payload_43, payload_44, payload_45, payload_46, payload_47, payload_48, payload_49, payload_50, payload_51, payload_52, payload_53, payload_54, payload_55, payload_56, payload_57, payload_58, payload_59, payload_60, payload_61, payload_62, payload_63 FROM bench WHERE l_shipdate = DATE '1995-03-15'",
+            "sql_sha256": "7cb0075c6b8045134bdbded91476336773507e42e41337b5d430832f70519a37"
+          },
+          "eq2": {
+            "native_expression_sha256": {
+              "daft": "7477bf39a9c8beaf261dfa4d877b7056c4d31a142d49431f4d557686977b2998",
+              "polars": "a51ccb6731d37177d847b65f69b98f539de630ab3f9e60a43639a115e906473a"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_shipdate, l_shipmode, l_partkey, payload_00, payload_01, payload_02, payload_03, payload_04, payload_05, payload_06, payload_07, payload_08, payload_09, payload_10, payload_11, payload_12, payload_13, payload_14, payload_15, payload_16, payload_17, payload_18, payload_19, payload_20, payload_21, payload_22, payload_23, payload_24, payload_25, payload_26, payload_27, payload_28, payload_29, payload_30, payload_31, payload_32, payload_33, payload_34, payload_35, payload_36, payload_37, payload_38, payload_39, payload_40, payload_41, payload_42, payload_43, payload_44, payload_45, payload_46, payload_47, payload_48, payload_49, payload_50, payload_51, payload_52, payload_53, payload_54, payload_55, payload_56, payload_57, payload_58, payload_59, payload_60, payload_61, payload_62, payload_63 FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR'",
+            "sql_sha256": "2fd1903e859929e688a906c0219717cccf59e2cf5c8e5eabb64ed643fa76ebe9"
+          },
+          "eq2-in1": {
+            "native_expression_sha256": {
+              "daft": "50092f394c01f48cd4467a9b7f7de1b8b7500d43d7980a7cdd02072a083ec714",
+              "polars": "6403666b0051b8ac06c402fa24f73cdc7c1042af3770c131d6ffc6f5baf8d33d"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_shipdate, l_shipmode, l_partkey, payload_00, payload_01, payload_02, payload_03, payload_04, payload_05, payload_06, payload_07, payload_08, payload_09, payload_10, payload_11, payload_12, payload_13, payload_14, payload_15, payload_16, payload_17, payload_18, payload_19, payload_20, payload_21, payload_22, payload_23, payload_24, payload_25, payload_26, payload_27, payload_28, payload_29, payload_30, payload_31, payload_32, payload_33, payload_34, payload_35, payload_36, payload_37, payload_38, payload_39, payload_40, payload_41, payload_42, payload_43, payload_44, payload_45, payload_46, payload_47, payload_48, payload_49, payload_50, payload_51, payload_52, payload_53, payload_54, payload_55, payload_56, payload_57, payload_58, payload_59, payload_60, payload_61, payload_62, payload_63 FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR' AND l_partkey IN (3023)",
+            "sql_sha256": "7525a8d16f2f5e19b4cda48aaae9efce76c960502bb537292a06b011e19ab203"
+          },
+          "eq2-in20": {
+            "native_expression_sha256": {
+              "daft": "5ddcb871a688ece12d3d2d64bb83790403ba8a719622c70ad848b89ac2e12190",
+              "polars": "13bd56f8c9516f632e5ec25d4bc9c80c5802cf098289bacff3b975521e98c698"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_shipdate, l_shipmode, l_partkey, payload_00, payload_01, payload_02, payload_03, payload_04, payload_05, payload_06, payload_07, payload_08, payload_09, payload_10, payload_11, payload_12, payload_13, payload_14, payload_15, payload_16, payload_17, payload_18, payload_19, payload_20, payload_21, payload_22, payload_23, payload_24, payload_25, payload_26, payload_27, payload_28, payload_29, payload_30, payload_31, payload_32, payload_33, payload_34, payload_35, payload_36, payload_37, payload_38, payload_39, payload_40, payload_41, payload_42, payload_43, payload_44, payload_45, payload_46, payload_47, payload_48, payload_49, payload_50, payload_51, payload_52, payload_53, payload_54, payload_55, payload_56, payload_57, payload_58, payload_59, payload_60, payload_61, payload_62, payload_63 FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR' AND l_partkey IN (3023, 3394, 3827, 5599, 6525, 6659, 6820, 8647, 8701, 8807, 10347, 10359, 11233, 11600, 12194, 12829, 13125, 14494, 14903, 15875)",
+            "sql_sha256": "427c6e503d0508f9676e7433de1207ced1e3680300ee78dbf5f6130af9756636"
+          },
+          "eq2-in20-keys": {
+            "native_expression_sha256": {
+              "daft": "87ebf68058587d2aa4085c6b88c4ce8aeeb2720ff94152cffc574e603aa96ea3",
+              "polars": "8f0c7a97b47edc5070fb51e002d276ffdef6e0d496d744144e96bb0a974dc425"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR' AND l_partkey IN (3023, 3394, 3827, 5599, 6525, 6659, 6820, 8647, 8701, 8807, 10347, 10359, 11233, 11600, 12194, 12829, 13125, 14494, 14903, 15875)",
+            "sql_sha256": "ed320f71fefe63c29cb449fc9de733165398abcb5c1baeae7ea87e4c918ebafc"
+          }
+        }
+      },
+      "source_rows": 6001215
+    },
+    "10": {
+      "in_literals": [
+        1987,
+        4552,
+        4698,
+        4916,
+        6102,
+        6163,
+        6743,
+        7170,
+        7251,
+        8775,
+        8792,
+        9016,
+        10055,
+        10619,
+        10985,
+        12328,
+        13396,
+        14541,
+        14941,
+        15295
+      ],
+      "literal_provenance": {
+        "generator": {
+          "arrow": "58.4.0",
+          "datafusion_sort": "54.1.0",
+          "executable_sha256": "c2e9db3255a45eb2979646aeee51379527220b85a321f6836cf60633b8f9049e",
+          "lockfile_sha256": "564fb9f39e8c13fbd19a22ea449c1a8652a0facaef13bb438777a13fb691fa1c",
+          "parquet": "58.4.0",
+          "source_sha256": "b05f95da47a80c803475276fd11861e4fd4065e2289d328229dbf72e66e794ed",
+          "target": "x86_64-linux",
+          "tpchgen": "3.0.0",
+          "tpchgen_git": "4f6bf4c5ab40511c8fdef5888fc8d022e5e546d7"
+        },
+        "manifest_sha256": "140a2f1399b54369caf107e1d857bfb0c4a02cf47690ed0c2c681815a90af305",
+        "profile": "report",
+        "source_objects_sha256": "bcd76333811c967c64c4df32d87d9145b0f71472f2ebafe14c09ebbfd3fac96d"
+      },
+      "queries": {
+        "li": {
+          "all-full": {
+            "native_expression_sha256": {
+              "daft": "894759a96d8e5b98eda65423452ae4c8c4ee0f942ef7c97bcd6691bb23e4423e",
+              "polars": "348ce6f1bc8395a2cd64557d56128f1053049aef2066ac8e3e0e0a7b4be18648"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench",
+            "sql_sha256": "1dc353297dac1e9b188a617e856719b53e90da25f0058e62e3026f10e437cd12"
+          },
+          "all-keys": {
+            "native_expression_sha256": {
+              "daft": "4645b67aed136e86b51e89f911e26a74e21731a14751361e2d6879636c00b33e",
+              "polars": "f2b9fef42151fe81d7a80ed3068f2019033c43954adc64ffd452a1a1fd2c62d8"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber FROM bench",
+            "sql_sha256": "8b6a34228022de73ca66c81eea4da055afa4b888a2bdbd4f7c2d4342211a82d9"
+          },
+          "date7-full": {
+            "native_expression_sha256": {
+              "daft": "d2d19eaa344b330bea85bd71b4de8ce131e9675b24f798e0fa6e9aa839a7843a",
+              "polars": "5da405bc724bb4eee4f4536b19e2fb3b8e04a74f4153d0e17782b4057ddb543b"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench WHERE l_shipdate >= DATE '1995-03-15' AND l_shipdate < DATE '1995-03-22'",
+            "sql_sha256": "e179aba5d1d8b7a0b0cd62adfb81eb979a627b6443b1c02acf228f6865fe52e4"
+          },
+          "date7-keys": {
+            "native_expression_sha256": {
+              "daft": "a73414bdf1ec01bb4366babb7ccf9ea42089a16b2fc851a5400faf80c648167d",
+              "polars": "cf960a01f854c50bceab13b9dee71cd3721f84c14268ba4ad947a8d968f5284b"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber FROM bench WHERE l_shipdate >= DATE '1995-03-15' AND l_shipdate < DATE '1995-03-22'",
+            "sql_sha256": "ca17dccd180f4eaa564eaed79a8ac3c040b7ab47329dd7e59ea8add810ff9e77"
+          },
+          "date7-limit": {
+            "native_expression_sha256": {
+              "daft": "ccd3023474c30f9966472f413e125969e3f772839de4075e9b99df790fc87edf",
+              "polars": "8e43af9c41c25f5c715f850a88a6931a80b5c6873d4bca1fae17710617696b85"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench WHERE l_shipdate >= DATE '1995-03-15' AND l_shipdate < DATE '1995-03-22' LIMIT 100",
+            "sql_sha256": "8757c653777e20b5d4b400652aa07f18ba3c4346215ba979725b677759a1ba2c"
+          },
+          "empty": {
+            "native_expression_sha256": {
+              "daft": "0d5473002310e9a16788b2286841b2b8ad99e23fbfca4f1127b8f775d4106791",
+              "polars": "dbd5e69a0decdd60fe06348539fef55fe7868d417806eccf71c129edda1900c5"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench WHERE l_shipdate < DATE '1990-01-01'",
+            "sql_sha256": "33885de3e118419a0fd4d4909c41eac9f9e643ee74e8e403b7235719114ef3a2"
+          },
+          "eq2-in1": {
+            "native_expression_sha256": {
+              "daft": "ff637ebd9f5f57a36825e28a26e518ed90ff18427a56e4d2f3159ddad40f3cb1",
+              "polars": "ce9f7445ee32cbd06d6a60f90d27385870c90bf3fded29a189b35b72cf254ab4"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR' AND l_partkey IN (1987)",
+            "sql_sha256": "0fb8a158f4eca4ec62387350e2bfd26784b011fa9f244d099f7332bc2fb7a41f"
+          },
+          "eq2-in20": {
+            "native_expression_sha256": {
+              "daft": "ee169e615574107ffd924b59d52ca66f14b1829bfbef56641871ad89b41ceb18",
+              "polars": "83aeb749ff99ff48e7e10c332604f3ac3614cedf6f7330659092c1ac0e471675"
+            },
+            "sql": "SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate, l_shipinstruct, l_shipmode, l_comment FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR' AND l_partkey IN (1987, 4552, 4698, 4916, 6102, 6163, 6743, 7170, 7251, 8775, 8792, 9016, 10055, 10619, 10985, 12328, 13396, 14541, 14941, 15295)",
+            "sql_sha256": "2aeb2f0e8fc2bc79297b8219ad2762c559878625994a02a94778d70405128597"
+          },
+          "q6-scan": {
+            "native_expression_sha256": {
+              "daft": "9d4fb5fa851fa944d520be8cb3890df144dca75238b442a544f9e974673c69a2",
+              "polars": "58649814c58b7ff1357d4a80670a8775d40630b88b7ad593edd0b227b4115caa"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_extendedprice, l_discount FROM bench WHERE l_shipdate >= DATE '1994-01-01' AND l_shipdate < DATE '1995-01-01' AND l_discount BETWEEN CAST('0.05' AS DECIMAL(15,2)) AND CAST('0.07' AS DECIMAL(15,2)) AND l_quantity < CAST('24.00' AS DECIMAL(15,2))",
+            "sql_sha256": "7d275e26264f889108da7708778852e66f75bddc8186f39a20cb0bde3b11142e"
+          }
+        },
+        "wide": {
+          "all-wide": {
+            "native_expression_sha256": {
+              "daft": "379cf126f32fb6554f9d5a19227c5a3ac099003126a430ebd926a8cff82b089b",
+              "polars": "803f3dc9d5d0673abdffc349b6276bea7f4ed7f9505b8380f3847ae710d14075"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_shipdate, l_shipmode, l_partkey, payload_00, payload_01, payload_02, payload_03, payload_04, payload_05, payload_06, payload_07, payload_08, payload_09, payload_10, payload_11, payload_12, payload_13, payload_14, payload_15, payload_16, payload_17, payload_18, payload_19, payload_20, payload_21, payload_22, payload_23, payload_24, payload_25, payload_26, payload_27, payload_28, payload_29, payload_30, payload_31, payload_32, payload_33, payload_34, payload_35, payload_36, payload_37, payload_38, payload_39, payload_40, payload_41, payload_42, payload_43, payload_44, payload_45, payload_46, payload_47, payload_48, payload_49, payload_50, payload_51, payload_52, payload_53, payload_54, payload_55, payload_56, payload_57, payload_58, payload_59, payload_60, payload_61, payload_62, payload_63 FROM bench",
+            "sql_sha256": "a24b7567d1d94c146f5cc6eb42263abc03dc227e048b9d8a95a7757f7c861f2d"
+          },
+          "eq1": {
+            "native_expression_sha256": {
+              "daft": "255203b0564e18e19121ee6798da7ccce2d0187e60c988e0ad8b4193911b4a9d",
+              "polars": "0f0f330073f15849b1b7d0439853dadd8999008e439fa25fa9945b3571d69fa0"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_shipdate, l_shipmode, l_partkey, payload_00, payload_01, payload_02, payload_03, payload_04, payload_05, payload_06, payload_07, payload_08, payload_09, payload_10, payload_11, payload_12, payload_13, payload_14, payload_15, payload_16, payload_17, payload_18, payload_19, payload_20, payload_21, payload_22, payload_23, payload_24, payload_25, payload_26, payload_27, payload_28, payload_29, payload_30, payload_31, payload_32, payload_33, payload_34, payload_35, payload_36, payload_37, payload_38, payload_39, payload_40, payload_41, payload_42, payload_43, payload_44, payload_45, payload_46, payload_47, payload_48, payload_49, payload_50, payload_51, payload_52, payload_53, payload_54, payload_55, payload_56, payload_57, payload_58, payload_59, payload_60, payload_61, payload_62, payload_63 FROM bench WHERE l_shipdate = DATE '1995-03-15'",
+            "sql_sha256": "7cb0075c6b8045134bdbded91476336773507e42e41337b5d430832f70519a37"
+          },
+          "eq2": {
+            "native_expression_sha256": {
+              "daft": "7477bf39a9c8beaf261dfa4d877b7056c4d31a142d49431f4d557686977b2998",
+              "polars": "a51ccb6731d37177d847b65f69b98f539de630ab3f9e60a43639a115e906473a"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_shipdate, l_shipmode, l_partkey, payload_00, payload_01, payload_02, payload_03, payload_04, payload_05, payload_06, payload_07, payload_08, payload_09, payload_10, payload_11, payload_12, payload_13, payload_14, payload_15, payload_16, payload_17, payload_18, payload_19, payload_20, payload_21, payload_22, payload_23, payload_24, payload_25, payload_26, payload_27, payload_28, payload_29, payload_30, payload_31, payload_32, payload_33, payload_34, payload_35, payload_36, payload_37, payload_38, payload_39, payload_40, payload_41, payload_42, payload_43, payload_44, payload_45, payload_46, payload_47, payload_48, payload_49, payload_50, payload_51, payload_52, payload_53, payload_54, payload_55, payload_56, payload_57, payload_58, payload_59, payload_60, payload_61, payload_62, payload_63 FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR'",
+            "sql_sha256": "2fd1903e859929e688a906c0219717cccf59e2cf5c8e5eabb64ed643fa76ebe9"
+          },
+          "eq2-in1": {
+            "native_expression_sha256": {
+              "daft": "d84af83eaa56873d40f0753067efa3581bd3b93a97dbedd797092fa326f15065",
+              "polars": "5078bc819eb67a66f6a9cdf654be1a36222f6f28c08442753f76570f127ca43a"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_shipdate, l_shipmode, l_partkey, payload_00, payload_01, payload_02, payload_03, payload_04, payload_05, payload_06, payload_07, payload_08, payload_09, payload_10, payload_11, payload_12, payload_13, payload_14, payload_15, payload_16, payload_17, payload_18, payload_19, payload_20, payload_21, payload_22, payload_23, payload_24, payload_25, payload_26, payload_27, payload_28, payload_29, payload_30, payload_31, payload_32, payload_33, payload_34, payload_35, payload_36, payload_37, payload_38, payload_39, payload_40, payload_41, payload_42, payload_43, payload_44, payload_45, payload_46, payload_47, payload_48, payload_49, payload_50, payload_51, payload_52, payload_53, payload_54, payload_55, payload_56, payload_57, payload_58, payload_59, payload_60, payload_61, payload_62, payload_63 FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR' AND l_partkey IN (1987)",
+            "sql_sha256": "93fbc0b99b15622f2f3282c0ba9a1dee472c6c95fe078f8cf5eaa55c709f82a2"
+          },
+          "eq2-in20": {
+            "native_expression_sha256": {
+              "daft": "473d8d6224f4a2994012de6cf2b2f4d4ffc943adac9e6c356ba086bd9e586e50",
+              "polars": "e9f4fd9156aeae495795d60ec4f6890c1725d0a8da9e0280bbd33ce98b5d269d"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber, l_shipdate, l_shipmode, l_partkey, payload_00, payload_01, payload_02, payload_03, payload_04, payload_05, payload_06, payload_07, payload_08, payload_09, payload_10, payload_11, payload_12, payload_13, payload_14, payload_15, payload_16, payload_17, payload_18, payload_19, payload_20, payload_21, payload_22, payload_23, payload_24, payload_25, payload_26, payload_27, payload_28, payload_29, payload_30, payload_31, payload_32, payload_33, payload_34, payload_35, payload_36, payload_37, payload_38, payload_39, payload_40, payload_41, payload_42, payload_43, payload_44, payload_45, payload_46, payload_47, payload_48, payload_49, payload_50, payload_51, payload_52, payload_53, payload_54, payload_55, payload_56, payload_57, payload_58, payload_59, payload_60, payload_61, payload_62, payload_63 FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR' AND l_partkey IN (1987, 4552, 4698, 4916, 6102, 6163, 6743, 7170, 7251, 8775, 8792, 9016, 10055, 10619, 10985, 12328, 13396, 14541, 14941, 15295)",
+            "sql_sha256": "ab0d23411b5b7e9462ea5d5b233f988494f0ff0f9b9c718f3e7f67fc6016552e"
+          },
+          "eq2-in20-keys": {
+            "native_expression_sha256": {
+              "daft": "f2d41f792177aa44bbce98d4da6a189e2b39d5f879995a4bcdd37037112ddd06",
+              "polars": "acac14748aae04ccac285662c8382002aac81e0a908083699bbac4b1e0d2d679"
+            },
+            "sql": "SELECT l_orderkey, l_linenumber FROM bench WHERE l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR' AND l_partkey IN (1987, 4552, 4698, 4916, 6102, 6163, 6743, 7170, 7251, 8775, 8792, 9016, 10055, 10619, 10985, 12328, 13396, 14541, 14941, 15295)",
+            "sql_sha256": "ee3b9ad6fde907807f6ce8683c718e0e78904ef1839e3db542f72348926ba7ca"
+          }
+        }
+      },
+      "source_rows": 59986052
+    }
+  },
+  "shapes": {
+    "li": {
+      "all-full": {
+        "limit": null,
+        "predicate": "all",
+        "predicate_columns": [],
+        "projection": [
+          "l_orderkey",
+          "l_partkey",
+          "l_suppkey",
+          "l_linenumber",
+          "l_quantity",
+          "l_extendedprice",
+          "l_discount",
+          "l_tax",
+          "l_returnflag",
+          "l_linestatus",
+          "l_shipdate",
+          "l_commitdate",
+          "l_receiptdate",
+          "l_shipinstruct",
+          "l_shipmode",
+          "l_comment"
+        ]
+      },
+      "all-keys": {
+        "limit": null,
+        "predicate": "all",
+        "predicate_columns": [],
+        "projection": [
+          "l_orderkey",
+          "l_linenumber"
+        ]
+      },
+      "date7-full": {
+        "limit": null,
+        "predicate": "date7",
+        "predicate_columns": [
+          "l_shipdate"
+        ],
+        "projection": [
+          "l_orderkey",
+          "l_partkey",
+          "l_suppkey",
+          "l_linenumber",
+          "l_quantity",
+          "l_extendedprice",
+          "l_discount",
+          "l_tax",
+          "l_returnflag",
+          "l_linestatus",
+          "l_shipdate",
+          "l_commitdate",
+          "l_receiptdate",
+          "l_shipinstruct",
+          "l_shipmode",
+          "l_comment"
+        ]
+      },
+      "date7-keys": {
+        "limit": null,
+        "predicate": "date7",
+        "predicate_columns": [
+          "l_shipdate"
+        ],
+        "projection": [
+          "l_orderkey",
+          "l_linenumber"
+        ]
+      },
+      "date7-limit": {
+        "limit": 100,
+        "predicate": "date7",
+        "predicate_columns": [
+          "l_shipdate"
+        ],
+        "projection": [
+          "l_orderkey",
+          "l_partkey",
+          "l_suppkey",
+          "l_linenumber",
+          "l_quantity",
+          "l_extendedprice",
+          "l_discount",
+          "l_tax",
+          "l_returnflag",
+          "l_linestatus",
+          "l_shipdate",
+          "l_commitdate",
+          "l_receiptdate",
+          "l_shipinstruct",
+          "l_shipmode",
+          "l_comment"
+        ]
+      },
+      "empty": {
+        "limit": null,
+        "predicate": "empty",
+        "predicate_columns": [
+          "l_shipdate"
+        ],
+        "projection": [
+          "l_orderkey",
+          "l_partkey",
+          "l_suppkey",
+          "l_linenumber",
+          "l_quantity",
+          "l_extendedprice",
+          "l_discount",
+          "l_tax",
+          "l_returnflag",
+          "l_linestatus",
+          "l_shipdate",
+          "l_commitdate",
+          "l_receiptdate",
+          "l_shipinstruct",
+          "l_shipmode",
+          "l_comment"
+        ]
+      },
+      "eq2-in1": {
+        "limit": null,
+        "predicate": "eq2-in1",
+        "predicate_columns": [
+          "l_shipdate",
+          "l_shipmode",
+          "l_partkey"
+        ],
+        "projection": [
+          "l_orderkey",
+          "l_partkey",
+          "l_suppkey",
+          "l_linenumber",
+          "l_quantity",
+          "l_extendedprice",
+          "l_discount",
+          "l_tax",
+          "l_returnflag",
+          "l_linestatus",
+          "l_shipdate",
+          "l_commitdate",
+          "l_receiptdate",
+          "l_shipinstruct",
+          "l_shipmode",
+          "l_comment"
+        ]
+      },
+      "eq2-in20": {
+        "limit": null,
+        "predicate": "eq2-in20",
+        "predicate_columns": [
+          "l_shipdate",
+          "l_shipmode",
+          "l_partkey"
+        ],
+        "projection": [
+          "l_orderkey",
+          "l_partkey",
+          "l_suppkey",
+          "l_linenumber",
+          "l_quantity",
+          "l_extendedprice",
+          "l_discount",
+          "l_tax",
+          "l_returnflag",
+          "l_linestatus",
+          "l_shipdate",
+          "l_commitdate",
+          "l_receiptdate",
+          "l_shipinstruct",
+          "l_shipmode",
+          "l_comment"
+        ]
+      },
+      "q6-scan": {
+        "limit": null,
+        "predicate": "q6",
+        "predicate_columns": [
+          "l_shipdate",
+          "l_discount",
+          "l_quantity"
+        ],
+        "projection": [
+          "l_orderkey",
+          "l_linenumber",
+          "l_extendedprice",
+          "l_discount"
+        ]
+      }
+    },
+    "wide": {
+      "all-wide": {
+        "limit": null,
+        "predicate": "all",
+        "predicate_columns": [],
+        "projection": [
+          "l_orderkey",
+          "l_linenumber",
+          "l_shipdate",
+          "l_shipmode",
+          "l_partkey",
+          "payload_00",
+          "payload_01",
+          "payload_02",
+          "payload_03",
+          "payload_04",
+          "payload_05",
+          "payload_06",
+          "payload_07",
+          "payload_08",
+          "payload_09",
+          "payload_10",
+          "payload_11",
+          "payload_12",
+          "payload_13",
+          "payload_14",
+          "payload_15",
+          "payload_16",
+          "payload_17",
+          "payload_18",
+          "payload_19",
+          "payload_20",
+          "payload_21",
+          "payload_22",
+          "payload_23",
+          "payload_24",
+          "payload_25",
+          "payload_26",
+          "payload_27",
+          "payload_28",
+          "payload_29",
+          "payload_30",
+          "payload_31",
+          "payload_32",
+          "payload_33",
+          "payload_34",
+          "payload_35",
+          "payload_36",
+          "payload_37",
+          "payload_38",
+          "payload_39",
+          "payload_40",
+          "payload_41",
+          "payload_42",
+          "payload_43",
+          "payload_44",
+          "payload_45",
+          "payload_46",
+          "payload_47",
+          "payload_48",
+          "payload_49",
+          "payload_50",
+          "payload_51",
+          "payload_52",
+          "payload_53",
+          "payload_54",
+          "payload_55",
+          "payload_56",
+          "payload_57",
+          "payload_58",
+          "payload_59",
+          "payload_60",
+          "payload_61",
+          "payload_62",
+          "payload_63"
+        ]
+      },
+      "eq1": {
+        "limit": null,
+        "predicate": "eq1",
+        "predicate_columns": [
+          "l_shipdate"
+        ],
+        "projection": [
+          "l_orderkey",
+          "l_linenumber",
+          "l_shipdate",
+          "l_shipmode",
+          "l_partkey",
+          "payload_00",
+          "payload_01",
+          "payload_02",
+          "payload_03",
+          "payload_04",
+          "payload_05",
+          "payload_06",
+          "payload_07",
+          "payload_08",
+          "payload_09",
+          "payload_10",
+          "payload_11",
+          "payload_12",
+          "payload_13",
+          "payload_14",
+          "payload_15",
+          "payload_16",
+          "payload_17",
+          "payload_18",
+          "payload_19",
+          "payload_20",
+          "payload_21",
+          "payload_22",
+          "payload_23",
+          "payload_24",
+          "payload_25",
+          "payload_26",
+          "payload_27",
+          "payload_28",
+          "payload_29",
+          "payload_30",
+          "payload_31",
+          "payload_32",
+          "payload_33",
+          "payload_34",
+          "payload_35",
+          "payload_36",
+          "payload_37",
+          "payload_38",
+          "payload_39",
+          "payload_40",
+          "payload_41",
+          "payload_42",
+          "payload_43",
+          "payload_44",
+          "payload_45",
+          "payload_46",
+          "payload_47",
+          "payload_48",
+          "payload_49",
+          "payload_50",
+          "payload_51",
+          "payload_52",
+          "payload_53",
+          "payload_54",
+          "payload_55",
+          "payload_56",
+          "payload_57",
+          "payload_58",
+          "payload_59",
+          "payload_60",
+          "payload_61",
+          "payload_62",
+          "payload_63"
+        ]
+      },
+      "eq2": {
+        "limit": null,
+        "predicate": "eq2",
+        "predicate_columns": [
+          "l_shipdate",
+          "l_shipmode"
+        ],
+        "projection": [
+          "l_orderkey",
+          "l_linenumber",
+          "l_shipdate",
+          "l_shipmode",
+          "l_partkey",
+          "payload_00",
+          "payload_01",
+          "payload_02",
+          "payload_03",
+          "payload_04",
+          "payload_05",
+          "payload_06",
+          "payload_07",
+          "payload_08",
+          "payload_09",
+          "payload_10",
+          "payload_11",
+          "payload_12",
+          "payload_13",
+          "payload_14",
+          "payload_15",
+          "payload_16",
+          "payload_17",
+          "payload_18",
+          "payload_19",
+          "payload_20",
+          "payload_21",
+          "payload_22",
+          "payload_23",
+          "payload_24",
+          "payload_25",
+          "payload_26",
+          "payload_27",
+          "payload_28",
+          "payload_29",
+          "payload_30",
+          "payload_31",
+          "payload_32",
+          "payload_33",
+          "payload_34",
+          "payload_35",
+          "payload_36",
+          "payload_37",
+          "payload_38",
+          "payload_39",
+          "payload_40",
+          "payload_41",
+          "payload_42",
+          "payload_43",
+          "payload_44",
+          "payload_45",
+          "payload_46",
+          "payload_47",
+          "payload_48",
+          "payload_49",
+          "payload_50",
+          "payload_51",
+          "payload_52",
+          "payload_53",
+          "payload_54",
+          "payload_55",
+          "payload_56",
+          "payload_57",
+          "payload_58",
+          "payload_59",
+          "payload_60",
+          "payload_61",
+          "payload_62",
+          "payload_63"
+        ]
+      },
+      "eq2-in1": {
+        "limit": null,
+        "predicate": "eq2-in1",
+        "predicate_columns": [
+          "l_shipdate",
+          "l_shipmode",
+          "l_partkey"
+        ],
+        "projection": [
+          "l_orderkey",
+          "l_linenumber",
+          "l_shipdate",
+          "l_shipmode",
+          "l_partkey",
+          "payload_00",
+          "payload_01",
+          "payload_02",
+          "payload_03",
+          "payload_04",
+          "payload_05",
+          "payload_06",
+          "payload_07",
+          "payload_08",
+          "payload_09",
+          "payload_10",
+          "payload_11",
+          "payload_12",
+          "payload_13",
+          "payload_14",
+          "payload_15",
+          "payload_16",
+          "payload_17",
+          "payload_18",
+          "payload_19",
+          "payload_20",
+          "payload_21",
+          "payload_22",
+          "payload_23",
+          "payload_24",
+          "payload_25",
+          "payload_26",
+          "payload_27",
+          "payload_28",
+          "payload_29",
+          "payload_30",
+          "payload_31",
+          "payload_32",
+          "payload_33",
+          "payload_34",
+          "payload_35",
+          "payload_36",
+          "payload_37",
+          "payload_38",
+          "payload_39",
+          "payload_40",
+          "payload_41",
+          "payload_42",
+          "payload_43",
+          "payload_44",
+          "payload_45",
+          "payload_46",
+          "payload_47",
+          "payload_48",
+          "payload_49",
+          "payload_50",
+          "payload_51",
+          "payload_52",
+          "payload_53",
+          "payload_54",
+          "payload_55",
+          "payload_56",
+          "payload_57",
+          "payload_58",
+          "payload_59",
+          "payload_60",
+          "payload_61",
+          "payload_62",
+          "payload_63"
+        ]
+      },
+      "eq2-in20": {
+        "limit": null,
+        "predicate": "eq2-in20",
+        "predicate_columns": [
+          "l_shipdate",
+          "l_shipmode",
+          "l_partkey"
+        ],
+        "projection": [
+          "l_orderkey",
+          "l_linenumber",
+          "l_shipdate",
+          "l_shipmode",
+          "l_partkey",
+          "payload_00",
+          "payload_01",
+          "payload_02",
+          "payload_03",
+          "payload_04",
+          "payload_05",
+          "payload_06",
+          "payload_07",
+          "payload_08",
+          "payload_09",
+          "payload_10",
+          "payload_11",
+          "payload_12",
+          "payload_13",
+          "payload_14",
+          "payload_15",
+          "payload_16",
+          "payload_17",
+          "payload_18",
+          "payload_19",
+          "payload_20",
+          "payload_21",
+          "payload_22",
+          "payload_23",
+          "payload_24",
+          "payload_25",
+          "payload_26",
+          "payload_27",
+          "payload_28",
+          "payload_29",
+          "payload_30",
+          "payload_31",
+          "payload_32",
+          "payload_33",
+          "payload_34",
+          "payload_35",
+          "payload_36",
+          "payload_37",
+          "payload_38",
+          "payload_39",
+          "payload_40",
+          "payload_41",
+          "payload_42",
+          "payload_43",
+          "payload_44",
+          "payload_45",
+          "payload_46",
+          "payload_47",
+          "payload_48",
+          "payload_49",
+          "payload_50",
+          "payload_51",
+          "payload_52",
+          "payload_53",
+          "payload_54",
+          "payload_55",
+          "payload_56",
+          "payload_57",
+          "payload_58",
+          "payload_59",
+          "payload_60",
+          "payload_61",
+          "payload_62",
+          "payload_63"
+        ]
+      },
+      "eq2-in20-keys": {
+        "limit": null,
+        "predicate": "eq2-in20",
+        "predicate_columns": [
+          "l_shipdate",
+          "l_shipmode",
+          "l_partkey"
+        ],
+        "projection": [
+          "l_orderkey",
+          "l_linenumber"
+        ]
+      }
+    }
+  },
+  "translation_locks": {
+    "daft": "983241cab28499e6d00184c812416ec979c67014cb8b1647afedec6f17585678",
+    "polars": "d113fe5208071565818b7aa7abc025d35426839d16456bfc81d2ec24a66fce5f"
+  }
+}
