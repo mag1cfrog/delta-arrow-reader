@@ -1,104 +1,111 @@
-"""Pinned Polars scan_delta adapter for the selective-read observation contract."""
+"""Pinned Daft read_deltalake adapter for the selective-read observation contract."""
 
-from contextlib import ExitStack
+from contextlib import ExitStack, closing
 import json
 import os
 from pathlib import Path
+import pickle
 import platform
 import sys
 from time import perf_counter_ns as clock
 from urllib.parse import urlsplit
 
 HERE = Path(__file__).resolve().parent
-# Set these before importing native runtimes. Do not inherit experimental Polars
-# flags, credentials/providers, cache overrides, or debugging from the shell.
 for name in list(os.environ):
-    if name.startswith("POLARS_"):
+    if name.startswith("DAFT_"):
         del os.environ[name]
-ENVIRONMENT = {"POLARS_MAX_THREADS": "8", "POLARS_ASYNC_THREAD_COUNT": "8",
-               "POLARS_MAX_BLOCKING_THREAD_COUNT": "64", "POLARS_FILE_CACHE_TTL": "0",
-               "POLARS_OOC_MEMORY_BUDGET_MB": "4000", "POLARS_OOC_SPILL_DIR": str(HERE / "spill"),
-               "TOKIO_WORKER_THREADS": "8"}
+ENVIRONMENT = {"DAFT_ANALYTICS_ENABLED": "0", "DAFT_MEMORY_LIMIT": str(4 * 1024**3),
+               "DAFT_RUNNER": "native", "TOKIO_WORKER_THREADS": "8"}
 os.environ.update(ENVIRONMENT)
 
+import daft
 import deltalake
 from deltalake.exceptions import DeltaError, DeltaProtocolError
-import polars as pl
 import pyarrow as pa
 
 sys.path.insert(0, str(HERE))
 from run import digest, save
 from python_common import correctness, json_hash, observation, require, runtime_metadata, scan_sql, sha, validate
 
-DELTA_OPTIONS = {"without_files": False, "log_buffer_size": 8, "skip_stats": False}
-COLLECT_OPTIONS = {"chunk_size": 8192, "maintain_order": False, "lazy": False, "engine": "streaming"}
+EXECUTION = {"default_morsel_size": 8192, "scantask_max_parallel": 8, "maintain_order": False}
 
 
 def engine():
     lock = json.loads((HERE / "lock.json").read_text())
     require(platform.python_implementation() == "CPython" and platform.python_version() == lock["python"],
             "wrong Python interpreter")
-    require(pl.thread_pool_size() == 8, "wrong Polars thread pool size")
-    return {"polars": pl.build_info(), "deltalake": deltalake.__version__, "polars_index_type": str(pl.get_index_type())}
+    runner = daft.set_runner_native(num_threads=8)
+    daft.set_execution_config(**EXECUTION)
+    daft.set_event_log_config(enabled=False)
+    require(runner.name == "native" and daft.get_build_type() == "release", "wrong Daft runner or build type")
+    return {"daft": daft.get_version(), "daft_build_type": daft.get_build_type(), "deltalake": deltalake.__version__}
 
 
 def expressions(sql):
     columns, predicate, limit = scan_sql(sql)
-    projection = [pl.col(c) for c in columns]
-    predicate = pl.sql_expr(predicate) if predicate else None
-    return projection, predicate, limit
+    return [daft.col(c) for c in columns], daft.sql_expr(predicate) if predicate else None, limit
 
 
 def expression_identity(sql):
     projection, predicate, limit = expressions(sql)
-    return {"projection": [e.meta.serialize(format="json") for e in projection],
-            "predicate": predicate.meta.serialize(format="json") if predicate is not None else None,
-            "limit": limit, "order": "filter, select, limit"}
+    # Daft's Expression.serialize transforms column values. Python's pickle
+    # protocol serializes the expression itself, including its native typed AST.
+    def frozen(expr):
+        return {"text": str(expr), "pickle_sha256": sha(pickle.dumps(expr, protocol=5))}
+    return {"projection": [frozen(e) for e in projection], "predicate": frozen(predicate) if predicate is not None else None,
+            "limit": limit, "order": "where, select, limit", "pickle_protocol": 5}
 
 
 def query(source, sql):
     projection, predicate, limit = expressions(sql)
-    plan = source.clone()
-    if predicate is not None:
-        plan = plan.filter(predicate)
-    plan = plan.select(projection)
+    plan = source.where(predicate) if predicate is not None else source
+    plan = plan.select(*projection)
     return plan.limit(limit) if limit is not None else plan
 
 
 def storage(uri):
     if urlsplit(uri).scheme != "s3":
-        return {}, {"credentials": "none"}
-    options = {"AWS_REGION": os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))}
-    for name in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"):
-        if name in os.environ:
-            options[name] = os.environ[name]
+        return daft.io.IOConfig(), {"credentials": "none"}
+    options = {"region_name": os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))}
+    for name, env in (("key_id", "AWS_ACCESS_KEY_ID"), ("access_key", "AWS_SECRET_ACCESS_KEY"), ("session_token", "AWS_SESSION_TOKEN")):
+        if env in os.environ:
+            options[name] = os.environ[env]
     endpoint = os.environ.get("AWS_ENDPOINT_URL")
     if endpoint:
         parsed = urlsplit(endpoint)
         require(parsed.scheme in ("http", "https") and parsed.netloc and not (parsed.username or parsed.password
                 or parsed.query or parsed.fragment) and parsed.path in ("", "/"), "invalid AWS_ENDPOINT_URL")
-        options.update(AWS_ENDPOINT_URL=endpoint, AWS_ALLOW_HTTP=str(parsed.scheme == "http").lower(),
-                       AWS_VIRTUAL_HOSTED_STYLE_REQUEST="false")
-    return options, {"credentials": "AWS environment", "region": options["AWS_REGION"], "endpoint": endpoint,
-                     "url_style": "path" if endpoint else "native default"}
+        options.update(endpoint_url=endpoint, use_ssl=parsed.scheme == "https", force_virtual_addressing=False)
+    config = daft.io.IOConfig(s3=daft.io.S3Config(**options))
+    return config, {"credentials": "AWS environment with native fallback", "region": options["region_name"], "endpoint": endpoint,
+                    "url_style": "path" if endpoint else "native default"}
 
 
-def scan(request, options):
-    return pl.scan_delta(request["table_uri"], version=request["snapshot_version"],
-                         storage_options=options, credential_provider=None,
-                         delta_table_options=DELTA_OPTIONS, use_pyarrow=False)
+def scan(request, config):
+    # Daft opens the latest snapshot then loads the explicit version internally.
+    # Keep that native work inside initialization/open-and-query, including errors.
+    return daft.read_deltalake(request["table_uri"], version=request["snapshot_version"],
+                               io_config=config, ignore_deletion_vectors=False)
 
 
-def execute(request, options, output, record):
+def native_settings():
+    ctx = daft.context.get_context()
+    config = ctx.daft_execution_config
+    fields = {name: getattr(config, name) for name in dir(config)
+              if not name.startswith("_") and not callable(getattr(config, name))}
+    fields["broadcast_join_size_bytes_threshold"] = config.get_broadcast_join_size_bytes_threshold()
+    return {"execution": fields, "strict_filter_pushdown": ctx.daft_planning_config.enable_strict_filter_pushdown,
+            "event_log_enabled": ctx.daft_event_log_config.enabled, "compute_workers": 8,
+            "io_workers": "min(8, Rust available_parallelism)", "compute_max_blocking_threads": 1,
+            "io_max_blocking_threads": "pinned Tokio default", "dashboard": "disabled", "environment": ENVIRONMENT}
+
+
+def execute(request, config, output, record):
     timed = request["purpose"] == "timing"
     reuse = request["execution_mode"] == "reuse"
     record["phase"] = "snapshot_open"
     session_start = clock()
-    source = scan(request, options)
-    if reuse:
-        # Resolve the native dataset's snapshot/schema, retaining only the source
-        # logical scan. Each query below constructs and plans fresh expressions.
-        source.collect_schema()
+    source = scan(request, config)
     initialization = clock() - session_start
     if timed and reuse:
         record["initialization_ns"] = initialization
@@ -113,42 +120,41 @@ def execute(request, options, output, record):
                 result = output / f"query-{index}.arrow"
                 writer = None
                 if request["purpose"] == "validation":
-                    schema = pl.DataFrame(schema=plan.collect_schema()).to_arrow().schema
                     sink = stack.enter_context(result.open("xb"))
-                    writer = stack.enter_context(pa.ipc.new_stream(sink, schema))
-                stream = plan.collect_batches(**COLLECT_OPTIONS)
-                for frame in stream:
-                    if frame.height and first is None:
+                    writer = stack.enter_context(pa.ipc.new_stream(sink, plan.schema().to_pyarrow_schema()))
+                stream = stack.enter_context(closing(plan.to_arrow_iter(results_buffer_size=8)))
+                for batch in stream:
+                    if batch.num_rows and first is None:
                         first = clock() - start
-                    rows += frame.height
+                    rows += batch.num_rows
                     batches += 1
                     if writer is not None:
-                        writer.write_table(frame.to_arrow())
-                    del frame
+                        writer.write_batch(batch)
+                    del batch
                 completion = clock() - start
                 if index == (9 if reuse else 0):
                     if timed:
                         record["session_elapsed_ns"] = clock() - session_start
                     record["_cleanup_start"] = clock()
-                del stream
         except Exception:
             record["partial_query"] = {"query_index": index, "output_rows": rows, "output_batches": batches,
                                        "elapsed_ns": clock() - start if timed else None, "first_batch_ns": first if timed else None}
             raise
-        observation = {"query_index": index, "output_rows": rows, "output_batches": batches,
-                       "completion_ns": completion if timed else None, "first_batch_ns": first if timed else None,
-                       "first_batch_unavailable_reason": "untimed invocation" if not timed else "empty result" if not rows else None,
-                       "result": None, "identity": None, "physical_plan": None}
+        result_record = {"query_index": index, "output_rows": rows, "output_batches": batches,
+                         "completion_ns": completion if timed else None, "first_batch_ns": first if timed else None,
+                         "first_batch_unavailable_reason": "untimed invocation" if not timed else "empty result" if not rows else None,
+                         "result": None, "identity": None, "physical_plan": None}
         if writer is not None:
             name = f"query-{index}.identity.json"
             save(output / name, record["identity"] | {"result_sha256": digest(result)})
-            observation.update(result=result.name, identity=name)
+            result_record.update(result=result.name, identity=name)
         if request["purpose"] == "diagnostic":
-            name = f"query-{index}.plan.dot"
-            (output / name).write_text(plan.show_graph(raw_output=True, show=False, engine="streaming", plan_stage="physical"))
-            observation["physical_plan"] = name
-        record["queries"].append(observation)
-        del plan
+            name = f"query-{index}.plan.txt"
+            with (output / name).open("x") as target:
+                plan.explain(show_all=True, file=target)
+            result_record["physical_plan"] = name
+        record["queries"].append(result_record)
+        del stream, plan
     if timed:
         durations = [q["completion_ns"] for q in record["queries"]]
         if reuse:
@@ -157,7 +163,7 @@ def execute(request, options, output, record):
         else:
             record["open_query_ns"] = durations[0]
     else:
-        record["provider_evidence"] = {"schema": {k: str(v) for k, v in source.collect_schema().items()},
+        record["provider_evidence"] = {"schema": str(source.schema().to_pyarrow_schema()),
                                        "native_expression": expression_identity(request["canonical_sql"])}
     record["phase"] = "complete"
     record["capability"] = {"status": "supported", "scope": "requested query and snapshot", "evidence_run_id": request["run_id"]}
@@ -171,35 +177,32 @@ def run(request_path, output):
     try:
         build_path = HERE / "build.json"
         build = json.loads(build_path.read_text())
-        require(build["reader_id"] == "polars" and build["executable_sha256"] == digest(Path(__file__))
+        require(build["reader_id"] == "daft" and build["executable_sha256"] == digest(Path(__file__))
                 and build["lockfile_sha256"] == digest(HERE / "lock.json")
                 and all(digest(HERE / name) == value for name, value in build["bundled_sha256"].items()), "stale runner build")
         require(runtime_metadata(engine()) == build["runtime"], "runtime differs from the prepared build")
-        options, storage_record = storage(request["table_uri"])
-        settings = {"polars_environment": ENVIRONMENT, "polars_config": pl.Config.state(), "thread_pool_size": pl.thread_pool_size(),
-                    "optimizations": str(pl.QueryOptFlags()), "collect_batches": COLLECT_OPTIONS,
-                    "provider": {"api": "polars.scan_delta", "use_pyarrow": False, "credential_provider": None,
-                                 "delta_table_options": DELTA_OPTIONS,
-                                 "initialization": "scan_delta + collect_schema" if request["execution_mode"] == "reuse" else "scan_delta"},
+        config, storage_record = storage(request["table_uri"])
+        settings = {"daft": native_settings(), "provider": {"api": "daft.read_deltalake", "ignore_deletion_vectors": False,
+                    "initialization": "read_deltalake (eager snapshot and schema)", "multithreaded_io": "native runner default: true"},
+                    "query_api": "to_arrow_iter(results_buffer_size=8)",
+                    "results_buffer_note": "the pinned native runner ignores this argument; its own channels control buffering",
                     "storage": storage_record, "resource_budget": request["resource_budget"], "table_uri": request["table_uri"],
                     "execution_mode": request["execution_mode"], "output_delivery": "streaming",
-                    "native_memory_budget_bytes": 4_000_000_000,
-                    "memory_limit_reason": "native spill threshold, not a process cap; launcher must enforce 8 GiB",
-                    "cache": "no result cache; native dataset snapshot retained within a session; file cache TTL 0"}
-        # Invalid/stale SQL in a timing request must fail the certificate gate too.
+                    "native_memory_budget_bytes": 4 * 1024**3, "memory_limit_reason": "native memory manager, not a process cap; launcher must enforce 8 GiB",
+                    "cache": "no collect/result cache; reuse retains the native Delta data source and runner"}
         if request["purpose"] == "timing":
             record["phase"] = "correctness_gate"
         expression = expression_identity(request["canonical_sql"])
-        identity = {"reader_id": "polars", "reader_build_sha256": digest(build_path), "reader_config_sha256": json_hash(settings),
+        identity = {"reader_id": "daft", "reader_build_sha256": digest(build_path), "reader_config_sha256": json_hash(settings),
                     **{name: request[name] for name in ("comparison_revision", "protocol_sha256", "fixture_manifest_sha256", "case_id", "snapshot_version")},
                     "canonical_sql_sha256": sha(request["canonical_sql"].encode()), "native_expression_sha256": json_hash(expression)}
         record.update(identity=identity, settings=settings, build_record=str(build_path), phase="correctness_gate")
         record["correctness"] = correctness(request, identity)
-        execute(request, options, output, record)
+        execute(request, config, output, record)
         if request["purpose"] == "timing" and [q["output_rows"] for q in record["queries"]] != record["correctness"]["expected_output_rows"]:
             record.update(status="validation_failed", failure_reason="timed output row count differs from the validated result")
     except Exception as error:
-        unsupported = isinstance(error, DeltaProtocolError) or (
+        unsupported = isinstance(error, (NotImplementedError, DeltaProtocolError)) or (
             isinstance(error, DeltaError) and str(error).startswith("Kernel error: Unsupported:"))
         record["status"] = "validation_failed" if record["phase"] == "correctness_gate" else "unsupported" if unsupported else "operational_failure"
         message = str(error)

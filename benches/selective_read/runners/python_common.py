@@ -31,6 +31,15 @@ def require(condition, reason):
         raise ValueError(reason)
 
 
+def scan_sql(sql):
+    """Split the public scan shape; native parsers handle the typed predicate."""
+    match = re.fullmatch(r"SELECT (\*|[a-z_][a-z_0-9]*(?:, [a-z_][a-z_0-9]*)*) FROM bench"
+                         r"(?: WHERE (.+?))?(?: LIMIT ([0-9]+))?", sql)
+    require(match is not None and ";" not in sql, "expected a canonical SELECT from bench")
+    columns, predicate, limit = match.groups()
+    return columns.split(", "), predicate, int(limit) if limit is not None else None
+
+
 def runtime_metadata(engine):
     """Hash installed files, not just the package's self-reported version or RECORD."""
     packages = {}
@@ -87,3 +96,17 @@ def correctness(request, identity):
         rows.append(check["output_rows"])
     return {"status": "passed", "path": str(path), "artifact_sha256": digest(path), "expected_output_rows": rows}
 
+
+def observation(request):
+    return {"format": "selective-read-observation-v1", "status": "success", "failure_reason": None,
+            "phase": "setup", "queries": [], "partial_query": None, "provider_evidence": None,
+            "capability": {"status": "not_checked", "scope": "requested query and snapshot"}, "correctness": None,
+            **{name: None for name in ("open_query_ns", "initialization_ns", "session_elapsed_ns", "cleanup_ns",
+                                      "initialization_plus_query1_ns", "initialization_plus_all_queries_ns")},
+            **{name: request[name] for name in ("campaign_id", "run_id", "repetition", "order", "profile", "purpose",
+                                               "execution_mode", "table_uri", "canonical_sql")},
+            "external_metrics": {"requests": None, "response_bytes": None, "touched_parquet_objects": None,
+                                 "process_cpu_ns": None, "peak_rss_bytes": None,
+                                 "reason": "storage observer and process scheduler are separate roadmap slices"},
+            "external_resource_limits": {"cpu_affinity": None, "process_memory_bytes": None,
+                                         "reason": "launcher must enforce and record the CPU affinity and process memory limit"}}

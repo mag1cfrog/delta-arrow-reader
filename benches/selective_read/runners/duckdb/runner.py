@@ -16,7 +16,7 @@ import pyarrow as pa
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from run import digest, save
-from python_common import correctness, json_hash, require, runtime_metadata, sha, validate
+from python_common import correctness, json_hash, observation, require, runtime_metadata, sha, validate
 
 CONFIG = {"threads": 8, "memory_limit": "4GiB", "enable_external_file_cache": False,
           "autoload_known_extensions": False, "autoinstall_known_extensions": False,
@@ -187,18 +187,7 @@ def run(request_path, output):
     validate(request)
     output.mkdir()
     connection = None
-    record = {"format": "selective-read-observation-v1", "status": "success", "failure_reason": None,
-              "phase": "setup", "queries": [], "partial_query": None, "provider_evidence": None,
-              "capability": {"status": "not_checked", "scope": "requested query and snapshot"}, "correctness": None,
-              **{name: None for name in ("open_query_ns", "initialization_ns", "session_elapsed_ns", "cleanup_ns",
-                                        "initialization_plus_query1_ns", "initialization_plus_all_queries_ns")},
-              **{name: request[name] for name in ("campaign_id", "run_id", "repetition", "order", "profile", "purpose",
-                                                 "execution_mode", "table_uri", "canonical_sql")},
-              "external_metrics": {"requests": None, "response_bytes": None, "touched_parquet_objects": None,
-                                   "process_cpu_ns": None, "peak_rss_bytes": None,
-                                   "reason": "storage observer and process scheduler are separate roadmap slices"},
-              "external_resource_limits": {"cpu_affinity": None, "process_memory_bytes": None,
-                                           "reason": "launcher must enforce and record the CPU affinity and process memory limit"}}
+    record = observation(request)
     try:
         build_path = HERE / "build.json"
         build = json.loads(build_path.read_text())
