@@ -196,6 +196,10 @@ pub struct Budget {
 }
 
 impl Budget {
+    pub fn written_bytes(&self) -> u64 {
+        self.used.load(Ordering::SeqCst)
+    }
+
     pub fn new(limit: u64) -> Self {
         Self {
             used: AtomicU64::new(0),
@@ -557,7 +561,7 @@ impl TableWriter {
     }
 }
 
-fn delta_schema(schema: &Schema) -> Result<Value> {
+pub(super) fn delta_schema(schema: &Schema) -> Result<Value> {
     let fields = schema.fields().iter().map(|field| {
         let kind = match field.data_type() {
             DataType::Int64 => "long", DataType::Int32 => "integer", DataType::Utf8 => "string",

@@ -4,6 +4,7 @@ mod control_rows;
 mod controls;
 mod dv;
 mod fixtures;
+mod large;
 mod repack;
 
 use std::collections::BTreeSet;
@@ -34,7 +35,8 @@ const GENERATOR_SOURCE: &str = concat!(
     include_str!("repack.rs"),
     include_str!("control_rows.rs"),
     include_str!("controls.rs"),
-    include_str!("dv.rs")
+    include_str!("dv.rs"),
+    include_str!("large.rs")
 );
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -42,6 +44,7 @@ enum Profile {
     Smoke,
     Development,
     Report,
+    Large,
 }
 
 impl Profile {
@@ -50,6 +53,7 @@ impl Profile {
             "smoke" => Ok(Self::Smoke),
             "development" => Ok(Self::Development),
             "report" => Ok(Self::Report),
+            "large" => Ok(Self::Large),
             _ => Err(format!("unknown profile: {value}").into()),
         }
     }
@@ -59,6 +63,7 @@ impl Profile {
             Self::Smoke => "smoke",
             Self::Development => "development",
             Self::Report => "report",
+            Self::Large => "large",
         }
     }
 
@@ -67,6 +72,7 @@ impl Profile {
             Self::Smoke => (0.01, 0.01),
             Self::Development => (1.0, 1.0),
             Self::Report => (10.0, 1.0),
+            Self::Large => unreachable!("large scales require explicit configuration"),
         }
     }
 
@@ -75,10 +81,14 @@ impl Profile {
     }
 
     fn disk_bytes(self) -> u64 {
+        if self == Self::Large {
+            return u64::MAX;
+        }
         (match self {
             Self::Smoke => 8,
             Self::Development => 64,
             Self::Report => 192,
+            Self::Large => unreachable!(),
         }) * 1024
             * MIB
     }
@@ -93,6 +103,7 @@ struct Config {
     repack_from: Option<PathBuf>,
     controls: bool,
     dv_from: Vec<PathBuf>,
+    large: Option<large::Options>,
 }
 
 impl Config {
@@ -105,20 +116,29 @@ impl Config {
         let mut repack_from = None;
         let mut controls = false;
         let mut dv_from = Vec::new();
+        let mut large_args = std::collections::BTreeMap::new();
+        let mut preflight = false;
         while let Some(arg) = args.next() {
             if arg == "--help" || arg == "-h" {
                 println!(
-                    "selective-read-fixtures --profile smoke|development|report --output NEW_DIRECTORY\n\
+                    "selective-read-fixtures --profile smoke|development|report|large --output NEW_DIRECTORY\n\
                      Optional preparation limits: --sort-memory-mib N --disk-limit-mib N\n\
                      Repack existing clustered rows: --repack-from FIXTURE_DIRECTORY\n\
                      Generate fixed within-file controls: --controls\n\
                      Add paired DV snapshots: --dv-from PUBLIC_FIXTURES --dv-from CONTROLS\n\
+                     Large: --scale-factor 1|10|30|100|300 --fixture source|li.clustered|li.shuffled|wide.clustered|wide.shuffled\n\
+                     Large limits (required): --disk-limit-mib N --elapsed-limit-seconds N\n\
+                     Large options: --source-from FIXTURE_DIRECTORY --preflight\n\
                      Existing output directories are never overwritten."
                 );
                 std::process::exit(0);
             }
             if arg == "--controls" {
                 controls = true;
+                continue;
+            }
+            if arg == "--preflight" {
+                preflight = true;
                 continue;
             }
             let value = args
@@ -129,6 +149,11 @@ impl Config {
                 "--output" => output = Some(PathBuf::from(value)),
                 "--repack-from" => repack_from = Some(PathBuf::from(value)),
                 "--dv-from" => dv_from.push(PathBuf::from(value)),
+                "--scale-factor" | "--fixture" | "--source-from" | "--elapsed-limit-seconds" => {
+                    if large_args.insert(arg.clone(), value).is_some() {
+                        return Err(format!("duplicate option: {arg}").into());
+                    }
+                }
                 "--sort-memory-mib" => {
                     sort_memory = Some(
                         value
@@ -149,6 +174,17 @@ impl Config {
             }
         }
         let output = output.ok_or("--output is required")?;
+        let large = if profile == Profile::Large {
+            if controls || repack_from.is_some() || !dv_from.is_empty() || disk_limit.is_none() {
+                return Err("large requires --disk-limit-mib and cannot combine controls/repack/DV preparation".into());
+            }
+            Some(large::Options::parse(large_args, preflight)?)
+        } else {
+            if !large_args.is_empty() || preflight {
+                return Err("scale, fixture, source reuse, elapsed limit and preflight require --profile large".into());
+            }
+            None
+        };
         if usize::from(controls)
             + usize::from(repack_from.is_some())
             + usize::from(!dv_from.is_empty())
@@ -180,12 +216,16 @@ impl Config {
             repack_from,
             controls,
             dv_from,
+            large,
         })
     }
 }
 
 fn main() -> Result<()> {
     let config = Config::parse(env::args().skip(1))?;
+    if let Some(options) = &config.large {
+        large::set_deadline(options.elapsed_seconds)?;
+    }
     fixtures::limit_memory(config.profile.memory_bytes())?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
@@ -196,7 +236,16 @@ fn main() -> Result<()> {
     // Errors go to stderr; partial output remains without a completion manifest.
     runtime.block_on(generate(&config))?;
     eprintln!(
-        "completed {} in {:.1}s",
+        "{} {} in {:.1}s",
+        if config
+            .large
+            .as_ref()
+            .is_some_and(|options| options.preflight)
+        {
+            "preflight passed for"
+        } else {
+            "completed"
+        },
         config.output.display(),
         started.elapsed().as_secs_f64()
     );
@@ -204,6 +253,34 @@ fn main() -> Result<()> {
 }
 
 async fn generate(config: &Config) -> Result<Value> {
+    let capacity = config
+        .large
+        .as_ref()
+        .map(|_| large::preflight(config))
+        .transpose()?;
+    if let Some(plan) = &capacity {
+        if config
+            .large
+            .as_ref()
+            .is_some_and(|options| options.preflight)
+        {
+            println!("{}", serde_json::to_string_pretty(plan)?);
+        }
+        if plan["fits_budget"] != true || plan["fits_available_disk"] != true {
+            return Err(format!(
+                "large preparation capacity check failed: {}",
+                serde_json::to_string(plan)?
+            )
+            .into());
+        }
+        if config
+            .large
+            .as_ref()
+            .is_some_and(|options| options.preflight)
+        {
+            return Ok(plan.clone());
+        }
+    }
     if !config.dv_from.is_empty() {
         return dv::generate(config);
     }
@@ -235,9 +312,23 @@ async fn generate(config: &Config) -> Result<Value> {
     fs::create_dir(&config.output)?;
     let spill_path = config.output.join("spill");
     fs::create_dir(&spill_path)?;
-    let output_limit = (disk_limit - spill_reserve) * 2 / 3;
-    let spill_limit = disk_limit - spill_reserve - output_limit;
+    let output_limit = capacity
+        .as_ref()
+        .map_or((disk_limit - spill_reserve) * 2 / 3, |plan| {
+            plan["output_limit_bytes"].as_u64().unwrap()
+        });
+    let spill_limit = capacity
+        .as_ref()
+        .map_or(disk_limit - spill_reserve - output_limit, |plan| {
+            plan["spill_limit_bytes"].as_u64().unwrap()
+        });
     let budget = Arc::new(Budget::new(output_limit));
+    if let Some(plan) = &capacity {
+        budget.write(
+            &config.output.join("preparation.json"),
+            &serde_json::to_vec_pretty(plan)?,
+        )?;
+    }
     let runtime = RuntimeEnvBuilder::new()
         .with_memory_limit(config.sort_memory as usize, 1.0)
         .with_temp_file_path(&spill_path)
@@ -259,7 +350,13 @@ async fn generate(config: &Config) -> Result<Value> {
         .execution
         .sort_spill_reservation_bytes = MIB as usize;
     let context = SessionContext::new_with_config_rt(session_config, runtime.clone());
-    let (original_scale, wide_scale) = config.profile.scales();
+    let sampler = capacity
+        .as_ref()
+        .map(|_| large::sample_disk(runtime.clone(), budget.clone()));
+    let (original_scale, wide_scale) = config.large.as_ref().map_or_else(
+        || config.profile.scales(),
+        |options| (f64::from(options.scale), f64::from(options.scale)),
+    );
     let mut scales = vec![original_scale];
     if wide_scale != original_scale {
         scales.push(wide_scale);
@@ -269,43 +366,69 @@ async fn generate(config: &Config) -> Result<Value> {
     let mut sorts = Vec::new();
     for scale in scales {
         let source_path = config.output.join(format!("sf{scale}/source"));
-        let mut source = TableWriter::new(&source_path, original_schema(), budget.clone())?;
-        let mut generator = LineItemGenerator::new(scale, 1, 1).into_iter();
-        let mut literals = BTreeSet::new();
-        let mut previous_key = None;
-        loop {
-            let rows: Vec<_> = generator.by_ref().take(BATCH_ROWS).collect();
-            if rows.is_empty() {
-                break;
+        let reused = config
+            .large
+            .as_ref()
+            .and_then(|options| options.source_from.as_ref());
+        let mut source_manifest = if let Some(input) = reused {
+            let source = large::reuse_source(input, &config.output, scale, budget.clone())?;
+            if capacity.as_ref().ok_or("missing source capacity plan")?["source_parent_manifest_sha256"]
+                != fixtures::hash_file(&input.join("manifest.json"))?
+            {
+                return Err("source manifest changed after capacity preflight".into());
             }
-            for row in &rows {
-                let key = (row.l_orderkey, row.l_linenumber);
-                if previous_key.is_some_and(|previous| previous >= key) {
-                    return Err("source row keys are duplicated or out of generator order".into());
+            source
+        } else {
+            let mut source = TableWriter::new(&source_path, original_schema(), budget.clone())?;
+            let mut generator = LineItemGenerator::new(scale, 1, 1).into_iter();
+            let mut literals = BTreeSet::new();
+            let mut previous_key = None;
+            loop {
+                let rows: Vec<_> = generator.by_ref().take(BATCH_ROWS).collect();
+                if rows.is_empty() {
+                    break;
                 }
-                previous_key = Some(key);
+                for row in &rows {
+                    let key = (row.l_orderkey, row.l_linenumber);
+                    if previous_key.is_some_and(|previous| previous >= key) {
+                        return Err(
+                            "source row keys are duplicated or out of generator order".into()
+                        );
+                    }
+                    previous_key = Some(key);
+                }
+                let batch = fixtures::source_batch(&rows)?;
+                find_literals(&batch, &mut literals)?;
+                source.push(batch)?;
             }
-            let batch = fixtures::source_batch(&rows)?;
-            find_literals(&batch, &mut literals)?;
-            source.push(batch)?;
-        }
-        if literals.is_empty() || (config.profile != Profile::Smoke && literals.len() < 20) {
-            return Err(format!("SF{scale} does not supply the required IN literal set").into());
-        }
-        let literals: Vec<_> = literals.into_iter().collect();
-        let mut source_manifest = source.finish(None)?;
+            if literals.is_empty() || (config.profile != Profile::Smoke && literals.len() < 20) {
+                return Err(
+                    format!("SF{scale} does not supply the required IN literal set").into(),
+                );
+            }
+            let literals: Vec<_> = literals.into_iter().collect();
+            let mut source_manifest = source.finish(None)?;
+            source_manifest["scale_factor"] = json!(scale);
+            source_manifest["path"] = json!(format!("sf{scale}/source"));
+            source_manifest["in_literals"] = json!(literals);
+            source_manifest["queries"] = queries(&literals, false);
+            source_manifest["wide_queries"] = queries(&literals, true);
+            source_manifest
+        };
+        // Reuse carries identical source metadata and bytes; its provenance is recorded separately.
         source_manifest["scale_factor"] = json!(scale);
-        source_manifest["path"] = json!(format!("sf{scale}/source"));
-        source_manifest["in_literals"] = json!(literals);
-        source_manifest["queries"] = queries(&literals, false);
-        source_manifest["wide_queries"] = queries(&literals, true);
         let expected_rows = source_manifest["rows"]
             .as_u64()
             .ok_or("missing source rows")?;
         sources.push(source_manifest);
 
         for layout in ["clustered", "shuffled"] {
-            if scale == original_scale {
+            if scale == original_scale
+                && config
+                    .large
+                    .as_ref()
+                    .is_none_or(|options| options.fixture == format!("li.{layout}"))
+            {
                 let id = format!("li.{layout}");
                 let table_path = config.output.join(&id);
                 eprintln!("writing {id}, SF{scale}");
@@ -328,11 +451,18 @@ async fn generate(config: &Config) -> Result<Value> {
                     expected_rows,
                 )?);
             }
-            if scale == wide_scale {
+            if scale == wide_scale
+                && config
+                    .large
+                    .as_ref()
+                    .is_none_or(|options| options.fixture == format!("wide.{layout}"))
+            {
                 let id = format!("wide.{layout}");
                 let table_path = config.output.join(&id);
                 eprintln!("writing {id}, SF{scale}");
-                let table = if scale == original_scale {
+                let table = if scale == original_scale
+                    && config.output.join(format!("li.{layout}")).is_dir()
+                {
                     // Reuse the already sorted narrow files, preserving identical row/file boundaries.
                     let mut table =
                         TableWriter::new(&table_path, fixtures::wide_schema(), budget.clone())?;
@@ -372,7 +502,7 @@ async fn generate(config: &Config) -> Result<Value> {
         LOCKFILE.as_bytes(),
     )?;
     let spilling = runtime.disk_manager.spilling_progress();
-    let manifest = json!({
+    let mut manifest = json!({
         "protocol": "selective-read-v1",
         "protocol_sha256": fixtures::hash_bytes(PROTOCOL.as_bytes()),
         "profile": config.profile.name(), "status": "complete",
@@ -403,6 +533,14 @@ async fn generate(config: &Config) -> Result<Value> {
             "elapsed_ms": started.elapsed().as_millis()
         }
     });
+    if let Some(plan) = capacity {
+        large::finish_manifest(&mut manifest, config, plan, &budget)?;
+    }
+    if let Some((stop, sampler)) = sampler {
+        drop(stop);
+        manifest["preparation"]["disk_observations"] =
+            sampler.join().map_err(|_| "disk sampler panicked")?;
+    }
     drop(context);
     drop(runtime);
     fs::remove_dir_all(&spill_path)?;
@@ -514,7 +652,12 @@ fn finish_table(
     layout: &str,
     rows: u64,
 ) -> Result<Value> {
-    let mut manifest = writer.finish(Some((profile.name(), id)))?;
+    let identity_profile = if profile == Profile::Large {
+        format!("large-sf{scale}")
+    } else {
+        profile.name().to_owned()
+    };
+    let mut manifest = writer.finish(Some((&identity_profile, id)))?;
     if manifest["rows"] != json!(rows) {
         return Err(format!("{id} changed the source row count").into());
     }
