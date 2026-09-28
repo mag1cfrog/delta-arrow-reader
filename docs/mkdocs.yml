@@ -45,6 +45,7 @@ nav:
   - Performance:
       - Reader benchmarks: benchmarks.md
       - Public selective-read protocol: benchmarks/selective-read-protocol.md
+      - Generate public fixtures: benchmarks/selective-read-fixtures.md
       - Focused benchmarks:
           - Selective S3 case study: benchmarks/selective-s3.md
           - Lazy and eager scan metadata: benchmarks/eager-metadata.md

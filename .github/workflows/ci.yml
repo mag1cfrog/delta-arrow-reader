@@ -157,9 +157,42 @@ jobs:
       - if: matrix.task == 'Package'
         run: cargo package --locked
 
+  selective-read-fixtures:
+    name: Public Fixture Smoke
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/selective-read
+      RUSTFLAGS: -C target-cpu=x86-64
+    defaults:
+      run:
+        working-directory: benches/selective_read
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+          components: clippy, rustfmt
+      - name: Cache Cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: benches/selective_read -> ../../target/selective-read
+          shared-key: selective-read-fixtures
+          cache-targets: false
+          save-if: false
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+      - run: cargo fmt -- --check
+      - run: cargo clippy --release --locked --all-targets -j8 -- -D warnings
+      - run: cargo test --release --locked -j8
+      - name: Check CLI preparation limits
+        run: cargo run --release --locked -j8 -- --profile smoke --sort-memory-mib 16 --output "${RUNNER_TEMP}/selective-read-smoke"
+
   ci:
     name: CI
-    needs: [changes, feature-tests, platform-tests, checks]
+    needs: [changes, feature-tests, platform-tests, checks, selective-read-fixtures]
     if: always()
     runs-on: ubuntu-latest
 
@@ -188,5 +221,10 @@ jobs:
 
           if [ "${{ needs.checks.result }}" != "success" ]; then
             echo "Checks did not pass: ${{ needs.checks.result }}"
+            exit 1
+          fi
+
+          if [ "${{ needs.selective-read-fixtures.result }}" != "success" ]; then
+            echo "Public Fixture Smoke did not pass: ${{ needs.selective-read-fixtures.result }}"
             exit 1
           fi
