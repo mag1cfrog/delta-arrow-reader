@@ -91,7 +91,7 @@ python3 -B benches/selective_read/storage.py upload \
   --state ../selective-read-storage --fixtures ../selective-read-files \
   --output ../selective-read-files-upload.json
 
-python3 -B benches/selective_read/campaign.py \
+../selective-read-oracle-venv/bin/python -B benches/selective_read/campaign.py \
   --state ../selective-read-storage --fixtures ../selective-read-files \
   --upload ../selective-read-files-upload.json \
   --output ../selective-read-files-campaign \
