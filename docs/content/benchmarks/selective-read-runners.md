@@ -97,11 +97,13 @@ the same interpreter, installed-file, source, and wheel identities as DuckDB.
 Use `--artifacts ../selective-read-polars-build/artifacts` with a new output
 directory to prepare an offline copy. Keep each build at its original path.
 
-The lock also records the Polars and Python deltalake source revisions.
-The latter release does not publish a resolved Cargo lockfile. Its declared
-Rust dependency ranges are recorded as ranges; the wheel hash fixes the actual
-embedded Delta implementation. Python `deltalake` 1.6.6 and the separate Rust
-delta-rs comparator have different dependency sets.
+The lock also records the Polars and Python deltalake source revisions. Preparation
+retains and verifies deltalake's published source archive, which includes its
+complete resolved Cargo lockfile. It records `buoyant_kernel` 0.28.1,
+`buoyant_kernel_engine` 0.28.0, Arrow 59.3.0, and DataFusion 55.1.0.
+Those versions describe the published source; wheel hashes identify the executed
+binaries. Python `deltalake` 1.6.6 and the separate Rust delta-rs comparator have
+different dependency sets.
 
 ## Validate a case before timing it
 

@@ -29,7 +29,7 @@ def prepare(adapter, output, artifacts):
     hashes = {str(p.relative_to(ROOT)): digest(p) for p in sorted(sources)}
     downloads = output / "artifacts"
     downloads.mkdir()
-    for item in lock["wheels"] + lock.get("extensions", []):
+    for item in lock["wheels"] + lock.get("extensions", []) + lock.get("source_artifacts", []):
         dest = downloads / item["filename"]
         if artifacts:
             shutil.copyfile(artifacts / item["filename"], dest)

@@ -3,7 +3,7 @@
   "platform": "linux_amd64",
   "polars_source": "1bd8ec12f42d40fcec62badf32ef2177d2377d8d",
   "deltalake_python_source": "104886f88027e27c27c59f51d71367d3938b6146",
-  "delta_dependency_note": "deltalake 1.6.6 wheel embeds delta-rs. Its release source declares buoyant_kernel 0.28.1,<0.28.100, buoyant_kernel_engine 0.28.0,<0.28.100, Arrow 59 and DataFusion 55. No resolved Cargo.lock is published in that source tag; the exact executable identity is the locked wheel SHA-256, not these dependency ranges.",
+  "delta_dependency_note": "The deltalake 1.6.6 source distribution contains the complete resolved Rust Cargo.lock retained in source_artifacts. Its dependency versions describe that published source; wheel hashes identify the actual executed binaries.",
   "wheels": [
     {
       "name": "polars",
@@ -53,6 +53,25 @@
       "filename": "wrapt-2.5.0-cp314-cp314-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
       "url": "https://files.pythonhosted.org/packages/23/38/285b433121d73c7a447b5b82d93c91dc3330f33ab5853975f34551e0c773/wrapt-2.5.0-cp314-cp314-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
       "sha256": "b640460f0ffb346b192686bd6fac5589e35a6c6640501c59a9fb6e82b0dd6bd8"
+    }
+  ],
+  "source_artifacts": [
+    {
+      "filename": "deltalake-1.6.6.tar.gz",
+      "url": "https://files.pythonhosted.org/packages/24/7e/817984d82cec757f6f3a3dbb84afcd85027e7ae02e0a354702c2127f6777/deltalake-1.6.6.tar.gz",
+      "sha256": "91864d97adb429fa8b8748b4f68d69adab3d0417ffa9f100bdb85805890c997f",
+      "cargo_lock_path": "deltalake-1.6.6/Cargo.lock",
+      "cargo_lock_sha256": "9a800c67506b3397eb990635be15b8e20f93b96409db3b5c477c8568045a5646",
+      "resolved_dependencies": {
+        "arrow": "59.3.0",
+        "buoyant_kernel": "0.28.1",
+        "buoyant_kernel_engine": "0.28.0",
+        "datafusion": "55.1.0",
+        "deltalake": "1.0.0",
+        "deltalake-core": "1.0.0",
+        "object_store": "0.13.2",
+        "tokio": "1.53.1"
+      }
     }
   ]
 }
