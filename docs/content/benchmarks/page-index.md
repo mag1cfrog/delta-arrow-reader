@@ -11,6 +11,10 @@ This five-repetition local run took place on August 28, 2026, using the same
 machine as the [reader comparison](../benchmarks.md#environment). Each value is
 the median across the five repetitions.
 
+These historical timings included result validation and hashing. The current
+harness validates once before timing, as described below, so new latency
+measurements use a different boundary.
+
 | Match layout | Offset index | First batch | Total | Bytes received | Range GETs |
 | --- | --- | ---: | ---: | ---: | ---: |
 | Localized | Present | 0.742 ms | 1.364 ms | 1.920 MiB | 35 |
@@ -45,20 +49,26 @@ page ranges separate instead of merging them into a complete column-chunk read.
 The benchmark uses the public streaming API with the `Direct` backend and one
 scan partition. It loads each Delta table and builds each scan before starting
 the timer. Time to first batch starts when the stream is first polled. Total
-time ends after the stream is exhausted and its results have been checked. The
-data-file metrics count bytes and GETs issued by the direct Parquet reader; they
+time ends after the stream is exhausted. Timed consumption counts and releases
+batches; a separate untimed pass checks every value and computes the fingerprint
+before any repetitions. The data-file metrics count bytes and GETs issued by
+the direct Parquet reader; they
 do not include Delta log reads.
 
-Every output value and null position contributes to a result fingerprint. The
-indexed and unindexed localized runs both produced
+Every output value and null position in the validation pass contributes to a
+result fingerprint. The indexed and unindexed localized runs both produced
 `fnv1a64:f727bcfaa4e3933f`. Both scattered runs produced
 `fnv1a64:ce7e5b1c0cc9b9bf`. The benchmark stops with an error if either pair
 returns different rows, values, ordering, or null placement.
 
-The case order is reversed on alternating repetitions. The benchmark does not
-perform a separate warmup run. File-system cache state, storage latency, and
-hardware affect the timing, so use the byte and request counts alongside the
-latency measurements.
+The case order is reversed on alternating repetitions. The validation pass warms
+each fixture; there is no additional warmup. File-system cache state, storage
+latency, and hardware affect the timing, so use the byte and request counts
+alongside the latency measurements.
+
+This is a DAR mechanism A/B. The unindexed file is an artificial control, not a
+delta-rs baseline. For all five readers on common indexed inputs, use the
+[within-file controls](selective-read-within-file.md).
 
 ## Run the benchmark
 

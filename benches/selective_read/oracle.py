@@ -37,7 +37,10 @@ FIELDS = (
 )
 ORIGINAL = tuple(name for name, _ in FIELDS)
 PAYLOADS = tuple(f"payload_{i:02}" for i in range(64))
-TYPES = dict(FIELDS) | dict.fromkeys(PAYLOADS, "int64")
+CONTROL_PAYLOADS = tuple(f"payload_{i:03}" for i in range(16))
+CONTROL_PROJECTION = ("row_id",) + CONTROL_PAYLOADS
+CONTROL_CASES = {"row-groups.select": "row-groups", "pages.localized": "pages.localized", "pages.scattered": "pages.scattered"}
+TYPES = dict(FIELDS) | dict.fromkeys(PAYLOADS, "int64") | dict.fromkeys(CONTROL_PAYLOADS, "string") | {"row_id": "int32", "event_id": "string"}
 WIDE69 = KEYS + ("l_shipdate", "l_shipmode", "l_partkey") + PAYLOADS
 # Projection, predicate, output limit. SQL is checked independently of its scalar evaluation.
 ORIGINAL_CASES = {
@@ -117,7 +120,8 @@ def full_rows(path, projection):
     check_schema(parquet.schema_arrow, projection)
     for batch in parquet.iter_batches(batch_size=BATCH_ROWS):
         for row in batch.to_pylist():
-            require(all(row[name] is not None for name in ORIGINAL), "null in original non-null field")
+            required = ("row_id", "event_id") if "row_id" in projection else ORIGINAL
+            require(all(row[name] is not None for name in required), "null in non-null field")
             yield row
 
 
@@ -128,6 +132,8 @@ def payload(order, line, column):
 
 
 def conditions(predicate, literals):
+    if predicate == "control-match":
+        return [("event_id", "=", "match")]
     if predicate == "all":
         return []
     if predicate == "empty":
@@ -216,10 +222,17 @@ def case_input(fixtures, case_id, duplicate_literal=False):
     require(pa.__version__ == "25.0.1", "oracle requires pyarrow==25.0.1")
     manifest = load_json(Path(fixtures) / "manifest.json")
     require(manifest["status"] == "complete" and manifest["protocol"] == "selective-read-v1", "incomplete or unknown fixtures")
+    if case_id in CONTROL_CASES:
+        require(not duplicate_literal, "control predicate has no IN literals")
+        table = next(t for t in manifest["tables"] if t["id"] == CONTROL_CASES[case_id])
+        require(type(table["snapshot_version"]) is int and table["snapshot_version"] == 0 and table["deletion_vectors"] is False, "controls require no-DV snapshot 0")
+        sql = f"SELECT {', '.join(CONTROL_PROJECTION)} FROM bench WHERE event_id = 'match'"
+        require(table["queries"][case_id] == sql, "control SQL differs from protocol")
+        return manifest, table, None, CONTROL_PROJECTION, "control-match", None, [], sql
     fixture_id, query = case_id.rsplit(".", 1)
     wide = fixture_id.startswith("wide.")
     require(fixture_id in ("li.clustered", "li.shuffled", "wide.clustered", "wide.shuffled", "files64", "files4096"),
-            "unsupported fixture; within-file controls and DVs follow in later slices")
+            "unsupported fixture or DV case")
     if fixture_id.startswith("files"):
         require(query in ("empty", "eq2-in20"), "unknown file-organization query")
     table = next(t for t in manifest["tables"] if t["id"] == fixture_id)
@@ -247,13 +260,14 @@ def record(row, projection, derive_payloads=False):
             value = payload(row[KEYS[0]], row[KEYS[1]], int(name[-2:]))
         else:
             value = row[name]
-        require(value is not None or name in PAYLOADS, f"unexpected null: {name}")
+        require(value is not None or name in PAYLOADS + CONTROL_PAYLOADS, f"unexpected null: {name}")
         if isinstance(value, Decimal):
             value = format(value, ".2f")
         elif isinstance(value, date):
             value = value.isoformat()
         values.append(value)
-    return row[KEYS[0]], row[KEYS[1]], json_bytes(values)
+    key = (row["row_id"], 0) if "row_id" in projection else (row[KEYS[0]], row[KEYS[1]])
+    return *key, json_bytes(values)
 
 
 def database(path):
@@ -292,7 +306,7 @@ def compare(db, reference_db, expected_count):
 
 def objects(fixtures, table, source):
     verified = []
-    for group in (source, table):
+    for group in ([source] if source is not None else []) + [table]:
         for item in group["files"] + ([group["delta_log"]] if group["delta_log"] else []):
             descriptor = {k: item[k] for k in ("path", "bytes", "sha256")}
             descriptor["path"] = str(Path(group["path"]) / item["path"])
@@ -314,10 +328,70 @@ def objects(fixtures, table, source):
     return verified
 
 
+def control_matches(case_id, row_id):
+    if case_id == "row-groups.select":
+        return row_id // 4096 % 16 == 7
+    if case_id == "pages.localized":
+        return row_id % 4096 < 32
+    require(case_id == "pages.scattered", "unknown control layout")
+    return row_id % 128 == 0
+
+
+def control_record(row_id):
+    values = [row_id] + [None if (row_id + j) % 17 == 0 else
+                        f"payload-{j:03}-{row_id:08}-" + "abcdefghijklmnopqrstuvwxyz0123456789" * 12
+                        for j in range(16)]
+    return row_id, 0, json_bytes(values)
+
+
+def control_geometry(fixtures, table, case_id):
+    """Check upper-level survival and actual footer/index geometry before timing."""
+    row_groups = case_id == "row-groups.select"
+    files, groups = (16, 16) if row_groups else (1, 2)
+    require(table["file_count"] == len(table["files"]) == files and table["rows"] == files * groups * 4096, "wrong control dimensions")
+    candidate_groups = candidate_pages = pages = 0
+    for item in table["files"]:
+        stats = item["delta_stats"]
+        require(stats["numRecords"] == item["rows"] == groups * 4096 and stats["nullCount"]["event_id"] == 0
+                and stats["minValues"]["event_id"] == "match" and stats["maxValues"]["event_id"] == "other", "control file can be pruned")
+        footer = pq.ParquetFile(inside(fixtures, str(Path(table["path"]) / item["path"]))).metadata
+        require(footer.num_row_groups == len(item["row_groups"]) == groups, "wrong control row groups")
+        for g, group in enumerate(item["row_groups"]):
+            require(group["first_row"] == g * 4096 and group["rows"] == footer.row_group(g).num_rows == 4096, "wrong control group boundary")
+            low = "match" if not row_groups or g == 7 else "other"
+            high = low if row_groups else "other"
+            expected = {"min_hex": low.encode().hex(), "max_hex": high.encode().hex()}
+            candidate_groups += low == "match"
+            require([c["column"] for c in group["columns"]] == ["row_id", "event_id", *CONTROL_PAYLOADS], "predicate/payload columns changed")
+            for c, column in enumerate(group["columns"]):
+                actual = footer.row_group(g).column(c)
+                require(actual.has_column_index and actual.has_offset_index and column["column_index"]["length"] > 0
+                        and column["offset_index"]["length"] > 0, "control index missing")
+                if not row_groups:
+                    require(actual.compression == column["compression"] == "UNCOMPRESSED" and actual.dictionary_page_offset is None, "page writer settings changed")
+                    require([(p["first_row"], p["rows"]) for p in column["pages"]] == [(p * 128, 128) for p in range(32)], "wrong 128-row page boundaries")
+                if c != 1:
+                    continue
+                require(actual.statistics.min == low and actual.statistics.max == high and actual.statistics.null_count == 0
+                        and column["statistics"] == {"nulls": 0, **expected}, "unexpected predicate group pruning")
+                for page in column["pages"]:
+                    page_low = low if row_groups else "match" if case_id == "pages.scattered" or page["first_row"] == 0 else "other"
+                    require(page["bounds"] == {"min_hex": page_low.encode().hex(), "max_hex": high.encode().hex()}
+                            and page["nulls"] == 0 and page["all_null"] is False, "unexpected predicate page pruning")
+                    pages += 1
+                    candidate_pages += page_low == "match"
+    return {"row_groups": files * groups, "candidate_row_groups": candidate_groups,
+            "predicate_pages": pages, "candidate_predicate_pages": candidate_pages,
+            "predicate_columns": ["event_id"], "output_columns": list(CONTROL_PROJECTION),
+            "decoded_row_groups": None, "decoded_pages": None,
+            "counter_unavailable_reason": "geometry describes opportunities; common adapters do not expose comparable decoded group/page counters"}
+
+
 def prepare(fixtures, case_id, output, duplicate_literal=False):
     fixtures, output = Path(fixtures).resolve(), Path(output)
     manifest, table, source, projection, predicate, limit, literals, sql = case_input(fixtures, case_id, duplicate_literal)
     verified = objects(fixtures, table, source)
+    geometry = control_geometry(fixtures, table, case_id) if source is None else None
     output.mkdir(parents=True, exist_ok=False)
     reference_db = output / "reference.sqlite"
     predicates = conditions(predicate, literals)
@@ -327,6 +401,14 @@ def prepare(fixtures, case_id, output, duplicate_literal=False):
 
     def expected_rows():
         nonlocal previous_key
+        if source is None:
+            counts[0] = table["rows"]
+            for row_id in range(table["rows"]):
+                if control_matches(case_id, row_id):
+                    counts[-1] += 1
+                    yield control_record(row_id)
+            require(counts[-1] == (65536 if case_id == "row-groups.select" else 64), "wrong qualifying control geometry")
+            return
         for item in source["files"]:
             path = inside(fixtures, str(Path(source["path"]) / item["path"]))
             file_rows = 0
@@ -348,7 +430,7 @@ def prepare(fixtures, case_id, output, duplicate_literal=False):
 
     with closing(database(reference_db)) as db:
         insert_rows(db, expected_rows())
-    require(counts[0] == source["rows"] == table["rows"], "source/table row counts disagree")
+    require(counts[0] == (source or table)["rows"] == table["rows"], "source/table row counts disagree")
     require(sorted(found_literals) == literals, "frozen IN literals disagree with full source")
 
     matching, candidates = [], []
@@ -361,7 +443,10 @@ def prepare(fixtures, case_id, output, duplicate_literal=False):
             if candidate(item["delta_stats"], predicates):
                 candidates.append(item["path"])
             matched, count = False, 0
-            for row in full_rows(path, ORIGINAL + PAYLOADS if table["id"].startswith("wide.") else ORIGINAL):
+            columns = ("row_id", "event_id") + CONTROL_PAYLOADS if source is None else ORIGINAL + PAYLOADS if table["id"].startswith("wide.") else ORIGINAL
+            for row in full_rows(path, columns):
+                if source is None:
+                    require(row["row_id"] == actual_rows + count and row["event_id"] == ("match" if control_matches(case_id, row["row_id"]) else "other"), "control row order or match placement changed")
                 count += 1
                 if prefix_matches(row, predicates) == len(predicates):
                     matched = True
@@ -376,7 +461,7 @@ def prepare(fixtures, case_id, output, duplicate_literal=False):
             insert_rows(db, fixture_rows())
             # Validate all qualifying fixture rows even for a LIMIT case.
             compare(db, reference_db, counts[-1])
-    require(actual_rows == source["rows"], "fixture lost source rows")
+    require(actual_rows == (source or table)["rows"], "fixture lost source rows")
     require(set(matching) <= set(candidates), "file statistics exclude a matching file")
     metadata = {
         "format": "selective-read-reference-v1", "status": "complete",
@@ -397,6 +482,7 @@ def prepare(fixtures, case_id, output, duplicate_literal=False):
         "qualifying_selectivity": counts[-1] / counts[0],
         "active_files": len(table["files"]), "candidate_files": candidates, "matching_files": matching,
         "verified_objects": verified, "reference_sha256": digest_file(reference_db),
+        **({"within_file_geometry": geometry} if geometry else {}),
     }
     # Completion marker last. Partial preparations cannot be accepted by check().
     (output / "reference.json").write_bytes(json_bytes(metadata))

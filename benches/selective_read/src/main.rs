@@ -1,5 +1,7 @@
 //! Public input preparation for selective-read-v1; no reader timings.
 
+mod control_rows;
+mod controls;
 mod fixtures;
 mod repack;
 
@@ -28,7 +30,9 @@ const LOCKFILE: &str = include_str!("../Cargo.lock");
 const GENERATOR_SOURCE: &str = concat!(
     include_str!("main.rs"),
     include_str!("fixtures.rs"),
-    include_str!("repack.rs")
+    include_str!("repack.rs"),
+    include_str!("control_rows.rs"),
+    include_str!("controls.rs")
 );
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -85,6 +89,7 @@ struct Config {
     sort_memory: u64,
     disk_limit: Option<u64>,
     repack_from: Option<PathBuf>,
+    controls: bool,
 }
 
 impl Config {
@@ -95,15 +100,21 @@ impl Config {
         let mut sort_memory = None;
         let mut disk_limit = None;
         let mut repack_from = None;
+        let mut controls = false;
         while let Some(arg) = args.next() {
             if arg == "--help" || arg == "-h" {
                 println!(
                     "selective-read-fixtures --profile smoke|development|report --output NEW_DIRECTORY\n\
                      Optional preparation limits: --sort-memory-mib N --disk-limit-mib N\n\
                      Repack existing clustered rows: --repack-from FIXTURE_DIRECTORY\n\
+                     Generate fixed within-file controls: --controls\n\
                      Existing output directories are never overwritten."
                 );
                 std::process::exit(0);
+            }
+            if arg == "--controls" {
+                controls = true;
+                continue;
             }
             let value = args
                 .next()
@@ -132,6 +143,9 @@ impl Config {
             }
         }
         let output = output.ok_or("--output is required")?;
+        if controls && repack_from.is_some() {
+            return Err("--controls and --repack-from are mutually exclusive".into());
+        }
         let sort_memory =
             sort_memory.unwrap_or(if profile == Profile::Smoke { 512 } else { 4096 } * MIB);
         if !(16 * MIB..=profile.memory_bytes() / 2).contains(&sort_memory) {
@@ -154,6 +168,7 @@ impl Config {
             sort_memory,
             disk_limit,
             repack_from,
+            controls,
         })
     }
 }
@@ -178,6 +193,9 @@ fn main() -> Result<()> {
 }
 
 async fn generate(config: &Config) -> Result<Value> {
+    if config.controls {
+        return controls::generate(config);
+    }
     if let Some(input) = &config.repack_from {
         return repack::generate(config, input);
     }

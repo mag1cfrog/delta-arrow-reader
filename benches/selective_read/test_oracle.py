@@ -112,6 +112,37 @@ def expected_keys(query):
 
 
 class OracleTests(unittest.TestCase):
+    def test_control_formulas_and_request_mapping(self):
+        from runners import run
+        expected = {
+            "row-groups.select": [row for f in range(16) for row in range((f * 16 + 7) * 4096, (f * 16 + 8) * 4096)],
+            "pages.localized": list(range(32)) + list(range(4096, 4128)),
+            "pages.scattered": list(range(0, 8192, 128)),
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tables = []
+            for case, fixture in oracle.CONTROL_CASES.items():
+                rows = 1048576 if case == "row-groups.select" else 8192
+                self.assertEqual([i for i in range(rows) if oracle.control_matches(case, i)], expected[case])
+                sql = f"SELECT {', '.join(oracle.CONTROL_PROJECTION)} FROM bench WHERE event_id = 'match'"
+                tables.append(dict(id=fixture, path=fixture, snapshot_version=0, deletion_vectors=False, queries={case: sql}))
+            write_json(root / "manifest.json", dict(status="complete", protocol="selective-read-v1", profile="smoke", tables=tables, sources=[]))
+            for case, fixture in oracle.CONTROL_CASES.items():
+                request = run.request(root, case, "open", "validation", "check")
+                self.assertEqual(request["table_uri"], (root / fixture).as_uri())
+                self.assertEqual(request["canonical_sql"], oracle.case_input(root, case)[-1])
+        key, _, blob = oracle.control_record(0)
+        self.assertEqual(key, 0)
+        values = json.loads(blob)
+        self.assertIsNone(values[1])
+        self.assertEqual(values[2], "payload-001-00000000-" + "abcdefghijklmnopqrstuvwxyz0123456789" * 12)
+        row = dict(zip(oracle.CONTROL_PROJECTION, values))
+        self.assertEqual(oracle.record(row, oracle.CONTROL_PROJECTION), oracle.control_record(0))
+        row["row_id"] = None
+        with self.assertRaises(ValueError):
+            oracle.record(row, oracle.CONTROL_PROJECTION)
+
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory()

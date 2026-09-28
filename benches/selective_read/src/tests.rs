@@ -7,6 +7,109 @@ use sha2::{Digest, Sha256};
 use super::*;
 
 #[test]
+fn within_file_controls_preserve_skip_levels_and_bytes() -> Result<()> {
+    let root = tempfile::tempdir()?;
+    let budget = Arc::new(Budget::new(1024 * MIB));
+    for case in controls::CASES {
+        // One full file exercises all group/page boundaries without writing 16 copies.
+        let one = controls::table(&root.path().join("one"), case, 1, budget.clone())?;
+        let two = controls::table(&root.path().join("two"), case, 1, budget.clone())?;
+        assert_eq!(one, two);
+        assert_eq!(one["file_count"], 1);
+        let file = &one["files"][0];
+        assert_eq!(file["delta_stats"]["minValues"]["event_id"], "match");
+        assert_eq!(file["delta_stats"]["maxValues"]["event_id"], "other");
+        let groups = file["row_groups"].as_array().ok_or("groups")?;
+        assert_eq!(
+            groups.len(),
+            if case == controls::CASES[0] { 16 } else { 2 }
+        );
+        for (g, group) in groups.iter().enumerate() {
+            assert_eq!(group["rows"], 4096);
+            let columns = group["columns"].as_array().ok_or("columns")?;
+            assert_eq!(columns.len(), 18);
+            let stats = &columns[1]["statistics"];
+            let low = if case != controls::CASES[0] || g == 7 {
+                "match"
+            } else {
+                "other"
+            };
+            assert_eq!(stats["min_hex"], fixtures::hex(low.as_bytes()));
+            assert_eq!(
+                stats["max_hex"],
+                fixtures::hex(if case == controls::CASES[0] {
+                    low.as_bytes()
+                } else {
+                    b"other"
+                })
+            );
+            if case != controls::CASES[0] {
+                for column in columns {
+                    let pages = column["pages"].as_array().ok_or("pages")?;
+                    assert_eq!(pages.len(), 32);
+                    for (p, page) in pages.iter().enumerate() {
+                        assert_eq!(page["first_row"], p * 128);
+                        assert_eq!(page["rows"], 128);
+                    }
+                }
+                let pages = columns[1]["pages"].as_array().ok_or("pages")?;
+                assert_eq!(
+                    pages
+                        .iter()
+                        .filter(|p| p["bounds"]["min_hex"] == "6d61746368")
+                        .count(),
+                    if case == "pages.localized" { 1 } else { 32 }
+                );
+            }
+        }
+        let path = root
+            .path()
+            .join("one")
+            .join(one["path"].as_str().ok_or("path")?)
+            .join(file["path"].as_str().ok_or("path")?);
+        let mut matched = 0;
+        let mut ordinal = 0;
+        for batch in fixtures::read_batches(&path)? {
+            let batch = batch?;
+            let ids = batch
+                .column(0)
+                .as_any()
+                .downcast_ref::<Int32Array>()
+                .ok_or("ids")?;
+            let events = batch
+                .column(1)
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .ok_or("events")?;
+            for row in 0..batch.num_rows() {
+                assert_eq!(ids.value(row), ordinal);
+                let expected = match case {
+                    "row-groups.select" => (28672..32768).contains(&ordinal),
+                    "pages.localized" => {
+                        (0..32).contains(&ordinal) || (4096..4128).contains(&ordinal)
+                    }
+                    _ => ordinal % 128 == 0,
+                };
+                assert_eq!(events.value(row) == "match", expected);
+                matched += usize::from(expected);
+                ordinal += 1;
+            }
+        }
+        assert_eq!(matched, if case == controls::CASES[0] { 4096 } else { 64 });
+    }
+    assert_eq!(control_rows::payload_value(0, 0), None);
+    assert_eq!(control_rows::payload_value(16, 1), None);
+    assert_eq!(
+        control_rows::payload_value(1, 0),
+        Some(format!(
+            "payload-000-00000001-{}",
+            "abcdefghijklmnopqrstuvwxyz0123456789".repeat(12)
+        ))
+    );
+    Ok(())
+}
+
+#[test]
 fn smoke_reproduces_files_and_preserves_rows() -> Result<()> {
     let root = tempfile::tempdir()?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -19,6 +122,7 @@ fn smoke_reproduces_files_and_preserves_rows() -> Result<()> {
         sort_memory: 512 * MIB,
         disk_limit: Some(4 * 1024 * MIB),
         repack_from: None,
+        controls: false,
     };
     let second = Config {
         output: root.path().join("second"),
@@ -205,7 +309,9 @@ fn smoke_reproduces_files_and_preserves_rows() -> Result<()> {
                 .join(table["path"].as_str().ok_or("path")?)
                 .join(file["path"].as_str().ok_or("path")?),
             original_schema(),
-            &bad_stats
+            &bad_stats,
+            fixtures::GROUP_ROWS,
+            8
         )
         .is_err()
     );

@@ -170,7 +170,7 @@ pub fn writer_settings() -> Value {
     })
 }
 
-fn writer_properties() -> Result<WriterProperties> {
+pub fn writer_properties() -> Result<WriterProperties> {
     Ok(WriterProperties::builder()
         .set_writer_version(WriterVersion::PARQUET_1_0)
         .set_max_row_group_row_count(Some(GROUP_ROWS))
@@ -404,10 +404,29 @@ pub struct TableWriter {
     files: Vec<Value>,
     pending: Vec<RecordBatch>,
     pending_rows: usize,
+    properties: WriterProperties,
+    group_rows: usize,
+    groups_per_file: usize,
 }
 
 impl TableWriter {
     pub fn new(path: &Path, schema: SchemaRef, budget: Arc<Budget>) -> Result<Self> {
+        Self::with_geometry(path, schema, budget, writer_properties()?, 8)
+    }
+
+    pub fn with_geometry(
+        path: &Path,
+        schema: SchemaRef,
+        budget: Arc<Budget>,
+        properties: WriterProperties,
+        groups_per_file: usize,
+    ) -> Result<Self> {
+        let group_rows = properties
+            .max_row_group_row_count()
+            .ok_or("unbounded row group")?;
+        if groups_per_file == 0 || group_rows.checked_mul(groups_per_file).is_none() {
+            return Err("invalid file geometry".into());
+        }
         fs::create_dir_all(path)?;
         Ok(Self {
             path: path.to_owned(),
@@ -418,17 +437,22 @@ impl TableWriter {
             files: Vec::new(),
             pending: Vec::new(),
             pending_rows: 0,
+            properties,
+            group_rows,
+            groups_per_file,
         })
     }
 
     pub fn push(&mut self, batch: RecordBatch) -> Result<()> {
         let mut offset = 0;
         while offset < batch.num_rows() {
-            let length = (BATCH_ROWS - self.pending_rows).min(batch.num_rows() - offset);
+            let remaining = self.group_rows * self.groups_per_file - self.stats.rows as usize;
+            let batch_rows = BATCH_ROWS.min(remaining);
+            let length = (batch_rows - self.pending_rows).min(batch.num_rows() - offset);
             self.pending.push(batch.slice(offset, length));
             self.pending_rows += length;
             offset += length;
-            if self.pending_rows == BATCH_ROWS {
+            if self.pending_rows == batch_rows {
                 self.flush_batch()?;
             }
         }
@@ -453,7 +477,7 @@ impl TableWriter {
             self.current = Some(ArrowWriter::try_new(
                 BudgetFile::new(&path, self.budget.clone())?,
                 self.schema.clone(),
-                Some(writer_properties()?),
+                Some(self.properties.clone()),
             )?);
         }
         self.stats.update(&batch)?;
@@ -461,7 +485,7 @@ impl TableWriter {
             .as_mut()
             .ok_or("missing writer")?
             .write(&batch)?;
-        if self.stats.rows == FILE_ROWS as u64 {
+        if self.stats.rows == (self.group_rows * self.groups_per_file) as u64 {
             self.finish_file()?;
         }
         Ok(())
@@ -475,7 +499,13 @@ impl TableWriter {
         let name = format!("part-{:05}.parquet", self.files.len());
         let path = self.path.join(&name);
         let stats = self.stats.json()?;
-        let mut inspected = inspect_file(&path, self.schema.clone(), &stats)?;
+        let mut inspected = inspect_file(
+            &path,
+            self.schema.clone(),
+            &stats,
+            self.group_rows,
+            self.groups_per_file,
+        )?;
         inspected["path"] = json!(name);
         self.files.push(inspected);
         self.stats = Stats::new(self.schema.clone());
@@ -557,7 +587,13 @@ pub fn read_batches(path: &Path) -> Result<ParquetRecordBatchReader> {
         .build()?)
 }
 
-pub fn inspect_file(path: &Path, schema: SchemaRef, expected_stats: &Value) -> Result<Value> {
+pub fn inspect_file(
+    path: &Path,
+    schema: SchemaRef,
+    expected_stats: &Value,
+    group_rows: usize,
+    groups_per_file: usize,
+) -> Result<Value> {
     let reader = ParquetRecordBatchReaderBuilder::try_new_with_options(
         File::open(path)?,
         ArrowReaderOptions::new().with_page_index_policy(PageIndexPolicy::Required),
@@ -578,8 +614,8 @@ pub fn inspect_file(path: &Path, schema: SchemaRef, expected_stats: &Value) -> R
     let mut first_row = 0;
     for (g, group) in metadata.row_groups().iter().enumerate() {
         if group.num_rows() <= 0
-            || group.num_rows() > GROUP_ROWS as i64
-            || (g + 1 < metadata.num_row_groups() && group.num_rows() != GROUP_ROWS as i64)
+            || group.num_rows() > group_rows as i64
+            || (g + 1 < metadata.num_row_groups() && group.num_rows() != group_rows as i64)
         {
             return Err("unexpected row-group boundary".into());
         }
@@ -630,7 +666,7 @@ pub fn inspect_file(path: &Path, schema: SchemaRef, expected_stats: &Value) -> R
         groups.push(json!({"first_row": first_row, "rows": group.num_rows(), "columns": chunks}));
         first_row += group.num_rows();
     }
-    if metadata.num_row_groups() > 8 {
+    if metadata.num_row_groups() > groups_per_file {
         return Err("too many row groups in a data file".into());
     }
     if first_row != metadata.file_metadata().num_rows()
