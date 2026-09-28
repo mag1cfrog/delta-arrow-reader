@@ -5,121 +5,19 @@ import json
 import os
 from pathlib import Path
 import shutil
-import subprocess
 import sys
 
-import pyarrow as pa
-import pyarrow.parquet as pq
-
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[3]
 sys.path.insert(0, str(HERE.parent))
 import check as shared_check
 import run
-
-
-def probe(binary, payload, output, env=None):
-    """Export a bounded capability fixture; it is not a public-case certificate."""
-    output.mkdir()
-    run.save(output / "request.json", payload)
-    with (output / "stdout.jsonl").open("x") as stdout, (output / "stderr.log").open("x") as stderr:
-        process = subprocess.run([str(binary.resolve()), str((output / "request.json").resolve()),
-                                  str((output / "reader").resolve())], stdout=stdout, stderr=stderr, env=env)
-    record_path = output / "reader/record.json"
-    record = json.loads(record_path.read_text()) if record_path.exists() else {
-        "status": "invalid_input", "failure_reason": (output / "stderr.log").read_text()}
-    assert (process.returncode == 0) == (record["status"] == "success"), record
-    return record
-
-
-def exported(record, output, expected):
-    assert record["status"] == "success", record
-    for query in record["queries"]:
-        with pa.ipc.open_stream(output / "reader" / query["result"]) as stream:
-            batches = list(stream)  # These fixtures have at most twelve rows.
-            assert all(b.num_rows <= 8192 for b in batches)
-            actual = pa.Table.from_batches(batches, schema=stream.schema)
-        assert [(f.name, f.type) for f in actual.schema] == [(f.name, f.type) for f in expected.schema]
-        assert actual.sort_by("id").to_pylist() == expected.sort_by("id").to_pylist()
-        assert query["output_rows"] == expected.num_rows and query["completion_ns"] is None
+from capabilities import CORPUS, delta_capabilities, probe
 
 
 def check(binary, fixtures, output):
     output.mkdir()
     shared_check.check([binary], fixtures, output / "public-cases")
-    corpus = ROOT / "tests/reader/fixtures/external_writer/corpus"
-    manifest = json.loads((corpus / "manifest.json").read_text())
-    fixture = next(f for f in manifest["fixtures"] if f["name"] == "deletion_vectors")
-    original = corpus / "deletion_vectors"
-    for name, expected in fixture["files"].items():
-        path = original / name
-        assert path.stat().st_size == expected["bytes"] and run.digest(path) == expected["sha256"]
-    source = pq.ParquetFile(next((original / "table").glob("*.parquet"))).read()
-    with pa.ipc.open_file(original / "expected.arrow") as saved:
-        deleted = saved.read_all()
-    assert source.num_rows == 12 and deleted.num_rows == 9
-    assert set(source["id"].to_pylist()) - set(deleted["id"].to_pylist()) == {2, 5, 12}
-
-    no_dv = output / "no-dv"
-    shutil.copytree(original / "table", no_dv)
-    (no_dv / "_delta_log/00000000000000000001.json").unlink()
-    log = no_dv / "_delta_log/00000000000000000000.json"
-    actions = [json.loads(line) for line in log.read_text().splitlines()]
-    for action in actions:
-        if "protocol" in action:
-            action["protocol"] = {"minReaderVersion": 1, "minWriterVersion": 2}
-        if "metaData" in action:
-            action["metaData"]["configuration"].pop("delta.enableDeletionVectors", None)
-    log.write_text("".join(json.dumps(a) + "\n" for a in actions))
-
-    observations = []
-    base = run.request(fixtures, "li.clustered.eq2-in20", "open", "validation", "probe")
-    # The corpus hash identifies these bounded probes. They cannot authorize public timing.
-    base.update(fixture_manifest_sha256=run.digest(corpus / "manifest.json"), case_id="probe.spark-dv")
-    for mode in ("open", "reuse"):
-        for name, table, version, expected in (("no-dv", no_dv, 0, source),
-                ("feature-only", original / "table", 0, source), ("real-dv", original / "table", 1, deleted)):
-            for predicate in ("", " WHERE id IN (2, 5, 12)", " WHERE id IN (1, 2, 5, 6, 12)"):
-                if name == "no-dv" and predicate:
-                    continue
-                selected = expected
-                if predicate:
-                    ids = {2, 5, 12} if predicate == " WHERE id IN (2, 5, 12)" else {1, 2, 5, 6, 12}
-                    selected = pa.Table.from_pylist([r for r in expected.to_pylist() if r["id"] in ids], schema=expected.schema)
-                destination = output / f"{mode}-{name}-{len(observations)}"
-                payload = dict(base, table_uri=table.resolve().as_uri(), snapshot_version=version,
-                               canonical_sql="SELECT id, value, label FROM bench" + predicate,
-                               execution_mode=mode, run_id=destination.name)
-                record = probe(binary, payload, destination)
-                exported(record, destination, selected)
-                assert len(record["queries"]) == (10 if mode == "reuse" else 1)
-                assert record["settings"]["provider"]["pin_snapshot"] == (mode == "reuse")
-                observations.append({"path": destination.name, "status": "passed", "mode": mode, "feature": name,
-                                     "version": version, "predicate": predicate, "output_rows": selected.num_rows})
-
-    unknown = output / "unsupported-feature"
-    shutil.copytree(original / "table", unknown)
-    unknown_log = unknown / "_delta_log/00000000000000000000.json"
-    actions = [json.loads(line) for line in unknown_log.read_text().splitlines()]
-    for action in actions:
-        if "protocol" in action:
-            for key in ("readerFeatures", "writerFeatures"):
-                action["protocol"][key].append("unknownBenchmarkProbe")
-    unknown_log.write_text("".join(json.dumps(a) + "\n" for a in actions))
-    missing = output / "missing-dv"
-    shutil.copytree(original / "table", missing)
-    next(missing.glob("deletion_vector_*.bin")).unlink()
-    for mode in ("open", "reuse"):
-        for name, table, version, status in (("wrong-version", original / "table", 999, "operational_failure"),
-                ("unsupported", unknown, 0, "unsupported"), ("missing-dv", missing, 1, "operational_failure")):
-            destination = output / f"{mode}-{name}"
-            payload = dict(base, table_uri=table.resolve().as_uri(), snapshot_version=version,
-                           canonical_sql="SELECT * FROM bench", execution_mode=mode, run_id=destination.name)
-            record = probe(binary, payload, destination)
-            assert record["status"] == status and record["failure_reason"], record
-            if mode == "reuse" and name == "wrong-version":
-                assert record["phase"] == "snapshot_open" and not record["queries"]
-            observations.append({"path": destination.name, "status": status, "reason": record["failure_reason"]})
+    observations = delta_capabilities(binary, fixtures, output)
 
     # An error after delivered rows distinguishes streaming from a collected result
     # sliced into batches. Use more rows than DuckDB's native stream buffer holds.
@@ -157,7 +55,7 @@ def check(binary, fixtures, output):
 
     changed = output / "changed-extension"
     changed.mkdir()
-    for name in (binary.name, "run.py", "oracle.py", "protocol.md", "lock.json", "build.json"):
+    for name in (binary.name, "python_common.py", "run.py", "oracle.py", "protocol.md", "lock.json", "build.json"):
         shutil.copy2(binary.with_name(name), changed / name)
     (changed / "httpfs.duckdb_extension").write_bytes(b"not the locked extension")
     result = probe(changed / binary.name, payload, output / "extension-rejected")
@@ -200,7 +98,7 @@ def check(binary, fixtures, output):
     summary = {"status": "passed", "public_contract_invocations": public,
                "capability_invocations": len(observations), "total_invocations": public + len(observations)}
     run.save(output / "capabilities.json", {**summary, "reader": "duckdb",
-        "build_sha256": run.digest(binary.with_name("build.json")), "corpus_manifest_sha256": run.digest(corpus / "manifest.json"),
+        "build_sha256": run.digest(binary.with_name("build.json")), "corpus_manifest_sha256": run.digest(CORPUS / "manifest.json"),
         "scope": "bounded fixtures; rerun against exact campaign fixtures", "observations": observations})
     print(json.dumps(summary))
 

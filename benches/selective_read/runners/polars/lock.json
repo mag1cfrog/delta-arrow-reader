@@ -1,0 +1,58 @@
+{
+  "python": "3.14.6",
+  "platform": "linux_amd64",
+  "polars_source": "1bd8ec12f42d40fcec62badf32ef2177d2377d8d",
+  "deltalake_python_source": "104886f88027e27c27c59f51d71367d3938b6146",
+  "delta_dependency_note": "deltalake 1.6.6 wheel embeds delta-rs. Its release source declares buoyant_kernel 0.28.1,<0.28.100, buoyant_kernel_engine 0.28.0,<0.28.100, Arrow 59 and DataFusion 55. No resolved Cargo.lock is published in that source tag; the exact executable identity is the locked wheel SHA-256, not these dependency ranges.",
+  "wheels": [
+    {
+      "name": "polars",
+      "version": "1.44.2",
+      "filename": "polars-1.44.2-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/51/6d/3014112c7f717d1253223faa13b6db3ac3a64ed00ab2a3bc1b942bc9cdd4/polars-1.44.2-py3-none-any.whl",
+      "sha256": "1bb331f17a40d9d931101533dcd33637b66edc61eb377b07020dac16a0f0377b"
+    },
+    {
+      "name": "polars-runtime-32",
+      "version": "1.44.2",
+      "filename": "polars_runtime_32-1.44.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/e9/24/ed9982657c446dd5491b089370eea196725673570cfc61f7225a9fdd7ef0/polars_runtime_32-1.44.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "sha256": "a1bafb441e99199a62c63bf1bbdc0ea09ee9776dbac2bf31452b5000fb1df2f7"
+    },
+    {
+      "name": "deltalake",
+      "version": "1.6.6",
+      "filename": "deltalake-1.6.6-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/75/8f/07925ff4f54d8ce35f33961f27e224e3073b7286d9041b95f8e84549fe4a/deltalake-1.6.6-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "sha256": "802db1ae734295c7b947bddd228b9e6b5df702846b085be91ad593840f72e36c"
+    },
+    {
+      "name": "pyarrow",
+      "version": "25.0.1",
+      "filename": "pyarrow-25.0.1-cp314-cp314-manylinux_2_28_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/8d/61/1c5d1229fa21da4cff5365e41e57177aaac57c563c727f35419b8513d1c1/pyarrow-25.0.1-cp314-cp314-manylinux_2_28_x86_64.whl",
+      "sha256": "9171748cdf796972d85a4b60157c279913e242992e350c90c7450182a9838b2a"
+    },
+    {
+      "name": "arro3-core",
+      "version": "0.8.3",
+      "filename": "arro3_core-0.8.3-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/df/32/83274c808ae58a2fcede42ce76178bcd2c5e0e5bbc9b9ef12eb458f79c83/arro3_core-0.8.3-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "sha256": "adf5bf37075fc3b6e9574a4c414b3a4f5fdb9c17c16eedf64c852a01d66093c1"
+    },
+    {
+      "name": "deprecated",
+      "version": "3.0.0",
+      "filename": "deprecated-3.0.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/83/ae/676feae8e4644a6d7169951a97f61c56f416c73f67bf1761f2461d75cc81/deprecated-3.0.0-py3-none-any.whl",
+      "sha256": "58204cf4a7f6270d547af5c278ee7a6bb56045a4b3d8441a1cd11660f41b7939"
+    },
+    {
+      "name": "wrapt",
+      "version": "2.5.0",
+      "filename": "wrapt-2.5.0-cp314-cp314-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/23/38/285b433121d73c7a447b5b82d93c91dc3330f33ab5853975f34551e0c773/wrapt-2.5.0-cp314-cp314-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+      "sha256": "b640460f0ffb346b192686bd6fac5589e35a6c6640501c59a9fb6e82b0dd6bd8"
+    }
+  ]
+}

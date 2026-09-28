@@ -1,4 +1,4 @@
-"""Prepare the pinned DuckDB runner and save its offline artifacts."""
+"""Prepare the pinned Polars runner and save its offline artifacts."""
 
 import argparse
 from pathlib import Path

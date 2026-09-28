@@ -1,15 +1,12 @@
 """Pinned DuckDB Delta adapter for the shared selective-read request/record contract."""
 
 from contextlib import ExitStack
-import hashlib
-import importlib.metadata
 import json
 import os
 from pathlib import Path
 import platform
 import re
 import sys
-import sysconfig
 from time import perf_counter_ns as clock
 from urllib.parse import urlsplit
 
@@ -18,27 +15,12 @@ import pyarrow as pa
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from run import BUDGET, digest, save
+from run import digest, save
+from python_common import correctness, json_hash, require, runtime_metadata, sha, validate
 
 CONFIG = {"threads": 8, "memory_limit": "4GiB", "enable_external_file_cache": False,
           "autoload_known_extensions": False, "autoinstall_known_extensions": False,
           "allow_persistent_secrets": False, "python_enable_replacements": False}
-REQUEST_FIELDS = set("table_uri snapshot_version case_id canonical_sql comparison_revision protocol_sha256 "
-                     "fixture_manifest_sha256 profile execution_mode purpose resource_budget correctness_file "
-                     "campaign_id run_id repetition order".split())
-
-
-def sha(value):
-    return hashlib.sha256(value).hexdigest()
-
-
-def json_hash(value):
-    return sha(json.dumps(value, sort_keys=True, separators=(",", ":")).encode())
-
-
-def require(condition, reason):
-    if not condition:
-        raise ValueError(reason)
 
 
 def literal(value):
@@ -70,45 +52,6 @@ def connect():
     except Exception:
         connection.close()
         raise
-
-
-def runtime_metadata(engine):
-    """Hash installed files, not just the package's self-reported version or RECORD."""
-    packages = {}
-    for dist in importlib.metadata.distributions():
-        files = {str(p): digest(Path(dist.locate_file(p))) for p in dist.files
-                 if p.suffix != ".pyc" and Path(dist.locate_file(p)).is_file()}
-        packages[dist.metadata["Name"].lower()] = {
-            "version": dist.version, "installed_files_sha256": json_hash(files),
-            "wheel": dist.read_text("WHEEL"), "requires_dist": dist.requires or [],
-        }
-    lock = json.loads((HERE / "lock.json").read_text())
-    require({k: v["version"] for k, v in packages.items()} == {w["name"]: w["version"] for w in lock["wheels"]},
-            "installed packages differ from the lock")
-    return {**engine, "packages": packages, "python": sys.version, "python_executable_sha256": digest(Path("/proc/self/exe")),
-            "python_abi": sysconfig.get_config_var("SOABI"), "python_build": list(platform.python_build()),
-            "python_config_args": sysconfig.get_config_var("CONFIG_ARGS"), "libc": list(platform.libc_ver())}
-
-
-def validate(request):
-    require(isinstance(request, dict) and set(request) == REQUEST_FIELDS, "unknown or missing request fields")
-    uri = urlsplit(request["table_uri"])
-    require(uri.scheme in ("file", "s3") and not (uri.username or uri.password or uri.query or uri.fragment)
-            and (uri.scheme != "file" or (uri.netloc in ("", "localhost") and uri.path.startswith("/")))
-            and (uri.scheme != "s3" or bool(uri.netloc)), "expected a file/s3 URL without credentials, query or fragment")
-    require(type(request["snapshot_version"]) is int and 0 <= request["snapshot_version"] < 2**64,
-            "invalid snapshot version")
-    require(request["execution_mode"] in ("open", "reuse") and request["purpose"] in ("validation", "timing", "diagnostic")
-            and type(request["comparison_revision"]) is int and request["comparison_revision"] == 2
-            and request["protocol_sha256"] == digest(HERE / "protocol.md")
-            and re.fullmatch("[0-9a-f]{64}", request["fixture_manifest_sha256"])
-            and request["resource_budget"] == BUDGET, "request differs from the frozen protocol")
-    for field in ("case_id", "run_id", "canonical_sql", "profile"):
-        require(isinstance(request[field], str) and request[field].strip(), f"invalid {field}")
-    for field in ("campaign_id", "correctness_file"):
-        require(request[field] is None or isinstance(request[field], str), f"invalid {field}")
-    for field in ("repetition", "order"):
-        require(request[field] is None or (type(request[field]) is int and request[field] >= 0), f"invalid {field}")
 
 
 def storage(connection, uri):
@@ -158,24 +101,6 @@ def native_settings(connection):
     if proxy.username or proxy.password:
         settings["http_proxy"] = proxy._replace(netloc=proxy.netloc.rsplit("@", 1)[-1]).geturl()
     return settings
-
-
-def correctness(request, identity):
-    if request["purpose"] != "timing":
-        return {"status": "not_checked", "reason": "untimed invocation"}
-    require(request["correctness_file"], "timing requires a correctness certificate")
-    path = Path(request["correctness_file"])
-    proof = json.loads(path.read_text())
-    count = 10 if request["execution_mode"] == "reuse" else 1
-    require(proof["status"] == "passed" and len(proof["checks"]) == count, "failed or incomplete correctness certificate")
-    rows = []
-    for check in proof["checks"]:
-        require(check["status"] == "passed" and check["oracle_sha256"] == digest(HERE / "oracle.py"), "failed or stale oracle check")
-        for key, value in identity.items():
-            require(type(check.get(key)) is type(value) and check.get(key) == value, f"stale correctness field: {key}")
-        require(type(check["output_rows"]) is int and check["output_rows"] >= 0, "missing validated row count")
-        rows.append(check["output_rows"])
-    return {"status": "passed", "path": str(path), "artifact_sha256": digest(path), "expected_output_rows": rows}
 
 
 def failure_status(error):
