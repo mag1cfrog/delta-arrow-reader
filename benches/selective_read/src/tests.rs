@@ -194,6 +194,7 @@ fn smoke_reproduces_files_and_preserves_rows() -> Result<()> {
         .build()?;
     let first = Config {
         profile: Profile::Smoke,
+        large: None,
         output: root.path().join("first"),
         sort_memory: 512 * MIB,
         disk_limit: Some(4 * 1024 * MIB),
@@ -221,6 +222,48 @@ fn smoke_reproduces_files_and_preserves_rows() -> Result<()> {
             .all(|sort| sort["spill_count"].as_u64().is_some_and(|n| n > 0))
     );
     assert_eq!(one["tables"].as_array().ok_or("tables")?.len(), 4);
+    // The staged path reuses exact source bytes and sorts directly into a selected wide
+    // fixture, without needing to retain an intermediate narrow table.
+    let staged = root.path().join("staged");
+    let budget = Arc::new(Budget::new(512 * MIB));
+    let copied = large::reuse_source(&first.output, &staged, 0.01, budget.clone())?;
+    assert_eq!(copied, one["sources"][0]);
+    assert!(
+        large::reuse_source(
+            &first.output,
+            &root.path().join("wrong-scale"),
+            1.0,
+            budget.clone()
+        )
+        .is_err()
+    );
+    let context = SessionContext::new();
+    for layout in ["clustered", "shuffled"] {
+        let id = format!("wide.{layout}");
+        let mut sorts = Vec::new();
+        let writer = runtime.block_on(sorted_table(
+            &context,
+            &staged.join("sf0.01/source"),
+            &staged.join(&id),
+            layout,
+            true,
+            budget.clone(),
+            &mut sorts,
+        ))?;
+        let table = finish_table(writer, &id, Profile::Large, 0.01, layout, 60175)?;
+        let original = one["tables"]
+            .as_array()
+            .ok_or("tables")?
+            .iter()
+            .find(|t| t["id"] == id)
+            .ok_or("table")?;
+        assert_eq!(table["files"], original["files"]);
+        assert_ne!(
+            table["delta_log"]["sha256"],
+            original["delta_log"]["sha256"]
+        );
+        assert!(!staged.join(format!("li.{layout}")).exists());
+    }
     assert_eq!(
         one["sources"][0]["queries"]
             .as_object()
@@ -411,6 +454,139 @@ fn smoke_reproduces_files_and_preserves_rows() -> Result<()> {
     let quota = Arc::new(Budget::new(3));
     assert!(quota.write(&root.path().join("quota"), b"four").is_err());
     assert_eq!(fs::metadata(root.path().join("quota"))?.len(), 0);
+    let mut legacy = one.clone();
+    for file in legacy["sources"][0]["files"]
+        .as_array_mut()
+        .ok_or("files")?
+    {
+        let file = file.as_object_mut().ok_or("file")?;
+        file.remove("created_by");
+        file.remove("parquet_version");
+    }
+    fs::write(
+        first.output.join("manifest.json"),
+        serde_json::to_vec(&legacy)?,
+    )?;
+    assert_eq!(
+        large::reuse_source(
+            &first.output,
+            &root.path().join("legacy-source"),
+            0.01,
+            budget.clone()
+        )?,
+        legacy["sources"][0]
+    );
+    let mut invalid = one.clone();
+    invalid["sources"][0]["in_literals"] = json!([-1]);
+    fs::write(
+        first.output.join("manifest.json"),
+        serde_json::to_vec(&invalid)?,
+    )?;
+    assert!(
+        large::reuse_source(
+            &first.output,
+            &root.path().join("wrong-literals"),
+            0.01,
+            budget.clone()
+        )
+        .is_err()
+    );
+    invalid["sources"][0]["path"] = json!("../escaped");
+    fs::write(
+        first.output.join("manifest.json"),
+        serde_json::to_vec(&invalid)?,
+    )?;
+    assert!(
+        large::reuse_source(
+            &first.output,
+            &root.path().join("wrong-path"),
+            0.01,
+            budget.clone()
+        )
+        .is_err()
+    );
+    fs::write(
+        first.output.join("manifest.json"),
+        serde_json::to_vec(&one)?,
+    )?;
+    let source_file = first.output.join("sf0.01/source/part-00000.parquet");
+    let mut corrupted = fs::read(&source_file)?;
+    corrupted[0] ^= 1;
+    fs::write(&source_file, corrupted)?;
+    assert!(
+        large::reuse_source(
+            &first.output,
+            &root.path().join("corrupt-source"),
+            0.01,
+            budget
+        )
+        .is_err()
+    );
+    Ok(())
+}
+
+#[test]
+fn large_requires_explicit_scale_and_capacity() -> Result<()> {
+    let root = tempfile::tempdir()?;
+    let output = root.path().join("new");
+    let base = vec![
+        "--profile",
+        "large",
+        "--scale-factor",
+        "1",
+        "--fixture",
+        "wide.clustered",
+        "--disk-limit-mib",
+        "196608",
+        "--elapsed-limit-seconds",
+        "600",
+        "--output",
+        output.to_str().ok_or("path")?,
+    ];
+    let config = Config::parse(base.iter().map(|s| (*s).to_owned()))?;
+    let plan = large::preflight(&config)?;
+    assert_eq!(plan["fits_budget"], true);
+    assert_eq!(plan["rows_for_capacity"], 10_500_000);
+    assert!(!output.exists());
+    for (index, value) in [
+        (3, "0.01"),
+        (3, "2"),
+        (3, "NaN"),
+        (5, "all"),
+        (7, "0"),
+        (9, "0"),
+        (1, "report"),
+    ] {
+        let mut args = base.clone();
+        args[index] = value;
+        assert!(
+            Config::parse(args.iter().map(|s| (*s).to_owned())).is_err(),
+            "accepted {args:?}"
+        );
+    }
+    for index in [2, 4, 6, 8] {
+        let mut args = base.clone();
+        args.drain(index..index + 2);
+        assert!(Config::parse(args.iter().map(|s| (*s).to_owned())).is_err());
+    }
+    let mut small = config.clone();
+    small.disk_limit = Some(1024 * MIB);
+    assert_eq!(large::preflight(&small)?["fits_budget"], false);
+    let mut larger = config.clone();
+    larger.large.as_mut().ok_or("large")?.scale = 300;
+    let bigger = large::preflight(&larger)?;
+    assert_eq!(bigger["fits_budget"], false);
+    assert!(bigger["estimated_peak_bytes"].as_u64() > plan["estimated_peak_bytes"].as_u64());
+    for extra in [
+        vec!["--controls"],
+        vec!["--repack-from", "unused"],
+        vec!["--dv-from", "unused"],
+        vec!["--fixture", "source"],
+    ] {
+        let mut args = base.clone();
+        args.extend(extra);
+        assert!(Config::parse(args.iter().map(|s| (*s).to_owned())).is_err());
+    }
     Ok(())
 }
 

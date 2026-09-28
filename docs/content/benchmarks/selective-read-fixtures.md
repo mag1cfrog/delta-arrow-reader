@@ -72,6 +72,105 @@ The generator is a separate Cargo package in `benches/selective_read`, with
 its own committed lockfile. Its dependencies do not change the reader library's
 dependency graph or Rust requirement. Use `--locked` when reproducing inputs.
 
+## Prepare one large fixture
+
+The [large-workload plan](selective-read-large-workloads.md) adds an explicit
+`large` profile. It accepts source scales 1, 10, 30, 100, and 300, and writes one
+selected fixture per invocation. The original three profiles keep their data
+and object identities. The final report scale is selected by the later pilot;
+generating one of these fixtures does not complete that calibration.
+
+Build the same executable, then inspect capacity before writing data:
+
+```sh
+RUSTFLAGS='-C target-cpu=x86-64' CARGO_TARGET_DIR=target/selective-read \
+  cargo +1.98.1 build --release --locked -j8 \
+  --manifest-path benches/selective_read/Cargo.toml
+
+target/selective-read/release/selective-read-fixtures \
+  --profile large --scale-factor 1 --fixture wide.clustered \
+  --disk-limit-mib 196608 --elapsed-limit-seconds 1800 \
+  --preflight --output ../large-wide-clustered-sf1
+```
+
+`--preflight` prints a JSON capacity plan without creating the output directory
+or generating rows. It exits unsuccessfully if the estimate exceeds the explicit
+budget or available space. Remove `--preflight` to generate the same request
+after inspecting the plan. The 192 GiB allowance in this example is a ceiling,
+not a request to allocate that much space. Larger scale factors can fail it.
+
+The required `--fixture` accepts `source`, `li.clustered`, `li.shuffled`,
+`wide.clustered`, or `wide.shuffled`. `source` prepares only the original rows;
+the other choices save those rows and the selected table. Wide tables use the
+same source scale and the normal 131,072-row groups/eight-group files. Source
+rows come from the pinned generator at that scale.
+
+To prepare another layout using the saved original rows:
+
+```sh
+target/selective-read/release/selective-read-fixtures \
+  --profile large --scale-factor 1 --fixture wide.shuffled \
+  --source-from ../large-wide-clustered-sf1 \
+  --disk-limit-mib 196608 --elapsed-limit-seconds 1800 \
+  --output ../large-wide-shuffled-sf1
+```
+
+Source reuse verifies the manifest, lockfile, physical metadata, hashes, complete
+source values and generator order, including the resolved literals and SQL.
+It copies the verified source objects into the new output, which remains self
+contained. It replays the pinned logical generator for validation but avoids
+re-encoding the source Parquet. Each wide layout sorts the narrow source before
+adding payloads, without retaining another narrow table. Existing development
+or report sources at the requested scale can also be reused.
+
+Large table UUIDs include `large-sf{scale}` in their namespace. Their manifests
+record the amendment hash, base protocol hash, selected scale/fixture, source
+provenance and file-size summary. The full file/page metadata remains available.
+These are generator identities. Comparison revision 3 queries, oracle bindings
+and reader adoption are delivered separately by
+[#344](https://github.com/mag1cfrog/delta-arrow-reader/issues/344); existing
+comparison certificates do not authorize timing a new large fixture.
+
+### Large preparation limits
+
+The process keeps the 16 GiB address-space limit and a default 4 GiB sort pool.
+Both disk allowance and wall-clock deadline must be explicit. The Linux alarm
+covers preflight, source validation, generation and final output; expiration
+terminates the process with SIGALRM. A failed or interrupted preparation has no
+valid completion manifest. Keep the command, exit status and partial output
+when investigating it, then use a new destination for another attempt.
+
+The capacity plan considers separate preparation, later validation and later
+derivative phases. It takes their maximum, allowing one source and selected
+fixture at a time. Later phases budget a MinIO copy, an exact reference database,
+one complete reader export and its comparison database, or two repack/DV copies.
+Retire each phase's reproducible temporary data before the next phase; retaining
+additional layouts, exports or scale rungs needs additional space. Builds and
+unrelated data are outside this allowance and still reduce free disk.
+
+Before source rows are known, planning uses at most seven lineitems for each of
+1.5 million orders per SF. A reused source supplies its recorded count, verified
+against actual rows before completion. Per-row allowances are 256 bytes for
+source/narrow Parquet, 768 for wide Parquet and its IPC export, and 512 for sort
+spill. Each SQLite reference/comparison allowance is 1,024 bytes per narrow row
+or 4,096 per wide row. Metadata adds 64 MiB per SF; sort-write headroom and a
+512 MiB filesystem margin are separate. These are conservative capacity
+assumptions, not measured compressed sizes or promises about later tools.
+
+Output writes and native spill have separate enforced byte ceilings from the
+plan. A larger disk flag does not silently increase those derived ceilings or
+change a fixture. An estimate that proves insufficient needs an explicit
+planning change before retrying. The checks do not reserve storage against
+other processes; later phases must preflight their actual inputs again.
+
+`preparation.json` saves the plan before generation. The completion manifest
+records peak RSS, elapsed preparation time, exact budgeted output bytes before
+the final manifest, sort counters and sampled disk high-water marks. Disk
+sampling runs every 100 ms and can miss a shorter peak; final manifest writes
+and later phases are outside its observation window. Native byte quotas and
+the address-space limit apply independently of sampling. Bulk data stays
+outside Git, and generation/calibration remain manual.
+
 ## Read the output
 
 A successful preparation writes `manifest.json` last. A directory without a
