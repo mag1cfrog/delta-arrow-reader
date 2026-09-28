@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## [0.6.2](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.1...v0.6.2) - 2026-09-28
+
+### Added
+
+- add paired wide file-organization benchmarks ([#349](https://github.com/mag1cfrog/delta-arrow-reader/pull/349))
+- add large-workload query and reuse contracts ([#348](https://github.com/mag1cfrog/delta-arrow-reader/pull/348))
+- add bounded selective-read scale ladders ([#347](https://github.com/mag1cfrog/delta-arrow-reader/pull/347))
+
+### Documentation
+
+- define large-workload benchmark calibration ([#346](https://github.com/mag1cfrog/delta-arrow-reader/pull/346))
+- expand selective-read benchmarks to five readers ([#331](https://github.com/mag1cfrog/delta-arrow-reader/pull/331))
+- freeze public selective-read benchmark protocol ([#325](https://github.com/mag1cfrog/delta-arrow-reader/pull/325))
+- record verified upstream Parquet resolution
+- record closure of stopped Spark issue backlog
+- freeze Spark experiment and unblock core Python bindings
+
 ## [0.6.1](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.0...v0.6.1) - 2026-09-25
 
 ### Documentation
