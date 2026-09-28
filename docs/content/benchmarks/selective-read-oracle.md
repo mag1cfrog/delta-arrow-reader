@@ -86,8 +86,9 @@ The identity file has these fields:
 | `result_sha256` | SHA-256 of the completed IPC stream file |
 
 Hash strings use 64 lowercase hexadecimal characters. The
-[Rust runners](selective-read-runners.md) produce these artifacts and preserve
-the underlying build/config records. The Python adapters follow in their own PRs.
+[reader adapters](selective-read-runners.md) produce these artifacts and preserve
+the underlying build/config records. DAR, delta-rs, and DuckDB are available;
+Polars and Daft follow in their own slices.
 The checker verifies their binding to the reference and result file; the runner
 is responsible for recording its actual build and invocation rather than
 copying labels from a reference it did not execute.

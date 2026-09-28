@@ -58,12 +58,20 @@ def invoke(binary, payload, output, fixtures=None, reference=None):
         process = subprocess.run([str(binary.resolve()), str((output / "request.json").resolve()),
                                   str((output / "reader").resolve())], stdout=stdout, stderr=stderr)
     record_path = output / "reader/record.json"
-    record = json.loads(record_path.read_text()) if record_path.exists() else {
-        "status": "invalid_input", "failure_reason": (output / "stderr.log").read_text()}
+    if record_path.exists():
+        record = json.loads(record_path.read_text())
+    else:
+        error = (output / "stderr.log").read_text()
+        try:
+            rejected = json.loads(error).get("status") == "invalid_input"
+        except (ValueError, AttributeError):
+            rejected = False
+        record = {"status": "invalid_input" if rejected else "operational_failure",
+                  "failure_reason": error or "reader exited without an observation record"}
     if process.returncode and record["status"] == "success":
         record["status"] = "operational_failure"
         record["failure_reason"] = f"reader exited with status {process.returncode} after writing its record"
-    if process.returncode == 0 and payload["purpose"] == "validation":
+    if process.returncode == 0 and record["status"] == "success" and payload["purpose"] == "validation":
         sys.path.insert(0, str(HERE.parent))
         import oracle
         checks = []

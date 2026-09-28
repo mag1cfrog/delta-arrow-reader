@@ -205,14 +205,18 @@ impl Fixture {
         retain: bool,
     ) -> Result<Self, Box<dyn Error>> {
         shape.validate()?;
+        static NEXT_FIXTURE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let path = temp_root.join(format!(
-            "delta-arrow-reader-page-index-{}-{}-{}-{}",
+            "delta-arrow-reader-page-index-{}-{}-{}-{}-{}",
             std::process::id(),
             SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos(),
+            NEXT_FIXTURE.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             case.layout.name(),
             case.page_index.name(),
         ));
-        fs::create_dir_all(path.join("_delta_log"))?;
+        fs::create_dir_all(temp_root)?;
+        fs::create_dir(&path)?;
+        fs::create_dir(path.join("_delta_log"))?;
 
         let schema = benchmark_schema(shape.payload_columns);
         let properties = WriterProperties::builder()
