@@ -119,7 +119,7 @@ def export_limit(payload, reference):
     if comparison_identity(metadata) != comparison_identity(payload):
         raise ValueError("export/reference workload mismatch")
     # At most ten exports coexist in a reuse validation; reserve half the declared
-    # oracle allowance for them and the other half for exact SQLite comparison.
+    # oracle allowance for them and the other half for the reference and sort spill.
     limit = (metadata["oracle_limits"]["disk_bytes"] - 8 * 1024**2) // (20 if payload["execution_mode"] == "reuse" else 2)
     if limit <= 0:
         raise ValueError("insufficient validation export allowance")

@@ -8,7 +8,7 @@ from pathlib import Path
 import pyarrow.parquet as pq
 
 import oracle
-from oracle import digest_file, inside, load_json, require, verify_object
+from oracle import digest_file, inside, load_json, require, same_rows, verify_object
 
 
 CASES = tuple(f"files{files}.{query}" for files in (64, 4096) for query in ("empty", "eq2-in20"))
@@ -18,22 +18,6 @@ def batches(root, table):
     for item in table["files"]:
         path = verify_object(inside(root, table["path"]), item)
         yield from pq.ParquetFile(path).iter_batches(batch_size=oracle.BATCH_ROWS)
-
-
-def same_rows(left, right):
-    """Exact ordered Arrow values, bounded by two batches despite different boundaries."""
-    left, right = iter(left), iter(right)
-    a, b = next(left, None), next(right, None)
-    rows = 0
-    while a is not None and b is not None:
-        count = min(a.num_rows, b.num_rows)
-        require(count > 0, "unexpected empty batch")
-        require(a.slice(0, count).equals(b.slice(0, count)), f"repacked values/order differ at ordinal {rows}")
-        rows += count
-        a = next(left, None) if count == a.num_rows else a.slice(count)
-        b = next(right, None) if count == b.num_rows else b.slice(count)
-    require(a is None and b is None, "repacked row count differs")
-    return rows
 
 
 def geometry(table, files):

@@ -1,15 +1,17 @@
 """Independent, untimed reference for the public selective-read cases.
 
-PyArrow only decodes full Parquet/IPC batches. Python evaluates predicates and
-payloads; disk-backed SQLite orders exact rows and checks multiplicity.
+Python evaluates predicates and payloads independently. PyArrow stores typed
+references in compressed Parquet; DuckDB only sorts actual Arrow results.
 """
 
 import argparse
 import base64
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from datetime import date
 from decimal import Decimal
 import hashlib
+import io
+from itertools import islice
 import json
 from pathlib import Path
 import platform
@@ -17,7 +19,6 @@ import re
 import resource
 import shutil
 import signal
-import sqlite3
 import sys
 import tempfile
 import uuid
@@ -25,11 +26,15 @@ import zlib
 
 import pyarrow as pa
 import pyarrow.parquet as pq
+import duckdb
 
 
 PROTOCOL = Path(__file__).resolve().parents[2] / "docs/content/benchmarks/selective-read-protocol.md"
 REVISION = 2
 BATCH_ROWS = 8192
+REFERENCE_ROWS = 131072
+SORT_MEMORY_BYTES = 512 * 1024**2
+REQUIREMENTS = Path(__file__).with_name("oracle-requirements.txt")
 READERS = {"delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft"}
 KEYS = ("l_orderkey", "l_linenumber")
 FIELDS = (
@@ -240,7 +245,7 @@ def base_case(case_id, large=False):
 
 
 def case_input(fixtures, case_id, duplicate_literal=False, workload=None):
-    require(pa.__version__ == "25.0.1", "oracle requires pyarrow==25.0.1")
+    require(pa.__version__ == "25.0.1" and duckdb.__version__ == "1.5.5", "oracle dependency version changed")
     manifest = load_json(Path(fixtures) / "manifest.json")
     require(manifest["status"] == "complete" and manifest["protocol"] == "selective-read-v1", "incomplete or unknown fixtures")
     row = None
@@ -297,7 +302,7 @@ def case_input(fixtures, case_id, duplicate_literal=False, workload=None):
 
 
 def record(row, projection, derive_payloads=False, logical_bytes=None):
-    values = []
+    values = {}
     for name in projection:
         if derive_payloads and name.startswith("payload_"):
             value = payload(row[KEYS[0]], row[KEYS[1]], int(name[-2:]))
@@ -307,51 +312,145 @@ def record(row, projection, derive_payloads=False, logical_bytes=None):
         if logical_bytes is not None and value is not None:
             kind = TYPES[name]
             logical_bytes[0] += len(value.encode()) if kind == "string" else 8 if kind == "int64" else 4 if kind in ("int32", "date32") else 16
-        if isinstance(value, Decimal):
-            value = format(value, ".2f")
-        elif isinstance(value, date):
-            value = value.isoformat()
-        values.append(value)
-    key = (row["row_id"], 0) if "row_id" in projection else (row[KEYS[0]], row[KEYS[1]])
-    return *key, json_bytes(values)
+        values[name] = value
+    return values
 
 
-def database(path, max_bytes=None):
-    db = sqlite3.connect(path, uri=True)
-    db.execute("PRAGMA cache_size=-65536")
-    db.execute("PRAGMA mmap_size=0")
-    db.execute("PRAGMA temp_store=FILE")
-    # These databases are disposable until their completion manifest is written.
-    db.execute("PRAGMA journal_mode=OFF")
-    if max_bytes is not None:
-        pages = max_bytes // db.execute("PRAGMA page_size").fetchone()[0]
-        require(pages >= 2, "insufficient SQLite disk allowance")
-        db.execute(f"PRAGMA max_page_count={pages}")
-    db.execute("CREATE TABLE rows (order_key INTEGER NOT NULL, line_number INTEGER NOT NULL, value BLOB NOT NULL, PRIMARY KEY (order_key, line_number)) WITHOUT ROWID")
-    return db
+def result_schema(projection):
+    types = {"int64": pa.int64(), "int32": pa.int32(), "date32": pa.date32(),
+             "string": pa.string(), "decimal(15,2)": pa.decimal128(15, 2)}
+    return pa.schema([pa.field(name, types[TYPES[name]], nullable=name in PAYLOADS + CONTROL_PAYLOADS)
+                      for name in projection])
 
 
-def insert_rows(db, rows):
-    # Consume a bounded batch at a time. The primary key rejects duplicate output.
-    batch = []
-    for row in rows:
-        batch.append(row)
-        if len(batch) == BATCH_ROWS:
-            db.executemany("INSERT INTO rows VALUES (?, ?, ?)", batch)
-            batch.clear()
-    db.executemany("INSERT INTO rows VALUES (?, ?, ?)", batch)
-    db.commit()
+def row_batches(rows, projection):
+    rows = iter(rows)
+    schema = result_schema(projection)
+    while batch := list(islice(rows, BATCH_ROWS)):
+        yield pa.RecordBatch.from_pylist(batch, schema=schema)
 
 
-def compare(db, reference_db, expected_count):
-    db.execute("ATTACH DATABASE ? AS expected", (reference_db.resolve().as_uri() + "?mode=ro",))
-    count = db.execute("SELECT count(*) FROM rows").fetchone()[0]
-    require(count == expected_count, f"wrong row count: {count}, expected {expected_count}")
-    mismatch = db.execute("""SELECT a.order_key, a.line_number FROM rows a
-        LEFT JOIN expected.rows e USING (order_key, line_number)
-        WHERE e.order_key IS NULL OR a.value != e.value LIMIT 1""").fetchone()
-    require(mismatch is None, f"wrong row membership or value at key {mismatch}")
+def normalized_batches(batches, projection):
+    schema = result_schema(projection)
+    for batch in batches:
+        check_schema(batch.schema, projection)
+        for offset in range(0, batch.num_rows, BATCH_ROWS):
+            part = batch.slice(offset, BATCH_ROWS)
+            for field, column in zip(schema, part.columns):
+                require(field.nullable or column.null_count == 0, f"unexpected null: {field.name}")
+            yield part.cast(schema)
+
+
+def ordered_batches(batches, projection):
+    keys = ("row_id",) if "row_id" in projection else KEYS
+    previous = None
+    for batch in batches:
+        for key in zip(*(batch.column(name).to_pylist() for name in keys)):
+            require(previous is None or previous < key, "duplicated key or unordered result")
+            previous = key
+        yield batch
+
+
+def same_rows(left, right):
+    """Exact ordered Arrow values, bounded by two batches despite different boundaries."""
+    left, right = iter(left), iter(right)
+    a, b = next(left, None), next(right, None)
+    rows = 0
+    while a is not None and b is not None:
+        count = min(a.num_rows, b.num_rows)
+        require(count > 0, "unexpected empty batch")
+        require(a.slice(0, count).equals(b.slice(0, count)), f"repacked values/order differ at ordinal {rows}")
+        rows += count
+        a = next(left, None) if count == a.num_rows else a.slice(count)
+        b = next(right, None) if count == b.num_rows else b.slice(count)
+    require(a is None and b is None, "repacked row count differs")
+    return rows
+
+
+class LimitedWriter(io.BufferedWriter):
+    def __init__(self, path, max_bytes):
+        super().__init__(open(path, "xb", buffering=0))
+        self.max_bytes = max_bytes
+
+    def write(self, data):
+        require(self.max_bytes is None or self.tell() + len(data) <= self.max_bytes,
+                "reference Parquet exceeds its disk allowance")
+        return super().write(data)
+
+
+def write_reference(path, rows, projection, max_bytes=None):
+    """The independent source already emits unique keys in ascending order."""
+    schema = result_schema(projection)
+    pending, count = [], 0
+    with LimitedWriter(path, max_bytes) as sink, pq.ParquetWriter(sink, schema, compression="zstd") as writer:
+        for batch in ordered_batches(normalized_batches(row_batches(rows, projection), projection), projection):
+            pending.append(batch)
+            count += batch.num_rows
+            if count >= REFERENCE_ROWS:
+                writer.write_table(pa.Table.from_batches(pending), row_group_size=REFERENCE_ROWS)
+                pending, count = [], 0
+        if pending:
+            writer.write_table(pa.Table.from_batches(pending), row_group_size=REFERENCE_ROWS)
+
+
+def compare(batches, reference, projection, expected_count, max_bytes=None, subset=False):
+    """Sort only actual rows; Python/Arrow checks their values against the reference."""
+    input_count = 0
+
+    def inputs():
+        nonlocal input_count
+        for batch in normalized_batches(batches, projection):
+            input_count += batch.num_rows
+            yield batch
+
+    keys = ("row_id",) if "row_id" in projection else KEYS
+    with tempfile.TemporaryDirectory(prefix="oracle-sort-", dir=reference.parent) as scratch:
+        config = {"threads": 1, "memory_limit": f"{SORT_MEMORY_BYTES}B", "temp_directory": scratch,
+                  "autoload_known_extensions": False, "autoinstall_known_extensions": False}
+        with duckdb.connect(config=config) as db, pq.ParquetFile(reference) as expected:
+            if max_bytes is not None:
+                # In the pinned build the startup config reports this quota but does
+                # not enforce it on spill; setting it after connect does enforce it.
+                db.execute("SET max_temp_directory_size = ?", [f"{max_bytes}B"])
+            with pa.RecordBatchReader.from_batches(result_schema(projection), inputs()) as source:
+                db.register("actual", source)
+                # No predicate, projection, aggregation, Delta extension or reference query.
+                query = "SELECT * FROM actual ORDER BY " + ", ".join(keys)
+                try:
+                    result = db.execute(query).to_arrow_reader(BATCH_ROWS)
+                except duckdb.Error as error:
+                    raise ValueError(f"oracle sort failed: {error}") from error
+                with result:
+                    actual = ordered_batches(normalized_batches(result, projection), projection)
+                    wanted = ordered_batches(normalized_batches(expected.iter_batches(batch_size=BATCH_ROWS), projection), projection)
+                    if subset:
+                        # LIMIT accepts different valid subsets, with exact values and unique keys.
+                        reference_rows = (row for batch in wanted for row in batch.to_pylist())
+                        current = next(reference_rows, None)
+                        count = 0
+                        for batch in actual:
+                            for row in batch.to_pylist():
+                                key = tuple(row[k] for k in keys)
+                                while current is not None and tuple(current[k] for k in keys) < key:
+                                    current = next(reference_rows, None)
+                                require(current == row, f"wrong row membership or value at key {key}")
+                                count += 1
+                    else:
+                        try:
+                            count = same_rows(actual, wanted)
+                        except ValueError as error:
+                            raise ValueError(f"wrong row membership or value: {error}") from error
+    require(input_count == count == expected_count,
+            f"wrong row count: input {input_count}, sorted {count}, expected {expected_count}")
     return count
+
+
+def check_reference_build(metadata):
+    require(metadata["format"] == "selective-read-reference-v2" and metadata["status"] == "complete", "incomplete reference")
+    require(metadata["oracle_sha256"] == digest_file(__file__)
+            and metadata["oracle_dependencies_sha256"] == digest_file(REQUIREMENTS)
+            and metadata["pyarrow"] == pa.__version__ == "25.0.1"
+            and metadata["duckdb_sort"] == duckdb.__version__ == "1.5.5", "stale oracle build")
 
 
 def objects(fixtures, table, source):
@@ -450,7 +549,7 @@ def control_record(row_id):
     values = [row_id] + [None if (row_id + j) % 17 == 0 else
                         f"payload-{j:03}-{row_id:08}-" + "abcdefghijklmnopqrstuvwxyz0123456789" * 12
                         for j in range(16)]
-    return row_id, 0, json_bytes(values)
+    return dict(zip(CONTROL_PROJECTION, values))
 
 
 def control_geometry(fixtures, table, case_id):
@@ -498,7 +597,7 @@ def control_geometry(fixtures, table, case_id):
 
 @contextmanager
 def bounded(root, limits):
-    """Native process deadline and SQLite quotas; used only for explicit revision 3."""
+    """Native process deadline and storage quotas; used only for explicit revision 3."""
     if limits is None:
         yield None
         return
@@ -551,7 +650,7 @@ def prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota):
     expected_deletions = set()
     deleted_qualifying = 0
     output.mkdir(parents=True, exist_ok=False)
-    reference_db = output / "reference.sqlite"
+    reference_path = output / "reference.parquet"
     predicates = conditions(predicate, literals)
     counts = [0] * (len(predicates) + 1)
     found_literals = set()
@@ -594,8 +693,7 @@ def prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota):
                     yield record(row, projection, derive_payloads=True, logical_bytes=projected_bytes)
             require(file_rows == item["rows"], "reference file row count changed")
 
-    with closing(database(reference_db, quota // 4 if quota is not None else None)) as db:
-        insert_rows(db, expected_rows())
+    write_reference(reference_path, expected_rows(), projection, quota // 4 if quota is not None else None)
     require(counts[0] == (source or table)["rows"] == table["rows"], "source/table row counts disagree")
     require(sorted(found_literals) == literals, "frozen IN literals disagree with full source")
     require(expected_deletions == saved_keys, "saved logical deletions disagree with the independent source rule")
@@ -642,18 +740,19 @@ def prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota):
             if matched:
                 matching.append(item["path"])
 
-    with tempfile.TemporaryDirectory(prefix="oracle-", dir=output) as scratch:
-        with closing(database(Path(scratch) / "actual.sqlite", quota // 4 if quota is not None else None)) as db:
-            insert_rows(db, fixture_rows())
-            # Validate all qualifying fixture rows even for a LIMIT case.
-            compare(db, reference_db, live_qualifying)
+    # Validate all qualifying fixture rows even for a LIMIT case.
+    compare(row_batches(fixture_rows(), projection), reference_path, projection, live_qualifying,
+            quota // 4 if quota is not None else None)
     require(actual_rows == (source or table)["rows"], "fixture lost source rows")
     require(set(matching) <= set(candidates), "file statistics exclude a matching file")
     metadata = {
-        "format": "selective-read-reference-v1", "status": "complete",
+        "format": "selective-read-reference-v2", "status": "complete",
         "comparison_revision": REVISION, "protocol_sha256": digest_file(PROTOCOL),
         "oracle_sha256": digest_file(__file__), "python": platform.python_version(),
-        "pyarrow": pa.__version__, "sqlite": sqlite3.sqlite_version,
+        "pyarrow": pa.__version__, "duckdb_sort": duckdb.__version__,
+        "oracle_dependencies_sha256": digest_file(REQUIREMENTS),
+        "reference_storage": {"format": "parquet", "compression": "zstd", "row_group_rows": REFERENCE_ROWS},
+        "sort_memory_bytes": SORT_MEMORY_BYTES, "sort_threads": 1,
         "fixture_manifest_sha256": digest_file(fixtures / "manifest.json"),
         "generator_protocol_sha256": manifest["protocol_sha256"],
         "case_id": case_id, "snapshot_version": table["snapshot_version"],
@@ -670,7 +769,7 @@ def prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota):
                             for (name, op, value), count in zip(predicates, counts[1:])],
         "qualifying_selectivity": live_qualifying / counts[0],
         "active_files": len(table["files"]), "candidate_files": candidates, "matching_files": matching,
-        "verified_objects": verified, "reference_sha256": digest_file(reference_db),
+        "verified_objects": verified, "reference_sha256": digest_file(reference_path),
         **({"within_file_geometry": geometry} if geometry else {}),
     }
     if "wide_file_pair" in manifest:
@@ -709,7 +808,7 @@ def check(reference, fixtures, result, identity):
 def check_rows(reference, fixtures, result, identity, quota):
     reference, fixtures, result, identity = map(Path, (reference, fixtures, result, identity))
     metadata = load_json(reference / "reference.json")
-    require(metadata["format"] == "selective-read-reference-v1" and metadata["status"] == "complete", "incomplete reference")
+    check_reference_build(metadata)
     sys.path.insert(0, str(Path(__file__).resolve().parent / "runners"))
     from run import comparison_identity
     comparison = comparison_identity(metadata)
@@ -719,9 +818,8 @@ def check_rows(reference, fixtures, result, identity, quota):
         require(comparison == large_workloads.identity(path), "stale workload manifest")
         row = large_workloads.binding(large_workloads.load(path), fixtures, metadata["case_id"])
         require(metadata["canonical_sql"] == row["canonical_sql"] and metadata["projection"] == row["projection"], "reference workload query changed")
-    require(metadata["oracle_sha256"] == digest_file(__file__) and metadata["pyarrow"] == pa.__version__ == "25.0.1", "stale oracle build")
     require(metadata["fixture_manifest_sha256"] == digest_file(fixtures / "manifest.json"), "stale fixture manifest")
-    require(metadata["reference_sha256"] == digest_file(reference / "reference.sqlite"), "reference database changed")
+    require(metadata["reference_sha256"] == digest_file(reference / "reference.parquet"), "reference Parquet changed")
     for item in metadata["verified_objects"]:
         verify_object(fixtures, item)
     provenance = load_json(identity)
@@ -740,19 +838,15 @@ def check_rows(reference, fixtures, result, identity, quota):
     projection = metadata["projection"]
     if quota is not None:
         exports = list(result.parent.glob("query-*.arrow")) if re.fullmatch(r"query-\d+\.arrow", result.name) else [result]
-        require((reference / "reference.sqlite").stat().st_size <= quota // 4
+        require((reference / "reference.parquet").stat().st_size <= quota // 4
                 and sum(p.stat().st_size for p in exports) <= quota // 2,
                 "reference/session exports exhaust the oracle disk allowance")
         quota //= 4
     with result.open("rb") as source, pa.ipc.open_stream(source) as stream:
         check_schema(stream.schema, projection)
         reported_nullability = {field.name: field.nullable for field in stream.schema}
-        with tempfile.TemporaryDirectory(prefix="oracle-check-", dir=reference.parent) as scratch:
-            with closing(database(Path(scratch) / "actual.sqlite", quota)) as db:
-                insert_rows(db, (record(row, projection) for batch in stream
-                                for offset in range(0, batch.num_rows, BATCH_ROWS)
-                                for row in batch.slice(offset, BATCH_ROWS).to_pylist()))
-                count = compare(db, reference / "reference.sqlite", metadata["output_rows"])
+        count = compare(stream, reference / "reference.parquet", projection, metadata["output_rows"],
+                        quota, subset=metadata["limit"] is not None)
         require(not source.read(1), "trailing bytes after Arrow stream")
     return {
         "status": "passed", **{name: metadata[name] for name in identity_fields},
@@ -781,7 +875,7 @@ def main():
             output = prepare(args.fixtures, args.case, args.output, args.duplicate_in_literal, args.workload)
         else:
             output = check(args.reference, args.fixtures, args.result, args.identity)
-    except (ValueError, KeyError, TypeError, StopIteration, OSError, sqlite3.Error, pa.ArrowException) as error:
+    except (ValueError, KeyError, TypeError, StopIteration, OSError, duckdb.Error, pa.ArrowException) as error:
         print(json.dumps({"status": "validation_failed", "error": str(error), "operation": args.command}))
         return 1
     print(json.dumps(output))
