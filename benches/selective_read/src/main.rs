@@ -2,6 +2,7 @@
 
 mod control_rows;
 mod controls;
+mod dv;
 mod fixtures;
 mod repack;
 
@@ -32,7 +33,8 @@ const GENERATOR_SOURCE: &str = concat!(
     include_str!("fixtures.rs"),
     include_str!("repack.rs"),
     include_str!("control_rows.rs"),
-    include_str!("controls.rs")
+    include_str!("controls.rs"),
+    include_str!("dv.rs")
 );
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -90,6 +92,7 @@ struct Config {
     disk_limit: Option<u64>,
     repack_from: Option<PathBuf>,
     controls: bool,
+    dv_from: Vec<PathBuf>,
 }
 
 impl Config {
@@ -101,6 +104,7 @@ impl Config {
         let mut disk_limit = None;
         let mut repack_from = None;
         let mut controls = false;
+        let mut dv_from = Vec::new();
         while let Some(arg) = args.next() {
             if arg == "--help" || arg == "-h" {
                 println!(
@@ -108,6 +112,7 @@ impl Config {
                      Optional preparation limits: --sort-memory-mib N --disk-limit-mib N\n\
                      Repack existing clustered rows: --repack-from FIXTURE_DIRECTORY\n\
                      Generate fixed within-file controls: --controls\n\
+                     Add paired DV snapshots: --dv-from PUBLIC_FIXTURES --dv-from CONTROLS\n\
                      Existing output directories are never overwritten."
                 );
                 std::process::exit(0);
@@ -123,6 +128,7 @@ impl Config {
                 "--profile" => profile = Profile::parse(&value)?,
                 "--output" => output = Some(PathBuf::from(value)),
                 "--repack-from" => repack_from = Some(PathBuf::from(value)),
+                "--dv-from" => dv_from.push(PathBuf::from(value)),
                 "--sort-memory-mib" => {
                     sort_memory = Some(
                         value
@@ -143,8 +149,12 @@ impl Config {
             }
         }
         let output = output.ok_or("--output is required")?;
-        if controls && repack_from.is_some() {
-            return Err("--controls and --repack-from are mutually exclusive".into());
+        if usize::from(controls)
+            + usize::from(repack_from.is_some())
+            + usize::from(!dv_from.is_empty())
+            > 1
+        {
+            return Err("--controls, --repack-from, and --dv-from are mutually exclusive".into());
         }
         let sort_memory =
             sort_memory.unwrap_or(if profile == Profile::Smoke { 512 } else { 4096 } * MIB);
@@ -169,6 +179,7 @@ impl Config {
             disk_limit,
             repack_from,
             controls,
+            dv_from,
         })
     }
 }
@@ -193,6 +204,9 @@ fn main() -> Result<()> {
 }
 
 async fn generate(config: &Config) -> Result<Value> {
+    if !config.dv_from.is_empty() {
+        return dv::generate(config);
+    }
     if config.controls {
         return controls::generate(config);
     }

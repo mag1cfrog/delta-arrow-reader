@@ -44,7 +44,7 @@ pub fn table(
     Ok(writer)
 }
 
-fn verified_files(input: &Path, group: &Value) -> Result<Vec<PathBuf>> {
+pub fn verified_files(input: &Path, group: &Value) -> Result<Vec<PathBuf>> {
     let files = group["files"].as_array().ok_or("missing source files")?;
     let mut paths = Vec::new();
     for (i, item) in files.iter().enumerate() {

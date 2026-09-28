@@ -44,7 +44,8 @@ done
 ```
 
 Use the [pinned oracle environment](selective-read-oracle.md). `--controls`
-generates only these three tables and is mutually exclusive with `--repack-from`.
+generates only these three tables and is mutually exclusive with `--repack-from`
+and `--dv-from`.
 Their geometry is identical under smoke, development, and report profiles; the
 profile selects preparation resource limits. These synthetic tables have no
 TPC-H scale factor.
@@ -132,7 +133,8 @@ predicate either its referenced columns or extra payload columns. The
 artificial controls explain mechanisms and are not delta-rs baselines. Their
 local scan/decode timers also differ from the five-reader open-and-query timer.
 
-Retain the generated Parquet objects for the later paired DV experiments. The
+Retain the generated Parquet objects for the
+[paired DV experiments](selective-read-deletion-vectors.md). The
 bounded generator check exercises actual group/page boundaries, upper-level
 survival, result geometry, and reproducible bytes. This work adds no CI job or
 benchmark timing step.
