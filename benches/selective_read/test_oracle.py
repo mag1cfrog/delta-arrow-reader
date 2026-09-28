@@ -114,6 +114,119 @@ def expected_keys(query):
 
 
 class OracleTests(unittest.TestCase):
+    def test_large_query_identity_boundaries_and_exact_values(self):
+        import large_workloads as large
+        import matrix
+        from runners import run, python_common
+        predicates = oracle.conditions("date30", [])
+        for day, matches in ((date(1995, 2, 28), False), (date(1995, 3, 1), True),
+                             (date(1995, 3, 30), True), (date(1995, 3, 31), False)):
+            self.assertEqual(oracle.prefix_matches({"l_shipdate": day}, predicates) == 2, matches)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            # Rust formats integral large scales as "1"; JSON preserves 1.0 and
+            # the exact oracle decodes it as Decimal("1.0"). Check the real logs.
+            metadata_root = root / "metadata"
+            metadata_root.mkdir()
+            write_json(metadata_root / "manifest.json", {"profile": "large"})
+            metadata = {"id": str(oracle.uuid.uuid5(oracle.uuid.NAMESPACE_URL,
+                        "https://github.com/mag1cfrog/delta-arrow-reader/selective-read-v1/large-sf1/wide.shuffled.dv")),
+                        "schemaString": "{}", "configuration": {}}
+            protocols = [{"minReaderVersion": 1, "minWriterVersion": 2},
+                         {"minReaderVersion": 3, "minWriterVersion": 7,
+                          "readerFeatures": ["deletionVectors"], "writerFeatures": ["deletionVectors"]}]
+            logs = []
+            for version, protocol in enumerate(protocols):
+                path = metadata_root / "_delta_log" / f"{version:020}.json"
+                path.parent.mkdir(exist_ok=True)
+                current = metadata | {"configuration": {"delta.enableDeletionVectors": "true"}} if version else metadata
+                path.write_text(json.dumps({"protocol": protocol}) + "\n" + json.dumps({"metaData": current}) + "\n")
+                logs.append({"path": str(path.relative_to(metadata_root)), "bytes": path.stat().st_size, "sha256": run.digest(path)})
+            table = {"id": "wide.shuffled.dv", "path": ".", "files": [], "scale_factor": Decimal("1.0"),
+                     "snapshot_version": 1, "schema": {}, "delta_logs": logs, "delta_log": logs[-1]}
+            self.assertEqual(len(oracle.objects(metadata_root, table, None)), 2)
+            fixtures = root / "fixtures"
+            rows = dataset(fixtures)
+            manifest = json.loads((fixtures / "manifest.json").read_text())
+            for group in manifest["tables"] + manifest["sources"]:
+                group.update(scale_factor=.01, file_count=len(group["files"]), bytes=sum(f["bytes"] for f in group["files"]))
+                for item in group["files"]:
+                    item["row_groups"] = []  # This unit fixture tests values, not writer geometry.
+            # Bind all definitions, but execute only the no-DV cases here. The real
+            # generator/manual smoke checks exercise native DV objects and translations.
+            for layout in ("clustered", "shuffled"):
+                table = next(t for t in manifest["tables"] if t["id"] == "wide." + layout)
+                variant = json.loads(json.dumps(table))
+                variant.update(id=table["id"] + ".dv", snapshot_version=1, deletion_vectors=True)
+                variant["queries"] = {f"wide.{layout}.date30-wide.dv": oracle.sql_for(oracle.WIDE69, "date30", None, [1])}
+                manifest["tables"].append(variant)
+            write_json(fixtures / "manifest.json", manifest)
+            expressions = {case: {"native_expression": "unit", "sha256": matrix.sha("unit")} for case in large.definitions()}
+            cases = [large.query_fields(case, manifest) | {"fixtures": str(fixtures),
+                     "fixture_manifest_sha256": run.digest(fixtures / "manifest.json"),
+                     "native_expression_sha256": dict.fromkeys(("polars", "daft"), matrix.sha("unit"))}
+                     for case in large.definitions()]
+            value = {"format": "selective-read-large-workload-v1", "comparison_revision": 3,
+                     "protocol_sha256": run.digest(run.AMENDMENT), "base_protocol_sha256": run.digest(run.PROTOCOL),
+                     "scope": "smoke", "publication_ready": False, "scales": {"data": .01, "control": .01},
+                     "readers": list(large.READERS), "sessions": large.SESSIONS, "cases": cases,
+                     "source_sha256": {str(p.relative_to(large.HERE)): run.digest(p) for p in large.SOURCES},
+                     "oracle_limits": {"memory_bytes": 16 * 1024**3, "disk_bytes": 64 * 1024**2, "elapsed_seconds": 30},
+                     "translations": {r: {"expressions": expressions, "lock_sha256": run.digest(large.HERE / "runners" / r / "lock.json")}
+                                      for r in ("polars", "daft")}}
+            workload = root / "workload.json"
+            write_json(workload, value)
+            self.assertEqual(len(large.load(workload)["cases"]), 18)
+            for case in ("large.wide.clustered.date30-wide", "large.wide.shuffled.date7-wide", "scale-control.wide.clustered.eq2-in20"):
+                reference = root / case
+                metadata = oracle.prepare(fixtures, case, reference, workload=workload)
+                request = run.request(fixtures, case, "reuse", "validation", "unit", workload=workload)
+                python_common.validate(request)
+                self.assertEqual(run.comparison_identity(request), run.comparison_identity(metadata))
+                self.assertEqual(metadata["output_rows"], 144 if "date30" in case else 143 if "date7" in case else 20)
+                self.assertGreater(metadata["projected_logical_bytes"], metadata["output_rows"])
+                projection = metadata["projection"]
+                expected = set(range(1, 143)) | {151, 152} if "date30" in case else set(range(1, 142)) | {151, 152} if "date7" in case else set(range(1, 21))
+                table = pa.Table.from_pylist([r for r in rows if r["l_orderkey"] in expected],
+                                            schema=pa.schema([WIDE_SCHEMA.field(c) for c in projection]))
+                result = root / (case + ".arrow")
+                identity = root / (case + ".json")
+                provenance = {k: metadata[k] for k in oracle.IDENTITY_FIELDS} | run.comparison_identity(metadata)
+                provenance.update(reader_id="delta-arrow-reader", reader_build_sha256="1" * 64,
+                                  reader_config_sha256="2" * 64, native_expression_sha256=None)
+                def export(current):
+                    with result.open("wb") as sink, pa.ipc.new_stream(sink, current.schema) as writer:
+                        writer.write_table(current, max_chunksize=7)
+                    write_json(identity, provenance | {"result_sha256": run.digest(result)})
+                export(table)
+                self.assertEqual(oracle.check(reference, fixtures, result, identity)["status"], "passed")
+                for field in ("base_protocol_sha256", "workload_manifest_sha256"):
+                    altered = json.loads(identity.read_text()) | {field: "0" * 64}
+                    write_json(identity, altered)
+                    with self.assertRaisesRegex(ValueError, "identity mismatch"):
+                        oracle.check(reference, fixtures, result, identity)
+                    export(table)
+                corrupted = table.set_column(0, table.schema.field(0), pa.array([0] * table.num_rows, type=pa.int64()))
+                export(corrupted)
+                with self.assertRaises((ValueError, oracle.sqlite3.IntegrityError)):
+                    oracle.check(reference, fixtures, result, identity)
+                if "date30" in case:
+                    export(table)
+                    session = root / "session"
+                    session.mkdir()
+                    shutil.copyfile(result, session / "query-0.arrow")
+                    with (session / "query-1.arrow").open("wb") as stream:
+                        stream.truncate(value["oracle_limits"]["disk_bytes"] // 2)
+                    with self.assertRaisesRegex(ValueError, "session exports"):
+                        oracle.check(reference, fixtures, session / "query-0.arrow", identity)
+            for change in ({"base_protocol_sha256": "0" * 64}, {"scales": {"data": 10, "control": 10}}, {"cases": cases[:-1]}):
+                write_json(workload, value | change)
+                with self.assertRaises(ValueError):
+                    large.load(workload)
+            with oracle.closing(oracle.database(root / "quota.sqlite", 8192)) as db:
+                with self.assertRaises(oracle.sqlite3.DatabaseError):
+                    oracle.insert_rows(db, ((i, 1, b"x" * 10000) for i in range(10)))
+
     def test_saved_deletions_filter_matching_rows_and_limit_membership(self):
         # The Rust check covers the native bitmap envelope and boundary ordinals.
         # Here isolate the independent logical/physical-list and result checks.

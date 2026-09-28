@@ -152,3 +152,111 @@ replacing the checked-in copies.
 The command checks generator SQL against the independent oracle and constructs
 expressions in each adapter's own pinned environment. Keep generated data,
 references and campaign outputs outside Git.
+
+## Large-workload candidates
+
+Revision 3 adds the cases from the
+[large-workload amendment](selective-read-large-workloads.md). Its workload
+manifest is separate from the checked-in revision 2 catalog.
+
+| IDs | Inputs |
+| --- | --- |
+| `large.wide.{clustered,shuffled}.{all-wide,date30-wide,date7-wide,eq1,eq2,eq2-in20,eq2-in20-keys}` | Seven shapes on each layout at one explicit source scale |
+| `large.wide.{clustered,shuffled}.date30-wide.dv` | Identical base Parquet bytes with real deletion vectors |
+| `scale-control.wide.shuffled.date30-wide`, `scale-control.wide.clustered.eq2-in20` | The immediately preceding scale rung |
+| `reuse.large.date30`, `reuse.large.compound` | Shuffled date30 and clustered compound, respectively; initialization followed by ten newly planned queries |
+
+All shapes except `eq2-in20-keys` project the same 69 columns. `date30` covers
+March 1 through March 30, 1995; `date7` retains March 15 through March 21.
+The equality literals are unchanged. IN20 is resolved separately at each scale
+from the first 20 distinct ascending source partkeys matching both equalities.
+The oracle verifies the literals and reports actual selectivity.
+
+Generate one wide layout at a time with the large fixture profile. To prepare
+its DV counterpart, reuse the existing writer with an explicit table selection:
+
+```sh
+target/selective-read/release/selective-read-fixtures \
+  --profile large --scale-factor 10 --fixture wide.shuffled \
+  --dv-from ../large-data-shuffled --dv-table wide.shuffled \
+  --disk-limit-mib 196608 --elapsed-limit-seconds 1800 \
+  --output ../large-data-shuffled-dv
+```
+
+This example's SF10 and ceilings are inputs, not a recommended final scale or
+a promise that the host has enough capacity. Preflight rejects inadequate
+space before copying. Prepare the clustered counterpart separately. Each new
+DV directory contains the source, base snapshot, and paired DV snapshot; the
+input directory stays immutable. Do the same preparation at the preceding rung
+for the two controls, which do not need DVs.
+
+Bind all 18 cases before preparing references or timing readers:
+
+```sh
+../selective-read-oracle-venv/bin/python -B benches/selective_read/large_workloads.py \
+  --fixtures ../large-data-clustered-dv --fixtures ../large-data-shuffled-dv \
+  --control-fixtures ../large-control-clustered \
+  --control-fixtures ../large-control-shuffled \
+  --binary ../selective-read-polars-build/selective-read-polars \
+  --binary ../selective-read-daft-build/selective-read-daft \
+  --disk-limit-mib 196608 --elapsed-limit-seconds 1800 \
+  --output ../large-workload
+```
+
+`workload.json` freezes fixture hashes, scales, geometry, expanded SQL,
+projections, literals, native translations and oracle ceilings. It binds the
+amendment hash, base protocol hash and harness sources. Each reference, reader
+identity, correctness certificate, campaign, schedule slot and report carries
+that workload file's hash. Mismatches fail validation. Rebuild all five adapters
+after changing the harness or oracle.
+
+The command produces a **candidate**, with `publication_ready: false`. Final
+scale selection, the full inventory including many-file cases, reader and
+environment bindings, and minute-scale acceptance belong to the pilot in
+[#345](https://github.com/mag1cfrog/delta-arrow-reader/issues/345). This command
+cannot declare a formal publication workload.
+
+For a bounded implementation check, add `--smoke` and use SF0.01 fixtures for
+both roles. Create the two small DV pairs with `--profile smoke --dv-from ...
+--dv-table wide.clustered` and its shuffled equivalent. Use smaller explicit
+oracle ceilings. The two smoke control IDs exercise binding only; identical
+SF0.01 inputs cannot measure a scale effect.
+
+Prepare one case at a time:
+
+```sh
+../selective-read-oracle-venv/bin/python -B benches/selective_read/oracle.py prepare \
+  --workload ../large-workload/workload.json \
+  --fixtures ../large-data-shuffled-dv --case large.wide.shuffled.date30-wide \
+  --output ../large-date30-reference
+```
+
+Use the existing campaign command with the selected fixture's upload receipt,
+all five binaries, and these additional arguments:
+
+```sh
+--workload ../large-workload/workload.json \
+--case large.wide.shuffled.date30-wide \
+--reference ../large-date30-reference --session reuse.large.date30
+```
+
+A campaign uses one staged fixture directory. `--case` selects its jobs; without
+it, all workload cases bound to that directory are selected. Matching new reuse
+sessions are included by default; `--no-sessions` disables them. Revision 2
+session defaults remain unchanged. Supply references for every selected case.
+Keep five explicit reader statuses, including native DV rejections and failures.
+
+Export a checked report with:
+
+```sh
+../selective-read-oracle-venv/bin/python -B benches/selective_read/large_workloads.py report \
+  --campaign ../large-date30-campaign --output ../large-date30-report
+```
+
+The exporter verifies identities and ordering, then recomputes summaries from
+raw observations. It retains all ten query positions across independent reuse
+sessions, initialization, enclosing session time and failure statuses. Separate
+native planning/scan clocks are null with a reason where unavailable. No fixed
+overhead is inferred by subtracting cached execution from open-and-query time.
+Large generation and performance runs remain manual; no new CI job or step is
+required.

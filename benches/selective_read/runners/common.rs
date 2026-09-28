@@ -26,6 +26,8 @@ pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 pub const TABLE: &str = "bench";
 const PROTOCOL: &[u8] =
     include_bytes!("../../../docs/content/benchmarks/selective-read-protocol.md");
+const AMENDMENT: &[u8] =
+    include_bytes!("../../../docs/content/benchmarks/selective-read-large-workloads.md");
 const ORACLE: &[u8] = include_bytes!("../oracle.py");
 const LOCK: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.lock"));
 
@@ -38,6 +40,8 @@ pub struct Request {
     canonical_sql: String,
     comparison_revision: u64,
     protocol_sha256: String,
+    base_protocol_sha256: Option<String>,
+    workload_manifest_sha256: Option<String>,
     fixture_manifest_sha256: String,
     profile: String,
     execution_mode: String,
@@ -79,8 +83,7 @@ impl Request {
                 self.purpose.as_str(),
                 "timing" | "validation" | "diagnostic" | "io"
             )
-            || self.comparison_revision != 2
-            || self.protocol_sha256 != digest(PROTOCOL)
+            || !self.valid_comparison()
             || !is_hash(&self.fixture_manifest_sha256)
             || self.case_id.is_empty()
             || self.run_id.is_empty()
@@ -90,6 +93,25 @@ impl Request {
             return Err("invalid request or settings differ from the frozen protocol".into());
         }
         Ok(())
+    }
+
+    fn valid_comparison(&self) -> bool {
+        match self.comparison_revision {
+            2 => {
+                self.protocol_sha256 == digest(PROTOCOL)
+                    && self.base_protocol_sha256.is_none()
+                    && self.workload_manifest_sha256.is_none()
+            }
+            3 => {
+                self.protocol_sha256 == digest(AMENDMENT)
+                    && self.base_protocol_sha256.as_deref() == Some(digest(PROTOCOL).as_str())
+                    && self
+                        .workload_manifest_sha256
+                        .as_deref()
+                        .is_some_and(is_hash)
+            }
+            _ => false,
+        }
     }
 }
 
@@ -166,13 +188,18 @@ fn context() -> Result<SessionContext> {
 }
 
 fn identity(request: &Request, build_hash: &str, config_hash: &str) -> Value {
-    json!({"reader_id": crate::READER, "reader_build_sha256": build_hash,
-        "reader_config_sha256": config_hash, "comparison_revision": 2,
+    let mut value = json!({"reader_id": crate::READER, "reader_build_sha256": build_hash,
+        "reader_config_sha256": config_hash, "comparison_revision": request.comparison_revision,
         "protocol_sha256": request.protocol_sha256,
         "fixture_manifest_sha256": request.fixture_manifest_sha256,
         "case_id": request.case_id, "snapshot_version": request.snapshot_version,
         "canonical_sql_sha256": digest(request.canonical_sql.as_bytes()),
-        "native_expression_sha256": null})
+        "native_expression_sha256": null});
+    if request.comparison_revision == 3 {
+        value["base_protocol_sha256"] = json!(request.base_protocol_sha256);
+        value["workload_manifest_sha256"] = json!(request.workload_manifest_sha256);
+    }
+    value
 }
 
 fn correctness(request: &Request, identity: &Value) -> Result<Value> {
@@ -486,6 +513,8 @@ fn run(request_path: &Path, output: &Path) -> Result<bool> {
         "capability": {"status": "not_checked", "scope": "requested query and snapshot"},
         "correctness": null, "provider_evidence": null, "queries": [], "partial_query": null,
         "open_query_ns": null, "initialization_ns": null, "session_elapsed_ns": null,
+        "native_phases": {"planning_ns": null, "scan_ns": null,
+            "unavailable_reason": "native APIs do not expose comparable separate planning/scan clocks"},
         "diagnostic_events": [], "diagnostic_session_ns": null,
         "initialization_plus_query1_ns": null, "initialization_plus_all_queries_ns": null, "cleanup_ns": null,
         "external_metrics": {"requests": null, "response_bytes": null, "touched_parquet_objects": null,

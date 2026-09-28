@@ -201,6 +201,7 @@ fn smoke_reproduces_files_and_preserves_rows() -> Result<()> {
         repack_from: None,
         controls: false,
         dv_from: Vec::new(),
+        dv_table: None,
     };
     let second = Config {
         output: root.path().join("second"),
@@ -312,6 +313,46 @@ fn smoke_reproduces_files_and_preserves_rows() -> Result<()> {
     );
     assert_eq!(fixtures::payload(1, 1, 0), Some(2558623671389681668));
     assert_eq!(fixtures::payload(1, 1, 2), Some(-11468591226400559));
+
+    for layout in ["clustered", "shuffled"] {
+        let id = format!("wide.{layout}");
+        let config = Config {
+            output: root.path().join(format!("dv-{layout}")),
+            dv_from: vec![first.output.clone()],
+            dv_table: Some(id.clone()),
+            ..first.clone()
+        };
+        let pair = dv::generate(&config, None)?;
+        let base = &pair["tables"][0];
+        let variant = &pair["tables"][1];
+        assert_eq!(base["id"], id);
+        assert_eq!(variant["snapshot_version"], 1);
+        assert_eq!(variant["queries"].as_object().ok_or("queries")?.len(), 1);
+        let mut qualifying_deletions = 0;
+        for (original, changed) in base["files"]
+            .as_array()
+            .ok_or("files")?
+            .iter()
+            .zip(variant["files"].as_array().ok_or("files")?)
+        {
+            assert_eq!(original["sha256"], changed["sha256"]);
+            assert_eq!(changed["delta_stats"]["numRecords"], original["rows"]);
+            for key in changed["deletion_vector"]["logical_ids"]
+                .as_array()
+                .ok_or("deleted keys")?
+            {
+                let values = &expected[&(
+                    key[0].as_i64().ok_or("order")?,
+                    key[1].as_i64().ok_or("line")? as i32,
+                )];
+                if let ScalarValue::Date32(Some(day)) = values[10] {
+                    qualifying_deletions += usize::from((9190..9220).contains(&day));
+                }
+            }
+        }
+        assert_eq!(qualifying_deletions, 1);
+        assert_eq!(pair["sources"], one["sources"]);
+    }
 
     for table in one["tables"].as_array().ok_or("tables")? {
         let id = table["id"].as_str().ok_or("table id")?;

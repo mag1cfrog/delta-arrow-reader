@@ -24,7 +24,7 @@ from deltalake.exceptions import DeltaError, DeltaProtocolError
 import pyarrow as pa
 
 sys.path.insert(0, str(HERE))
-from run import digest, save
+from run import comparison_identity, digest, save
 from python_common import checkpoint, correctness, event, json_hash, observation, require, runtime_metadata, scan_sql, sha, validate
 
 EXECUTION = {"default_morsel_size": 8192, "scantask_max_parallel": 8, "maintain_order": False}
@@ -204,7 +204,8 @@ def run(request_path, output):
             record["phase"] = "correctness_gate"
         expression = expression_identity(request["canonical_sql"])
         identity = {"reader_id": "daft", "reader_build_sha256": digest(build_path), "reader_config_sha256": json_hash(settings),
-                    **{name: request[name] for name in ("comparison_revision", "protocol_sha256", "fixture_manifest_sha256", "case_id", "snapshot_version")},
+                    **comparison_identity(request),
+                    **{name: request[name] for name in ("fixture_manifest_sha256", "case_id", "snapshot_version")},
                     "canonical_sql_sha256": sha(request["canonical_sql"].encode()), "native_expression_sha256": json_hash(expression)}
         record.update(identity=identity, settings=settings, build_record=str(build_path), phase="correctness_gate")
         record["correctness"] = correctness(request, identity)

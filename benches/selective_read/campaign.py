@@ -15,6 +15,7 @@ import observe
 import storage
 import run
 import matrix
+import large_workloads
 from run import digest, save
 from supervise import integer, require
 
@@ -28,13 +29,13 @@ SESSIONS = {"reuse.li": "li.clustered.eq2-in20", "reuse.wide": "wide.clustered.e
 DEFAULT_CASES = ("li.clustered.eq2-in20", "li.shuffled.eq2-in20")
 
 
-def schedule(inventory, campaign_id):
+def schedule(inventory, campaign_id, comparison=None):
     slots = []
     def add(job, stage, readers, repetition, *, traced=False):
         for position, reader in enumerate(readers):
             slots.append({"run_id": f"{campaign_id}-{len(slots):05d}", "job_id": job,
                           "reader_id": reader, "stage": stage, "repetition": repetition,
-                          "order": position, "traced": traced})
+                          "order": position, "traced": traced, **(comparison or {})})
 
     # Inventory is ordered: lexical isolated cases, then lexical reuse sessions.
     for job, entries in inventory.items():
@@ -91,14 +92,18 @@ def validate(record, payload, reader, gate=None):
     if record["status"] != "success":
         return
     identity = record["identity"]
+    comparison = run.comparison_identity(payload)
     require(identity["reader_id"] == reader, "reader identity changed")
-    for key in ("comparison_revision", "protocol_sha256", "fixture_manifest_sha256", "case_id", "snapshot_version"):
+    for key in (*comparison, "fixture_manifest_sha256", "case_id", "snapshot_version"):
         require(identity[key] == payload[key], "observation identity differs: " + key)
     require(identity["canonical_sql_sha256"] == hashlib.sha256(payload["canonical_sql"].encode()).hexdigest(), "SQL hash differs")
     for key in ("campaign_id", "run_id", "purpose", "execution_mode", "repetition", "order", "table_uri", "profile", "canonical_sql"):
         require(record[key] == payload[key], "observation request differs: " + key)
     require(record["capability"]["status"] == "supported" and record["cleanup"]["status"] == "passed", "incomplete capability or cleanup")
     require(record["external_resource_limits"]["process_memory_bytes"] == run.BUDGET["process_memory_bytes"], "missing enforced memory limit")
+    if payload["comparison_revision"] == 3 and payload["purpose"] == "validation":
+        require(record["external_resource_limits"]["max_file_size_bytes"] == record["validation_export_limit_bytes_per_file"],
+                "validation export limit was not inherited by the reader")
     queries = record["queries"]
     count = 10 if payload["execution_mode"] == "reuse" else 1
     require(isinstance(queries, list) and len(queries) == count, "incomplete query count")
@@ -214,6 +219,11 @@ def execute(args):
         require(digest(binary) == build["executable_sha256"], "reader executable changed")
         binaries[reader], builds[reader] = binary, build
     prepared = matrix.load(args.matrix, fixtures) if args.matrix else None
+    workload_path = getattr(args, "workload", None)
+    workload = large_workloads.load(workload_path) if workload_path else None
+    require(not (workload and prepared), "use one workload revision per campaign")
+    comparison = large_workloads.identity(workload_path) if workload else {
+        "comparison_revision": 2, "protocol_sha256": digest(run.PROTOCOL)}
     if prepared:
         require(not (args.case or args.reference or args.session or args.no_sessions), "--matrix supplies all cases and references; do not mix case/session overrides")
         for reader, build in builds.items():
@@ -221,13 +231,25 @@ def execute(args):
                 require(build["lockfile_sha256"] == prepared["translation_locks"][reader], "native translation lock changed")
     cases = {row["case_id"]: row for row in prepared["cases"]} if prepared else {}
     references = {case: Path(row["reference"]) for case, row in cases.items() if row["status"] == "prepared"}
+    sessions = SESSIONS
+    if workload:
+        cases = {r["case_id"]: dict(r, status="prepared") for r in workload["cases"]
+                 if r["case_id"] in args.case} if args.case else {
+                     r["case_id"]: dict(r, status="prepared") for r in workload["cases"]
+                     if r["fixture_manifest_sha256"] == digest(fixtures / "manifest.json")}
+        require(cases and (not args.case or set(cases) == set(args.case)), "unknown/empty workload case selection")
+        sessions = {s: c for s, c in workload["sessions"].items() if c in cases}
+        require(not args.session or set(args.session) <= set(sessions), "reuse session is outside the selected workload cases")
+        for reader, translation in workload["translations"].items():
+            if reader in builds:
+                require(builds[reader]["lockfile_sha256"] == translation["lock_sha256"], "native translation lock changed")
     for reference in args.reference:
         metadata = json.loads((reference / "reference.json").read_text())
         require(metadata["case_id"] not in references, "duplicate reference case")
         references[metadata["case_id"]] = reference.resolve()
     jobs = [{"id": case, "case_id": case, "execution_mode": "open"} for case in sorted(cases or set(args.case or DEFAULT_CASES))]
     if not prepared and not args.no_sessions:
-        jobs += [{"id": session, "case_id": SESSIONS[session], "execution_mode": "reuse"} for session in sorted(set(args.session or SESSIONS))]
+        jobs += [{"id": session, "case_id": sessions[session], "execution_mode": "reuse"} for session in sorted(set(args.session or sessions))]
     config = storage.state(state)
     previous_affinity = os.sched_getaffinity(0)
     os.sched_setaffinity(0, config["cpus"]["observer"])
@@ -236,14 +258,17 @@ def execute(args):
                HERE / "runners/run.py", HERE / "runners/supervise.py", run.PROTOCOL]
     if prepared:
         sources += [HERE / "matrix.py", matrix.CATALOG, matrix.EXPRESSIONS, args.matrix.resolve()]
+    if workload:
+        sources += [HERE / "large_workloads.py", workload_path.resolve(), run.AMENDMENT]
     hashes = {str(p): digest(p) for p in sources}
-    save(output / "campaign.json", {"campaign_id": campaign_id, "comparison_revision": 2,
-         "protocol_sha256": digest(run.PROTOCOL), "fixtures": str(fixtures), "upload": str(args.upload.resolve()),
+    save(output / "campaign.json", {"campaign_id": campaign_id, **comparison,
+         "fixtures": str(fixtures), "upload": str(args.upload.resolve()),
          "upload_sha256": digest(args.upload), "server": config, "reader_builds": builds, "jobs": jobs,
          "matrix": {"path": str(args.matrix.resolve()), "sha256": digest(args.matrix)} if prepared else None,
+         "workload": str(workload_path.resolve()) if workload else None,
          "source_sha256": hashes, "timer_resolution": resolution, "started_ns": time.time_ns(),
          "cache_policy": "fresh clients, reused MinIO/OS caches, no flushes; complete warmup/run history in observations.jsonl",
-         "scope": "requested cases/sessions only; not the complete 46-case publication report"})
+         "scope": "requested cases/sessions only; not a complete publication campaign"})
     inventory, templates, rows = {}, {}, []
     abort_reason = None
     with storage.exclusive(state), (output / "observations.jsonl").open("x") as journal:
@@ -265,7 +290,7 @@ def execute(args):
                         abort_reason = "previous invocation did not prove process/server cleanup: " + slot["run_id"]
                     try:
                         validate(record, payload, slot["reader_id"], gate)
-                        if prepared:
+                        if prepared or workload:
                             matrix.check_translation(record, cases[job["case_id"]])
                     except (ValueError, KeyError, TypeError) as error:
                         record = dict(record, status="operational_failure", failure_reason="invalid observation: " + str(error))
@@ -286,7 +311,7 @@ def execute(args):
                 try:
                     if prepared:
                         require(cases[job["case_id"]]["status"] == "prepared", cases[job["case_id"]].get("failure_reason", "missing matrix reference"))
-                    payload = run.request(fixtures, job["case_id"], job["execution_mode"], "validation", "pending")
+                    payload = run.request(fixtures, job["case_id"], job["execution_mode"], "validation", "pending", workload=workload_path)
                     location = Path(unquote(urlsplit(payload["table_uri"]).path)).relative_to(fixtures)
                     payload["table_uri"] = receipt["table_root"] + "/" + str(location)
                     reference = references[job["case_id"]]
@@ -294,6 +319,7 @@ def execute(args):
                     require(metadata["status"] == "complete" and metadata["fixture_manifest_sha256"] == payload["fixture_manifest_sha256"] and
                             metadata["protocol_sha256"] == payload["protocol_sha256"] and metadata["canonical_sql"] == payload["canonical_sql"] and
                             metadata["snapshot_version"] == payload["snapshot_version"], "reference differs from request")
+                    require(run.comparison_identity(metadata) == comparison, "reference comparison/workload identity differs")
                     templates[job["id"]] = payload
                     missing = None
                 except (ValueError, KeyError, OSError, StopIteration) as error:
@@ -307,14 +333,15 @@ def execute(args):
                         entry.update(status="operational_failure", failure_reason="reader build not supplied")
                         continue
                     slot = {"run_id": f"{campaign_id}-gate-{len(rows):05d}", "job_id": job["id"], "reader_id": reader,
-                            "stage": "gate", "repetition": 0, "order": READERS.index(reader), "traced": False}
+                            "stage": "gate", "repetition": 0, "order": READERS.index(reader), "traced": False,
+                            **(comparison if workload else {})}
                     record = invoke(slot, job)
                     entry.update(status=record["status"], runnable=record["status"] == "success", run_id=slot["run_id"],
                                  failure_reason=record.get("failure_reason"), identity=record.get("identity"),
                                  correctness_file=str(output / slot["run_id"] / "correctness.json"),
                                  reference=str(reference), reference_sha256=digest(reference / "reference.json"))
             save(output / "inventory.json", inventory)
-            slots = schedule(inventory, campaign_id)
+            slots = schedule(inventory, campaign_id, comparison if workload else None)
             save(output / "schedule.json", slots)
             frozen = {name: digest(output / name) for name in ("campaign.json", "inventory.json", "schedule.json")}
             save(output / "frozen.json", frozen)
@@ -327,6 +354,7 @@ def execute(args):
             failed_slots = any(row["status"] != "success" for row in rows if row["stage"] != "gate")
             status = "complete" if intact and not failures and not failed_slots and not abort_reason else "incomplete"
             save(output / "summary.json", {"status": status, "integrity_passed": intact, "abort_reason": abort_reason,
+                 **comparison,
                  "campaign_id": campaign_id, "finished_ns": time.time_ns(), "timer_resolution": resolution,
                  "scheduled_slots": len(slots), "recorded_slots": sum(row["stage"] != "gate" for row in rows), "jobs": summary})
         finally:
@@ -343,7 +371,8 @@ if __name__ == "__main__":
     parser.add_argument("--reference", type=Path, action="append", default=[])
     parser.add_argument("--case", action="append", help="repeat for selected cases; default: both compound layouts")
     parser.add_argument("--matrix", type=Path, help="prepared 30-case matrix; replaces case/reference/session defaults")
+    parser.add_argument("--workload", type=Path, help="explicit revision 3 workload; select staged cases with --case")
     sessions = parser.add_mutually_exclusive_group()
-    sessions.add_argument("--session", choices=SESSIONS, action="append", help="repeat for selected sessions; default: all three")
+    sessions.add_argument("--session", choices={**SESSIONS, **large_workloads.SESSIONS}, action="append", help="repeat for selected sessions")
     sessions.add_argument("--no-sessions", action="store_true", help="run only the isolated cases")
     sys.exit(execute(parser.parse_args()))

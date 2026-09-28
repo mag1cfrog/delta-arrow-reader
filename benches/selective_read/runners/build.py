@@ -22,7 +22,8 @@ def digest(path):
 def sources():
     paths = [ROOT / name for name in ("Cargo.toml", "Cargo.lock", "README.md",
              "benches/selective_read/oracle.py", "benches/selective_read/rust-toolchain.toml",
-             "docs/content/benchmarks/selective-read-protocol.md")]
+             "docs/content/benchmarks/selective-read-protocol.md",
+             "docs/content/benchmarks/selective-read-large-workloads.md")]
     paths += [path for base in (ROOT / "src", HERE) for path in base.rglob("*")
               if path.is_file() and path.suffix in (".rs", ".toml", ".lock", ".py")]
     return {str(path.relative_to(ROOT)): digest(path) for path in sorted(paths)}
