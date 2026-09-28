@@ -209,6 +209,13 @@ impl Budget {
         output.flush()?;
         Ok(())
     }
+
+    pub fn copy(self: &Arc<Self>, input: &Path, output: &Path) -> Result<()> {
+        let mut destination = BudgetFile::new(output, self.clone())?;
+        io::copy(&mut File::open(input)?, &mut destination)?;
+        destination.flush()?;
+        Ok(())
+    }
 }
 
 struct BudgetFile {
@@ -473,6 +480,11 @@ impl TableWriter {
         self.files.push(inspected);
         self.stats = Stats::new(self.schema.clone());
         Ok(())
+    }
+
+    pub fn end_file(&mut self) -> Result<()> {
+        self.flush_batch()?;
+        self.finish_file()
     }
 
     pub fn finish(mut self, delta: Option<(&str, &str)>) -> Result<Value> {

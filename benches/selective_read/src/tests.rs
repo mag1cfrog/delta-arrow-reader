@@ -18,6 +18,7 @@ fn smoke_reproduces_files_and_preserves_rows() -> Result<()> {
         output: root.path().join("first"),
         sort_memory: 512 * MIB,
         disk_limit: Some(4 * 1024 * MIB),
+        repack_from: None,
     };
     let second = Config {
         output: root.path().join("second"),
@@ -245,4 +246,80 @@ fn key(batch: &arrow::record_batch::RecordBatch, row: usize) -> Result<(i64, i32
             .ok_or("linenumber")?
             .value(row),
     ))
+}
+
+#[test]
+fn repack_preserves_values_and_fractional_boundaries() -> Result<()> {
+    let root = tempfile::tempdir()?;
+    let budget = Arc::new(Budget::new(256 * MIB));
+    let rows: Vec<_> = LineItemGenerator::new(0.01, 1, 1)
+        .into_iter()
+        .take(20003)
+        .collect();
+    let expected = fixtures::source_batch(&rows)?;
+    let input = root.path().join("source");
+    let mut writer = TableWriter::new(&input, original_schema(), budget.clone())?;
+    writer.push(expected.clone())?;
+    writer.finish(None)?;
+    let paths = fixtures::parquet_files(&input)?;
+    for files in [2, 64] {
+        let mut previous = None;
+        for copy in 0..2 {
+            let output = root.path().join(format!("{files}-{copy}"));
+            let writer = repack::table(
+                &paths,
+                &output,
+                original_schema(),
+                rows.len() as u64,
+                files,
+                budget.clone(),
+            )?;
+            let manifest = writer.finish(Some(("smoke", "repack-check")))?;
+            assert_eq!(manifest["file_count"], files);
+            for (i, file) in manifest["files"]
+                .as_array()
+                .ok_or("files")?
+                .iter()
+                .enumerate()
+            {
+                assert_eq!(
+                    file["rows"],
+                    (i + 1) * rows.len() / files as usize - i * rows.len() / files as usize
+                );
+            }
+            let actual = fixtures::parquet_files(&output)?
+                .iter()
+                .map(|p| {
+                    fixtures::read_batches(p)?
+                        .collect::<std::result::Result<Vec<_>, _>>()
+                        .map_err(Into::into)
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>();
+            assert_eq!(
+                arrow::compute::concat_batches(&original_schema(), &actual)?,
+                expected
+            );
+            if let Some(previous) = previous {
+                assert_eq!(manifest, previous);
+            }
+            previous = Some(manifest);
+        }
+    }
+    for (count, files) in [(20002, 64), (20004, 64), (10, 64), (20003, 0)] {
+        assert!(
+            repack::table(
+                &paths,
+                &root.path().join(format!("bad-{count}-{files}")),
+                original_schema(),
+                count,
+                files,
+                budget.clone()
+            )
+            .is_err()
+        );
+    }
+    Ok(())
 }
