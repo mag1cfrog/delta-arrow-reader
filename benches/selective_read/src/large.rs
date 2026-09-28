@@ -208,13 +208,10 @@ pub fn preflight(config: &Config) -> Result<Value> {
     };
     let headroom = config.sort_memory + 64 * MIB;
     let preparation = sum(&[existing, output, spill, headroom])?;
-    // Later stages retain one fixture and MinIO copy, and one exact result at a time.
-    // Reference and comparison SQLite allowances include indexes and journal headroom.
-    let reference = if table == 0 {
-        0
-    } else {
-        rows * if table_row_bytes == 768 { 4096 } else { 1024 }
-    };
+    // Later stages retain a typed Parquet reference and sort actual Arrow batches.
+    // Reserve full-output reference and sort-spill bytes; selective cases can use less.
+    // These are planning allowances, not measured compression or spill ratios.
+    let reference = table;
     let export = table;
     let validation = sum(&[existing, output, table, reference * 2, export])?;
     let derivatives = sum(&[existing, source, table * 3, metadata * 3])?;
@@ -233,12 +230,13 @@ pub fn preflight(config: &Config) -> Result<Value> {
         "fixture": options.fixture, "source_parent_manifest_sha256": saved.as_ref().map(|(_, hash)| hash),
         "rows_for_capacity": rows, "row_basis": if saved.is_some() { "saved source; verified before reuse" } else { "1,500,000 orders/SF times maximum 7 lineitems" },
         "allowances": {"new_source_bytes_per_row": 256, "table_bytes_per_row": table_row_bytes,
-            "sort_spill_bytes_per_row": 512, "sqlite_bytes_per_row_per_database": if table_row_bytes == 768 { 4096 } else { 1024 },
+            "sort_spill_bytes_per_row": 512, "reference_parquet_bytes_per_row": table_row_bytes,
+            "oracle_sort_spill_bytes_per_row": table_row_bytes,
             "metadata_bytes_per_sf": 64 * MIB},
         "estimated_bytes": {"existing_source": existing_source, "existing_dv_base": existing_table, "source_copy_or_generation": source,
             "selected_table": table, "metadata": metadata, "sort_spill": spill,
-            "minio_copy": table, "reference_sqlite": reference, "validation_export": export,
-            "comparison_sqlite": reference, "two_later_repack_dv_copies": table * 2},
+            "minio_copy": table, "reference_parquet": reference, "validation_export": export,
+            "oracle_sort_spill": reference, "two_later_repack_dv_copies": table * 2},
         "phase_peak_bytes": {"preparation": preparation, "later_validation": validation, "later_derivatives": derivatives},
         "estimated_peak_bytes": peak, "additional_disk_required_bytes": additional,
         "disk_limit_bytes": limit, "output_limit_bytes": output, "spill_limit_bytes": spill,

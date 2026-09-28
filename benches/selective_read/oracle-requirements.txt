@@ -1,2 +1,4 @@
 # CPython 3.14, Linux x86-64, matching the frozen comparison profile.
 pyarrow==25.0.1 --hash=sha256:9171748cdf796972d85a4b60157c279913e242992e350c90c7450182a9838b2a
+# Same wheel as the DuckDB reader; the oracle uses only Arrow input and sorting.
+duckdb==1.5.5 --hash=sha256:fbf0f2d48b43c6c304d00463b463c27ead6c4b01c3c1816b750f728decf71afe

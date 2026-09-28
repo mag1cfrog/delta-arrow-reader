@@ -164,11 +164,12 @@ def prepare(fixtures, output, references=None):
                         metadata = oracle.prepare(fixtures, case, reference)
                     else:
                         metadata = json.loads((reference / "reference.json").read_text())
+                    oracle.check_reference_build(metadata)
                     require(metadata["status"] == "complete" and metadata["case_id"] == case and metadata["canonical_sql"] == row["canonical_sql"]
                             and metadata["fixture_manifest_sha256"] == digest(fixtures / "manifest.json")
                             and metadata["protocol_sha256"] == frozen["protocol_sha256"]
                             and metadata["oracle_sha256"] == digest(Path(oracle.__file__))
-                            and metadata["reference_sha256"] == digest(reference / "reference.sqlite"), "stale independent reference")
+                            and metadata["reference_sha256"] == digest(reference / "reference.parquet"), "stale independent reference")
                     row.update(status="prepared", reference=str(reference), reference_metadata_sha256=digest(reference / "reference.json"),
                                oracle={k: metadata[k] for k in ORACLE_FIELDS})
                 except (ValueError, OSError, KeyError, StopIteration) as error:
@@ -201,6 +202,8 @@ def load(path, fixtures):
             reference = Path(row["reference"]) / "reference.json"
             require(digest(reference) == row["reference_metadata_sha256"], "reference metadata changed")
             metadata = json.loads(reference.read_text())
+            import oracle
+            oracle.check_reference_build(metadata)
             require(metadata["status"] == "complete" and metadata["oracle_sha256"] == digest(HERE / "oracle.py")
                     and metadata["fixture_manifest_sha256"] == value["fixture_manifest_sha256"]
                     and metadata["protocol_sha256"] == value["protocol_sha256"]

@@ -16,7 +16,7 @@ READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft")
 SESSIONS = {"reuse.large.date30": "large.wide.shuffled.date30-wide",
             "reuse.large.compound": "large.wide.clustered.eq2-in20"}
 FILE_SESSIONS = {"reuse.large.files4096" + suffix: "large.files4096.eq2-in20" + suffix for suffix in ("", ".dv")}
-SOURCES = (HERE / "oracle.py", Path(__file__), HERE / "matrix.py", HERE / "runners/run.py",
+SOURCES = (HERE / "oracle.py", HERE / "oracle-requirements.txt", Path(__file__), HERE / "matrix.py", HERE / "runners/run.py",
            HERE / "wide_files.py", HERE / "file_organizations.py")
 
 
