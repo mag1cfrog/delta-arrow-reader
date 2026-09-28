@@ -88,6 +88,9 @@ The report profile saves both SF10 and SF1 reference inputs. Reference files
 use the same pinned Parquet settings as the tables. Preserve them for the
 independent full-read oracle.
 
+Use [Validate public results](selective-read-oracle.md) to prepare independent
+query references and check untimed reader output against these saved inputs.
+
 The manifest records:
 
 - Generator, source, executable, protocol, and lockfile identities; row keys,
