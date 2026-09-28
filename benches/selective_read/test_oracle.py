@@ -114,6 +114,35 @@ def expected_keys(query):
 
 
 class OracleTests(unittest.TestCase):
+    def test_wide_file_geometry_rejects_small_files_and_mixed_scales(self):
+        import wide_files
+        import large_workloads
+        self.assertEqual(len(large_workloads.definitions("files")), 4)
+        self.assertEqual(len(large_workloads.FILE_SESSIONS), 2)
+        schema = {"fields": [{"name": name} for name in oracle.ORIGINAL + oracle.PAYLOADS]}
+        files = [{"path": f"part-{i:05}.parquet", "bytes": 64 * 1024**2,
+                  "rows": 1, "source_ordinal_range": [i, i + 1], "row_groups": [{"rows": 1}],
+                  "delta_stats": {"numRecords": 1, "minValues": {"l_shipdate": "1995-03-15" if i == 0 else "1995-02-28",
+                    "l_shipmode": "AIR", "l_partkey": 1}, "maxValues": {"l_shipdate": "1995-03-15" if i == 0 else "1995-02-28",
+                    "l_shipmode": "AIR", "l_partkey": 1}, "nullCount": {"l_shipdate": 0, "l_shipmode": 0, "l_partkey": 0}}} for i in range(4096)]
+        normal = {"id": "wide.clustered", "scale_factor": 10, "rows": 4096, "schema": schema,
+                  "deletion_vectors": False, "snapshot_version": 0, "files": files, "file_count": 4096}
+        repacked = normal | {"id": "wide.files4096"}
+        manifest = {"wide_file_pair": {"kind": "large"}, "sources": [{"scale_factor": 10, "rows": 4096, "in_literals": [1]}],
+                    "tables": [normal, repacked, normal | {"id": "wide.clustered.dv", "deletion_vectors": True, "snapshot_version": 1},
+                               repacked | {"id": "wide.files4096.dv", "deletion_vectors": True, "snapshot_version": 1}]}
+        shape = wide_files.geometry(manifest, large=True, smoke=False)
+        self.assertEqual(len(shape["excluded_files"]), 4095)
+        for file in files:
+            file["bytes"] -= 1
+        with self.assertRaisesRegex(ValueError, "64 MiB"):
+            wide_files.geometry(manifest, large=True, smoke=False)
+        for file in files:
+            file["bytes"] += 1
+        normal["scale_factor"] = 30
+        with self.assertRaisesRegex(ValueError, "scale, rows or schema"):
+            wide_files.geometry(manifest, large=True, smoke=False)
+
     def test_large_query_identity_boundaries_and_exact_values(self):
         import large_workloads as large
         import matrix

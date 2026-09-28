@@ -41,6 +41,89 @@ fn dv_payload_preserves_page_group_and_batch_boundaries() -> Result<()> {
 }
 
 #[test]
+fn wide_file_deletions_share_logical_keys_across_boundaries() -> Result<()> {
+    let root = tempfile::tempdir()?;
+    let budget = Arc::new(Budget::new(16 * MIB));
+    let rows: Vec<_> = LineItemGenerator::new(0.01, 1, 1)
+        .into_iter()
+        .take(8)
+        .collect();
+    let source = fixtures::source_batch(&rows)?;
+    let mut columns = source.columns().to_vec();
+    columns[0] = Arc::new(Int64Array::from(vec![8, 0, 1, 7, 2, 3, 20, 21]));
+    columns[1] = Arc::new(Int64Array::from(vec![1; 8]));
+    columns[3] = Arc::new(Int32Array::from(vec![1; 8]));
+    columns[10] = Arc::new(Date32Array::from(vec![
+        9190, 9190, 9190, 9190, 9190, 9190, 9204, 9204,
+    ]));
+    columns[14] = Arc::new(StringArray::from(vec!["AIR"; 8]));
+    let batch = arrow::record_batch::RecordBatch::try_new(source.schema(), columns)?;
+    let mut writer = TableWriter::new(&root.path().join("input"), source.schema(), budget.clone())?;
+    writer.push(batch)?;
+    writer.finish(None)?;
+    let input = fixtures::parquet_files(&root.path().join("input"))?;
+    let mut tables = Vec::new();
+    for (id, files) in [("normal", 2), ("many", 3)] {
+        let writer = repack::table(
+            &input,
+            &root.path().join(id),
+            source.schema(),
+            8,
+            files,
+            budget.clone(),
+            files == 3,
+        )?;
+        let mut table = finish_table(writer, id, Profile::Smoke, 0.01, "clustered", 8)?;
+        table["queries"] = json!({"compound": "SELECT * FROM bench"});
+        tables.push(table);
+    }
+    let groups = [
+        (root.path().join("normal"), &tables[0]),
+        (root.path().join("many"), &tables[1]),
+    ];
+    let legacy = dv::file_minima(&groups[1..], &BTreeSet::from([1]))?;
+    assert_eq!(legacy, BTreeSet::from([(0, 1), (1, 1), (3, 1), (20, 1)]));
+    let shared = dv::file_minima(&groups, &BTreeSet::from([1]))?;
+    assert_eq!(
+        shared,
+        BTreeSet::from([(0, 1), (1, 1), (2, 1), (3, 1), (20, 1)])
+    );
+    for table in &tables {
+        let variant = dv::variant(
+            root.path(),
+            table,
+            Profile::Smoke,
+            false,
+            budget.clone(),
+            &shared,
+        )?;
+        assert_eq!(variant["deletion_summary"]["deleted_rows"], 5);
+        assert_eq!(variant["deletion_summary"]["dv_files"], table["file_count"]);
+        let mut deleted = BTreeSet::new();
+        for (base, file) in table["files"]
+            .as_array()
+            .ok_or("files")?
+            .iter()
+            .zip(variant["files"].as_array().ok_or("files")?)
+        {
+            assert_eq!(base["sha256"], file["sha256"]);
+            assert_eq!(base["rows"], file["delta_stats"]["numRecords"]);
+            for key in file["deletion_vector"]["logical_ids"]
+                .as_array()
+                .ok_or("keys")?
+            {
+                deleted.insert((
+                    key[0].as_i64().ok_or("order")?,
+                    key[1].as_i64().ok_or("line")? as i32,
+                ));
+            }
+        }
+        assert_eq!(deleted, shared);
+    }
+    Ok(())
+}
+
+#[test]
 fn within_file_controls_preserve_skip_levels_and_bytes() -> Result<()> {
     let root = tempfile::tempdir()?;
     let budget = Arc::new(Budget::new(1024 * MIB));
@@ -137,6 +220,7 @@ fn within_file_controls_preserve_skip_levels_and_bytes() -> Result<()> {
                 Profile::Smoke,
                 false,
                 budget.clone(),
+                &BTreeSet::new(),
             )?;
             let second = dv::variant(
                 &root.path().join("two"),
@@ -144,6 +228,7 @@ fn within_file_controls_preserve_skip_levels_and_bytes() -> Result<()> {
                 Profile::Smoke,
                 false,
                 budget.clone(),
+                &BTreeSet::new(),
             )?;
             assert_eq!(first, second);
             let file = &first["files"][0];
@@ -168,6 +253,7 @@ fn within_file_controls_preserve_skip_levels_and_bytes() -> Result<()> {
                 Profile::Smoke,
                 true,
                 budget.clone(),
+                &BTreeSet::new(),
             )?;
             assert_eq!(feature["deletion_summary"]["deleted_rows"], 0);
             assert_eq!(feature["files"], one["files"]);
@@ -202,6 +288,8 @@ fn smoke_reproduces_files_and_preserves_rows() -> Result<()> {
         controls: false,
         dv_from: Vec::new(),
         dv_table: None,
+        wide_files_from: None,
+        large_file_pair: false,
     };
     let second = Config {
         output: root.path().join("second"),
@@ -673,6 +761,7 @@ fn repack_preserves_values_and_fractional_boundaries() -> Result<()> {
                 rows.len() as u64,
                 files,
                 budget.clone(),
+                false,
             )?;
             let manifest = writer.finish(Some(("smoke", "repack-check")))?;
             assert_eq!(manifest["file_count"], files);
@@ -716,7 +805,8 @@ fn repack_preserves_values_and_fractional_boundaries() -> Result<()> {
                 original_schema(),
                 count,
                 files,
-                budget.clone()
+                budget.clone(),
+                false
             )
             .is_err()
         );

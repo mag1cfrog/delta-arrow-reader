@@ -373,6 +373,6 @@ if __name__ == "__main__":
     parser.add_argument("--matrix", type=Path, help="prepared 30-case matrix; replaces case/reference/session defaults")
     parser.add_argument("--workload", type=Path, help="explicit revision 3 workload; select staged cases with --case")
     sessions = parser.add_mutually_exclusive_group()
-    sessions.add_argument("--session", choices={**SESSIONS, **large_workloads.SESSIONS}, action="append", help="repeat for selected sessions")
+    sessions.add_argument("--session", choices={**SESSIONS, **large_workloads.SESSIONS, **large_workloads.FILE_SESSIONS}, action="append", help="repeat for selected sessions")
     sessions.add_argument("--no-sessions", action="store_true", help="run only the isolated cases")
     sys.exit(execute(parser.parse_args()))

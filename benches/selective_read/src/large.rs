@@ -36,6 +36,7 @@ impl Options {
             "li.shuffled",
             "wide.clustered",
             "wide.shuffled",
+            "wide.files4096",
         ]
         .contains(&fixture.as_str())
         {
@@ -135,6 +136,7 @@ pub fn preflight(config: &Config) -> Result<Value> {
         .source_from
         .as_ref()
         .or(config.dv_from.first())
+        .or(config.wide_files_from.as_ref())
         .map(|input| saved_source(input, f64::from(options.scale)))
         .transpose()?;
     // TPC-H has 1.5 million orders/SF and at most seven lineitems/order. Byte coefficients
@@ -162,19 +164,27 @@ pub fn preflight(config: &Config) -> Result<Value> {
     } else {
         rows * table_row_bytes
     };
-    let existing_table = if let Some(input) = config.dv_from.first() {
-        let parent: Value = serde_json::from_slice(&fs::read(input.join("manifest.json"))?)?;
-        parent["tables"]
-            .as_array()
-            .ok_or("tables")?
-            .iter()
-            .find(|t| t["id"] == options.fixture)
-            .ok_or("selected DV base missing")?["bytes"]
-            .as_u64()
-            .ok_or("DV base bytes")?
-    } else {
-        0
-    };
+    let existing_table =
+        if let Some(input) = config.dv_from.first().or(config.wide_files_from.as_ref()) {
+            let parent: Value = serde_json::from_slice(&fs::read(input.join("manifest.json"))?)?;
+            parent["tables"]
+                .as_array()
+                .ok_or("tables")?
+                .iter()
+                .find(|t| {
+                    t["id"]
+                        == if config.wide_files_from.is_some() {
+                            "wide.clustered"
+                        } else {
+                            &options.fixture
+                        }
+                })
+                .ok_or("selected DV base missing")?["bytes"]
+                .as_u64()
+                .ok_or("DV base bytes")?
+        } else {
+            0
+        };
     let metadata = u64::from(options.scale) * 64 * MIB;
     let sum = |parts: &[u64]| -> Result<u64> {
         parts.iter().try_fold(0_u64, |sum, part| {
@@ -183,9 +193,15 @@ pub fn preflight(config: &Config) -> Result<Value> {
         })
     };
     let existing = sum(&[existing_source, existing_table])?;
-    let copies = if config.dv_from.is_empty() { 1 } else { 2 };
+    let copies = if config.wide_files_from.is_some() {
+        4
+    } else if config.dv_from.is_empty() {
+        1
+    } else {
+        2
+    };
     let output = sum(&[source, table * copies, metadata * copies])?;
-    let spill = if table == 0 || !config.dv_from.is_empty() {
+    let spill = if table == 0 || !config.dv_from.is_empty() || config.wide_files_from.is_some() {
         0
     } else {
         rows * 512

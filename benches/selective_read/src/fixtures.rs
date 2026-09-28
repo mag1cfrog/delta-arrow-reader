@@ -411,6 +411,7 @@ pub struct TableWriter {
     properties: WriterProperties,
     group_rows: usize,
     groups_per_file: usize,
+    geometry_sidecars: bool,
 }
 
 impl TableWriter {
@@ -444,7 +445,13 @@ impl TableWriter {
             properties,
             group_rows,
             groups_per_file,
+            geometry_sidecars: false,
         })
+    }
+
+    pub fn with_geometry_sidecars(mut self, enabled: bool) -> Self {
+        self.geometry_sidecars = enabled;
+        self
     }
 
     pub fn push(&mut self, batch: RecordBatch) -> Result<()> {
@@ -511,6 +518,22 @@ impl TableWriter {
             self.groups_per_file,
         )?;
         inspected["path"] = json!(name);
+        if self.geometry_sidecars {
+            let groups = inspected["row_groups"].take();
+            inspected["row_groups"] = groups
+                .as_array()
+                .ok_or("groups")?
+                .iter()
+                .map(|g| json!({"first_row": g["first_row"], "rows": g["rows"]}))
+                .collect();
+            let bytes = serde_json::to_vec(
+                &json!({"parquet_sha256": inspected["sha256"], "row_groups": groups}),
+            )?;
+            let geometry_path = format!("{name}.geometry.json");
+            self.budget.write(&self.path.join(&geometry_path), &bytes)?;
+            inspected["geometry"] =
+                json!({"path": geometry_path, "bytes": bytes.len(), "sha256": hash_bytes(&bytes)});
+        }
         self.files.push(inspected);
         self.stats = Stats::new(self.schema.clone());
         Ok(())

@@ -27,7 +27,11 @@ pub fn deleted_key(order: i64, line: i32) -> bool {
     u64::from_le_bytes(first).is_multiple_of(1000)
 }
 
-fn deletions(path: &Path, control: bool) -> Result<(Vec<u64>, Vec<Value>)> {
+fn deletions(
+    path: &Path,
+    control: bool,
+    extra: &BTreeSet<(i64, i32)>,
+) -> Result<(Vec<u64>, Vec<Value>)> {
     let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(path)?)?;
     let projection = ProjectionMask::roots(
         reader.parquet_schema(),
@@ -67,8 +71,9 @@ fn deletions(path: &Path, control: bool) -> Result<(Vec<u64>, Vec<Value>)> {
                     .as_any()
                     .downcast_ref::<Int32Array>()
                     .ok_or("linenumber type")?;
-                deleted_key(orders.value(row), lines.value(row))
-                    .then(|| json!([orders.value(row), lines.value(row)]))
+                (deleted_key(orders.value(row), lines.value(row))
+                    || extra.contains(&(orders.value(row), lines.value(row))))
+                .then(|| json!([orders.value(row), lines.value(row)]))
             };
             if let Some(key) = key {
                 ordinals.push(first + row as u64);
@@ -117,6 +122,7 @@ pub fn variant(
     profile: Profile,
     feature_only: bool,
     budget: Arc<Budget>,
+    extra: &BTreeSet<(i64, i32)>,
 ) -> Result<Value> {
     let base_id = base["id"].as_str().ok_or("base id")?;
     let suffix = if feature_only { "feature-only" } else { "dv" };
@@ -179,10 +185,19 @@ pub fn variant(
     for file in table["files"].as_array_mut().ok_or("files")? {
         let name = file["path"].as_str().ok_or("Parquet path")?.to_owned();
         budget.copy(&output.join(base_id).join(&name), &root.join(&name))?;
+        if let Some(geometry) = file.get("geometry") {
+            let path = geometry["path"].as_str().ok_or("geometry path")?;
+            if path != format!("{name}.geometry.json")
+                || geometry["sha256"] != fixtures::hash_file(&output.join(base_id).join(path))?
+            {
+                return Err("invalid geometry sidecar".into());
+            }
+            budget.copy(&output.join(base_id).join(path), &root.join(path))?;
+        }
         if feature_only {
             continue;
         }
-        let (ordinals, keys) = deletions(&root.join(&name), control)?;
+        let (ordinals, keys) = deletions(&root.join(&name), control, extra)?;
         if ordinals.is_empty() {
             continue;
         }
@@ -214,7 +229,84 @@ pub fn variant(
         "file_coverage": affected as f64 / table["file_count"].as_u64().ok_or("file count")? as f64,
         "rule": if feature_only { "none" } else if control { "event_id = 'other' AND row_id % 1000 = 0" }
             else { "SHA256(UTF8(l_orderkey/l_linenumber))[0:8] as unsigned LE u64 % 1000 = 0" }});
+    if !extra.is_empty() {
+        if affected != table["file_count"].as_u64().ok_or("file count")? {
+            return Err("wide file pair needs a nonempty DV on every file".into());
+        }
+        table["deletion_summary"]["extra_logical_keys"] = json!(extra);
+        table["deletion_summary"]["rule"] = json!(
+            "public hash UNION extra_logical_keys (file nonmatching minima and global matching minimum)"
+        );
+    }
     Ok(table)
+}
+
+/// The same logical union is applied independently at both physical organizations.
+pub fn file_minima(
+    groups: &[(PathBuf, &Value)],
+    literals: &BTreeSet<i64>,
+) -> Result<BTreeSet<(i64, i32)>> {
+    let mut extra = BTreeSet::new();
+    let mut matching = BTreeSet::new();
+    for (root, table) in groups {
+        for path in repack::verified_files(root, table)? {
+            let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(path)?)?;
+            let projection = ProjectionMask::roots(reader.parquet_schema(), [0, 1, 3, 10, 14]);
+            let mut minimum = None;
+            for batch in reader
+                .with_projection(projection)
+                .with_batch_size(BATCH_ROWS)
+                .build()?
+            {
+                let batch = batch?;
+                let orders = batch
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .ok_or("orderkey type")?;
+                let parts = batch
+                    .column(1)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .ok_or("partkey type")?;
+                let lines = batch
+                    .column(2)
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .ok_or("linenumber type")?;
+                let dates = batch
+                    .column(3)
+                    .as_any()
+                    .downcast_ref::<Date32Array>()
+                    .ok_or("shipdate type")?;
+                let modes = batch
+                    .column(4)
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .ok_or("shipmode type")?;
+                for row in 0..batch.num_rows() {
+                    let key = (orders.value(row), lines.value(row));
+                    if dates.value(row) == 9204
+                        && modes.value(row) == "AIR"
+                        && literals.contains(&parts.value(row))
+                    {
+                        matching.insert(key);
+                    } else {
+                        minimum = Some(minimum.map_or(key, |previous| key.min(previous)));
+                    }
+                }
+            }
+            extra.insert(minimum.ok_or("file has no nonmatching logical key")?);
+        }
+    }
+    extra.insert(*matching.first().ok_or("file pair has no matching row")?);
+    if !matching
+        .iter()
+        .any(|&(order, line)| !extra.contains(&(order, line)) && !deleted_key(order, line))
+    {
+        return Err("file pair has no surviving matching row".into());
+    }
+    Ok(extra)
 }
 
 pub fn generate(config: &Config, capacity: Option<Value>) -> Result<Value> {
@@ -394,6 +486,7 @@ pub fn generate(config: &Config, capacity: Option<Value>) -> Result<Value> {
             config.profile,
             false,
             budget.clone(),
+            &BTreeSet::new(),
         )?;
         if id == "row-groups" {
             prepared.push(variant(
@@ -402,6 +495,7 @@ pub fn generate(config: &Config, capacity: Option<Value>) -> Result<Value> {
                 config.profile,
                 true,
                 budget.clone(),
+                &BTreeSet::new(),
             )?);
         }
         prepared.extend([table, paired]);
