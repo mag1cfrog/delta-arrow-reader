@@ -25,7 +25,7 @@ import pyarrow as pa
 
 sys.path.insert(0, str(HERE))
 from run import digest, save
-from python_common import correctness, json_hash, observation, require, runtime_metadata, scan_sql, sha, validate
+from python_common import correctness, event, json_hash, observation, require, runtime_metadata, scan_sql, sha, validate
 
 EXECUTION = {"default_morsel_size": 8192, "scantask_max_parallel": 8, "maintain_order": False}
 
@@ -105,6 +105,7 @@ def execute(request, config, output, record):
     reuse = request["execution_mode"] == "reuse"
     record["phase"] = "snapshot_open"
     session_start = clock()
+    event(record, "snapshot_open")
     source = scan(request, config)
     initialization = clock() - session_start
     if timed and reuse:
@@ -112,6 +113,7 @@ def execute(request, config, output, record):
     for index in range(10 if reuse else 1):
         record["phase"] = "query"
         start = clock() if reuse else session_start
+        event(record, "query_start", index)
         rows = batches = 0
         first = None
         try:
@@ -132,9 +134,12 @@ def execute(request, config, output, record):
                         writer.write_batch(batch)
                     del batch
                 completion = clock() - start
+                event(record, "stream_complete", index)
                 if index == (9 if reuse else 0):
                     if timed:
                         record["session_elapsed_ns"] = clock() - session_start
+                    elif request["purpose"] in ("diagnostic", "io"):
+                        record["diagnostic_session_ns"] = clock() - session_start
                     record["_cleanup_start"] = clock()
         except Exception:
             record["partial_query"] = {"query_index": index, "output_rows": rows, "output_batches": batches,
@@ -162,7 +167,7 @@ def execute(request, config, output, record):
             record["initialization_plus_all_queries_ns"] = initialization + sum(durations)
         else:
             record["open_query_ns"] = durations[0]
-    else:
+    elif request["purpose"] != "io":
         record["provider_evidence"] = {"schema": str(source.schema().to_pyarrow_schema()),
                                        "native_expression": expression_identity(request["canonical_sql"])}
     record["phase"] = "complete"
@@ -216,6 +221,7 @@ def run(request_path, output):
         cleanup = record.pop("_cleanup_start", clock())
         if request["purpose"] == "timing":
             record["cleanup_ns"] = clock() - cleanup
+        event(record, "cleanup_complete")
     save(output / "record.json", record)
     print(json.dumps(record))
     return 0 if record["status"] == "success" else 1

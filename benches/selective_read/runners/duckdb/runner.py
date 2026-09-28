@@ -16,7 +16,7 @@ import pyarrow as pa
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from run import digest, save
-from python_common import correctness, json_hash, observation, require, runtime_metadata, sha, validate
+from python_common import correctness, event, json_hash, observation, require, runtime_metadata, sha, validate
 
 CONFIG = {"threads": 8, "memory_limit": "4GiB", "enable_external_file_cache": False,
           "autoload_known_extensions": False, "autoinstall_known_extensions": False,
@@ -117,6 +117,7 @@ def execute(connection, request, output, record):
     reuse = request["execution_mode"] == "reuse"
     record["phase"] = "snapshot_open"
     session_start = clock()
+    event(record, "snapshot_open")
     attach(connection, request)
     initialization = clock() - session_start
     if timed and reuse:
@@ -124,6 +125,7 @@ def execute(connection, request, output, record):
     for index in range(10 if reuse else 1):
         record["phase"] = "query"
         start = clock() if reuse else session_start
+        event(record, "query_start", index)
         rows = batches = 0
         first = None
         try:
@@ -144,9 +146,12 @@ def execute(connection, request, output, record):
                         writer.write_batch(batch)
                     del batch
                 completion = clock() - start
+                event(record, "stream_complete", index)
                 if index == (9 if reuse else 0):
                     if timed:
                         record["session_elapsed_ns"] = clock() - session_start
+                    elif request["purpose"] in ("diagnostic", "io"):
+                        record["diagnostic_session_ns"] = clock() - session_start
                     record["_cleanup_start"] = clock()
             del relation
         except Exception:
@@ -175,7 +180,7 @@ def execute(connection, request, output, record):
             record["initialization_plus_all_queries_ns"] = initialization + sum(durations)
         else:
             record["open_query_ns"] = durations[0]
-    else:
+    elif request["purpose"] != "io":
         record["provider_evidence"] = {"schema": connection.sql("DESCRIBE bench").fetchall(),
                                        "attach_options": record["settings"]["provider"]}
     record["phase"] = "complete"
@@ -230,6 +235,7 @@ def run(request_path, output):
                 record.update(status="operational_failure", failure_reason=f"cleanup failed: {error}", phase="cleanup")
         if request["purpose"] == "timing":
             record["cleanup_ns"] = clock() - cleanup
+        event(record, "cleanup_complete")
     save(output / "record.json", record)
     print(json.dumps(record))
     return 0 if record["status"] == "success" else 1

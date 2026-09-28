@@ -1,0 +1,211 @@
+---
+title: Observe selective-read storage requests
+description: Use one pinned local MinIO server to validate uploads and observe all five readers' S3 requests.
+---
+
+# Observe selective-read storage requests
+
+The storage observer uses MinIO's native S3 trace and metrics endpoints. All five
+readers connect directly to the same loopback endpoint. The launcher enforces
+the protocol's CPU and memory budgets. Timing invocations have no trace
+subscriber; validation, plan export and I/O diagnostics run separately.
+
+## Start the pinned server
+
+Use Linux x86-64 with cgroup v2, a working systemd user manager, `taskset`, `curl`
+with `--aws-sigv4`, Go toolchain downloads, and an authenticated `gh` CLI.
+Prepare the [five reader builds](selective-read-runners.md), the
+[oracle environment](selective-read-oracle.md), and
+[public fixtures](selective-read-fixtures.md) first. Run from the repository root:
+
+```sh
+python3 -B benches/selective_read/storage.py prepare \
+  --output ../selective-read-minio-build
+python3 -B benches/selective_read/storage.py start \
+  --build ../selective-read-minio-build --state ../selective-read-storage \
+  --port 19000
+python3 -B benches/selective_read/storage.py upload \
+  --state ../selective-read-storage --fixtures ../selective-read-smoke \
+  --output ../selective-read-upload.json
+```
+
+Build and state directories must be new. Preparation checks out source commit
+`07c3a429bfed433e49018cb0f78a52145d4bedeb` and builds release
+`RELEASE.2025-09-07T16-13-09Z` with Go 1.24.7, `CGO_ENABLED=0`, Linux/amd64 and
+`GOAMD64=v1`. To reuse an existing clean checkout at that exact commit, pass
+`--source PATH` to `prepare`. Keep the binary, build record, Go module files and
+license together.
+
+The service binds only to `127.0.0.1`. Generated credentials live in the private
+state directory. The upload checks every local object's size and SHA-256 against
+the fixture manifest, uses conditional PUTs to preserve existing objects, and
+verifies each uploaded object with a complete GET and SHA-256. Its receipt records
+the object inventory and `s3://selective-read/MANIFEST_SHA256` table root.
+
+The launcher selects eight logical CPUs for the reader, two separate physical
+cores for MinIO, and a third separate core for the trace process. It never splits
+SMT siblings across these groups. Insufficient CPU topology fails setup. MinIO
+gets a 4 GiB memory cap; readers get 8 GiB. Both disable swap. Setup verifies
+MinIO's effective affinity and cgroup limits; every reader launch verifies and
+saves its own limits before table I/O. These caps include native allocations.
+
+`server.json` records the CPU topology, placement, kernel, memory, mount, curl
+version/hash, server build identity, startup command and cache policy.
+`limits.json` records the actual server cgroup. Keep MinIO running throughout a
+campaign. Clients are fresh for every invocation; server and OS caches are reused
+without flushing. Start the server once before the campaign's uploads and
+warm-ups. Do not restart it between readers or modes. Use an otherwise idle host;
+affinity does not reserve CPUs against unrelated host processes.
+
+## Validate, time and observe a remote case
+
+Use the oracle environment's Python for this example. All paths below are relative
+to the repository root. The output directories must be new:
+
+```python
+import json
+from pathlib import Path
+import sys
+
+sys.path.insert(0, "benches/selective_read")
+import observe
+import oracle
+import run
+
+state = Path("../selective-read-storage")
+fixtures = Path("../selective-read-smoke")
+binary = Path("../selective-read-dar-build/selective-read-dar")
+root = json.loads(Path("../selective-read-upload.json").read_text())["table_root"]
+case = "li.clustered.eq2-in20"
+reference = Path("../remote-reference")
+oracle.prepare(fixtures, case, reference)
+payload = run.request(fixtures, case, "open", "validation", "remote-validation",
+                      table_uri=root + "/li.clustered")
+validation = Path("../remote-validation")
+record = observe.invoke(state, binary, payload, validation, fixtures, reference)
+assert record["status"] == "success"
+
+timed = run.request(fixtures, case, "open", "timing", "remote-timing",
+                    table_uri=payload["table_uri"],
+                    correctness=validation / "correctness.json")
+assert observe.invoke(state, binary, timed, Path("../remote-timing"))["status"] == "success"
+io = dict(payload, purpose="io", run_id="remote-io")
+assert observe.invoke(state, binary, io, Path("../remote-io"))["status"] == "success"
+```
+
+Substitute any other prepared executable to use the same server and observer.
+The launcher removes inherited AWS profiles, endpoints and proxies, supplies the
+dedicated credentials through the environment, and applies the same path-style
+HTTP endpoint to all adapters. An exclusive state lock prevents overlapping
+invocations and uploads. Keep this server dedicated to the benchmark.
+
+For an existing saved request, the equivalent command is:
+
+```sh
+../selective-read-oracle-venv/bin/python -B benches/selective_read/observe.py run \
+  --state ../selective-read-storage \
+  --binary ../selective-read-dar-build/selective-read-dar \
+  --request ../remote-io/request.json --output ../remote-io-repeat
+```
+
+Validation also requires `--fixtures` and `--reference`. Timing requires the
+request's matching remote correctness certificate. A local-file certificate
+cannot authorize the same query against S3.
+
+`storage-observation.json` augments the ordinary reader observation with verified
+limits, server identity, capture status, and I/O totals. A sibling directory with
+the suffix `-io` holds the capture proof and sanitized `requests.jsonl`. Failed
+captures retain their artifacts and invalidate the storage observation.
+
+## Observation boundary
+
+The pinned MinIO source records the byte counts returned by HTTP `Write` and
+`ReadFrom` in its
+[`ResponseRecorder`](https://github.com/minio/minio/blob/07c3a429bfed433e49018cb0f78a52145d4bedeb/internal/http/response-recorder.go).
+These are response-body bytes accepted by the server's HTTP writer. They exclude
+headers and include accepted buffered data, which can exceed what a canceled
+client consumed. They are neither advertised Content-Length nor decoded rows.
+The check below verifies full GET, range GET, HEAD, LIST, and an interrupted
+64 MiB transfer against known requests.
+
+Native trace is preferable here to a forwarding proxy: the readers retain their
+own connections and S3 implementations. MinIO's trace publisher can drop records
+when its subscriber falls behind. Every capture therefore reconciles all traced
+requests and body bytes with the server's independent S3 counters at
+`/minio/metrics/v3/api/requests`. A zero-byte control HEAD confirms subscription
+before the reader starts and another confirms draining after it exits. Control
+traffic is excluded from reader totals. Missing, duplicate, unrelated, rejected,
+or undrained traffic invalidates the observation. Bucket discovery requests are
+allowed; object requests and listing prefixes must belong to the selected table.
+
+Only selected fields are saved. Authorization headers, credentials, raw response
+bodies, and unrelated object names never enter the request artifacts. Every
+attempt counts as a request. SDK retry metadata is retained when present;
+identical requests alone do not prove a retry.
+
+Capture starts before the reader process and remains active through process exit
+and pending server requests. Diagnostic lifecycle markers identify stream
+completion. Requests crossing or following that boundary remain visible,
+including work after LIMIT. These timestamps describe overlap, not which query
+caused an asynchronous request in a reuse session.
+
+| Saved field | Meaning |
+| --- | --- |
+| `api`, `method`, `object`, `object_class` | Native S3 operation and relative key, classified as log, Parquet, DV, listing, bucket or other |
+| `range`, `content_range` | Requested Range and returned Content-Range |
+| `response_bytes` | Body bytes accepted by MinIO's HTTP writer for this attempt, including error bodies |
+| `advertised_content_length`, `incomplete_body` | Separate advertised length and evidence of a short non-HEAD response |
+| `status`, `request_id` | Native status and response request ID, including failed attempts |
+| `sdk_invocation_id`, `sdk_attempt` | Retry metadata when supplied; otherwise null |
+| `run_id`, `case_id`, `started_ns`, `ended_ns` | Invocation identity and native UTC request boundaries |
+
+The summary counts calls separately from distinct touched Parquet objects, and
+lists GET and HEAD objects separately. Log checkpoints ending in `.parquet` count
+as log traffic. An empty result can still touch Parquet footers: inspect the
+recorded ranges instead of treating a touched object as a complete data-file
+read. A file absent from both object lists received no observed HEAD or GET.
+
+`started_after_final_stream` and `ended_after_final_stream` expose work after the
+last stream completes, including LIMIT cleanup. A response spanning that event
+has one byte total; the observer cannot divide it into before/after bytes.
+`response_bytes_after_stream` therefore stays null. UTC events identify overlap;
+the monotonic `diagnostic_session_ns` is used only for observer overhead.
+
+## Run the bounded storage check
+
+Use the smoke fixture to check the entire path without a report-scale campaign:
+
+```sh
+../selective-read-oracle-venv/bin/python -B benches/selective_read/check_storage.py \
+  --state ../selective-read-storage --fixtures ../selective-read-smoke \
+  --binary ../selective-read-dar-build/selective-read-dar \
+  --binary ../selective-read-delta-rs-build/selective-read-delta-rs \
+  --binary ../selective-read-duckdb-build/selective-read-duckdb \
+  --binary ../selective-read-polars-build/selective-read-polars \
+  --binary ../selective-read-daft-build/selective-read-daft \
+  --output ../storage-check
+```
+
+The check validates uploads, known request bytes, a canceled download, explicit
+retry metadata, trace completeness, and output from every remote reader against
+the independent oracle. It covers compound predicates in both layouts, an empty
+result, LIMIT, wide projection, and ten-query reuse. The pinned Spark DV fixture
+checks real sidecar traffic for the four supporting readers and Daft's explicit
+unsupported result. It does not change the later report-scale DV scenarios.
+
+For each reader, one warm-up per trace mode precedes four fresh-process diagnostic
+runs in off/on/on/off order. `checks.json` preserves the separate durations,
+median difference and ratio. These few smoke samples check observer cost; use the
+campaign's repetitions and statistics before drawing performance conclusions.
+Never combine diagnostic I/O and untraced latency as one measured sample.
+
+This check is manual and adds no CI job or step. The campaign scheduler supplies
+query deadlines, whole-process CPU/RSS measurements, repetitions and reporting
+in the next roadmap slice. Keep credentials, state data and generated artifacts
+outside the repository; publish only reviewed, sanitized records.
+
+Stop the owned service when finished:
+
+```sh
+python3 -B benches/selective_read/storage.py stop --state ../selective-read-storage
+```

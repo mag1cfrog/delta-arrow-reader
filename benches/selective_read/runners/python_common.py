@@ -8,6 +8,7 @@ import platform
 import re
 import sys
 import sysconfig
+from time import time_ns
 from urllib.parse import urlsplit
 
 from run import BUDGET, digest
@@ -66,7 +67,7 @@ def validate(request):
             and (uri.scheme != "s3" or bool(uri.netloc)), "expected a file/s3 URL without credentials, query or fragment")
     require(type(request["snapshot_version"]) is int and 0 <= request["snapshot_version"] < 2**64,
             "invalid snapshot version")
-    require(request["execution_mode"] in ("open", "reuse") and request["purpose"] in ("validation", "timing", "diagnostic")
+    require(request["execution_mode"] in ("open", "reuse") and request["purpose"] in ("validation", "timing", "diagnostic", "io")
             and type(request["comparison_revision"]) is int and request["comparison_revision"] == 2
             and request["protocol_sha256"] == digest(HERE / "protocol.md")
             and re.fullmatch("[0-9a-f]{64}", request["fixture_manifest_sha256"])
@@ -99,6 +100,7 @@ def correctness(request, identity):
 
 def observation(request):
     return {"format": "selective-read-observation-v1", "status": "success", "failure_reason": None,
+            "diagnostic_events": [], "diagnostic_session_ns": None,
             "phase": "setup", "queries": [], "partial_query": None, "provider_evidence": None,
             "capability": {"status": "not_checked", "scope": "requested query and snapshot"}, "correctness": None,
             **{name: None for name in ("open_query_ns", "initialization_ns", "session_elapsed_ns", "cleanup_ns",
@@ -110,3 +112,8 @@ def observation(request):
                                  "reason": "storage observer and process scheduler are separate roadmap slices"},
             "external_resource_limits": {"cpu_affinity": None, "process_memory_bytes": None,
                                          "reason": "launcher must enforce and record the CPU affinity and process memory limit"}}
+
+
+def event(record, name, query_index=None):
+    if record["purpose"] in ("diagnostic", "io"):
+        record["diagnostic_events"].append({"event": name, "time_ns": time_ns(), "query_index": query_index})

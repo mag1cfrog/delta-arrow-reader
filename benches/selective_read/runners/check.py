@@ -75,6 +75,18 @@ def check(binaries, fixtures, output):
         assert (diagnostic_dir / "reader" / diagnostic["queries"][0]["physical_plan"]).stat().st_size > 0
         invocations += 1
 
+        for mode in ("open", "reuse"):
+            observed = run.invoke(binary, run.request(fixtures, case, mode, "io", f"{reader}-io-{mode}"),
+                                  output / f"{reader}-io-{mode}")
+            assert observed["status"] == "success" and observed["diagnostic_session_ns"] > 0, observed
+            assert observed["provider_evidence"] is None and observed["open_query_ns"] is None, observed
+            assert all(q["physical_plan"] is None and q["completion_ns"] is None for q in observed["queries"])
+            events = observed["diagnostic_events"]
+            assert [e["event"] for e in events] == ["snapshot_open"] + ["query_start", "stream_complete"] * (10 if mode == "reuse" else 1) + ["cleanup_complete"]
+            assert [e["time_ns"] for e in events] == sorted(e["time_ns"] for e in events)
+            assert observed["diagnostic_process"]["exited_ns"] >= events[-1]["time_ns"]
+            invocations += 1
+
         for name, changes in (
             ("wrong-snapshot", {"snapshot_version": 999}),
             ("bad-query", {"canonical_sql": "SELECT missing_column FROM bench"}),

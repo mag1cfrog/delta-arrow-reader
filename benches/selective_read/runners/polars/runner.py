@@ -28,7 +28,7 @@ import pyarrow as pa
 
 sys.path.insert(0, str(HERE))
 from run import digest, save
-from python_common import correctness, json_hash, observation, require, runtime_metadata, scan_sql, sha, validate
+from python_common import correctness, event, json_hash, observation, require, runtime_metadata, scan_sql, sha, validate
 
 DELTA_OPTIONS = {"without_files": False, "log_buffer_size": 8, "skip_stats": False}
 COLLECT_OPTIONS = {"chunk_size": 8192, "maintain_order": False, "lazy": False, "engine": "streaming"}
@@ -94,6 +94,7 @@ def execute(request, options, output, record):
     reuse = request["execution_mode"] == "reuse"
     record["phase"] = "snapshot_open"
     session_start = clock()
+    event(record, "snapshot_open")
     source = scan(request, options)
     if reuse:
         # Resolve the native dataset's snapshot/schema, retaining only the source
@@ -105,6 +106,7 @@ def execute(request, options, output, record):
     for index in range(10 if reuse else 1):
         record["phase"] = "query"
         start = clock() if reuse else session_start
+        event(record, "query_start", index)
         rows = batches = 0
         first = None
         try:
@@ -126,9 +128,12 @@ def execute(request, options, output, record):
                         writer.write_table(frame.to_arrow())
                     del frame
                 completion = clock() - start
+                event(record, "stream_complete", index)
                 if index == (9 if reuse else 0):
                     if timed:
                         record["session_elapsed_ns"] = clock() - session_start
+                    elif request["purpose"] in ("diagnostic", "io"):
+                        record["diagnostic_session_ns"] = clock() - session_start
                     record["_cleanup_start"] = clock()
                 del stream
         except Exception:
@@ -156,7 +161,7 @@ def execute(request, options, output, record):
             record["initialization_plus_all_queries_ns"] = initialization + sum(durations)
         else:
             record["open_query_ns"] = durations[0]
-    else:
+    elif request["purpose"] != "io":
         record["provider_evidence"] = {"schema": {k: str(v) for k, v in source.collect_schema().items()},
                                        "native_expression": expression_identity(request["canonical_sql"])}
     record["phase"] = "complete"
@@ -213,6 +218,7 @@ def run(request_path, output):
         cleanup = record.pop("_cleanup_start", clock())
         if request["purpose"] == "timing":
             record["cleanup_ns"] = clock() - cleanup
+        event(record, "cleanup_complete")
     save(output / "record.json", record)
     print(json.dumps(record))
     return 0 if record["status"] == "success" else 1

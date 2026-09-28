@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 
 HERE = Path(__file__).resolve().parent
@@ -51,12 +52,14 @@ def request(fixtures, case_id, execution_mode, purpose, run_id, table_uri=None, 
     }
 
 
-def invoke(binary, payload, output, fixtures=None, reference=None):
+def invoke(binary, payload, output, fixtures=None, reference=None, *, env=None, command_prefix=()):
     output.mkdir()
     save(output / "request.json", payload)
     with (output / "stdout.jsonl").open("x") as stdout, (output / "stderr.log").open("x") as stderr:
-        process = subprocess.run([str(binary.resolve()), str((output / "request.json").resolve()),
-                                  str((output / "reader").resolve())], stdout=stdout, stderr=stderr)
+        started = time.time_ns()
+        process = subprocess.run([*command_prefix, str(binary.resolve()), str((output / "request.json").resolve()),
+                                  str((output / "reader").resolve())], stdout=stdout, stderr=stderr, env=env)
+        exited = time.time_ns()
     record_path = output / "reader/record.json"
     if record_path.exists():
         record = json.loads(record_path.read_text())
@@ -87,6 +90,8 @@ def invoke(binary, payload, output, fixtures=None, reference=None):
         save(output / "correctness.json", proof)
         record["correctness"] = {"status": proof["status"], "path": str((output / "correctness.json").resolve()),
                                  "artifact_sha256": digest(output / "correctness.json")}
+    if payload["purpose"] in ("diagnostic", "io"):
+        record["diagnostic_process"] = {"started_ns": started, "exited_ns": exited}
     save(output / "observation.json", record)
     return record
 
@@ -97,7 +102,7 @@ def main():
     parser.add_argument("--fixtures", type=Path, required=True)
     parser.add_argument("--case", required=True)
     parser.add_argument("--execution", choices=("open", "reuse"), default="open")
-    parser.add_argument("--purpose", choices=("validation", "timing", "diagnostic"), required=True)
+    parser.add_argument("--purpose", choices=("validation", "timing", "diagnostic", "io"), required=True)
     parser.add_argument("--reference", type=Path)
     parser.add_argument("--correctness", type=Path)
     parser.add_argument("--table-uri")
