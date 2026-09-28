@@ -85,8 +85,9 @@ The identity file has these fields:
 | `native_expression_sha256` | Hash of the executed expression translation for Polars/Daft; null for a reader executing canonical SQL directly |
 | `result_sha256` | SHA-256 of the completed IPC stream file |
 
-Hash strings use 64 lowercase hexadecimal characters. The later runner PRs
-produce these artifacts and preserve the underlying build/config records.
+Hash strings use 64 lowercase hexadecimal characters. The
+[Rust runners](selective-read-runners.md) produce these artifacts and preserve
+the underlying build/config records. The Python adapters follow in their own PRs.
 The checker verifies their binding to the reference and result file; the runner
 is responsible for recording its actual build and invocation rather than
 copying labels from a reference it did not execute.

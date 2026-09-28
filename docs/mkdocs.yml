@@ -47,6 +47,7 @@ nav:
       - Public selective-read protocol: benchmarks/selective-read-protocol.md
       - Generate public fixtures: benchmarks/selective-read-fixtures.md
       - Validate public results: benchmarks/selective-read-oracle.md
+      - Run the Rust readers: benchmarks/selective-read-runners.md
       - Focused benchmarks:
           - Selective S3 case study: benchmarks/selective-s3.md
           - Lazy and eager scan metadata: benchmarks/eager-metadata.md
