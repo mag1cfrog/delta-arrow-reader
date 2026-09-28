@@ -1,0 +1,84 @@
+{
+  "python": "3.14.6",
+  "platform": "linux_amd64",
+  "deltalake_python_source": "104886f88027e27c27c59f51d71367d3938b6146",
+  "delta_dependency_note": "The deltalake 1.6.6 source distribution contains the complete resolved Rust Cargo.lock retained in source_artifacts. Its dependency versions describe that published source; wheel hashes identify the actual executed binaries.",
+  "source_artifacts": [
+    {
+      "filename": "deltalake-1.6.6.tar.gz",
+      "url": "https://files.pythonhosted.org/packages/24/7e/817984d82cec757f6f3a3dbb84afcd85027e7ae02e0a354702c2127f6777/deltalake-1.6.6.tar.gz",
+      "sha256": "91864d97adb429fa8b8748b4f68d69adab3d0417ffa9f100bdb85805890c997f",
+      "cargo_lock_path": "deltalake-1.6.6/Cargo.lock",
+      "cargo_lock_sha256": "9a800c67506b3397eb990635be15b8e20f93b96409db3b5c477c8568045a5646",
+      "resolved_dependencies": {
+        "arrow": "59.3.0",
+        "buoyant_kernel": "0.28.1",
+        "buoyant_kernel_engine": "0.28.0",
+        "datafusion": "55.1.0",
+        "deltalake": "1.0.0",
+        "deltalake-core": "1.0.0",
+        "object_store": "0.13.2",
+        "tokio": "1.53.1"
+      }
+    }
+  ],
+  "daft_source": "50b3f1208f4d3d1ed4bf3bb1da44b31fc6d9a14f",
+  "wheels": [
+    {
+      "name": "deltalake",
+      "version": "1.6.6",
+      "filename": "deltalake-1.6.6-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/75/8f/07925ff4f54d8ce35f33961f27e224e3073b7286d9041b95f8e84549fe4a/deltalake-1.6.6-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "sha256": "802db1ae734295c7b947bddd228b9e6b5df702846b085be91ad593840f72e36c"
+    },
+    {
+      "name": "pyarrow",
+      "version": "25.0.1",
+      "filename": "pyarrow-25.0.1-cp314-cp314-manylinux_2_28_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/8d/61/1c5d1229fa21da4cff5365e41e57177aaac57c563c727f35419b8513d1c1/pyarrow-25.0.1-cp314-cp314-manylinux_2_28_x86_64.whl",
+      "sha256": "9171748cdf796972d85a4b60157c279913e242992e350c90c7450182a9838b2a"
+    },
+    {
+      "name": "arro3-core",
+      "version": "0.8.3",
+      "filename": "arro3_core-0.8.3-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/df/32/83274c808ae58a2fcede42ce76178bcd2c5e0e5bbc9b9ef12eb458f79c83/arro3_core-0.8.3-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "sha256": "adf5bf37075fc3b6e9574a4c414b3a4f5fdb9c17c16eedf64c852a01d66093c1"
+    },
+    {
+      "name": "deprecated",
+      "version": "3.0.0",
+      "filename": "deprecated-3.0.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/83/ae/676feae8e4644a6d7169951a97f61c56f416c73f67bf1761f2461d75cc81/deprecated-3.0.0-py3-none-any.whl",
+      "sha256": "58204cf4a7f6270d547af5c278ee7a6bb56045a4b3d8441a1cd11660f41b7939"
+    },
+    {
+      "name": "wrapt",
+      "version": "2.5.0",
+      "filename": "wrapt-2.5.0-cp314-cp314-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/23/38/285b433121d73c7a447b5b82d93c91dc3330f33ab5853975f34551e0c773/wrapt-2.5.0-cp314-cp314-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+      "sha256": "b640460f0ffb346b192686bd6fac5589e35a6c6640501c59a9fb6e82b0dd6bd8"
+    },
+    {
+      "name": "daft",
+      "version": "0.7.25",
+      "filename": "daft-0.7.25-cp310-abi3-manylinux_2_24_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/3c/59/5cf88cf69649a15dbc34e1576f3748fce95ab29eccd404c57d1c7add798e/daft-0.7.25-cp310-abi3-manylinux_2_24_x86_64.whl",
+      "sha256": "6aaeb7b7537e5125f1e78d026ad6e5326ea0a535736867ce52150559dd1d5094"
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "filename": "packaging-26.3-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
+      "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c"
+    },
+    {
+      "name": "tqdm",
+      "version": "4.67.3",
+      "filename": "tqdm-4.67.3-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/16/e1/3079a9ff9b8e11b846c6ac5c8b5bfb7ff225eee721825310c91b3b50304f/tqdm-4.67.3-py3-none-any.whl",
+      "sha256": "ee1e4c0e59148062281c49d80b25b67771a127c85fc9676d3be5f243206826bf"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 ---
 title: Run the public reader comparisons
-description: Prepare the pinned DAR, delta-rs, DuckDB, and Polars adapters, validate their output, and record individual streaming invocations.
+description: Prepare the five pinned reader adapters, validate their output, and record individual streaming invocations.
 ---
 
 # Run the public reader comparisons
@@ -11,8 +11,8 @@ DAR uses this checkout's DataFusion integration. delta-rs uses the released
 `deltalake = "=1.0.0"` provider. Each has its own manifest and lockfile under
 `benches/selective_read/runners`; delta-rs is not a library dependency.
 DuckDB uses a separate Python environment and its official Delta extension.
-Polars uses another isolated environment with `scan_delta` and native lazy
-expressions. Neither Python reader changes the library's dependencies.
+Polars and Daft each use an isolated environment with their native Delta scans
+and lazy expressions. The Python readers do not change the library's dependencies.
 
 These commands exercise individual invocations. The campaign scheduler, fixed
 CPU affinity, process memory limit, storage observations, and statistical report
@@ -105,6 +105,24 @@ Those versions describe the published source; wheel hashes identify the executed
 binaries. Python `deltalake` 1.6.6 and the separate Rust delta-rs comparator have
 different dependency sets.
 
+## Prepare Daft
+
+Use CPython 3.14.6, Linux x86-64, and `uv`:
+
+```sh
+python3 benches/selective_read/runners/daft/prepare.py \
+  --output ../selective-read-daft-build
+```
+
+`daft/lock.json` pins Daft 0.7.25, Python `deltalake` 1.6.6, PyArrow 25.0.1,
+and all five transitive Python dependencies. It records each wheel's URL and
+SHA-256 hash, Daft source `50b3f1208f4d3d1ed4bf3bb1da44b31fc6d9a14f`, and
+the same deltalake source archive and resolved Delta dependencies as Polars.
+The shared preparation helper records and verifies interpreter, installed-file,
+source, and wheel identities. Use
+`--artifacts ../selective-read-daft-build/artifacts` with a new output directory
+for an offline copy. Keep each build at its original path.
+
 ## Validate a case before timing it
 
 [Generate fixtures](selective-read-fixtures.md) and install the pinned
@@ -132,14 +150,15 @@ PYTHONDONTWRITEBYTECODE=1 ../selective-read-oracle-venv/bin/python \
 Use the same reference and case with
 `../selective-read-delta-rs-build/selective-read-delta-rs` or
 `../selective-read-duckdb-build/selective-read-duckdb` or
-`../selective-read-polars-build/selective-read-polars` and a new output directory.
+`../selective-read-polars-build/selective-read-polars` or
+`../selective-read-daft-build/selective-read-daft` and a new output directory.
 Use `li.shuffled.eq2-in20` with its own reference to check the paired layout.
 Development/report fixtures contain the frozen 20-value IN list;
 the smoke profile retains its documented shorter-list exception.
 
 The helper reads the saved SQL from the fixture manifest. The Rust and DuckDB
 executables register the selected snapshot as `bench` and execute that SQL.
-Polars translates the scan shape to native filter, projection, and limit
+Polars and Daft translate the scan shape to native filter, projection, and limit
 expressions. No adapter supplies a preselected file list. The oracle verifies
 complete values, logical types and multiplicity. A failed check produces
 `validation_failed` and a nonzero exit.
@@ -181,6 +200,11 @@ contain the region and endpoint but omit secret values. The local check verifies
 configuration before table I/O; remote execution still needs the shared storage
 observer's integration checks.
 
+Daft accepts the same AWS variables and endpoint through its native `IOConfig`.
+Unspecified credentials use the native provider chain. The adapter records the
+region and endpoint without secret values. Its local check verifies configuration
+before table I/O; remote execution needs the same later integration checks.
+
 ## Reuse and diagnostics
 
 Add `--execution reuse` to validation and timing commands to retain one
@@ -201,6 +225,13 @@ initialization calls `collect_schema()` to load and retain its native Delta
 snapshot. Each query clones this source and constructs fresh filter, projection,
 and limit expressions. It retains no prepared physical query plan or result.
 Open-and-query includes lazy snapshot loading in its single interval.
+
+Daft's `read_deltalake` eagerly loads the snapshot and schema. Its pinned
+implementation opens the latest snapshot before loading the requested version;
+both operations belong to initialization or the open-and-query interval.
+Reuse retains this native Delta data source for ten newly planned queries.
+Native add-action enumeration, optimization, and physical planning still occur
+per query. The adapter does not retain a collected result or physical plan.
 
 The executable accepts any supplied case in reuse mode. The report protocol
 selects `reuse.li`, `reuse.wide`, and `reuse.files4096`; the last profile's
@@ -279,6 +310,46 @@ collects the full result first. Arrow conversion/export happens only in untimed
 validation; diagnostic runs save the streaming physical graph. The first-batch
 timer measures the first nonempty DataFrame delivered by this native API.
 
+### Daft execution settings
+
+Daft accepts the same public scan shape as Polars. It uses `daft.col` for the
+ordered projection and `daft.sql_expr` for the predicate, followed by `where`,
+`select`, and `limit`. Date and Decimal expressions retain their native types.
+The certificate binds the projection, predicate, and limit to hashes of the
+native expression objects serialized with Python pickle protocol 5. The adapter
+only writes this serialization for hashing; it never loads a pickle. Query
+expressions are reconstructed inside the clock; serialization is outside it.
+
+The local native runner reads through `read_deltalake` with
+`ignore_deletion_vectors=False`. It receives native Delta statistics and keeps
+its predicate/projection optimizations. The harness supplies no file list.
+
+| Setting | Value |
+| --- | --- |
+| Native compute workers | 8 |
+| Native I/O workers | `min(8, Rust available_parallelism)` |
+| Compute / I/O maximum blocking threads | 1 / pinned Tokio default |
+| Delta executor `TOKIO_WORKER_THREADS` | 8 |
+| Scan-task parallelism / default morsel rows | 8 / 8,192 |
+| Maintain output order | `False` |
+| Native memory budget | `DAFT_MEMORY_LIMIT=4294967296` |
+| Result delivery | `to_arrow_iter(results_buffer_size=8)` |
+| Analytics / event log / dashboard | Disabled |
+| Collected-result cache | None |
+
+The pinned native runner ignores `results_buffer_size`; its own channels control
+buffering. The record states this limitation. `to_arrow_iter` streams native
+micro-partitions as Arrow batches without calling `collect`. The adapter consumes
+and drops each batch, and measures the first nonempty batch delivered by this API.
+Validation exports and diagnostic `explain` output run in untimed invocations.
+
+The memory budget applies to Daft's native memory manager, not all allocations.
+The campaign scheduler must enforce the common 8 GiB process cap and CPU affinity.
+Other native options retain their pinned defaults. The adapter clears inherited
+`DAFT_*` overrides before import and records resolved execution/planning options,
+provider options, and selected environment values. Native metadata may remain
+available within a session.
+
 ## Request and observation contract
 
 The helper saves `request.json` and invokes the executable as:
@@ -288,6 +359,7 @@ selective-read-dar REQUEST.json NEW_OUTPUT_DIRECTORY
 selective-read-delta-rs REQUEST.json NEW_OUTPUT_DIRECTORY
 selective-read-duckdb REQUEST.json NEW_OUTPUT_DIRECTORY
 selective-read-polars REQUEST.json NEW_OUTPUT_DIRECTORY
+selective-read-daft REQUEST.json NEW_OUTPUT_DIRECTORY
 ```
 
 The JSON request contains table URL, explicit snapshot, case ID, expanded SQL,
@@ -321,10 +393,10 @@ independent validation result. Existing destinations are never overwritten.
 Times are integer nanoseconds. First-batch time is null with reason
 `empty result` for an empty timed query. Validation and diagnostic invocations
 leave headline timers null. Failures remain visible and cannot produce a speedup.
-Rust and DuckDB explicitly shut down their runtimes/connections. Polars releases
+Rust and DuckDB explicitly shut down their runtimes/connections. Polars and Daft release
 query and snapshot objects; its global native runtimes end with the process.
 The campaign launcher must enforce the query and cleanup deadlines and wait for
-process exit. Polars' `cleanup_ns` covers object release, not process teardown.
+process exit. Their `cleanup_ns` covers object release, not process teardown.
 
 ## Check the adapters
 
@@ -360,9 +432,10 @@ from snapshot 1 with three actual deletions, and check predicates that match
 only deleted rows or a mix of deleted and live rows. Both open and reuse modes
 must return exact values and types. A no-DV copy provides the feature baseline.
 
-An unsupported feature produces `unsupported`; a missing DV object or invalid
-snapshot produces `operational_failure`. Wrong values or types fail independent
-validation. A stream with a late execution error must deliver rows before the
+An unsupported feature produces `unsupported`; a missing data object or invalid
+snapshot produces `operational_failure` if execution reaches it. A reader that
+first rejects DV support cannot probe a missing DV object's handling. Wrong values
+or types fail independent validation. A stream with a late execution error must deliver rows before the
 error, demonstrating that the adapter did not first collect the whole result.
 Invalid requests and SQL with side effects are also rejected. Probe records
 include the reader build and fixture hashes. They are bounded capability
@@ -386,5 +459,28 @@ The fixed Polars version passes the bounded feature-only and real-DV cases,
 including deleted-only and mixed live/deleted predicates, in open and reuse modes.
 This does not establish support for every future campaign fixture.
 
+Daft uses the shared public cases and records its native limitations explicitly:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 ../selective-read-oracle-venv/bin/python \
+  benches/selective_read/runners/daft/check.py \
+  --binary ../selective-read-daft-build/selective-read-daft \
+  --fixtures ../selective-read-smoke --output ../daft-contract-check
+```
+
+The fixed Daft version rejects both feature-only and actual-DV snapshots when
+`delta.enableDeletionVectors=true`. These observations are `unsupported`.
+A separate metadata-only commit sets the property to `false` while retaining
+the active DV descriptors. Daft then returns deleted rows. The bounded validator
+records `validation_failed` against the Spark-written expected values, for
+full, deleted-only, and mixed predicates in both modes. This known failure is
+part of the capability evidence; it cannot authorize timing.
+
+The check also covers exact no-DV time travel, NULL/duplicate-IN semantics,
+projection order, expression-certificate binding, native reuse with the log
+hidden, missing data/dependencies, and frozen storage configuration. A late date
+parse error must arrive after streamed rows. No-DV public cases must pass the
+independent oracle. Reprobe the exact campaign fixtures before reporting support.
+
 These commands run locally. Adding the Python readers does not add a CI job or
-production-library dependency. The Daft adapter follows in its own slice.
+production-library dependency.

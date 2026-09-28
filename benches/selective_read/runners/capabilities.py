@@ -41,7 +41,7 @@ def exported(record, output, expected):
         assert query["output_rows"] == expected.num_rows and query["completion_ns"] is None
 
 
-def delta_capabilities(binary, fixtures, output):
+def delta_capabilities(binary, fixtures, output, *, dv_status="success"):
     corpus = CORPUS
     manifest = json.loads((corpus / "manifest.json").read_text())
     fixture = next(f for f in manifest["fixtures"] if f["name"] == "deletion_vectors")
@@ -86,10 +86,17 @@ def delta_capabilities(binary, fixtures, output):
                                canonical_sql="SELECT id, value, label FROM bench" + predicate,
                                execution_mode=mode, run_id=destination.name)
                 record = probe(binary, payload, destination)
-                exported(record, destination, selected)
-                assert len(record["queries"]) == (10 if mode == "reuse" else 1)
-                observations.append({"path": destination.name, "status": "passed", "mode": mode, "feature": name,
-                                     "version": version, "predicate": predicate, "output_rows": selected.num_rows})
+                expected_status = "success" if name == "no-dv" else dv_status
+                assert record["status"] == expected_status, record
+                if expected_status == "success":
+                    exported(record, destination, selected)
+                    assert len(record["queries"]) == (10 if mode == "reuse" else 1)
+                else:
+                    assert record["failure_reason"] and not record["queries"], record
+                observations.append({"path": destination.name, "status": "passed" if expected_status == "success" else expected_status,
+                                     "mode": mode, "feature": name, "version": version, "predicate": predicate,
+                                     "output_rows": selected.num_rows if expected_status == "success" else None,
+                                     "reason": record["failure_reason"]})
 
     unknown = output / "unsupported-feature"
     shutil.copytree(original / "table", unknown)
@@ -105,7 +112,8 @@ def delta_capabilities(binary, fixtures, output):
     next(missing.glob("deletion_vector_*.bin")).unlink()
     for mode in ("open", "reuse"):
         for name, table, version, status in (("wrong-version", original / "table", 999, "operational_failure"),
-                ("unsupported", unknown, 0, "unsupported"), ("missing-dv", missing, 1, "operational_failure")):
+                ("unsupported", unknown, 0, "unsupported"),
+                ("missing-dv", missing, 1, "unsupported" if dv_status == "unsupported" else "operational_failure")):
             destination = output / f"{mode}-{name}"
             payload = dict(base, table_uri=table.resolve().as_uri(), snapshot_version=version,
                            canonical_sql="SELECT * FROM bench", execution_mode=mode, run_id=destination.name)
