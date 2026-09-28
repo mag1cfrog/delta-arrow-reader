@@ -53,6 +53,7 @@ nav:
       - Compare predicates and projection width: benchmarks/selective-read-matrix.md
       - Compare file organizations: benchmarks/selective-read-files.md
       - Compare pruning inside files: benchmarks/selective-read-within-file.md
+      - Compare deletion vectors: benchmarks/selective-read-deletion-vectors.md
       - Focused benchmarks:
           - Selective S3 case study: benchmarks/selective-s3.md
           - Lazy and eager scan metadata: benchmarks/eager-metadata.md

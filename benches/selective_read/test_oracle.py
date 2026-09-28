@@ -6,9 +6,11 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -27,11 +29,11 @@ def write_json(path, value):
     path.write_text(json.dumps(value, default=str))
 
 
-def dataset(root):
+def dataset(root, key_offset=0):
     rows = []
     for number in range(1, 153):
         rows.append(dict(zip(oracle.ORIGINAL, [
-            number, number, 10, 1, Decimal("17.00"), Decimal("1234.56"),
+            number + key_offset, number, 10, 1, Decimal("17.00"), Decimal("1234.56"),
             Decimal("0.06"), Decimal("0.02"), "N", "O", date(1995, 3, 15),
             date(1995, 3, 16), date(1995, 3, 20), "DELIVER IN PERSON", "AIR", "text with trailing spaces  ",
         ])))
@@ -112,6 +114,54 @@ def expected_keys(query):
 
 
 class OracleTests(unittest.TestCase):
+    def test_saved_deletions_filter_matching_rows_and_limit_membership(self):
+        # The Rust check covers the native bitmap envelope and boundary ordinals.
+        # Here isolate the independent logical/physical-list and result checks.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixtures = root / "fixtures"
+            rows = dataset(fixtures, key_offset=2500)
+            manifest = json.loads((fixtures / "manifest.json").read_text())
+            base = manifest["tables"][0]
+            base["schema"] = {"fields": list(oracle.ORIGINAL)}
+            table = json.loads(json.dumps(base))
+            table.update(id="li.clustered.dv", path="li.clustered.dv", base_fixture_id=base["id"],
+                         variant="dv", dv_features=True, snapshot_version=1, deletion_vectors=True)
+            table["queries"] = {f"li.clustered.{q}.dv": manifest["sources"][0]["queries"][q]
+                                for q in ("date7-full", "date7-limit")}
+            shutil.copytree(fixtures / base["path"], fixtures / table["path"])
+            affected = 0
+            for item in table["files"]:
+                physical = pq.read_table(fixtures / table["path"] / item["path"]).to_pylist()
+                indices = [i for i, row in enumerate(physical) if row["l_orderkey"] == 2581]
+                if indices:
+                    affected += 1
+                    item["deletion_vector"] = {"physical_ordinals": indices, "logical_ids": [[2581, 1]]}
+                    item["delta_stats"]["tightBounds"] = False
+            table["deletion_summary"] = dict(physical_rows=152, deleted_rows=1, live_rows=151,
+                                               dv_files=affected, density=1/152, file_coverage=affected/3)
+            manifest["tables"].append(table)
+            write_json(fixtures / "manifest.json", manifest)
+            with patch.object(oracle, "objects", return_value=[]):
+                full = oracle.prepare(fixtures, "li.clustered.date7-full.dv", root / "full")
+                limited = oracle.prepare(fixtures, "li.clustered.date7-limit.dv", root / "limited")
+                self.assertEqual((full["physical_qualifying_rows"], full["qualifying_rows"], full["deleted_qualifying_rows"]), (143, 142, 1))
+                self.assertEqual(limited["output_rows"], 100)
+                live = [row for row in rows if row["l_orderkey"] != 2581 and row["l_shipdate"] >= date(1995, 3, 15) and row["l_shipdate"] < date(1995, 3, 22)]
+                for i, subset in enumerate((live[:100], list(reversed(live))[:100])):
+                    with oracle.closing(oracle.database(root / f"subset-{i}.sqlite")) as db:
+                        oracle.insert_rows(db, (oracle.record(row, oracle.ORIGINAL) for row in subset))
+                        self.assertEqual(oracle.compare(db, root / "limited/reference.sqlite", 100), 100)
+                with oracle.closing(oracle.database(root / "deleted.sqlite")) as db:
+                    oracle.insert_rows(db, (oracle.record(row, oracle.ORIGINAL) for row in [rows[80], *live[:99]]))
+                    with self.assertRaisesRegex(ValueError, "wrong row membership"):
+                        oracle.compare(db, root / "limited/reference.sqlite", 100)
+                affected_file = next(f for f in table["files"] if "deletion_vector" in f)
+                affected_file["deletion_vector"]["physical_ordinals"][0] += 1
+                write_json(fixtures / "manifest.json", manifest)
+                with self.assertRaisesRegex(ValueError, "physical deletion ordinal"):
+                    oracle.prepare(fixtures, "li.clustered.date7-full.dv", root / "wrong-position")
+
     def test_control_formulas_and_request_mapping(self):
         from runners import run
         expected = {

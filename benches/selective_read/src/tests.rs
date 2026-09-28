@@ -7,6 +7,40 @@ use sha2::{Digest, Sha256};
 use super::*;
 
 #[test]
+fn dv_payload_preserves_page_group_and_batch_boundaries() -> Result<()> {
+    let ordinals = [
+        0,
+        127,
+        128,
+        4095,
+        4096,
+        8191,
+        8192,
+        131071,
+        131072,
+        1_u64 << 32,
+    ];
+    let (bytes, descriptor) = dv::payload(&ordinals)?;
+    assert_eq!(dv::payload(&ordinals)?, (bytes.clone(), descriptor.clone()));
+    assert_eq!(descriptor["offset"], 1);
+    assert_eq!(descriptor["cardinality"], ordinals.len());
+    assert_eq!(bytes[0], 1);
+    assert_eq!(
+        u32::from_be_bytes(bytes[1..5].try_into()?) as usize,
+        bytes.len() - 9
+    );
+    assert_eq!(u32::from_le_bytes(bytes[5..9].try_into()?), 1681511377);
+    let decoded = roaring::RoaringTreemap::deserialize_from(&bytes[9..bytes.len() - 4])?;
+    assert_eq!(decoded.iter().collect::<Vec<_>>(), ordinals);
+    for invalid in [&[][..], &[1, 1], &[2, 1]] {
+        assert!(dv::payload(invalid).is_err());
+    }
+    assert!(dv::deleted_key(2581, 1));
+    assert!(!dv::deleted_key(2580, 1));
+    Ok(())
+}
+
+#[test]
 fn within_file_controls_preserve_skip_levels_and_bytes() -> Result<()> {
     let root = tempfile::tempdir()?;
     let budget = Arc::new(Budget::new(1024 * MIB));
@@ -96,6 +130,48 @@ fn within_file_controls_preserve_skip_levels_and_bytes() -> Result<()> {
             }
         }
         assert_eq!(matched, if case == controls::CASES[0] { 4096 } else { 64 });
+        if case != "pages.scattered" {
+            let first = dv::variant(
+                &root.path().join("one"),
+                &one,
+                Profile::Smoke,
+                false,
+                budget.clone(),
+            )?;
+            let second = dv::variant(
+                &root.path().join("two"),
+                &two,
+                Profile::Smoke,
+                false,
+                budget.clone(),
+            )?;
+            assert_eq!(first, second);
+            let file = &first["files"][0];
+            assert_eq!(file["sha256"], one["files"][0]["sha256"]);
+            assert_eq!(file["delta_stats"]["numRecords"], one["rows"]);
+            assert_eq!(file["delta_stats"]["tightBounds"], false);
+            for id in file["deletion_vector"]["logical_ids"]
+                .as_array()
+                .ok_or("deleted IDs")?
+            {
+                let row = id[0].as_u64().ok_or("row ID")?;
+                assert_eq!(row % 1000, 0);
+                assert!(if case == controls::CASES[0] {
+                    row / 4096 != 7
+                } else {
+                    row % 4096 >= 32
+                });
+            }
+            let feature = dv::variant(
+                &root.path().join("one"),
+                &one,
+                Profile::Smoke,
+                true,
+                budget.clone(),
+            )?;
+            assert_eq!(feature["deletion_summary"]["deleted_rows"], 0);
+            assert_eq!(feature["files"], one["files"]);
+        }
     }
     assert_eq!(control_rows::payload_value(0, 0), None);
     assert_eq!(control_rows::payload_value(16, 1), None);
@@ -123,6 +199,7 @@ fn smoke_reproduces_files_and_preserves_rows() -> Result<()> {
         disk_limit: Some(4 * 1024 * MIB),
         repack_from: None,
         controls: false,
+        dv_from: Vec::new(),
     };
     let second = Config {
         output: root.path().join("second"),

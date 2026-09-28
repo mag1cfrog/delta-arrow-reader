@@ -14,8 +14,10 @@ Arrow IPC; none of the five benchmark engines computes the expected results.
 Each reference also checks the selected fixture's qualifying rows against the
 saved source. This detects changed values, payloads, nulls, or duplicate rows
 before an engine runs. All qualifying rows are checked even for a LIMIT case.
-File-organization controls and deletion sets are added by their later roadmap
-slices; this version accepts the four base fixtures at no-DV snapshot 0.
+The same checker also accepts [file-organization controls](selective-read-files.md),
+[within-file controls](selective-read-within-file.md), and
+[paired DV snapshots](selective-read-deletion-vectors.md). DV references apply
+independently checked deletion lists and retain both physical and live row counts.
 
 ## Install and prepare a reference
 

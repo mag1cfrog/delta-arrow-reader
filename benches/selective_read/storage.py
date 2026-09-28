@@ -212,7 +212,9 @@ def inventory(fixtures):
     assert manifest["status"] == "complete" and manifest["protocol"] == "selective-read-v1"
     objects = []
     for table in manifest["tables"]:
-        for item in [table["delta_log"], *table["files"]]:
+        logs = table.get("delta_logs", [table["delta_log"]])
+        dvs = [f["deletion_vector"] for f in table["files"] if "deletion_vector" in f]
+        for item in logs + table["files"] + dvs:
             name = str(Path(table["path"]) / item["path"])
             path = (fixtures / name).resolve()
             assert path.is_relative_to(fixtures.resolve()) and path.is_file(), name

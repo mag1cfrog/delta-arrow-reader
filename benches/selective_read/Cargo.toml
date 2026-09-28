@@ -11,6 +11,7 @@ publish = false
 arrow = "=58.4.0"
 chrono = { version = "=0.4.45", default-features = false, features = ["std"] }
 datafusion = { version = "=54.1.0", default-features = false, features = ["parquet", "crypto_expressions", "string_expressions"] }
+delta_kernel = { version = "=0.25.0", default-features = false, features = ["internal-api"] }
 futures-util = "=0.3.33"
 libc = "=0.2.189"
 parquet = "=58.4.0"
@@ -19,8 +20,10 @@ sha2 = "=0.11.0"
 tokio = { version = "=1.53.1", features = ["rt-multi-thread"] }
 tpchgen = "=3.0.0"
 uuid = { version = "=1.24.0", features = ["v5"] }
+z85 = "=3.0.7"
 
 [dev-dependencies]
+roaring = "=0.11.3"
 tempfile = "=3.27.0"
 
 [profile.release]

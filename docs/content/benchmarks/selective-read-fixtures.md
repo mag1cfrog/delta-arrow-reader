@@ -19,6 +19,10 @@ runners, the independent query oracle, and other comparisons have separate issue
 [the benchmark plan](https://github.com/mag1cfrog/delta-arrow-reader/issues/312).
 Preparation times are not reader benchmark results.
 
+Use [Compare selective reads with deletion vectors](selective-read-deletion-vectors.md)
+to copy these Parquet objects into paired snapshots with saved deletion lists
+and a feature-only control.
+
 The comparison now includes DAR, delta-rs, DuckDB, Polars, and Daft. Its paired
 wide 4,096-file workload, with and without DVs, is prepared in a later slice
 from these same public rows. This generator supplies the base inputs. Comparison

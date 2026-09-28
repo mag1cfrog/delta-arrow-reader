@@ -41,6 +41,8 @@ state directory. The upload checks every local object's size and SHA-256 against
 the fixture manifest, uses conditional PUTs to preserve existing objects, and
 verifies each uploaded object with a complete GET and SHA-256. Its receipt records
 the object inventory and `s3://selective-read/MANIFEST_SHA256` table root.
+For paired DV fixtures, that inventory includes both snapshot logs and all
+referenced DV payloads as well as Parquet objects.
 
 The launcher selects eight logical CPUs for the reader, two separate physical
 cores for MinIO, and a third separate core for the trace process. It never splits

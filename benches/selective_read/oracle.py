@@ -5,6 +5,7 @@ payloads; disk-backed SQLite orders exact rows and checks multiplicity.
 """
 
 import argparse
+import base64
 from contextlib import closing
 from datetime import date
 from decimal import Decimal
@@ -16,6 +17,8 @@ import re
 import sqlite3
 import sys
 import tempfile
+import uuid
+import zlib
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -40,6 +43,8 @@ PAYLOADS = tuple(f"payload_{i:02}" for i in range(64))
 CONTROL_PAYLOADS = tuple(f"payload_{i:03}" for i in range(16))
 CONTROL_PROJECTION = ("row_id",) + CONTROL_PAYLOADS
 CONTROL_CASES = {"row-groups.select": "row-groups", "pages.localized": "pages.localized", "pages.scattered": "pages.scattered"}
+DV_CASES = ("li.clustered.date7-full", "li.shuffled.date7-full", "wide.clustered.eq2-in20",
+            "li.clustered.date7-limit", "row-groups.select", "pages.localized")
 TYPES = dict(FIELDS) | dict.fromkeys(PAYLOADS, "int64") | dict.fromkeys(CONTROL_PAYLOADS, "string") | {"row_id": "int32", "event_id": "string"}
 WIDE69 = KEYS + ("l_shipdate", "l_shipmode", "l_partkey") + PAYLOADS
 # Projection, predicate, output limit. SQL is checked independently of its scalar evaluation.
@@ -218,25 +223,47 @@ def sql_for(projection, predicate, limit, literals):
     return sql
 
 
+def base_case(case_id):
+    for suffix in (".dv", ".feature-only"):
+        if case_id.endswith(suffix):
+            case = case_id.removesuffix(suffix)
+            require(case in DV_CASES if suffix == ".dv" else case == "row-groups.select", "unknown DV case")
+            return case, suffix
+    return case_id, ""
+
+
 def case_input(fixtures, case_id, duplicate_literal=False):
     require(pa.__version__ == "25.0.1", "oracle requires pyarrow==25.0.1")
     manifest = load_json(Path(fixtures) / "manifest.json")
     require(manifest["status"] == "complete" and manifest["protocol"] == "selective-read-v1", "incomplete or unknown fixtures")
-    if case_id in CONTROL_CASES:
+    case, suffix = base_case(case_id)
+    fixture_id = CONTROL_CASES[case] if case in CONTROL_CASES else case.rsplit(".", 1)[0]
+    table = next(t for t in manifest["tables"] if t["id"] == fixture_id + suffix)
+    require(type(table["snapshot_version"]) is int and table["snapshot_version"] == bool(suffix)
+            and table["deletion_vectors"] is (suffix == ".dv"), "unexpected snapshot version or DV flag")
+    if suffix:
+        require(table["base_fixture_id"] == fixture_id and table["variant"] == suffix[1:]
+                and table["dv_features"] is True, "incorrect variant identity")
+        base = next(t for t in manifest["tables"] if t["id"] == fixture_id)
+        require(table["schema"] == base["schema"] and table["rows"] == base["rows"], "DV pair changed schema or physical rows")
+        files = []
+        for item in table["files"]:
+            item = dict(item)
+            if item.pop("deletion_vector", None):
+                item["delta_stats"] = {k: v for k, v in item["delta_stats"].items() if k != "tightBounds"}
+            files.append(item)
+        require(files == base["files"], "DV pair changed Parquet objects, statistics, or geometry")
+    if case in CONTROL_CASES:
         require(not duplicate_literal, "control predicate has no IN literals")
-        table = next(t for t in manifest["tables"] if t["id"] == CONTROL_CASES[case_id])
-        require(type(table["snapshot_version"]) is int and table["snapshot_version"] == 0 and table["deletion_vectors"] is False, "controls require no-DV snapshot 0")
         sql = f"SELECT {', '.join(CONTROL_PROJECTION)} FROM bench WHERE event_id = 'match'"
         require(table["queries"][case_id] == sql, "control SQL differs from protocol")
         return manifest, table, None, CONTROL_PROJECTION, "control-match", None, [], sql
-    fixture_id, query = case_id.rsplit(".", 1)
+    fixture_id, query = case.rsplit(".", 1)
     wide = fixture_id.startswith("wide.")
     require(fixture_id in ("li.clustered", "li.shuffled", "wide.clustered", "wide.shuffled", "files64", "files4096"),
-            "unsupported fixture or DV case")
+            "unsupported fixture")
     if fixture_id.startswith("files"):
         require(query in ("empty", "eq2-in20"), "unknown file-organization query")
-    table = next(t for t in manifest["tables"] if t["id"] == fixture_id)
-    require(type(table["snapshot_version"]) is int and table["snapshot_version"] == 0 and table["deletion_vectors"] is False, "oracle slice requires no-DV snapshot 0")
     source = next(s for s in manifest["sources"] if s["scale_factor"] == table["scale_factor"])
     shapes = WIDE_CASES if wide else ORIGINAL_CASES
     require(query in shapes, "unknown public query")
@@ -246,6 +273,8 @@ def case_input(fixtures, case_id, duplicate_literal=False):
     require(len(literals) == 20 or (manifest["profile"] == "smoke" and len(literals) < 20), "wrong frozen literal count")
     canonical = sql_for(projection, predicate, limit, literals)
     require(canonical == source["wide_queries" if wide else "queries"][query], "manifest SQL differs from frozen case")
+    if suffix:
+        require(table["queries"][case_id] == canonical, "variant SQL changed")
     if duplicate_literal:
         require(predicate in ("eq2-in1", "eq2-in20"), "duplicate literal requires an IN case")
         selected = literals[:1] if predicate == "eq2-in1" else literals
@@ -307,25 +336,72 @@ def compare(db, reference_db, expected_count):
 def objects(fixtures, table, source):
     verified = []
     for group in ([source] if source is not None else []) + [table]:
-        for item in group["files"] + ([group["delta_log"]] if group["delta_log"] else []):
+        logs = group.get("delta_logs", [group["delta_log"]] if group["delta_log"] else [])
+        dvs = [f["deletion_vector"] for f in group["files"] if "deletion_vector" in f]
+        for item in group["files"] + logs + dvs:
             descriptor = {k: item[k] for k in ("path", "bytes", "sha256")}
             descriptor["path"] = str(Path(group["path"]) / item["path"])
             verify_object(fixtures, descriptor)
             verified.append(descriptor)
-    require(table["delta_log"]["path"] == "_delta_log/00000000000000000000.json", "wrong snapshot log")
-    log = inside(fixtures, str(Path(table["path"]) / table["delta_log"]["path"]))
-    actions = [json.loads(line, parse_float=Decimal) for line in log.read_text().splitlines()]
-    protocols = [action["protocol"] for action in actions if "protocol" in action]
-    require(protocols == [{"minReaderVersion": 1, "minWriterVersion": 2}], "unexpected Delta protocol")
-    adds = [action["add"] for action in actions if "add" in action]
-    by_path = {action["path"]: action for action in adds}
-    require(len(adds) == len(by_path) == len(table["files"]), "Delta file inventory differs from manifest")
-    require(not any("remove" in action for action in actions), "unexpected remove in base snapshot")
+    logs = table.get("delta_logs", [table["delta_log"]])
+    require([item["path"] for item in logs] == [f"_delta_log/{v:020}.json" for v in range(table["snapshot_version"] + 1)]
+            and logs[-1] == table["delta_log"], "wrong snapshot logs")
+    by_path, metadata = {}, None
+    for version, log in enumerate(logs):
+        path = inside(fixtures, str(Path(table["path"]) / log["path"]))
+        actions = [json.loads(line, parse_float=Decimal) for line in path.read_text().splitlines()]
+        protocol = {"minReaderVersion": 1, "minWriterVersion": 2} if version == 0 else {
+            "minReaderVersion": 3, "minWriterVersion": 7, "readerFeatures": ["deletionVectors"], "writerFeatures": ["deletionVectors"]}
+        require([a["protocol"] for a in actions if "protocol" in a] == [protocol], "unexpected Delta protocol")
+        for action in actions:
+            if "metaData" in action:
+                current = action["metaData"]
+                if version:
+                    require(metadata is not None and current == metadata | {"configuration": metadata["configuration"] | {"delta.enableDeletionVectors": "true"}}, "DV metadata changed unrelated fields")
+                metadata = current
+            if "remove" in action:
+                removed = action["remove"]
+                require(version == 1 and removed["path"] in by_path and not removed.get("deletionVector"), "unexpected removed file identity")
+                del by_path[removed["path"]]
+            if "add" in action:
+                added = action["add"]
+                require(added["path"] not in by_path and (version or not added.get("deletionVector")), "duplicate Add or DV in base snapshot")
+                by_path[added["path"]] = added
+    require(set(by_path) == {f["path"] for f in table["files"]}, "Delta file inventory differs from manifest")
+    if table["snapshot_version"]:
+        table_uuid = uuid.uuid5(uuid.NAMESPACE_URL, f"https://github.com/mag1cfrog/delta-arrow-reader/selective-read-v1/{load_json(Path(fixtures) / 'manifest.json')['profile']}/{table['id']}")
+        require(metadata is not None and metadata["id"] == str(table_uuid)
+                and json.loads(metadata["schemaString"]) == table["schema"]
+                and metadata["configuration"]["delta.enableDeletionVectors"] == "true", "invalid DV table metadata")
     for item in table["files"]:
         action = by_path[item["path"]]
-        require(action.get("deletionVector") is None and not action.get("partitionValues"), "unexpected DV or partitions")
+        dv = item.get("deletion_vector")
+        require(action.get("deletionVector") == (dv["descriptor"] if dv else None) and not action.get("partitionValues"), "unexpected DV or partitions")
         require(action["size"] == item["bytes"] and json.loads(action["stats"], parse_float=Decimal) == item["delta_stats"], "Delta Add differs from manifest")
+        require(item["delta_stats"]["numRecords"] == item["rows"], "numRecords must retain physical rows")
+        if dv:
+            descriptor = dv["descriptor"]
+            ordinals = dv["physical_ordinals"]
+            require(table["deletion_vectors"] and item["delta_stats"]["tightBounds"] is False
+                    and ordinals and all(type(n) is int and 0 <= n < item["rows"] for n in ordinals)
+                    and ordinals == sorted(set(ordinals)) and len(ordinals) == len(dv["logical_ids"]) == descriptor["cardinality"], "invalid deletion coordinates")
+            dv_uuid = uuid.uuid5(table_uuid, item["path"])
+            require(dv["path"] == f"deletion_vector_{dv_uuid}.bin" and descriptor["storageType"] == "u"
+                    and descriptor["pathOrInlineDv"] == base64.z85encode(dv_uuid.bytes).decode()
+                    and descriptor["offset"] == 1, "invalid deterministic DV path/offset")
+            data = inside(fixtures, str(Path(table["path"]) / dv["path"])).read_bytes()
+            require(data[0] == 1 and len(data) == descriptor["sizeInBytes"] + 9
+                    and int.from_bytes(data[1:5], "big") == descriptor["sizeInBytes"]
+                    and int.from_bytes(data[5:9], "little") == 1681511377
+                    and zlib.crc32(data[5:-4]) == int.from_bytes(data[-4:], "big"), "invalid DV envelope/checksum")
     return verified
+
+
+def deleted(row):
+    if "row_id" in row:
+        return row["event_id"] == "other" and row["row_id"] % 1000 == 0
+    value = hashlib.sha256(f"{row['l_orderkey']}/{row['l_linenumber']}".encode()).digest()
+    return int.from_bytes(value[:8], "little") % 1000 == 0
 
 
 def control_matches(case_id, row_id):
@@ -391,7 +467,13 @@ def prepare(fixtures, case_id, output, duplicate_literal=False):
     fixtures, output = Path(fixtures).resolve(), Path(output)
     manifest, table, source, projection, predicate, limit, literals, sql = case_input(fixtures, case_id, duplicate_literal)
     verified = objects(fixtures, table, source)
-    geometry = control_geometry(fixtures, table, case_id) if source is None else None
+    case, suffix = base_case(case_id)
+    geometry = control_geometry(fixtures, table, case) if source is None else None
+    saved_keys = [tuple(key) for item in table["files"] for key in item.get("deletion_vector", {}).get("logical_ids", [])]
+    require(len(saved_keys) == len(set(saved_keys)), "duplicate deleted logical ID")
+    saved_keys = set(saved_keys)
+    expected_deletions = set()
+    deleted_qualifying = 0
     output.mkdir(parents=True, exist_ok=False)
     reference_db = output / "reference.sqlite"
     predicates = conditions(predicate, literals)
@@ -400,14 +482,17 @@ def prepare(fixtures, case_id, output, duplicate_literal=False):
     previous_key = None
 
     def expected_rows():
-        nonlocal previous_key
+        nonlocal previous_key, deleted_qualifying
         if source is None:
             counts[0] = table["rows"]
             for row_id in range(table["rows"]):
-                if control_matches(case_id, row_id):
+                matches = control_matches(case, row_id)
+                if table["deletion_vectors"] and deleted({"row_id": row_id, "event_id": "match" if matches else "other"}):
+                    expected_deletions.add((row_id,))
+                if matches:
                     counts[-1] += 1
                     yield control_record(row_id)
-            require(counts[-1] == (65536 if case_id == "row-groups.select" else 64), "wrong qualifying control geometry")
+            require(counts[-1] == (65536 if case == "row-groups.select" else 64), "wrong qualifying control geometry")
             return
         for item in source["files"]:
             path = inside(fixtures, str(Path(source["path"]) / item["path"]))
@@ -424,6 +509,10 @@ def prepare(fixtures, case_id, output, duplicate_literal=False):
                 passed = prefix_matches(row, predicates)
                 for index in range(passed + 1):
                     counts[index] += 1
+                if table["deletion_vectors"] and deleted(row):
+                    expected_deletions.add(key)
+                    deleted_qualifying += passed == len(predicates)
+                    continue
                 if passed == len(predicates):
                     yield record(row, projection, derive_payloads=True)
             require(file_rows == item["rows"], "reference file row count changed")
@@ -432,6 +521,15 @@ def prepare(fixtures, case_id, output, duplicate_literal=False):
         insert_rows(db, expected_rows())
     require(counts[0] == (source or table)["rows"] == table["rows"], "source/table row counts disagree")
     require(sorted(found_literals) == literals, "frozen IN literals disagree with full source")
+    require(expected_deletions == saved_keys, "saved logical deletions disagree with the independent source rule")
+    live_qualifying = counts[-1] - deleted_qualifying
+    if suffix:
+        summary = table["deletion_summary"]
+        affected = sum("deletion_vector" in item for item in table["files"])
+        require(summary["physical_rows"] == counts[0] and summary["deleted_rows"] == len(saved_keys)
+                and summary["live_rows"] == counts[0] - len(saved_keys) and summary["dv_files"] == affected
+                and abs(float(summary["density"]) - len(saved_keys) / counts[0]) < 1e-15
+                and abs(float(summary["file_coverage"]) - affected / len(table["files"])) < 1e-15, "wrong deletion summary")
 
     matching, candidates = [], []
     actual_rows = 0
@@ -443,11 +541,20 @@ def prepare(fixtures, case_id, output, duplicate_literal=False):
             if candidate(item["delta_stats"], predicates):
                 candidates.append(item["path"])
             matched, count = False, 0
+            dv = item.get("deletion_vector", {})
+            by_ordinal = dict(zip(dv.get("physical_ordinals", []), map(tuple, dv.get("logical_ids", []))))
             columns = ("row_id", "event_id") + CONTROL_PAYLOADS if source is None else ORIGINAL + PAYLOADS if table["id"].startswith("wide.") else ORIGINAL
             for row in full_rows(path, columns):
                 if source is None:
-                    require(row["row_id"] == actual_rows + count and row["event_id"] == ("match" if control_matches(case_id, row["row_id"]) else "other"), "control row order or match placement changed")
+                    require(row["row_id"] == actual_rows + count and row["event_id"] == ("match" if control_matches(case, row["row_id"]) else "other"), "control row order or match placement changed")
+                is_deleted = count in by_ordinal
+                require(is_deleted == (table["deletion_vectors"] and deleted(row)), "physical deletion ordinal differs from rule")
+                if is_deleted:
+                    key = (row["row_id"],) if source is None else tuple(row[name] for name in KEYS)
+                    require(by_ordinal[count] == key, "physical ordinal refers to the wrong logical row")
                 count += 1
+                if is_deleted:
+                    continue
                 if prefix_matches(row, predicates) == len(predicates):
                     matched = True
                     yield record(row, projection)
@@ -460,7 +567,7 @@ def prepare(fixtures, case_id, output, duplicate_literal=False):
         with closing(database(Path(scratch) / "actual.sqlite")) as db:
             insert_rows(db, fixture_rows())
             # Validate all qualifying fixture rows even for a LIMIT case.
-            compare(db, reference_db, counts[-1])
+            compare(db, reference_db, live_qualifying)
     require(actual_rows == (source or table)["rows"], "fixture lost source rows")
     require(set(matching) <= set(candidates), "file statistics exclude a matching file")
     metadata = {
@@ -474,12 +581,15 @@ def prepare(fixtures, case_id, output, duplicate_literal=False):
         "profile": manifest["profile"], "query_variant": "duplicate-in" if duplicate_literal else "canonical",
         "canonical_sql": sql, "canonical_sql_sha256": digest_bytes(sql.encode()),
         "in_literals": literals, "projection": list(projection), "limit": limit,
-        "source_rows": counts[0], "qualifying_rows": counts[-1],
-        "output_rows": min(limit, counts[-1]) if limit is not None else counts[-1],
+        "source_rows": counts[0], "qualifying_rows": live_qualifying,
+        "physical_qualifying_rows": counts[-1], "deleted_qualifying_rows": deleted_qualifying,
+        "deleted_rows": len(saved_keys), "live_rows": counts[0] - len(saved_keys),
+        "output_rows": min(limit, live_qualifying) if limit is not None else live_qualifying,
+        "predicate_step_population": "physical_rows_before_deletions",
         "predicate_steps": [{"predicate": f"{name} {op} {sorted(value) if op == 'IN' else value}",
                              "rows": count, "selectivity": count / counts[0]}
                             for (name, op, value), count in zip(predicates, counts[1:])],
-        "qualifying_selectivity": counts[-1] / counts[0],
+        "qualifying_selectivity": live_qualifying / counts[0],
         "active_files": len(table["files"]), "candidate_files": candidates, "matching_files": matching,
         "verified_objects": verified, "reference_sha256": digest_file(reference_db),
         **({"within_file_geometry": geometry} if geometry else {}),
