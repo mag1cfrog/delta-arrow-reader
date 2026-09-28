@@ -45,6 +45,7 @@ nav:
   - Performance:
       - Reader benchmarks: benchmarks.md
       - Public selective-read protocol: benchmarks/selective-read-protocol.md
+      - Large-workload benchmark plan: benchmarks/selective-read-large-workloads.md
       - Generate public fixtures: benchmarks/selective-read-fixtures.md
       - Validate public results: benchmarks/selective-read-oracle.md
       - Run the reader comparisons: benchmarks/selective-read-runners.md
