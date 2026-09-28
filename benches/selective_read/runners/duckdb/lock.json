@@ -1,0 +1,48 @@
+{
+  "python": "3.14.6",
+  "platform": "linux_amd64",
+  "duckdb_abi": "v1.5.5",
+  "duckdb_source": "d8cdaa33fda8df955cc76ef58a280f68f4cd43fa",
+  "python_binding_source": "b236c8194ed14c7a7c685e0534dde501cc855b3a",
+  "wheels": [
+    {
+      "name": "duckdb",
+      "version": "1.5.5",
+      "filename": "duckdb-1.5.5-cp314-cp314-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/a1/43/3a5e81d1728f4d234c79bfe385808ee7c04834f7c37a4b5c257459c25614/duckdb-1.5.5-cp314-cp314-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "fbf0f2d48b43c6c304d00463b463c27ead6c4b01c3c1816b750f728decf71afe"
+    },
+    {
+      "name": "pyarrow",
+      "version": "25.0.1",
+      "filename": "pyarrow-25.0.1-cp314-cp314-manylinux_2_28_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/8d/61/1c5d1229fa21da4cff5365e41e57177aaac57c563c727f35419b8513d1c1/pyarrow-25.0.1-cp314-cp314-manylinux_2_28_x86_64.whl",
+      "sha256": "9171748cdf796972d85a4b60157c279913e242992e350c90c7450182a9838b2a"
+    }
+  ],
+  "extensions": [
+    {
+      "name": "httpfs",
+      "source_repository": "https://github.com/duckdb/duckdb-httpfs",
+      "source_revision": "827222fb45a043a7a852d1f7aae46901492a3cda",
+      "extension_version": "827222f",
+      "filename": "httpfs.duckdb_extension.gz",
+      "url": "https://extensions.duckdb.org/v1.5.5/linux_amd64/httpfs.duckdb_extension.gz",
+      "sha256": "7cdd52a3135388718884a9b71e3987ba723002121e8e9de399c4ed619d824a05",
+      "binary_sha256": "887c392b1e49128d11667c81e3698d8b00dfdeb456771acf66d05a0f74f7b7d8"
+    },
+    {
+      "name": "delta",
+      "source_repository": "https://github.com/duckdb/duckdb-delta",
+      "source_revision": "45c40878601b54b4188b09e08732fe0d576ad222",
+      "kernel_version": "0.21.0",
+      "kernel_source_revision": "2cdf7333b8e10fb53c053677cd8b436752220188",
+      "extension_version": "45c4087",
+      "filename": "delta.duckdb_extension.gz",
+      "url": "https://extensions.duckdb.org/v1.5.5/linux_amd64/delta.duckdb_extension.gz",
+      "sha256": "c8ce674cd61a395d88f2759e191186ab496714058f3fcf55ee86338780af90e9",
+      "binary_sha256": "24b10f221b799a82f2aec588102702540fb79b34ba4be7f47328333a02fd4e1e"
+    }
+  ],
+  "builtin_extensions": ["core_functions", "icu", "json", "parquet"]
+}
