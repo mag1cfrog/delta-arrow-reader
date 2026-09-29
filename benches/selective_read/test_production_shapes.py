@@ -10,9 +10,32 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 import production_shapes as shapes
+import production_fixtures as fixtures
 
 
 class ProductionShapeCheck(unittest.TestCase):
+    def test_capacity_keeps_false_positives_and_both_stripes(self):
+        files = [{"stripe": s, "file_index": i, "rows": 11 + i,
+                  "candidate": i == 0, "matching_rows": 0}
+                 for s in range(2) for i in range(3)]
+        self.assertEqual(fixtures.probe_selection(files, 2), [0, 2, 3, 5])
+        samples, evidence = [], []
+        for ordinal in fixtures.probe_selection(files, 2):
+            planned = files[ordinal]
+            samples.append({"rows": planned["rows"], "bytes": planned["rows"] * (100 + ordinal),
+                            "geometry": {"bytes": 500}, "delta_stats": {"numRecords": planned["rows"]}})
+            evidence.append({"source_file_ordinal": ordinal, "planned": planned,
+                             "full_value_roundtrip": "passed", "maximum_page_rows": 256})
+        probe = {"writer": {"tables": [{"layout": "localized", "files": samples, "file_evidence": evidence}]}}
+        result = fixtures.capacity(probe, files, "localized", 1000, 2000)
+        # Use each stripe's maximum, including an interior file, then round up.
+        self.assertEqual(result["estimated_parquet_bytes"], (36 * 102 * 5 + 3) // 4 + (36 * 105 * 5 + 3) // 4)
+        self.assertGreater(result["estimated_phase_peak_bytes"], result["native_output_limit_bytes"])
+        del samples[2:]
+        del evidence[2:]
+        with self.assertRaisesRegex(ValueError, "misses a stripe"):
+            fixtures.capacity(probe, files, "localized", 1000, 2000)
+
     def test_predicates_and_file_membership(self):
         rows = []
         for i in range(10):
