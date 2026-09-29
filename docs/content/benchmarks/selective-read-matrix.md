@@ -5,6 +5,11 @@ description: Run all 30 public query cases across five pinned readers and retain
 
 # Compare predicates and projection width
 
+These queries are mechanism and throughput controls. The
+[Q2/Q4-derived workloads](selective-read-production-shapes.md) define the main
+comparison of selective reads across thousands of files and wide stored schemas.
+Completing this matrix does not complete that main workload.
+
 The public query matrix compares compound predicates and projection width on
 the same generated tables. It contains 30 cases, each accounting for
 delta-arrow-reader, delta-rs, DuckDB, Polars and Daft. All tables in this slice
