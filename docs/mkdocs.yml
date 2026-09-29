@@ -45,6 +45,7 @@ nav:
   - Performance:
       - Reader benchmarks: benchmarks.md
       - Q2/Q4-derived main workloads: benchmarks/selective-read-production-shapes.md
+      - Generate Q2/Q4-derived inputs: benchmarks/selective-read-production-fixtures.md
       - Public selective-read protocol: benchmarks/selective-read-protocol.md
       - Large-workload benchmark plan: benchmarks/selective-read-large-workloads.md
       - Generate public fixtures: benchmarks/selective-read-fixtures.md

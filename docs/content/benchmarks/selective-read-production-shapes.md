@@ -18,9 +18,11 @@ selective-read evidence. Those results remain controls. The historical 4,096-fil
 64 MiB median requirement and automatic scale ladder no longer govern the new
 workloads. Frozen protocol files and existing artifacts retain their identities.
 
-The definitions and source-layout planner are implemented. Delta generation,
-physical geometry checks, exact references and native campaigns for these new
-cases are pending. A successful layout plan is not a performance result.
+The definitions, source-layout planner and bounded
+[Delta generator](selective-read-production-fixtures.md) are implemented.
+Each input still needs a completed generation manifest with physical geometry
+checks. Exact references and native campaigns for these new cases are pending.
+A successful layout plan or generation is not a performance result.
 
 ## Relationship to the historical queries
 
