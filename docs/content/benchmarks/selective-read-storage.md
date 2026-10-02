@@ -136,6 +136,7 @@ The focused HTTP check can run without MinIO:
 GOTOOLCHAIN=go1.24.7 go test -race -v \
   benches/selective_read/network_proxy.go \
   benches/selective_read/network_proxy_test.go
+python3 -B benches/selective_read/test_network.py
 ```
 
 Both checks are manual. This transport adds no CI job or performance threshold.

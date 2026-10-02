@@ -115,10 +115,14 @@ def start(directory, output, port, latency_ms, jitter_ms, mbps, seed):
 def stop(directory):
     value = config(directory)
     if value is not None:
-        subprocess.run(["systemctl", "--user", "stop", value["unit"]], check=True)
+        # A transient service can disappear before stop (or while it runs).
+        # Prove the process is gone instead of requiring systemctl to find it.
+        subprocess.run(["systemctl", "--user", "stop", value["unit"]], check=False, capture_output=True)
         actual = storage.properties(value["unit"])
-        assert actual["ActiveState"] != "active" and actual["MainPID"] == "0"
-        save(Path(value["output"]) / "stopped.json", dict(stopped_ns=time.time_ns(), properties=actual))
+        assert actual["ActiveState"] != "active" and actual["MainPID"] == "0", "proxy did not stop"
+        receipt = Path(value["output"]) / "stopped.json"
+        if not receipt.exists():
+            save(receipt, dict(stopped_ns=time.time_ns(), properties=actual))
         (directory / "network.json").unlink()
 
 
