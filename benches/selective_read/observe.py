@@ -18,6 +18,7 @@ import uuid
 from urllib.parse import parse_qs, unquote, urlsplit
 
 import storage
+import network
 from storage import digest, save
 import run
 
@@ -291,7 +292,8 @@ def drain(directory, unit, deadline):
             populated = group is not None and "populated 1" in (group / "cgroup.events").read_text()
         except FileNotFoundError:
             populated = False
-        if not populated and not metrics(directory, min(10, max(.001, deadline - time.monotonic())))["active"]:
+        proxy = network.control(directory, timeout=min(10, max(.001, deadline - time.monotonic())))
+        if not populated and not (proxy or {}).get("active", 0) and not metrics(directory, min(10, max(.001, deadline - time.monotonic())))["active"]:
             if time.monotonic() < deadline:
                 return
         time.sleep(.02)
@@ -309,6 +311,7 @@ def invoke(directory, binary, payload, output, fixtures=None, reference=None, *,
         assert metrics(directory)["active"] == 0, "pending server requests before reader launch"
         if output.exists():
             raise FileExistsError(output)
+        network.control(directory, reset=True, traced=traced)
         observer = None
         # The shared helper creates the invocation directory. The observer has a
         # separate new sibling directory, so even startup failure is retained.
@@ -365,6 +368,9 @@ def invoke(directory, binary, payload, output, fixtures=None, reference=None, *,
             "server_sha256": digest(directory / "server.json"), "trace_enabled": traced,
             "source_sha256": {p.name: digest(p) for p in (Path(__file__), Path(storage.__file__), Path(run.__file__))},
             "reader_affinity": config["cpus"]["reader"], "server_affinity": config["cpus"]["server"], "observer_affinity": config["cpus"]["observer"]}
+        if network.config(directory) is not None:
+            result["storage_environment"]["network"] = network.config(directory)
+            result["storage_environment"]["source_sha256"]["network.py"] = digest(Path(network.__file__))
         result.setdefault("external_resource_limits", {"status": "unverified", "reason": "reader launcher did not record effective limits"})
         if traced:
             proof = json.loads((trace_output / "capture.json").read_text()) if (trace_output / "capture.json").exists() else {
@@ -382,6 +388,15 @@ def invoke(directory, binary, payload, output, fixtures=None, reference=None, *,
         else:
             result["storage_capture"] = {"status": "disabled", "reason": "no detailed tracing in this invocation"}
             result.setdefault("external_metrics", {})["reason"] = "request/byte metrics require a separate I/O diagnostic"
+        try:
+            transport = network.finish(directory, trace_output)
+            if transport is not None:
+                result["network_io"] = transport
+                if traced:
+                    result.setdefault("external_metrics", {}).update(requests=transport["requests"],
+                        response_bytes=transport["response_bytes"], response_bytes_boundary=network.BOUNDARY)
+        except (OSError, ValueError, AssertionError) as error:
+            result.update(status="operational_failure", failure_reason="proxy capture failed: " + str(error))
         if result["status"] == "success" and payload["purpose"] == "validation":
             run.check_result(result, output, fixtures, reference)
         # Preserve the reader's raw record and the shared helper's observation.
