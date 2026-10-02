@@ -6,7 +6,8 @@ description: Use one pinned local MinIO server to validate uploads and observe a
 # Observe selective-read storage requests
 
 The storage observer uses MinIO's native S3 trace and metrics endpoints. All five
-readers connect directly to the same loopback endpoint. The launcher enforces
+readers use the same loopback endpoint, optionally through the network proxy
+described below. The launcher enforces
 the protocol's CPU and memory budgets. Timing invocations have no trace
 subscriber; validation, plan export and I/O diagnostics run separately.
 
@@ -58,6 +59,86 @@ campaign. Clients are fresh for every invocation; server and OS caches are reuse
 without flushing. Start the server once before the campaign's uploads and
 warm-ups. Do not restart it between readers or modes. Use an otherwise idle host;
 affinity does not reserve CPUs against unrelated host processes.
+
+## Add controlled network conditions
+
+To measure a remote-network profile, attach the optional proxy after starting
+MinIO and uploading the fixtures:
+
+```sh
+python3 -B benches/selective_read/network.py start \
+  --state ../selective-read-storage --output ../selective-read-network \
+  --latency-ms 200 --jitter-ms 20 --mbps 150 --seed 0
+python3 -B benches/selective_read/check_network.py \
+  --state ../selective-read-storage --output ../selective-read-network-check
+```
+
+The new output directory holds a Go 1.24.7 standard-library-only proxy build,
+its source, binary hash, profile and effective process limits. The service uses
+one physical core separate from the readers, MinIO and observer, with a 512 MiB
+memory cap and no swap. Setup fails if that separate core is unavailable.
+Port 19002 is the default; use `--port` to choose another loopback port.
+
+All five readers receive the proxy endpoint through the existing storage
+launcher. Uploads, health checks and MinIO trace subscriptions continue to use
+MinIO directly. A stopped or changed attached proxy fails verification instead
+of silently falling back to an unshaped connection.
+
+The default profile adds 200 ms before forwarding each GET or HEAD, with uniform
+jitter between -20 and +20 ms. It represents additional request/response delay,
+not 200 ms in each direction. Jitter uses integer microseconds derived from
+SHA-256 of the seed, HTTP method, original request URI and Range header.
+Identical requests repeat the same delay regardless of scheduling order; a
+different seed gives another reproducible assignment. This is request-level
+variation, not a time-correlated model of Internet congestion.
+
+Response bodies share one 150 Mbit/s budget across all connections, equivalent
+to 18,750,000 bytes/s or about 17.9 MiB/s. The proxy paces and flushes small chunks
+while preserving S3 signatures, Range requests and connection reuse. It does
+not buffer a whole object before delivering it. Timer catch-up is bounded to
+one 64 KiB chunk. A cancelled request can consume one reserved chunk's time;
+the pacing schedule resets between idle reader invocations.
+
+The calibration command checks signed full GET, HEAD and byte ranges, progressive
+delivery, body contents, two explicit failed attempts, a cancelled transfer and
+the combined rate of four concurrent downloads.
+It requires the default latency, jitter and bandwidth values and accepts any
+seed. `--latency-ms 0 --jitter-ms 0 --mbps 0` supplies an unshaped proxy control.
+These settings model an HTTP transport envelope, not TCP RTT, packet loss, TLS
+or a calibrated guarantee about any particular S3 deployment.
+
+Each observation records the network profile and proxy provenance under
+`storage_environment.network`. `network_io` counts response-body bytes accepted
+by the proxy's client-facing HTTP writer. The existing `storage_io` and MinIO
+trace retain their upstream boundary. The two can differ when a client cancels
+after MinIO has sent data into proxy or socket buffers. Neither counter measures
+bytes decoded by the reader or TCP/IP overhead.
+
+I/O diagnostics also save `network-requests.jsonl`, including actual chosen
+delays, request IDs, ranges and incomplete bodies. Its totals must reconcile
+with the proxy counters. Timing runs collect only aggregate proxy counters,
+without per-request trace records. `external_metrics.response_bytes` uses the
+proxy boundary for shaped I/O diagnostics, with an explicit boundary label.
+The campaign records and hashes the attached network configuration.
+
+To detach the proxy while keeping MinIO running:
+
+```sh
+python3 -B benches/selective_read/network.py stop --state ../selective-read-storage
+```
+
+Stopping MinIO through `storage.py stop` also stops its attached proxy. The
+proxy's build/profile record and shutdown receipt remain in its output directory.
+
+The focused HTTP check can run without MinIO:
+
+```sh
+GOTOOLCHAIN=go1.24.7 go test -race -v \
+  benches/selective_read/network_proxy.go \
+  benches/selective_read/network_proxy_test.go
+```
+
+Both checks are manual. This transport adds no CI job or performance threshold.
 
 ## Validate, time and observe a remote case
 

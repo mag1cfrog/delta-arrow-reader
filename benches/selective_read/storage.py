@@ -109,6 +109,8 @@ def verify_server(directory):
     assert sorted(os.sched_getaffinity(int(actual["MainPID"]))) == config["cpus"]["server"]
     assert (group / "memory.max").read_text().strip() == str(4 * 1024**3)
     assert (group / "memory.swap.max").read_text().strip() == "0"
+    import network
+    network.verify(directory)
 
 
 @contextmanager
@@ -254,14 +256,16 @@ def put_verified(directory, key, source, expected):
 
 def reader_environment(directory):
     config = state(directory)
+    import network
+    endpoint = (network.config(directory) or config)["endpoint"]
     secret = credentials(directory)
     # A dedicated server must not inherit cloud profiles, metadata credentials,
     # alternate S3 endpoints or proxies from the invoking shell.
     env = {k: v for k, v in os.environ.items() if not k.startswith(("AWS_", "MINIO_"))
            and k.lower() not in ("http_proxy", "https_proxy", "all_proxy", "no_proxy")}
     env.update(AWS_ACCESS_KEY_ID=secret["access_key"], AWS_SECRET_ACCESS_KEY=secret["secret_key"],
-               AWS_REGION="us-east-1", AWS_DEFAULT_REGION="us-east-1", AWS_ENDPOINT_URL=config["endpoint"],
-               AWS_ENDPOINT=config["endpoint"], AWS_ALLOW_HTTP="true", AWS_VIRTUAL_HOSTED_STYLE_REQUEST="false",
+               AWS_REGION="us-east-1", AWS_DEFAULT_REGION="us-east-1", AWS_ENDPOINT_URL=endpoint,
+               AWS_ENDPOINT=endpoint, AWS_ALLOW_HTTP="true", AWS_VIRTUAL_HOSTED_STYLE_REQUEST="false",
                AWS_EC2_METADATA_DISABLED="true", NO_PROXY="*", no_proxy="*")
     return env
 
@@ -318,4 +322,6 @@ if __name__ == "__main__":
         exec_reader(args.state, args.arguments[1:])
     else:
         with exclusive(args.state):
+            import network
+            network.stop(args.state)
             subprocess.run(["systemctl", "--user", "stop", state(args.state)["unit"]], check=True)

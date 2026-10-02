@@ -13,6 +13,7 @@ from urllib.parse import unquote, urlsplit
 
 import observe
 import storage
+import network
 import run
 import matrix
 import large_workloads
@@ -251,11 +252,15 @@ def execute(args):
     if not prepared and not args.no_sessions:
         jobs += [{"id": session, "case_id": sessions[session], "execution_mode": "reuse"} for session in sorted(set(args.session or sessions))]
     config = storage.state(state)
+    if network.config(state) is not None:
+        config = dict(config, network=network.config(state))
     previous_affinity = os.sched_getaffinity(0)
     os.sched_setaffinity(0, config["cpus"]["observer"])
     resolution = timer_resolution()
     sources = [Path(__file__), HERE / "observe.py", HERE / "storage.py", HERE / "oracle.py", HERE.parent / "run_order.py",
                HERE / "runners/run.py", HERE / "runners/supervise.py", run.PROTOCOL]
+    if "network" in config:
+        sources += [HERE / "network.py", state / "network.json"]
     if prepared:
         sources += [HERE / "matrix.py", matrix.CATALOG, matrix.EXPRESSIONS, args.matrix.resolve()]
     if workload:
