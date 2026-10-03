@@ -47,7 +47,8 @@ def inputs(source_root, plan_path, name):
     require(len(set(paths)) == len(paths) == source["file_count"]
             and set(paths) == set(inside(source_root, source["path"]).glob("*.parquet")), "source inventory changed")
     shape = plan["shapes"][name]
-    require(all(shape[k] == v for k, v in shapes.definitions()[name].items()), "production SQL or shape changed")
+    definition = shapes.definitions(plan["file_target_mib"], plan["data_page_rows"])[name]
+    require(all(shape[k] == v for k, v in definition.items()), "production SQL or shape changed")
     geometry_path = plan_path.with_name(name + "-files.json")
     require(digest_file(geometry_path) == shape["file_geometry_sha256"], "logical file geometry changed")
     files = json.loads(geometry_path.read_text())
@@ -73,11 +74,14 @@ def probe_selection(files, stripes):
 def capacity(probe, files, layout, source_bytes, probe_bytes):
     """Use the largest measured bytes/row per stripe, plus 25% write headroom."""
     table = next(t for t in probe["writer"]["tables"] if t["layout"] == layout)
+    settings = table["writer"]
+    page_ceiling = ((settings["data_page_rows"] + settings["write_batch_rows"] - 1)
+                    // settings["write_batch_rows"] * settings["write_batch_rows"])
     rates = {}
     for file, evidence in zip(table["files"], table["file_evidence"], strict=True):
         planned = files[evidence["source_file_ordinal"]]
         require(evidence["planned"] == planned and file["rows"] == planned["rows"], "probe geometry changed")
-        require(evidence["full_value_roundtrip"] == "passed" and evidence["maximum_page_rows"] <= 256, "probe checks failed")
+        require(evidence["full_value_roundtrip"] == "passed" and evidence["maximum_page_rows"] <= page_ceiling, "probe checks failed")
         # Sidecars plus bounded allowance for both manifests and Delta JSON actions.
         metadata = (file["geometry"]["bytes"] + 2 * len(json.dumps(file, indent=2))
                     + 2 * len(json.dumps(evidence, indent=2)) + len(json.dumps(file["delta_stats"])) + 1024)
@@ -122,8 +126,9 @@ def generate(args):
     if args.command == "probe":
         require(args.probe is None and args.layout is None, "probe writes both sample layouts")
         sample_rows = sum(files[i]["rows"] for i in selected)
-        # Wide values, page metadata and two sample layouts, before compression is known.
-        output_limit = sample_rows * shape["stored_columns"] * 64 + 256 * 1024**2
+        # Two layouts, each allowing 16 bytes/cell for values and metadata with >=2048-row pages.
+        # This is a hard write budget, not an assumption about the achieved compression ratio.
+        output_limit = sample_rows * shape["stored_columns"] * 32 + 256 * 1024**2
         phase = {"estimated_phase_peak_bytes": source["bytes"] * 2 + SPILL + output_limit + GIB,
                  "native_output_limit_bytes": output_limit, "scope": "bounded writer probe only"}
     else:
@@ -144,16 +149,20 @@ def generate(args):
         phase = capacity(probe, files, args.layout, source["bytes"], tree_bytes(probe_root))
     require(phase["estimated_phase_peak_bytes"] <= limit, "production phase exceeds disk allowance: " + json.dumps(phase))
     output.parent.mkdir(parents=True, exist_ok=True)
-    require(shutil.disk_usage(output.parent).free >= phase["estimated_phase_peak_bytes"] + GIB, "insufficient free disk")
+    # Retained inputs count against the phase allocation but already occupy disk.
+    phase["additional_disk_bytes"] = phase["estimated_phase_peak_bytes"] - source["bytes"] - phase.get("probe_bytes", 0)
+    require(shutil.disk_usage(output.parent).free >= phase["additional_disk_bytes"] + GIB, "insufficient free disk")
     output.mkdir()
     save(output / "capacity.json", phase | {"disk_limit_bytes": limit})
     request = {"format": "selective-read-production-write-v1", "mode": args.command, "shape": args.shape,
+               "file_target_mib": shape["file_target_mib"], "data_page_rows": shape["data_page_rows"],
                "layout": args.layout, "contract_sha256": digest_file(shapes.CONTRACT),
                "driver_sha256": digest_file(Path(__file__)), "files": files, "selected": selected,
                "projection": shape["projection"], "output_limit_bytes": phase["native_output_limit_bytes"]}
     save(output / "writer-request.json", request)
     started = time.monotonic()
-    with bounded(output, {"memory_bytes": 8 * GIB, "disk_bytes": limit, "elapsed_seconds": args.elapsed_limit_seconds}):
+    with bounded(output, {"memory_bytes": 8 * GIB, "disk_bytes": phase["additional_disk_bytes"],
+                          "elapsed_seconds": args.elapsed_limit_seconds}):
         copied_source = output / source["path"]
         copied_source.mkdir(parents=True)
         for path in paths:
