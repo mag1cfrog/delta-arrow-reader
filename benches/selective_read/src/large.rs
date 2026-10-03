@@ -18,6 +18,7 @@ pub struct Options {
     pub source_from: Option<PathBuf>,
     pub elapsed_seconds: u32,
     pub preflight: bool,
+    pub preparation_only: bool,
 }
 
 impl Options {
@@ -54,6 +55,7 @@ impl Options {
             fixture,
             elapsed_seconds,
             preflight,
+            preparation_only: args.remove("--preparation-only").is_some(),
             source_from: args.remove("--source-from").map(PathBuf::from),
         })
     }
@@ -215,7 +217,11 @@ pub fn preflight(config: &Config) -> Result<Value> {
     let export = table;
     let validation = sum(&[existing, output, table, reference * 2, export])?;
     let derivatives = sum(&[existing, source, table * 3, metadata * 3])?;
-    let peak = preparation.max(validation).max(derivatives);
+    let peak = if options.preparation_only {
+        preparation
+    } else {
+        preparation.max(validation).max(derivatives)
+    };
     let additional = peak - existing;
     let parent = config
         .output
@@ -227,6 +233,7 @@ pub fn preflight(config: &Config) -> Result<Value> {
     let limit = config.disk_limit.ok_or("large disk limit missing")?;
     Ok(json!({
         "status": "preflight", "profile": "large", "scale_factor": options.scale,
+        "preparation_only": options.preparation_only,
         "fixture": options.fixture, "source_parent_manifest_sha256": saved.as_ref().map(|(_, hash)| hash),
         "rows_for_capacity": rows, "row_basis": if saved.is_some() { "saved source; verified before reuse" } else { "1,500,000 orders/SF times maximum 7 lineitems" },
         "allowances": {"new_source_bytes_per_row": 256, "table_bytes_per_row": table_row_bytes,
@@ -244,7 +251,11 @@ pub fn preflight(config: &Config) -> Result<Value> {
         "sort_memory_bytes": config.sort_memory, "elapsed_limit_seconds": options.elapsed_seconds,
         "free_disk_before_bytes": available, "filesystem_headroom_bytes": 512 * MIB,
         "fits_budget": peak <= limit, "fits_available_disk": additional <= available.saturating_sub(512 * MIB),
-        "scope": "one source and selected fixture; validation and derivatives run separately with staged retirement; build and unrelated data are outside this allowance"
+        "scope": if options.preparation_only {
+            "source and selected fixture generation only; separately budget actual validation/MinIO inputs before running readers; no capacity claim for the full workload or derivatives"
+        } else {
+            "one source and selected fixture; validation and derivatives run separately with staged retirement; build and unrelated data are outside this allowance"
+        }
     }))
 }
 

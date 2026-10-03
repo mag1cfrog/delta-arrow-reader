@@ -7,6 +7,8 @@ import signal
 import subprocess
 import time
 
+from run import query_count
+
 QUERY_SECONDS = 1800
 CLEANUP_SECONDS = 60
 
@@ -22,7 +24,7 @@ def integer(value):
 
 class Progress:
     def __init__(self, payload, query_seconds, cleanup_seconds):
-        self.count = 10 if payload["execution_mode"] == "reuse" else 1
+        self.count = query_count(payload)
         self.timed = payload["purpose"] == "timing"
         self.query_seconds, self.cleanup_seconds = query_seconds, cleanup_seconds
         self.phase = "setup"
@@ -42,7 +44,7 @@ class Progress:
             require(self.phase == "setup" and phase == ("open" if self.count == 1 else "initialization")
                     and index is None and query is None, "invalid snapshot phase")
         elif phase == "query":
-            require(self.count == 10 and self.phase in ("initialization", "between") and integer(index)
+            require(self.count > 1 and self.phase in ("initialization", "between") and integer(index)
                     and index == len(self.queries) < self.count and query is None, "invalid query sequence")
             self.initialization_ns = message["initialization_ns"]
             if self.timed:

@@ -14,6 +14,11 @@ DuckDB uses a separate Python environment and its official Delta extension.
 Polars and Daft each use an isolated environment with their native Delta scans
 and lazy expressions. The Python readers do not change the library's dependencies.
 
+Revision 4 [large workloads](selective-read-matrix.md#large-workload-candidates)
+carry a [sampling identity](selective-read-sampling.md) and execute two queries
+per reuse session. Historical revision 2/3 requests retain ten queries.
+All five adapters enforce the selected identity and expected result count.
+
 These commands exercise individual invocations. The
 [storage launcher](selective-read-storage.md) supplies CPU affinity, process
 memory limits, and S3 observations. The campaign scheduler and statistical report

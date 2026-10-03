@@ -220,6 +220,27 @@ impl Budget {
         destination.flush()?;
         Ok(())
     }
+
+    /// Share immutable fixture objects while charging their full logical size.
+    pub fn link(self: &Arc<Self>, input: &Path, output: &Path) -> Result<()> {
+        let bytes = fs::metadata(input)?.len();
+        self.used
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |used| {
+                used.checked_add(bytes).filter(|next| *next <= self.limit)
+            })
+            .map_err(|_| io::Error::other("fixture output disk budget exceeded"))?;
+        match fs::hard_link(input, output) {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                self.used.fetch_sub(bytes, Ordering::SeqCst);
+                if error.kind() == io::ErrorKind::CrossesDevices {
+                    self.copy(input, output)
+                } else {
+                    Err(error.into())
+                }
+            }
+        }
+    }
 }
 
 struct BudgetFile {

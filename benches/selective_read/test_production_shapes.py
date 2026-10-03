@@ -95,6 +95,7 @@ class ProductionShapeCheck(unittest.TestCase):
         for name, value in definitions.items():
             self.assertEqual(value["canonical_sql"], control[name]["canonical_sql"])
             self.assertEqual(value["row_group_rows"], 131072)
+            self.assertEqual(value["data_page_rows"], 20000)
             self.assertFalse(value["dictionary"])
         with self.assertRaisesRegex(ValueError, "unsupported"):
             shapes.definitions(128)

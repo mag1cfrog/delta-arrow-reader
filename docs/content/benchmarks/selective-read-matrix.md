@@ -160,16 +160,28 @@ references and campaign outputs outside Git.
 
 ## Large-workload candidates
 
-Revision 3 adds the cases from the
+The large workload adds the cases from the
 [large-workload amendment](selective-read-large-workloads.md). Its workload
-manifest is separate from the checked-in revision 2 catalog.
+manifest is separate from the checked-in revision 2 catalog. New manifests use
+revision 4 and the [reduced sampling contract](selective-read-sampling.md).
+
+The owner selected SF10 for the main large-data family after the SF1/SF10
+screen in [#345](https://github.com/mag1cfrog/delta-arrow-reader/issues/345).
+Keep SF1 as the scale control. The shuffled SF10 anchor contains 59,986,052
+rows and 35.95 GiB of Parquet; the five readers' two-sample median times ranged
+from 22.46 to 106.94 seconds. This decision replaces the earlier automatic
+scale escalation and 60-second acceptance rule. Report it as an owner-selected
+scale after calibration, not as a pass of that historical rule. First and
+reused execution still need separate measurements. The many-file geometry
+requirements and complete publication inventory remain unresolved in #345;
+this decision does not select or allocate a larger source scale for them.
 
 | IDs | Inputs |
 | --- | --- |
 | `large.wide.{clustered,shuffled}.{all-wide,date30-wide,date7-wide,eq1,eq2,eq2-in20,eq2-in20-keys}` | Seven shapes on each layout at one explicit source scale |
 | `large.wide.{clustered,shuffled}.date30-wide.dv` | Identical base Parquet bytes with real deletion vectors |
 | `scale-control.wide.shuffled.date30-wide`, `scale-control.wide.clustered.eq2-in20` | The immediately preceding scale rung |
-| `reuse.large.date30`, `reuse.large.compound` | Shuffled date30 and clustered compound, respectively; initialization followed by ten newly planned queries |
+| `reuse.large.date30`, `reuse.large.compound` | Shuffled date30 and clustered compound, respectively; initialization followed by two newly planned queries |
 
 All shapes except `eq2-in20-keys` project the same 69 columns. `date30` covers
 March 1 through March 30, 1995; `date7` retains March 15 through March 21.
@@ -188,14 +200,49 @@ target/selective-read/release/selective-read-fixtures \
   --output ../large-data-shuffled-dv
 ```
 
-This example's SF10 and ceilings are inputs, not a recommended final scale or
-a promise that the host has enough capacity. Preflight rejects inadequate
+The example uses the selected SF10 data scale. Its ceilings do not establish
+that the host has enough capacity. Preflight rejects inadequate
 space before copying. Prepare the clustered counterpart separately. Each new
 DV directory contains the source, base snapshot, and paired DV snapshot; the
 input directory stays immutable. Do the same preparation at the preceding rung
 for the two controls, which do not need DVs.
 
-Bind all 18 cases before preparing references or timing readers:
+To calibrate scale first, bind only the shuffled `date30` anchor with
+`--family pilot`, one `--fixtures` directory and no `--control-fixtures`.
+This accepts the SF1 baseline and the declared larger rungs. For example:
+
+```sh
+../selective-read-oracle-venv/bin/python -B benches/selective_read/large_workloads.py \
+  --family pilot --fixtures ../large-wide-shuffled-sf1 \
+  --binary ../selective-read-polars-build/selective-read-polars \
+  --binary ../selective-read-daft-build/selective-read-daft \
+  --disk-limit-mib 8192 --elapsed-limit-seconds 1800 \
+  --output ../pilot-workload-sf1
+```
+
+The resulting manifest has `scope: pilot` and `publication_ready: false`.
+It preserves the same SQL, five readers, native expression identities and exact
+oracle checks. It needs no DV copy, other layout or 4,096-file pair to measure
+this one query. Choose oracle ceilings from the expected result and record them
+before each rung; the values above describe the SF1 preparation example.
+
+For another declared no-DV data query, add `--case`, for example
+`--case large.wide.clustered.eq2-in20` or
+`--case large.wide.clustered.eq2-in20-keys`, with its matching fixture directory.
+Each pilot manifest binds one query and only its declared reuse profile, if any.
+These pilots check individual workloads before the full inventory is ready;
+they retain `publication_ready: false` and cannot replace the complete campaign.
+
+The [sampling amendment in #345](https://github.com/mag1cfrog/delta-arrow-reader/issues/345)
+starts screening with two independent single queries per reader, with correctness
+and I/O checks outside timing. Use the declared standalone invocations from the
+[storage guide](selective-read-storage.md) for screening. The revision 4
+campaign below uses five independent samples per case or session, and two
+queries per reuse session, bound by `sampling_sha256`. Screening observations
+cannot fill formal measurement slots or freeze the full publication inventory.
+
+For the complete large-data family, bind all 18 cases before preparing its
+references or timing readers:
 
 ```sh
 ../selective-read-oracle-venv/bin/python -B benches/selective_read/large_workloads.py \
@@ -210,14 +257,14 @@ Bind all 18 cases before preparing references or timing readers:
 
 `workload.json` freezes fixture hashes, scales, geometry, expanded SQL,
 projections, literals, native translations and oracle ceilings. It binds the
-amendment hash, base protocol hash and harness sources. Each reference, reader
+amendment hash, sampling hash, base protocol hash and harness sources. Each reference, reader
 identity, correctness certificate, campaign, schedule slot and report carries
 that workload file's hash. Mismatches fail validation. Rebuild all five adapters
 after changing the harness or oracle.
 
-The command produces a **candidate**, with `publication_ready: false`. Final
-scale selection, the full inventory including many-file cases, reader and
-environment bindings, and minute-scale acceptance belong to the pilot in
+The command produces a **candidate**, with `publication_ready: false`. The full
+inventory including many-file cases, reader and environment bindings, and
+first-versus-reused execution measurements belong to the pilot in
 [#345](https://github.com/mag1cfrog/delta-arrow-reader/issues/345). This command
 cannot declare a formal publication workload.
 
@@ -259,7 +306,7 @@ Export a checked report with:
 ```
 
 The exporter verifies identities and ordering, then recomputes summaries from
-raw observations. It retains all ten query positions across independent reuse
+raw observations. It retains both query positions across independent reuse
 sessions, initialization, enclosing session time and failure statuses. Separate
 native planning/scan clocks are null with a reason where unavailable. No fixed
 overhead is inferred by subtracting cached execution from open-and-query time.

@@ -8,7 +8,7 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
-from run import AMENDMENT, PROTOCOL, comparison_identity, digest, save
+from run import AMENDMENT, PROTOCOL, SAMPLING, comparison_identity, digest, save
 from supervise import require
 
 SCALES = (1, 10, 30, 100, 300)
@@ -16,6 +16,7 @@ READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft")
 SESSIONS = {"reuse.large.date30": "large.wide.shuffled.date30-wide",
             "reuse.large.compound": "large.wide.clustered.eq2-in20"}
 FILE_SESSIONS = {"reuse.large.files4096" + suffix: "large.files4096.eq2-in20" + suffix for suffix in ("", ".dv")}
+PILOT_SESSIONS = {"reuse.large.date30": SESSIONS["reuse.large.date30"]}
 SOURCES = (HERE / "oracle.py", HERE / "oracle-requirements.txt", Path(__file__), HERE / "matrix.py", HERE / "runners/run.py",
            HERE / "wide_files.py", HERE / "file_organizations.py")
 
@@ -28,8 +29,18 @@ def shapes():
             **{k: oracle.WIDE_CASES[k] for k in ("eq1", "eq2", "eq2-in20", "eq2-in20-keys")}}
 
 
-def definitions(family="data"):
-    require(family in ("data", "files"), "unknown workload family")
+def definitions(family="data", pilot_case=None):
+    if family == "production":
+        import production_shapes
+        return {case: ("production", case, row["shape"]) for case, row in production_shapes.cases().items()}
+    require(family in ("data", "files", "pilot"), "unknown workload family")
+    require(family == "pilot" or pilot_case is None, "case selection requires the pilot family")
+    if family == "pilot":
+        case = SESSIONS["reuse.large.date30"] if pilot_case is None else pilot_case
+        declared = definitions()
+        require(case in declared and declared[case][0] == "data" and not case.endswith(".dv"),
+                "pilot requires a declared no-DV data case")
+        return {case: declared[case]}
     if family == "files":
         return {f"large.{name}.eq2-in20{suffix}": ("files", fixture + suffix, "eq2-in20")
                 for name, fixture in (("files.normal", "wide.clustered"), ("files4096", "wide.files4096"))
@@ -80,14 +91,38 @@ def query_fields(case, manifest):
                          "row_groups": [len(f["row_groups"]) for f in table["files"]]}}
 
 
-def define(fixtures, controls, binaries, output, disk_limit_mib, elapsed_limit_seconds, smoke=False, family="data"):
+def translate(cases, binaries, output):
+    queries = {r["case_id"]: r["canonical_sql"] for r in cases}
+    save(output / "sql.json", queries)
+    translations = {}
+    for binary in binaries:
+        binary = binary.resolve()
+        build = json.loads(binary.with_name("build.json").read_text())
+        reader = build["reader_id"]
+        require(reader in ("polars", "daft") and reader not in translations, "provide one Polars and one Daft binary")
+        path = output / (reader + "-translations.json")
+        subprocess.run([str(binary.with_name("venv") / "bin/python"), "-I", "-B", str(HERE / "matrix.py"),
+                        "translations", "--binary", str(binary), "--request", str((output / "sql.json").resolve()),
+                        "--output", str(path.resolve())], check=True)
+        translations[reader] = json.loads(path.read_text())
+    require(set(translations) == {"polars", "daft"}, "both native translations required")
+    for row in cases:
+        row["native_expression_sha256"] = {r: v["expressions"][row["case_id"]]["sha256"] for r, v in translations.items()}
+    return translations
+
+
+def define(fixtures, controls, binaries, output, disk_limit_mib, elapsed_limit_seconds, smoke=False, family="data", pilot_case=None):
     """Freeze candidate inputs; publication/environment selection belongs to the pilot."""
     require(type(disk_limit_mib) is int and disk_limit_mib > 0
             and type(elapsed_limit_seconds) is int and 0 < elapsed_limit_seconds < 2**31, "finite oracle limits required")
     inputs, scales = {}, {}
-    expected = definitions(family)
-    require(family != "files" or len(fixtures) == 1 and not controls, "file organizations require one paired fixture and no scale control")
-    for role, roots in ((("files", fixtures),) if family == "files" else (("data", fixtures), ("control", controls))):
+    expected = definitions(family, pilot_case)
+    require(family == "data" or len(fixtures) == 1 and not controls,
+            "file organizations and pilots require one fixture and no scale control")
+    roles = [("files" if family == "files" else "data", fixtures)]
+    if family == "data":
+        roles.append(("control", controls))
+    for role, roots in roles:
         for root in roots:
             root = root.resolve()
             manifest = json.loads((root / "manifest.json").read_text())
@@ -109,7 +144,10 @@ def define(fixtures, controls, binaries, output, disk_limit_mib, elapsed_limit_s
                 scale = table["scale_factor"]
                 require(role not in scales or scales[role] == scale, "mixed source scales in one role")
                 scales[role] = scale
-    if family == "files":
+    if family == "pilot":
+        require(scales == {"data": .01} if smoke else set(scales) == {"data"} and scales["data"] in SCALES,
+                "invalid pilot scale")
+    elif family == "files":
         require(scales == {"files": .01} if smoke else set(scales) == {"files"} and scales["files"] in SCALES[1:], "invalid file-pair scale")
     elif smoke:
         require(scales == {"data": .01, "control": .01}, "smoke scale must be SF0.01")
@@ -129,31 +167,19 @@ def define(fixtures, controls, binaries, output, disk_limit_mib, elapsed_limit_s
         require(all((r["source_rows"], r["in_literals"]) == (rows[0]["source_rows"], rows[0]["in_literals"]) for r in rows),
                 "layouts/DV pairs disagree on source rows or literals")
     output.mkdir()
-    queries = {r["case_id"]: r["canonical_sql"] for r in cases}
-    save(output / "sql.json", queries)
-    translations = {}
-    for binary in binaries:
-        binary = binary.resolve()
-        build = json.loads(binary.with_name("build.json").read_text())
-        reader = build["reader_id"]
-        require(reader in ("polars", "daft") and reader not in translations, "provide one Polars and one Daft binary")
-        path = output / (reader + "-translations.json")
-        subprocess.run([str(binary.with_name("venv") / "bin/python"), "-I", "-B", str(HERE / "matrix.py"),
-                        "translations", "--binary", str(binary), "--request", str((output / "sql.json").resolve()),
-                        "--output", str(path.resolve())], check=True)
-        translations[reader] = json.loads(path.read_text())
-    require(set(translations) == {"polars", "daft"}, "both native translations required")
-    for row in cases:
-        row["native_expression_sha256"] = {r: v["expressions"][row["case_id"]]["sha256"] for r, v in translations.items()}
-    result = {"format": "selective-read-large-workload-v1", "comparison_revision": 3,
+    translations = translate(cases, binaries, output)
+    result = {"format": "selective-read-large-workload-v1", "comparison_revision": 4,
               "protocol_sha256": digest(AMENDMENT), "base_protocol_sha256": digest(PROTOCOL),
-              "scope": "smoke" if smoke else "candidate", "publication_ready": False,
+              "sampling_sha256": digest(SAMPLING),
+              "scope": "smoke" if smoke else "pilot" if family == "pilot" else "candidate", "publication_ready": False,
               "source_sha256": {str(p.relative_to(HERE)): digest(p) for p in SOURCES},
               "family": family, "scales": scales, "readers": list(READERS), "cases": cases,
-              "sessions": FILE_SESSIONS if family == "files" else SESSIONS,
+              "sessions": FILE_SESSIONS if family == "files" else {k: v for k, v in SESSIONS.items() if v in expected},
               "oracle_limits": {"memory_bytes": 16 * 1024**3, "disk_bytes": disk_limit_mib * 1024**2,
                                 "elapsed_seconds": elapsed_limit_seconds},
               "translations": translations}
+    if pilot_case is not None:
+        result["pilot_case"] = pilot_case
     save(output / "workload.json", result)
     load(output / "workload.json")
     return result
@@ -162,17 +188,24 @@ def define(fixtures, controls, binaries, output, disk_limit_mib, elapsed_limit_s
 def load(path):
     value = json.loads(Path(path).read_text())
     identity(path)
-    require(value["format"] == "selective-read-large-workload-v1" and value["comparison_revision"] == 3,
+    if value["format"] == "selective-read-production-workload-v1":
+        import production_workloads
+        return production_workloads.load(path, value)
+    require(value["format"] == "selective-read-large-workload-v1" and value["comparison_revision"] in (3, 4),
             "unknown large workload")
     require(value["source_sha256"] == {str(p.relative_to(HERE)): digest(p) for p in SOURCES}, "workload harness sources changed")
-    require(value["scope"] in ("smoke", "candidate") and value["publication_ready"] is False,
-            "formal workload freeze is not implemented by this slice")
     family = value.get("family", "data")
-    expected = definitions(family)
-    require(value["readers"] == list(READERS) and value["sessions"] == (FILE_SESSIONS if family == "files" else SESSIONS), "workload readers/sessions changed")
+    require(value["scope"] in ("smoke", "pilot" if family == "pilot" else "candidate") and value["publication_ready"] is False,
+            "formal workload freeze is not implemented by this slice")
+    expected = definitions(family, value.get("pilot_case"))
+    sessions = FILE_SESSIONS if family == "files" else {k: v for k, v in SESSIONS.items() if v in expected}
+    require(value["readers"] == list(READERS) and value["sessions"] == sessions, "workload readers/sessions changed")
     require(len(value["cases"]) == len(expected) and {r["case_id"] for r in value["cases"]} == set(expected), "incomplete workload family")
     scales = value["scales"]
-    if family == "files":
+    if family == "pilot":
+        require(scales == {"data": .01} if value["scope"] == "smoke" else
+                set(scales) == {"data"} and scales["data"] in SCALES, "invalid pilot scale")
+    elif family == "files":
         require(scales == {"files": .01} if value["scope"] == "smoke" else
                 set(scales) == {"files"} and scales["files"] in SCALES[1:], "invalid file-pair scale")
     else:
@@ -203,6 +236,9 @@ def load(path):
 
 
 def binding(value, fixtures, case_id):
+    if value["comparison_revision"] == 5:
+        import production_workloads
+        return production_workloads.binding(value, fixtures, case_id)
     row = next(r for r in value["cases"] if r["case_id"] == case_id)
     path = Path(fixtures) / "manifest.json"
     require(digest(path) == row["fixture_manifest_sha256"], "workload fixture identity changed")
@@ -237,7 +273,7 @@ def report(campaign, output):
     for job, entries in inventory.items():
         require(set(entries) == set(READERS), "all five reader statuses are required")
         case = jobs[job]["case_id"]
-        require(case in definitions(frozen.get("family", "data")) and (jobs[job]["execution_mode"] == "open" and job == case or
+        require(case in definitions(frozen.get("family", "data"), frozen.get("pilot_case")) and (jobs[job]["execution_mode"] == "open" and job == case or
                 jobs[job]["execution_mode"] == "reuse" and frozen["sessions"].get(job) == case), "unknown workload job")
     require(len({r["run_id"] for r in observations}) == len(observations), "duplicate observation")
     for row in observations:
@@ -266,9 +302,11 @@ def report(campaign, output):
             metadata = json.loads(reference.read_text())
             require(comparison_identity(metadata) == comparison, "reference workload changed")
             row["oracle"] = {k: metadata[k] for k in ("source_rows", "physical_qualifying_rows", "qualifying_rows",
-                "deleted_qualifying_rows", "output_rows", "projected_logical_bytes", "candidate_files", "matching_files", "wide_file_geometry") if k in metadata}
+                "deleted_qualifying_rows", "output_rows", "projected_logical_bytes", "candidate_files", "matching_files", "wide_file_geometry",
+                "within_file_geometry", "physical_rows", "derived_value_checks") if k in metadata}
     result = {"status": summary["status"], **comparison, "campaign_id": config["campaign_id"],
               "scope": frozen["scope"], "publication_ready": False, "rows": rows,
+              **({"core_inventory": frozen["inventory"]} if frozen["comparison_revision"] == 5 else {}),
               "observations_sha256": digest(campaign / "observations.jsonl"),
               "summary_sha256": digest(campaign / "summary.json")}
     save(output / "large-workload-report.json", result)
@@ -287,7 +325,9 @@ if __name__ == "__main__":
         sys.exit(0 if result["status"] == "complete" else 1)
     parser.add_argument("--fixtures", type=Path, action="append", required=True)
     parser.add_argument("--control-fixtures", type=Path, action="append", default=[])
-    parser.add_argument("--family", choices=("data", "files"), default="data")
+    parser.add_argument("--family", choices=("data", "files", "pilot"), default="data",
+                        help="pilot binds one no-DV data case, including the SF1 baseline")
+    parser.add_argument("--case", dest="pilot_case", help="pilot case; defaults to large.wide.shuffled.date30-wide")
     parser.add_argument("--binary", type=Path, action="append", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--disk-limit-mib", type=int, required=True)
@@ -295,4 +335,4 @@ if __name__ == "__main__":
     parser.add_argument("--smoke", action="store_true", help="bounded SF0.01 contract check, never a scale-control result")
     args = parser.parse_args()
     define(args.fixtures, args.control_fixtures, args.binary, args.output,
-           args.disk_limit_mib, args.elapsed_limit_seconds, args.smoke, args.family)
+           args.disk_limit_mib, args.elapsed_limit_seconds, args.smoke, args.family, args.pilot_case)

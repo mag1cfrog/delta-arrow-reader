@@ -383,7 +383,7 @@ def invoke(directory, binary, payload, output, fixtures=None, reference=None, *,
             result["storage_capture"] = {"status": "disabled", "reason": "no detailed tracing in this invocation"}
             result.setdefault("external_metrics", {})["reason"] = "request/byte metrics require a separate I/O diagnostic"
         if result["status"] == "success" and payload["purpose"] == "validation":
-            run.check_result(result, output, fixtures, reference)
+            run.check_result(result, output, fixtures, reference, payload)
         # Preserve the reader's raw record and the shared helper's observation.
         save(output / "storage-observation.json", result)
         return result
