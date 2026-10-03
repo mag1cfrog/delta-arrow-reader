@@ -18,10 +18,16 @@ import time
 HERE = Path(__file__).resolve().parent
 PROTOCOL = HERE.parents[2] / "docs/content/benchmarks/selective-read-protocol.md"
 AMENDMENT = PROTOCOL.with_name("selective-read-large-workloads.md")
+SAMPLING = PROTOCOL.with_name("selective-read-sampling.md")
+PRODUCTION = PROTOCOL.with_name("selective-read-production-workloads.md")
 if (HERE / "protocol.md").exists():
     PROTOCOL, AMENDMENT = HERE / "protocol.md", HERE / "large-workloads.md"
+    SAMPLING = HERE / "sampling.md"
+    PRODUCTION = HERE / "production-workloads.md"
 COMPARISON_FIELDS = ("comparison_revision", "protocol_sha256")
 LARGE_IDENTITY_FIELDS = ("base_protocol_sha256", "workload_manifest_sha256")
+SAMPLING_IDENTITY_FIELDS = ("sampling_sha256",)
+PRODUCTION_IDENTITY_FIELDS = ("sampling_stage",)
 BUDGET = {"worker_threads": 8, "max_blocking_threads": 64, "target_partitions": 8,
           "batch_rows": 8192, "datafusion_pool_bytes": 4 * 1024**3,
           "process_memory_bytes": 8 * 1024**3, "logical_cpus": 8}
@@ -40,26 +46,55 @@ def save(path, value):
 
 def comparison_identity(value):
     revision = value["comparison_revision"]
-    if type(revision) is not int or revision not in (2, 3):
+    if type(revision) is not int or revision not in (2, 3, 4, 5):
         raise ValueError("unknown comparison revision")
-    fields = COMPARISON_FIELDS + (LARGE_IDENTITY_FIELDS if revision == 3 else ())
-    expected = digest(AMENDMENT if revision == 3 else PROTOCOL)
+    fields = COMPARISON_FIELDS + (LARGE_IDENTITY_FIELDS if revision >= 3 else ())
+    expected = digest(PRODUCTION if revision == 5 else AMENDMENT if revision >= 3 else PROTOCOL)
     if value["protocol_sha256"] != expected:
         raise ValueError("stale comparison protocol")
-    if revision == 3:
+    if revision >= 3:
         if value.get("base_protocol_sha256") != digest(PROTOCOL) or not isinstance(value.get("workload_manifest_sha256"), str) or not re.fullmatch(
                 "[0-9a-f]{64}", value["workload_manifest_sha256"]):
             raise ValueError("missing or stale large-workload identity")
     elif any(value.get(key) is not None for key in LARGE_IDENTITY_FIELDS):
-        raise ValueError("revision 2 cannot carry revision 3 identities")
+        raise ValueError("revision 2 cannot carry large-workload identities")
+    if revision >= 4:
+        if value.get("sampling_sha256") != digest(SAMPLING):
+            raise ValueError("missing or stale sampling identity")
+        fields += SAMPLING_IDENTITY_FIELDS
+    elif value.get("sampling_sha256") is not None:
+        raise ValueError("historical revisions cannot carry a sampling amendment")
+    if revision == 5:
+        if value.get("sampling_stage") not in ("pilot", "formal"):
+            raise ValueError("missing or invalid production sampling stage")
+        fields += PRODUCTION_IDENTITY_FIELDS
+    elif value.get("sampling_stage") is not None:
+        raise ValueError("historical revisions cannot carry a production sampling stage")
     return {key: value[key] for key in fields}
+
+
+def query_count(value):
+    if value["execution_mode"] == "open":
+        return 1
+    return 2 if value.get("comparison_revision", 2) >= 4 else 10
+
+
+def fixture_tables(manifest):
+    if manifest.get("status") != "complete":
+        raise ValueError("incomplete fixture manifest")
+    if manifest["protocol"] == "selective-read-v1":
+        return manifest["tables"]
+    if manifest["protocol"] in ("selective-read-production-fixtures-v1", "selective-read-production-pairs-v1"):
+        if manifest["writer"]["status"] != "complete":
+            raise ValueError("incomplete production writer")
+        return manifest["writer"]["tables"]
+    raise ValueError("unknown fixture manifest")
 
 
 def request(fixtures, case_id, execution_mode, purpose, run_id, table_uri=None, correctness=None, *, workload=None):
     manifest_path = fixtures / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
-    if manifest["status"] != "complete" or manifest["protocol"] != "selective-read-v1":
-        raise ValueError("incomplete or unknown fixture manifest")
+    tables = fixture_tables(manifest)
     comparison = {"comparison_revision": 2, "protocol_sha256": digest(PROTOCOL)}
     if workload is not None:
         sys.path.insert(0, str(HERE.parent))
@@ -67,11 +102,11 @@ def request(fixtures, case_id, execution_mode, purpose, run_id, table_uri=None, 
         frozen = large_workloads.load(workload)
         row = large_workloads.binding(frozen, fixtures, case_id)
         comparison = large_workloads.identity(workload)
-        table = next(t for t in manifest["tables"] if t["id"] == row["fixture_id"])
+        table = next(t for t in tables if t["id"] == row["fixture_id"])
         sql = row["canonical_sql"]
     else:
-        if manifest["profile"] == "large":
-            raise ValueError("large fixtures require an explicit revision 3 workload manifest")
+        if manifest["protocol"] != "selective-read-v1" or manifest["profile"] == "large":
+            raise ValueError("large fixtures require an explicit workload manifest")
         fixture_id, query = case_id.rsplit(".", 1)
         table = next((t for t in manifest["tables"] if case_id in t.get("queries", {})), None)
     if workload is None and table is not None:
@@ -87,17 +122,19 @@ def request(fixtures, case_id, execution_mode, purpose, run_id, table_uri=None, 
         "table_uri": table_uri or location.as_uri(), "snapshot_version": table["snapshot_version"],
         "case_id": case_id, "canonical_sql": sql, **comparison,
         "fixture_manifest_sha256": digest(manifest_path),
-        "profile": manifest["profile"], "execution_mode": execution_mode, "purpose": purpose,
+        "profile": manifest.get("profile", "production-" + manifest.get("mode", "unknown")), "execution_mode": execution_mode, "purpose": purpose,
         "resource_budget": BUDGET, "correctness_file": str(correctness.resolve()) if correctness else None,
         "campaign_id": None, "run_id": run_id, "repetition": None, "order": None,
     }
 
 
-def check_result(record, output, fixtures, reference):
+def check_result(record, output, fixtures, reference, payload):
     sys.path.insert(0, str(HERE.parent))
     import oracle
     checks = []
     try:
+        if [q["query_index"] for q in record["queries"]] != list(range(query_count(payload))):
+            raise ValueError("incomplete validation query sequence")
         for query in record["queries"]:
             checks.append(oracle.check(reference, fixtures,
                 output / "reader" / query["result"], output / "reader" / query["identity"]))
@@ -112,15 +149,15 @@ def check_result(record, output, fixtures, reference):
 
 @contextmanager
 def export_limit(payload, reference):
-    if payload.get("comparison_revision") != 3 or payload["purpose"] != "validation":
+    if payload.get("comparison_revision") not in (3, 4, 5) or payload["purpose"] != "validation":
         yield None
         return
     metadata = json.loads((reference / "reference.json").read_text())
     if comparison_identity(metadata) != comparison_identity(payload):
         raise ValueError("export/reference workload mismatch")
-    # At most ten exports coexist in a reuse validation; reserve half the declared
-    # oracle allowance for them and the other half for the reference and sort spill.
-    limit = (metadata["oracle_limits"]["disk_bytes"] - 8 * 1024**2) // (20 if payload["execution_mode"] == "reuse" else 2)
+    # Half the allowance holds every export in this session; the other half
+    # holds the reference and sort spill.
+    limit = (metadata["oracle_limits"]["disk_bytes"] - 8 * 1024**2) // (2 * query_count(payload))
     if limit <= 0:
         raise ValueError("insufficient validation export allowance")
     previous = resource.getrlimit(resource.RLIMIT_FSIZE)
@@ -174,7 +211,7 @@ def invoke(binary, payload, output, fixtures=None, reference=None, *, env=None, 
         if supervision["status"] != "success":
             record.update(status=supervision["status"], failure_reason=supervision["failure_reason"])
         if record["status"] == "success" and (supervision["last_phase"] != "cleanup" or
-                len(supervision["completed_queries"]) != (10 if payload["execution_mode"] == "reuse" else 1)):
+                len(supervision["completed_queries"]) != query_count(payload)):
             record.update(status="operational_failure", failure_reason="reader did not complete the watchdog lifecycle")
         if type(record.get("cleanup_ns")) is int and record["cleanup_ns"] > supervision["cleanup_deadline_seconds"] * 10**9:
             record.update(status="timeout", failure_reason="reported cleanup exceeded its deadline")
@@ -182,7 +219,7 @@ def invoke(binary, payload, output, fixtures=None, reference=None, *, env=None, 
         record.setdefault("external_metrics", {}).update({k: supervision[k] for k in (
             "process_user_cpu_ns", "process_system_cpu_ns", "process_cpu_ns", "peak_rss_bytes", "process_elapsed_ns")})
     if returncode == 0 and record["status"] == "success" and payload["purpose"] == "validation" and not defer_validation:
-        check_result(record, output, fixtures, reference)
+        check_result(record, output, fixtures, reference, payload)
     if payload["purpose"] in ("diagnostic", "io"):
         record["diagnostic_process"] = {"started_ns": started, "exited_ns": exited}
     save(output / "observation.json", record)
@@ -194,7 +231,7 @@ def main():
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--fixtures", type=Path, required=True)
     parser.add_argument("--case", required=True)
-    parser.add_argument("--workload", type=Path, help="explicit revision 3 workload manifest")
+    parser.add_argument("--workload", type=Path, help="explicit workload manifest")
     parser.add_argument("--execution", choices=("open", "reuse"), default="open")
     parser.add_argument("--purpose", choices=("validation", "timing", "diagnostic", "io"), required=True)
     parser.add_argument("--reference", type=Path)

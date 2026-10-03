@@ -32,6 +32,8 @@ DEFAULT_CASES = ("li.clustered.eq2-in20", "li.shuffled.eq2-in20")
 
 def schedule(inventory, campaign_id, comparison=None):
     slots = []
+    reduced = (comparison or {}).get("comparison_revision", 2) >= 4
+    samples = 2 if (comparison or {}).get("sampling_stage") == "pilot" else 5
     def add(job, stage, readers, repetition, *, traced=False):
         for position, reader in enumerate(readers):
             slots.append({"run_id": f"{campaign_id}-{len(slots):05d}", "job_id": job,
@@ -43,15 +45,19 @@ def schedule(inventory, campaign_id, comparison=None):
         readers = tuple(r for r in READERS if entries[r]["runnable"])
         if not readers:
             continue
-        for repetition, order in enumerate((readers, readers[::-1])):
+        for repetition, order in enumerate((readers,) if reduced else (readers, readers[::-1])):
             add(job, "warmup", order, repetition)
         orders = balanced_orders(readers)
-        for repetition, order in enumerate(orders * math.ceil(10 / len(orders))):
+        orders *= math.ceil((samples if reduced else 10) / len(orders))
+        for repetition, order in enumerate(orders[:samples] if reduced else orders):
             add(job, "timing", order, repetition)
     # No tracing or plan capture until every timing slot has finished.
     for job, entries in inventory.items():
         readers = tuple(r for r in READERS if entries[r]["runnable"])
         add(job, "plan", readers, 0)
+        if reduced:
+            add(job, "diagnostic", readers, 0, traced=True)
+            continue
         for repetition, order in enumerate((readers, readers[::-1])):
             add(job, "diagnostic_warmup", order, repetition, traced=True)
         for repetition, order in enumerate((readers, readers[::-1])):
@@ -102,11 +108,11 @@ def validate(record, payload, reader, gate=None):
         require(record[key] == payload[key], "observation request differs: " + key)
     require(record["capability"]["status"] == "supported" and record["cleanup"]["status"] == "passed", "incomplete capability or cleanup")
     require(record["external_resource_limits"]["process_memory_bytes"] == run.BUDGET["process_memory_bytes"], "missing enforced memory limit")
-    if payload["comparison_revision"] == 3 and payload["purpose"] == "validation":
+    if payload["comparison_revision"] in (3, 4, 5) and payload["purpose"] == "validation":
         require(record["external_resource_limits"]["max_file_size_bytes"] == record["validation_export_limit_bytes_per_file"],
                 "validation export limit was not inherited by the reader")
     queries = record["queries"]
-    count = 10 if payload["execution_mode"] == "reuse" else 1
+    count = run.query_count(payload)
     require(isinstance(queries, list) and len(queries) == count, "incomplete query count")
     for index, query in enumerate(queries):
         require(query["query_index"] == index and integer(query["output_rows"]) and integer(query["output_batches"]), "invalid query counts")
@@ -250,6 +256,7 @@ def execute(args):
         references[metadata["case_id"]] = reference.resolve()
     jobs = [{"id": case, "case_id": case, "execution_mode": "open"} for case in sorted(cases or set(args.case or DEFAULT_CASES))]
     if not prepared and not args.no_sessions:
+        require(not args.session or set(args.session) <= set(sessions), "unknown reuse session")
         jobs += [{"id": session, "case_id": sessions[session], "execution_mode": "reuse"} for session in sorted(set(args.session or sessions))]
     config = storage.state(state)
     if network.config(state) is not None:
@@ -265,6 +272,10 @@ def execute(args):
         sources += [HERE / "matrix.py", matrix.CATALOG, matrix.EXPRESSIONS, args.matrix.resolve()]
     if workload:
         sources += [HERE / "large_workloads.py", workload_path.resolve(), run.AMENDMENT]
+        if comparison["comparison_revision"] >= 4:
+            sources.append(run.SAMPLING)
+        if comparison["comparison_revision"] == 5:
+            sources += [run.PRODUCTION, HERE / "production_workloads.py"]
     hashes = {str(p): digest(p) for p in sources}
     save(output / "campaign.json", {"campaign_id": campaign_id, **comparison,
          "fixtures": str(fixtures), "upload": str(args.upload.resolve()),
@@ -376,8 +387,8 @@ if __name__ == "__main__":
     parser.add_argument("--reference", type=Path, action="append", default=[])
     parser.add_argument("--case", action="append", help="repeat for selected cases; default: both compound layouts")
     parser.add_argument("--matrix", type=Path, help="prepared 30-case matrix; replaces case/reference/session defaults")
-    parser.add_argument("--workload", type=Path, help="explicit revision 3 workload; select staged cases with --case")
+    parser.add_argument("--workload", type=Path, help="explicit workload; select staged cases with --case")
     sessions = parser.add_mutually_exclusive_group()
-    sessions.add_argument("--session", choices={**SESSIONS, **large_workloads.SESSIONS, **large_workloads.FILE_SESSIONS}, action="append", help="repeat for selected sessions")
+    sessions.add_argument("--session", action="append", help="repeat for selected sessions; checked against the workload")
     sessions.add_argument("--no-sessions", action="store_true", help="run only the isolated cases")
     sys.exit(execute(parser.parse_args()))

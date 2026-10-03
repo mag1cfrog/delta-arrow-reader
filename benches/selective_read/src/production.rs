@@ -572,6 +572,113 @@ pub fn run(args: &[String]) -> Result<()> {
     Ok(())
 }
 
+/// Reuse the portable DV writer over an explicitly copied, bounded base inventory.
+pub fn pairs(args: &[String]) -> Result<()> {
+    if args.len() != 3 {
+        return Err("production-pairs REQUEST_JSON OUTPUT_DIRECTORY ELAPSED_SECONDS".into());
+    }
+    large::set_deadline(args[2].parse()?)?;
+    fixtures::limit_memory(8 * 1024 * MIB)?;
+    let bytes = fs::read(&args[0])?;
+    let request: Value = serde_json::from_slice(&bytes)?;
+    if request["format"] != "selective-read-production-pairs-request-v1"
+        || request["contract_sha256"] != fixtures::hash_bytes(CONTRACT.as_bytes())
+    {
+        return Err("unknown production DV request".into());
+    }
+    let mut tables = request["tables"].as_array().ok_or("base tables")?.clone();
+    let ids = tables
+        .iter()
+        .filter_map(|t| t["id"].as_str())
+        .collect::<BTreeSet<_>>();
+    let valid = ["q2", "q4"]
+        .into_iter()
+        .flat_map(|shape| {
+            ["localized", "scattered"].map(|layout| format!("production.{shape}.{layout}"))
+        })
+        .collect::<BTreeSet<_>>();
+    if !matches!(tables.len(), 2 | 4)
+        || ids.len() != tables.len()
+        || ids.iter().any(|id| !valid.contains(*id))
+        || ["q2", "q4"].into_iter().any(|shape| {
+            ids.contains(format!("production.{shape}.localized").as_str())
+                != ids.contains(format!("production.{shape}.scattered").as_str())
+        })
+        || tables.iter().any(|t| {
+            t["snapshot_version"] != 0
+                || t["deletion_vectors"] != false
+                || t["scale_factor"] != 10.0
+        })
+    {
+        return Err(
+            "production DV union requires both no-DV layouts of each included shape".into(),
+        );
+    }
+    let limit = request["output_limit_bytes"]
+        .as_u64()
+        .ok_or("output limit")?;
+    if limit == 0 || limit > 192 * 1024 * MIB {
+        return Err("production DV ceiling must be within 192 GiB".into());
+    }
+    let root = Path::new(&args[1]);
+    let budget = Arc::new(Budget::new(limit));
+    for table in &mut tables {
+        if table["delta_log"].is_null() {
+            if request["mode"] != "probe" {
+                return Err("full table has no Delta log".into());
+            }
+            let id = table["id"].as_str().ok_or("base ID")?;
+            let name = id.split('.').nth(1).ok_or("shape")?;
+            let (_, _, metrics) = dimensions(
+                name,
+                table["file_target_mib"].as_u64().ok_or("file target")?,
+            )?;
+            let finished = TableWriter::finish_files(
+                &root.join(id),
+                schema(metrics),
+                budget.clone(),
+                table["files"].as_array().ok_or("files")?.clone(),
+                Some(("production-probe-sf10", id)),
+            )?;
+            if finished["schema"] != table["schema"] {
+                return Err("probe schema changed".into());
+            }
+            table["delta_log"] = finished["delta_log"].clone();
+        }
+    }
+    let groups = tables
+        .iter()
+        .map(|t| {
+            let id = t["id"].as_str().ok_or("base ID")?;
+            if t["path"] != id {
+                return Err("invalid production base path".into());
+            }
+            Ok((root.join(id), t))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let extra = dv::production_minima(&groups)?;
+    let started = Instant::now();
+    let mut variants = Vec::new();
+    for table in &tables {
+        variants.push(dv::variant(
+            root,
+            table,
+            Profile::Large,
+            false,
+            budget.clone(),
+            &extra,
+        )?);
+    }
+    let result = json!({"status": "complete", "request_sha256": fixtures::hash_bytes(&bytes),
+        "generator": generator_identity()?, "tables": variants, "base_tables": tables, "extra_logical_keys": extra,
+        "elapsed_ms": started.elapsed().as_millis(), "peak_rss_bytes": fixtures::peak_rss()?});
+    budget.write(
+        &root.join("dv-result.json"),
+        &serde_json::to_vec_pretty(&result)?,
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

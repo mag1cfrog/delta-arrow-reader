@@ -21,7 +21,7 @@ CARGO_TARGET_DIR=target/selective-read cargo +1.98.1 build --release --locked \
 ../selective-read-oracle-venv/bin/python -B \
   benches/selective_read/production_shapes.py \
   --source ../selective-read-calibration-345/sf10 \
-  --file-target-mib 512 --page-rows 2048 \
+  --file-target-mib 512 --page-rows 20000 \
   --output ../production-plan
 ```
 
@@ -30,8 +30,13 @@ reader timing. Keep its output directory: the writer checks its hashes against
 the current workload definition, source and planner. The default 512 MiB target
 uses 60 Q4 files or 130 Q2 files. `--file-target-mib 256` doubles those counts.
 These are approximate compressed-size targets; the probe records actual sizes.
-Use `--page-rows 20000` in a separate plan directory for the bounded page-size
-comparison. Neither option changes source rows, query literals or projections.
+The main setting is now `--page-rows 20000`; keep `--page-rows 2048` in a
+separate plan directory as a sensitivity control. This choice follows the Q4
+page comparison and supersedes the initial page recommendation in the frozen
+shape contract. The writer can produce 20,480-row pages at batch boundaries.
+Neither option changes source rows, query literals or projections. Replaying
+an older plan requires its recorded planner, contract and writer; changing a
+default does not relabel existing fixtures.
 
 ## Probe the compressed size
 
@@ -101,3 +106,66 @@ row. It describes the opportunity for selective reads, not observed reader
 decoding or network traffic. The manifest keeps `native_campaign_ready` and
 `publication_ready` false: exact source-derived references, real DV pairs and
 the five native reader campaigns are separate steps.
+
+## Validate and run the new workloads
+
+[Comparison revision 5](selective-read-production-workloads.md) connects these
+inputs to the existing oracle, five native adapters, scheduler and report.
+Build the readers with the commands in the
+[runner guide](selective-read-runners.md), using the current harness and the
+same engine locks. Older executables reject revision 5 requests.
+
+Pair the localized and scattered layouts of one shape at a time. For Q4:
+
+```sh
+../selective-read-oracle-venv/bin/python -B \
+  benches/selective_read/production_pairs.py \
+  --fixtures ../production-q4-localized --fixtures ../production-q4-scattered \
+  --binary target/selective-read/release/selective-read-fixtures \
+  --output ../production-q4-pairs --disk-limit-gib 192
+```
+
+Each supplied shape must include both layouts, from the same source and plan
+settings. The helper preserves Parquet bytes and computes one shared logical
+deletion union across the supplied base inventory, recorded in the manifest.
+Both layouts therefore delete the same logical rows. Q2 can be paired later;
+the full eight-case inventory remains required for formal sampling.
+
+Immutable source, Parquet and geometry objects use hard links on the same
+filesystem. The disk ceiling still counts their full logical sizes; the free
+space check reserves only new writes. Cross-filesystem copies require space
+for all bytes. Treat every linked fixture as immutable.
+
+A probe directory already contains both layouts and can be supplied alone.
+The helper creates native Delta logs and real DV snapshots for it, but retains
+its `probe` identity. Reduced probes cannot stand in for full SF10 tables.
+
+Freeze a pilot for a completed full Q4 table:
+
+```sh
+../selective-read-oracle-venv/bin/python -B \
+  benches/selective_read/production_workloads.py \
+  --fixtures ../production-q4-localized \
+  --binary ../build-polars/selective-read-polars \
+  --binary ../build-daft/selective-read-daft \
+  --output ../production-q4-workload
+
+../selective-read-oracle-venv/bin/python -B benches/selective_read/oracle.py \
+  prepare --fixtures ../production-q4-localized \
+  --case production.q4.localized \
+  --workload ../production-q4-workload/workload.json \
+  --output ../production-q4-reference
+```
+
+The workload always lists all eight core cases and all five readers. Inputs not
+supplied to this freeze remain `not_prepared`. Use the paired probe directory
+instead to prepare references for all eight bounded cases. Native validation
+uses the same `--workload` argument as the campaign.
+
+Upload the completed fixture with the existing
+[storage commands](selective-read-storage.md), then pass `--workload`, the
+reference, and all five binaries to the
+[campaign runner](selective-read-campaign.md). The pilot schedules two timed
+invocations per reader and execution mode. Reuse contains initialization and
+two queries. `--stage formal` requires all eight full cases and selects five
+samples. The existing `large_workloads.py report` command audits both revisions.

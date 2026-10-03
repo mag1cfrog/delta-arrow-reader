@@ -398,7 +398,7 @@ def invoke(directory, binary, payload, output, fixtures=None, reference=None, *,
         except (OSError, ValueError, AssertionError) as error:
             result.update(status="operational_failure", failure_reason="proxy capture failed: " + str(error))
         if result["status"] == "success" and payload["purpose"] == "validation":
-            run.check_result(result, output, fixtures, reference)
+            run.check_result(result, output, fixtures, reference, payload)
         # Preserve the reader's raw record and the shared helper's observation.
         save(output / "storage-observation.json", result)
         return result

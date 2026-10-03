@@ -28,7 +28,7 @@ SHAPES = {
 INPUT_COLUMNS = ["l_orderkey", "l_linenumber", "l_shipdate", "l_shipmode"]
 
 
-def definitions(file_target_mib=512, page_rows=2048):
+def definitions(file_target_mib=512, page_rows=20000):
     require(file_target_mib in (256, 512) and page_rows in (2048, 20000), "unsupported production layout")
     return {name: {**shape, "files": shape["files"] * (512 // file_target_mib),
                    "file_target_mib": file_target_mib, "row_group_rows": 131072,
@@ -93,7 +93,7 @@ def file_geometry(connection, shape):
     return result
 
 
-def plan(fixtures, output, file_target_mib=512, page_rows=2048):
+def plan(fixtures, output, file_target_mib=512, page_rows=20000):
     manifest_path = fixtures / "manifest.json"
     manifest_hash = digest_file(manifest_path)
     manifest = json.loads(manifest_path.read_text())
@@ -150,7 +150,7 @@ if __name__ == "__main__":
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--file-target-mib", type=int, choices=(256, 512), default=512)
-    parser.add_argument("--page-rows", type=int, choices=(2048, 20000), default=2048)
+    parser.add_argument("--page-rows", type=int, choices=(2048, 20000), default=20000)
     args = parser.parse_args()
     # Only preparation is bounded here; these settings never govern native timings.
     resource.setrlimit(resource.RLIMIT_AS, (16 * 1024**3, 16 * 1024**3))

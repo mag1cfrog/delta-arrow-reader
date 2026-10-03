@@ -12,7 +12,7 @@ import sysconfig
 from time import time_ns
 from urllib.parse import urlsplit
 
-from run import BUDGET, LARGE_IDENTITY_FIELDS, comparison_identity, digest
+from run import BUDGET, LARGE_IDENTITY_FIELDS, SAMPLING_IDENTITY_FIELDS, PRODUCTION_IDENTITY_FIELDS, comparison_identity, digest, query_count
 
 HERE = Path(__file__).resolve().parent
 REQUEST_FIELDS = set("table_uri snapshot_version case_id canonical_sql comparison_revision protocol_sha256 "
@@ -62,7 +62,11 @@ def runtime_metadata(engine):
 
 def validate(request):
     require(isinstance(request, dict), "expected request object")
-    extra = set(LARGE_IDENTITY_FIELDS) if request.get("comparison_revision") == 3 else set()
+    extra = set(LARGE_IDENTITY_FIELDS) if request.get("comparison_revision") in (3, 4, 5) else set()
+    if request.get("comparison_revision") in (4, 5):
+        extra.update(SAMPLING_IDENTITY_FIELDS)
+    if request.get("comparison_revision") == 5:
+        extra.update(PRODUCTION_IDENTITY_FIELDS)
     require(set(request) == REQUEST_FIELDS | extra, "unknown or missing request fields")
     comparison_identity(request)
     uri = urlsplit(request["table_uri"])
@@ -88,7 +92,7 @@ def correctness(request, identity):
     require(request["correctness_file"], "timing requires a correctness certificate")
     path = Path(request["correctness_file"])
     proof = json.loads(path.read_text())
-    count = 10 if request["execution_mode"] == "reuse" else 1
+    count = query_count(request)
     require(proof["status"] == "passed" and len(proof["checks"]) == count, "failed or incomplete correctness certificate")
     rows = []
     for check in proof["checks"]:
