@@ -47,7 +47,8 @@ def inputs(source_root, plan_path, name):
     require(len(set(paths)) == len(paths) == source["file_count"]
             and set(paths) == set(inside(source_root, source["path"]).glob("*.parquet")), "source inventory changed")
     shape = plan["shapes"][name]
-    definition = shapes.definitions(plan["file_target_mib"], plan["data_page_rows"])[name]
+    definition = shapes.definitions(plan["file_target_mib"], plan["data_page_rows"],
+                                    plan["data_page_bytes"], plan["write_batch_rows"])[name]
     require(all(shape[k] == v for k, v in definition.items()), "production SQL or shape changed")
     geometry_path = plan_path.with_name(name + "-files.json")
     require(digest_file(geometry_path) == shape["file_geometry_sha256"], "logical file geometry changed")
@@ -124,11 +125,11 @@ def generate(args):
     require(duckdb.__version__ == "1.5.5" and pa.__version__ == "25.0.1", "use the pinned oracle Python environment")
     selected = probe_selection(files, shape["stripes"]) if args.command == "probe" else list(range(len(files)))
     if args.command == "probe":
-        require(args.probe is None and args.layout is None, "probe writes both sample layouts")
+        require(args.probe is None and args.layout in (None, "localized", "scattered"), "invalid probe layout")
         sample_rows = sum(files[i]["rows"] for i in selected)
-        # Two layouts, each allowing 16 bytes/cell for values and metadata with >=2048-row pages.
+        # Allow 16 bytes/cell per layout for values and page metadata.
         # This is a hard write budget, not an assumption about the achieved compression ratio.
-        output_limit = sample_rows * shape["stored_columns"] * 32 + 256 * 1024**2
+        output_limit = sample_rows * shape["stored_columns"] * (32 if args.layout is None else 16) + 256 * 1024**2
         phase = {"estimated_phase_peak_bytes": source["bytes"] * 2 + SPILL + output_limit + GIB,
                  "native_output_limit_bytes": output_limit, "scope": "bounded writer probe only"}
     else:
@@ -156,6 +157,7 @@ def generate(args):
     save(output / "capacity.json", phase | {"disk_limit_bytes": limit})
     request = {"format": "selective-read-production-write-v1", "mode": args.command, "shape": args.shape,
                "file_target_mib": shape["file_target_mib"], "data_page_rows": shape["data_page_rows"],
+               "data_page_bytes": shape["data_page_bytes"], "write_batch_rows": shape["write_batch_rows"],
                "layout": args.layout, "contract_sha256": digest_file(shapes.CONTRACT),
                "driver_sha256": digest_file(Path(__file__)), "files": files, "selected": selected,
                "projection": shape["projection"], "output_limit_bytes": phase["native_output_limit_bytes"]}

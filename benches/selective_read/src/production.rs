@@ -13,7 +13,6 @@ const CONTRACT: &str =
     include_str!("../../../docs/content/benchmarks/selective-read-production-shapes.md");
 const DRIVER: &str = include_str!("../production_fixtures.py");
 const GROUP_ROWS: usize = fixtures::GROUP_ROWS;
-const WRITE_BATCH_ROWS: usize = 1024;
 
 fn dimensions(name: &str, file_target_mib: u64) -> Result<(usize, i64, usize)> {
     let multiplier = match file_target_mib {
@@ -288,6 +287,15 @@ fn write_stream<R: io::Read>(
     if ![2048, 20000].contains(&page_rows) {
         return Err("page row limit must be 2048 or 20000".into());
     }
+    let page_bytes = request["data_page_bytes"]
+        .as_u64()
+        .ok_or("page byte target")? as usize;
+    let write_batch_rows = request["write_batch_rows"]
+        .as_u64()
+        .ok_or("write batch rows")? as usize;
+    if ![8192, 65536, 1048576].contains(&page_bytes) || ![128, 1024].contains(&write_batch_rows) {
+        return Err("unsupported page byte target or write batch size".into());
+    }
     let files = request["files"].as_array().ok_or("planned files")?;
     let selected: BTreeSet<usize> = request["selected"]
         .as_array()
@@ -296,14 +304,11 @@ fn write_stream<R: io::Read>(
         .map(|n| n.as_u64().map(|v| v as usize).ok_or("selected file index"))
         .collect::<std::result::Result<_, _>>()?;
     let probe = request["mode"] == "probe";
-    let layouts = if probe {
-        vec!["localized", "scattered"]
-    } else {
-        match request["layout"].as_str() {
-            Some("localized") => vec!["localized"],
-            Some("scattered") => vec!["scattered"],
-            _ => return Err("invalid layout".into()),
-        }
+    let layouts = match request["layout"].as_str() {
+        Some("localized") => vec!["localized"],
+        Some("scattered") => vec!["scattered"],
+        None if probe && request["layout"].is_null() => vec!["localized", "scattered"],
+        _ => return Err("invalid layout".into()),
     };
     let max_rows = files
         .iter()
@@ -338,7 +343,8 @@ fn write_stream<R: io::Read>(
     let properties = fixtures::writer_properties()?
         .into_builder()
         .set_max_row_group_row_count(Some(GROUP_ROWS))
-        .set_write_batch_size(WRITE_BATCH_ROWS)
+        .set_write_batch_size(write_batch_rows)
+        .set_data_page_size_limit(page_bytes)
         .set_data_page_row_count_limit(page_rows)
         .set_dictionary_enabled(false)
         .build();
@@ -438,7 +444,7 @@ fn write_stream<R: io::Read>(
                                 file,
                                 &expected,
                                 projection,
-                                page_rows.div_ceil(WRITE_BATCH_ROWS) * WRITE_BATCH_ROWS,
+                                page_rows.div_ceil(write_batch_rows) * write_batch_rows,
                             )?;
                             actual["source_file_ordinal"] = json!(*index);
                             actual["planned"] = planned.clone();
@@ -482,11 +488,14 @@ fn write_stream<R: io::Read>(
             schema(metrics),
             budget.clone(),
             completed,
-            if probe {
-                None
-            } else {
-                Some(("production-sf10", &id))
-            },
+            Some((
+                if probe {
+                    "production-probe-sf10"
+                } else {
+                    "production-sf10"
+                },
+                &id,
+            )),
         )?;
         table["id"] = json!(id);
         table["path"] = table["id"].clone();
@@ -503,7 +512,8 @@ fn write_stream<R: io::Read>(
         let mut settings = fixtures::writer_settings();
         settings["row_group_rows"] = json!(GROUP_ROWS);
         settings["groups_per_file"] = json!(max_groups);
-        settings["write_batch_rows"] = json!(WRITE_BATCH_ROWS);
+        settings["write_batch_rows"] = json!(write_batch_rows);
+        settings["data_page_bytes"] = json!(page_bytes);
         settings["data_page_rows"] = json!(page_rows);
         settings["dictionary"] = json!(false);
         table["writer"] = settings;
@@ -725,17 +735,33 @@ mod tests {
             "projection": ["l_orderkey", "payload_00"], "files": [
                 {"stripe": 0, "file_index": 0, "rows": file_rows, "candidate": true, "matching_rows": 16},
                 {"stripe": 1, "file_index": 0, "rows": file_rows + 1, "candidate": true, "matching_rows": 16}]});
-        for (name, page_rows) in [("q4", 2048_usize), ("q2", 2048), ("q4", 20000)] {
+        for (name, page_rows, page_bytes, write_batch_rows, layout) in [
+            ("q4", 2048_usize, 1048576, 1024_usize, None),
+            ("q2", 2048, 1048576, 1024, None),
+            ("q4", 20000, 1048576, 1024, None),
+            ("q4", 20000, 1048576, 128, Some("scattered")),
+            ("q4", 20000, 65536, 128, Some("scattered")),
+            ("q4", 20000, 8192, 128, Some("scattered")),
+        ] {
             request["shape"] = json!(name);
             request["data_page_rows"] = json!(page_rows);
-            let output = root.path().join(format!("{name}-{page_rows}"));
+            request["data_page_bytes"] = json!(page_bytes);
+            request["write_batch_rows"] = json!(write_batch_rows);
+            request["layout"] = json!(layout);
+            let output = root.path().join(format!(
+                "{name}-{page_rows}-{page_bytes}-{write_batch_rows}"
+            ));
             let tables = write_stream(
                 ipc.as_slice(),
                 &request,
                 &output,
                 Arc::new(Budget::new(1024 * MIB)),
             )?;
+            assert_eq!(tables.len(), if layout.is_some() { 1 } else { 2 });
             for table in &tables {
+                assert!(!table["delta_log"].is_null());
+                assert_eq!(table["writer"]["data_page_bytes"], page_bytes);
+                assert_eq!(table["writer"]["write_batch_rows"], write_batch_rows);
                 assert_eq!(table["rows"], total_rows);
                 assert_eq!(table["file_count"], 2);
                 assert_eq!(
@@ -807,10 +833,29 @@ mod tests {
                     }
                     let evidence = &table["file_evidence"][i];
                     assert_eq!(evidence["full_value_roundtrip"], "passed");
-                    assert_eq!(
-                        evidence["maximum_page_rows"],
-                        page_rows.div_ceil(WRITE_BATCH_ROWS) * WRITE_BATCH_ROWS
+                    assert!(
+                        evidence["maximum_page_rows"].as_u64().unwrap() as usize
+                            <= page_rows.div_ceil(write_batch_rows) * write_batch_rows
                     );
+                    if page_bytes < 1048576 {
+                        let geometry: Value = serde_json::from_slice(&fs::read(
+                            output
+                                .join(table["path"].as_str().unwrap())
+                                .join(file["geometry"]["path"].as_str().unwrap()),
+                        )?)?;
+                        let payload = geometry["row_groups"][0]["columns"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .find(|c| c["column"] == "payload_00")
+                            .unwrap();
+                        let pages = payload["pages"].as_array().unwrap();
+                        assert!(pages.len() > if page_bytes == 8192 { 100 } else { 10 });
+                        // Incompressible Int64 payloads make the byte target observable;
+                        // allow one writer batch and the page header beyond the target.
+                        assert!(pages.iter().all(|p| p["compressed_bytes"].as_u64().unwrap()
+                            <= page_bytes as u64 + (write_batch_rows * 16 + 512) as u64));
+                    }
                     assert_eq!(table["writer"]["dictionary"], false);
                     assert_eq!(evidence["matching_groups"].as_array().unwrap().len(), 1);
                     let pages = evidence["matching_groups"][0]["matching_output_pages"]
@@ -824,6 +869,17 @@ mod tests {
                 }
             }
         }
+        request["data_page_bytes"] = json!(0);
+        assert!(
+            write_stream(
+                ipc.as_slice(),
+                &request,
+                &root.path().join("invalid-bytes"),
+                Arc::new(Budget::new(1024 * MIB))
+            )
+            .is_err()
+        );
+        request["data_page_bytes"] = json!(8192);
         // Reject duplicated selections and a truncated source instead of publishing partial data.
         request["selected"] = json!([0, 0]);
         assert!(

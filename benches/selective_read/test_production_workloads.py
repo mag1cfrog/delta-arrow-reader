@@ -28,7 +28,7 @@ class ProductionContract(unittest.TestCase):
                     "sources": [{"scale_factor": 10, "rows": 100}],
                     "shape_definitions": {"q4": definition}, "writer": {"status": "complete", "tables": [table]}}
         self.assertEqual(production.query_fields(case, manifest)["writer"]["data_page_rows"], 20000)
-        for field in ("data_page_rows", "row_group_rows", "dictionary"):
+        for field in ("data_page_rows", "data_page_bytes", "write_batch_rows", "row_group_rows", "dictionary"):
             bad = copy.deepcopy(manifest)
             bad["writer"]["tables"][0]["writer"] = dict(definition, **{field: 123})
             with self.assertRaisesRegex(ValueError, "page/group"):

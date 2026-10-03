@@ -28,11 +28,14 @@ SHAPES = {
 INPUT_COLUMNS = ["l_orderkey", "l_linenumber", "l_shipdate", "l_shipmode"]
 
 
-def definitions(file_target_mib=512, page_rows=20000):
-    require(file_target_mib in (256, 512) and page_rows in (2048, 20000), "unsupported production layout")
+def definitions(file_target_mib=512, page_rows=20000, page_bytes=1048576, write_batch_rows=1024):
+    require(file_target_mib in (256, 512) and page_rows in (2048, 20000)
+            and page_bytes in (8192, 65536, 1048576) and write_batch_rows in (128, 1024),
+            "unsupported production layout")
     return {name: {**shape, "files": shape["files"] * (512 // file_target_mib),
                    "file_target_mib": file_target_mib, "row_group_rows": 131072,
-                   "data_page_rows": page_rows, "write_batch_rows": 1024, "dictionary": False,
+                   "data_page_rows": page_rows, "data_page_bytes": page_bytes,
+                   "write_batch_rows": write_batch_rows, "dictionary": False,
                    "projection": list(shape["projection"]),
                    "stored_columns": len(ORIGINAL) + len(PAYLOADS) + shape["extra_numeric_columns"],
                    "canonical_sql": "SELECT " + ", ".join(shape["projection"]) + " FROM bench WHERE " + PREDICATE}
@@ -93,7 +96,8 @@ def file_geometry(connection, shape):
     return result
 
 
-def plan(fixtures, output, file_target_mib=512, page_rows=20000):
+def plan(fixtures, output, file_target_mib=512, page_rows=20000, page_bytes=1048576, write_batch_rows=1024):
+    shapes = definitions(file_target_mib, page_rows, page_bytes, write_batch_rows)
     manifest_path = fixtures / "manifest.json"
     manifest_hash = digest_file(manifest_path)
     manifest = json.loads(manifest_path.read_text())
@@ -112,7 +116,6 @@ def plan(fixtures, output, file_target_mib=512, page_rows=20000):
     require(all(a > b > 0 for a, b in zip(counts, counts[1:])), "each predicate must reduce the source")
     require(300 <= counts[-1] <= 2000, "query does not have the declared hundreds-of-rows shape")
     output.mkdir()
-    shapes = definitions(file_target_mib, page_rows)
     with tempfile.TemporaryDirectory(prefix="shape-sort-", dir=output) as temporary:
         with duckdb.connect(config={"memory_limit": "2GiB", "threads": "4",
                                     "temp_directory": temporary, "max_temp_directory_size": "16GiB"}) as connection:
@@ -137,6 +140,7 @@ def plan(fixtures, output, file_target_mib=512, page_rows=20000):
               "contract_sha256": digest_file(CONTRACT), "planner_sha256": digest_file(Path(__file__)),
               "source_manifest_sha256": manifest_hash, "source_scale": 10, "predicate_stage_rows": counts,
               "file_target_mib": file_target_mib, "data_page_rows": page_rows,
+              "data_page_bytes": page_bytes, "write_batch_rows": write_batch_rows,
               "duckdb": duckdb.__version__, "shapes": shapes, "cases": cases(),
               "scope": "Source predicates and proposed file membership only. No Delta generation, physical page or performance acceptance.",
               "pending": ["bounded compression/capacity probe", "Delta fixtures and actual group/page geometry",
@@ -151,12 +155,15 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--file-target-mib", type=int, choices=(256, 512), default=512)
     parser.add_argument("--page-rows", type=int, choices=(2048, 20000), default=20000)
+    parser.add_argument("--page-bytes", type=int, choices=(8192, 65536, 1048576), default=1048576)
+    parser.add_argument("--write-batch-rows", type=int, choices=(128, 1024), default=1024)
     args = parser.parse_args()
     # Only preparation is bounded here; these settings never govern native timings.
     resource.setrlimit(resource.RLIMIT_AS, (16 * 1024**3, 16 * 1024**3))
     signal.signal(signal.SIGALRM, signal.SIG_DFL)
     signal.alarm(600)
-    result = plan(args.source.resolve(), args.output.resolve(), args.file_target_mib, args.page_rows)
+    result = plan(args.source.resolve(), args.output.resolve(), args.file_target_mib, args.page_rows,
+                  args.page_bytes, args.write_batch_rows)
     print(json.dumps({"status": result["status"], "predicate_stage_rows": result["predicate_stage_rows"],
                       "shapes": {name: {k: shape[k] for k in ("files", "candidate_files", "matching_files", "output_rows")}
                                  for name, shape in result["shapes"].items()}}))
