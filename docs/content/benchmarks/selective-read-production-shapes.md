@@ -6,8 +6,8 @@ description: The main workload definition, its relationship to the private S3 qu
 # Q2/Q4-derived selective-read workloads
 
 The main benchmark follows the published shapes of the private S3 case study's
-Q2 and Q4. It measures selecting a few files from thousands, then retrieving
-hundreds of matching rows across about 70 output columns. DAR, delta-rs,
+Q2 and Q4. It measures excluding files, then retrieving hundreds of matching
+rows across about 70 output columns from a few retained files. DAR, delta-rs,
 DuckDB, Polars and Daft remain the five candidates, with ordinary and real-DV
 snapshots. Reader timing does not determine which queries are included.
 
@@ -16,7 +16,8 @@ This is the current workload direction under
 using the 58-file SF10 compound query or the shuffled date30 scan as the main
 selective-read evidence. Those results remain controls. The historical 4,096-file
 64 MiB median requirement and automatic scale ladder no longer govern the new
-workloads. Frozen protocol files and existing artifacts retain their identities.
+workloads. The current SF10 layouts target 512 MiB compressed files, with a
+256 MiB control. Frozen protocol files and existing artifacts retain their identities.
 
 The definitions, source-layout planner and bounded
 [Delta generator](selective-read-production-fixtures.md) are implemented.
@@ -28,7 +29,7 @@ A successful layout plan or generation is not a performance result.
 
 | Property | Historical Q2 | Public Q2 derivative | Historical Q4 | Public Q4 derivative |
 | --- | --- | --- | --- | --- |
-| Active files | Over 18,000 | 18,432 | Over 3,000 | 4,096 |
+| Active files | Over 18,000 | 130 (512 MiB target), 260 (256 MiB) | Over 3,000 | 60 (512 MiB target), 120 (256 MiB) |
 | Stored columns | Over 400 | 416 | About 90 | 90 |
 | Projected columns | 69 | 69 | 71 | 71 |
 | Filter shape | Two equalities and IN1 | Two equalities and IN1 | Two equalities and IN1 | Two equalities and IN1 |
@@ -38,7 +39,11 @@ A successful layout plan or generation is not a performance result.
 
 The historical inputs and SQL remain private. These derivatives reproduce
 published workload characteristics, not the private values, exact file sizes,
-compression or reported speedups. The source remains TPC-H lineitem at SF10;
+compression or reported speedups. The file counts are fixed layout recipes, not
+a guarantee that every compressed file hits the target size. Q4 counts follow
+the completed file-size study; Q2 counts require their own compression probe
+because its schema is wider. Report actual size distributions for both.
+The source remains TPC-H lineitem at SF10;
 no repeated SF1 rows, synthetic empty files or padded files count as scale.
 The historical measurements are in the
 [S3 case study](selective-s3.md#table-shape).
@@ -86,6 +91,9 @@ or an extra query predicate.
 Conservative per-column statistics can retain a file containing no matching
 row. Keep and report these false positives instead of arranging every candidate
 file to contain a result. Record candidate and actually matching files separately.
+With 60 files and six candidates, file pruning excludes 90%, not 99%. Report
+that fraction alongside bytes and pages read inside the retained files; a
+within-file saving does not demonstrate stronger file pruning.
 
 The localized variant preserves this order. The scattered variant keeps the
 same file and row-group membership, then orders rows within each group by
@@ -94,12 +102,21 @@ ties by the unique source keys. Both return identical values. This pair tests
 whether sparse matches leave output pages unread; it must remain in the report
 when scattering eliminates the saving.
 
-Use 4,096 rows per group, a 256-row data-page limit, 256-row writer batches and
-a 1 MiB page-byte target, with the existing Zstd, dictionary, statistics and
-offset-index settings.
-Real pages can be shorter than their limits. Validate actual groups, pages,
-match positions and file statistics from the written objects. Do not label a
-planned page count or a selected-file size as observed reader work.
+Use 131,072 rows per group, a 2,048-row data-page limit, 1,024-row writer
+batches and a 1 MiB page-byte target. Use plain encoding with dictionary
+encoding disabled, Zstd level 3, and the existing statistics and offset-index
+settings. The original dictionary-encoded, small-file inputs remain controls.
+
+Before freezing publication inputs, compare the 2,048-row page setting with the
+pinned writer's default 20,000-row setting on a bounded Q4 sample. The writer
+checks row limits at batch boundaries, so the latter can produce 20,480-row
+pages. Record the setting and actual page sizes separately. This comparison
+changes neither the predicate nor the SF10 source. Real pages can be shorter
+than their limits. Validate actual groups, pages,
+match positions and file statistics from the written objects. These recipes write fresh balanced files from the original source. Their group
+boundaries can differ from the exploratory study that joined already encoded
+files. Do not reuse that study's timings as measurements of these new inputs.
+Do not label a planned page count or a selected-file size as observed reader work.
 
 The core inventory is eight cases: Q2/Q4 x localized/scattered x no-DV/real-DV.
 Pair DV snapshots on the same Parquet bytes, use the existing deterministic
@@ -116,7 +133,8 @@ counts to budget the full derivative, then check actual bytes as it is written.
 Prepare one layout at a time under the existing 192 GiB allowance, with source,
 sort spill, MinIO, exact references and validation exports accounted for.
 Budget builds separately. A failed budget check leaves that case pending;
-it does not authorize smaller file counts, narrower schemas or a larger SF.
+it does not authorize changing the declared recipe, narrowing the schema or
+increasing SF without a revised capacity plan.
 
 First run two independent queries per supported reader on Q4 localized, then
 the other declared cases. Record opening, initialization and two-query native
@@ -152,8 +170,13 @@ Use the existing oracle environment and a new output directory:
 ../selective-read-oracle-venv/bin/python -B \
   benches/selective_read/production_shapes.py \
   --source ../selective-read-calibration-345/sf10 \
+  --file-target-mib 512 --page-rows 2048 \
   --output ../production-shape-plan
 ```
+
+Use `--file-target-mib 256` for the file-size control or `--page-rows 20000`
+for the page-size comparison, each in a new plan directory. The resulting plan
+binds the writer settings and file counts to its identity.
 
 The command verifies source-object identities, independently counts the three
 predicate stages with Arrow, and computes proposed file membership with a

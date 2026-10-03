@@ -12,12 +12,18 @@ use std::io;
 const CONTRACT: &str =
     include_str!("../../../docs/content/benchmarks/selective-read-production-shapes.md");
 const DRIVER: &str = include_str!("../production_fixtures.py");
-const GROUP_ROWS: usize = 4096;
+const GROUP_ROWS: usize = fixtures::GROUP_ROWS;
+const WRITE_BATCH_ROWS: usize = 1024;
 
-fn dimensions(name: &str) -> Result<(usize, i64, usize)> {
+fn dimensions(name: &str, file_target_mib: u64) -> Result<(usize, i64, usize)> {
+    let multiplier = match file_target_mib {
+        512 => 1,
+        256 => 2,
+        _ => return Err("file target must be 256 or 512 MiB".into()),
+    };
     match name {
-        "q2" => Ok((18432, 5, 336)),
-        "q4" => Ok((4096, 6, 10)),
+        "q2" => Ok((130 * multiplier, 5, 336)),
+        "q4" => Ok((60 * multiplier, 6, 10)),
         _ => Err("production shape must be q2 or q4".into()),
     }
 }
@@ -191,15 +197,36 @@ fn next_file<R: io::Read>(
 fn physical_evidence(
     path: &Path,
     file: &Value,
-    expected: &RecordBatch,
+    expected: &[RecordBatch],
     projection: &[String],
+    page_ceiling: usize,
 ) -> Result<Value> {
-    let batches = fixtures::read_batches(&path.join(file["path"].as_str().ok_or("file path")?))?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-    if concat_batches(&expected.schema(), &batches)? != *expected {
-        return Err("Parquet roundtrip changed source/payload/metric values or nulls".into());
+    let mut positions = Vec::new();
+    let (mut group, mut offset, mut row) = (0, 0, 0);
+    for actual in fixtures::read_batches(&path.join(file["path"].as_str().ok_or("file path")?))? {
+        let actual = actual?;
+        let mut start = 0;
+        while start < actual.num_rows() {
+            let batch = expected.get(group).ok_or("Parquet roundtrip added rows")?;
+            let count = (batch.num_rows() - offset).min(actual.num_rows() - start);
+            if batch.slice(offset, count) != actual.slice(start, count) {
+                return Err(
+                    "Parquet roundtrip changed source/payload/metric values or nulls".into(),
+                );
+            }
+            start += count;
+            offset += count;
+            if offset == batch.num_rows() {
+                group += 1;
+                offset = 0;
+            }
+        }
+        positions.extend(matching(&actual)?.into_iter().map(|r| row + r));
+        row += actual.num_rows();
     }
-    let positions = matching(expected)?;
+    if group != expected.len() || offset != 0 {
+        return Err("Parquet roundtrip lost rows".into());
+    }
     let geometry: Value = serde_json::from_slice(&fs::read(
         path.join(file["geometry"]["path"].as_str().ok_or("geometry path")?),
     )?)?;
@@ -222,8 +249,8 @@ fn physical_evidence(
                 let start = page["first_row"].as_u64().ok_or("page offset")? as usize;
                 let count = page["rows"].as_u64().ok_or("page rows")? as usize;
                 maximum_page_rows = maximum_page_rows.max(count);
-                if count > 256 {
-                    return Err("production page exceeds 256 rows".into());
+                if count > page_ceiling {
+                    return Err("production page exceeds the declared writer limit".into());
                 }
                 if projected {
                     output_pages += 1;
@@ -253,8 +280,14 @@ fn write_stream<R: io::Read>(
     budget: Arc<Budget>,
 ) -> Result<Vec<Value>> {
     let name = request["shape"].as_str().ok_or("shape")?;
-    let write_threads = std::thread::available_parallelism()?.get();
-    let (_, stripes, metrics) = dimensions(name)?;
+    let (_, stripes, metrics) = dimensions(
+        name,
+        request["file_target_mib"].as_u64().ok_or("file target")?,
+    )?;
+    let page_rows = request["data_page_rows"].as_u64().ok_or("page row limit")? as usize;
+    if ![2048, 20000].contains(&page_rows) {
+        return Err("page row limit must be 2048 or 20000".into());
+    }
     let files = request["files"].as_array().ok_or("planned files")?;
     let selected: BTreeSet<usize> = request["selected"]
         .as_array()
@@ -294,11 +327,20 @@ fn write_stream<R: io::Read>(
         return Err("invalid production file selection or size".into());
     }
     let max_groups = max_rows.div_ceil(GROUP_ROWS);
+    // ponytail: conservative per-file admission estimate; the 8 GiB process limit remains authoritative.
+    // Retain one wide expected file, original rows, group encoder/readback buffers and metadata.
+    let worker_bytes = max_rows * ((80 + metrics) * 9 + 256)
+        + GROUP_ROWS * (80 + metrics) * 24
+        + 128 * MIB as usize;
+    let write_threads = std::thread::available_parallelism()?
+        .get()
+        .min((7 * 1024 * MIB as usize / worker_bytes).max(1));
     let properties = fixtures::writer_properties()?
         .into_builder()
         .set_max_row_group_row_count(Some(GROUP_ROWS))
-        .set_write_batch_size(256)
-        .set_data_page_row_count_limit(256)
+        .set_write_batch_size(WRITE_BATCH_ROWS)
+        .set_data_page_row_count_limit(page_rows)
+        .set_dictionary_enabled(false)
         .build();
     let projection = request["projection"]
         .as_array()
@@ -394,8 +436,9 @@ fn write_stream<R: io::Read>(
                             let mut actual = physical_evidence(
                                 path,
                                 file,
-                                &concat_batches(&schema(metrics), &expected)?,
+                                &expected,
                                 &projection,
+                                page_rows.div_ceil(WRITE_BATCH_ROWS) * WRITE_BATCH_ROWS,
                             )?;
                             actual["source_file_ordinal"] = json!(*index);
                             actual["planned"] = planned.clone();
@@ -451,15 +494,18 @@ fn write_stream<R: io::Read>(
         table["scale_factor"] = json!(10);
         table["snapshot_version"] = json!(0);
         table["deletion_vectors"] = json!(false);
+        table["file_target_mib"] = request["file_target_mib"].clone();
         table["file_evidence"] = json!(evidence);
         table["preparation_ms_summed_across_files"] = json!({
             "payloads_metrics_and_scatter": totals[0], "parquet_write_and_statistics_readback": totals[1],
-            "exact_readback_and_page_evidence": totals[2], "threads": write_threads});
+            "exact_readback_and_page_evidence": totals[2], "threads": write_threads,
+            "estimated_worker_bytes": worker_bytes});
         let mut settings = fixtures::writer_settings();
         settings["row_group_rows"] = json!(GROUP_ROWS);
         settings["groups_per_file"] = json!(max_groups);
-        settings["write_batch_rows"] = json!(256);
-        settings["data_page_rows"] = json!(256);
+        settings["write_batch_rows"] = json!(WRITE_BATCH_ROWS);
+        settings["data_page_rows"] = json!(page_rows);
+        settings["dictionary"] = json!(false);
         table["writer"] = settings;
         result.push(table);
     }
@@ -496,7 +542,10 @@ pub fn run(args: &[String]) -> Result<()> {
     {
         return Err("unknown or stale production writer request".into());
     }
-    let (count, _, _) = dimensions(request["shape"].as_str().ok_or("shape")?)?;
+    let (count, _, _) = dimensions(
+        request["shape"].as_str().ok_or("shape")?,
+        request["file_target_mib"].as_u64().ok_or("file target")?,
+    )?;
     if request["files"].as_array().ok_or("files")?.len() != count
         || (request["mode"] == "generate"
             && request["selected"].as_array().ok_or("selection")?.len() != count)
@@ -532,51 +581,55 @@ mod tests {
     fn streamed_files_preserve_values_groups_and_scatter_pages() -> Result<()> {
         let root = tempfile::tempdir()?;
         // Cross IPC, row-group and file boundaries with different row counts.
-        let rows: Vec<_> = LineItemGenerator::new(0.01, 1, 1)
+        let file_rows = GROUP_ROWS + 3;
+        let total_rows = file_rows * 2 + 1;
+        let rows: Vec<_> = LineItemGenerator::new(0.1, 1, 1)
             .into_iter()
-            .take(10001)
+            .take(total_rows)
             .collect();
         let source = fixtures::source_batch(&rows)?;
         let mut columns = source.columns().to_vec();
-        columns[0] = Arc::new(Int64Array::from_iter_values((0..10001).map(|r| {
-            if r < 5000 {
-                r * 30
+        columns[0] = Arc::new(Int64Array::from_iter_values((0..total_rows).map(|r| {
+            if r < file_rows {
+                r as i64 * 30
             } else {
-                (r - 5000) * 30 + 1
+                (r - file_rows) as i64 * 30 + 1
             }
         })));
-        columns[3] = Arc::new(Int32Array::from(vec![1; 10001]));
-        columns[10] = Arc::new(Date32Array::from_iter_values((0..10001).map(|r| {
-            if r < 16 || (5000..5016).contains(&r) {
+        columns[3] = Arc::new(Int32Array::from(vec![1; total_rows]));
+        columns[10] = Arc::new(Date32Array::from_iter_values((0..total_rows).map(|r| {
+            if r < 16 || (file_rows..file_rows + 16).contains(&r) {
                 9204
             } else {
                 9205
             }
         })));
-        columns[14] = Arc::new(StringArray::from(vec!["AIR"; 10001]));
+        columns[14] = Arc::new(StringArray::from(vec!["AIR"; total_rows]));
         let source = RecordBatch::try_new(original_schema(), columns)?;
         let mut ipc = Vec::new();
         let mut stream = StreamWriter::try_new(&mut ipc, &source.schema())?;
-        for r in (0..10001).step_by(997) {
-            stream.write(&source.slice(r, (10001 - r).min(997)))?;
+        for r in (0..total_rows).step_by(997) {
+            stream.write(&source.slice(r, (total_rows - r).min(997)))?;
         }
         stream.finish()?;
         drop(stream);
-        let mut request = json!({"mode": "probe", "shape": "q4", "selected": [0, 1],
+        let mut request = json!({"mode": "probe", "shape": "q4",
+            "file_target_mib": 512, "data_page_rows": 2048, "selected": [0, 1],
             "projection": ["l_orderkey", "payload_00"], "files": [
-                {"stripe": 0, "file_index": 0, "rows": 5000, "candidate": true, "matching_rows": 16},
-                {"stripe": 1, "file_index": 0, "rows": 5001, "candidate": true, "matching_rows": 16}]});
-        for name in ["q4", "q2"] {
+                {"stripe": 0, "file_index": 0, "rows": file_rows, "candidate": true, "matching_rows": 16},
+                {"stripe": 1, "file_index": 0, "rows": file_rows + 1, "candidate": true, "matching_rows": 16}]});
+        for (name, page_rows) in [("q4", 2048_usize), ("q2", 2048), ("q4", 20000)] {
             request["shape"] = json!(name);
-            let output = root.path().join(name);
+            request["data_page_rows"] = json!(page_rows);
+            let output = root.path().join(format!("{name}-{page_rows}"));
             let tables = write_stream(
                 ipc.as_slice(),
                 &request,
                 &output,
-                Arc::new(Budget::new(128 * MIB)),
+                Arc::new(Budget::new(1024 * MIB)),
             )?;
             for table in &tables {
-                assert_eq!(table["rows"], 10001);
+                assert_eq!(table["rows"], total_rows);
                 assert_eq!(table["file_count"], 2);
                 assert_eq!(
                     table["schema"]["fields"].as_array().unwrap().len(),
@@ -590,7 +643,7 @@ mod tests {
                     )?
                     .collect::<std::result::Result<Vec<_>, _>>()?;
                     let stored = concat_batches(&batches[0].schema(), &batches)?;
-                    let original = source.slice(if i == 0 { 0 } else { 5000 }, 5000 + i);
+                    let original = source.slice(if i == 0 { 0 } else { file_rows }, file_rows + i);
                     let sorted_keys = |batch: &RecordBatch| {
                         let mut keys = batch
                             .column(0)
@@ -647,7 +700,11 @@ mod tests {
                     }
                     let evidence = &table["file_evidence"][i];
                     assert_eq!(evidence["full_value_roundtrip"], "passed");
-                    assert_eq!(evidence["maximum_page_rows"], 256);
+                    assert_eq!(
+                        evidence["maximum_page_rows"],
+                        page_rows.div_ceil(WRITE_BATCH_ROWS) * WRITE_BATCH_ROWS
+                    );
+                    assert_eq!(table["writer"]["dictionary"], false);
                     assert_eq!(evidence["matching_groups"].as_array().unwrap().len(), 1);
                     let pages = evidence["matching_groups"][0]["matching_output_pages"]
                         .as_u64()
@@ -667,7 +724,7 @@ mod tests {
                 ipc.as_slice(),
                 &request,
                 &root.path().join("duplicate"),
-                Arc::new(Budget::new(128 * MIB))
+                Arc::new(Budget::new(1024 * MIB))
             )
             .is_err()
         );
@@ -677,7 +734,7 @@ mod tests {
                 &ipc[..ipc.len() / 2],
                 &request,
                 &root.path().join("truncated"),
-                Arc::new(Budget::new(128 * MIB))
+                Arc::new(Budget::new(1024 * MIB))
             )
             .is_err()
         );
