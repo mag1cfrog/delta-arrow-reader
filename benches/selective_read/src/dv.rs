@@ -184,7 +184,7 @@ pub fn variant(
     let control = base.get("scale_factor").is_none();
     for file in table["files"].as_array_mut().ok_or("files")? {
         let name = file["path"].as_str().ok_or("Parquet path")?.to_owned();
-        budget.copy(&output.join(base_id).join(&name), &root.join(&name))?;
+        budget.link(&output.join(base_id).join(&name), &root.join(&name))?;
         if let Some(geometry) = file.get("geometry") {
             let path = geometry["path"].as_str().ok_or("geometry path")?;
             if path != format!("{name}.geometry.json")
@@ -192,7 +192,7 @@ pub fn variant(
             {
                 return Err("invalid geometry sidecar".into());
             }
-            budget.copy(&output.join(base_id).join(path), &root.join(path))?;
+            budget.link(&output.join(base_id).join(path), &root.join(path))?;
         }
         if feature_only {
             continue;
@@ -246,6 +246,18 @@ pub fn file_minima(
     groups: &[(PathBuf, &Value)],
     literals: &BTreeSet<i64>,
 ) -> Result<BTreeSet<(i64, i32)>> {
+    minima(groups, literals, false)
+}
+
+pub fn production_minima(groups: &[(PathBuf, &Value)]) -> Result<BTreeSet<(i64, i32)>> {
+    minima(groups, &BTreeSet::new(), true)
+}
+
+fn minima(
+    groups: &[(PathBuf, &Value)],
+    literals: &BTreeSet<i64>,
+    production: bool,
+) -> Result<BTreeSet<(i64, i32)>> {
     let mut extra = BTreeSet::new();
     let mut matching = BTreeSet::new();
     for (root, table) in groups {
@@ -288,7 +300,11 @@ pub fn file_minima(
                     let key = (orders.value(row), lines.value(row));
                     if dates.value(row) == 9204
                         && modes.value(row) == "AIR"
-                        && literals.contains(&parts.value(row))
+                        && if production {
+                            lines.value(row) == 1
+                        } else {
+                            literals.contains(&parts.value(row))
+                        }
                     {
                         matching.insert(key);
                     } else {

@@ -210,9 +210,9 @@ def start(build, directory, port):
 
 def inventory(fixtures):
     manifest = json.loads((fixtures / "manifest.json").read_text())
-    assert manifest["status"] == "complete" and manifest["protocol"] == "selective-read-v1"
+    from run import fixture_tables
     objects = []
-    for table in manifest["tables"]:
+    for table in fixture_tables(manifest):
         logs = table.get("delta_logs", [table["delta_log"]])
         dvs = [f["deletion_vector"] for f in table["files"] if "deletion_vector" in f]
         for item in logs + table["files"] + dvs:

@@ -140,6 +140,7 @@ impl Config {
                      Large: --scale-factor 1|10|30|100|300 --fixture source|li.clustered|li.shuffled|wide.clustered|wide.shuffled\n\
                      Large limits (required): --disk-limit-mib N --elapsed-limit-seconds N\n\
                      Large options: --source-from FIXTURE_DIRECTORY --preflight\n\
+                     Staged pilot generation: --preparation-only (budget later phases separately)\n\
                      Existing output directories are never overwritten."
                 );
                 std::process::exit(0);
@@ -150,6 +151,12 @@ impl Config {
             }
             if arg == "--preflight" {
                 preflight = true;
+                continue;
+            }
+            if arg == "--preparation-only" {
+                if large_args.insert(arg, "true".into()).is_some() {
+                    return Err("duplicate --preparation-only".into());
+                }
                 continue;
             }
             if arg == "--large-file-pair" {
@@ -281,6 +288,9 @@ impl Config {
 fn main() -> Result<()> {
     if env::args().nth(1).as_deref() == Some("production-write") {
         return production::run(&env::args().skip(2).collect::<Vec<_>>());
+    }
+    if env::args().nth(1).as_deref() == Some("production-pairs") {
+        return production::pairs(&env::args().skip(2).collect::<Vec<_>>());
     }
     let config = Config::parse(env::args().skip(1))?;
     if let Some(options) = &config.large {

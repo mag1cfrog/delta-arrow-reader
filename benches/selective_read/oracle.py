@@ -252,9 +252,9 @@ def case_input(fixtures, case_id, duplicate_literal=False, workload=None):
     if workload is not None:
         import large_workloads
         row = large_workloads.binding(large_workloads.load(workload), fixtures, case_id)
-        require(not duplicate_literal, "revision 3 query variants need a separate workload identity")
+        require(not duplicate_literal, "large query variants need a separate workload identity")
     else:
-        require(manifest["profile"] != "large", "large fixtures require a revision 3 workload manifest")
+        require(manifest["profile"] != "large", "large fixtures require a workload manifest")
     case, suffix = base_case(row["query_case_id"] if row else case_id, row is not None)
     fixture_id = CONTROL_CASES[case] if case in CONTROL_CASES else case.rsplit(".", 1)[0]
     table = next(t for t in manifest["tables"] if t["id"] == fixture_id + suffix)
@@ -447,6 +447,9 @@ def compare(batches, reference, projection, expected_count, max_bytes=None, subs
 
 def check_reference_build(metadata):
     require(metadata["format"] == "selective-read-reference-v2" and metadata["status"] == "complete", "incomplete reference")
+    if metadata["comparison_revision"] == 5:
+        import production_workloads
+        require(metadata["production_oracle_sha256"] == digest_file(production_workloads.__file__), "stale production oracle")
     require(metadata["oracle_sha256"] == digest_file(__file__)
             and metadata["oracle_dependencies_sha256"] == digest_file(REQUIREMENTS)
             and metadata["pyarrow"] == pa.__version__ == "25.0.1"
@@ -498,7 +501,7 @@ def objects(fixtures, table, source):
                 by_path[added["path"]] = added
     require(set(by_path) == {f["path"] for f in table["files"]}, "Delta file inventory differs from manifest")
     if table["snapshot_version"]:
-        profile = load_json(Path(fixtures) / 'manifest.json')['profile']
+        profile = load_json(Path(fixtures) / 'manifest.json').get('profile', 'large')
         if profile == "large":
             profile = f"large-sf{int(table['scale_factor'])}"
         table_uuid = uuid.uuid5(uuid.NAMESPACE_URL, f"https://github.com/mag1cfrog/delta-arrow-reader/selective-read-v1/{profile}/{table['id']}")
@@ -597,7 +600,7 @@ def control_geometry(fixtures, table, case_id):
 
 @contextmanager
 def bounded(root, limits):
-    """Native process deadline and storage quotas; used only for explicit revision 3."""
+    """Native process deadline and storage quotas for explicit large workloads."""
     if limits is None:
         yield None
         return
@@ -627,6 +630,10 @@ def prepare(fixtures, case_id, output, duplicate_literal=False, workload=None):
         import large_workloads
         limits = large_workloads.load(workload)["oracle_limits"]
     with bounded(Path(output).parent, limits) as quota:
+        if workload is not None and large_workloads.identity(workload)["comparison_revision"] == 5:
+            require(not duplicate_literal, "production variants need a new workload identity")
+            import production_workloads
+            return production_workloads.prepare_reference(fixtures, case_id, output, workload, quota)
         return prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota)
 
 
@@ -796,8 +803,8 @@ IDENTITY_FIELDS = ("comparison_revision", "protocol_sha256", "fixture_manifest_s
 
 def check(reference, fixtures, result, identity):
     metadata = load_json(Path(reference) / "reference.json")
-    limits = metadata.get("oracle_limits") if metadata.get("comparison_revision") == 3 else None
-    if metadata.get("comparison_revision") == 3:
+    limits = metadata.get("oracle_limits") if metadata.get("comparison_revision") in (3, 4, 5) else None
+    if metadata.get("comparison_revision") in (3, 4, 5):
         import large_workloads
         frozen = large_workloads.load(Path(metadata["workload_manifest"]))
         require(limits == frozen["oracle_limits"], "oracle limits differ from the workload")
@@ -812,7 +819,7 @@ def check_rows(reference, fixtures, result, identity, quota):
     sys.path.insert(0, str(Path(__file__).resolve().parent / "runners"))
     from run import comparison_identity
     comparison = comparison_identity(metadata)
-    if metadata["comparison_revision"] == 3:
+    if metadata["comparison_revision"] in (3, 4, 5):
         import large_workloads
         path = Path(metadata["workload_manifest"])
         require(comparison == large_workloads.identity(path), "stale workload manifest")
@@ -832,7 +839,7 @@ def check_rows(reference, fixtures, result, identity, quota):
     expression = provenance["native_expression_sha256"]
     require(expression is None or re.fullmatch(r"[0-9a-f]{64}", expression) is not None, "invalid native expression hash")
     require(provenance["reader_id"] not in ("polars", "daft") or expression is not None, "missing native expression identity")
-    if metadata["comparison_revision"] == 3:
+    if metadata["comparison_revision"] in (3, 4, 5):
         require(expression == row["native_expression_sha256"].get(provenance["reader_id"]), "native translation differs from workload")
     require(digest_file(result) == provenance["result_sha256"], "result checksum mismatch")
     projection = metadata["projection"]

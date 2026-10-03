@@ -1,0 +1,822 @@
+{
+  "declaration": {
+    "anchor": {
+      "fixture": "wide.shuffled",
+      "predicate": "l_shipdate >= DATE '1995-03-01' AND l_shipdate < DATE '1995-03-31'",
+      "projection": "wide69",
+      "snapshot_version": 0
+    },
+    "base_protocol_sha256": "affe5fde898c1e39c03792fadbfd79d17b6af8a16dbdaa48988869a4567d5efe",
+    "baseline_scale": 1,
+    "budgets": {
+      "build_storage_bytes_separate": 68719476736,
+      "capacity_screen_wall_seconds_total": 300,
+      "data_disk_bytes": 206158430208,
+      "oracle_memory_bytes": 17179869184,
+      "oracle_wall_seconds_per_case": 1800,
+      "pilot_wall_seconds_total": 86400,
+      "preparation_wall_seconds_per_invocation": 1800,
+      "reader_cleanup_wall_seconds": 60,
+      "reader_query_wall_seconds": 1800
+    },
+    "bulk_retention": "outside Git; retain hashes, commands, manifests, all trial statuses and failure records; no retirement of unrelated data",
+    "capacity_rule": "run the committed generator preflight; no generation or native timing after budget/disk rejection; larger ceilings or a changed environment require a new reviewed declaration",
+    "committed_implementation": "49a0bb3e3b4d9bc94491f2988fbaeaf40d69903e",
+    "created_at": "2026-09-28T19:22:56.725883+00:00",
+    "environment_sha256": "6f0264ef579cbd3b5f6c1b253526c8eb8db0089ec6cc932bb1533535cb76d136",
+    "expected_validation_and_output": "record the committed preflight SQLite, IPC export and table-copy allowances per rung; actual output counts/bytes require exact references before native trials",
+    "format": "selective-read-pilot-preflight-v1",
+    "generator": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/target/selective-read/release/selective-read-fixtures",
+      "sha256": "57fab24825d2583bd7986eaefc3ab26962b905363910c62abf39584a3a1dfd63",
+      "source_sha256": "fc8e9fb001ca11ff751f9bd3c1b67994372c68594e2750f4f4db4ef3397f254c"
+    },
+    "geometry_requirement": {
+      "excludable_fraction_min": 0.99,
+      "files": 4096,
+      "median_file_bytes_min": 67108864,
+      "paired_snapshots": "normal and 4096 layouts at one scale, each with/without real DVs"
+    },
+    "inventory_requirement": {
+      "case_reader_entries": 340,
+      "large_cases": 22,
+      "large_sessions": 4,
+      "legacy_cases": 46,
+      "legacy_sessions": 3,
+      "readers": 5,
+      "session_reader_entries": 35
+    },
+    "issue": 345,
+    "ordering": "at each feasible rung, two ten-query reuse sessions per passing reader in fixed then reverse order, plus two open/query trials in those orders",
+    "protocol_sha256": "7508a0c53113097aa153b3d22a1b0341efa85ad4483cd2a824bdd23d978d5dfa",
+    "publication_ready": false,
+    "reader_order": [
+      "delta-arrow-reader",
+      "delta-rs",
+      "duckdb",
+      "polars",
+      "daft"
+    ],
+    "readers_sha256": "faeebdf9db51033bcb4b3563e5939b7308f1c7bc8bd497a49010aa7c5d578d67",
+    "rung_order": [
+      10,
+      30,
+      100,
+      300
+    ],
+    "scope": "capacity screening before any native pilot trial; not a formal workload manifest",
+    "selection": "first feasible rung with at least three readers passing both sessions; compute each passing reader's median of its two query-2 times, then take the median across all passing readers; require at least 60 seconds; include DAR if it passes and never exclude a passing reader for speed"
+  },
+  "declaration_sha256": "5d7c2aec2ba51495bfc646942cd1a5b95dc2d5e47bbc77cfed49bfbc1a19703a",
+  "environment": {
+    "collected_at": "2026-09-28T19:22:56.074471+00:00",
+    "cpu_models": [
+      "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics"
+    ],
+    "filesystem_bytes": {
+      "free": 266454437888,
+      "total": 869306204160,
+      "used": 602851766272
+    },
+    "kernel": "6.19.14-200.fc43.x86_64",
+    "machine": "x86_64",
+    "memory": {
+      "MemAvailable": "21900752 kB",
+      "MemTotal": "29311820 kB",
+      "SwapTotal": "41943032 kB"
+    },
+    "minio_build_receipt": {
+      "path": "/home/hanbo/repo/selective-read-minio-build-317-final/build.json",
+      "sha256": "dd10df511155d0f386f411b5e0b019895bcfb89eacea2139dc67644aaee1f6b5"
+    },
+    "minio_limits": {
+      "logical_cpus": 2,
+      "memory_bytes": 4294967296,
+      "swap_bytes": 0
+    },
+    "placement": {
+      "observer": [
+        6
+      ],
+      "reader": [
+        0,
+        1,
+        2,
+        3,
+        8,
+        9,
+        10,
+        11
+      ],
+      "server": [
+        4,
+        5
+      ]
+    },
+    "preparation_limits": {
+      "address_space_bytes": 17179869184,
+      "sort_pool_bytes": 4294967296
+    },
+    "reader_limits": {
+      "logical_cpus": 8,
+      "memory_bytes": 8589934592,
+      "swap_bytes": 0
+    },
+    "record_sha256": "6f0264ef579cbd3b5f6c1b253526c8eb8db0089ec6cc932bb1533535cb76d136",
+    "storage": {
+      "filesystems": [
+        {
+          "fstype": "xfs",
+          "options": "rw,relatime,seclabel,inode64,logbufs=8,logbsize=32k,noquota",
+          "source": "/dev/mapper/fedora-home",
+          "target": "/home"
+        }
+      ]
+    },
+    "storage_environment": "local S3-compatible MinIO; fresh clients, reused server/OS caches; no cache flushing",
+    "topology": [
+      {
+        "core": 0,
+        "cpu": 0,
+        "governor": "powersave",
+        "siblings": "0,8",
+        "socket": 0
+      },
+      {
+        "core": 1,
+        "cpu": 1,
+        "governor": "powersave",
+        "siblings": "1,9",
+        "socket": 0
+      },
+      {
+        "core": 2,
+        "cpu": 2,
+        "governor": "powersave",
+        "siblings": "2,10",
+        "socket": 0
+      },
+      {
+        "core": 3,
+        "cpu": 3,
+        "governor": "powersave",
+        "siblings": "3,11",
+        "socket": 0
+      },
+      {
+        "core": 4,
+        "cpu": 4,
+        "governor": "powersave",
+        "siblings": "4,12",
+        "socket": 0
+      },
+      {
+        "core": 5,
+        "cpu": 5,
+        "governor": "powersave",
+        "siblings": "5,13",
+        "socket": 0
+      },
+      {
+        "core": 6,
+        "cpu": 6,
+        "governor": "powersave",
+        "siblings": "6,14",
+        "socket": 0
+      },
+      {
+        "core": 7,
+        "cpu": 7,
+        "governor": "powersave",
+        "siblings": "7,15",
+        "socket": 0
+      },
+      {
+        "core": 0,
+        "cpu": 8,
+        "governor": "powersave",
+        "siblings": "0,8",
+        "socket": 0
+      },
+      {
+        "core": 1,
+        "cpu": 9,
+        "governor": "powersave",
+        "siblings": "1,9",
+        "socket": 0
+      },
+      {
+        "core": 2,
+        "cpu": 10,
+        "governor": "powersave",
+        "siblings": "2,10",
+        "socket": 0
+      },
+      {
+        "core": 3,
+        "cpu": 11,
+        "governor": "powersave",
+        "siblings": "3,11",
+        "socket": 0
+      },
+      {
+        "core": 4,
+        "cpu": 12,
+        "governor": "powersave",
+        "siblings": "4,12",
+        "socket": 0
+      },
+      {
+        "core": 5,
+        "cpu": 13,
+        "governor": "powersave",
+        "siblings": "5,13",
+        "socket": 0
+      },
+      {
+        "core": 6,
+        "cpu": 14,
+        "governor": "powersave",
+        "siblings": "6,14",
+        "socket": 0
+      },
+      {
+        "core": 7,
+        "cpu": 15,
+        "governor": "powersave",
+        "siblings": "7,15",
+        "socket": 0
+      }
+    ]
+  },
+  "format": "selective-read-pilot-capacity-v1",
+  "geometry_lower_bound": {
+    "base_plus_dv_min_bytes": 274877906944,
+    "basis": "at least the upper half of 4096 files are >=64 MiB; the base and DV Parquet bytes are identical",
+    "excludes": [
+      "normal layout and its DV pair",
+      "source",
+      "Delta logs and DVs",
+      "MinIO",
+      "exact references",
+      "validation exports"
+    ],
+    "fits_declared_budget": false,
+    "one_repacked_snapshot_min_bytes": 137438953472
+  },
+  "implementation_pr": "https://github.com/mag1cfrog/delta-arrow-reader/pull/349",
+  "issue": 345,
+  "native_trials": [],
+  "preflights": [
+    {
+      "command": [
+        "/home/hanbo/repo/delta-arrow-reader/target/selective-read/release/selective-read-fixtures",
+        "--profile",
+        "large",
+        "--scale-factor",
+        "1",
+        "--fixture",
+        "wide.shuffled",
+        "--disk-limit-mib",
+        "196608",
+        "--elapsed-limit-seconds",
+        "1800",
+        "--preflight",
+        "--output",
+        "/home/hanbo/repo/selective-read-pilot-345/not-generated-baseline-sf1-saved-source",
+        "--source-from",
+        "/home/hanbo/repo/selective-read-development-314"
+      ],
+      "declaration_sha256": "5d7c2aec2ba51495bfc646942cd1a5b95dc2d5e47bbc77cfed49bfbc1a19703a",
+      "elapsed_seconds": 0.284243046073243,
+      "feasible": true,
+      "name": "baseline-sf1-saved-source",
+      "output_created": false,
+      "plan": {
+        "additional_disk_required_bytes": 63232836188,
+        "allowances": {
+          "metadata_bytes_per_sf": 67108864,
+          "new_source_bytes_per_row": 256,
+          "sort_spill_bytes_per_row": 512,
+          "sqlite_bytes_per_row_per_database": 4096,
+          "table_bytes_per_row": 768
+        },
+        "disk_limit_bytes": 206158430208,
+        "elapsed_limit_seconds": 1800,
+        "estimated_bytes": {
+          "comparison_sqlite": 24580976640,
+          "existing_dv_base": 0,
+          "existing_source": 176974684,
+          "metadata": 67108864,
+          "minio_copy": 4608933120,
+          "reference_sqlite": 24580976640,
+          "selected_table": 4608933120,
+          "sort_spill": 3072622080,
+          "source_copy_or_generation": 176974684,
+          "two_later_repack_dv_copies": 9217866240,
+          "validation_export": 4608933120
+        },
+        "estimated_peak_bytes": 63409810872,
+        "filesystem_headroom_bytes": 536870912,
+        "fits_available_disk": true,
+        "fits_budget": true,
+        "fixture": "wide.shuffled",
+        "free_disk_before_bytes": 266454388736,
+        "memory_limit_bytes": 17179869184,
+        "output_limit_bytes": 4853016668,
+        "phase_peak_bytes": {
+          "later_derivatives": 14382075320,
+          "later_validation": 63409810872,
+          "preparation": 12464689592
+        },
+        "profile": "large",
+        "row_basis": "saved source; verified before reuse",
+        "rows_for_capacity": 6001215,
+        "scale_factor": 1,
+        "scope": "one source and selected fixture; validation and derivatives run separately with staged retirement; build and unrelated data are outside this allowance",
+        "sort_memory_bytes": 4294967296,
+        "source_parent_manifest_sha256": "e8a21355ba45dd7b2c6fb5fc7e8566e838913cd956c3b1606196546fcbe64b11",
+        "spill_headroom_bytes": 4362076160,
+        "spill_limit_bytes": 3072622080,
+        "status": "preflight"
+      },
+      "returncode": 0,
+      "role": "baseline capacity",
+      "scale_factor": 1,
+      "source_parent_manifest_sha256": "e8a21355ba45dd7b2c6fb5fc7e8566e838913cd956c3b1606196546fcbe64b11"
+    },
+    {
+      "command": [
+        "/home/hanbo/repo/delta-arrow-reader/target/selective-read/release/selective-read-fixtures",
+        "--profile",
+        "large",
+        "--scale-factor",
+        "10",
+        "--fixture",
+        "wide.shuffled",
+        "--disk-limit-mib",
+        "196608",
+        "--elapsed-limit-seconds",
+        "1800",
+        "--preflight",
+        "--output",
+        "/home/hanbo/repo/selective-read-pilot-345/not-generated-fresh-sf10"
+      ],
+      "declaration_sha256": "5d7c2aec2ba51495bfc646942cd1a5b95dc2d5e47bbc77cfed49bfbc1a19703a",
+      "elapsed_seconds": 0.0035069549921900034,
+      "feasible": false,
+      "name": "fresh-sf10",
+      "output_created": false,
+      "plan": {
+        "additional_disk_required_bytes": 1129631088640,
+        "allowances": {
+          "metadata_bytes_per_sf": 67108864,
+          "new_source_bytes_per_row": 256,
+          "sort_spill_bytes_per_row": 512,
+          "sqlite_bytes_per_row_per_database": 4096,
+          "table_bytes_per_row": 768
+        },
+        "disk_limit_bytes": 206158430208,
+        "elapsed_limit_seconds": 1800,
+        "estimated_bytes": {
+          "comparison_sqlite": 430080000000,
+          "existing_dv_base": 0,
+          "existing_source": 0,
+          "metadata": 671088640,
+          "minio_copy": 80640000000,
+          "reference_sqlite": 430080000000,
+          "selected_table": 80640000000,
+          "sort_spill": 53760000000,
+          "source_copy_or_generation": 26880000000,
+          "two_later_repack_dv_copies": 161280000000,
+          "validation_export": 80640000000
+        },
+        "estimated_peak_bytes": 1129631088640,
+        "filesystem_headroom_bytes": 536870912,
+        "fits_available_disk": false,
+        "fits_budget": false,
+        "fixture": "wide.shuffled",
+        "free_disk_before_bytes": 266454220800,
+        "memory_limit_bytes": 17179869184,
+        "output_limit_bytes": 108191088640,
+        "phase_peak_bytes": {
+          "later_derivatives": 270813265920,
+          "later_validation": 1129631088640,
+          "preparation": 166313164800
+        },
+        "profile": "large",
+        "row_basis": "1,500,000 orders/SF times maximum 7 lineitems",
+        "rows_for_capacity": 105000000,
+        "scale_factor": 10,
+        "scope": "one source and selected fixture; validation and derivatives run separately with staged retirement; build and unrelated data are outside this allowance",
+        "sort_memory_bytes": 4294967296,
+        "source_parent_manifest_sha256": null,
+        "spill_headroom_bytes": 4362076160,
+        "spill_limit_bytes": 53760000000,
+        "status": "preflight"
+      },
+      "returncode": 1,
+      "role": "fresh-source capacity screen",
+      "scale_factor": 10
+    },
+    {
+      "command": [
+        "/home/hanbo/repo/delta-arrow-reader/target/selective-read/release/selective-read-fixtures",
+        "--profile",
+        "large",
+        "--scale-factor",
+        "30",
+        "--fixture",
+        "wide.shuffled",
+        "--disk-limit-mib",
+        "196608",
+        "--elapsed-limit-seconds",
+        "1800",
+        "--preflight",
+        "--output",
+        "/home/hanbo/repo/selective-read-pilot-345/not-generated-fresh-sf30"
+      ],
+      "declaration_sha256": "5d7c2aec2ba51495bfc646942cd1a5b95dc2d5e47bbc77cfed49bfbc1a19703a",
+      "elapsed_seconds": 0.00261037889868021,
+      "feasible": false,
+      "name": "fresh-sf30",
+      "output_created": false,
+      "plan": {
+        "additional_disk_required_bytes": 3388893265920,
+        "allowances": {
+          "metadata_bytes_per_sf": 67108864,
+          "new_source_bytes_per_row": 256,
+          "sort_spill_bytes_per_row": 512,
+          "sqlite_bytes_per_row_per_database": 4096,
+          "table_bytes_per_row": 768
+        },
+        "disk_limit_bytes": 206158430208,
+        "elapsed_limit_seconds": 1800,
+        "estimated_bytes": {
+          "comparison_sqlite": 1290240000000,
+          "existing_dv_base": 0,
+          "existing_source": 0,
+          "metadata": 2013265920,
+          "minio_copy": 241920000000,
+          "reference_sqlite": 1290240000000,
+          "selected_table": 241920000000,
+          "sort_spill": 161280000000,
+          "source_copy_or_generation": 80640000000,
+          "two_later_repack_dv_copies": 483840000000,
+          "validation_export": 241920000000
+        },
+        "estimated_peak_bytes": 3388893265920,
+        "filesystem_headroom_bytes": 536870912,
+        "fits_available_disk": false,
+        "fits_budget": false,
+        "fixture": "wide.shuffled",
+        "free_disk_before_bytes": 266454089728,
+        "memory_limit_bytes": 17179869184,
+        "output_limit_bytes": 324573265920,
+        "phase_peak_bytes": {
+          "later_derivatives": 812439797760,
+          "later_validation": 3388893265920,
+          "preparation": 490215342080
+        },
+        "profile": "large",
+        "row_basis": "1,500,000 orders/SF times maximum 7 lineitems",
+        "rows_for_capacity": 315000000,
+        "scale_factor": 30,
+        "scope": "one source and selected fixture; validation and derivatives run separately with staged retirement; build and unrelated data are outside this allowance",
+        "sort_memory_bytes": 4294967296,
+        "source_parent_manifest_sha256": null,
+        "spill_headroom_bytes": 4362076160,
+        "spill_limit_bytes": 161280000000,
+        "status": "preflight"
+      },
+      "returncode": 1,
+      "role": "fresh-source capacity screen",
+      "scale_factor": 30
+    },
+    {
+      "command": [
+        "/home/hanbo/repo/delta-arrow-reader/target/selective-read/release/selective-read-fixtures",
+        "--profile",
+        "large",
+        "--scale-factor",
+        "100",
+        "--fixture",
+        "wide.shuffled",
+        "--disk-limit-mib",
+        "196608",
+        "--elapsed-limit-seconds",
+        "1800",
+        "--preflight",
+        "--output",
+        "/home/hanbo/repo/selective-read-pilot-345/not-generated-fresh-sf100"
+      ],
+      "declaration_sha256": "5d7c2aec2ba51495bfc646942cd1a5b95dc2d5e47bbc77cfed49bfbc1a19703a",
+      "elapsed_seconds": 0.0035146691370755434,
+      "feasible": false,
+      "name": "fresh-sf100",
+      "output_created": false,
+      "plan": {
+        "additional_disk_required_bytes": 11296310886400,
+        "allowances": {
+          "metadata_bytes_per_sf": 67108864,
+          "new_source_bytes_per_row": 256,
+          "sort_spill_bytes_per_row": 512,
+          "sqlite_bytes_per_row_per_database": 4096,
+          "table_bytes_per_row": 768
+        },
+        "disk_limit_bytes": 206158430208,
+        "elapsed_limit_seconds": 1800,
+        "estimated_bytes": {
+          "comparison_sqlite": 4300800000000,
+          "existing_dv_base": 0,
+          "existing_source": 0,
+          "metadata": 6710886400,
+          "minio_copy": 806400000000,
+          "reference_sqlite": 4300800000000,
+          "selected_table": 806400000000,
+          "sort_spill": 537600000000,
+          "source_copy_or_generation": 268800000000,
+          "two_later_repack_dv_copies": 1612800000000,
+          "validation_export": 806400000000
+        },
+        "estimated_peak_bytes": 11296310886400,
+        "filesystem_headroom_bytes": 536870912,
+        "fits_available_disk": false,
+        "fits_budget": false,
+        "fixture": "wide.shuffled",
+        "free_disk_before_bytes": 266453958656,
+        "memory_limit_bytes": 17179869184,
+        "output_limit_bytes": 1081910886400,
+        "phase_peak_bytes": {
+          "later_derivatives": 2708132659200,
+          "later_validation": 11296310886400,
+          "preparation": 1623872962560
+        },
+        "profile": "large",
+        "row_basis": "1,500,000 orders/SF times maximum 7 lineitems",
+        "rows_for_capacity": 1050000000,
+        "scale_factor": 100,
+        "scope": "one source and selected fixture; validation and derivatives run separately with staged retirement; build and unrelated data are outside this allowance",
+        "sort_memory_bytes": 4294967296,
+        "source_parent_manifest_sha256": null,
+        "spill_headroom_bytes": 4362076160,
+        "spill_limit_bytes": 537600000000,
+        "status": "preflight"
+      },
+      "returncode": 1,
+      "role": "fresh-source capacity screen",
+      "scale_factor": 100
+    },
+    {
+      "command": [
+        "/home/hanbo/repo/delta-arrow-reader/target/selective-read/release/selective-read-fixtures",
+        "--profile",
+        "large",
+        "--scale-factor",
+        "300",
+        "--fixture",
+        "wide.shuffled",
+        "--disk-limit-mib",
+        "196608",
+        "--elapsed-limit-seconds",
+        "1800",
+        "--preflight",
+        "--output",
+        "/home/hanbo/repo/selective-read-pilot-345/not-generated-fresh-sf300"
+      ],
+      "declaration_sha256": "5d7c2aec2ba51495bfc646942cd1a5b95dc2d5e47bbc77cfed49bfbc1a19703a",
+      "elapsed_seconds": 0.0032003140076994896,
+      "feasible": false,
+      "name": "fresh-sf300",
+      "output_created": false,
+      "plan": {
+        "additional_disk_required_bytes": 33888932659200,
+        "allowances": {
+          "metadata_bytes_per_sf": 67108864,
+          "new_source_bytes_per_row": 256,
+          "sort_spill_bytes_per_row": 512,
+          "sqlite_bytes_per_row_per_database": 4096,
+          "table_bytes_per_row": 768
+        },
+        "disk_limit_bytes": 206158430208,
+        "elapsed_limit_seconds": 1800,
+        "estimated_bytes": {
+          "comparison_sqlite": 12902400000000,
+          "existing_dv_base": 0,
+          "existing_source": 0,
+          "metadata": 20132659200,
+          "minio_copy": 2419200000000,
+          "reference_sqlite": 12902400000000,
+          "selected_table": 2419200000000,
+          "sort_spill": 1612800000000,
+          "source_copy_or_generation": 806400000000,
+          "two_later_repack_dv_copies": 4838400000000,
+          "validation_export": 2419200000000
+        },
+        "estimated_peak_bytes": 33888932659200,
+        "filesystem_headroom_bytes": 536870912,
+        "fits_available_disk": false,
+        "fits_budget": false,
+        "fixture": "wide.shuffled",
+        "free_disk_before_bytes": 266453827584,
+        "memory_limit_bytes": 17179869184,
+        "output_limit_bytes": 3245732659200,
+        "phase_peak_bytes": {
+          "later_derivatives": 8124397977600,
+          "later_validation": 33888932659200,
+          "preparation": 4862894735360
+        },
+        "profile": "large",
+        "row_basis": "1,500,000 orders/SF times maximum 7 lineitems",
+        "rows_for_capacity": 3150000000,
+        "scale_factor": 300,
+        "scope": "one source and selected fixture; validation and derivatives run separately with staged retirement; build and unrelated data are outside this allowance",
+        "sort_memory_bytes": 4294967296,
+        "source_parent_manifest_sha256": null,
+        "spill_headroom_bytes": 4362076160,
+        "spill_limit_bytes": 1612800000000,
+        "status": "preflight"
+      },
+      "returncode": 1,
+      "role": "fresh-source capacity screen",
+      "scale_factor": 300
+    },
+    {
+      "command": [
+        "/home/hanbo/repo/delta-arrow-reader/target/selective-read/release/selective-read-fixtures",
+        "--profile",
+        "large",
+        "--scale-factor",
+        "10",
+        "--fixture",
+        "wide.shuffled",
+        "--disk-limit-mib",
+        "196608",
+        "--elapsed-limit-seconds",
+        "1800",
+        "--preflight",
+        "--output",
+        "/home/hanbo/repo/selective-read-pilot-345/not-generated-sf10-saved-source",
+        "--source-from",
+        "/home/hanbo/repo/selective-read-report-314"
+      ],
+      "declaration_sha256": "5d7c2aec2ba51495bfc646942cd1a5b95dc2d5e47bbc77cfed49bfbc1a19703a",
+      "elapsed_seconds": 0.8227922960650176,
+      "feasible": false,
+      "name": "sf10-saved-source",
+      "output_created": false,
+      "plan": {
+        "additional_disk_required_bytes": 632217909502,
+        "allowances": {
+          "metadata_bytes_per_sf": 67108864,
+          "new_source_bytes_per_row": 256,
+          "sort_spill_bytes_per_row": 512,
+          "sqlite_bytes_per_row_per_database": 4096,
+          "table_bytes_per_row": 768
+        },
+        "disk_limit_bytes": 206158430208,
+        "elapsed_limit_seconds": 1800,
+        "estimated_bytes": {
+          "comparison_sqlite": 245702868992,
+          "existing_dv_base": 0,
+          "existing_source": 1933219070,
+          "metadata": 671088640,
+          "minio_copy": 46069287936,
+          "reference_sqlite": 245702868992,
+          "selected_table": 46069287936,
+          "sort_spill": 30712858624,
+          "source_copy_or_generation": 1933219070,
+          "two_later_repack_dv_copies": 92138575872,
+          "validation_export": 46069287936
+        },
+        "estimated_peak_bytes": 634151128572,
+        "filesystem_headroom_bytes": 536870912,
+        "fits_available_disk": false,
+        "fits_budget": false,
+        "fixture": "wide.shuffled",
+        "free_disk_before_bytes": 266453696512,
+        "memory_limit_bytes": 17179869184,
+        "output_limit_bytes": 48673595646,
+        "phase_peak_bytes": {
+          "later_derivatives": 144087567868,
+          "later_validation": 634151128572,
+          "preparation": 85681749500
+        },
+        "profile": "large",
+        "row_basis": "saved source; verified before reuse",
+        "rows_for_capacity": 59986052,
+        "scale_factor": 10,
+        "scope": "one source and selected fixture; validation and derivatives run separately with staged retirement; build and unrelated data are outside this allowance",
+        "sort_memory_bytes": 4294967296,
+        "source_parent_manifest_sha256": "140a2f1399b54369caf107e1d857bfb0c4a02cf47690ed0c2c681815a90af305",
+        "spill_headroom_bytes": 4362076160,
+        "spill_limit_bytes": 30712858624,
+        "status": "preflight"
+      },
+      "returncode": 1,
+      "role": "saved-source capacity cross-check",
+      "scale_factor": 10,
+      "source_parent_manifest_sha256": "140a2f1399b54369caf107e1d857bfb0c4a02cf47690ed0c2c681815a90af305"
+    }
+  ],
+  "publication_ready": false,
+  "raw_artifact_sha256": {
+    "capacity-result.json": "90e031ccbbbc99182664c84209886190aea4704f2e652907cc288f4278b4c11d",
+    "capacity.log": "d23dd08921c8aeb4b0d202dc009ebaa0e1cc850193597b6b65765c58df9779c7",
+    "capacity.py": "eea54c0ab66a9fb53da1f50a5936c200a8ca095789db53cb7ce4f96c5a56a4f4",
+    "declaration.json": "5d7c2aec2ba51495bfc646942cd1a5b95dc2d5e47bbc77cfed49bfbc1a19703a",
+    "environment.json": "6f0264ef579cbd3b5f6c1b253526c8eb8db0089ec6cc932bb1533535cb76d136",
+    "issue-before.json": "e4bb1fa68c34e4375e225d5f4bfb28008892290572a61f62228431aa5bbe7fca",
+    "readers.json": "faeebdf9db51033bcb4b3563e5939b7308f1c7bc8bd497a49010aa7c5d578d67"
+  },
+  "raw_evidence_directory": "/home/hanbo/repo/selective-read-pilot-345",
+  "reader_pins": {
+    "daft": {
+      "binary": "/home/hanbo/repo/selective-read-wide-files-330/daft-build/selective-read-daft",
+      "build_receipt": "/home/hanbo/repo/selective-read-wide-files-330/daft-build/build.json",
+      "build_receipt_sha256": "03dab0451a4d76dc83d07d63baeccb8c8c6521c696b9767d0de468c21c8478ed",
+      "executable_sha256": "6e876dbc67a054b8f8ca6e54d3b9e5b62f71c625f5c2b8717854d47aae45d620",
+      "harness_git_commit": "339b21f6888e7d304b95ea07ff584e02d4a7d6ad",
+      "lockfile_sha256": "983241cab28499e6d00184c812416ec979c67014cb8b1647afedec6f17585678",
+      "reader_git_commit": "50b3f1208f4d3d1ed4bf3bb1da44b31fc6d9a14f",
+      "reader_id": "daft"
+    },
+    "delta-arrow-reader": {
+      "binary": "/home/hanbo/repo/selective-read-wide-files-330/dar-build/selective-read-dar",
+      "build_receipt": "/home/hanbo/repo/selective-read-wide-files-330/dar-build/build.json",
+      "build_receipt_sha256": "c5359b693165dafe700bb46b6989b1d3c767ae8a0901a1dfa40bb12ddba9f0da",
+      "executable_sha256": "44ac97f1369ccea05b937d49e6459ac33fd6125d467b0eec3c747ce267dea271",
+      "harness_git_commit": "339b21f6888e7d304b95ea07ff584e02d4a7d6ad",
+      "lockfile_sha256": "3bb043cecfae0e4125b21ca0098cf459974368f33ee6d1bc07211f87a31a81c9",
+      "reader_git_commit": "339b21f6888e7d304b95ea07ff584e02d4a7d6ad",
+      "reader_id": "delta-arrow-reader"
+    },
+    "delta-rs": {
+      "binary": "/home/hanbo/repo/selective-read-wide-files-330/delta-rs-build/selective-read-delta-rs",
+      "build_receipt": "/home/hanbo/repo/selective-read-wide-files-330/delta-rs-build/build.json",
+      "build_receipt_sha256": "44086882b2836c52e37f9e6aa5deb4dd251e06fff026cfa6a070afa5182fccdb",
+      "executable_sha256": "151c63b5d6aaee943ca21b58cda040ee5fc698d03dccfaf81740cc39de865bb4",
+      "harness_git_commit": "339b21f6888e7d304b95ea07ff584e02d4a7d6ad",
+      "lockfile_sha256": "c0dfe47f552b94b68f16ae1510d33037db1ba18b87339e28364574fdb9d74486",
+      "reader_git_commit": "41f1ce23377f088298a3ed196ad6c8e40cb9bfed",
+      "reader_id": "delta-rs"
+    },
+    "duckdb": {
+      "binary": "/home/hanbo/repo/selective-read-wide-files-330/duckdb-build/selective-read-duckdb",
+      "build_receipt": "/home/hanbo/repo/selective-read-wide-files-330/duckdb-build/build.json",
+      "build_receipt_sha256": "0d2d6015505106bf56ac30dca9d09e411a48a4bf0110a22504861775a670ed8f",
+      "executable_sha256": "05f46536664a7911d6d61cb71ef729632cac45dae39d1acc9b63ea84bab91289",
+      "harness_git_commit": "339b21f6888e7d304b95ea07ff584e02d4a7d6ad",
+      "lockfile_sha256": "4acfa6e4bc57d6d9380ff20c3f5bab643690d3bed0afdde0803d8d540480ee2d",
+      "reader_git_commit": "d8cdaa33fda8df955cc76ef58a280f68f4cd43fa",
+      "reader_id": "duckdb"
+    },
+    "polars": {
+      "binary": "/home/hanbo/repo/selective-read-wide-files-330/polars-build/selective-read-polars",
+      "build_receipt": "/home/hanbo/repo/selective-read-wide-files-330/polars-build/build.json",
+      "build_receipt_sha256": "bc2d61980899369abd3d940757285934f3efc779be13f117ea73e323977f0a53",
+      "executable_sha256": "01fa34c890a7c17301d10d05f2e7083b959e0496cc8009cd62093a3409d44b62",
+      "harness_git_commit": "339b21f6888e7d304b95ea07ff584e02d4a7d6ad",
+      "lockfile_sha256": "d113fe5208071565818b7aa7abc025d35426839d16456bfc81d2ec24a66fce5f",
+      "reader_git_commit": "1bd8ec12f42d40fcec62badf32ef2177d2377d8d",
+      "reader_id": "polars"
+    }
+  },
+  "reader_statuses": [
+    {
+      "reader_id": "delta-arrow-reader",
+      "reason": "no candidate rung passed preparation preflight",
+      "status": "not_attempted_capacity"
+    },
+    {
+      "reader_id": "delta-rs",
+      "reason": "no candidate rung passed preparation preflight",
+      "status": "not_attempted_capacity"
+    },
+    {
+      "reader_id": "duckdb",
+      "reason": "no candidate rung passed preparation preflight",
+      "status": "not_attempted_capacity"
+    },
+    {
+      "reader_id": "polars",
+      "reason": "no candidate rung passed preparation preflight",
+      "status": "not_attempted_capacity"
+    },
+    {
+      "reader_id": "daft",
+      "reason": "no candidate rung passed preparation preflight",
+      "status": "not_attempted_capacity"
+    }
+  ],
+  "remaining_requirements": [
+    "feasible environment and reviewed allocation",
+    "native scale pilot and selection",
+    "actual large-file geometry",
+    "full-inventory correctness/resource checks",
+    "formal duration estimate",
+    "concrete publication workload manifest"
+  ],
+  "scope": "capacity screening only; no scale selected, no native pilot samples, no formal workload freeze",
+  "status": "capacity_unmet"
+}

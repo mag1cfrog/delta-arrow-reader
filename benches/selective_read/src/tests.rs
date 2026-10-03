@@ -7,6 +7,28 @@ use sha2::{Digest, Sha256};
 use super::*;
 
 #[test]
+fn immutable_dv_links_charge_budget_and_never_overwrite() -> Result<()> {
+    let root = tempfile::tempdir()?;
+    let source = root.path().join("source");
+    fs::write(&source, b"fixture")?;
+    let budget = Arc::new(Budget::new(14));
+    let first = root.path().join("first");
+    budget.link(&source, &first)?;
+    assert_eq!(fs::read(&first)?, b"fixture");
+    assert_eq!(budget.written_bytes(), 7);
+    assert!(budget.link(&source, &first).is_err());
+    assert_eq!(budget.written_bytes(), 7);
+    budget.link(&source, &root.path().join("second"))?;
+    let rejected = root.path().join("rejected");
+    assert!(budget.link(&source, &rejected).is_err());
+    assert!(!rejected.exists());
+    assert_eq!(budget.written_bytes(), 14);
+    fs::remove_file(first)?;
+    assert_eq!(fs::read(source)?, b"fixture");
+    Ok(())
+}
+
+#[test]
 fn dv_payload_preserves_page_group_and_batch_boundaries() -> Result<()> {
     let ordinals = [
         0,
@@ -709,6 +731,24 @@ fn large_requires_explicit_scale_and_capacity() -> Result<()> {
     let mut small = config.clone();
     small.disk_limit = Some(1024 * MIB);
     assert_eq!(large::preflight(&small)?["fits_budget"], false);
+    let mut pilot_args = base.clone();
+    pilot_args[3] = "10";
+    let complete = Config::parse(pilot_args.iter().map(|s| (*s).to_owned()))?;
+    assert_eq!(large::preflight(&complete)?["fits_budget"], false);
+    pilot_args.push("--preparation-only");
+    let pilot = Config::parse(pilot_args.iter().map(|s| (*s).to_owned()))?;
+    let pilot_plan = large::preflight(&pilot)?;
+    assert_eq!(pilot_plan["preparation_only"], true);
+    assert_eq!(pilot_plan["fits_budget"], true);
+    assert_eq!(
+        pilot_plan["estimated_peak_bytes"],
+        pilot_plan["phase_peak_bytes"]["preparation"]
+    );
+    assert!(
+        pilot_plan["phase_peak_bytes"]["later_validation"].as_u64()
+            > pilot_plan["disk_limit_bytes"].as_u64()
+    );
+    assert!(!output.exists());
     let mut larger = config.clone();
     larger.large.as_mut().ok_or("large")?.scale = 300;
     let bigger = large::preflight(&larger)?;
