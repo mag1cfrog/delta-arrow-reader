@@ -437,7 +437,7 @@ fn write_stream<R: io::Read>(
                                 path,
                                 file,
                                 &expected,
-                                &projection,
+                                projection,
                                 page_rows.div_ceil(WRITE_BATCH_ROWS) * WRITE_BATCH_ROWS,
                             )?;
                             actual["source_file_ordinal"] = json!(*index);
