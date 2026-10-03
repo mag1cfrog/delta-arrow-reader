@@ -5,6 +5,7 @@ mod controls;
 mod dv;
 mod fixtures;
 mod large;
+mod production;
 mod repack;
 
 use std::collections::BTreeSet;
@@ -36,7 +37,9 @@ const GENERATOR_SOURCE: &str = concat!(
     include_str!("control_rows.rs"),
     include_str!("controls.rs"),
     include_str!("dv.rs"),
-    include_str!("large.rs")
+    include_str!("large.rs"),
+    include_str!("production.rs"),
+    include_str!("../production_fixtures.py")
 );
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -276,6 +279,9 @@ impl Config {
 }
 
 fn main() -> Result<()> {
+    if env::args().nth(1).as_deref() == Some("production-write") {
+        return production::run(&env::args().skip(2).collect::<Vec<_>>());
+    }
     let config = Config::parse(env::args().skip(1))?;
     if let Some(options) = &config.large {
         large::set_deadline(options.elapsed_seconds)?;

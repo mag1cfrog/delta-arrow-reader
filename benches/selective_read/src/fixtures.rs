@@ -412,6 +412,7 @@ pub struct TableWriter {
     group_rows: usize,
     groups_per_file: usize,
     geometry_sidecars: bool,
+    first_file_index: usize,
 }
 
 impl TableWriter {
@@ -446,12 +447,31 @@ impl TableWriter {
             group_rows,
             groups_per_file,
             geometry_sidecars: false,
+            first_file_index: 0,
         })
     }
 
     pub fn with_geometry_sidecars(mut self, enabled: bool) -> Self {
         self.geometry_sidecars = enabled;
         self
+    }
+
+    pub fn with_first_file_index(mut self, index: usize) -> Self {
+        self.first_file_index = index;
+        self
+    }
+
+    /// Assemble a Delta log from files already written and verified independently.
+    pub fn finish_files(
+        path: &Path,
+        schema: SchemaRef,
+        budget: Arc<Budget>,
+        files: Vec<Value>,
+        delta: Option<(&str, &str)>,
+    ) -> Result<Value> {
+        let mut writer = Self::new(path, schema, budget)?;
+        writer.files = files;
+        writer.finish(delta)
     }
 
     pub fn push(&mut self, batch: RecordBatch) -> Result<()> {
@@ -482,9 +502,10 @@ impl TableWriter {
         self.pending.clear();
         self.pending_rows = 0;
         if self.current.is_none() {
-            let path = self
-                .path
-                .join(format!("part-{:05}.parquet", self.files.len()));
+            let path = self.path.join(format!(
+                "part-{:05}.parquet",
+                self.first_file_index + self.files.len()
+            ));
             self.current = Some(ArrowWriter::try_new(
                 BudgetFile::new(&path, self.budget.clone())?,
                 self.schema.clone(),
@@ -507,7 +528,10 @@ impl TableWriter {
             return Ok(());
         };
         writer.close()?;
-        let name = format!("part-{:05}.parquet", self.files.len());
+        let name = format!(
+            "part-{:05}.parquet",
+            self.first_file_index + self.files.len()
+        );
         let path = self.path.join(&name);
         let stats = self.stats.json()?;
         let mut inspected = inspect_file(
