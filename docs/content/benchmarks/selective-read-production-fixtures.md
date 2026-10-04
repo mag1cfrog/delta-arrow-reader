@@ -154,9 +154,18 @@ Both layouts therefore delete the same logical rows. Q2 can be paired later;
 the full eight-case inventory remains required for formal sampling.
 
 Immutable source, Parquet and geometry objects use hard links on the same
-filesystem. The disk ceiling still counts their full logical sizes; the free
-space check reserves only new writes. Cross-filesystem copies require space
-for all bytes. Treat every linked fixture as immutable.
+filesystem. Pairing counts retained files once per device/inode, using the
+larger of file size and allocated blocks. It reserves new space for objects
+that must cross filesystems, plus 25% of retained bytes and 256 MiB for DV and
+metadata writes. Both the total allowance and available free space must fit.
+An unexpected copy cannot exceed the reserved copy bytes. `attempt.json`
+records retained, copied and reserved bytes separately. Treat every linked
+fixture as immutable.
+
+This check covers the supplied fixture directories and the new pair. Other
+retained datasets, generator spill and a later remote replica need their own
+phase accounting within the same 192 GiB allowance. The native writer's
+logical output ceiling remains a separate limit.
 
 A probe directory containing both layouts can be supplied alone. The helper
 creates real DV snapshots and supplies logs for older probes that lack them,
