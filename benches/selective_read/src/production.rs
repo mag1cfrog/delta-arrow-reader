@@ -582,6 +582,49 @@ pub fn run(args: &[String]) -> Result<()> {
     Ok(())
 }
 
+fn pair_tables(request: &Value) -> Result<Vec<Value>> {
+    let layout = request["layout"].as_str();
+    if !request["layout"].is_null() && !matches!(layout, Some("localized" | "scattered")) {
+        return Err("unknown pairing layout".into());
+    }
+    let tables = request["tables"].as_array().ok_or("base tables")?.clone();
+    let ids = tables
+        .iter()
+        .filter_map(|t| t["id"].as_str())
+        .collect::<BTreeSet<_>>();
+    let valid = ["q2", "q4"]
+        .into_iter()
+        .flat_map(|shape| {
+            ["localized", "scattered"].map(|layout| format!("production.{shape}.{layout}"))
+        })
+        .collect::<BTreeSet<_>>();
+    if !(if layout.is_some() {
+        matches!(tables.len(), 1 | 2)
+    } else {
+        matches!(tables.len(), 2 | 4)
+    }) || ids.len() != tables.len()
+        || ids.iter().any(|id| !valid.contains(*id))
+        || ["q2", "q4"].into_iter().any(|shape| {
+            let localized = ids.contains(format!("production.{shape}.localized").as_str());
+            let scattered = ids.contains(format!("production.{shape}.scattered").as_str());
+            match layout {
+                Some("localized") => scattered,
+                Some("scattered") => localized,
+                _ => localized != scattered,
+            }
+        })
+        || layout.is_some_and(|wanted| tables.iter().any(|t| t["layout"] != wanted))
+        || tables.iter().any(|t| {
+            t["snapshot_version"] != 0
+                || t["deletion_vectors"] != false
+                || t["scale_factor"] != 10.0
+        })
+    {
+        return Err("production DV inventory does not match requested layout scope".into());
+    }
+    Ok(tables)
+}
+
 /// Reuse the portable DV writer over an explicitly copied, bounded base inventory.
 pub fn pairs(args: &[String]) -> Result<()> {
     if args.len() != 3 {
@@ -596,34 +639,7 @@ pub fn pairs(args: &[String]) -> Result<()> {
     {
         return Err("unknown production DV request".into());
     }
-    let mut tables = request["tables"].as_array().ok_or("base tables")?.clone();
-    let ids = tables
-        .iter()
-        .filter_map(|t| t["id"].as_str())
-        .collect::<BTreeSet<_>>();
-    let valid = ["q2", "q4"]
-        .into_iter()
-        .flat_map(|shape| {
-            ["localized", "scattered"].map(|layout| format!("production.{shape}.{layout}"))
-        })
-        .collect::<BTreeSet<_>>();
-    if !matches!(tables.len(), 2 | 4)
-        || ids.len() != tables.len()
-        || ids.iter().any(|id| !valid.contains(*id))
-        || ["q2", "q4"].into_iter().any(|shape| {
-            ids.contains(format!("production.{shape}.localized").as_str())
-                != ids.contains(format!("production.{shape}.scattered").as_str())
-        })
-        || tables.iter().any(|t| {
-            t["snapshot_version"] != 0
-                || t["deletion_vectors"] != false
-                || t["scale_factor"] != 10.0
-        })
-    {
-        return Err(
-            "production DV union requires both no-DV layouts of each included shape".into(),
-        );
-    }
+    let mut tables = pair_tables(&request)?;
     let limit = request["output_limit_bytes"]
         .as_u64()
         .ok_or("output limit")?;
@@ -693,6 +709,37 @@ pub fn pairs(args: &[String]) -> Result<()> {
 mod tests {
     use super::*;
     use arrow::ipc::writer::StreamWriter;
+
+    #[test]
+    fn staged_pairs_require_an_explicit_layout_and_valid_base_inventory() -> Result<()> {
+        let table = |name: &str, layout: &str| {
+            json!({"id": format!("production.{name}.{layout}"), "layout": layout,
+                "snapshot_version": 0, "deletion_vectors": false, "scale_factor": 10.0})
+        };
+        let localized = table("q2", "localized");
+        let scattered = table("q2", "scattered");
+        let mut request = json!({"tables": [localized, scattered]});
+        assert_eq!(pair_tables(&request)?.len(), 2);
+        request["tables"] = json!([localized]);
+        assert!(pair_tables(&request).is_err());
+        request["layout"] = json!("localized");
+        assert_eq!(pair_tables(&request)?.len(), 1);
+        request["tables"] = json!([localized, table("q4", "localized")]);
+        assert_eq!(pair_tables(&request)?.len(), 2);
+        for invalid in [json!("scattered"), json!("unknown"), json!(true)] {
+            request["layout"] = invalid;
+            assert!(pair_tables(&request).is_err());
+        }
+        request["layout"] = json!("localized");
+        for invalid in [json!([localized, scattered]), json!([localized, localized])] {
+            request["tables"] = invalid;
+            assert!(pair_tables(&request).is_err());
+        }
+        request["tables"] = json!([localized]);
+        request["tables"][0]["deletion_vectors"] = json!(true);
+        assert!(pair_tables(&request).is_err());
+        Ok(())
+    }
 
     #[test]
     fn streamed_files_preserve_values_groups_and_scatter_pages() -> Result<()> {

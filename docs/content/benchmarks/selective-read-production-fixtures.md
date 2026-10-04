@@ -153,6 +153,29 @@ deletion union across the supplied base inventory, recorded in the manifest.
 Both layouts therefore delete the same logical rows. Q2 can be paired later;
 the full eight-case inventory remains required for formal sampling.
 
+For staged execution, supply one complete layout and select it explicitly:
+
+```sh
+../selective-read-oracle-venv/bin/python -B \
+  benches/selective_read/production_pairs.py \
+  --fixtures ../production-q2-localized --layout localized \
+  --binary target/selective-read/release/selective-read-fixtures \
+  --output ../production-q2-localized-pair --disk-limit-gib 192
+```
+
+This creates the selected layout's no-DV and real-DV snapshots. Repeat with
+`--layout scattered` for the other layout. Each phase computes its deletion
+keys from its full base files; the oracle independently checks those keys and
+every physical deletion ordinal. A workload containing both layouts rejects
+different logical deletion unions for the same query shape. Before reporting
+the pair, also compare the complete deleted-key inventories, source-derived
+references and file/group membership across phases. Keep this evidence after
+reclaiming a completed layout's generated Parquet files.
+
+The ordinary command still requires both layouts. Staging changes when data
+is present, not the table's row count, file inventory, query or reader set.
+One-layout pilots remain incomplete for formal sampling.
+
 Immutable source, Parquet and geometry objects use hard links on the same
 filesystem. Pairing counts retained files once per device/inode, using the
 larger of file size and allocated blocks. It reserves new space for objects
@@ -167,10 +190,18 @@ retained datasets, generator spill and a later remote replica need their own
 phase accounting within the same 192 GiB allowance. The native writer's
 logical output ceiling remains a separate limit.
 
+Count every retained dataset when planning a staged phase. Local data plus a
+MinIO replica must fit before uploading; generator sort spill must fit before
+writing. Upload one complete Delta snapshot at a time, verify and remove its
+remote copy after the readers finish, then reclaim any local bulk data needed
+to fit the next phase. Preserve manifests, references, raw observations and
+source/build identities. Reclaimed inputs need regeneration before replay.
+
 A probe directory containing both layouts can be supplied alone. The helper
 creates real DV snapshots and supplies logs for older probes that lack them,
 but retains the `probe` identity. A single-layout probe can be used directly
-for a no-DV pilot; it cannot form a localized/scattered DV pair by itself.
+for a no-DV pilot or with `--layout` for its own DV snapshot. It cannot stand
+in for both localized and scattered layouts.
 Reduced probes cannot stand in for full SF10 tables.
 
 Freeze a pilot for a completed full Q4 table:

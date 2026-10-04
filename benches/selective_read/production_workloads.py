@@ -137,8 +137,14 @@ def load(path, value):
         for case, expression in translation["expressions"].items():
             require(matrix.sha(expression["native_expression"]) == expression["sha256"]
                     == cases[case]["native_expression_sha256"][reader], "native expression changed")
+    deletion_unions = {}
     for case, row in cases.items():
         binding(value, Path(row["fixtures"]), case)
+        if row["deletion_vectors"]:
+            manifest = oracle.load_json(Path(row["fixtures"]) / "manifest.json")
+            keys = manifest["production_dv"]["extra_logical_keys"]
+            require(deletion_unions.setdefault(row["shape"], keys) == keys,
+                    "paired DV layouts delete different logical rows")
     return value
 
 
@@ -181,9 +187,12 @@ def extra_keys(fixtures, manifest):
     require(sorted(t["id"] for t in bases) == manifest["production_dv"]["base_case_ids"],
             "shared DV union inventory changed")
     paired_shapes = {shapes.cases()[t["id"]]["shape"] for t in bases}
+    layout = manifest["production_dv"].get("layout")
+    require(layout in (None, "localized", "scattered"), "unknown pairing layout")
     require(paired_shapes and {t["id"] for t in bases} ==
-            {c for c, v in shapes.cases().items() if not v["deletion_vectors"] and v["shape"] in paired_shapes},
-            "shared DV union requires both layouts of each included shape")
+            {c for c, v in shapes.cases().items() if not v["deletion_vectors"] and v["shape"] in paired_shapes
+             and (layout is None or v["layout"] == layout)},
+            "shared DV union inventory does not match requested layout scope")
     for table in bases:
         for item in table["files"]:
             minimum = None
