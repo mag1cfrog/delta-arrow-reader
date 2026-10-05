@@ -2,6 +2,7 @@
 
 from datetime import date
 import copy
+from itertools import combinations
 from pathlib import Path
 import tempfile
 import unittest
@@ -15,6 +16,28 @@ import run
 
 
 class ProductionContract(unittest.TestCase):
+    def test_formal_batches_require_full_pairs(self):
+        bases = [case for case, row in production.shapes.cases().items() if not row["deletion_vectors"]]
+        for count in range(1, len(bases) + 1):
+            for selected in combinations(bases, count):
+                cases = {case for base in selected for case in (base, base + ".dv")}
+                production.check_sampling("formal", cases, {"generate"})
+                for missing in cases:
+                    with self.assertRaisesRegex(ValueError, "complete full no-DV/DV pairs"):
+                        production.check_sampling("formal", cases - {missing}, {"generate"})
+                with self.assertRaisesRegex(ValueError, "complete full no-DV/DV pairs"):
+                    production.check_sampling("formal", cases, {"probe"})
+        production.check_sampling("pilot", {bases[0]}, {"probe"})
+        production.check_sampling("pilot", {bases[0]}, {"generate"})
+        for stage, cases, modes in (
+            ("formal", set(), {"generate"}),
+            ("formal", {"unknown", "unknown.dv"}, {"generate"}),
+            ("formal", set(production.shapes.cases()), {"probe", "generate"}),
+            ("formla", set(production.shapes.cases()), {"generate"}),
+        ):
+            with self.assertRaises(ValueError):
+                production.check_sampling(stage, cases, modes)
+
     def test_staged_deletions_are_recomputed_and_default_pairs_remain_complete(self):
         extras = {(1, 1), (2, 1), (3, 1)}
         with tempfile.TemporaryDirectory() as temporary:
