@@ -192,7 +192,8 @@ class OracleTests(unittest.TestCase):
                         "schemaString": "{}", "configuration": {}}
             protocols = [{"minReaderVersion": 1, "minWriterVersion": 2},
                          {"minReaderVersion": 3, "minWriterVersion": 7,
-                          "readerFeatures": ["deletionVectors"], "writerFeatures": ["deletionVectors"]}]
+                          "readerFeatures": ["deletionVectors"],
+                          "writerFeatures": ["deletionVectors", "invariants", "appendOnly"]}]
             logs = []
             for version, protocol in enumerate(protocols):
                 path = metadata_root / "_delta_log" / f"{version:020}.json"

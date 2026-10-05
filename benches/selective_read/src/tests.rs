@@ -253,6 +253,17 @@ fn within_file_controls_preserve_skip_levels_and_bytes() -> Result<()> {
                 &BTreeSet::new(),
             )?;
             assert_eq!(first, second);
+            let upgraded = fs::read_to_string(
+                root.path()
+                    .join("one")
+                    .join(first["path"].as_str().ok_or("DV path")?)
+                    .join("_delta_log/00000000000000000001.json"),
+            )?;
+            let protocol: Value = serde_json::from_str(upgraded.lines().next().ok_or("protocol")?)?;
+            assert_eq!(
+                protocol["protocol"]["writerFeatures"],
+                json!(["deletionVectors", "invariants", "appendOnly"])
+            );
             let file = &first["files"][0];
             assert_eq!(file["sha256"], one["files"][0]["sha256"]);
             assert_eq!(file["delta_stats"]["numRecords"], one["rows"]);

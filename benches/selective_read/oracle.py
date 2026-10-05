@@ -483,7 +483,8 @@ def objects(fixtures, table, source):
         path = inside(fixtures, str(Path(table["path"]) / log["path"]))
         actions = [json.loads(line, parse_float=Decimal) for line in path.read_text().splitlines()]
         protocol = {"minReaderVersion": 1, "minWriterVersion": 2} if version == 0 else {
-            "minReaderVersion": 3, "minWriterVersion": 7, "readerFeatures": ["deletionVectors"], "writerFeatures": ["deletionVectors"]}
+            "minReaderVersion": 3, "minWriterVersion": 7, "readerFeatures": ["deletionVectors"],
+            "writerFeatures": ["deletionVectors", "invariants", "appendOnly"]}
         require([a["protocol"] for a in actions if "protocol" in a] == [protocol], "unexpected Delta protocol")
         for action in actions:
             if "metaData" in action:
