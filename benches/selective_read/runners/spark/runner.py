@@ -51,8 +51,11 @@ def connect():
     builder = SparkSession.builder.appName("selective-read-spark")
     for key, value in CONFIG.items():
         builder = builder.config(key, value)
-    builder = builder.config("spark.jars", ",".join(str(HERE / "jars" / j["filename"])
-                             for j in json.loads((HERE / "lock.json").read_text())["jars"]))
+    # local[8] shares the driver JVM. Classpaths avoid copying the large AWS JAR
+    # into an executor scratch file covered by the validation-export size limit.
+    classpath = os.pathsep.join(str(HERE / "jars" / j["filename"])
+                               for j in json.loads((HERE / "lock.json").read_text())["jars"])
+    builder = builder.config("spark.driver.extraClassPath", classpath).config("spark.executor.extraClassPath", classpath)
     session = builder.getOrCreate()
     session.sparkContext.setLogLevel("ERROR")
     require(session.version == pyspark.__version__, "wrong JVM Spark version")

@@ -14,6 +14,9 @@ The Spark source distribution, Python dependencies, Delta JARs and matching
 Hadoop 3.4.2/AWS SDK dependencies have complete artifact checksums in `lock.json`.
 The Python Delta package is unnecessary; the JVM loads the native Delta connector.
 The reader uses path-based tables, without Unity Catalog.
+The local driver and executor use the same verified JAR classpaths. Spark does
+not copy the large AWS SDK JAR into a scratch file under the validation-export
+size limit.
 
 ```sh
 python3 -B benches/selective_read/runners/spark/prepare.py \
