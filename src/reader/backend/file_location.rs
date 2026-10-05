@@ -6,6 +6,29 @@ use url::{Position, Url};
 use super::data_file_error;
 use crate::DeltaReaderError;
 
+pub(super) fn resolve_data_file_url(
+    table_url: &Url,
+    file_path: &str,
+) -> Result<Url, DeltaReaderError> {
+    let path = resolve_data_file_path(table_url, file_path)?;
+    let mut location = table_url.clone();
+    // Kernel extracts the object key from this URL. Re-encode the resolved key
+    // once, without restoring a cloud namespace or using presigned-URL I/O.
+    location
+        .path_segments_mut()
+        .map_err(|()| {
+            data_file_error(
+                "data_file_path_resolution_failed",
+                std::io::Error::other("table URL cannot contain a data file path"),
+            )
+        })?
+        .clear()
+        .extend(path.parts());
+    location.set_query(None);
+    location.set_fragment(None);
+    Ok(location)
+}
+
 pub(super) fn resolve_data_file_path(
     table_url: &Url,
     file_path: &str,

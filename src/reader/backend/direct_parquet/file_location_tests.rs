@@ -4,11 +4,19 @@ use std::{error::Error, sync::Arc};
 
 use arrow::{
     array::Int32Array,
-    datatypes::{DataType, Field, Schema},
+    datatypes::{DataType, Field, Schema, SchemaRef},
+    record_batch::RecordBatch,
 };
+use delta_kernel::{
+    Engine, FileMeta,
+    engine::{arrow_conversion::TryFromArrow, arrow_data::EngineDataArrowExt},
+    schema::StructType,
+};
+use delta_kernel_default_engine::DefaultEngineBuilder;
 use object_store::{ObjectStore, ObjectStoreExt, memory::InMemory, path::Path};
 use url::Url;
 
+use super::super::file_location::{resolve_data_file_path, resolve_data_file_url};
 use super::{
     DirectParquetReader, MeteredParquetObjectStore, MultiRangeReadStrategy,
     tests::{metrics, task},
@@ -96,6 +104,12 @@ async fn data_file_location_alias_reads_the_declared_object_not_a_prefixed_decoy
             "part.parquet",
         ),
         (
+            "https://example.com/table/?X-Amz-Signature=secret",
+            "https://example.com/other/part.parquet?X-Amz-Signature=secret#secret",
+            "other/part.parquet",
+            "part.parquet",
+        ),
+        (
             "https://account.blob.core.windows.net/container/table/",
             "part.parquet",
             "container/table/part.parquet",
@@ -121,7 +135,7 @@ async fn data_file_location_alias_reads_the_declared_object_not_a_prefixed_decoy
         ),
     ];
     for (table, file, expected_key, decoy_key) in cases {
-        for mode in ["ordinary", "ranged", "cached", "buffered"] {
+        for mode in ["ordinary", "ranged", "cached", "buffered", "kernel"] {
             let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
             store
                 .put(&Path::parse(expected_key)?, correct.clone().into())
@@ -129,6 +143,17 @@ async fn data_file_location_alias_reads_the_declared_object_not_a_prefixed_decoy
             store
                 .put(&Path::parse(decoy_key)?, decoy.clone().into())
                 .await?;
+            if mode == "kernel" {
+                let batches = kernel_batches(table, file, store, Arc::clone(&schema), size).await?;
+                assert_eq!(batches.len(), 1, "{table} + {file}");
+                let ids = batches[0]
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .ok_or("id type")?;
+                assert_eq!(ids.values(), &[777], "{table} + {file}, mode={mode}");
+                continue;
+            }
             let options = DeltaScanExecutionOptions::new()
                 .with_parquet_full_file_read_threshold_bytes(
                     (mode == "buffered").then_some(correct.len()),
@@ -186,6 +211,28 @@ async fn data_file_location_alias_reads_the_declared_object_not_a_prefixed_decoy
     Ok(())
 }
 
+async fn kernel_batches(
+    table: &str,
+    file: &str,
+    store: Arc<dyn ObjectStore>,
+    schema: SchemaRef,
+    size: u64,
+) -> TestResult<Vec<RecordBatch>> {
+    let location = resolve_data_file_url(&Url::parse(table)?, file)?;
+    assert!(location.query().is_none());
+    assert!(location.fragment().is_none());
+    let schema = Arc::new(StructType::try_from_arrow(schema)?);
+    Ok(tokio::task::spawn_blocking(move || {
+        DefaultEngineBuilder::new(store)
+            .build()
+            .parquet_handler()
+            .read_parquet_files(&[FileMeta::new(location, 0, size)], schema, None)?
+            .map(|batch| batch?.try_into_record_batch())
+            .collect::<delta_kernel::DeltaResult<Vec<_>>>()
+    })
+    .await??)
+}
+
 fn reader(table: &str, options: DeltaScanExecutionOptions) -> TestResult<DirectParquetReader> {
     // Store construction is offline; the reader's store is replaced below for I/O tests.
     let storage_options = [
@@ -227,8 +274,6 @@ fn assert_foreign(error: &DeltaReaderError) {
 
 #[test]
 fn data_file_location_handles_normalization_and_redacts_invalid_paths() -> TestResult {
-    use super::file_location::resolve_data_file_path;
-
     for (table, file, expected) in [
         (
             "https://account.blob.core.windows.net/",
@@ -270,6 +315,10 @@ fn data_file_location_handles_normalization_and_redacts_invalid_paths() -> TestR
             resolve_data_file_path(&Url::parse(table)?, file)?.as_ref(),
             expected
         );
+        assert_eq!(
+            Path::from_url_path(resolve_data_file_url(&Url::parse(table)?, file)?.path())?.as_ref(),
+            expected
+        );
     }
 
     for (table, file) in [
@@ -303,23 +352,31 @@ fn data_file_location_handles_normalization_and_redacts_invalid_paths() -> TestR
                 .err()
                 .ok_or("foreign namespace was accepted")?,
         );
+        assert_foreign(
+            &resolve_data_file_url(&Url::parse(table)?, file)
+                .err()
+                .ok_or("foreign namespace was accepted by Kernel")?,
+        );
     }
 
     for file in ["s3://secret-user:secret-password@[", "secret/%00.parquet"] {
-        let error = resolve_data_file_path(&Url::parse("s3://bucket/table/")?, file)
-            .err()
-            .ok_or("invalid URL/key was accepted")?;
-        assert!(matches!(
-            error,
-            DeltaReaderError::DataFileRead {
-                reason: "data_file_path_resolution_failed",
-                ..
+        for result in [
+            resolve_data_file_path(&Url::parse("s3://bucket/table/")?, file).map(|_| ()),
+            resolve_data_file_url(&Url::parse("s3://bucket/table/")?, file).map(|_| ()),
+        ] {
+            let error = result.err().ok_or("invalid URL/key was accepted")?;
+            assert!(matches!(
+                error,
+                DeltaReaderError::DataFileRead {
+                    reason: "data_file_path_resolution_failed",
+                    ..
+                }
+            ));
+            let mut source: Option<&dyn Error> = Some(&error);
+            while let Some(error) = source {
+                assert!(!format!("{error} {error:?}").contains("secret"));
+                source = error.source();
             }
-        ));
-        let mut source: Option<&dyn Error> = Some(&error);
-        while let Some(error) = source {
-            assert!(!format!("{error} {error:?}").contains("secret"));
-            source = error.source();
         }
     }
     Ok(())
@@ -428,6 +485,11 @@ fn data_file_location_preserves_same_store_paths_and_aliases() -> TestResult {
         let reader = reader(table, DeltaScanExecutionOptions::new())?;
         let object = reader.resolve_parquet_object(&task(file, Some(1))?)?;
         assert_eq!(object.path.as_ref(), expected, "{table} + {file}");
+        assert_eq!(
+            Path::from_url_path(resolve_data_file_url(&Url::parse(table)?, file)?.path())?.as_ref(),
+            expected,
+            "{table} + {file} through Kernel"
+        );
     }
     Ok(())
 }
@@ -518,6 +580,11 @@ async fn data_file_location_rejects_foreign_stores_before_any_get() -> TestResul
         Field::new("name", DataType::Utf8, true),
     ]));
     for (table, foreign) in cases {
+        assert_foreign(
+            &resolve_data_file_url(&Url::parse(table)?, foreign)
+                .err()
+                .ok_or("foreign URL was accepted by Kernel")?,
+        );
         for mode in ["ordinary", "ranged", "cached", "buffered"] {
             let options = DeltaScanExecutionOptions::new()
                 .with_parquet_full_file_read_threshold_bytes(
