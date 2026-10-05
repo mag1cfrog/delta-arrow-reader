@@ -1,0 +1,93 @@
+{
+  "python": "3.14.6",
+  "platform": "linux_x86_64",
+  "spark_version": "4.1.1",
+  "delta_version": "4.3.1",
+  "spark_source": "c0690c763bafabd08e7079d1137fa0a769a05bae",
+  "delta_source": "54ce02692567fc3e5107a3ae69ebeccdffa7edfe",
+  "java_runtime_version": "21.0.8+9-LTS",
+  "java_implementor": "Eclipse Adoptium",
+  "wheels": [
+    {
+      "name": "py4j",
+      "version": "0.10.9.9",
+      "filename": "py4j-0.10.9.9-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/bd/db/ea0203e495be491c85af87b66e37acfd3bf756fd985f87e46fc5e3bf022c/py4j-0.10.9.9-py2.py3-none-any.whl",
+      "sha256": "c7c26e4158defb37b0bb124933163641a2ff6e3a3913f7811b0ddbe07ed61533"
+    },
+    {
+      "name": "pyarrow",
+      "version": "25.0.1",
+      "filename": "pyarrow-25.0.1-cp314-cp314-manylinux_2_28_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/8d/61/1c5d1229fa21da4cff5365e41e57177aaac57c563c727f35419b8513d1c1/pyarrow-25.0.1-cp314-cp314-manylinux_2_28_x86_64.whl",
+      "sha256": "9171748cdf796972d85a4b60157c279913e242992e350c90c7450182a9838b2a"
+    },
+    {
+      "name": "pandas",
+      "version": "3.0.6",
+      "filename": "pandas-3.0.6-cp314-cp314-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/ca/ba/ffdcb19be4ff6bfe7d969e7cef2c567c633df5a3a1cc1053394ad053bca8/pandas-3.0.6-cp314-cp314-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "62f51d7f651c8054c5e82a69265c98082e795d1442df7ca6edc3a545d61214b1"
+    },
+    {
+      "name": "numpy",
+      "version": "2.5.3",
+      "filename": "numpy-2.5.3-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/45/8f/9beacf79ca7c650688ad0baa80931adb988fe6e6e5d5903c23cc3dbd70eb/numpy-2.5.3-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "b0521d0f4aebb6e06189451025fa17a913287b13c03d5fe05c017333b654ea5b"
+    },
+    {
+      "name": "python-dateutil",
+      "version": "2.9.0.post0",
+      "filename": "python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+      "sha256": "a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427"
+    },
+    {
+      "name": "six",
+      "version": "1.17.0",
+      "filename": "six-1.17.0-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl",
+      "sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274"
+    }
+  ],
+  "jars": [
+    {
+      "name": "delta-spark_2.13",
+      "version": "4.3.1",
+      "filename": "delta-spark_2.13-4.3.1.jar",
+      "url": "https://repo.maven.apache.org/maven2/io/delta/delta-spark_2.13/4.3.1/delta-spark_2.13-4.3.1.jar",
+      "publisher_sha1": "280b8f7afcecf6ee8920fdfc95b13c3579a1fe14",
+      "sha256": "ebf35a4383f0a653c3ee3c7882c0edcac2f846be31ac61af4b96ccfaaf36c171"
+    },
+    {
+      "name": "delta-storage",
+      "version": "4.3.1",
+      "filename": "delta-storage-4.3.1.jar",
+      "url": "https://repo.maven.apache.org/maven2/io/delta/delta-storage/4.3.1/delta-storage-4.3.1.jar",
+      "publisher_sha1": "2c2a7bf8be414c1474fa349276204e1cc4936311",
+      "sha256": "577c12c7e371be4c041714fb48e88ad86e3c3512beea2bdaffbe7a4debf79718"
+    },
+    {
+      "name": "hadoop-aws",
+      "version": "3.4.2",
+      "filename": "hadoop-aws-3.4.2.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/apache/hadoop/hadoop-aws/3.4.2/hadoop-aws-3.4.2.jar",
+      "publisher_sha1": "16f9de6da5c7862241d55a13d34843404d0cbb88",
+      "sha256": "d2d24e6b715b5656b9d238bf13b6682a07e2004dd36aad74a73aeb854319f4d9"
+    },
+    {
+      "name": "bundle",
+      "version": "2.29.52",
+      "filename": "bundle-2.29.52.jar",
+      "url": "https://repo.maven.apache.org/maven2/software/amazon/awssdk/bundle/2.29.52/bundle-2.29.52.jar",
+      "publisher_sha1": "b63eb928c2ac13bde07746bcfe7fb38bbdb4b5c5",
+      "sha256": "62638f33045690c6bc5e496b54b0b2e89a9ad38cbedacdf6e017fea6bc85f55c"
+    }
+  ],
+  "spark_distribution": {
+    "filename": "pyspark-4.1.1.tar.gz",
+    "url": "https://files.pythonhosted.org/packages/19/bf/58ee13add151469c25825b7125bbf62c3bdcec05eec4d458fcb5c5516066/pyspark-4.1.1.tar.gz",
+    "sha256": "77f78984aa84fbe865c717dd37b49913b4e5c97d76ef6824f932f1aefa6621ec"
+  }
+}
