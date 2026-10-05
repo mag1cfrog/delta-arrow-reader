@@ -14,6 +14,38 @@ from production_workloads import query_fields
 from run import digest, fixture_tables, save
 
 
+def table_objects(table):
+    logs = [table["delta_log"]] if table["delta_log"] else []
+    return table["files"] + logs + [f["geometry"] for f in table["files"] if "geometry" in f]
+
+
+def capacity(fixtures, transfers, output, limit):
+    # Retained inputs include source copies, manifests and geometry, once per inode.
+    retained = {}
+    for root in fixtures:
+        for path in root.rglob("*"):
+            if path.is_file():
+                stat = path.stat()
+                retained[stat.st_dev, stat.st_ino] = max(stat.st_size, stat.st_blocks * 512)
+    resident = sum(retained.values())
+    destination_device = output.parent.stat().st_dev
+    copied = 0
+    for root, table in transfers:
+        for item in table_objects(table):
+            path = oracle.inside(root, str(Path(table["path"]) / item["path"]))
+            stat = path.stat()
+            oracle.require(stat.st_size == item["bytes"], "fixture object size changed")
+            if stat.st_dev != destination_device:
+                copied += stat.st_size
+    reserve = resident // 4 + 256 * 1024**2
+    additional = copied + reserve
+    oracle.require(resident + additional <= limit and additional <= shutil.disk_usage(output.parent).free,
+                   "production DV pair exceeds its disk ceiling")
+    return {"retained_input_bytes": resident, "copied_input_bytes": copied,
+            "metadata_reserve_bytes": reserve, "conservative_bytes": resident + additional,
+            "additional_disk_bytes": additional, "immutable_hardlinks": copied == 0}
+
+
 def prepare(fixtures, binary, output, disk_gib, seconds):
     oracle.require(0 < disk_gib <= 192 and seconds > 0, "finite production pairing ceilings required")
     bases, parents, source, modes, source_hashes, definitions = {}, [], None, set(), set(), {}
@@ -37,21 +69,14 @@ def prepare(fixtures, binary, output, disk_gib, seconds):
     expected = {c for c, v in shapes.cases().items() if not v["deletion_vectors"] and v["shape"] in definitions}
     oracle.require(bases and set(bases) == expected and len(modes) == len(source_hashes) == 1,
                    "pair both layouts of each included shape from one source and scope")
-    # Count both base and DV copies even when hard links avoid physical duplication.
-    size = source[1]["bytes"] + 2 * sum(t["bytes"] + sum(f["geometry"]["bytes"] for f in t["files"]) for _, t in bases.values())
-    allowance = size * 5 // 4 + 256 * 1024**2
-    same_device = all(root.stat().st_dev == output.parent.stat().st_dev for root in fixtures)
-    additional = allowance - size if same_device else allowance
-    oracle.require(allowance <= disk_gib * 1024**3 and additional <= shutil.disk_usage(output.parent).free,
-                   "production DV pair exceeds its disk ceiling")
+    phase = capacity(fixtures, [source, *bases.values()], output, disk_gib * 1024**3)
     output.mkdir()
     save(output / "attempt.json", {"status": "preparing", "disk_limit_bytes": disk_gib * 1024**3,
-                                   "conservative_bytes": allowance, "additional_disk_bytes": additional,
-                                   "immutable_hardlinks": same_device, "parents": parents})
+                                   **phase, "parents": parents})
+    copy_remaining = phase["copied_input_bytes"]
     def copy(root, table):
-        logs = [table["delta_log"]] if table["delta_log"] else []
-        objects = table["files"] + logs + [f["geometry"] for f in table["files"] if "geometry" in f]
-        for item in objects:
+        nonlocal copy_remaining
+        for item in table_objects(table):
             name = str(Path(table["path"]) / item["path"])
             path = oracle.verify_object(root, {**item, "path": name})
             target = output / name
@@ -61,6 +86,8 @@ def prepare(fixtures, binary, output, disk_gib, seconds):
             except OSError as error:
                 if error.errno != errno.EXDEV:
                     raise
+                oracle.require(item["bytes"] <= copy_remaining, "unbudgeted cross-filesystem copy")
+                copy_remaining -= item["bytes"]
                 shutil.copyfile(path, target)
     copy(*source)
     tables = []
