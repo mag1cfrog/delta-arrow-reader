@@ -18,6 +18,16 @@ the adapters, watchdog, certificates and report. This schedule does not run
 paired tracing-overhead experiments; report that estimate as unavailable.
 The revision 2 examples and historical schedules below remain reproducible.
 
+For Q2/Q4 revision 5, `production_workloads.py --stage formal` accepts one or
+more complete no-DV/DV pairs of full fixtures. Each pair shares a query shape
+and layout. Prepare pairs in batches to stay within the disk budget.
+Probe fixtures and missing pair members are rejected.
+Formal jobs use five independent samples and two queries per reuse invocation.
+The workload and report retain all eight case entries, with other inputs marked
+`not_prepared`. A batch report covers its selected jobs and keeps
+`publication_ready: false`; publication still requires all eight cases and their
+reuse profiles under the frozen conditions.
+
 For all 30 public predicate/projection cases, use the
 [query matrix guide](selective-read-matrix.md). Its `--matrix` argument supplies
 the full case list and references without adding the default reuse sessions.
@@ -158,6 +168,7 @@ subprocess crashes, malformed output and phase timeouts. It requires no reader
 builds, MinIO or additional Python packages. Campaigns and this check are manual;
 this slice adds no CI job or step.
 
-A successful smoke campaign verifies the execution machinery. Publication still
-requires the protocol's full 46-case and three-session inventory at report scale.
+A successful smoke campaign verifies the execution machinery. Revision 2
+publication still requires the protocol's full 46-case and three-session inventory
+at report scale.
 Keep generated results outside Git and stop the owned MinIO service when finished.

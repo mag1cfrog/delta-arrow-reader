@@ -81,6 +81,15 @@ def query_fields(case, manifest):
                          "row_groups": [len(f["row_groups"]) for f in table["files"]]}}
 
 
+def check_sampling(stage, cases, modes):
+    require(stage in ("pilot", "formal"), "unknown production sampling stage")
+    if stage == "formal":
+        bases = {case.removesuffix(".dv") for case in cases}
+        require(modes == {"generate"} and cases and cases <= set(shapes.cases())
+                and cases == {case for base in bases for case in (base, base + ".dv")},
+                "formal sampling requires complete full no-DV/DV pairs")
+
+
 def define(fixtures, binaries, output, stage="pilot"):
     import large_workloads
     rows, seen = [], set()
@@ -94,10 +103,10 @@ def define(fixtures, binaries, output, stage="pilot"):
             seen.add(case)
             row = query_fields(case, manifest)
             rows.append(row | {"fixtures": str(root), "fixture_manifest_sha256": digest(root / "manifest.json")})
-    require(rows and len({r["fixture_mode"] for r in rows}) == 1
+    modes = {r["fixture_mode"] for r in rows}
+    require(rows and len(modes) == 1
             and len({r["source_parent_manifest_sha256"] for r in rows}) == 1, "mixed probe/full or source identities")
-    require(stage in ("pilot", "formal") and (stage != "formal" or seen == set(shapes.cases())
-            and all(r["fixture_mode"] == "generate" for r in rows)), "formal sampling requires all eight full cases")
+    check_sampling(stage, seen, modes)
     output.mkdir()
     translations = large_workloads.translate(rows, binaries, output, comparison_revision=5)
     result = {"format": "selective-read-production-workload-v1", "family": "production", "comparison_revision": 5,
@@ -128,7 +137,7 @@ def load(path, value):
     modes = {r["fixture_mode"] for r in cases.values()}
     require(modes in ({"probe"}, {"generate"}) and value["scope"] == ("probe" if modes == {"probe"} else value["sampling_stage"])
             and value["publication_ready"] is False, "invalid production scope")
-    require(value["sampling_stage"] != "formal" or modes == {"generate"} and set(cases) == set(shapes.cases()), "incomplete formal workload")
+    check_sampling(value["sampling_stage"], set(cases), modes)
     require(value["oracle_limits"] == {"memory_bytes": 16 * 1024**3, "disk_bytes": 1024**3, "elapsed_seconds": 1800}, "production oracle limits changed")
     require(set(value["translations"]) == {"polars", "daft"}, "missing native translations")
     for reader, translation in value["translations"].items():
