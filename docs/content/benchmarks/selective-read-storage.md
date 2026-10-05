@@ -45,6 +45,22 @@ the object inventory and `s3://selective-read/MANIFEST_SHA256` table root.
 For paired DV fixtures, that inventory includes both snapshot logs and all
 referenced DV payloads as well as Parquet objects.
 
+For a large staged pair, upload one native table at a time:
+
+```sh
+python3 -B benches/selective_read/storage.py upload \
+  --state ../selective-read-storage --fixtures ../production-q2-pairs \
+  --table production.q2.scattered --output ../q2-scattered-upload.json
+```
+
+Repeat `--table` to include more native table IDs, or omit it to upload every
+table. The receipt records the selection and verifies all of its logs, Parquet
+and DV objects. Unknown, duplicate and empty selections fail. The complete
+fixture manifest and paired workload stay unchanged; missing bulk outside the
+upload selection does not block it. Pass this receipt and the matching `--case`
+to the campaign runner. Other tables need their own verified upload. Keep both
+snapshots and all eight main cases in the complete publication inventory.
+
 The launcher selects eight logical CPUs for the reader, two separate physical
 cores for MinIO, and a third separate core for the trace process. It never splits
 SMT siblings across these groups. Insufficient CPU topology fails setup. MinIO

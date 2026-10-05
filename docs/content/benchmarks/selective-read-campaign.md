@@ -53,6 +53,12 @@ done
 References contain complete expected values and independently evaluated file
 sets. They must match the fixture manifest, snapshot, SQL and frozen protocol.
 The upload receipt must belong to the current server and those same fixtures.
+An upload made with `storage.py upload --table` covers only its declared native
+tables. Select the corresponding query with `--case`; its reuse session is
+included by default when using a production workload. Jobs whose tables are
+absent from the upload remain `preparation_failed` and launch no readers.
+Use separate verified uploads for the other snapshots without editing the
+complete-pair workload definition.
 
 ## Run the smoke campaign
 
