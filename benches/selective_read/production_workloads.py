@@ -31,13 +31,17 @@ def query_fields(case, manifest):
     definition = shapes.cases()[case]
     declared = (manifest["shape_definitions"][definition["shape"]] if "shape_definitions" in manifest
                 else manifest["shape_definition"])
+    table = next(t for t in fixture_tables(manifest) if t["id"] == case)
+    if "data_page_bytes" not in declared:
+        require(table["writer"].get("data_page_bytes") == 1048576,
+                "legacy shape requires its recorded 1 MiB page target")
+        declared = dict(declared, data_page_bytes=table["writer"]["data_page_bytes"])
     shape = shapes.definitions(declared["file_target_mib"], declared["data_page_rows"],
                                declared["data_page_bytes"], declared["write_batch_rows"])[definition["shape"]]
     require(all(declared[k] == v for k, v in shape.items()), "production shape definition changed")
     require(manifest["protocol"] in ("selective-read-production-fixtures-v1", "selective-read-production-pairs-v1")
             and manifest["contract_sha256"] == digest(shapes.CONTRACT)
             and manifest["mode"] in ("probe", "generate"), "unknown production fixture/definition")
-    table = next(t for t in fixture_tables(manifest) if t["id"] == case)
     source = next(s for s in manifest["sources"] if s["scale_factor"] == 10)
     require(table["deletion_vectors"] is definition["deletion_vectors"]
             and type(table["snapshot_version"]) is int

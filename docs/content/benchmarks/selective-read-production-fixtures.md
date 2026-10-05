@@ -151,7 +151,8 @@ Each supplied shape must include both layouts, from the same source and plan
 settings. The helper preserves Parquet bytes and computes one shared logical
 deletion union across the supplied base inventory, recorded in the manifest.
 Both layouts therefore delete the same logical rows. Q2 can be paired later;
-the full eight-case inventory remains required for formal sampling.
+the complete publication inventory requires all eight cases. Formal batches can
+use complete full no-DV/DV pairs before every layout is resident.
 
 For staged execution, supply one complete layout and select it explicitly:
 
@@ -174,7 +175,9 @@ reclaiming a completed layout's generated Parquet files.
 
 The ordinary command still requires both layouts. Staging changes when data
 is present, not the table's row count, file inventory, query or reader set.
-One-layout pilots remain incomplete for formal sampling.
+A complete full one-layout pair can enter a formal batch. The complete
+publication still requires both layouts of Q2 and Q4 and their native reuse
+profiles. Probe fixtures remain outside the full formal campaign.
 
 Immutable source, Parquet and geometry objects use hard links on the same
 filesystem. Pairing counts retained files once per device/inode, using the
@@ -231,5 +234,11 @@ Upload the completed fixture with the existing
 reference, and all five binaries to the
 [campaign runner](selective-read-campaign.md). The pilot schedules two timed
 invocations per reader and execution mode. Reuse contains initialization and
-two queries. `--stage formal` requires all eight full cases and selects five
-samples. The existing `large_workloads.py report` command audits both revisions.
+two queries. `--stage formal` accepts one or more complete full no-DV/DV pairs
+and selects five independent samples per runnable reader and execution mode.
+Keep all eight cases and native reuse profiles in the complete publication
+inventory. Inputs outside a batch remain `not_prepared`, and a batch report
+keeps `publication_ready: false`. The existing `large_workloads.py report`
+command audits both revisions. Follow the
+[execution contract](selective-read-production-workloads.md) for the final main
+geometry, emulated transport and formal deadlines.

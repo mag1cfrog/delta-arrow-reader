@@ -11,8 +11,22 @@ All five readers remain in each campaign inventory.
 The workload freezes the shape definition, completed fixture manifest, source
 identity, expanded SQL, projection, literals, native expressions, writer settings,
 file sizes and row groups. Probe fixtures carry their actual reduced file and row
-counts and cannot be reported as full SF10 tables. A full fixture must contain
-every source row and the declared 4096 or 18432 files.
+counts and cannot be reported as full SF10 tables. A full fixture contains every
+original source row and the file geometry declared by its completed manifest.
+The main 512 MiB file-target recipes have these dimensions:
+
+| Shape | Files per layout | Stored columns | Output columns |
+| --- | ---: | ---: | ---: |
+| Q2 | 130 | 416 | 69 |
+| Q4 | 60 | 90 | 71 |
+
+Use 131,072 rows per group, a 20,000-row page limit, 1,024-row writer batches,
+a 1 MiB page-byte target, plain encoding without dictionaries and Zstd level 3.
+Page limits are checked at writer batch boundaries; record actual page lengths
+and compressed file sizes separately. The 256 MiB file target and 2,048-row
+page limit remain sensitivity controls outside the eight main cases. The
+generation-shape contract retains its historical identity; these main settings
+follow the accepted physical calibration.
 
 Revision 5 uses this document as `protocol_sha256`, retains the base protocol
 and sampling amendment hashes, and adds `sampling_stage` to the identity.
@@ -45,7 +59,24 @@ has two independent timed invocations per supported reader; formal sampling
 has five. Each open invocation contains one query. Each reuse invocation
 contains initialization and two freshly planned queries on the same native
 source. The scheduler uses the existing balanced ordering and records its
-prefix when the pilot has fewer samples than positions.
+prefix when fewer samples than ordering positions are scheduled.
+
+Formal workloads may contain one or more complete full no-DV/DV pairs for the
+same shape and layout. A batch can be prepared without keeping all eight
+fixtures resident at once. The workload retains the complete eight-case,
+five-reader inventory, marking inputs outside that batch as `not_prepared`.
+A completed batch does not establish complete publication coverage. Publication
+requires all eight cases and their native reuse profiles, fresh independent
+exact-result gates and every predeclared formal slot. Pilot and historical
+samples cannot fill those slots. Batch reports retain `publication_ready: false`.
+
+Freeze the complete case definitions, source and generated-object hashes,
+SQL/native expressions, reference provenance, builds, resources, transport and
+schedule before formal timing. Completed generation manifests can define an
+input whose bulk objects have been reclaimed; record physical residency
+separately. Before uploading or validating an active case, restore and verify
+every required object against its frozen identity. Missing objects leave that
+case pending.
 
 Plan capture and one traced I/O invocation run after all timing slots. They
 do not contribute to query-time distributions. Save requests, response bytes,
@@ -53,9 +84,24 @@ GET/HEAD file sets, file-stat candidates and files containing live matches.
 Geometry describes pruning opportunities; it does not prove decoded page or
 row-group counts. Keep unsupported readers, failed samples, ties and losses.
 
-The first full Q4 pilot uses the existing local MinIO storage control. It is
-not a reproduction of the earlier S3 network environment. Pilot artifacts and
-probe validations are not a publication result. The prior 68-case inventory
-remains available as supporting mechanism and throughput evidence.
+Formal initialization and each query have uniform 1,800-second deadlines;
+startup uses the same bound, with 60 seconds for between-query bookkeeping and
+cleanup. Readers retain the existing eight-CPU, 8 GiB, no-swap budget. Data,
+staging, source, scratch and references stay within 192 GiB, with builds budgeted
+separately. Record the actual affinity and all server/proxy resource limits.
+
+The main emulated transport uses 200 ms request latency, deterministic +/-20 ms
+jitter and one shared, progressively paced 150 Mbps response-body budget.
+Freeze the proxy build, jitter seed and configuration before timing and use the
+same endpoint for every reader. Clients and processes are fresh per independent
+sample; MinIO and OS caches remain in place without flushing. Record snapshot
+initialization and both fresh queries in each reused native source separately.
+Use the same warmup history and keep initialization out of query-only clocks.
+
+This controlled transport is emulation, not a reproduction of private S3 data
+or network conditions. Localhost controls and earlier 600-second pilot limits
+remain separate from the formal campaign. The historical 68-case inventory
+provides supporting mechanism and throughput evidence; it does not replace the
+eight-case main comparison.
 
 No CI jobs, large CI runs or performance thresholds are added by this contract.
