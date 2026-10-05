@@ -61,21 +61,47 @@ storage performance probes while planning a scan.
 On Linux, the memory hint is the smaller of host availability from
 `/proc/meminfo` and the process's remaining cgroup memory allowance. The reader
 supports cgroup v1 and v2, discovers the process's group and its mounted path,
-and checks accessible ancestor limits. Each remaining allowance is the hard
-limit minus that group's current usage, floored at zero. An ancestor's usage
-also accounts for sibling groups. A v1 ancestor contributes only when
-hierarchical accounting is enabled.
+and checks accessible ancestor limits. Each group uses its own usage and cache
+counters, so ancestor estimates include sibling groups. A v1 ancestor
+contributes only when hierarchical accounting is enabled.
 
-Unlimited limits, unreadable or malformed files, and unsupported layouts add no
-cgroup hint. The reader uses any remaining readable hints and falls back to
-host availability when no cgroup hint is usable. Ancestors hidden by the cgroup
-namespace or mount are not observable. Swap allowance is excluded. The local
-environment diagnostic reports the effective available-memory hint; its total
-memory field still describes host physical memory.
+The estimate credits inactive file cache after deducting dirty and writeback
+pages. Every subtraction floors at zero:
 
-These values are sampled during planning and can change as other processes
-allocate memory. The partition cap is a planning heuristic: it does not reserve
-memory, enforce a process memory limit, or guarantee that a scan avoids OOM.
+```text
+cache credit = inactive file - dirty - writeback
+headroom = hard limit - (current usage - cache credit)
+```
+
+The required `memory.stat` counters depend on the accounting mode:
+
+| Accounting mode | Inactive file | Dirty | Writeback |
+| --- | --- | --- | --- |
+| v2 | `inactive_file` | `file_dirty` | `file_writeback` |
+| v1, `memory.use_hierarchy = 1` | `total_inactive_file` | `total_dirty` | `total_writeback` |
+| v1, `memory.use_hierarchy = 0` | `inactive_file` | `dirty` | `writeback` |
+
+All dirty and writeback pages are deducted, even if they overlap or belong to
+other reclaim lists. Shmem and tmpfs use anonymous lists, so they receive no
+credit. Active file cache and swap allowance are also excluded. V1's inactive
+file counter can include lazy-free anonymous pages. See the kernel's
+[v2 memory counters](https://docs.kernel.org/admin-guide/cgroup-v2.html#memory)
+and [v1 statistics](https://docs.kernel.org/admin-guide/cgroup-v1/memory.html#stat-file).
+
+Missing, unreadable, malformed, or duplicate counters give no cache credit. The
+same applies if a counter exceeds current usage or the v1 hierarchy mode is
+unknown. The group keeps its raw headroom estimate. Unlimited limits, unusable
+limit or usage files, and unsupported layouts add no cgroup hint. Other readable
+hints still apply, with host availability as the fallback. Ancestors hidden by
+the cgroup namespace or mount are not observable. The local environment
+diagnostic reports the effective available-memory hint; its total memory field
+still describes host physical memory.
+
+These counters are sampled separately during planning and can change between
+reads. Inactive pages may not be immediately reclaimable; reclaim can add
+latency and force later reads from storage. The partition cap is a planning
+heuristic: it does not reserve memory, enforce a process memory limit, or
+guarantee that a scan avoids OOM.
 
 ## Select the files
 
