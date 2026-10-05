@@ -57,6 +57,7 @@ nav:
       - Observe storage requests: benchmarks/selective-read-storage.md
       - Run a selective-read campaign: benchmarks/selective-read-campaign.md
       - Report staged Q2/Q4 campaigns: benchmarks/selective-read-production-report.md
+      - Run the Spark Delta pilot: benchmarks/selective-read-spark.md
       - Compare predicates and projection width: benchmarks/selective-read-matrix.md
       - Compare file organizations: benchmarks/selective-read-files.md
       - Compare pruning inside files: benchmarks/selective-read-within-file.md
