@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="840" height="500" viewBox="0 0 840 500" role="img" aria-labelledby="title description">
 <title id="title">Same laptop: Delta Arrow Reader and delta-rs</title>
-<desc id="description">Median query time and peak process memory for Delta Arrow Reader and delta-rs on the same laptop. Delta Arrow Reader was faster on all four queries and used less peak memory. Lower is better.</desc>
+<desc id="description">Median query times and peak process memory for Delta Arrow Reader and delta-rs on the same laptop, tested August 31, 2026. Lower is better.</desc>
 <style>text{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}</style>
 <rect width="840" height="500" fill="#ffffff"/>
 <text x="32" y="40" fill="#20252b" font-size="26" font-weight="500">Same laptop: Delta Arrow Reader vs delta-rs</text>
