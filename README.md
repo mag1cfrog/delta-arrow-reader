@@ -25,25 +25,25 @@ pipelines that read Delta Lake tables. It is a good fit when:
 - Your application already works with Arrow data.
 - You want to run SQL through DataFusion.
 
-## A laptop beat Databricks Serverless SQL on all four queries
+## A laptop vs. Databricks Serverless SQL
 
-These were ordinary application reads: each query pulled a small result from a
-much larger Delta table in S3. We reused an existing production sample instead
-of designing a workload around this reader.
+These queries came from an existing production sample. Each pulled a small
+result from a much larger Delta table in S3.
 
-Running from a laptop over the public internet, Delta Arrow Reader beat
-Databricks Serverless SQL Small on all four queries. It also beat Lakehouse//RT
-Small (Beta) once and finished within 33.8% on two more.
+From a laptop over the public internet, Delta Arrow Reader had lower median
+query times than Databricks Serverless SQL Small on all four queries. Q2 was
+too variable for a clear conclusion. Against Lakehouse//RT Small (Beta), its
+median was lower on Q3 and within 33.8% on Q1 and Q4.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-readme-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-readme-light.svg">
-  <img alt="Median query time for four existing selective Delta queries across Delta Arrow Reader on a laptop, Lakehouse RT Small (Beta), and Databricks Serverless SQL Small. Delta Arrow Reader beat Serverless SQL on all four." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-readme-light.svg" width="1000">
+  <img alt="Median query times for Delta Arrow Reader on a laptop, Lakehouse RT Small (Beta), and Serverless SQL Small across four selective queries. Q2 is inconclusive." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-readme-light.svg" width="1000">
 </picture>
 
-The same-machine comparison was not close. Delta Arrow Reader beat delta-rs on
-all four queries, by as much as 71.75 times, while delta-rs used 6.4 times as
-much peak memory.
+In this test on the same laptop, delta-rs median query times were up to
+[71.75 times as long](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/selective-s3/#limits),
+with 6.4 times as much peak memory.
 
 The [anonymized case study](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/selective-s3/)
 publishes every measured run, the query shapes, remote byte counts, cache

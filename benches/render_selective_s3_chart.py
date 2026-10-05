@@ -536,11 +536,9 @@ def render_readme_latency(
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}" role="img" aria-labelledby="title description">',
         '<title id="title">Laptop Delta reads compared with managed warehouses</title>',
-        '<desc id="description">Median query time for four existing selective Delta '
-        'queries. Delta Arrow Reader ran from a laptop and was faster than Databricks '
-        'Serverless SQL Small on all four. It was faster than Lakehouse RT Small '
-        '(Beta) on Q3. '
-        'Lower is better.</desc>',
+        '<desc id="description">Median query times for Delta Arrow Reader on a '
+        'laptop, Lakehouse RT Small (Beta), and Serverless SQL Small over eight '
+        'measured rounds. Q2 is inconclusive. Lower is better.</desc>',
         '<style>text{font-family:Inter,ui-sans-serif,-apple-system,'
         'BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}</style>',
         '<defs><linearGradient id="page" x1="0" y1="0" x2="1" y2="1">'
@@ -623,7 +621,7 @@ def render_readme_latency(
     parts.extend(
         [
             f'<text x="44" y="584" fill="{theme["muted"]}" font-size="13">'
-            'Laptop over public WAN | 8 measured runs per query | result parity verified'
+            'Laptop over public WAN | Q2 inconclusive | Result parity verified'
             '</text>',
             '</svg>',
         ]
@@ -715,9 +713,9 @@ def render_delta_rs_comparison(
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}" role="img" aria-labelledby="title description">',
         '<title id="title">Same laptop: Delta Arrow Reader and delta-rs</title>',
-        '<desc id="description">Median query time and peak process memory for '
-        'Delta Arrow Reader and delta-rs on the same laptop. Delta Arrow Reader '
-        'was faster on all four queries and used less peak memory. Lower is better.</desc>',
+        '<desc id="description">Median query times and peak process memory for '
+        'Delta Arrow Reader and delta-rs on the same laptop, tested August 31, '
+        '2026. Lower is better.</desc>',
         '<style>text{font-family:Inter,ui-sans-serif,-apple-system,'
         'BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}</style>',
         f'<rect width="{width}" height="{height}" fill="{theme["background"]}"/>',

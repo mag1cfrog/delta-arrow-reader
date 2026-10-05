@@ -3,17 +3,19 @@ title: "Databricks Serverless SQL vs a laptop on selective Delta reads"
 description: "An anonymized S3 benchmark comparing four selective Delta Lake queries across Delta Arrow Reader on a laptop, Databricks Serverless SQL, Lakehouse RT, and delta-rs."
 ---
 
-# A laptop beat Serverless Small on selective Delta reads
+# A laptop vs. Serverless Small on selective Delta reads
 
 Delta Arrow Reader ran four pre-existing selective queries from a laptop
-against private Delta tables in S3. It beat Databricks Serverless SQL Small on
-all four. Against Lakehouse//RT Small (Beta), it won one query, finished within
-10.4% on another and 33.8% on a third, and was 2.33 times slower on the fourth.
-All four engines returned the same results.
+against private Delta tables in S3. Its median query times were lower than
+Databricks Serverless SQL Small on all four, though Q2 was too variable for a
+clear conclusion.
 
-The same-machine comparison was not close. Delta Arrow Reader ran the four
-queries 4.67, 71.75, 1.26, and 30.48 times faster than delta-rs, which used 6.4
-times as much peak memory.
+Against Lakehouse//RT Small (Beta), the reader's median was lower on Q3,
+10.4% higher on Q1, 33.8% higher on Q4, and 2.33 times as long on Q2. All four
+engines returned the same results.
+
+On the same laptop, delta-rs median query times were up to
+[71.75 times as long](#limits), and it used 6.4 times as much peak memory.
 
 The latency table also understates the result against RT. Delta Arrow Reader
 selected the same files, transferred half as many reported bytes on Q1, and
@@ -57,18 +59,17 @@ Lower is faster.
 | Q3 | 1.004 s | 1.359 s | **0.806 s** | 1.016 s |
 | Q4 | **1.297 s** | 2.821 s | 1.736 s | 52.899 s |
 
-Delta Arrow Reader finished 1.04-1.69 times faster than Serverless SQL on
-every query. Against RT, it was 1.24 times faster on Q3, 10.4% slower on Q1,
-33.8% slower on Q4, and 2.33 times slower on Q2.
+Serverless SQL's median query times were 1.04-1.69 times as long as Delta Arrow
+Reader's. On Q3, RT's median was 1.24 times as long.
 
 When each query has equal weight, the geometric mean puts Delta Arrow Reader
 29.0% behind RT and 28.8% ahead of Serverless SQL. Summing the four medians
 puts it 50.9% behind RT and 22.9% ahead of Serverless SQL. Both summaries are
 included because either one alone can flatter a benchmark.
 
-Q2 is the weakest and noisiest Delta Arrow Reader result. Its eight measured
-runs ranged from 1.831 to 20.386 seconds around a 3.733-second median. The chart
-shows that range rather than reducing a WAN-sensitive result to one clean dot.
+For Q2, Delta Arrow Reader's median was 3.733 seconds versus 3.880 for
+Serverless SQL, but it was faster in only 3 of 8 corresponding rounds. Its runs
+ranged from 1.831 to 20.386 seconds, leaving the comparison inconclusive.
 
 ### Databricks-reported server time
 
@@ -139,7 +140,7 @@ advantage from the comparison.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-delta-rs-comparison-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-delta-rs-comparison-light.svg">
-  <img alt="Median query time and peak process memory for Delta Arrow Reader and delta-rs on the same laptop. Delta Arrow Reader was faster on all four queries and used less peak memory." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-delta-rs-comparison-light.svg">
+  <img alt="Median query times and peak process memory for Delta Arrow Reader and delta-rs on the same laptop, tested August 31, 2026." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-delta-rs-comparison-light.svg">
 </picture>
 
 | Query | Delta Arrow Reader | delta-rs | DAR speedup |
@@ -152,17 +153,6 @@ advantage from the comparison.
 The memory result was just as clear: Delta Arrow Reader peaked at 431.1 MiB,
 while delta-rs reached 2,751.6 MiB. That is 6.4 times as much memory for
 delta-rs.
-
-This is the strongest evidence that the reader itself matters. Rust,
-DataFusion, and Delta support did not produce comparable performance by
-themselves. Delta Arrow Reader's selective read path was faster on every query,
-dramatically so on the two largest tables.
-
-This remains an end-to-end comparison, not a one-component A/B test. The two
-readers used different DataFusion, Arrow, and Parquet versions, and delta-rs
-did not expose an equivalent S3 byte counter. Those differences limit which
-optimization gets credit; they do not explain away a same-machine gap of up to
-71.75 times.
 
 ## The workload was not designed for this reader
 
@@ -334,8 +324,8 @@ metadata snapshot.
 ## What the numbers say
 
 An Apache-2.0 reader running in WSL on a laptop with 19 GiB of usable memory
-beat Serverless SQL Small on application-facing latency for all four selective
-reads. It also reported fewer remote bytes on every query.
+had lower median application-facing latency than Serverless SQL Small on all
+four selective reads and reported fewer remote bytes on every query.
 
 RT won three queries and the aggregate comparison, but it did not win by
 selecting fewer files or reading materially less data. Delta Arrow Reader
@@ -345,11 +335,8 @@ placement are undisclosed. The different network paths may account for a
 meaningful part of the remaining gap, but the benchmark cannot separate that
 effect from differences between the engines.
 
-delta-rs was not competitive on the same machine. Delta Arrow Reader was
-faster on every query, up to 71.75 times faster, while delta-rs used 6.4 times
-as much peak memory. Supporting Delta Lake and DataFusion is not enough by
-itself; the read path determines whether a selective query takes milliseconds,
-seconds, or minutes.
+In this same-machine setup, delta-rs median query times were up to 71.75 times
+as long, and it used 6.4 times as much peak memory.
 
 Databricks keeps RT's implementation inside its service. Delta Arrow Reader's
 implementation, raw anonymized measurements, and chart generator are public.
@@ -371,9 +358,13 @@ exclusive to a closed runtime.
 - Local table initialization was measured separately and excluded from query
   latency. A one-shot caller that loads all four tables would pay that
   12.033-second cost.
-- The local runs crossed a public WAN to S3, and Q2 showed substantial network
-  variability.
+- The local runs crossed a public WAN to S3, and Q2 showed substantial
+  run-to-run variability.
 - The local engines used different DataFusion, Arrow, and Parquet versions.
+- Per-table deletion-vector status and equivalent delta-rs S3 byte counters
+  are unavailable. The [protocol](selective-read-protocol.md#questions-and-existing-evidence)
+  explains why the speedups cannot be assigned to deletion vectors or a
+  particular pruning layer.
 - The benchmark reports no cost-normalized or CPU-normalized comparison.
 - These results describe the pinned snapshots and software tested on August
   31, 2026. They are not a universal performance promise.
