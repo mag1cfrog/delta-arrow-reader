@@ -20,10 +20,12 @@ PROTOCOL = HERE.parents[2] / "docs/content/benchmarks/selective-read-protocol.md
 AMENDMENT = PROTOCOL.with_name("selective-read-large-workloads.md")
 SAMPLING = PROTOCOL.with_name("selective-read-sampling.md")
 PRODUCTION = PROTOCOL.with_name("selective-read-production-workloads.md")
+SPARK_MATRIX = PROTOCOL.with_name("selective-read-spark-matrix.md")
 if (HERE / "protocol.md").exists():
     PROTOCOL, AMENDMENT = HERE / "protocol.md", HERE / "large-workloads.md"
     SAMPLING = HERE / "sampling.md"
     PRODUCTION = HERE / "production-workloads.md"
+    SPARK_MATRIX = HERE / "spark-matrix.md"
 COMPARISON_FIELDS = ("comparison_revision", "protocol_sha256")
 LARGE_IDENTITY_FIELDS = ("base_protocol_sha256", "workload_manifest_sha256")
 SAMPLING_IDENTITY_FIELDS = ("sampling_sha256",)
@@ -46,10 +48,10 @@ def save(path, value):
 
 def comparison_identity(value):
     revision = value["comparison_revision"]
-    if type(revision) is not int or revision not in (2, 3, 4, 5):
+    if type(revision) is not int or revision not in (2, 3, 4, 5, 6):
         raise ValueError("unknown comparison revision")
     fields = COMPARISON_FIELDS + (LARGE_IDENTITY_FIELDS if revision >= 3 else ())
-    expected = digest(PRODUCTION if revision == 5 else AMENDMENT if revision >= 3 else PROTOCOL)
+    expected = digest(SPARK_MATRIX if revision == 6 else PRODUCTION if revision == 5 else AMENDMENT if revision >= 3 else PROTOCOL)
     if value["protocol_sha256"] != expected:
         raise ValueError("stale comparison protocol")
     if revision >= 3:
@@ -64,13 +66,23 @@ def comparison_identity(value):
         fields += SAMPLING_IDENTITY_FIELDS
     elif value.get("sampling_sha256") is not None:
         raise ValueError("historical revisions cannot carry a sampling amendment")
-    if revision == 5:
+    if revision >= 5:
         if value.get("sampling_stage") not in ("pilot", "formal"):
             raise ValueError("missing or invalid production sampling stage")
         fields += PRODUCTION_IDENTITY_FIELDS
     elif value.get("sampling_stage") is not None:
         raise ValueError("historical revisions cannot carry a production sampling stage")
     return {key: value[key] for key in fields}
+
+
+HISTORICAL_READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft")
+
+
+def reader_roster(value):
+    revision = value.get("comparison_revision", 2)
+    if type(revision) is not int or revision not in (2, 3, 4, 5, 6):
+        raise ValueError("unknown comparison reader roster")
+    return (*HISTORICAL_READERS[:-1], "spark") if revision == 6 else HISTORICAL_READERS
 
 
 def query_count(value):
@@ -149,7 +161,7 @@ def check_result(record, output, fixtures, reference, payload):
 
 @contextmanager
 def export_limit(payload, reference):
-    if payload.get("comparison_revision") not in (3, 4, 5) or payload["purpose"] != "validation":
+    if payload.get("comparison_revision") not in (3, 4, 5, 6) or payload["purpose"] != "validation":
         yield None
         return
     metadata = json.loads((reference / "reference.json").read_text())

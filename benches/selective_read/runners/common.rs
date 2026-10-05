@@ -32,6 +32,8 @@ const SAMPLING: &[u8] =
     include_bytes!("../../../docs/content/benchmarks/selective-read-sampling.md");
 const PRODUCTION: &[u8] =
     include_bytes!("../../../docs/content/benchmarks/selective-read-production-workloads.md");
+const SPARK_MATRIX: &[u8] =
+    include_bytes!("../../../docs/content/benchmarks/selective-read-spark-matrix.md");
 const ORACLE: &[u8] = include_bytes!("../oracle.py");
 const LOCK: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.lock"));
 
@@ -108,7 +110,7 @@ impl Request {
     }
 
     fn valid_comparison(&self) -> bool {
-        if self.comparison_revision == 5 {
+        if self.comparison_revision >= 5 {
             if !matches!(self.sampling_stage.as_deref(), Some("pilot" | "formal")) {
                 return false;
             }
@@ -122,9 +124,11 @@ impl Request {
                     && self.workload_manifest_sha256.is_none()
                     && self.sampling_sha256.is_none()
             }
-            3 | 4 | 5 => {
+            3 | 4 | 5 | 6 => {
                 self.protocol_sha256
-                    == digest(if self.comparison_revision == 5 {
+                    == digest(if self.comparison_revision == 6 {
+                        SPARK_MATRIX
+                    } else if self.comparison_revision == 5 {
                         PRODUCTION
                     } else {
                         AMENDMENT
@@ -232,7 +236,7 @@ fn identity(request: &Request, build_hash: &str, config_hash: &str) -> Value {
     if request.comparison_revision >= 4 {
         value["sampling_sha256"] = json!(request.sampling_sha256);
     }
-    if request.comparison_revision == 5 {
+    if request.comparison_revision >= 5 {
         value["sampling_stage"] = json!(request.sampling_stage);
     }
     value

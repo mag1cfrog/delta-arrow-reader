@@ -21,7 +21,7 @@ def prepare(output, java_home, artifacts):
     tracked = [*HERE.glob("*.py"), HERE / "lock.json", HERE.parent / "python_common.py", HERE.parent / "run.py",
                HERE.parents[1] / "oracle.py", *[ROOT / "docs/content/benchmarks" / name for name in (
                    "selective-read-protocol.md", "selective-read-large-workloads.md", "selective-read-sampling.md",
-                   "selective-read-production-workloads.md")]]
+                   "selective-read-production-workloads.md", "selective-read-spark-matrix.md")]]
     hashes = {str(p.relative_to(ROOT)): digest(p) for p in sorted(tracked)}
     lock = json.loads((HERE / "lock.json").read_text())
     if (platform.python_implementation(), platform.python_version(), sys.platform, platform.machine()) != (
@@ -68,7 +68,8 @@ def prepare(output, java_home, artifacts):
     for name, document in (("protocol.md", "selective-read-protocol.md"),
                            ("large-workloads.md", "selective-read-large-workloads.md"),
                            ("sampling.md", "selective-read-sampling.md"),
-                           ("production-workloads.md", "selective-read-production-workloads.md")):
+                           ("production-workloads.md", "selective-read-production-workloads.md"),
+                           ("spark-matrix.md", "selective-read-spark-matrix.md")):
         sources[name] = ROOT / "docs/content/benchmarks" / document
     for name, source in sources.items():
         shutil.copyfile(source, output / name)
@@ -81,7 +82,7 @@ def prepare(output, java_home, artifacts):
     if {str(p.relative_to(ROOT)): digest(p) for p in sorted(tracked)} != hashes:
         raise ValueError("source files changed during preparation; use a new output directory")
     save(output / "build.json", {
-        "format": "selective-read-build-v1", "reader_id": "spark", "pilot_only": True,
+        "format": "selective-read-build-v1", "reader_id": "spark", "pilot_only": False,
         "harness_git_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
         "git_status": subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True),
         "reader_git_commit": lock["spark_source"], "delta_git_commit": lock["delta_source"],

@@ -9,14 +9,15 @@ from unittest.mock import patch
 import production_report as reporting
 
 
-def main():
-    identity = {"comparison_revision": 5, "sampling_stage": "formal", "workload_manifest_sha256": "definition"}
+def check_revision(revision):
+    identity = {"comparison_revision": revision, "sampling_stage": "formal", "workload_manifest_sha256": "definition"}
+    readers = reporting.reader_roster(identity)
     cases = [{"case_id": f"production.{shape}.{layout}" + suffix,
               "geometry": {"files": 130 if shape == "q2" else 60, "stored_columns": 416 if shape == "q2" else 90,
                            "physical_bytes": 1024**3}, "projection_columns": 69 if shape == "q2" else 71}
              for shape in ("q2", "q4") for layout in ("localized", "scattered") for suffix in ("", ".dv")]
     definition = {"scope": "formal", "cases": cases, "inventory": {row["case_id"]: {} for row in cases}}
-    config = {**identity, "reader_builds": {reader: {"version": "pinned"} for reader in reporting.READERS},
+    config = {**identity, "reader_builds": {reader: {"version": "pinned"} for reader in readers},
               "server": {"build_sha256": "minio", "cpus": {"reader": list(range(8))}, "topology": [],
                          "kernel": "fixed", "cpu_info": "model name: check-cpu\ncpu MHz: 1000\n"},
               "cache_policy": "fresh clients; reused caches"}
@@ -31,7 +32,7 @@ def main():
             (path / "observations.jsonl").write_text("")
             rows = []
             for mode in reporting.MODES:
-                for reader in reporting.READERS:
+                for reader in readers:
                     unsupported = case["case_id"].endswith(".dv") and reader == "daft"
                     rows.append({"case": case, "job": {"case_id": case["case_id"], "execution_mode": mode},
                                  "reader_id": reader, "gate": {"status": "unsupported" if unsupported else "success",
@@ -56,7 +57,9 @@ def main():
             assert sum(row["status"] == "not_run" for row in result["rows"]) == 70
             result = aggregate(paths)
             assert result["formal_coverage_complete"] and not result["publication_ready"]
-            assert sum(row["status"] == "unsupported" for row in result["rows"]) == 8
+            assert result["readers"] == list(readers)
+            assert {r["reader_id"] for r in result["rows"]} == set(readers)
+            assert sum(row["status"] == "unsupported" for row in result["rows"]) == (8 if revision == 5 else 0)
             reports[paths[0]]["status"] = "incomplete"
             assert not aggregate(paths)["formal_coverage_complete"]
             reports[paths[0]]["status"] = "complete"
@@ -74,7 +77,7 @@ def main():
             (paths[0] / "campaign.json").write_text(json.dumps(altered))
             rejected(paths[:1])
             altered = copy.deepcopy(config)
-            altered["reader_builds"]["daft"]["version"] = "different"
+            altered["reader_builds"][readers[-1]]["version"] = "different"
             (paths[0] / "campaign.json").write_text(json.dumps(altered))
             rejected(paths[:2])
             (paths[0] / "campaign.json").write_text(json.dumps(config))
@@ -113,4 +116,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    for revision in (5, 6):
+        check_revision(revision)

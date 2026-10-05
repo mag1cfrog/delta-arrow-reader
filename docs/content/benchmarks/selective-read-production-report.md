@@ -7,6 +7,9 @@ profiles visible. A completed batch can leave most of the matrix pending.
 Use the pinned oracle Python environment from
 [Validate public results](selective-read-oracle.md). Keep the complete frozen
 formal definition, fixture manifests, references and raw campaign artifacts.
+Revision 6 uses the [Spark reader roster](selective-read-spark-matrix.md).
+Revision 5 retains Daft. Use each revision's frozen harness for historical inputs;
+the report rejects mixtures of comparison revisions.
 Reporting loads metadata; reclaimed Parquet bulk does not need to be restored
 just to generate the overview.
 
@@ -19,8 +22,8 @@ BENCH_PYTHON=/path/to/oracle-venv/bin/python
 BENCH_RESULTS=/path/to/benchmark-results
 "$BENCH_PYTHON" -B benches/selective_read/production_report.py \
   --definition "$BENCH_RESULTS/global-definition/workload.json" \
-  --campaign "$BENCH_RESULTS/campaigns/q2-scattered-main-v2" \
-  --campaign "$BENCH_RESULTS/campaigns/q2-scattered-dv-main-v2" \
+  --campaign "$BENCH_RESULTS/campaigns/q2-scattered-spark-v6" \
+  --campaign "$BENCH_RESULTS/campaigns/q2-scattered-dv-spark-v6" \
   --output "$BENCH_RESULTS/report"
 ```
 

@@ -32,6 +32,8 @@ DEFAULT_CASES = ("li.clustered.eq2-in20", "li.shuffled.eq2-in20")
 
 def schedule(inventory, campaign_id, comparison=None):
     slots = []
+    roster = run.reader_roster(comparison or {})
+    require(all(set(entries) == set(roster) for entries in inventory.values()), "reader inventory differs from the comparison roster")
     reduced = (comparison or {}).get("comparison_revision", 2) >= 4
     samples = 2 if (comparison or {}).get("sampling_stage") == "pilot" else 5
     def add(job, stage, readers, repetition, *, traced=False):
@@ -42,7 +44,7 @@ def schedule(inventory, campaign_id, comparison=None):
 
     # Inventory is ordered: lexical isolated cases, then lexical reuse sessions.
     for job, entries in inventory.items():
-        readers = tuple(r for r in READERS if entries[r]["runnable"])
+        readers = tuple(r for r in roster if entries[r]["runnable"])
         if not readers:
             continue
         for repetition, order in enumerate((readers,) if reduced else (readers, readers[::-1])):
@@ -53,7 +55,7 @@ def schedule(inventory, campaign_id, comparison=None):
             add(job, "timing", order, repetition)
     # No tracing or plan capture until every timing slot has finished.
     for job, entries in inventory.items():
-        readers = tuple(r for r in READERS if entries[r]["runnable"])
+        readers = tuple(r for r in roster if entries[r]["runnable"])
         add(job, "plan", readers, 0)
         if reduced:
             add(job, "diagnostic", readers, 0, traced=True)
@@ -108,7 +110,7 @@ def validate(record, payload, reader, gate=None):
         require(record[key] == payload[key], "observation request differs: " + key)
     require(record["capability"]["status"] == "supported" and record["cleanup"]["status"] == "passed", "incomplete capability or cleanup")
     require(record["external_resource_limits"]["process_memory_bytes"] == run.BUDGET["process_memory_bytes"], "missing enforced memory limit")
-    if payload["comparison_revision"] in (3, 4, 5) and payload["purpose"] == "validation":
+    if payload["comparison_revision"] in (3, 4, 5, 6) and payload["purpose"] == "validation":
         require(record["external_resource_limits"]["max_file_size_bytes"] == record["validation_export_limit_bytes_per_file"],
                 "validation export limit was not inherited by the reader")
     queries = record["queries"]
@@ -143,6 +145,8 @@ def validate(record, payload, reader, gate=None):
 def measurements(record):
     values = {key: record[key] for key in ("open_query_ns", "initialization_ns", "initialization_plus_query1_ns",
               "initialization_plus_all_queries_ns", "session_elapsed_ns", "cleanup_ns") if record[key] is not None}
+    if record.get("startup_ns") is not None:
+        values["startup_ns"] = record["startup_ns"]
     values.update({key: record["external_metrics"][key] for key in (
         "process_user_cpu_ns", "process_system_cpu_ns", "process_cpu_ns", "peak_rss_bytes", "process_elapsed_ns")})
     for query in record["queries"]:
@@ -190,7 +194,7 @@ def summarize(inventory, slots, rows, resolution, integrity=True):
                     "difference_ns": on - off, "ratio": on / off if min(overhead["observer_baseline"] + overhead["diagnostic"]) >= resolution else None,
                     "note": "two descriptive pairs; separate observations from headline timing"}
         dar = readers[READERS[0]]
-        for reader in READERS[1:]:
+        for reader in (r for r in readers if r != READERS[0]):
             comparator = readers[reader]
             for key in ("open_query_ns", "initialization_plus_query1_ns", "initialization_plus_all_queries_ns"):
                 ratio, reason = None, "both readers must pass validation and every scheduled warmup/timing slot"
@@ -222,7 +226,7 @@ def execute(args):
         binary = binary.resolve()
         build = json.loads((binary.parent / "build.json").read_text())
         reader = build["reader_id"]
-        require(reader in READERS and reader not in binaries, "unknown or duplicate reader")
+        require(reader in (*READERS, "spark") and reader not in binaries, "unknown or duplicate reader")
         require(digest(binary) == build["executable_sha256"], "reader executable changed")
         binaries[reader], builds[reader] = binary, build
     prepared = matrix.load(args.matrix, fixtures) if args.matrix else None
@@ -231,6 +235,8 @@ def execute(args):
     require(not (workload and prepared), "use one workload revision per campaign")
     comparison = large_workloads.identity(workload_path) if workload else {
         "comparison_revision": 2, "protocol_sha256": digest(run.PROTOCOL)}
+    roster = run.reader_roster(comparison)
+    require(set(binaries) <= set(roster), "binary is outside the comparison reader roster")
     if prepared:
         require(not (args.case or args.reference or args.session or args.no_sessions), "--matrix supplies all cases and references; do not mix case/session overrides")
         for reader, build in builds.items():
@@ -274,8 +280,8 @@ def execute(args):
         sources += [HERE / "large_workloads.py", workload_path.resolve(), run.AMENDMENT]
         if comparison["comparison_revision"] >= 4:
             sources.append(run.SAMPLING)
-        if comparison["comparison_revision"] == 5:
-            sources += [run.PRODUCTION, HERE / "production_workloads.py"]
+        if comparison["comparison_revision"] in (5, 6):
+            sources += [run.SPARK_MATRIX if comparison["comparison_revision"] == 6 else run.PRODUCTION, HERE / "production_workloads.py"]
     hashes = {str(p): digest(p) for p in sources}
     save(output / "campaign.json", {"campaign_id": campaign_id, **comparison,
          "fixtures": str(fixtures), "upload": str(args.upload.resolve()),
@@ -342,7 +348,7 @@ def execute(args):
                     missing = None
                 except (ValueError, KeyError, OSError, StopIteration) as error:
                     missing = "fixture/query/reference not prepared: " + (str(error) or job["case_id"])
-                for reader in READERS:
+                for reader in roster:
                     entry = entries[reader] = {"runnable": False, "status": "preparation_failed", "failure_reason": missing,
                                                "case_id": job["case_id"], "execution_mode": job["execution_mode"]}
                     if missing:
@@ -351,7 +357,7 @@ def execute(args):
                         entry.update(status="operational_failure", failure_reason="reader build not supplied")
                         continue
                     slot = {"run_id": f"{campaign_id}-gate-{len(rows):05d}", "job_id": job["id"], "reader_id": reader,
-                            "stage": "gate", "repetition": 0, "order": READERS.index(reader), "traced": False,
+                            "stage": "gate", "repetition": 0, "order": roster.index(reader), "traced": False,
                             **(comparison if workload else {})}
                     record = invoke(slot, job)
                     entry.update(status=record["status"], runnable=record["status"] == "success", run_id=slot["run_id"],
