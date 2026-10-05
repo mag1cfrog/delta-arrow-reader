@@ -10,6 +10,14 @@ MinIO server. It checks each case and execution mode against the independent
 oracle, saves the runnable subset and full schedule, then runs warmups, timing
 samples and separate diagnostics. All five readers remain in the inventory.
 
+New large workloads use [revision 4 sampling](selective-read-sampling.md):
+one validation, one warmup, five independent timed samples, one plan capture
+and one I/O diagnostic per runnable reader and job. Each reuse invocation
+contains two queries. The `sampling_sha256` identity binds these counts through
+the adapters, watchdog, certificates and report. This schedule does not run
+paired tracing-overhead experiments; report that estimate as unavailable.
+The revision 2 examples and historical schedules below remain reproducible.
+
 For all 30 public predicate/projection cases, use the
 [query matrix guide](selective-read-matrix.md). Its `--matrix` argument supplies
 the full case list and references without adding the default reuse sessions.
@@ -83,14 +91,15 @@ helpers support them.
 | Each run directory | Request, raw reader record, stdout/stderr, lifecycle progress, process resources and storage observation |
 | Each `-io` sibling directory | Observer request, capture proof and sanitized S3 requests when tracing is enabled |
 
-Cases run in lexical order, followed by sessions in lexical order. Each runnable
+Cases run in lexical order, followed by sessions in lexical order. In the
+historical revision 2/3 schedule, each runnable
 reader warms up once in fixed order and once in reverse. The existing
 `balanced_orders` helper supplies complete cycles: five, four, three, two and one
 runnable readers receive 10, 16, 12, 12 and 10 independent samples respectively.
 Failed slots remain in their original positions. No outlier removal or sample
 replacement occurs.
 
-Each reuse sample opens one process, initializes its native snapshot/session and
+Each historical reuse sample opens one process, initializes its native snapshot/session and
 plans and executes the query ten times. The summary reports initialization,
 each query index across independent sessions, initialization plus the first/all
 queries, and enclosing session time. Ten queries within a process never become
@@ -102,7 +111,7 @@ every scheduled warmup and timing sample to succeed. Ties and losses remain
 visible. Durations below the recorded clock resolution yield no ratio. Raw
 durations and byte counts are integers; interpolated summaries can be fractional.
 
-Plan export starts after the entire timing schedule. I/O diagnostics then have
+Plan export starts after the entire timing schedule. Historical I/O diagnostics have
 one traced warmup round in fixed order and one in reverse, followed by two
 measured diagnostic rounds in those orders. Each traced observation has a
 separate untraced run of the same query, ordered off/on in the first round and
@@ -142,8 +151,9 @@ accounting has microsecond precision, stored as bytes and nanoseconds.
 python3 -B benches/selective_read/check_campaign.py
 ```
 
-This bounded check covers all reader subsets, balanced positions and adjacencies,
-session accounting, ties/losses, timer resolution, failed/missing slots and real
+This bounded check covers all reader subsets, historical counterbalancing,
+five-sample ordering, two-query sessions, sampling identity rejection,
+ties/losses, timer resolution, failed/missing slots and real
 subprocess crashes, malformed output and phase timeouts. It requires no reader
 builds, MinIO or additional Python packages. Campaigns and this check are manual;
 this slice adds no CI job or step.

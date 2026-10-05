@@ -27,7 +27,7 @@ import polars as pl
 import pyarrow as pa
 
 sys.path.insert(0, str(HERE))
-from run import comparison_identity, digest, save
+from run import comparison_identity, digest, query_count, save
 from python_common import checkpoint, correctness, event, json_hash, observation, require, runtime_metadata, scan_sql, sha, validate
 
 DELTA_OPTIONS = {"without_files": False, "log_buffer_size": 8, "skip_stats": False}
@@ -104,7 +104,8 @@ def execute(request, options, output, record):
     initialization = clock() - session_start
     if timed and reuse:
         record["initialization_ns"] = initialization
-    for index in range(10 if reuse else 1):
+    count = query_count(request)
+    for index in range(count):
         record["phase"] = "query"
         if reuse:
             checkpoint(record, "query", index)
@@ -132,7 +133,7 @@ def execute(request, options, output, record):
                     del frame
                 completion = clock() - start
                 event(record, "stream_complete", index)
-                if index == (9 if reuse else 0):
+                if index + 1 == count:
                     if timed:
                         record["session_elapsed_ns"] = clock() - session_start
                     elif request["purpose"] in ("diagnostic", "io"):

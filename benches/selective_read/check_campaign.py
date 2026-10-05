@@ -27,7 +27,10 @@ reuse = p["execution_mode"] == "reuse"
 emit("initialization" if reuse else "open")
 if mode == "initialization-timeout": time.sleep(2)
 queries = []
-for index in range(10 if reuse else 1):
+count = (2 if p.get("comparison_revision") == 4 else 10) if reuse else 1
+if mode == "extra-query": count += 1
+if mode == "missing-query": count -= 1
+for index in range(count):
     if reuse: emit("query", index)
     if mode == "query-timeout" and index == 1: time.sleep(2)
     query = dict(query_index=index, output_rows=3, output_batches=1, completion_ns=100, first_batch_ns=20)
@@ -39,11 +42,11 @@ if mode == "cleanup-timeout": time.sleep(2)
 '''
 
 
-def observation(value, reuse=False):
-    count = 10 if reuse else 1
+def observation(value, reuse=False, revision=2):
+    count = (2 if revision == 4 else 10) if reuse else 1
     return {"open_query_ns": None if reuse else value, "initialization_ns": 5 if reuse else None,
             "initialization_plus_query1_ns": value + 5 if reuse else None,
-            "initialization_plus_all_queries_ns": 10 * value + 5 if reuse else None,
+            "initialization_plus_all_queries_ns": count * value + 5 if reuse else None,
             "session_elapsed_ns": count * value + (5 if reuse else 0), "cleanup_ns": 1,
             "external_metrics": {key: 1 for key in ("process_user_cpu_ns", "process_system_cpu_ns", "process_cpu_ns", "peak_rss_bytes", "process_elapsed_ns")},
             "queries": [{"query_index": index, "output_rows": 3, "output_batches": 1,
@@ -59,10 +62,38 @@ def check():
     slots = campaign.schedule({s: entries for s in campaign.large_workloads.SESSIONS}, "revision3", comparison)
     assert all(run.comparison_identity(slot) == comparison for slot in slots)
     assert all(s["job_id"] in campaign.large_workloads.SESSIONS for s in slots)
+    reduced = comparison | {"comparison_revision": 4, "sampling_sha256": run.digest(run.SAMPLING)}
+    assert run.comparison_identity(reduced) == reduced
+    for change in ({"sampling_sha256": "0" * 64}, {"sampling_sha256": None}, {"comparison_revision": 3}):
+        try:
+            run.comparison_identity(reduced | change)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("stale or missing sampling identity accepted")
     for count in range(6):
         for subset in combinations(campaign.READERS, count):
             entries = {r: {"runnable": r in subset, "status": "success" if r in subset else "unsupported"} for r in campaign.READERS}
             inventory = {"case": entries, "reuse.li": entries}
+            short = campaign.schedule(inventory, "reduced", reduced)
+            assert all(run.comparison_identity(s) == reduced for s in short)
+            for job in inventory:
+                for reader in subset:
+                    stages = Counter(s["stage"] for s in short if s["job_id"] == job and s["reader_id"] == reader)
+                    assert stages == {"warmup": 1, "timing": 5, "plan": 1, "diagnostic": 1}
+                positions = Counter((s["reader_id"], s["order"]) for s in short if s["job_id"] == job and s["stage"] == "timing")
+                assert not positions or max(positions.values()) - min(positions.values()) <= 1
+            short_rows = [{**s, "status": "success", "observation": observation(100, s["job_id"].startswith("reuse"), 4)}
+                          for s in short if s["stage"] in ("warmup", "timing")]
+            short_summary = campaign.summarize(inventory, short, short_rows, 1)
+            for reader in subset:
+                metrics = short_summary["reuse.li"][reader]["metrics"]
+                assert metrics["query_1.completion_ns"]["samples"] == 5 and "query_2.completion_ns" not in metrics
+            if short_rows:
+                missing = next(row for row in short_rows if row["stage"] == "timing")
+                short_rows.remove(missing)
+                incomplete = campaign.summarize(inventory, short, short_rows, 1)[missing["job_id"]][missing["reader_id"]]
+                assert not incomplete["eligible"] and incomplete["sample_statuses"]["not_run"] == 1
             slots = campaign.schedule(inventory, "check")
             assert len({s["run_id"] for s in slots}) == len(slots)
             assert all(s["reader_id"] in subset for s in slots)
@@ -121,6 +152,24 @@ def check():
         for mode in ("crash", "malformed"):
             result = run.invoke(fake, {"execution_mode": "open", "purpose": "timing", "test": mode}, root / mode, supervised=True)
             assert result["status"] == "operational_failure" and (root / mode / "observation.json").is_file(), result
+        for mode in ("success", "missing-query", "extra-query", "query-timeout"):
+            payload = {"execution_mode": "reuse", "purpose": "timing", "comparison_revision": 4, "test": mode}
+            if mode == "query-timeout":
+                # The existing short-deadline check above covers the watchdog's
+                # timeout path; exercise the second query in revision 4 too.
+                output = root / ("reduced-" + mode)
+                output.mkdir()
+                request = output / "request.json"
+                request.write_text(json.dumps(payload))
+                with (output / "stdout").open("w") as stdout, (output / "stderr").open("w") as stderr:
+                    result = supervise.launch([str(fake), str(request), str(output / "reader")], payload, output, stdout, stderr,
+                                              query_seconds=.3, cleanup_seconds=.3)
+                assert result["status"] == "timeout" and len(result["completed_queries"]) == 1
+            else:
+                result = run.invoke(fake, payload, root / ("reduced-" + mode), supervised=True)
+                assert result["status"] == ("success" if mode == "success" else "operational_failure"), result
+                if mode == "success":
+                    assert len(result["queries"]) == 2 and result["supervision"]["last_phase"] == "cleanup"
         bad = {"status": "success"}
         try:
             campaign.validate(bad, {}, "delta-arrow-reader")
@@ -128,7 +177,7 @@ def check():
             pass
         else:
             raise AssertionError("malformed success accepted")
-    print("passed: all 32 reader subsets, balanced schedules, independent sessions, ratios, missing/failed slots and subprocess watchdogs")
+    print("passed: all 32 reader subsets, historical and five-sample schedules, two-query sessions, identity rejection, missing/failed slots and subprocess watchdogs")
 
 
 if __name__ == "__main__":

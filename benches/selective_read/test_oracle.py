@@ -224,8 +224,9 @@ class OracleTests(unittest.TestCase):
                      "fixture_manifest_sha256": run.digest(fixtures / "manifest.json"),
                      "native_expression_sha256": dict.fromkeys(("polars", "daft"), matrix.sha("unit"))}
                      for case in large.definitions()]
-            value = {"format": "selective-read-large-workload-v1", "comparison_revision": 3,
+            value = {"format": "selective-read-large-workload-v1", "comparison_revision": 4,
                      "protocol_sha256": run.digest(run.AMENDMENT), "base_protocol_sha256": run.digest(run.PROTOCOL),
+                     "sampling_sha256": run.digest(run.SAMPLING),
                      "scope": "smoke", "publication_ready": False, "scales": {"data": .01, "control": .01},
                      "readers": list(large.READERS), "sessions": large.SESSIONS, "cases": cases,
                      "source_sha256": {str(p.relative_to(large.HERE)): run.digest(p) for p in large.SOURCES},
@@ -240,6 +241,7 @@ class OracleTests(unittest.TestCase):
                 metadata = oracle.prepare(fixtures, case, reference, workload=workload)
                 request = run.request(fixtures, case, "reuse", "validation", "unit", workload=workload)
                 python_common.validate(request)
+                self.assertEqual(run.query_count(request), 2)
                 self.assertEqual(run.comparison_identity(request), run.comparison_identity(metadata))
                 self.assertEqual(metadata["output_rows"], 144 if "date30" in case else 143 if "date7" in case else 20)
                 self.assertGreater(metadata["projected_logical_bytes"], metadata["output_rows"])
@@ -258,7 +260,7 @@ class OracleTests(unittest.TestCase):
                     write_json(identity, provenance | {"result_sha256": run.digest(result)})
                 export(table)
                 self.assertEqual(oracle.check(reference, fixtures, result, identity)["status"], "passed")
-                for field in ("base_protocol_sha256", "workload_manifest_sha256"):
+                for field in ("base_protocol_sha256", "workload_manifest_sha256", "sampling_sha256"):
                     altered = json.loads(identity.read_text()) | {field: "0" * 64}
                     write_json(identity, altered)
                     with self.assertRaisesRegex(ValueError, "identity mismatch"):
@@ -277,12 +279,49 @@ class OracleTests(unittest.TestCase):
                         stream.truncate(value["oracle_limits"]["disk_bytes"] // 2)
                     with self.assertRaisesRegex(ValueError, "session exports"):
                         oracle.check(reference, fixtures, session / "query-0.arrow", identity)
-            for change in ({"base_protocol_sha256": "0" * 64}, {"scales": {"data": 10, "control": 10}}, {"cases": cases[:-1]}):
+            for change in ({"base_protocol_sha256": "0" * 64}, {"sampling_sha256": "0" * 64},
+                           {"comparison_revision": 3}, {"scales": {"data": 10, "control": 10}}, {"cases": cases[:-1]}):
                 write_json(workload, value | change)
                 with self.assertRaises(ValueError):
                     large.load(workload)
             with self.assertRaisesRegex(ValueError, "disk allowance"):
                 oracle.write_reference(root / "quota.parquet", rows, oracle.WIDE69, max_bytes=8192)
+            # A pilot can validate the real anchor without preparing the other
+            # layouts/DVs; it must never masquerade as the complete data family.
+            anchor = large.SESSIONS["reuse.large.date30"]
+            pilot = value | {"family": "pilot", "scales": {"data": .01}, "sessions": large.PILOT_SESSIONS,
+                             "cases": [r for r in cases if r["case_id"] == anchor],
+                             "translations": {r: t | {"expressions": {anchor: t["expressions"][anchor]}}
+                                              for r, t in value["translations"].items()}}
+            write_json(workload, pilot)
+            self.assertEqual(len(large.load(workload)["cases"]), 1)
+            metadata = oracle.prepare(fixtures, anchor, root / "pilot-reference", workload=workload)
+            self.assertEqual(metadata["output_rows"], 144)
+            request = run.request(fixtures, anchor, "reuse", "validation", "pilot", workload=workload)
+            python_common.validate(request)
+            self.assertEqual(run.comparison_identity(request), run.comparison_identity(metadata))
+            for change in ({"family": "data"}, {"scope": "candidate"}, {"publication_ready": True},
+                           {"readers": list(large.READERS[:-1])}, {"scales": {"data": 2}}):
+                write_json(workload, pilot | change)
+                with self.assertRaises(ValueError):
+                    large.load(workload)
+            for case in ("large.wide.clustered.eq2-in20", "large.wide.clustered.eq2-in20-keys"):
+                selected = pilot | {"pilot_case": case, "cases": [r for r in cases if r["case_id"] == case],
+                    "sessions": {k: v for k, v in large.SESSIONS.items() if v == case},
+                    "translations": {r: t | {"expressions": {case: t["expressions"][case]}}
+                                     for r, t in value["translations"].items()}}
+                write_json(workload, selected)
+                self.assertEqual(large.load(workload)["cases"][0]["case_id"], case)
+                metadata = oracle.prepare(fixtures, case, root / case, workload=workload)
+                self.assertEqual(metadata["output_rows"], 20)
+                self.assertEqual(len(metadata["projection"]), 2 if case.endswith("-keys") else 69)
+                for change in ({"family": "data"}, {"pilot_case": ""}, {"pilot_case": anchor},
+                               {"pilot_case": "large.wide.clustered.date30-wide.dv"},
+                               {"pilot_case": "scale-control.wide.clustered.eq2-in20"},
+                               {"sessions": large.SESSIONS}):
+                    write_json(workload, selected | change)
+                    with self.assertRaises(ValueError):
+                        large.load(workload)
 
     def test_saved_deletions_filter_matching_rows_and_limit_membership(self):
         # The Rust check covers the native bitmap envelope and boundary ordinals.

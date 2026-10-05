@@ -28,6 +28,10 @@ const PROTOCOL: &[u8] =
     include_bytes!("../../../docs/content/benchmarks/selective-read-protocol.md");
 const AMENDMENT: &[u8] =
     include_bytes!("../../../docs/content/benchmarks/selective-read-large-workloads.md");
+const SAMPLING: &[u8] =
+    include_bytes!("../../../docs/content/benchmarks/selective-read-sampling.md");
+const PRODUCTION: &[u8] =
+    include_bytes!("../../../docs/content/benchmarks/selective-read-production-workloads.md");
 const ORACLE: &[u8] = include_bytes!("../oracle.py");
 const LOCK: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.lock"));
 
@@ -42,6 +46,8 @@ pub struct Request {
     protocol_sha256: String,
     base_protocol_sha256: Option<String>,
     workload_manifest_sha256: Option<String>,
+    sampling_sha256: Option<String>,
+    sampling_stage: Option<String>,
     fixture_manifest_sha256: String,
     profile: String,
     execution_mode: String,
@@ -59,7 +65,13 @@ impl Request {
         self.execution_mode == "reuse"
     }
     fn query_count(&self) -> usize {
-        if self.reuse() { 10 } else { 1 }
+        if !self.reuse() {
+            1
+        } else if self.comparison_revision >= 4 {
+            2
+        } else {
+            10
+        }
     }
     fn timed(&self) -> bool {
         self.purpose == "timing"
@@ -96,19 +108,37 @@ impl Request {
     }
 
     fn valid_comparison(&self) -> bool {
+        if self.comparison_revision == 5 {
+            if !matches!(self.sampling_stage.as_deref(), Some("pilot" | "formal")) {
+                return false;
+            }
+        } else if self.sampling_stage.is_some() {
+            return false;
+        }
         match self.comparison_revision {
             2 => {
                 self.protocol_sha256 == digest(PROTOCOL)
                     && self.base_protocol_sha256.is_none()
                     && self.workload_manifest_sha256.is_none()
+                    && self.sampling_sha256.is_none()
             }
-            3 => {
-                self.protocol_sha256 == digest(AMENDMENT)
+            3 | 4 | 5 => {
+                self.protocol_sha256
+                    == digest(if self.comparison_revision == 5 {
+                        PRODUCTION
+                    } else {
+                        AMENDMENT
+                    })
                     && self.base_protocol_sha256.as_deref() == Some(digest(PROTOCOL).as_str())
                     && self
                         .workload_manifest_sha256
                         .as_deref()
                         .is_some_and(is_hash)
+                    && if self.comparison_revision >= 4 {
+                        self.sampling_sha256.as_deref() == Some(digest(SAMPLING).as_str())
+                    } else {
+                        self.sampling_sha256.is_none()
+                    }
             }
             _ => false,
         }
@@ -195,9 +225,15 @@ fn identity(request: &Request, build_hash: &str, config_hash: &str) -> Value {
         "case_id": request.case_id, "snapshot_version": request.snapshot_version,
         "canonical_sql_sha256": digest(request.canonical_sql.as_bytes()),
         "native_expression_sha256": null});
-    if request.comparison_revision == 3 {
+    if request.comparison_revision >= 3 {
         value["base_protocol_sha256"] = json!(request.base_protocol_sha256);
         value["workload_manifest_sha256"] = json!(request.workload_manifest_sha256);
+    }
+    if request.comparison_revision >= 4 {
+        value["sampling_sha256"] = json!(request.sampling_sha256);
+    }
+    if request.comparison_revision == 5 {
+        value["sampling_stage"] = json!(request.sampling_stage);
     }
     value
 }

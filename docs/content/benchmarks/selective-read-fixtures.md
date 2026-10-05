@@ -77,8 +77,10 @@ dependency graph or Rust requirement. Use `--locked` when reproducing inputs.
 The [large-workload plan](selective-read-large-workloads.md) adds an explicit
 `large` profile. It accepts source scales 1, 10, 30, 100, and 300, and writes one
 selected fixture per invocation. The original three profiles keep their data
-and object identities. The final report scale is selected by the later pilot;
-generating one of these fixtures does not complete that calibration.
+and object identities. The owner selected SF10 for the main large-data cases
+after the SF1/SF10 screen in [#345](https://github.com/mag1cfrog/delta-arrow-reader/issues/345).
+Keep SF1 as the scale control. Generating a fixture does not complete validation
+or freeze the full publication inventory.
 
 Build the same executable, then inspect capacity before writing data:
 
@@ -142,18 +144,26 @@ when investigating it, then use a new destination for another attempt.
 
 The capacity plan considers separate preparation, later validation and later
 derivative phases. It takes their maximum, allowing one source and selected
-fixture at a time. Later phases budget a MinIO copy, an exact reference database,
-one complete reader export and its comparison database, or two repack/DV copies.
+fixture at a time. Later phases budget a MinIO copy, a compressed Parquet
+reference, one complete reader export and bounded sort spill, or two repack/DV copies.
 Retire each phase's reproducible temporary data before the next phase; retaining
 additional layouts, exports or scale rungs needs additional space. Builds and
 unrelated data are outside this allowance and still reduce free disk.
+
+For a staged calibration, `--preparation-only` checks generation's output and
+spill against the same explicit disk limit. The JSON marks this scope and still
+shows every phase estimate. Before running a reader, separately check the actual
+fixture bytes, MinIO copy, oracle limits and retained exports against the total
+budget. This option does not establish capacity for the full query inventory or
+file-organization pairs. Keep earlier rungs in the accounting while their files
+remain on disk.
 
 Before source rows are known, planning uses at most seven lineitems for each of
 1.5 million orders per SF. A reused source supplies its recorded count, verified
 against actual rows before completion. Per-row allowances are 256 bytes for
 source/narrow Parquet, 768 for wide Parquet and its IPC export, and 512 for sort
-spill. Each SQLite reference/comparison allowance is 1,024 bytes per narrow row
-or 4,096 per wide row. Metadata adds 64 MiB per SF; sort-write headroom and a
+spill. Reference Parquet and oracle sort spill each use the same per-row
+allowance as the table. Metadata adds 64 MiB per SF; sort-write headroom and a
 512 MiB filesystem margin are separate. These are conservative capacity
 assumptions, not measured compressed sizes or promises about later tools.
 
