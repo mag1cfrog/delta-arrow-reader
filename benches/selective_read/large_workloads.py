@@ -91,7 +91,7 @@ def query_fields(case, manifest):
                          "row_groups": [len(f["row_groups"]) for f in table["files"]]}}
 
 
-def translate(cases, binaries, output):
+def translate(cases, binaries, output, comparison_revision=2):
     queries = {r["case_id"]: r["canonical_sql"] for r in cases}
     save(output / "sql.json", queries)
     translations = {}
@@ -103,6 +103,7 @@ def translate(cases, binaries, output):
         path = output / (reader + "-translations.json")
         subprocess.run([str(binary.with_name("venv") / "bin/python"), "-I", "-B", str(HERE / "matrix.py"),
                         "translations", "--binary", str(binary), "--request", str((output / "sql.json").resolve()),
+                        "--comparison-revision", str(comparison_revision),
                         "--output", str(path.resolve())], check=True)
         translations[reader] = json.loads(path.read_text())
     require(set(translations) == {"polars", "daft"}, "both native translations required")
