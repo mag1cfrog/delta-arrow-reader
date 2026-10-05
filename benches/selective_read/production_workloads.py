@@ -99,7 +99,7 @@ def define(fixtures, binaries, output, stage="pilot"):
     require(stage in ("pilot", "formal") and (stage != "formal" or seen == set(shapes.cases())
             and all(r["fixture_mode"] == "generate" for r in rows)), "formal sampling requires all eight full cases")
     output.mkdir()
-    translations = large_workloads.translate(rows, binaries, output)
+    translations = large_workloads.translate(rows, binaries, output, comparison_revision=5)
     result = {"format": "selective-read-production-workload-v1", "family": "production", "comparison_revision": 5,
               "protocol_sha256": digest(PRODUCTION), "base_protocol_sha256": digest(PROTOCOL),
               "sampling_sha256": digest(SAMPLING), "sampling_stage": stage, "definition_sha256": digest(shapes.CONTRACT),

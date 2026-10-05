@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import pickle
 import platform
+import re
 import sys
 from time import perf_counter_ns as clock
 from urllib.parse import urlsplit
@@ -41,13 +42,18 @@ def engine():
     return {"daft": daft.get_version(), "daft_build_type": daft.get_build_type(), "deltalake": deltalake.__version__}
 
 
-def expressions(sql):
+def expressions(sql, comparison_revision=2):
     columns, predicate, limit = scan_sql(sql)
+    if predicate and comparison_revision == 5:
+        # Daft 0.7.25 pushes CAST literals into scan filters, while DATE literals
+        # become non-pushable to_date calls. Skip ordinary SQL string values.
+        predicate = re.sub(r"'(?:[^']|'')*'|\bDATE\s+('[0-9]{4}-[0-9]{2}-[0-9]{2}')",
+                           lambda m: f"CAST({m[1]} AS DATE)" if m[1] else m[0], predicate, flags=re.IGNORECASE)
     return [daft.col(c) for c in columns], daft.sql_expr(predicate) if predicate else None, limit
 
 
-def expression_identity(sql):
-    projection, predicate, limit = expressions(sql)
+def expression_identity(sql, comparison_revision=2):
+    projection, predicate, limit = expressions(sql, comparison_revision)
     # Daft's Expression.serialize transforms column values. Python's pickle
     # protocol serializes the expression itself, including its native typed AST.
     def frozen(expr):
@@ -56,8 +62,8 @@ def expression_identity(sql):
             "limit": limit, "order": "where, select, limit", "pickle_protocol": 5}
 
 
-def query(source, sql):
-    projection, predicate, limit = expressions(sql)
+def query(source, sql, comparison_revision=2):
+    projection, predicate, limit = expressions(sql, comparison_revision)
     plan = source.where(predicate) if predicate is not None else source
     plan = plan.select(*projection)
     return plan.limit(limit) if limit is not None else plan
@@ -121,7 +127,7 @@ def execute(request, config, output, record):
         rows = batches = 0
         first = None
         try:
-            plan = query(source, request["canonical_sql"])
+            plan = query(source, request["canonical_sql"], request["comparison_revision"])
             with ExitStack() as stack:
                 result = output / f"query-{index}.arrow"
                 writer = None
@@ -175,7 +181,7 @@ def execute(request, config, output, record):
             record["open_query_ns"] = durations[0]
     elif request["purpose"] != "io":
         record["provider_evidence"] = {"schema": str(source.schema().to_pyarrow_schema()),
-                                       "native_expression": expression_identity(request["canonical_sql"])}
+                                       "native_expression": expression_identity(request["canonical_sql"], request["comparison_revision"])}
     record["phase"] = "complete"
     record["capability"] = {"status": "supported", "scope": "requested query and snapshot", "evidence_run_id": request["run_id"]}
 
@@ -203,7 +209,7 @@ def run(request_path, output):
                     "cache": "no collect/result cache; reuse retains the native Delta data source and runner"}
         if request["purpose"] == "timing":
             record["phase"] = "correctness_gate"
-        expression = expression_identity(request["canonical_sql"])
+        expression = expression_identity(request["canonical_sql"], request["comparison_revision"])
         identity = {"reader_id": "daft", "reader_build_sha256": digest(build_path), "reader_config_sha256": json_hash(settings),
                     **comparison_identity(request),
                     **{name: request[name] for name in ("fixture_manifest_sha256", "case_id", "snapshot_version")},
