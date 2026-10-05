@@ -9,7 +9,9 @@ The oracle checks the 30 original/wide public query cases in the
 [comparison protocol](selective-read-protocol.md). It reads every source row,
 evaluates predicates with Python integers, dates, and exact Decimals, and derives
 wide payload values from the published hash rule. PyArrow decodes Parquet and
-Arrow IPC; none of the five benchmark engines computes the expected results.
+Arrow IPC and writes compressed reference Parquet. DuckDB sorts actual Arrow
+results by their logical keys; it does not compute expected results, execute
+the benchmark predicate, read Delta snapshots, or apply deletion vectors.
 
 Each reference also checks the selected fixture's qualifying rows against the
 saved source. This detects changed values, payloads, nulls, or duplicate rows
@@ -22,7 +24,9 @@ independently checked deletion lists and retain both physical and live row count
 ## Install and prepare a reference
 
 Run from the repository root on Linux x86-64, using CPython 3.14.6. The
-requirements file pins PyArrow 25.0.1 and its wheel hash. Use an environment
+requirements file pins PyArrow 25.0.1 and DuckDB 1.5.5 with their wheel hashes.
+The DuckDB wheel is the same version used by the benchmark adapter; the oracle
+does not install or load its Delta or HTTP extensions. Use an environment
 outside the checkout:
 
 ```sh
@@ -60,7 +64,7 @@ The new directory contains:
 
 | File | Contents |
 | --- | --- |
-| `reference.sqlite` | Exact qualifying rows ordered on disk by their unique logical keys |
+| `reference.parquet` | Exact qualifying rows in logical-key order, with typed columns and ZSTD compression |
 | `reference.json` | Completion marker, source/build/protocol identities, SQL, literals, projection, expected counts, predicate-step selectivity, and candidate/matching file sets |
 
 The completion marker is written last. A failed or interrupted preparation
@@ -109,26 +113,37 @@ usage errors are reported by the CLI before validation starts. Store both
 stdout and stderr when running the checker from a campaign.
 
 The checker compares exact row contents and multiplicity, independently of
-output order. Its disk index rejects duplicate keys. An unlimited query needs
+output order. It checks that sorted keys strictly increase, including across
+batch boundaries, and rejects duplicated keys. An unlimited query needs
 the complete expected set; unordered `LIMIT 100` needs exactly
 `min(100, qualifying_rows)` distinct valid rows with complete matching values.
 Two readers may return different valid subsets. Field nullability declarations
 are recorded separately, while actual null values must agree.
 
-Keep all export, hashing, verification, and SQLite work outside query timing.
+Keep all export, hashing, verification, and sorting work outside query timing.
 A changed fixture, protocol, oracle, query translation, reader build, or reader
 configuration needs a fresh correctness gate. Generator protocol hashes remain
 provenance; the reference separately binds the active comparison revision/hash.
 
 ## Resource use and checks
 
-Rows are processed in batches and stored in SQLite's on-disk primary-key order.
-Comparisons use full encoded values, not probabilistic result fingerprints.
-Each SQLite connection has a 64 MiB page cache, and file contents are hashed in
-streams. Temporary comparison databases are created beside the reference and
-removed when checking finishes.
+Reference rows arrive from the independently checked source in logical-key
+order. PyArrow writes them in 131,072-row Parquet groups with ZSTD compression.
+Integer, date and Decimal columns retain their types. The checker reads and
+normalizes at most 8,192 rows per batch; equivalent string representations
+become ordinary UTF-8 after their logical types are checked.
 
-Allow disk for the reference and one complete qualifying result while preparing
+DuckDB receives actual Arrow batches and executes only `SELECT * FROM actual
+ORDER BY ...`, using the unique key columns. It uses one thread and a 512 MiB
+buffer-manager limit, with temporary files beside the reference. It streams
+sorted batches back to the checker without saving a second complete result
+database. Arrow compares full values against the independently generated
+reference; Python checks key order, uniqueness, counts and LIMIT membership.
+Reference data never passes through DuckDB. Temporary sort files are removed
+after success or a handled failure. A process killed by its deadline can leave
+partial files for inspection. File checksums are computed in streams.
+
+Allow disk for the reference, actual result exports and sort spill while preparing
 or checking. Wide full scans can require substantial space; point the reference
 directory at the data filesystem. Disk exhaustion fails the operation and
 cannot produce a successful completion marker. Reuse one reference for all
@@ -146,7 +161,8 @@ To also validate all 30 cases against actual public smoke fixtures, set
 CI does this after its generator smoke check. The checks cover paired layouts,
 exact Decimal/date boundaries, changed values at equal row counts, wrong types,
 null changes, duplicated/missing rows, duplicate IN literals, wrong snapshots,
-stale artifacts, and valid alternative LIMIT subsets. No reader speed threshold
+stale artifacts, valid alternative LIMIT subsets, and sort-spill quota rejection.
+No reader speed threshold
 is part of these checks.
 
 ## Large-workload references
@@ -160,12 +176,16 @@ result. Existing revision 2 inputs keep their original cases.
 
 The workload declares finite oracle disk and elapsed-time ceilings. Preparation
 and checking enforce a 16 GiB virtual-address-space ceiling and a native process
-alarm, and check free disk before scanning. SQLite page quotas bound the reference
-and temporary comparison indexes. Reader validation exports have a per-file
+alarm, and check free disk before scanning. The reference writer checks its byte
+limit before each write; DuckDB enforces `max_temp_directory_size` for sort spill.
+The checker sets that limit after connecting: in the pinned build, passing it
+only in the startup configuration reports the value but does not enforce it.
+Its buffer-manager limit is separate from the process address-space ceiling.
+Reader validation exports have a per-file
 limit inherited by the reader process; ten exports share the allowance in a
 reuse session. Exhaustion is a failed operation, not an unsupported reader.
-After reserving 8 MiB for metadata, one quarter goes to the reference index,
-one quarter to its temporary comparison index, and half to all exports in the
+After reserving 8 MiB for metadata, one quarter goes to the reference Parquet,
+one quarter to temporary sort files, and half to all exports in the
 current reader session. The checker counts sibling query exports together.
 
 The reference scans full source and fixture rows. It independently derives the
@@ -177,7 +197,30 @@ as non-null fixed-width values plus actual UTF-8 string bytes. This excludes
 null bitmaps, offsets, IPC framing, and compressed storage overhead.
 
 Prepare one case, validate the five readers and required reuse mode, retain its
-certificates and manifests, then retire reproducible exports/indexes before the
+certificates and manifests, then retire reproducible exports/references before the
 next case. The limits cover one staged case; they do not authorize keeping all
 18 references and every reader export at once. Hashing, export, and oracle work
 remain outside performance query clocks.
+
+## Reference storage amendment
+
+New references use artifact format `selective-read-reference-v2`. This replaces
+the SQLite result store with compressed Parquet and bounded DuckDB sorting.
+The comparison revisions, frozen SQL, independent predicate/DV evaluation and
+exact correctness rules retain their existing meanings. DuckDB supplies only
+row ordering, and Python checks the input/output counts and sorted key order.
+
+The base protocol and large-workload design documents retain their original
+bytes and hashes. Their SQLite storage references describe the previous
+implementation. Generator preflights now reserve one full-output Parquet
+reference and one sort-spill allowance, each using the existing table-byte
+coefficient: 768 bytes per wide source row or 256 per original source row.
+These are conservative planning coefficients, not measured compressed sizes.
+They still assume unfiltered output; selective cases can use less.
+
+Oracle source, pinned requirements, package versions and storage settings are
+recorded in each new reference. Revision 3 workload manifests also bind the
+requirements file. Regenerate references and workload manifests after this
+change; old SQLite references and correctness certificates cannot validate a
+new run. Historical capacity records retain their original estimates and do
+not establish the new checker's disk requirements.

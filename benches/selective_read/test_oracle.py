@@ -114,6 +114,35 @@ def expected_keys(query):
 
 
 class OracleTests(unittest.TestCase):
+    def test_sort_spill_respects_disk_quota(self):
+        count = 600000
+        schema = oracle.result_schema(oracle.KEYS)
+        expected = pa.Table.from_arrays([pa.array(range(count), type=pa.int64()),
+                   pa.repeat(pa.scalar(1, type=pa.int32()), count)], schema=schema)
+        actual = expected.take(pa.array(range(count - 1, -1, -1)))
+        with tempfile.TemporaryDirectory() as temporary, patch.object(oracle, "SORT_MEMORY_BYTES", 8 * 1024**2):
+            reference = Path(temporary) / "reference.parquet"
+            pq.write_table(expected, reference, compression="zstd")
+            self.assertEqual(oracle.compare(actual.to_batches(8192), reference, oracle.KEYS, count,
+                                           max_bytes=32 * 1024**2), count)
+            with self.assertRaisesRegex(ValueError, "max_temp_directory_size"):
+                oracle.compare(actual.to_batches(8192), reference, oracle.KEYS, count, max_bytes=1)
+            self.assertFalse(list(reference.parent.glob("oracle-sort-*")))
+
+    def test_sort_rejects_duplicate_keys_across_batch_boundaries(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            reference = Path(temporary) / "reference.parquet"
+            count = oracle.BATCH_ROWS * 2 + 7
+            rows = [{"l_orderkey": n, "l_linenumber": 1} for n in range(count)]
+            oracle.write_reference(reference, rows, oracle.KEYS)
+            table = pa.Table.from_pylist(list(reversed(rows)), schema=oracle.result_schema(oracle.KEYS))
+            self.assertEqual(oracle.compare(table.to_batches(37), reference, oracle.KEYS, count), count)
+            rows[oracle.BATCH_ROWS] = rows[oracle.BATCH_ROWS - 1]
+            table = pa.Table.from_pylist(rows, schema=table.schema)
+            with self.assertRaisesRegex(ValueError, "duplicated key"):
+                oracle.compare(table.to_batches(37), reference, oracle.KEYS, count)
+            self.assertFalse(list(reference.parent.glob("oracle-sort-*")))
+
     def test_wide_file_geometry_rejects_small_files_and_mixed_scales(self):
         import wide_files
         import large_workloads
@@ -237,7 +266,7 @@ class OracleTests(unittest.TestCase):
                     export(table)
                 corrupted = table.set_column(0, table.schema.field(0), pa.array([0] * table.num_rows, type=pa.int64()))
                 export(corrupted)
-                with self.assertRaises((ValueError, oracle.sqlite3.IntegrityError)):
+                with self.assertRaises(ValueError):
                     oracle.check(reference, fixtures, result, identity)
                 if "date30" in case:
                     export(table)
@@ -252,9 +281,8 @@ class OracleTests(unittest.TestCase):
                 write_json(workload, value | change)
                 with self.assertRaises(ValueError):
                     large.load(workload)
-            with oracle.closing(oracle.database(root / "quota.sqlite", 8192)) as db:
-                with self.assertRaises(oracle.sqlite3.DatabaseError):
-                    oracle.insert_rows(db, ((i, 1, b"x" * 10000) for i in range(10)))
+            with self.assertRaisesRegex(ValueError, "disk allowance"):
+                oracle.write_reference(root / "quota.parquet", rows, oracle.WIDE69, max_bytes=8192)
 
     def test_saved_deletions_filter_matching_rows_and_limit_membership(self):
         # The Rust check covers the native bitmap envelope and boundary ordinals.
@@ -291,13 +319,11 @@ class OracleTests(unittest.TestCase):
                 self.assertEqual(limited["output_rows"], 100)
                 live = [row for row in rows if row["l_orderkey"] != 2581 and row["l_shipdate"] >= date(1995, 3, 15) and row["l_shipdate"] < date(1995, 3, 22)]
                 for i, subset in enumerate((live[:100], list(reversed(live))[:100])):
-                    with oracle.closing(oracle.database(root / f"subset-{i}.sqlite")) as db:
-                        oracle.insert_rows(db, (oracle.record(row, oracle.ORIGINAL) for row in subset))
-                        self.assertEqual(oracle.compare(db, root / "limited/reference.sqlite", 100), 100)
-                with oracle.closing(oracle.database(root / "deleted.sqlite")) as db:
-                    oracle.insert_rows(db, (oracle.record(row, oracle.ORIGINAL) for row in [rows[80], *live[:99]]))
-                    with self.assertRaisesRegex(ValueError, "wrong row membership"):
-                        oracle.compare(db, root / "limited/reference.sqlite", 100)
+                    self.assertEqual(oracle.compare(oracle.row_batches(subset, oracle.ORIGINAL),
+                                     root / "limited/reference.parquet", oracle.ORIGINAL, 100, subset=True), 100)
+                with self.assertRaisesRegex(ValueError, "wrong row membership"):
+                    oracle.compare(oracle.row_batches([rows[80], *live[:99]], oracle.ORIGINAL),
+                                   root / "limited/reference.parquet", oracle.ORIGINAL, 100, subset=True)
                 affected_file = next(f for f in table["files"] if "deletion_vector" in f)
                 affected_file["deletion_vector"]["physical_ordinals"][0] += 1
                 write_json(fixtures / "manifest.json", manifest)
@@ -324,12 +350,10 @@ class OracleTests(unittest.TestCase):
                 request = run.request(root, case, "open", "validation", "check")
                 self.assertEqual(request["table_uri"], (root / fixture).as_uri())
                 self.assertEqual(request["canonical_sql"], oracle.case_input(root, case)[-1])
-        key, _, blob = oracle.control_record(0)
-        self.assertEqual(key, 0)
-        values = json.loads(blob)
-        self.assertIsNone(values[1])
-        self.assertEqual(values[2], "payload-001-00000000-" + "abcdefghijklmnopqrstuvwxyz0123456789" * 12)
-        row = dict(zip(oracle.CONTROL_PROJECTION, values))
+        row = oracle.control_record(0)
+        self.assertEqual(row["row_id"], 0)
+        self.assertIsNone(row["payload_000"])
+        self.assertEqual(row["payload_001"], "payload-001-00000000-" + "abcdefghijklmnopqrstuvwxyz0123456789" * 12)
         self.assertEqual(oracle.record(row, oracle.CONTROL_PROJECTION), oracle.control_record(0))
         row["row_id"] = None
         with self.assertRaises(ValueError):
@@ -505,7 +529,7 @@ class OracleTests(unittest.TestCase):
         duplicate = pa.concat_tables([good.slice(0, 1), good.slice(0, len(rows) - 1)])
         for wrong in (wrong_value, wrong_scale, wrong_interpretation, duplicate, good.slice(1)):
             with self.subTest(schema=str(wrong.schema)):
-                with self.assertRaises((ValueError, oracle.sqlite3.IntegrityError)):
+                with self.assertRaises(ValueError):
                     oracle.check(*self.export(case, wrong))
 
     def test_nulls_and_equivalent_strings(self):
@@ -560,6 +584,7 @@ class OracleTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "checksum"):
             oracle.check(*args)
         for field, value in (("protocol_sha256", "bad"), ("oracle_sha256", "bad"),
+                             ("oracle_dependencies_sha256", "bad"), ("duckdb_sort", "bad"),
                              ("fixture_manifest_sha256", "bad"), ("reference_sha256", "bad")):
             path = args[0] / "reference.json"
             original = path.read_bytes()

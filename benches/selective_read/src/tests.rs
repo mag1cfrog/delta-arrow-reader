@@ -676,6 +676,14 @@ fn large_requires_explicit_scale_and_capacity() -> Result<()> {
     let plan = large::preflight(&config)?;
     assert_eq!(plan["fits_budget"], true);
     assert_eq!(plan["rows_for_capacity"], 10_500_000);
+    assert_eq!(
+        plan["estimated_bytes"]["reference_parquet"],
+        10_500_000_u64 * 768
+    );
+    assert_eq!(
+        plan["estimated_bytes"]["oracle_sort_spill"],
+        plan["estimated_bytes"]["reference_parquet"]
+    );
     assert!(!output.exists());
     for (index, value) in [
         (3, "0.01"),
