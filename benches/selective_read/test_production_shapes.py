@@ -1,6 +1,7 @@
 """Check source predicates and fractional stripe boundaries without large data."""
 
 from datetime import date
+import json
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -25,6 +26,9 @@ class ProductionShapeCheck(unittest.TestCase):
             # The probe fits on a disk with 80 GiB free even when its allocation is 192 GiB.
             self.assertLess(limits["disk_bytes"], 80 * fixtures.GIB)
             self.assertGreater(limits["disk_bytes"], fixtures.SPILL)
+            request = json.loads((root / "writer-request.json").read_text())
+            for field in ("data_page_bytes", "write_batch_rows", "data_page_rows"):
+                self.assertEqual(request[field], shape[field])
             raise RuntimeError("checked before native generation")
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -96,6 +100,8 @@ class ProductionShapeCheck(unittest.TestCase):
             self.assertEqual(value["canonical_sql"], control[name]["canonical_sql"])
             self.assertEqual(value["row_group_rows"], 131072)
             self.assertEqual(value["data_page_rows"], 20000)
+            self.assertEqual(value["data_page_bytes"], 1048576)
+            self.assertEqual(value["write_batch_rows"], 1024)
             self.assertFalse(value["dictionary"])
         with self.assertRaisesRegex(ValueError, "unsupported"):
             shapes.definitions(128)
@@ -106,6 +112,16 @@ class ProductionShapeCheck(unittest.TestCase):
         self.assertEqual(set(shapes.cases()), {"production." + name + suffix
                          for name in ("q2.localized", "q2.scattered", "q4.localized", "q4.scattered")
                          for suffix in ("", ".dv")})
+
+    def test_byte_controls_keep_query_and_file_geometry(self):
+        baseline = shapes.definitions(write_batch_rows=128)
+        for size in (8192, 65536):
+            control = shapes.definitions(page_bytes=size, write_batch_rows=128)
+            for name, shape in baseline.items():
+                self.assertEqual(control[name], dict(shape, data_page_bytes=size))
+        for options in ({"page_bytes": 0}, {"page_bytes": 16384}, {"write_batch_rows": 0}):
+            with self.assertRaisesRegex(ValueError, "unsupported"):
+                shapes.definitions(**options)
 
 
 if __name__ == "__main__":

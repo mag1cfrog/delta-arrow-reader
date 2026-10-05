@@ -31,7 +31,8 @@ def query_fields(case, manifest):
     definition = shapes.cases()[case]
     declared = (manifest["shape_definitions"][definition["shape"]] if "shape_definitions" in manifest
                 else manifest["shape_definition"])
-    shape = shapes.definitions(declared["file_target_mib"], declared["data_page_rows"])[definition["shape"]]
+    shape = shapes.definitions(declared["file_target_mib"], declared["data_page_rows"],
+                               declared["data_page_bytes"], declared["write_batch_rows"])[definition["shape"]]
     require(all(declared[k] == v for k, v in shape.items()), "production shape definition changed")
     require(manifest["protocol"] in ("selective-read-production-fixtures-v1", "selective-read-production-pairs-v1")
             and manifest["contract_sha256"] == digest(shapes.CONTRACT)
@@ -50,7 +51,7 @@ def query_fields(case, manifest):
             and table["bytes"] == sum(f["bytes"] for f in table["files"]), "wrong physical inventory")
     require(table["file_target_mib"] == shape["file_target_mib"]
             and all(table["writer"][k] == shape[k] for k in
-                    ("row_group_rows", "data_page_rows", "write_batch_rows", "dictionary")),
+                    ("row_group_rows", "data_page_rows", "data_page_bytes", "write_batch_rows", "dictionary")),
             "production page/group settings changed")
     if manifest["mode"] == "generate":
         require(table["file_count"] == shape["files"] and table["rows"] == source["rows"], "incomplete full production fixture")

@@ -38,6 +38,21 @@ Neither option changes source rows, query literals or projections. Replaying
 an older plan requires its recorded planner, contract and writer; changing a
 default does not relabel existing fixtures.
 
+For the page-byte sensitivity comparison, create three new plans using
+`--page-bytes 8192`, `--page-bytes 65536` and `--page-bytes 1048576`.
+Use `--page-rows 20000 --write-batch-rows 128` for all three. This holds the
+writer's checking granularity constant; it does not replace the original
+1 MiB / 1,024-row-batch baseline. Defaults remain unchanged. Plans, writer
+requests and workload identities bind both settings.
+
+The byte target applies to the writer's estimated encoded page size before
+compression, not the compressed bytes fetched from storage. Checks happen
+between write batches, so a page can exceed the target. Record actual
+per-column page rows and compressed bytes from the geometry sidecars, including
+small final pages. Keep file and row-group membership, row order, schema,
+compression and query fixed across this comparison. Report storage growth and
+page/index overhead alongside any reduction in projected bytes read.
+
 ## Probe the compressed size
 
 Start with Q4. The probe writes every candidate file, including false positives,
@@ -57,7 +72,14 @@ columns to the Rust writer, and expands only the selected files. It uses the
 existing payload function with 131,072-row groups, plain encoding, Zstd level 3
 and the plan's page setting. It reads every written file back and compares all values and
 nulls. It also checks Delta statistics and records actual page boundaries and
-matching row positions. Probe samples have no Delta transaction log.
+matching row positions. Probe samples include native Delta transaction logs
+and retain their reduced `probe` identity. Add `--layout scattered` or
+`--layout localized` to write only that layout when a paired-layout probe is
+not needed. This preserves the same selected whole files and row groups.
+For Q4 with the 512 MiB target, the probe contains 12 of the planned 60 files,
+including all candidate files and one ordinary file per stripe. Use the same
+probe scope for every page-byte variant and reader; do not compare its timings
+directly with a complete table's timings.
 
 ## Generate one complete layout
 
@@ -136,9 +158,11 @@ filesystem. The disk ceiling still counts their full logical sizes; the free
 space check reserves only new writes. Cross-filesystem copies require space
 for all bytes. Treat every linked fixture as immutable.
 
-A probe directory already contains both layouts and can be supplied alone.
-The helper creates native Delta logs and real DV snapshots for it, but retains
-its `probe` identity. Reduced probes cannot stand in for full SF10 tables.
+A probe directory containing both layouts can be supplied alone. The helper
+creates real DV snapshots and supplies logs for older probes that lack them,
+but retains the `probe` identity. A single-layout probe can be used directly
+for a no-DV pilot; it cannot form a localized/scattered DV pair by itself.
+Reduced probes cannot stand in for full SF10 tables.
 
 Freeze a pilot for a completed full Q4 table:
 
