@@ -5,9 +5,10 @@ use std::sync::Arc;
 use arrow::record_batch::RecordBatch;
 use delta_kernel::{FileMeta, engine::arrow_data::EngineDataArrowExt};
 use futures_util::stream;
-use snafu::{IntoError, ResultExt};
+use snafu::ResultExt;
 use tokio::{sync::mpsc, task::JoinHandle};
 
+use super::{data_file_error, file_location::resolve_data_file_url};
 use crate::{
     DeltaReaderError,
     error::{CancelledSnafu, DataFileReadSnafu, PhysicalToLogicalTransformSnafu},
@@ -75,6 +76,7 @@ fn read_file(
         transform,
         ..
     } = task;
+    let location = resolve_data_file_url(plan.engine_context.table_url(), &path)?;
     let physical_predicate = if deletion_vector.is_present() {
         None
     } else {
@@ -105,14 +107,6 @@ fn read_file(
             ),
         )
     })?;
-    let location = plan
-        .engine_context
-        .table_url()
-        .join(&path)
-        .boxed()
-        .context(DataFileReadSnafu {
-            reason: "data_file_path_resolution_failed",
-        })?;
     let metadata = FileMeta::new(location, modification_time_ms, size);
     let batches = plan
         .engine_context
@@ -197,13 +191,6 @@ fn spawn_blocking_file_stream(
         };
         Some((Err(error), state))
     }))
-}
-
-fn data_file_error(
-    reason: &'static str,
-    source: impl std::error::Error + Send + Sync + 'static,
-) -> DeltaReaderError {
-    DataFileReadSnafu { reason }.into_error(Box::new(source))
 }
 
 #[cfg(test)]

@@ -1,6 +1,5 @@
 //! Direct asynchronous Parquet data-file reader.
 
-mod file_location;
 mod metadata_cache;
 mod metered_object_store;
 mod nan_counts;
@@ -34,12 +33,13 @@ use parquet::basic::Type as PhysicalType;
 use parquet::errors::{ParquetError, Result as ParquetResult};
 use parquet::file::metadata::{PageIndexPolicy, ParquetMetaData};
 use parquet::schema::types::SchemaDescriptor;
-use snafu::{IntoError, ResultExt};
+use snafu::ResultExt;
+
+use super::{data_file_error, file_location::resolve_data_file_path};
 
 pub(crate) use self::metadata_cache::ParquetMetadataCache;
 pub(crate) use self::metered_object_store::ParquetRangeReadEstimator;
 use self::{
-    file_location::resolve_data_file_path,
     metadata_cache::CachedParquetMetadata,
     metered_object_store::{MeteredParquetObjectStore, MultiRangeReadStrategy},
     nan_counts::NanCounts,
@@ -811,13 +811,6 @@ fn cancelled_error() -> DeltaReaderError {
         reason: "scan_execution_cancelled",
     }
     .build()
-}
-
-fn data_file_error(
-    reason: &'static str,
-    source: impl std::error::Error + Send + Sync + 'static,
-) -> DeltaReaderError {
-    DataFileReadSnafu { reason }.into_error(Box::new(source))
 }
 
 #[cfg(test)]
