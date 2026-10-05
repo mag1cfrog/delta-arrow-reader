@@ -176,7 +176,8 @@ pub fn variant(
     let first_log = save_log(&root, 0, &initial, &budget)?;
     let mut actions = vec![
         json!({"protocol": {"minReaderVersion": 3, "minWriterVersion": 7,
-            "readerFeatures": ["deletionVectors"], "writerFeatures": ["deletionVectors"]}}),
+            "readerFeatures": ["deletionVectors"],
+            "writerFeatures": ["deletionVectors", "invariants", "appendOnly"]}}),
         json!({"metaData": enabled}),
     ];
     let mut deleted = 0_u64;
