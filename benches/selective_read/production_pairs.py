@@ -46,8 +46,9 @@ def capacity(fixtures, transfers, output, limit):
             "additional_disk_bytes": additional, "immutable_hardlinks": copied == 0}
 
 
-def prepare(fixtures, binary, output, disk_gib, seconds):
+def prepare(fixtures, binary, output, disk_gib, seconds, layout=None):
     oracle.require(0 < disk_gib <= 192 and seconds > 0, "finite production pairing ceilings required")
+    oracle.require(layout in (None, "localized", "scattered"), "unknown pairing layout")
     bases, parents, source, modes, source_hashes, definitions = {}, [], None, set(), set(), {}
     for root in fixtures:
         manifest = json.loads((root / "manifest.json").read_text())
@@ -58,6 +59,8 @@ def prepare(fixtures, binary, output, disk_gib, seconds):
                         "writer": manifest["writer"]["generator"]})
         for table in fixture_tables(manifest):
             query_fields(table["id"], manifest)
+            if layout is not None and table["layout"] != layout:
+                continue
             oracle.require(table["id"] not in bases and not table["deletion_vectors"], "duplicate/non-base table")
             bases[table["id"]] = root, table
         name, definition = manifest["shape"], manifest["shape_definition"]
@@ -66,9 +69,10 @@ def prepare(fixtures, binary, output, disk_gib, seconds):
         current = manifest["sources"][0]
         oracle.require(source is None or source[1] == current, "source inventories differ")
         source = root, current
-    expected = {c for c, v in shapes.cases().items() if not v["deletion_vectors"] and v["shape"] in definitions}
+    expected = {c for c, v in shapes.cases().items() if not v["deletion_vectors"] and v["shape"] in definitions
+                and (layout is None or v["layout"] == layout)}
     oracle.require(bases and set(bases) == expected and len(modes) == len(source_hashes) == 1,
-                   "pair both layouts of each included shape from one source and scope")
+                   "pair the requested layouts of each included shape from one source and scope")
     phase = capacity(fixtures, [source, *bases.values()], output, disk_gib * 1024**3)
     output.mkdir()
     save(output / "attempt.json", {"status": "preparing", "disk_limit_bytes": disk_gib * 1024**3,
@@ -97,6 +101,8 @@ def prepare(fixtures, binary, output, disk_gib, seconds):
         tables.append(table | {"queries": {case: definitions[shape]["canonical_sql"]}})
     request = {"format": "selective-read-production-pairs-request-v1", "contract_sha256": digest(shapes.CONTRACT),
                "mode": next(iter(modes)), "tables": tables, "output_limit_bytes": disk_gib * 1024**3}
+    if layout is not None:
+        request["layout"] = layout
     save(output / "dv-request.json", request)
     subprocess.run([str(binary.resolve()), "production-pairs", str((output / "dv-request.json").resolve()),
                     str(output.resolve()), str(seconds)], check=True, timeout=seconds + 30)
@@ -110,6 +116,8 @@ def prepare(fixtures, binary, output, disk_gib, seconds):
                 "writer": {"status": "complete", "generator": result["generator"], "tables": result["base_tables"] + result["tables"]},
                 "dv_result_sha256": digest(output / "dv-result.json"), "driver_sha256": digest(Path(__file__)),
                 "native_campaign_ready": False, "publication_ready": False}
+    if layout is not None:
+        manifest["production_dv"]["layout"] = layout
     save(output / "manifest.json", manifest)
     return manifest
 
@@ -117,10 +125,12 @@ def prepare(fixtures, binary, output, disk_gib, seconds):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fixtures", type=Path, action="append", required=True)
+    parser.add_argument("--layout", choices=("localized", "scattered"),
+                        help="prepare one layout and its DV snapshot for staged execution")
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--disk-limit-gib", type=int, required=True)
     parser.add_argument("--elapsed-limit-seconds", type=int, default=1800)
     args = parser.parse_args()
-    value = prepare(args.fixtures, args.binary, args.output, args.disk_limit_gib, args.elapsed_limit_seconds)
+    value = prepare(args.fixtures, args.binary, args.output, args.disk_limit_gib, args.elapsed_limit_seconds, args.layout)
     print(json.dumps({"status": value["status"], "tables": len(value["writer"]["tables"])}))

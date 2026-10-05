@@ -2,9 +2,12 @@
 
 from datetime import date
 import copy
+from pathlib import Path
+import tempfile
 import unittest
 
 import pyarrow as pa
+import pyarrow.parquet as pq
 
 import production_workloads as production
 import campaign
@@ -12,6 +15,40 @@ import run
 
 
 class ProductionContract(unittest.TestCase):
+    def test_staged_deletions_are_recomputed_and_default_pairs_remain_complete(self):
+        extras = {(1, 1), (2, 1), (3, 1)}
+        with tempfile.TemporaryDirectory() as temporary:
+            root, tables = Path(temporary), []
+            for layout in ("localized", "scattered"):
+                case = "production.q2." + layout
+                (root / case).mkdir()
+                files = []
+                for ordinal in range(2):
+                    rows = [{"l_orderkey": key, "l_partkey": 1, "l_linenumber": 1,
+                             "l_shipdate": date(1995, 3, 15 if key % 2 == 0 else 14), "l_shipmode": "AIR"}
+                            for key in (1 + 2 * ordinal, 2 + 2 * ordinal)]
+                    name = f"part-{ordinal}.parquet"
+                    pq.write_table(pa.Table.from_pylist(rows if layout == "localized" else rows[::-1]), root / case / name)
+                    files.append({"path": name})
+                tables.append({"id": case, "path": case, "deletion_vectors": False, "files": files})
+            manifest = {"status": "complete", "protocol": "selective-read-production-pairs-v1",
+                        "writer": {"status": "complete", "tables": tables},
+                        "production_dv": {"base_case_ids": [t["id"] for t in tables],
+                                          "extra_logical_keys": [list(k) for k in sorted(extras)]}}
+            self.assertEqual(production.extra_keys(root, manifest), extras)
+            for layout, table in zip(("localized", "scattered"), tables, strict=True):
+                staged = copy.deepcopy(manifest)
+                staged["writer"]["tables"] = [table]
+                staged["production_dv"].update(layout=layout, base_case_ids=[table["id"]])
+                self.assertEqual(production.extra_keys(root, staged), extras)
+                staged["production_dv"].pop("layout")
+                with self.assertRaisesRegex(ValueError, "layout scope"):
+                    production.extra_keys(root, staged)
+                staged["production_dv"]["layout"] = layout
+                staged["production_dv"]["extra_logical_keys"].pop()
+                with self.assertRaisesRegex(ValueError, "deletion union changed"):
+                    production.extra_keys(root, staged)
+
     def test_large_geometry_is_bound_to_each_paired_shape(self):
         case = "production.q4.localized"
         definition = production.shapes.definitions()["q4"]
