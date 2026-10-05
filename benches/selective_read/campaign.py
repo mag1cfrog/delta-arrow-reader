@@ -216,7 +216,7 @@ def execute(args):
     require(receipt["status"] == "verified" and receipt["server_sha256"] == digest(state / "server.json") and
             receipt["fixture_manifest_sha256"] == digest(fixtures / "manifest.json") and
             receipt["table_root"] == f"s3://{storage.BUCKET}/{receipt['fixture_manifest_sha256']}", "upload receipt differs from server/fixtures")
-    require(storage.inventory(fixtures) == receipt["objects"], "fixture objects differ from verified upload")
+    require(storage.inventory(fixtures, receipt.get("table_ids")) == receipt["objects"], "fixture objects differ from verified upload")
     binaries, builds = {}, {}
     for binary in args.binary:
         binary = binary.resolve()
@@ -329,6 +329,8 @@ def execute(args):
                         require(cases[job["case_id"]]["status"] == "prepared", cases[job["case_id"]].get("failure_reason", "missing matrix reference"))
                     payload = run.request(fixtures, job["case_id"], job["execution_mode"], "validation", "pending", workload=workload_path)
                     location = Path(unquote(urlsplit(payload["table_uri"]).path)).relative_to(fixtures)
+                    require(any(item["path"].startswith(str(location) + "/") for item in receipt["objects"]),
+                            "table is absent from verified upload")
                     payload["table_uri"] = receipt["table_root"] + "/" + str(location)
                     reference = references[job["case_id"]]
                     metadata = json.loads((reference / "reference.json").read_text())

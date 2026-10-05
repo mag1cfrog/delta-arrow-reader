@@ -210,11 +210,19 @@ def start(build, directory, port):
         raise
 
 
-def inventory(fixtures):
+def inventory(fixtures, table_ids=None):
     manifest = json.loads((fixtures / "manifest.json").read_text())
     from run import fixture_tables
+    tables = fixture_tables(manifest)
+    if table_ids is not None:
+        if (not isinstance(table_ids, list) or not table_ids
+                or not all(isinstance(t, str) for t in table_ids)
+                or len(set(table_ids)) != len(table_ids)
+                or not set(table_ids) <= {t["id"] for t in tables}):
+            raise ValueError("invalid native upload table selection")
+        tables = [t for t in tables if t["id"] in table_ids]
     objects = []
-    for table in fixture_tables(manifest):
+    for table in tables:
         logs = table.get("delta_logs", [table["delta_log"]])
         dvs = [f["deletion_vector"] for f in table["files"] if "deletion_vector" in f]
         for item in logs + table["files"] + dvs:
@@ -227,8 +235,8 @@ def inventory(fixtures):
     return objects
 
 
-def upload(directory, fixtures, output):
-    objects = inventory(fixtures)
+def upload(directory, fixtures, output, table_ids=None):
+    objects = inventory(fixtures, table_ids)
     prefix = digest(fixtures / "manifest.json")
     with exclusive(directory):
         verify_server(directory)
@@ -236,7 +244,7 @@ def upload(directory, fixtures, output):
             put_verified(directory, prefix + "/" + item["path"], fixtures / item["path"], item["sha256"])
     save(output, {"status": "verified", "server_sha256": digest(directory / "server.json"),
                   "fixture_manifest_sha256": prefix, "prefix": prefix, "objects": objects,
-                  "table_root": f"s3://{BUCKET}/{prefix}", "verified_ns": time.time_ns()})
+                  "table_root": f"s3://{BUCKET}/{prefix}", "table_ids": table_ids, "verified_ns": time.time_ns()})
 
 
 def put_verified(directory, key, source, expected):
@@ -307,6 +315,7 @@ if __name__ == "__main__":
     p = commands.add_parser("upload")
     p.add_argument("--state", type=Path, required=True)
     p.add_argument("--fixtures", type=Path, required=True)
+    p.add_argument("--table", action="append", help="repeat for exact native table IDs; default: all tables")
     p.add_argument("--output", type=Path, required=True)
     p = commands.add_parser("reader", help=argparse.SUPPRESS)
     p.add_argument("--state", type=Path, required=True)
@@ -317,7 +326,7 @@ if __name__ == "__main__":
     elif args.command == "start":
         start(args.build, args.state, args.port)
     elif args.command == "upload":
-        upload(args.state, args.fixtures, args.output)
+        upload(args.state, args.fixtures, args.output, args.table)
     elif args.command == "reader":
         exec_reader(args.state, args.arguments[1:])
     else:
