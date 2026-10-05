@@ -14,7 +14,10 @@ use async_trait::async_trait;
 use delta_arrow_reader::{
     DeltaReaderError, DeltaScanExecutionOptions, DeltaTableBuilder, ParquetReaderBackend,
 };
-use futures_util::{TryStreamExt, stream::BoxStream};
+use futures_util::{
+    TryStreamExt,
+    stream::{self, BoxStream},
+};
 use object_store::{
     CopyOptions, GetOptions, GetResult, ListResult, MultipartUpload, ObjectMeta, ObjectStore,
     PutMultipartOptions, PutOptions, PutPayload, PutResult, Result as StoreResult,
@@ -214,7 +217,12 @@ async fn data_file_location_checks_the_store_before_data_io_in_both_backends() -
     ] {
         for (path, accepted) in &cases {
             set_data_file_path(&fixture, path)?;
-            let table = DeltaTableBuilder::new(&table_url).load_table().await?;
+            let table = DeltaTableBuilder::new(&table_url)
+                .load_table()
+                .await
+                .map_err(|error| {
+                    format!("{backend:?} {path}: {error}, source={:?}", error.source())
+                })?;
             let scan = table
                 .scan()
                 .with_execution_options(
@@ -295,7 +303,16 @@ impl ObjectStore for DataReadStore {
     }
 
     fn list(&self, prefix: Option<&StorePath>) -> BoxStream<'static, StoreResult<ObjectMeta>> {
-        self.inner.list(prefix)
+        let entries = self.inner.list(prefix);
+        Box::pin(
+            stream::once(async move {
+                let mut entries = entries.try_collect::<Vec<_>>().await?;
+                // Kernel assumes sorted listings for this custom scheme.
+                entries.sort_unstable_by(|left, right| left.location.cmp(&right.location));
+                Ok::<_, object_store::Error>(stream::iter(entries.into_iter().map(Ok)))
+            })
+            .try_flatten(),
+        )
     }
 
     async fn list_with_delimiter(&self, prefix: Option<&StorePath>) -> StoreResult<ListResult> {
