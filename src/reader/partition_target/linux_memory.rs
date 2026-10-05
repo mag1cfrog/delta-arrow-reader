@@ -53,12 +53,21 @@ fn cgroup_available_memory(
         // Each ancestor's own usage includes its other descendants. Subtracting
         // only the leaf's usage would overstate the shared parent's headroom.
         for directory in leaf.ancestors().take_while(|path| path.starts_with(&mount)) {
+            let hierarchical = match version {
+                CgroupVersion::V1 => {
+                    read(&directory.join("memory.use_hierarchy")).and_then(|value| {
+                        match value.trim() {
+                            "1" => Some(true),
+                            "0" => Some(false),
+                            _ => None,
+                        }
+                    })
+                }
+                CgroupVersion::V2 => Some(true),
+            };
             if matches!(version, CgroupVersion::V1)
                 && directory != leaf
-                && read(&directory.join("memory.use_hierarchy"))
-                    .as_deref()
-                    .map(str::trim)
-                    != Some("1")
+                && hierarchical != Some(true)
             {
                 continue;
             }
@@ -74,11 +83,51 @@ fn cgroup_available_memory(
             else {
                 continue;
             };
-            let headroom = limit.saturating_sub(usage);
+            let reclaimable = read(&directory.join("memory.stat"))
+                .and_then(|stats| reclaimable_file_cache(&stats, usage, version, hierarchical))
+                .unwrap_or(0);
+            // Subtract cache from usage first: usage may already exceed the limit.
+            let headroom = limit.saturating_sub(usage.saturating_sub(reclaimable));
             available = Some(available.map_or(headroom, |value: u64| value.min(headroom)));
         }
     }
     available
+}
+
+fn reclaimable_file_cache(
+    contents: &str,
+    usage: u64,
+    version: CgroupVersion,
+    hierarchical: Option<bool>,
+) -> Option<u64> {
+    let keys = match (version, hierarchical) {
+        (CgroupVersion::V2, _) => ["inactive_file", "file_dirty", "file_writeback"],
+        (CgroupVersion::V1, Some(true)) => {
+            ["total_inactive_file", "total_dirty", "total_writeback"]
+        }
+        (CgroupVersion::V1, Some(false)) => ["inactive_file", "dirty", "writeback"],
+        (CgroupVersion::V1, None) => return None,
+    };
+    let mut values = [None; 3];
+    for line in contents.lines() {
+        let mut fields = line.split_ascii_whitespace();
+        let Some(key) = fields.next() else { continue };
+        let Some(index) = keys.iter().position(|name| *name == key) else {
+            continue;
+        };
+        let value = fields.next()?.parse::<u64>().ok()?;
+        // Separately sampled counters can disagree. Keep raw headroom in that case.
+        if values[index].is_some() || fields.next().is_some() || value > usage {
+            return None;
+        }
+        values[index] = Some(value);
+    }
+    let [Some(inactive), Some(dirty), Some(writeback)] = values else {
+        return None;
+    };
+    // Deduct all dirty/writeback pages, even those on other lists. Shmem is on
+    // the anonymous lists, so it receives no credit from inactive_file.
+    Some(inactive.saturating_sub(dirty).saturating_sub(writeback))
 }
 
 fn memory_cgroup(contents: &str) -> Option<(CgroupVersion, &Path)> {
@@ -217,6 +266,245 @@ mod tests {
 
     fn hint(files: &HashMap<PathBuf, String>) -> Option<MemoryHint> {
         collect_memory_hint(|path| files.get(path).cloned(), 4096)
+    }
+
+    #[test]
+    fn clean_inactive_file_cache_increases_automatic_targets()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut files = fixture(2);
+        files.insert("/cg/team/worker/memory.max".into(), "2147483648".into());
+        files.insert("/cg/team/worker/memory.current".into(), "2013265920".into());
+        for (inactive, expected_mib, expected_target) in [(0, 128, 1), (1_073_741_824, 1152, 4)] {
+            files.insert(
+                "/cg/team/worker/memory.stat".into(),
+                format!("inactive_file {inactive}\nfile_dirty 0\nfile_writeback 0\nshmem 0\n"),
+            );
+            let memory = hint(&files).ok_or("missing hint")?;
+            let input = DeltaScanPartitionTargetDiagnosticInput {
+                available_parallelism: Some(8),
+                available_memory_bytes: memory.available_bytes,
+                unix_soft_file_descriptor_limit: Some(128),
+                ..Default::default()
+            };
+            assert_eq!(
+                (
+                    memory.available_bytes,
+                    derive_delta_scan_partition_target_diagnostic(input)?.target_partitions,
+                ),
+                (Some(expected_mib * 1024 * 1024), expected_target),
+                "inactive_file={inactive}",
+            );
+            let explicit = DeltaScanPartitionTargetDiagnosticInput {
+                explicit_target_partitions: Some(32),
+                ..input
+            };
+            assert_eq!(
+                derive_delta_scan_partition_target_diagnostic(explicit)?.target_partitions,
+                32
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn cache_credit_deducts_dirty_writeback_and_handles_usage_above_the_limit() {
+        for (version, limit, usage, keys) in [
+            (
+                1,
+                "memory.limit_in_bytes",
+                "memory.usage_in_bytes",
+                ["total_inactive_file", "total_dirty", "total_writeback"],
+            ),
+            (
+                2,
+                "memory.max",
+                "memory.current",
+                ["inactive_file", "file_dirty", "file_writeback"],
+            ),
+        ] {
+            let mut files = fixture(version);
+            files.insert("/cg/team/worker/memory.use_hierarchy".into(), "1".into());
+            for (maximum, used, inactive, dirty, writeback, expected) in [
+                (1024, 512, 128, 16, 32, 592),
+                (1024, 512, 128, 128, 0, 512),
+                (1024, 512, 128, 0, 128, 512),
+                (1024, 512, 128, 100, 100, 512),
+                (1024, 512, 128, 256, 0, 512),
+                (1024, 512, 0, 0, 0, 512),
+                (1024, 512, 512, 0, 0, 1024),
+                (1024, 1152, 256, 0, 0, 128),
+                (1024, 1152, 64, 0, 0, 0),
+                (0, 512, 512, 0, 0, 0),
+                (100, u64::MAX, u64::MAX, u64::MAX, u64::MAX, 0),
+                (100, u64::MAX, u64::MAX, 0, 0, 100),
+            ] {
+                files.insert(
+                    Path::new("/cg/team/worker").join(limit),
+                    maximum.to_string(),
+                );
+                files.insert(Path::new("/cg/team/worker").join(usage), used.to_string());
+                let [inactive_key, dirty_key, writeback_key] = keys;
+                files.insert(
+                    "/cg/team/worker/memory.stat".into(),
+                    format!(
+                        "{writeback_key} {writeback}\n\npgfault 900\n\
+                         {inactive_key} {inactive}\n{dirty_key} {dirty}\n"
+                    ),
+                );
+                assert_eq!(
+                    hint(&files).and_then(|hint| hint.available_bytes),
+                    Some(expected),
+                    "v{version}: limit={maximum}, usage={used}, cache={inactive}/{dirty}/{writeback}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn v1_cache_counters_match_the_usage_accounting_scope() {
+        let mut files = fixture(1);
+        files.insert(
+            "/cg/team/worker/memory.limit_in_bytes".into(),
+            "1024".into(),
+        );
+        files.insert("/cg/team/worker/memory.usage_in_bytes".into(), "512".into());
+        let stats = "inactive_file 128\ndirty 16\nwriteback 32\n\
+                     total_inactive_file 256\ntotal_dirty 32\ntotal_writeback 64\n";
+        files.insert("/cg/team/worker/memory.stat".into(), stats.into());
+        for (hierarchy, expected) in [
+            (None, 512),
+            (Some("bad"), 512),
+            (Some("0"), 592),
+            (Some("1\n"), 672),
+        ] {
+            files.remove(Path::new("/cg/team/worker/memory.use_hierarchy"));
+            if let Some(value) = hierarchy {
+                files.insert("/cg/team/worker/memory.use_hierarchy".into(), value.into());
+            }
+            assert_eq!(
+                hint(&files).and_then(|hint| hint.available_bytes),
+                Some(expected),
+                "hierarchy={hierarchy:?}"
+            );
+        }
+        // Never fill in a missing hierarchical counter from the local counters.
+        files.insert(
+            "/cg/team/worker/memory.stat".into(),
+            stats.replace("total_writeback 64\n", ""),
+        );
+        assert_eq!(
+            hint(&files).and_then(|hint| hint.available_bytes),
+            Some(512)
+        );
+    }
+
+    #[test]
+    fn unusable_cache_counters_preserve_raw_headroom() {
+        let mut files = fixture(2);
+        files.insert("/cg/team/worker/memory.max".into(), "1024".into());
+        files.insert("/cg/team/worker/memory.current".into(), "512".into());
+        let stats = "inactive_file 128\nfile_dirty 0\nfile_writeback 0\n";
+        for (key, value) in [
+            ("inactive_file", 128),
+            ("file_dirty", 0),
+            ("file_writeback", 0),
+        ] {
+            let field = format!("{key} {value}");
+            for replacement in [
+                String::new(),
+                key.into(),
+                format!("{key} -1"),
+                format!("{key} bad"),
+                format!("{key} 1 2"),
+                format!("{key} 18446744073709551616"),
+                format!("{key} 513"),
+                format!("{field}\n{field}"),
+            ] {
+                files.insert(
+                    "/cg/team/worker/memory.stat".into(),
+                    stats.replace(&field, &replacement),
+                );
+                assert_eq!(
+                    hint(&files).and_then(|hint| hint.available_bytes),
+                    Some(512),
+                    "{replacement:?}"
+                );
+            }
+        }
+        files.remove(Path::new("/cg/team/worker/memory.stat"));
+        assert_eq!(
+            hint(&files).and_then(|hint| hint.available_bytes),
+            Some(512)
+        );
+    }
+
+    #[test]
+    fn cache_aware_ancestors_use_their_own_counters_and_stay_capped_by_the_host() {
+        for (version, limit, usage, keys, unlimited) in [
+            (
+                1,
+                "memory.limit_in_bytes",
+                "memory.usage_in_bytes",
+                ["total_inactive_file", "total_dirty", "total_writeback"],
+                "9223372036854771712",
+            ),
+            (
+                2,
+                "memory.max",
+                "memory.current",
+                ["inactive_file", "file_dirty", "file_writeback"],
+                "max",
+            ),
+        ] {
+            let mut files = fixture(version);
+            for (directory, maximum, used, inactive, dirty, writeback) in [
+                ("/cg/team/worker", 1024, 768, 512, 64, 64),
+                ("/cg/team", 2048, 1800, 768, 128, 128),
+            ] {
+                let directory = Path::new(directory);
+                files.insert(directory.join(limit), (maximum * 1024).to_string());
+                files.insert(directory.join(usage), (used * 1024).to_string());
+                files.insert(directory.join("memory.use_hierarchy"), "1".into());
+                let [inactive_key, dirty_key, writeback_key] = keys;
+                files.insert(
+                    directory.join("memory.stat"),
+                    format!(
+                        "{inactive_key} {}\n{dirty_key} {}\n{writeback_key} {}\n",
+                        inactive * 1024,
+                        dirty * 1024,
+                        writeback * 1024
+                    ),
+                );
+            }
+            assert_eq!(
+                hint(&files).and_then(|hint| hint.available_bytes),
+                Some(640 * 1024)
+            );
+            files.insert(Path::new("/cg/team").join(usage), (2000 * 1024).to_string());
+            assert_eq!(
+                hint(&files).and_then(|hint| hint.available_bytes),
+                Some(560 * 1024)
+            );
+            files.insert("/proc/meminfo".into(), "MemAvailable: 512 kB\n".into());
+            assert_eq!(
+                hint(&files).and_then(|hint| hint.available_bytes),
+                Some(512 * 1024)
+            );
+            // Missing stats retain the ancestor's raw limit, including sibling usage.
+            files.remove(Path::new("/cg/team/memory.stat"));
+            assert_eq!(
+                hint(&files).and_then(|hint| hint.available_bytes),
+                Some(48 * 1024)
+            );
+            files.remove(Path::new("/proc/meminfo"));
+            files.insert(Path::new("/cg/team").join(limit), unlimited.into());
+            assert_eq!(
+                hint(&files).and_then(|hint| hint.available_bytes),
+                Some(640 * 1024)
+            );
+            files.insert(Path::new("/cg/team/worker").join(limit), unlimited.into());
+            assert!(hint(&files).is_none());
+        }
     }
 
     #[test]
@@ -575,6 +863,13 @@ mod tests {
     #[test]
     fn detection_reads_current_membership_and_never_uses_swap_or_soft_limits() {
         let mut files = fixture(2);
+        // Active cache and shmem account for usage, but neither earns cache credit.
+        files.insert(
+            "/cg/team/worker/memory.stat".into(),
+            "file 536870912\nactive_file 268435456\nshmem 268435456\n\
+             inactive_anon 268435456\ninactive_file 0\nfile_dirty 0\nfile_writeback 0\n"
+                .into(),
+        );
         for name in [
             "memory.high",
             "memory.swap.max",
