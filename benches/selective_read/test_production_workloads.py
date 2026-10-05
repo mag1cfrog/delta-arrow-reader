@@ -88,6 +88,16 @@ class ProductionContract(unittest.TestCase):
                     "sources": [{"scale_factor": 10, "rows": 100}],
                     "shape_definitions": {"q4": definition}, "writer": {"status": "complete", "tables": [table]}}
         self.assertEqual(production.query_fields(case, manifest)["writer"]["data_page_rows"], 20000)
+        legacy = copy.deepcopy(manifest)
+        legacy["writer"]["tables"][0]["writer"] = dict(definition)
+        legacy["shape_definitions"]["q4"].pop("data_page_bytes")
+        self.assertEqual(production.query_fields(case, legacy), production.query_fields(case, manifest))
+        self.assertNotIn("data_page_bytes", legacy["shape_definitions"]["q4"])
+        for page_bytes in (None, 8192, 65536):
+            bad = copy.deepcopy(legacy)
+            bad["writer"]["tables"][0]["writer"] = dict(definition, data_page_bytes=page_bytes)
+            with self.assertRaisesRegex(ValueError, "recorded 1 MiB page target"):
+                production.query_fields(case, bad)
         for field in ("data_page_rows", "data_page_bytes", "write_batch_rows", "row_group_rows", "dictionary"):
             bad = copy.deepcopy(manifest)
             bad["writer"]["tables"][0]["writer"] = dict(definition, **{field: 123})
