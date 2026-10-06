@@ -54,11 +54,11 @@ pub(crate) fn parse_table_location(table_location: &str) -> delta_kernel::DeltaR
 pub(crate) struct DeltaKernelEngineContext {
     /// Public table URL, retaining the bucket/container for resolving file URLs
     /// and checking that they belong to the configured store.
-    table_url: Url,
+    public_table_url: Url,
     /// Internal URL for Kernel I/O, whose path is relative to `object_store`.
     /// For path-style S3 HTTPS, `/bucket/table/` becomes `/table/` because the
     /// store already selects the bucket.
-    kernel_table_url: Url,
+    store_relative_table_url: Url,
     object_store: Arc<dyn ObjectStore>,
     engine: Arc<dyn Engine + Send + Sync>,
 }
@@ -501,30 +501,32 @@ fn convert_scalar(scalar: &DeltaScalar) -> Option<Scalar> {
 
 impl DeltaKernelEngineContext {
     pub(crate) fn try_new(
-        table_url: Url,
+        public_table_url: Url,
         storage_options: &DeltaStorageOptions,
     ) -> delta_kernel::DeltaResult<Self> {
         let object_store = store_from_url_opts(
-            &table_url,
+            &public_table_url,
             storage_options
                 .iter()
                 .map(|(key, value)| (key.as_str(), value.as_str())),
         )?;
         let engine = Arc::new(DefaultEngineBuilder::new(Arc::clone(&object_store)).build());
         // store_from_url_opts discards object_store's parsed path.
-        let kernel_table_url =
-            with_object_store_path(table_url.clone(), &object_store_path(&table_url)?)?;
+        let store_relative_table_url = with_object_store_path(
+            public_table_url.clone(),
+            &object_store_path(&public_table_url)?,
+        )?;
 
         Ok(Self {
-            table_url,
-            kernel_table_url,
+            public_table_url,
+            store_relative_table_url,
             object_store,
             engine,
         })
     }
 
     pub(crate) fn table_url(&self) -> &Url {
-        &self.table_url
+        &self.public_table_url
     }
 
     pub(crate) fn engine(&self) -> &(dyn Engine + Send + Sync) {
@@ -565,7 +567,7 @@ impl DeltaKernelEngineContext {
         &self,
         version: Option<u64>,
     ) -> delta_kernel::DeltaResult<KernelSnapshot> {
-        let mut builder = Snapshot::builder_for(self.kernel_table_url.clone());
+        let mut builder = Snapshot::builder_for(self.store_relative_table_url.clone());
         if let Some(version) = version {
             builder = builder.at_version(version);
         }
@@ -587,8 +589,8 @@ impl DeltaKernelEngineContext {
         deletion_vector: &KernelDeletionVectorHandle,
     ) -> delta_kernel::DeltaResult<roaring::RoaringTreemap> {
         let mut descriptor = deletion_vector.0.clone();
-        if let Some(location) = descriptor.absolute_path(&self.table_url)? {
-            if !same_store(&self.table_url, &location) {
+        if let Some(location) = descriptor.absolute_path(&self.public_table_url)? {
+            if !same_store(&self.public_table_url, &location) {
                 return Err(delta_kernel::Error::generic(
                     "deletion vector URL does not identify the configured table store",
                 ));
@@ -598,7 +600,10 @@ impl DeltaKernelEngineContext {
                 delta_kernel::actions::deletion_vector::DeletionVectorStorageType::PersistedAbsolute;
             descriptor.path_or_inline_dv = with_object_store_path(location, &path)?.into();
         }
-        descriptor.read(self.engine.storage_handler(), &self.kernel_table_url)
+        descriptor.read(
+            self.engine.storage_handler(),
+            &self.store_relative_table_url,
+        )
     }
 }
 
