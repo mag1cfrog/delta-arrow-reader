@@ -11,6 +11,11 @@ DuckDB retains its separate EXPLAIN invocation after timing. EXPLAIN can read
 extra Parquet data, so it must not enter the gate's I/O totals. The other four
 readers export their existing native plans during the gate.
 
+DuckDB's merged gate exports the Arrow result schema and every projected value,
+without repeating `DESCRIBE bench` after the query. The separate EXPLAIN invocation
+still retains the full provider schema. This avoids validation-only Delta-log
+reads in the gate's I/O totals.
+
 ## Start a new campaign
 
 Add `--gate-diagnostics` to the existing
