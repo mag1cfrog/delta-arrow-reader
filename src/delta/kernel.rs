@@ -52,7 +52,12 @@ pub(crate) fn parse_table_location(table_location: &str) -> delta_kernel::DeltaR
 
 /// One parsed table location, object store, and Kernel engine.
 pub(crate) struct DeltaKernelEngineContext {
+    /// Public table URL, retaining the bucket/container for resolving file URLs
+    /// and checking that they belong to the configured store.
     table_url: Url,
+    /// Internal URL for Kernel I/O, whose path is relative to `object_store`.
+    /// For path-style S3 HTTPS, `/bucket/table/` becomes `/table/` because the
+    /// store already selects the bucket.
     kernel_table_url: Url,
     object_store: Arc<dyn ObjectStore>,
     engine: Arc<dyn Engine + Send + Sync>,
@@ -506,8 +511,7 @@ impl DeltaKernelEngineContext {
                 .map(|(key, value)| (key.as_str(), value.as_str())),
         )?;
         let engine = Arc::new(DefaultEngineBuilder::new(Arc::clone(&object_store)).build());
-        // store_from_url_opts discards object_store's parsed path. Keep the
-        // public URL for identity checks and give Kernel the bucket-relative key.
+        // store_from_url_opts discards object_store's parsed path.
         let kernel_table_url =
             with_object_store_path(table_url.clone(), &object_store_path(&table_url)?)?;
 
