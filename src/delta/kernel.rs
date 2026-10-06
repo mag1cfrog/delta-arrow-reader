@@ -32,6 +32,7 @@ use delta_kernel_default_engine::{DefaultEngineBuilder, storage::store_from_url_
 use object_store::ObjectStore;
 use url::Url;
 
+use super::location::{object_store_path, same_store, with_object_store_path};
 use crate::{DeltaComparison, DeltaPredicate, DeltaScalar, DeltaStorageOptions};
 
 #[allow(dead_code)]
@@ -52,6 +53,7 @@ pub(crate) fn parse_table_location(table_location: &str) -> delta_kernel::DeltaR
 /// One parsed table location, object store, and Kernel engine.
 pub(crate) struct DeltaKernelEngineContext {
     table_url: Url,
+    kernel_table_url: Url,
     object_store: Arc<dyn ObjectStore>,
     engine: Arc<dyn Engine + Send + Sync>,
 }
@@ -504,9 +506,14 @@ impl DeltaKernelEngineContext {
                 .map(|(key, value)| (key.as_str(), value.as_str())),
         )?;
         let engine = Arc::new(DefaultEngineBuilder::new(Arc::clone(&object_store)).build());
+        // store_from_url_opts discards object_store's parsed path. Keep the
+        // public URL for identity checks and give Kernel the bucket-relative key.
+        let kernel_table_url =
+            with_object_store_path(table_url.clone(), &object_store_path(&table_url)?)?;
 
         Ok(Self {
             table_url,
+            kernel_table_url,
             object_store,
             engine,
         })
@@ -554,7 +561,7 @@ impl DeltaKernelEngineContext {
         &self,
         version: Option<u64>,
     ) -> delta_kernel::DeltaResult<KernelSnapshot> {
-        let mut builder = Snapshot::builder_for(self.table_url.clone());
+        let mut builder = Snapshot::builder_for(self.kernel_table_url.clone());
         if let Some(version) = version {
             builder = builder.at_version(version);
         }
@@ -575,9 +582,19 @@ impl DeltaKernelEngineContext {
         &self,
         deletion_vector: &KernelDeletionVectorHandle,
     ) -> delta_kernel::DeltaResult<roaring::RoaringTreemap> {
-        deletion_vector
-            .0
-            .read(self.engine.storage_handler(), &self.table_url)
+        let mut descriptor = deletion_vector.0.clone();
+        if let Some(location) = descriptor.absolute_path(&self.table_url)? {
+            if !same_store(&self.table_url, &location) {
+                return Err(delta_kernel::Error::generic(
+                    "deletion vector URL does not identify the configured table store",
+                ));
+            }
+            let path = object_store_path(&location)?;
+            descriptor.storage_type =
+                delta_kernel::actions::deletion_vector::DeletionVectorStorageType::PersistedAbsolute;
+            descriptor.path_or_inline_dv = with_object_store_path(location, &path)?.into();
+        }
+        descriptor.read(self.engine.storage_handler(), &self.kernel_table_url)
     }
 }
 

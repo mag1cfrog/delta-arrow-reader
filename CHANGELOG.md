@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- read path-style S3, Azure and R2 HTTPS table locations through both Parquet backends
+- validate deletion-vector store identity before reading the payload
+
 ## [0.6.1](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.0...v0.6.1) - 2026-09-25
 
 ### Documentation

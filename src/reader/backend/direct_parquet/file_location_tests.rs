@@ -112,14 +112,14 @@ async fn data_file_location_alias_reads_the_declared_object_not_a_prefixed_decoy
         (
             "https://account.blob.core.windows.net/container/table/",
             "part.parquet",
-            "container/table/part.parquet",
             "table/part.parquet",
+            "container/table/part.parquet",
         ),
         (
             "https://s3.us-east-1.amazonaws.com/bucket/table/",
             "part.parquet",
-            "bucket/table/part.parquet",
             "table/part.parquet",
+            "bucket/table/part.parquet",
         ),
         (
             "abfss://container@account.dfs.core.windows.net/table/",
@@ -130,8 +130,8 @@ async fn data_file_location_alias_reads_the_declared_object_not_a_prefixed_decoy
         (
             "https://account.blob.core.windows.net/container/table/",
             "/container/other/part.parquet",
-            "container/other/part.parquet",
             "other/part.parquet",
+            "container/other/part.parquet",
         ),
     ];
     for (table, file, expected_key, decoy_key) in cases {
@@ -169,7 +169,7 @@ async fn data_file_location_alias_reads_the_declared_object_not_a_prefixed_decoy
                     .path_segments_mut()
                     .map_err(|()| "control URL has no path")?
                     .extend(decoy_key.split('/'));
-                let mut control = task(control.path(), Some(size))?;
+                let mut control = task(&format!("..{}", control.path()), Some(size))?;
                 control.parquet_byte_range = Some(0..size);
                 let mut stream = reader
                     .open_physical_parquet_stream(&control, &schema, Default::default())
@@ -276,16 +276,6 @@ fn assert_foreign(error: &DeltaReaderError) {
 fn data_file_location_handles_normalization_and_redacts_invalid_paths() -> TestResult {
     for (table, file, expected) in [
         (
-            "https://account.blob.core.windows.net/",
-            "part.parquet",
-            "part.parquet",
-        ),
-        (
-            "https://account.blob.core.windows.net/container/table/",
-            "../../other/part.parquet",
-            "other/part.parquet",
-        ),
-        (
             "file:///table/",
             "file://localhost/other/a%20b.parquet",
             "other/a b.parquet",
@@ -322,6 +312,31 @@ fn data_file_location_handles_normalization_and_redacts_invalid_paths() -> TestR
     }
 
     for (table, file) in [
+        (
+            "https://s3.us-east-1.amazonaws.com/bucket//table/",
+            "https://s3.us-east-1.amazonaws.com/secret-bucket//table/part.parquet",
+        ),
+        (
+            "https://s3.us-east-1.amazonaws.com/bucket/%2Ftable/",
+            "https://s3.us-east-1.amazonaws.com/secret-bucket/%2Ftable/part.parquet",
+        ),
+        (
+            "https://account.blob.core.windows.net/container//table/",
+            "https://account.blob.core.windows.net/secret-container//table/part.parquet",
+        ),
+        (
+            "https://account.r2.cloudflarestorage.com/bucket//table/",
+            "https://account.r2.cloudflarestorage.com/secret-bucket//table/part.parquet",
+        ),
+        ("https://account.blob.core.windows.net/", "part.parquet"),
+        (
+            "https://account.blob.core.windows.net/container/table/",
+            "../../secret-container/part.parquet",
+        ),
+        (
+            "https://s3.us-east-1.amazonaws.com/bucket/table/",
+            "/secret-bucket/part.parquet",
+        ),
         (
             "https://account.blob.core.windows.net/container/table/",
             "//account.blob.core.windows.net/secret-container/part.parquet",
@@ -459,12 +474,12 @@ fn data_file_location_preserves_same_store_paths_and_aliases() -> TestResult {
         (
             "https://account.dfs.fabric.microsoft.com/workspace/table/",
             "../other/part.parquet",
-            "workspace/other/part.parquet",
+            "other/part.parquet",
         ),
         (
             "https://s3.us-east-1.amazonaws.com/bucket/table/",
             "../other/part.parquet",
-            "bucket/other/part.parquet",
+            "other/part.parquet",
         ),
         (
             "https://bucket.s3.us-east-1.amazonaws.com/table/",
@@ -474,7 +489,7 @@ fn data_file_location_preserves_same_store_paths_and_aliases() -> TestResult {
         (
             "https://account.r2.cloudflarestorage.com/bucket/table/",
             "../other/part.parquet",
-            "bucket/other/part.parquet",
+            "other/part.parquet",
         ),
         (
             "https://EXAMPLE.com:443/table/",
@@ -608,7 +623,7 @@ async fn data_file_location_rejects_foreign_stores_before_any_get() -> TestResul
             if mode == "cached" {
                 reader = reader.with_metadata_cache(Arc::default());
                 // Prime the cache at the colliding object key, through a legitimate URL.
-                let mut control = task(&format!("/{old_key}"), Some(size))?;
+                let mut control = task(&format!("../{old_key}"), Some(size))?;
                 control.parquet_byte_range = Some(0..size);
                 let mut stream = reader
                     .open_physical_parquet_stream(&control, &schema, Default::default())
