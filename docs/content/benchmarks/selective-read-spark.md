@@ -2,9 +2,10 @@
 
 The optional Spark adapter reads native Delta snapshots with Spark 4.1.1 and
 Delta Lake 4.3.1. It is a feasibility pilot for replacing Daft in the main
-comparison. Historical comparison revisions 2-5 retain their original reader
-rosters. The adapter rejects timing requests and campaign membership until the
-new roster contract is available.
+comparison. The [revision 6 contract](selective-read-spark-matrix.md) admits
+correctness-gated timing and campaign membership. Historical comparison revisions
+2-5 retain their original reader rosters and allow this adapter only for untimed
+pilot invocations.
 
 ## Prepare the reader
 

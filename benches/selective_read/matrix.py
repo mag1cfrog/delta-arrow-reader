@@ -289,7 +289,7 @@ if __name__ == "__main__":
     p = commands.add_parser("translations", help=argparse.SUPPRESS)
     for name in ("binary", "request", "output"):
         p.add_argument("--" + name, type=Path, required=True)
-    p.add_argument("--comparison-revision", type=int, choices=(2, 3, 4, 5), default=2)
+    p.add_argument("--comparison-revision", type=int, choices=(2, 3, 4, 5, 6), default=2)
     p = commands.add_parser("prepare")
     for name in ("fixtures", "output"):
         p.add_argument("--" + name, type=Path, required=True)

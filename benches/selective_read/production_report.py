@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 
 import large_workloads
-from run import BUDGET, comparison_identity, digest, save
+from run import BUDGET, comparison_identity, digest, reader_roster, save
 from supervise import require
 
 READERS = large_workloads.READERS
@@ -32,7 +32,8 @@ def conditions(config):
 def report(definition, campaigns, output):
     frozen = large_workloads.load(definition)
     identity = large_workloads.identity(definition)
-    require(identity["comparison_revision"] == 5 and identity["sampling_stage"] == "formal"
+    readers = reader_roster(identity)
+    require(identity["comparison_revision"] in (5, 6) and identity["sampling_stage"] == "formal"
             and frozen["scope"] == "formal"
             and set(frozen["inventory"]) == {r["case_id"] for r in frozen["cases"]},
             "use the complete eight-case formal definition")
@@ -87,14 +88,14 @@ def report(definition, campaigns, output):
                                              "reader_id": reader, "status": "not_run", "gate": None,
                                              "measurements": None, "oracle": None, "campaign_id": None,
                                              "campaign_status": None})
-            for case in cases for mode in MODES for reader in READERS]
+            for case in cases for mode in MODES for reader in readers]
     complete = [case for case in cases if all(row["status"] in ("success", "unsupported")
                                              and row["campaign_status"] == "complete"
                                              for row in rows if row["job"]["case_id"] == case)]
     result = {"format": "selective-read-production-report-v1", **identity,
               "status": "complete" if len(complete) == len(cases) else "incomplete",
               "formal_coverage_complete": len(complete) == len(cases), "complete_cases": complete,
-              "publication_ready": False, "conditions": shared, "reader_build_sha256": builds,
+              "publication_ready": False, "readers": list(readers), "conditions": shared, "reader_build_sha256": builds,
               "definition": str(definition.resolve()), "cases": cases, "campaigns": sources, "rows": rows}
     output.mkdir()
     save(output / "production-report.json", result)
@@ -120,7 +121,7 @@ def markdown(result):
               "| --- | --- | --- | ---: | --- | ---: | ---: |"]
     entries = {(r["job"]["case_id"], r["job"]["execution_mode"], r["reader_id"]): r for r in result["rows"]}
     for case in result["cases"]:
-        for reader in READERS:
+        for reader in result["readers"]:
             opened, reused = (entries[case, mode, reader] for mode in MODES)
             lines.append(f"| {case} | {reader} | {opened['status']} | {seconds(opened, 'open_query_ns')} | {reused['status']} | {seconds(reused, 'initialization_plus_query1_ns')} | {seconds(reused, 'query_1.completion_ns')} |")
     lines += ["", "The JSON report retains IQRs, sample statuses, eligible ratios, exact-gate evidence, file/group/page geometry",

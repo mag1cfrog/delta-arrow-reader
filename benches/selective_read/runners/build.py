@@ -25,7 +25,8 @@ def sources():
              "docs/content/benchmarks/selective-read-protocol.md",
              "docs/content/benchmarks/selective-read-large-workloads.md",
              "docs/content/benchmarks/selective-read-sampling.md",
-             "docs/content/benchmarks/selective-read-production-workloads.md")]
+             "docs/content/benchmarks/selective-read-production-workloads.md",
+             "docs/content/benchmarks/selective-read-spark-matrix.md")]
     paths += [path for base in (ROOT / "src", HERE) for path in base.rglob("*")
               if path.is_file() and path.suffix in (".rs", ".toml", ".lock", ".py")]
     return {str(path.relative_to(ROOT)): digest(path) for path in sorted(paths)}

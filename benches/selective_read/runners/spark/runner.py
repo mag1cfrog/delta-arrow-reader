@@ -1,4 +1,4 @@
-"""Optional, pilot-only Spark Delta reader. Historical formal rosters stay fixed."""
+"""Spark Delta reader for revision 6 and historical untimed pilots."""
 
 import json
 import os
@@ -14,7 +14,7 @@ import pyarrow as pa
 import pyspark
 from pyspark.sql import SparkSession
 from run import comparison_identity, digest, query_count, save
-from python_common import checkpoint, event, json_hash, observation, require, runtime_metadata, scan_sql, sha, validate
+from python_common import checkpoint, correctness, event, json_hash, observation, require, runtime_metadata, scan_sql, sha, validate
 
 CONFIG = {"spark.master": "local[8]", "spark.driver.memory": "4g", "spark.default.parallelism": "8",
           "spark.sql.shuffle.partitions": "8", "spark.databricks.delta.snapshotPartitions": "8",
@@ -97,15 +97,17 @@ def run(request_path, output):
     request = json.loads(request_path.read_text())
     validate(request)
     scan_sql(request["canonical_sql"])
-    require(request["purpose"] != "timing" and request["campaign_id"] is None,
+    require(request["comparison_revision"] == 6 or request["purpose"] != "timing" and request["campaign_id"] is None,
             "Spark is a pilot only; formal timing needs the new reader-roster contract")
     output.mkdir()
     record = observation(request)
-    record.update(pilot_only=True, publication_ready=False, startup_ns=None, pilot_initialization_ns=None)
+    timed = request["purpose"] == "timing"
+    record.update(pilot_only=request.get("sampling_stage") != "formal" or request["comparison_revision"] < 6,
+                  publication_ready=False, startup_ns=None, pilot_initialization_ns=None)
     session = None
     try:
         build = json.loads((HERE / "build.json").read_text())
-        require(build["reader_id"] == "spark" and build["pilot_only"]
+        require(build["reader_id"] == "spark" and not build["pilot_only"]
                 and build["executable_sha256"] == digest(Path(__file__))
                 and all(digest(HERE / name) == value for name, value in build["bundled_sha256"].items())
                 and runtime() == build["runtime"], "stale Spark runtime/build")
@@ -117,13 +119,15 @@ def run(request_path, output):
                     "table_uri": request["table_uri"], "execution_mode": request["execution_mode"],
                     "provider": {"api": "spark.read.format(delta).option(versionAsOf, n).load(uri)",
                                  "query_api": "spark.sql(canonical_sql).toArrow()", "cache_or_persist": False},
-                    "output_delivery": "collected", "runtime_scope": "pilot; excluded from revision 2-5 formal rosters"}
+                    "output_delivery": "collected", "runtime_scope": "revision 6; historical untimed pilot only"}
         identity = {"reader_id": "spark", "reader_build_sha256": digest(HERE / "build.json"),
                     "reader_config_sha256": json_hash(settings), **comparison_identity(request),
                     **{name: request[name] for name in ("fixture_manifest_sha256", "case_id", "snapshot_version")},
                     "canonical_sql_sha256": sha(request["canonical_sql"].encode()), "native_expression_sha256": None}
         record.update(identity=identity, settings=settings, build_record=str(HERE / "build.json"),
                       native_session_configuration=dict(session.sparkContext.getConf().getAll()))
+        record["phase"] = "correctness_gate"
+        record["correctness"] = correctness(request, identity)
         record["phase"] = "snapshot_open"
         reuse = request["execution_mode"] == "reuse"
         checkpoint(record, "initialization" if reuse else "open")
@@ -133,6 +137,8 @@ def run(request_path, output):
         source.schema
         source.createOrReplaceTempView("bench")
         record["pilot_initialization_ns"] = clock() - session_start
+        if timed and reuse:
+            record["initialization_ns"] = record["pilot_initialization_ns"]
         for index in range(query_count(request)):
             record["phase"] = "query"
             if reuse:
@@ -144,9 +150,15 @@ def run(request_path, output):
             completion = clock() - start
             event(record, "stream_complete", index)
             query = {"query_index": index, "output_rows": table.num_rows,
-                     "output_batches": len(table.to_batches(8192)), "completion_ns": None, "first_batch_ns": None,
+                     "output_batches": len(table.to_batches(8192)), "completion_ns": completion if timed else None, "first_batch_ns": None,
                      "first_batch_unavailable_reason": "collected API; no streaming first-batch clock",
                      "pilot_completion_ns": completion, "result": None, "identity": None, "physical_plan": None}
+            if index + 1 == query_count(request):
+                if timed:
+                    record["session_elapsed_ns"] = clock() - session_start
+                elif request["purpose"] in ("diagnostic", "io"):
+                    record["diagnostic_session_ns"] = clock() - session_start
+                record["_cleanup_start"] = clock()
             checkpoint(record, "query_end", index, {k: query[k] for k in
                        ("query_index", "output_rows", "output_batches", "completion_ns", "first_batch_ns")})
             if request["purpose"] == "validation":
@@ -163,20 +175,36 @@ def run(request_path, output):
                 query["physical_plan"] = name
             record["queries"].append(query)
             del relation, table
+        if timed:
+            durations = [q["completion_ns"] for q in record["queries"]]
+            if reuse:
+                record["initialization_plus_query1_ns"] = record["initialization_ns"] + durations[0]
+                record["initialization_plus_all_queries_ns"] = record["initialization_ns"] + sum(durations)
+            else:
+                record["open_query_ns"] = durations[0]
+            if [q["output_rows"] for q in record["queries"]] != record["correctness"]["expected_output_rows"]:
+                record.update(status="validation_failed", failure_reason="timed output row count differs from the validated result")
         record.update(phase="complete", capability={"status": "supported", "scope": "requested query and snapshot"})
     except Exception as error:
         reason = str(error)
         for name in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"):
             if os.environ.get(name):
                 reason = reason.replace(os.environ[name], "[redacted]")
-        record.update(status=failure_status(error), failure_reason=reason)
+        record.update(status="validation_failed" if record["phase"] == "correctness_gate" else failure_status(error),
+                      failure_reason=reason)
+        if record["phase"] == "query":
+            record["partial_query"] = {"query_index": len(record["queries"]), "output_rows": 0, "output_batches": 0,
+                                       "elapsed_ns": clock() - start if timed else None, "first_batch_ns": None}
     finally:
+        cleanup_start = record.pop("_cleanup_start", clock())
         checkpoint(record, "cleanup")
         if session is not None:
             try:
                 session.stop()
             except Exception as error:
                 record.update(status="operational_failure", phase="cleanup", failure_reason="Spark cleanup failed: " + str(error))
+        if timed:
+            record["cleanup_ns"] = clock() - cleanup_start
         event(record, "cleanup_complete")
     save(output / "record.json", record)
     print(json.dumps(record))

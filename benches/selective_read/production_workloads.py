@@ -16,7 +16,7 @@ import production_shapes as shapes
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
-from run import PRODUCTION, PROTOCOL, SAMPLING, digest, fixture_tables, save
+from run import PRODUCTION, PROTOCOL, SAMPLING, SPARK_MATRIX, digest, fixture_tables, reader_roster, save
 from oracle import require
 
 READERS = ["delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft"]
@@ -94,7 +94,9 @@ def check_sampling(stage, cases, modes):
                 "formal sampling requires complete full no-DV/DV pairs")
 
 
-def define(fixtures, binaries, output, stage="pilot"):
+def define(fixtures, binaries, output, stage="pilot", comparison_revision=6):
+    require(comparison_revision in (5, 6), "unknown production comparison revision")
+    readers = list(reader_roster({"comparison_revision": comparison_revision}))
     import large_workloads
     rows, seen = [], set()
     for root in fixtures:
@@ -112,14 +114,14 @@ def define(fixtures, binaries, output, stage="pilot"):
             and len({r["source_parent_manifest_sha256"] for r in rows}) == 1, "mixed probe/full or source identities")
     check_sampling(stage, seen, modes)
     output.mkdir()
-    translations = large_workloads.translate(rows, binaries, output, comparison_revision=5)
-    result = {"format": "selective-read-production-workload-v1", "family": "production", "comparison_revision": 5,
-              "protocol_sha256": digest(PRODUCTION), "base_protocol_sha256": digest(PROTOCOL),
+    translations = large_workloads.translate(rows, binaries, output, comparison_revision=comparison_revision)
+    result = {"format": "selective-read-production-workload-v1", "family": "production", "comparison_revision": comparison_revision,
+              "protocol_sha256": digest(SPARK_MATRIX if comparison_revision == 6 else PRODUCTION), "base_protocol_sha256": digest(PROTOCOL),
               "sampling_sha256": digest(SAMPLING), "sampling_stage": stage, "definition_sha256": digest(shapes.CONTRACT),
               "scope": "probe" if rows[0]["fixture_mode"] == "probe" else stage, "publication_ready": False,
               "source_sha256": {str(p.relative_to(HERE)): digest(p) for p in SOURCES},
-              "readers": READERS, "cases": rows, "sessions": {"reuse." + r["case_id"]: r["case_id"] for r in rows},
-              "inventory": {case: {**shape, "status": "prepared" if case in seen else "not_prepared", "readers": READERS}
+              "readers": readers, "cases": rows, "sessions": {"reuse." + r["case_id"]: r["case_id"] for r in rows},
+              "inventory": {case: {**shape, "status": "prepared" if case in seen else "not_prepared", "readers": readers}
                             for case, shape in shapes.cases().items()},
               "oracle_limits": {"memory_bytes": 16 * 1024**3, "disk_bytes": 1024**3, "elapsed_seconds": 1800},
               "translations": translations}
@@ -130,20 +132,23 @@ def define(fixtures, binaries, output, stage="pilot"):
 
 def load(path, value):
     import matrix
-    require(value["comparison_revision"] == 5 and value["family"] == "production"
+    readers = list(reader_roster(value))
+    require(value["comparison_revision"] in (5, 6) and value["family"] == "production"
             and value["definition_sha256"] == digest(shapes.CONTRACT)
             and value["source_sha256"] == {str(p.relative_to(HERE)): digest(p) for p in SOURCES}, "production workload sources changed")
     cases = {r["case_id"]: r for r in value["cases"]}
     require(cases and len(cases) == len(value["cases"]) and set(cases) <= set(shapes.cases()), "unknown/duplicate production cases")
-    require(value["readers"] == READERS and value["sessions"] == {"reuse." + c: c for c in cases}
-            and value["inventory"] == {c: {**v, "status": "prepared" if c in cases else "not_prepared", "readers": READERS}
+    require(value["readers"] == readers and value["sessions"] == {"reuse." + c: c for c in cases}
+            and value["inventory"] == {c: {**v, "status": "prepared" if c in cases else "not_prepared", "readers": readers}
                                        for c, v in shapes.cases().items()}, "incomplete production inventory")
     modes = {r["fixture_mode"] for r in cases.values()}
     require(modes in ({"probe"}, {"generate"}) and value["scope"] == ("probe" if modes == {"probe"} else value["sampling_stage"])
             and value["publication_ready"] is False, "invalid production scope")
     check_sampling(value["sampling_stage"], set(cases), modes)
     require(value["oracle_limits"] == {"memory_bytes": 16 * 1024**3, "disk_bytes": 1024**3, "elapsed_seconds": 1800}, "production oracle limits changed")
-    require(set(value["translations"]) == {"polars", "daft"}, "missing native translations")
+    require(set(value["translations"]) == ({"polars"} if value["comparison_revision"] == 6 else {"polars", "daft"}), "missing native translations")
+    require(all(set(row["native_expression_sha256"]) == set(value["translations"]) for row in cases.values()),
+            "case native expressions differ from the comparison roster")
     for reader, translation in value["translations"].items():
         require(translation["lock_sha256"] == digest(HERE / "runners" / reader / "lock.json")
                 and set(translation["expressions"]) == set(cases), "native translation lock/cases changed")
@@ -354,9 +359,10 @@ def prepare_reference(fixtures, case, output, workload, quota):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fixtures", type=Path, action="append", required=True)
-    parser.add_argument("--binary", type=Path, action="append", required=True, help="pinned Polars and Daft builds")
+    parser.add_argument("--binary", type=Path, action="append", required=True, help="pinned Polars build; revision 5 also requires Daft")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--stage", choices=("pilot", "formal"), default="pilot")
+    parser.add_argument("--comparison-revision", type=int, choices=(5, 6), default=6)
     args = parser.parse_args()
-    result = define(args.fixtures, args.binary, args.output, args.stage)
-    print(json.dumps({"comparison_revision": 5, "scope": result["scope"], "prepared_cases": len(result["cases"]), "core_cases": 8}))
+    result = define(args.fixtures, args.binary, args.output, args.stage, args.comparison_revision)
+    print(json.dumps({"comparison_revision": result["comparison_revision"], "scope": result["scope"], "prepared_cases": len(result["cases"]), "core_cases": 8}))

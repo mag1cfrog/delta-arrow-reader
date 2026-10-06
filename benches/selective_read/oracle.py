@@ -447,7 +447,7 @@ def compare(batches, reference, projection, expected_count, max_bytes=None, subs
 
 def check_reference_build(metadata):
     require(metadata["format"] == "selective-read-reference-v2" and metadata["status"] == "complete", "incomplete reference")
-    if metadata["comparison_revision"] == 5:
+    if metadata["comparison_revision"] in (5, 6):
         import production_workloads
         require(metadata["production_oracle_sha256"] == digest_file(production_workloads.__file__), "stale production oracle")
     require(metadata["oracle_sha256"] == digest_file(__file__)
@@ -631,7 +631,7 @@ def prepare(fixtures, case_id, output, duplicate_literal=False, workload=None):
         import large_workloads
         limits = large_workloads.load(workload)["oracle_limits"]
     with bounded(Path(output).parent, limits) as quota:
-        if workload is not None and large_workloads.identity(workload)["comparison_revision"] == 5:
+        if workload is not None and large_workloads.identity(workload)["comparison_revision"] in (5, 6):
             require(not duplicate_literal, "production variants need a new workload identity")
             import production_workloads
             return production_workloads.prepare_reference(fixtures, case_id, output, workload, quota)
@@ -804,8 +804,8 @@ IDENTITY_FIELDS = ("comparison_revision", "protocol_sha256", "fixture_manifest_s
 
 def check(reference, fixtures, result, identity):
     metadata = load_json(Path(reference) / "reference.json")
-    limits = metadata.get("oracle_limits") if metadata.get("comparison_revision") in (3, 4, 5) else None
-    if metadata.get("comparison_revision") in (3, 4, 5):
+    limits = metadata.get("oracle_limits") if metadata.get("comparison_revision") in (3, 4, 5, 6) else None
+    if metadata.get("comparison_revision") in (3, 4, 5, 6):
         import large_workloads
         frozen = large_workloads.load(Path(metadata["workload_manifest"]))
         require(limits == frozen["oracle_limits"], "oracle limits differ from the workload")
@@ -818,9 +818,9 @@ def check_rows(reference, fixtures, result, identity, quota):
     metadata = load_json(reference / "reference.json")
     check_reference_build(metadata)
     sys.path.insert(0, str(Path(__file__).resolve().parent / "runners"))
-    from run import comparison_identity
+    from run import comparison_identity, reader_roster
     comparison = comparison_identity(metadata)
-    if metadata["comparison_revision"] in (3, 4, 5):
+    if metadata["comparison_revision"] in (3, 4, 5, 6):
         import large_workloads
         path = Path(metadata["workload_manifest"])
         require(comparison == large_workloads.identity(path), "stale workload manifest")
@@ -831,7 +831,7 @@ def check_rows(reference, fixtures, result, identity, quota):
     for item in metadata["verified_objects"]:
         verify_object(fixtures, item)
     provenance = load_json(identity)
-    require(provenance["reader_id"] in READERS, "unknown reader identity")
+    require(provenance["reader_id"] in (set(reader_roster(metadata)) if metadata["comparison_revision"] == 6 else READERS), "unknown reader identity")
     identity_fields = tuple(dict.fromkeys((*IDENTITY_FIELDS, *comparison)))
     for name in identity_fields:
         require(type(provenance[name]) is type(metadata[name]) and provenance[name] == metadata[name], f"result identity mismatch: {name}")
@@ -840,7 +840,7 @@ def check_rows(reference, fixtures, result, identity, quota):
     expression = provenance["native_expression_sha256"]
     require(expression is None or re.fullmatch(r"[0-9a-f]{64}", expression) is not None, "invalid native expression hash")
     require(provenance["reader_id"] not in ("polars", "daft") or expression is not None, "missing native expression identity")
-    if metadata["comparison_revision"] in (3, 4, 5):
+    if metadata["comparison_revision"] in (3, 4, 5, 6):
         require(expression == row["native_expression_sha256"].get(provenance["reader_id"]), "native translation differs from workload")
     require(digest_file(result) == provenance["result_sha256"], "result checksum mismatch")
     projection = metadata["projection"]

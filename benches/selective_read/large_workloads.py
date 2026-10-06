@@ -8,7 +8,7 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
-from run import AMENDMENT, PROTOCOL, SAMPLING, comparison_identity, digest, save
+from run import reader_roster, AMENDMENT, PROTOCOL, SAMPLING, comparison_identity, digest, save
 from supervise import require
 
 SCALES = (1, 10, 30, 100, 300)
@@ -99,14 +99,14 @@ def translate(cases, binaries, output, comparison_revision=2):
         binary = binary.resolve()
         build = json.loads(binary.with_name("build.json").read_text())
         reader = build["reader_id"]
-        require(reader in ("polars", "daft") and reader not in translations, "provide one Polars and one Daft binary")
+        require(reader in (("polars",) if comparison_revision == 6 else ("polars", "daft")) and reader not in translations, "provide the comparison's required translation binaries")
         path = output / (reader + "-translations.json")
         subprocess.run([str(binary.with_name("venv") / "bin/python"), "-I", "-B", str(HERE / "matrix.py"),
                         "translations", "--binary", str(binary), "--request", str((output / "sql.json").resolve()),
                         "--comparison-revision", str(comparison_revision),
                         "--output", str(path.resolve())], check=True)
         translations[reader] = json.loads(path.read_text())
-    require(set(translations) == {"polars", "daft"}, "both native translations required")
+    require(set(translations) == ({"polars"} if comparison_revision == 6 else {"polars", "daft"}), "required native translations missing")
     for row in cases:
         row["native_expression_sha256"] = {r: v["expressions"][row["case_id"]]["sha256"] for r, v in translations.items()}
     return translations
@@ -237,7 +237,7 @@ def load(path):
 
 
 def binding(value, fixtures, case_id):
-    if value["comparison_revision"] == 5:
+    if value["comparison_revision"] in (5, 6):
         import production_workloads
         return production_workloads.binding(value, fixtures, case_id)
     row = next(r for r in value["cases"] if r["case_id"] == case_id)
@@ -259,6 +259,7 @@ def report(campaign, output):
     path = Path(config["workload"])
     frozen = load(path)
     comparison = identity(path)
+    readers = reader_roster(comparison)
     require(comparison_identity(config) == comparison, "campaign workload changed")
     seals = json.loads((campaign / "frozen.json").read_text())
     require(seals == {name: digest(campaign / name) for name in ("campaign.json", "inventory.json", "schedule.json")}, "frozen campaign inputs changed")
@@ -272,7 +273,7 @@ def report(campaign, output):
     jobs = {j["id"]: j for j in config["jobs"]}
     require(set(jobs) == set(inventory) == set(summary["jobs"]), "campaign inventory differs from jobs")
     for job, entries in inventory.items():
-        require(set(entries) == set(READERS), "all five reader statuses are required")
+        require(set(entries) == set(readers), "all five reader statuses are required")
         case = jobs[job]["case_id"]
         require(case in definitions(frozen.get("family", "data"), frozen.get("pilot_case")) and (jobs[job]["execution_mode"] == "open" and job == case or
                 jobs[job]["execution_mode"] == "reuse" and frozen["sessions"].get(job) == case), "unknown workload job")
@@ -293,7 +294,7 @@ def report(campaign, output):
              "measurements": summary["jobs"][job["id"]][reader],
              "native_phases": {"planning_ns": None, "scan_ns": None,
                                "unavailable_reason": "adapters do not expose comparable separate phase clocks"}}
-            for job in config["jobs"] for reader in READERS]
+            for job in config["jobs"] for reader in readers]
     for row in rows:
         gate = row["gate"]
         row["oracle"] = None
@@ -307,7 +308,7 @@ def report(campaign, output):
                 "within_file_geometry", "physical_rows", "derived_value_checks") if k in metadata}
     result = {"status": summary["status"], **comparison, "campaign_id": config["campaign_id"],
               "scope": frozen["scope"], "publication_ready": False, "rows": rows,
-              **({"core_inventory": frozen["inventory"]} if frozen["comparison_revision"] == 5 else {}),
+              **({"core_inventory": frozen["inventory"]} if frozen["comparison_revision"] in (5, 6) else {}),
               "observations_sha256": digest(campaign / "observations.jsonl"),
               "summary_sha256": digest(campaign / "summary.json")}
     save(output / "large-workload-report.json", result)

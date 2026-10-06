@@ -62,10 +62,10 @@ def runtime_metadata(engine):
 
 def validate(request):
     require(isinstance(request, dict), "expected request object")
-    extra = set(LARGE_IDENTITY_FIELDS) if request.get("comparison_revision") in (3, 4, 5) else set()
-    if request.get("comparison_revision") in (4, 5):
+    extra = set(LARGE_IDENTITY_FIELDS) if request.get("comparison_revision") in (3, 4, 5, 6) else set()
+    if request.get("comparison_revision") in (4, 5, 6):
         extra.update(SAMPLING_IDENTITY_FIELDS)
-    if request.get("comparison_revision") == 5:
+    if request.get("comparison_revision") in (5, 6):
         extra.update(PRODUCTION_IDENTITY_FIELDS)
     require(set(request) == REQUEST_FIELDS | extra, "unknown or missing request fields")
     comparison_identity(request)
