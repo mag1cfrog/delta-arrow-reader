@@ -52,6 +52,7 @@ nav:
       - Reduced benchmark sampling: benchmarks/selective-read-sampling.md
       - Combine plan and I/O diagnostics: benchmarks/selective-read-combined-diagnostics.md
       - Use exact validation as storage warmup: benchmarks/selective-read-gate-warmup.md
+      - Collect diagnostics during exact validation: benchmarks/selective-read-gate-diagnostics.md
       - Pilot capacity check: benchmarks/selective-read-pilot-capacity.md
       - Generate public fixtures: benchmarks/selective-read-fixtures.md
       - Validate public results: benchmarks/selective-read-oracle.md

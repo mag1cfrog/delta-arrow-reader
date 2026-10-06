@@ -67,6 +67,11 @@ def validate(request):
         extra.update(SAMPLING_IDENTITY_FIELDS)
     if request.get("comparison_revision") in (5, 6):
         extra.update(PRODUCTION_IDENTITY_FIELDS)
+    if "validation_diagnostics" in request:
+        extra.add("validation_diagnostics")
+        require(type(request["validation_diagnostics"]) is bool and (not request["validation_diagnostics"] or
+                request.get("comparison_revision") == 6 and request.get("purpose") == "validation"),
+                "diagnostic validation requires revision 6 and validation purpose")
     require(set(request) == REQUEST_FIELDS | extra, "unknown or missing request fields")
     comparison_identity(request)
     uri = urlsplit(request["table_uri"])
@@ -109,6 +114,7 @@ def observation(request):
             "native_phases": {"planning_ns": None, "scan_ns": None,
                               "unavailable_reason": "native APIs do not expose comparable separate planning/scan clocks"},
             "diagnostic_events": [], "diagnostic_session_ns": None,
+            **({"validation_diagnostics": True} if request.get("validation_diagnostics") else {}),
             "phase": "setup", "queries": [], "partial_query": None, "provider_evidence": None,
             "capability": {"status": "not_checked", "scope": "requested query and snapshot"}, "correctness": None,
             **{name: None for name in ("open_query_ns", "initialization_ns", "session_elapsed_ns", "cleanup_ns",
@@ -123,7 +129,7 @@ def observation(request):
 
 
 def event(record, name, query_index=None):
-    if record["purpose"] in ("diagnostic", "io"):
+    if record["purpose"] in ("diagnostic", "io") or record.get("validation_diagnostics"):
         record["diagnostic_events"].append({"event": name, "time_ns": time_ns(), "query_index": query_index})
 
 

@@ -302,7 +302,9 @@ def drain(directory, unit, deadline):
 def invoke(directory, binary, payload, output, fixtures=None, reference=None, *, traced=None, _locked=False):
     if traced is None:
         traced = payload["purpose"] == "io"
-    assert not traced or payload["purpose"] in ("io", "diagnostic"), "detailed tracing requires an untimed diagnostic"
+    assert not traced or payload["purpose"] in ("io", "diagnostic") or (
+        payload["purpose"] == "validation" and payload.get("validation_diagnostics") is True
+        and payload.get("comparison_revision") == 6), "detailed tracing requires an untimed diagnostic or declared exact gate"
     config = storage.state(directory)
     table = urlsplit(payload["table_uri"])
     assert table.scheme == "s3" and table.netloc == storage.BUCKET and table.path.strip("/")

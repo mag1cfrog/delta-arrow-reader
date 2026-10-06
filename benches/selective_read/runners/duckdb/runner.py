@@ -154,7 +154,7 @@ def execute(connection, request, output, record):
                 if index + 1 == count:
                     if timed:
                         record["session_elapsed_ns"] = clock() - session_start
-                    elif request["purpose"] in ("diagnostic", "io"):
+                    elif request["purpose"] in ("diagnostic", "io") or request.get("validation_diagnostics"):
                         record["diagnostic_session_ns"] = clock() - session_start
                     record["_cleanup_start"] = clock()
                 checkpoint(record, "query_end", index, {"query_index": index, "output_rows": rows, "output_batches": batches,
