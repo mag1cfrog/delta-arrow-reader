@@ -27,7 +27,9 @@
 - prevent ordered scans from deadlocking under file-read limits ([#210](https://github.com/mag1cfrog/delta-arrow-reader/pull/210))
 - preserve row counts for empty DV projections ([#201](https://github.com/mag1cfrog/delta-arrow-reader/pull/201))
 - validate data-file URLs before Parquet reads ([#199](https://github.com/mag1cfrog/delta-arrow-reader/pull/199))
-- preserve NaN matches in row-group pruning ([#198](https://github.com/mag1cfrog/delta-arrow-reader/pull/198))
+- preserve NaN matches in row-group pruning ([#198](https://github.com/mag1cfrog/delta-arrow-reader/pull/198)).
+  The Direct backend may read extra row groups for float range and `!=` predicates
+  without a usable zero NaN count; see [the pruning behavior](https://mag1cfrog.github.io/delta-arrow-reader/architecture/#floating-point-row-group-pruning).
 - preserve INT96 timestamps across the full microsecond range ([#196](https://github.com/mag1cfrog/delta-arrow-reader/pull/196))
 - preserve rows when Parquet statistics need type conversion ([#193](https://github.com/mag1cfrog/delta-arrow-reader/pull/193))
 

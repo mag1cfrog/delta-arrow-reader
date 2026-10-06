@@ -86,6 +86,27 @@ falls back to reading complete column chunks.
 Both optimizations are automatic for the `Direct` backend and behave the same
 through the streaming API and the DataFusion adapter.
 
+### Floating-point row-group pruning
+
+For physical Parquet `FLOAT` and `DOUBLE` columns, the `Direct` backend requires
+a usable `nan_count = 0` before using min/max bounds to prune `<`, `<=`, `>`,
+`>=`, or `!=`. Missing, invalid, or nonzero counts prevent these bounds from
+excluding a row group for those operators, which can mean extra reads. An
+explicit zero restores these pruning opportunities when the bounds suffice.
+
+Bounds can omit NaNs. The
+[Parquet specification](https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift)
+requires readers to assume NaNs may exist when `nan_count` is absent. Direct's
+row evaluator uses Arrow comparisons: negative NaNs sort below non-NaN values,
+positive NaNs above them. For example, bounds of `[1.5, 1.5]` do not rule out
+`v > 100.0` if the group might contain a positive NaN.
+
+Equality to a finite value can still exclude impossible matches, such as
+`v = 100.0` with those bounds. Null checks with valid counts and an independently
+impossible `AND` condition on another column can also exclude row groups. The
+NaN guard checks physical statistics; widening integers to floats does not
+require NaN counts.
+
 ## Cancellation
 
 The reader schedules file work gradually instead of starting every file at
