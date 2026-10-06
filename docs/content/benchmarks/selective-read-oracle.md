@@ -92,7 +92,9 @@ Production pairs share the original-source scan and full-column checks for
 unchanged Parquet files. DV preparation still reads every physical key to
 verify deletion ordinals and logical IDs, then checks every live projected
 value against the independent reference. `reference.json` records fresh and
-reused full-column scans in `physical_validation`. Reader correctness gates
+reused full-column scans in `physical_validation`. Untimed production scans use
+65,536-row batches within the existing 16 GiB preparation limit; native reader
+batch sizes are unchanged. Reader correctness gates
 use the same checksum helper and still compare every exported value.
 
 ## Export and check a reader result

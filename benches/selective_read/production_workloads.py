@@ -310,6 +310,7 @@ def prepare_reference(fixtures, case, output, workload, quota):
     saved_keys = [tuple(k) for f in table["files"] for k in f.get("deletion_vector", {}).get("logical_ids", [])]
     require(len(saved_keys) == len(set(saved_keys)), "duplicate deleted logical key")
     scans = {"full_column_scans": 0, "reused_full_column_scans": 0, "source_scan_reused": source_reused,
+             "scan_batch_rows": 65536,
              "reuse_guard": "unchanged local device/inode/size/mtime_ns/ctime_ns"}
 
     def fixture_batches():
@@ -331,7 +332,7 @@ def prepare_reference(fixtures, case, output, workload, quota):
             ordinal, matched = 0, False
             physical_matches = list(cached["ordinals"]) if cached else []
             physical_batches = list(cached["batches"]) if cached else []
-            batches = parquet.iter_batches(batch_size=8192, columns=list(oracle.KEYS) if cached else None)
+            batches = parquet.iter_batches(batch_size=scans["scan_batch_rows"], columns=list(oracle.KEYS) if cached else None)
             if cached and not table["deletion_vectors"]:
                 ordinal, batches = cached["rows"], []
             for batch in batches:
