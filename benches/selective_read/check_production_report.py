@@ -34,7 +34,8 @@ def check_revision(revision):
             for mode in reporting.MODES:
                 for reader in readers:
                     unsupported = case["case_id"].endswith(".dv") and reader == "daft"
-                    rows.append({"case": case, "job": {"case_id": case["case_id"], "execution_mode": mode},
+                    rows.append({"case": case, "job": {"id": case["case_id"] if mode == "open" else "reuse." + case["case_id"],
+                                                       "case_id": case["case_id"], "execution_mode": mode},
                                  "reader_id": reader, "gate": {"status": "unsupported" if unsupported else "success",
                                      "identity": {"reader_build_sha256": reader}},
                                  "measurements": {"eligible": not unsupported, "scheduled_samples": 0 if unsupported else 5,
@@ -59,6 +60,7 @@ def check_revision(revision):
             assert result["formal_coverage_complete"] and not result["publication_ready"]
             assert result["readers"] == list(readers)
             assert {r["reader_id"] for r in result["rows"]} == set(readers)
+            assert not result["campaigns"][0]["combined_diagnostics"]
             assert sum(row["status"] == "unsupported" for row in result["rows"]) == (8 if revision == 5 else 0)
             reports[paths[0]]["status"] = "incomplete"
             assert not aggregate(paths)["formal_coverage_complete"]

@@ -302,7 +302,7 @@ def drain(directory, unit, deadline):
 def invoke(directory, binary, payload, output, fixtures=None, reference=None, *, traced=None, _locked=False):
     if traced is None:
         traced = payload["purpose"] == "io"
-    assert not traced or payload["purpose"] == "io", "detailed tracing requires an I/O diagnostic without plan export"
+    assert not traced or payload["purpose"] in ("io", "diagnostic"), "detailed tracing requires an untimed diagnostic"
     config = storage.state(directory)
     table = urlsplit(payload["table_uri"])
     assert table.scheme == "s3" and table.netloc == storage.BUCKET and table.path.strip("/")
