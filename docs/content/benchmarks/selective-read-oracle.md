@@ -71,6 +71,30 @@ The completion marker is written last. A failed or interrupted preparation
 leaves an incomplete directory for inspection. Choose a new destination when
 retrying. Existing directories are never overwritten.
 
+For a production no-DV/DV pair, prepare both references in one process:
+
+```sh
+../selective-read-oracle-venv/bin/python -B benches/selective_read/oracle.py prepare \
+  --fixtures ../production-q2-scattered-pairs \
+  --workload ../production-q2-workload/workload.json \
+  --case production.q2.scattered --case production.q2.scattered.dv \
+  --output ../production-q2-references
+```
+
+With multiple `--case` arguments, each reference goes in `OUTPUT/CASE_ID`.
+Each case retains its own oracle memory, disk and elapsed-time limits.
+The process checksums each unchanged local inode once, including hard links,
+and checks its device, inode, size, modification time and change time on reuse.
+Writes, replacements and changes during hashing invalidate reuse. The cache
+ends with the process; a standalone invocation starts fresh.
+
+Production pairs share the original-source scan and full-column checks for
+unchanged Parquet files. DV preparation still reads every physical key to
+verify deletion ordinals and logical IDs, then checks every live projected
+value against the independent reference. `reference.json` records fresh and
+reused full-column scans in `physical_validation`. Reader correctness gates
+use the same checksum helper and still compare every exported value.
+
 ## Export and check a reader result
 
 Each reader exports an **untimed Arrow IPC stream** with the case's ordered

@@ -7,6 +7,7 @@ import argparse
 from contextlib import contextmanager
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import resource
@@ -33,11 +34,24 @@ PRODUCTION_IDENTITY_FIELDS = ("sampling_stage",)
 BUDGET = {"worker_threads": 8, "max_blocking_threads": 64, "target_partitions": 8,
           "batch_rows": 8192, "datafusion_pool_bytes": 4 * 1024**3,
           "process_memory_bytes": 8 * 1024**3, "logical_cpus": 8}
+_DIGESTS = {}
+
+
+def file_identity(path):
+    stat = os.stat(path)
+    return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
 
 
 def digest(path):
-    with path.open("rb") as source:
-        return hashlib.file_digest(source, "sha256").hexdigest()
+    """Hash an unchanged local inode once per process, including hard links."""
+    with Path(path).open("rb") as source:
+        identity = file_identity(source.fileno())
+        previous = _DIGESTS.get(identity[:2])
+        value = previous[1] if previous and previous[0] == identity else hashlib.file_digest(source, "sha256").hexdigest()
+        if file_identity(source.fileno()) != identity or file_identity(path) != identity:
+            raise ValueError(f"file changed during checksum: {path}")
+        _DIGESTS[identity[:2]] = identity, value
+        return value
 
 
 def save(path, value):
