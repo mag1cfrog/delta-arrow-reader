@@ -59,6 +59,10 @@ visible and cannot complete a case. A batch interrupted before producing its
 summary cannot pass the existing campaign audit; keep its raw records separately.
 
 The JSON also retains exact-gate oracle geometry and separate I/O diagnostics.
+New revision 6 campaigns can use the
+[combined diagnostic amendment](selective-read-combined-diagnostics.md).
+The overview records each campaign's mode and amendment hash. Those invocations
+remain outside the timing distributions, and DuckDB EXPLAIN remains separate.
 Physical Parquet bytes describe table layout. Response bytes describe downloaded
 traffic. Geometry and traffic do not measure decoded pages or row groups. DV
 snapshots share their base snapshot's Parquet data.

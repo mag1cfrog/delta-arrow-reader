@@ -28,10 +28,52 @@ READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft")
 SESSIONS = {"reuse.li": "li.clustered.eq2-in20", "reuse.wide": "wide.clustered.eq2-in20",
             "reuse.files4096": "files4096.eq2-in20"}
 DEFAULT_CASES = ("li.clustered.eq2-in20", "li.shuffled.eq2-in20")
+COMBINED_DIAGNOSTICS = run.PROTOCOL.with_name("selective-read-combined-diagnostics.md")
 
 
-def schedule(inventory, campaign_id, comparison=None):
+def combined_diagnostics(config):
+    enabled = config.get("combined_diagnostics", False)
+    require(type(enabled) is bool, "combined diagnostics must be a boolean")
+    if enabled:
+        require(config.get("comparison_revision") == 6 and
+                config.get("diagnostics_amendment_sha256") == digest(COMBINED_DIAGNOSTICS),
+                "missing or stale combined-diagnostic amendment")
+    else:
+        require(config.get("diagnostics_amendment_sha256") is None, "separate diagnostics cannot carry the amendment")
+    return enabled
+
+
+def slot_purpose(slot, combined=False):
+    if slot["stage"] == "gate":
+        return "validation"
+    if slot["stage"] in ("warmup", "timing"):
+        return "timing"
+    if slot["stage"] == "plan" or combined and slot["stage"] == "diagnostic" and slot["reader_id"] != "duckdb":
+        return "diagnostic"
+    return "io"
+
+
+def plan_evidence(record, artifacts):
+    evidence = []
+    for query in record["queries"]:
+        name = query["physical_plan"]
+        require(isinstance(name, str) and Path(name).name == name, "missing or invalid native plan")
+        path = artifacts / "reader" / name
+        require(not path.is_symlink() and path.is_file() and path.stat().st_size > 0,
+                "native plan export is empty or missing")
+        evidence.append({"query_index": query["query_index"], "path": str(path), "sha256": digest(path)})
+    return evidence
+
+
+def schedule(inventory, campaign_id, comparison=None, *, combined=None):
     slots = []
+    declared = [entry.get("combined_diagnostics", False) for entries in inventory.values() for entry in entries.values()]
+    require(all(type(value) is bool for value in declared) and len(set(declared)) <= 1,
+            "reader inventory has inconsistent diagnostic modes")
+    if combined is None:
+        combined = declared[0] if declared else False
+    require(type(combined) is bool and (not combined or (comparison or {}).get("comparison_revision") == 6),
+            "combined diagnostics require comparison revision 6")
     roster = run.reader_roster(comparison or {})
     require(all(set(entries) == set(roster) for entries in inventory.values()), "reader inventory differs from the comparison roster")
     reduced = (comparison or {}).get("comparison_revision", 2) >= 4
@@ -56,7 +98,8 @@ def schedule(inventory, campaign_id, comparison=None):
     # No tracing or plan capture until every timing slot has finished.
     for job, entries in inventory.items():
         readers = tuple(r for r in roster if entries[r]["runnable"])
-        add(job, "plan", readers, 0)
+        # DuckDB EXPLAIN reads additional data; keep it outside the I/O invocation.
+        add(job, "plan", tuple(r for r in readers if r == "duckdb") if combined else readers, 0)
         if reduced:
             add(job, "diagnostic", readers, 0, traced=True)
             continue
@@ -69,6 +112,34 @@ def schedule(inventory, campaign_id, comparison=None):
                     add(job, "diagnostic" if traced else "observer_baseline", (reader,), repetition, traced=traced)
                     slots[-1]["order"] = position
     return slots
+
+
+def validate_diagnostics(config, inventory, slots, observations):
+    combined = combined_diagnostics(config)
+    require(slots == schedule(inventory, config["campaign_id"], run.comparison_identity(config), combined=combined),
+            "schedule differs from the declared diagnostic mode")
+    if not combined:
+        return
+    require(all(entry.get("combined_diagnostics") is True for entries in inventory.values() for entry in entries.values()),
+            "combined diagnostics were not declared in the frozen inventory")
+    by_id = {slot["run_id"]: slot for slot in slots}
+    require({row["run_id"] for row in observations if row["stage"] != "gate"} == set(by_id),
+            "combined diagnostic schedule has missing or extra observations")
+    for row in observations:
+        if row["stage"] != "gate":
+            require(all(row[key] == value for key, value in by_id[row["run_id"]].items()),
+                    "observation differs from the declared diagnostic schedule")
+        require(row["request"]["purpose"] == slot_purpose(row, combined), "diagnostic purpose changed")
+        record = row["observation"]
+        if record["status"] != "success":
+            continue
+        if row["request"]["purpose"] == "diagnostic":
+            require(record.get("plan_artifacts") == plan_evidence(record, Path(row["artifacts"])),
+                    "native plan artifacts changed")
+        if row["stage"] == "diagnostic":
+            require(record["storage_capture"]["status"] == "passed" and
+                    record["storage_environment"]["trace_enabled"] and record.get("storage_io") is not None,
+                    "combined diagnostic lacks reconciled I/O")
 
 
 def distribution(values):
@@ -235,6 +306,10 @@ def execute(args):
     require(not (workload and prepared), "use one workload revision per campaign")
     comparison = large_workloads.identity(workload_path) if workload else {
         "comparison_revision": 2, "protocol_sha256": digest(run.PROTOCOL)}
+    combined = getattr(args, "combined_diagnostics", False)
+    diagnostic_config = {"combined_diagnostics": combined,
+                         **({"diagnostics_amendment_sha256": digest(COMBINED_DIAGNOSTICS)} if combined else {})}
+    combined_diagnostics(comparison | diagnostic_config)
     roster = run.reader_roster(comparison)
     require(set(binaries) <= set(roster), "binary is outside the comparison reader roster")
     if prepared:
@@ -274,6 +349,8 @@ def execute(args):
                HERE / "runners/run.py", HERE / "runners/supervise.py", run.PROTOCOL]
     if "network" in config:
         sources += [HERE / "network.py", state / "network.json"]
+    if combined:
+        sources.append(COMBINED_DIAGNOSTICS)
     if prepared:
         sources += [HERE / "matrix.py", matrix.CATALOG, matrix.EXPRESSIONS, args.matrix.resolve()]
     if workload:
@@ -283,7 +360,7 @@ def execute(args):
         if comparison["comparison_revision"] in (5, 6):
             sources += [run.SPARK_MATRIX if comparison["comparison_revision"] == 6 else run.PRODUCTION, HERE / "production_workloads.py"]
     hashes = {str(p): digest(p) for p in sources}
-    save(output / "campaign.json", {"campaign_id": campaign_id, **comparison,
+    save(output / "campaign.json", {"campaign_id": campaign_id, **comparison, **diagnostic_config,
          "fixtures": str(fixtures), "upload": str(args.upload.resolve()),
          "upload_sha256": digest(args.upload), "server": config, "reader_builds": builds, "jobs": jobs,
          "matrix": {"path": str(args.matrix.resolve()), "sha256": digest(args.matrix)} if prepared else None,
@@ -297,7 +374,7 @@ def execute(args):
         def invoke(slot, job, gate=None):
             nonlocal abort_reason
             stage = slot["stage"]
-            purpose = "validation" if stage == "gate" else "timing" if stage in ("warmup", "timing") else "diagnostic" if stage == "plan" else "io"
+            purpose = slot_purpose(slot, combined)
             payload = dict(templates[job["id"]], campaign_id=campaign_id, run_id=slot["run_id"], purpose=purpose,
                            repetition=slot["repetition"], order=slot["order"],
                            correctness_file=gate["correctness_file"] if gate else None)
@@ -312,6 +389,8 @@ def execute(args):
                         abort_reason = "previous invocation did not prove process/server cleanup: " + slot["run_id"]
                     try:
                         validate(record, payload, slot["reader_id"], gate)
+                        if combined and record["status"] == "success" and purpose == "diagnostic":
+                            record["plan_artifacts"] = plan_evidence(record, destination)
                         if prepared or workload:
                             matrix.check_translation(record, cases[job["case_id"]])
                     except (ValueError, KeyError, TypeError) as error:
@@ -350,7 +429,8 @@ def execute(args):
                     missing = "fixture/query/reference not prepared: " + (str(error) or job["case_id"])
                 for reader in roster:
                     entry = entries[reader] = {"runnable": False, "status": "preparation_failed", "failure_reason": missing,
-                                               "case_id": job["case_id"], "execution_mode": job["execution_mode"]}
+                                               "case_id": job["case_id"], "execution_mode": job["execution_mode"],
+                                               **({"combined_diagnostics": True} if combined else {})}
                     if missing:
                         continue
                     if reader not in binaries:
@@ -365,7 +445,7 @@ def execute(args):
                                  correctness_file=str(output / slot["run_id"] / "correctness.json"),
                                  reference=str(reference), reference_sha256=digest(reference / "reference.json"))
             save(output / "inventory.json", inventory)
-            slots = schedule(inventory, campaign_id, comparison if workload else None)
+            slots = schedule(inventory, campaign_id, comparison if workload else None, combined=combined)
             save(output / "schedule.json", slots)
             frozen = {name: digest(output / name) for name in ("campaign.json", "inventory.json", "schedule.json")}
             save(output / "frozen.json", frozen)
@@ -396,6 +476,8 @@ if __name__ == "__main__":
     parser.add_argument("--case", action="append", help="repeat for selected cases; default: both compound layouts")
     parser.add_argument("--matrix", type=Path, help="prepared 30-case matrix; replaces case/reference/session defaults")
     parser.add_argument("--workload", type=Path, help="explicit workload; select staged cases with --case")
+    parser.add_argument("--combined-diagnostics", action="store_true",
+                        help="revision 6: capture plans during traced I/O, retaining separate DuckDB EXPLAIN")
     sessions = parser.add_mutually_exclusive_group()
     sessions.add_argument("--session", action="append", help="repeat for selected sessions; checked against the workload")
     sessions.add_argument("--no-sessions", action="store_true", help="run only the isolated cases")

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 
+import campaign as runner
 import large_workloads
 from run import BUDGET, comparison_identity, digest, reader_roster, save
 from supervise import require
@@ -43,6 +44,7 @@ def report(definition, campaigns, output):
     with tempfile.TemporaryDirectory(dir=output.parent, prefix="production-report-") as scratch:
         for index, campaign in enumerate(campaigns):
             config = json.loads((campaign / "campaign.json").read_text())
+            combined = runner.combined_diagnostics(config)
             comparison = comparison_identity(config)
             require(all(comparison.get(k) == v for k, v in identity.items() if k != "workload_manifest_sha256"),
                     "campaign is not from the same formal protocol")
@@ -50,8 +52,11 @@ def report(definition, campaigns, output):
             require(shared is None or shared == observed, "incompatible reader builds, resources, cache or transport")
             shared = observed
             audited = large_workloads.report(campaign, Path(scratch) / str(index))
-            for line in (campaign / "observations.jsonl").read_text().splitlines():
-                row = json.loads(line)
+            observations = [json.loads(line) for line in (campaign / "observations.jsonl").read_text().splitlines()]
+            if combined:
+                runner.validate_diagnostics(config, json.loads((campaign / "inventory.json").read_text()),
+                                            json.loads((campaign / "schedule.json").read_text()), observations)
+            for row in observations:
                 record = row["observation"]
                 if record["status"] == "success":
                     limits, watch = record["external_resource_limits"], record["supervision"]
@@ -78,8 +83,13 @@ def report(definition, campaigns, output):
                             "formal distributions require five independent samples")
                 status = "incomplete" if gate["status"] == "success" and not measurement["eligible"] else gate["status"]
                 entries[key] = {**{k: v for k, v in row.items() if k != "case"}, "status": status,
-                                "campaign_id": audited["campaign_id"], "campaign_status": audited["status"]}
+                                "campaign_id": audited["campaign_id"], "campaign_status": audited["status"],
+                                "plans": [{"run_id": observed["run_id"], "artifacts": observed["observation"]["plan_artifacts"]}
+                                          for observed in observations if observed.get("job_id") == job["id"]
+                                          and observed.get("reader_id") == reader and "plan_artifacts" in observed["observation"]]}
             sources.append({"path": str(campaign.resolve()), "campaign_id": audited["campaign_id"],
+                            "combined_diagnostics": combined,
+                            "diagnostics_amendment_sha256": config.get("diagnostics_amendment_sha256"),
                             "status": audited["status"], "workload_manifest_sha256": comparison["workload_manifest_sha256"],
                             "observations_sha256": audited["observations_sha256"], "summary_sha256": audited["summary_sha256"],
                             "config_sha256": digest(campaign / "campaign.json"), "frozen_sha256": digest(campaign / "frozen.json")})
@@ -126,6 +136,8 @@ def markdown(result):
             lines.append(f"| {case} | {reader} | {opened['status']} | {seconds(opened, 'open_query_ns')} | {reused['status']} | {seconds(reused, 'initialization_plus_query1_ns')} | {seconds(reused, 'query_1.completion_ns')} |")
     lines += ["", "The JSON report retains IQRs, sample statuses, eligible ratios, exact-gate evidence, file/group/page geometry",
               "and separate I/O diagnostics. An incomplete campaign remains visible and cannot complete a case.", "",
+              "Each campaign declares whether plans share its untimed I/O invocation. DuckDB EXPLAIN remains separate;",
+              "the JSON retains diagnostic modes and plan hashes. Diagnostic sessions are excluded from timing distributions.", "",
               "Matching cases and query profiles are taken from one audited campaign each. Samples are never pooled across retries.", ""]
     return "\n".join(lines)
 

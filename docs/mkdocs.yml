@@ -50,6 +50,7 @@ nav:
       - Public selective-read protocol: benchmarks/selective-read-protocol.md
       - Large-workload benchmark plan: benchmarks/selective-read-large-workloads.md
       - Reduced benchmark sampling: benchmarks/selective-read-sampling.md
+      - Combine plan and I/O diagnostics: benchmarks/selective-read-combined-diagnostics.md
       - Pilot capacity check: benchmarks/selective-read-pilot-capacity.md
       - Generate public fixtures: benchmarks/selective-read-fixtures.md
       - Validate public results: benchmarks/selective-read-oracle.md
