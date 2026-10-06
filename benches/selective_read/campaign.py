@@ -17,6 +17,7 @@ import network
 import run
 import matrix
 import large_workloads
+import metadata_cache
 from run import digest, save
 from supervise import integer, require
 
@@ -29,6 +30,19 @@ SESSIONS = {"reuse.li": "li.clustered.eq2-in20", "reuse.wide": "wide.clustered.e
             "reuse.files4096": "files4096.eq2-in20"}
 DEFAULT_CASES = ("li.clustered.eq2-in20", "li.shuffled.eq2-in20")
 COMBINED_DIAGNOSTICS = run.PROTOCOL.with_name("selective-read-combined-diagnostics.md")
+GATE_WARMUP = run.PROTOCOL.with_name("selective-read-gate-warmup.md")
+
+
+def validation_warmup(config):
+    enabled = config.get("gate_warmup", False)
+    require(type(enabled) is bool, "gate warmup must be a boolean")
+    if enabled:
+        require(config.get("comparison_revision") == 6 and
+                config.get("warmup_amendment_sha256") == digest(GATE_WARMUP),
+                "missing or stale gate-warmup amendment")
+    else:
+        require(config.get("warmup_amendment_sha256") is None, "standalone warmup cannot carry the amendment")
+    return enabled
 
 
 def combined_diagnostics(config):
@@ -65,13 +79,24 @@ def plan_evidence(record, artifacts):
     return evidence
 
 
-def schedule(inventory, campaign_id, comparison=None, *, combined=None):
+def schedule(inventory, campaign_id, comparison=None, *, combined=None, gate_warmup=None):
     slots = []
     declared = [entry.get("combined_diagnostics", False) for entries in inventory.values() for entry in entries.values()]
     require(all(type(value) is bool for value in declared) and len(set(declared)) <= 1,
             "reader inventory has inconsistent diagnostic modes")
     if combined is None:
         combined = declared[0] if declared else False
+    warmed = [entry.get("gate_warmup", False) for entries in inventory.values() for entry in entries.values()]
+    require(all(type(value) is bool for value in warmed) and len(set(warmed)) <= 1,
+            "reader inventory has inconsistent warmup modes")
+    if gate_warmup is None:
+        gate_warmup = warmed[0] if warmed else False
+    require(type(gate_warmup) is bool and (not gate_warmup or (comparison or {}).get("comparison_revision") == 6),
+            "gate warmup requires comparison revision 6")
+    if gate_warmup:
+        cases = {job.removeprefix("reuse.") for job in inventory}
+        require(len(cases) == 1 and set(inventory) == {next(iter(cases)), "reuse." + next(iter(cases))},
+                "gate warmup requires one snapshot with both open and reuse profiles")
     require(type(combined) is bool and (not combined or (comparison or {}).get("comparison_revision") == 6),
             "combined diagnostics require comparison revision 6")
     roster = run.reader_roster(comparison or {})
@@ -89,8 +114,9 @@ def schedule(inventory, campaign_id, comparison=None, *, combined=None):
         readers = tuple(r for r in roster if entries[r]["runnable"])
         if not readers:
             continue
-        for repetition, order in enumerate((readers,) if reduced else (readers, readers[::-1])):
-            add(job, "warmup", order, repetition)
+        if not gate_warmup:
+            for repetition, order in enumerate((readers,) if reduced else (readers, readers[::-1])):
+                add(job, "warmup", order, repetition)
         orders = balanced_orders(readers)
         orders *= math.ceil((samples if reduced else 10) / len(orders))
         for repetition, order in enumerate(orders[:samples] if reduced else orders):
@@ -116,8 +142,18 @@ def schedule(inventory, campaign_id, comparison=None, *, combined=None):
 
 def validate_diagnostics(config, inventory, slots, observations):
     combined = combined_diagnostics(config)
-    require(slots == schedule(inventory, config["campaign_id"], run.comparison_identity(config), combined=combined),
+    gate_warmup = validation_warmup(config)
+    require(slots == schedule(inventory, config["campaign_id"], run.comparison_identity(config),
+                             combined=combined, gate_warmup=gate_warmup),
             "schedule differs from the declared diagnostic mode")
+    if gate_warmup:
+        require(all(entry.get("gate_warmup") is True for entries in inventory.values() for entry in entries.values()),
+                "gate warmup was not declared in the frozen inventory")
+        by_id = {row["run_id"]: row for row in observations}
+        for entries in inventory.values():
+            for gate in entries.values():
+                if gate["runnable"]:
+                    require(warmed_gate(gate, by_id), "storage-warmup gate is missing or incomplete")
     if not combined:
         return
     require(all(entry.get("combined_diagnostics") is True for entries in inventory.values() for entry in entries.values()),
@@ -140,6 +176,16 @@ def validate_diagnostics(config, inventory, slots, observations):
             require(record["storage_capture"]["status"] == "passed" and
                     record["storage_environment"]["trace_enabled"] and record.get("storage_io") is not None,
                     "combined diagnostic lacks reconciled I/O")
+
+
+def warmed_gate(gate, observations):
+    row = observations.get(gate.get("run_id"), {})
+    record = row.get("observation", {})
+    return (row.get("stage") == "gate" and row.get("status") == "success"
+            and gate.get("status") == "success" and isinstance(gate.get("identity"), dict)
+            and record.get("status") == "success" and record.get("identity") == gate.get("identity")
+            and record.get("correctness", {}).get("status") == "passed"
+            and record.get("cleanup", {}).get("status") == "passed")
 
 
 def distribution(values):
@@ -239,6 +285,8 @@ def summarize(inventory, slots, rows, resolution, integrity=True):
             statuses = Counter(by_id.get(s["run_id"], {}).get("status", "not_run") for s in timed)
             eligible = integrity and gate["runnable"] and bool(timed) and all(
                 by_id.get(s["run_id"], {}).get("status") == "success" for s in required)
+            if gate.get("gate_warmup"):
+                eligible = eligible and warmed_gate(gate, by_id)
             values = [measurements(by_id[s["run_id"]]["observation"]) for s in timed] if eligible else []
             metrics = {key: distribution([v[key] for v in values]) for key in values[0]
                        if all(key in v for v in values)} if values else {}
@@ -249,6 +297,9 @@ def summarize(inventory, slots, rows, resolution, integrity=True):
                                    if by_id.get(s["run_id"], {}).get("status") == "success"
                                    for q in by_id[s["run_id"]]["observation"]["queries"] if q["first_batch_ns"] is None],
                                "_durations": durations}
+            if gate.get("gate_warmup"):
+                readers[reader]["warmup"] = {"source": "exact-validation-gate", "run_id": gate.get("run_id"),
+                                             "passed": warmed_gate(gate, by_id)}
             diagnostics = {stage: [by_id.get(s["run_id"], {"run_id": s["run_id"], "status": "not_run"})
                                   for s in selected if s["stage"] == stage]
                            for stage in ("diagnostic", "observer_baseline")}
@@ -283,6 +334,11 @@ def summarize(inventory, slots, rows, resolution, integrity=True):
 
 
 def execute(args):
+    with metadata_cache.bindings():
+        return execute_cached(args)
+
+
+def execute_cached(args):
     output = args.output.resolve()
     output.mkdir()
     campaign_id = output.name
@@ -310,6 +366,10 @@ def execute(args):
     diagnostic_config = {"combined_diagnostics": combined,
                          **({"diagnostics_amendment_sha256": digest(COMBINED_DIAGNOSTICS)} if combined else {})}
     combined_diagnostics(comparison | diagnostic_config)
+    gate_warmup = getattr(args, "gate_warmup", False)
+    warming_config = {"gate_warmup": gate_warmup,
+                      **({"warmup_amendment_sha256": digest(GATE_WARMUP)} if gate_warmup else {})}
+    validation_warmup(comparison | warming_config)
     roster = run.reader_roster(comparison)
     require(set(binaries) <= set(roster), "binary is outside the comparison reader roster")
     if prepared:
@@ -339,6 +399,9 @@ def execute(args):
     if not prepared and not args.no_sessions:
         require(not args.session or set(args.session) <= set(sessions), "unknown reuse session")
         jobs += [{"id": session, "case_id": sessions[session], "execution_mode": "reuse"} for session in sorted(set(args.session or sessions))]
+    if gate_warmup:
+        require(len(cases) == 1 and {job["execution_mode"] for job in jobs} == {"open", "reuse"},
+                "gate warmup requires one snapshot with both open and reuse profiles")
     config = storage.state(state)
     if network.config(state) is not None:
         config = dict(config, network=network.config(state))
@@ -346,11 +409,13 @@ def execute(args):
     os.sched_setaffinity(0, config["cpus"]["observer"])
     resolution = timer_resolution()
     sources = [Path(__file__), HERE / "observe.py", HERE / "storage.py", HERE / "oracle.py", HERE.parent / "run_order.py",
-               HERE / "runners/run.py", HERE / "runners/supervise.py", run.PROTOCOL]
+               HERE / "runners/run.py", HERE / "runners/supervise.py", HERE / "metadata_cache.py", run.PROTOCOL]
     if "network" in config:
         sources += [HERE / "network.py", state / "network.json"]
     if combined:
         sources.append(COMBINED_DIAGNOSTICS)
+    if gate_warmup:
+        sources.append(GATE_WARMUP)
     if prepared:
         sources += [HERE / "matrix.py", matrix.CATALOG, matrix.EXPRESSIONS, args.matrix.resolve()]
     if workload:
@@ -360,7 +425,7 @@ def execute(args):
         if comparison["comparison_revision"] in (5, 6):
             sources += [run.SPARK_MATRIX if comparison["comparison_revision"] == 6 else run.PRODUCTION, HERE / "production_workloads.py"]
     hashes = {str(p): digest(p) for p in sources}
-    save(output / "campaign.json", {"campaign_id": campaign_id, **comparison, **diagnostic_config,
+    save(output / "campaign.json", {"campaign_id": campaign_id, **comparison, **diagnostic_config, **warming_config,
          "fixtures": str(fixtures), "upload": str(args.upload.resolve()),
          "upload_sha256": digest(args.upload), "server": config, "reader_builds": builds, "jobs": jobs,
          "matrix": {"path": str(args.matrix.resolve()), "sha256": digest(args.matrix)} if prepared else None,
@@ -430,7 +495,8 @@ def execute(args):
                 for reader in roster:
                     entry = entries[reader] = {"runnable": False, "status": "preparation_failed", "failure_reason": missing,
                                                "case_id": job["case_id"], "execution_mode": job["execution_mode"],
-                                               **({"combined_diagnostics": True} if combined else {})}
+                                               **({"combined_diagnostics": True} if combined else {}),
+                                               **({"gate_warmup": True} if gate_warmup else {})}
                     if missing:
                         continue
                     if reader not in binaries:
@@ -445,7 +511,7 @@ def execute(args):
                                  correctness_file=str(output / slot["run_id"] / "correctness.json"),
                                  reference=str(reference), reference_sha256=digest(reference / "reference.json"))
             save(output / "inventory.json", inventory)
-            slots = schedule(inventory, campaign_id, comparison if workload else None, combined=combined)
+            slots = schedule(inventory, campaign_id, comparison if workload else None, combined=combined, gate_warmup=gate_warmup)
             save(output / "schedule.json", slots)
             frozen = {name: digest(output / name) for name in ("campaign.json", "inventory.json", "schedule.json")}
             save(output / "frozen.json", frozen)
@@ -478,6 +544,8 @@ if __name__ == "__main__":
     parser.add_argument("--workload", type=Path, help="explicit workload; select staged cases with --case")
     parser.add_argument("--combined-diagnostics", action="store_true",
                         help="revision 6: capture plans during traced I/O, retaining separate DuckDB EXPLAIN")
+    parser.add_argument("--gate-warmup", action="store_true",
+                        help="revision 6: one snapshot, use exact open/reuse gates as storage warmup")
     sessions = parser.add_mutually_exclusive_group()
     sessions.add_argument("--session", action="append", help="repeat for selected sessions; checked against the workload")
     sessions.add_argument("--no-sessions", action="store_true", help="run only the isolated cases")

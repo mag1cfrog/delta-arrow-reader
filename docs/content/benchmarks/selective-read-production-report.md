@@ -63,6 +63,10 @@ New revision 6 campaigns can use the
 [combined diagnostic amendment](selective-read-combined-diagnostics.md).
 The overview records each campaign's mode and amendment hash. Those invocations
 remain outside the timing distributions, and DuckDB EXPLAIN remains separate.
+Single-snapshot revision 6 campaigns can also declare
+[exact validation as storage warmup](selective-read-gate-warmup.md).
+The JSON records that method per campaign and reader/profile. Compare matching
+cases and preparation methods, and retain earlier standalone-warmup observations.
 Physical Parquet bytes describe table layout. Response bytes describe downloaded
 traffic. Geometry and traffic do not measure decoded pages or row groups. DV
 snapshots share their base snapshot's Parquet data.
