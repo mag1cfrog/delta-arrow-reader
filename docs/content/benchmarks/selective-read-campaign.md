@@ -60,6 +60,20 @@ absent from the upload remain `preparation_failed` and launch no readers.
 Use separate verified uploads for the other snapshots without editing the
 complete-pair workload definition.
 
+For a new campaign, add `--upload-table NATIVE_TABLE_ID` and point `--upload`
+to a new receipt path. Repeat `--upload-table` to stage multiple native tables.
+The controller uploads them with server SHA-256 verification before creating
+reader requests. Upload and campaign checks share the existing local checksum
+cache in that process, so an unchanged file is hashed once. The cache checks
+device/inode, size, mtime and ctime; changed files receive a fresh hash.
+An existing receipt is rejected in this mode. Omit `--upload-table` to consume
+an already verified receipt through the existing path.
+
+Preparation stays outside the reader clocks. Every native invocation still
+starts a fresh process/client/JVM. The campaign freezes the upload verification
+method and receipt hash before timing; the overview retains the declared staging
+method per campaign. Keep the receipt and complete run history with the results.
+
 ## Run the smoke campaign
 
 ```sh

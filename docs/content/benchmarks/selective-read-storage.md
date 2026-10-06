@@ -45,6 +45,22 @@ the object inventory and `s3://selective-read/MANIFEST_SHA256` table root.
 For paired DV fixtures, that inventory includes both snapshot logs and all
 referenced DV payloads as well as Parquet objects.
 
+Add `--verify-checksum` to verify the stored object's length and full SHA-256
+with a signed HEAD request. The pinned MinIO server computes and checks the
+supplied SHA-256 while receiving a PUT and rejects mismatched bytes. Conditional
+PUTs still preserve existing objects; their stored checksum must match too.
+Objects without a full SHA-256, including legacy and multipart objects, receive
+the complete GET verification. ETags are not used as content checksums.
+The receipt records the requested method, actual verification counts and
+uploader source hash. The default standalone upload uses complete GETs.
+
+To avoid hashing local files again in a separate campaign process, use the
+campaign's `--upload-table` option described in the
+[campaign guide](selective-read-campaign.md). It stages the selected tables with
+checksum verification before running. The existing checksum cache reuses an
+unchanged local inode only within that process; changed device/inode, size,
+mtime or ctime forces a fresh hash. Upload preparation stays outside query clocks.
+
 For a large staged pair, upload one native table at a time:
 
 ```sh

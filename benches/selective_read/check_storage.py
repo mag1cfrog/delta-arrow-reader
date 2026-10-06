@@ -43,6 +43,10 @@ def known_requests(directory, output):
         # Repeat upload must keep the object and still verify its returned bytes.
         storage.put_verified(directory, scope + "small.parquet", small, digest(small))
         rejected(lambda: storage.put_verified(directory, scope + "small.parquet", small, "00" * 32))
+        assert storage.put_verified(directory, scope + "checksum.parquet", small, digest(small), checksum=True) == "server-sha256"
+        assert storage.put_verified(directory, scope + "checksum.parquet", small, digest(small), checksum=True) == "server-sha256"
+        rejected(lambda: storage.put_verified(directory, scope + "bad-checksum.parquet", small, "00" * 32, checksum=True))
+        rejected(lambda: storage.put_verified(directory, scope + "checksum.parquet", small, "00" * 32, checksum=True))
         trace = observe.Trace(directory, output, scope, "known", "known-requests")
         expected = []
         def get(name, *, method="GET", range_=None, attempt=None, failed=False):
