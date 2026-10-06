@@ -126,10 +126,12 @@ def report_cached(definition, campaigns, output):
 def markdown(result):
     def seconds(row, key):
         metric = ((row["measurements"] or {}).get("metrics", {}).get(key))
-        return f"{metric['median'] / 1e9:.3f}" if metric else "-"
+        return (f"{metric['median'] / 1e9:.3f} [{metric['q1'] / 1e9:.3f}, {metric['q3'] / 1e9:.3f}]"
+                if metric else "-")
     lines = ["# Staged Q2/Q4 benchmark report", "",
              f"Completed formal cases: {len(result['complete_cases'])}/8. Publication ready: false.", "",
-             "Times are medians from five independent invocations. Reuse retains one native source for two queries;",
+             "Times show median [Q1, Q3] in seconds from five independent invocations.",
+             "The bracketed range covers the middle 50% of timings. Reuse retains one native source for two queries;",
              "initialization plus query 1 and query 2 are reported separately. Missing results have no timing value.", "",
              "| Case | Files | Stored columns | Output columns | Parquet GiB |",
              "| --- | ---: | ---: | ---: | ---: |"]
