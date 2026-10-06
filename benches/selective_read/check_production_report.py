@@ -32,6 +32,9 @@ def check_revision(revision):
             (path / "observations.jsonl").write_text("")
             rows = []
             for mode in reporting.MODES:
+                samples = ({"open_query_ns": [0, 1e9, 2e9, 3e9, 20e9]} if mode == "open" else {
+                    "initialization_plus_query1_ns": [1e9, 3e9, 4e9, 5e9, 9e9],
+                    "query_1.completion_ns": [0, 0, 0.5e9, 1e9, 2e9]})
                 for reader in readers:
                     unsupported = case["case_id"].endswith(".dv") and reader == "daft"
                     rows.append({"case": case, "job": {"id": case["case_id"] if mode == "open" else "reuse." + case["case_id"],
@@ -39,7 +42,8 @@ def check_revision(revision):
                                  "reader_id": reader, "gate": {"status": "unsupported" if unsupported else "success",
                                      "identity": {"reader_build_sha256": reader}},
                                  "measurements": {"eligible": not unsupported, "scheduled_samples": 0 if unsupported else 5,
-                                     "metrics": {} if unsupported else {"open_query_ns": {"samples": 5, "median": 2e9}}},
+                                     "metrics": {} if unsupported else {
+                                         key: reporting.runner.distribution(values) for key, values in samples.items()}},
                                  "oracle": {"output_rows": 895}, "native_phases": {"planning_ns": None}})
             reports[path] = {"campaign_id": path.name, "status": "complete", "rows": rows,
                              "observations_sha256": "journal", "summary_sha256": "summary"}
@@ -56,12 +60,20 @@ def check_revision(revision):
             result = aggregate(paths[:1])
             assert len(result["rows"]) == 80 and len(result["complete_cases"]) == 1
             assert sum(row["status"] == "not_run" for row in result["rows"]) == 70
+            rendered = (root / "report-0" / "README.md").read_text()
+            assert "median [Q1, Q3]" in rendered
+            assert (f"| {cases[0]['case_id']} | {readers[0]} | success | 2.000 [1.000, 3.000] | success | "
+                    "4.000 [3.000, 5.000] | 0.500 [0.000, 1.000] |") in rendered
+            assert f"| {cases[1]['case_id']} | {readers[0]} | not_run | - | not_run | - | - |" in rendered
             result = aggregate(paths)
             assert result["formal_coverage_complete"] and not result["publication_ready"]
             assert result["readers"] == list(readers)
             assert {r["reader_id"] for r in result["rows"]} == set(readers)
             assert not result["campaigns"][0]["combined_diagnostics"]
             assert sum(row["status"] == "unsupported" for row in result["rows"]) == (8 if revision == 5 else 0)
+            if revision == 5:
+                rendered = (root / "report-1" / "README.md").read_text()
+                assert f"| {cases[1]['case_id']} | daft | unsupported | - | unsupported | - | - |" in rendered
             reports[paths[0]]["status"] = "incomplete"
             assert not aggregate(paths)["formal_coverage_complete"]
             reports[paths[0]]["status"] = "complete"
@@ -114,7 +126,7 @@ def check_revision(revision):
             metric["samples"] = 5
             reports[paths[0]]["rows"][0]["case"] = dict(cases[0], projection_columns=1)
             rejected(paths[:1])
-    print("Staged coverage, unsupported readers, incomplete batches and incompatible input rejection passed")
+    print("Timing quartiles, staged coverage, unsupported readers, incomplete batches and incompatible input rejection passed")
 
 
 if __name__ == "__main__":

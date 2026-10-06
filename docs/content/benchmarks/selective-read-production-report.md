@@ -46,9 +46,11 @@ and owner review described in the execution contract.
 
 ## Read the results
 
-Each displayed time is a median from five independent invocations. Open time
-includes opening the table and consuming the complete query result. The reuse
-columns show initialization plus query 1, then query 2 on the same native source.
+Each time shows `median [Q1, Q3]` in seconds from five independent invocations.
+Q1 and Q3 are the 25th and 75th percentiles, so the bracketed range covers the
+middle 50% of timings. Open time includes opening the table and consuming the
+complete query result. The reuse columns show initialization plus query 1, then
+query 2 on the same native source.
 The JSON retains initialization and individual query clocks, IQRs and eligible
 same-case speedups. Query positions are separate measurements, not extra
 independent samples. Do not subtract medians to estimate overhead.
