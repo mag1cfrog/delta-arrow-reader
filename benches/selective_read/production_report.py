@@ -7,6 +7,7 @@ import tempfile
 
 import campaign as runner
 import large_workloads
+import metadata_cache
 from run import BUDGET, comparison_identity, digest, reader_roster, save
 from supervise import require
 
@@ -31,6 +32,11 @@ def conditions(config):
 
 
 def report(definition, campaigns, output):
+    with metadata_cache.bindings():
+        return report_cached(definition, campaigns, output)
+
+
+def report_cached(definition, campaigns, output):
     frozen = large_workloads.load(definition)
     identity = large_workloads.identity(definition)
     readers = reader_roster(identity)
@@ -45,6 +51,7 @@ def report(definition, campaigns, output):
         for index, campaign in enumerate(campaigns):
             config = json.loads((campaign / "campaign.json").read_text())
             combined = runner.combined_diagnostics(config)
+            gate_warmup = runner.validation_warmup(config)
             comparison = comparison_identity(config)
             require(all(comparison.get(k) == v for k, v in identity.items() if k != "workload_manifest_sha256"),
                     "campaign is not from the same formal protocol")
@@ -53,7 +60,7 @@ def report(definition, campaigns, output):
             shared = observed
             audited = large_workloads.report(campaign, Path(scratch) / str(index))
             observations = [json.loads(line) for line in (campaign / "observations.jsonl").read_text().splitlines()]
-            if combined:
+            if combined or gate_warmup:
                 runner.validate_diagnostics(config, json.loads((campaign / "inventory.json").read_text()),
                                             json.loads((campaign / "schedule.json").read_text()), observations)
             for row in observations:
@@ -84,11 +91,14 @@ def report(definition, campaigns, output):
                 status = "incomplete" if gate["status"] == "success" and not measurement["eligible"] else gate["status"]
                 entries[key] = {**{k: v for k, v in row.items() if k != "case"}, "status": status,
                                 "campaign_id": audited["campaign_id"], "campaign_status": audited["status"],
+                                "warmup_source": "exact-validation-gate" if gate_warmup else "standalone",
                                 "plans": [{"run_id": observed["run_id"], "artifacts": observed["observation"]["plan_artifacts"]}
                                           for observed in observations if observed.get("job_id") == job["id"]
                                           and observed.get("reader_id") == reader and "plan_artifacts" in observed["observation"]]}
             sources.append({"path": str(campaign.resolve()), "campaign_id": audited["campaign_id"],
                             "combined_diagnostics": combined,
+                            "gate_warmup": gate_warmup,
+                            "warmup_amendment_sha256": config.get("warmup_amendment_sha256"),
                             "diagnostics_amendment_sha256": config.get("diagnostics_amendment_sha256"),
                             "status": audited["status"], "workload_manifest_sha256": comparison["workload_manifest_sha256"],
                             "observations_sha256": audited["observations_sha256"], "summary_sha256": audited["summary_sha256"],
@@ -138,6 +148,8 @@ def markdown(result):
               "and separate I/O diagnostics. An incomplete campaign remains visible and cannot complete a case.", "",
               "Each campaign declares whether plans share its untimed I/O invocation. DuckDB EXPLAIN remains separate;",
               "the JSON retains diagnostic modes and plan hashes. Diagnostic sessions are excluded from timing distributions.", "",
+              "Warmup may come from the exact validation gate or a separate invocation, as declared per campaign.",
+              "Compare readers within the same case and declared warming method; samples are not pooled across methods.", "",
               "Matching cases and query profiles are taken from one audited campaign each. Samples are never pooled across retries.", ""]
     return "\n".join(lines)
 
