@@ -96,6 +96,8 @@ def report_cached(definition, campaigns, output):
                                           for observed in observations if observed.get("job_id") == job["id"]
                                           and observed.get("reader_id") == reader and "plan_artifacts" in observed["observation"]]}
             sources.append({"path": str(campaign.resolve()), "campaign_id": audited["campaign_id"],
+                            "upload_verification": config.get("upload_verification"),
+                            "in_process_upload": config.get("in_process_upload", False),
                             "combined_diagnostics": combined,
                             "gate_warmup": gate_warmup,
                             "warmup_amendment_sha256": config.get("warmup_amendment_sha256"),

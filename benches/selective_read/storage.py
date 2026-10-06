@@ -2,7 +2,9 @@
 
 import argparse
 import base64
+from collections import Counter
 from contextlib import contextmanager
+from email.parser import BytesParser
 import fcntl
 import json
 import os
@@ -235,19 +237,23 @@ def inventory(fixtures, table_ids=None):
     return objects
 
 
-def upload(directory, fixtures, output, table_ids=None):
+def upload(directory, fixtures, output, table_ids=None, *, checksum=False):
+    started = time.monotonic()
     objects = inventory(fixtures, table_ids)
     prefix = digest(fixtures / "manifest.json")
     with exclusive(directory):
         verify_server(directory)
-        for item in objects:
-            put_verified(directory, prefix + "/" + item["path"], fixtures / item["path"], item["sha256"])
+        methods = Counter(put_verified(directory, prefix + "/" + item["path"],
+                                      fixtures / item["path"], item["sha256"], checksum=checksum)
+                          for item in objects)
     save(output, {"status": "verified", "server_sha256": digest(directory / "server.json"),
                   "fixture_manifest_sha256": prefix, "prefix": prefix, "objects": objects,
-                  "table_root": f"s3://{BUCKET}/{prefix}", "table_ids": table_ids, "verified_ns": time.time_ns()})
+                  "table_root": f"s3://{BUCKET}/{prefix}", "table_ids": table_ids, "verified_ns": time.time_ns(),
+                  "verification": {"requested": "server-sha256" if checksum else "full-get", "methods": dict(methods)},
+                  "source_sha256": digest(Path(__file__)), "elapsed_seconds": time.monotonic() - started})
 
 
-def put_verified(directory, key, source, expected):
+def put_verified(directory, key, source, expected, *, checksum=False):
     import hashlib
     path = f"/{BUCKET}/" + quote(key, safe="/")
     # A content-addressed location is immutable, including repeat uploads.
@@ -256,10 +262,24 @@ def put_verified(directory, key, source, expected):
                 "--output", "/dev/null", "--write-out", "%{http_code}")
     status, error = proc.communicate()
     assert proc.returncode == 0 and status.decode() in ("200", "412"), (status, error)
+    if checksum:
+        proc = curl(directory, path, "--head", "--fail", "--header", "x-amz-checksum-mode: ENABLED",
+                    "--write-out", "%{http_code}")
+        body, error = proc.communicate()
+        assert proc.returncode == 0 and body[-3:] == b"200", (key, error)
+        headers = BytesParser().parsebytes(body[:-3].partition(b"\r\n")[2])
+        assert headers.get_all("Content-Length") == [str(source.stat().st_size)], "stored object length changed: " + key
+        sha, kind = (headers.get_all(name) for name in ("x-amz-checksum-sha256", "x-amz-checksum-type"))
+        assert (sha is None or len(sha) == 1) and (kind is None or len(kind) == 1), "duplicate checksum headers: " + key
+        if sha is not None and kind == ["FULL_OBJECT"]:
+            assert sha == [base64.b64encode(bytes.fromhex(expected)).decode()], "stored object checksum changed: " + key
+            return "server-sha256"
+        # Legacy or multipart objects need a complete readback, not a partial checksum.
     proc = curl(directory, path, "--fail")
     actual = hashlib.file_digest(proc.stdout, "sha256").hexdigest()
     error = proc.stderr.read()
     assert proc.wait() == 0 and actual == expected, (key, error)
+    return "full-get"
 
 
 def reader_environment(directory):
@@ -316,6 +336,8 @@ if __name__ == "__main__":
     p.add_argument("--state", type=Path, required=True)
     p.add_argument("--fixtures", type=Path, required=True)
     p.add_argument("--table", action="append", help="repeat for exact native table IDs; default: all tables")
+    p.add_argument("--verify-checksum", action="store_true",
+                   help="verify stored full-object SHA-256 and length; read back objects without that checksum")
     p.add_argument("--output", type=Path, required=True)
     p = commands.add_parser("reader", help=argparse.SUPPRESS)
     p.add_argument("--state", type=Path, required=True)
@@ -326,7 +348,7 @@ if __name__ == "__main__":
     elif args.command == "start":
         start(args.build, args.state, args.port)
     elif args.command == "upload":
-        upload(args.state, args.fixtures, args.output, args.table)
+        upload(args.state, args.fixtures, args.output, args.table, checksum=args.verify_checksum)
     elif args.command == "reader":
         exec_reader(args.state, args.arguments[1:])
     else:

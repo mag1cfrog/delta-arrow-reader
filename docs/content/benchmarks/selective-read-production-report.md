@@ -67,6 +67,8 @@ The overview records each campaign's mode and amendment hash. Those invocations
 remain outside the timing distributions, and DuckDB EXPLAIN remains separate.
 Single-snapshot revision 6 campaigns can also declare
 [exact validation as storage warmup](selective-read-gate-warmup.md).
+Each campaign also retains its upload verification method and whether staging
+shared the controller process. These preparation steps stay outside query clocks.
 The JSON records that method per campaign and reader/profile. Compare matching
 cases and preparation methods, and retain earlier standalone-warmup observations.
 Physical Parquet bytes describe table layout. Response bytes describe downloaded

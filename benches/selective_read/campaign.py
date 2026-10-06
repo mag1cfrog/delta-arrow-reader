@@ -343,6 +343,10 @@ def execute_cached(args):
     output.mkdir()
     campaign_id = output.name
     fixtures, state = args.fixtures.resolve(), args.state.resolve()
+    upload_tables = getattr(args, "upload_table", None)
+    if upload_tables:
+        require(not args.upload.exists(), "inline upload requires a new receipt path")
+        storage.upload(state, fixtures, args.upload, upload_tables, checksum=True)
     receipt = json.loads(args.upload.read_text())
     require(receipt["status"] == "verified" and receipt["server_sha256"] == digest(state / "server.json") and
             receipt["fixture_manifest_sha256"] == digest(fixtures / "manifest.json") and
@@ -428,6 +432,7 @@ def execute_cached(args):
     save(output / "campaign.json", {"campaign_id": campaign_id, **comparison, **diagnostic_config, **warming_config,
          "fixtures": str(fixtures), "upload": str(args.upload.resolve()),
          "upload_sha256": digest(args.upload), "server": config, "reader_builds": builds, "jobs": jobs,
+         "upload_verification": receipt.get("verification"), "in_process_upload": bool(upload_tables),
          "matrix": {"path": str(args.matrix.resolve()), "sha256": digest(args.matrix)} if prepared else None,
          "workload": str(workload_path.resolve()) if workload else None,
          "source_sha256": hashes, "timer_resolution": resolution, "started_ns": time.time_ns(),
@@ -540,6 +545,8 @@ if __name__ == "__main__":
     parser.add_argument("--binary", type=Path, action="append", default=[])
     parser.add_argument("--reference", type=Path, action="append", default=[])
     parser.add_argument("--case", action="append", help="repeat for selected cases; default: both compound layouts")
+    parser.add_argument("--upload-table", action="append",
+                        help="upload exact native table IDs to a new --upload receipt in this process before running")
     parser.add_argument("--matrix", type=Path, help="prepared 30-case matrix; replaces case/reference/session defaults")
     parser.add_argument("--workload", type=Path, help="explicit workload; select staged cases with --case")
     parser.add_argument("--combined-diagnostics", action="store_true",
