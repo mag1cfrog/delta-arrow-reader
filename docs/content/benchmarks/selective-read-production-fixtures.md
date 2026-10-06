@@ -214,7 +214,6 @@ Freeze a pilot for a completed full Q4 table:
   benches/selective_read/production_workloads.py \
   --fixtures ../production-q4-localized \
   --binary ../build-polars/selective-read-polars \
-  --binary ../build-daft/selective-read-daft \
   --output ../production-q4-workload
 
 ../selective-read-oracle-venv/bin/python -B benches/selective_read/oracle.py \

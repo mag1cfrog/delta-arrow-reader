@@ -1,22 +1,18 @@
 """Build one pinned Rust reader and save its executable and resolved provenance."""
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 
+from run import digest
+
 
 ROOT = Path(__file__).resolve().parents[3]
 HERE = Path(__file__).resolve().parent
 TARGET = "x86_64-unknown-linux-gnu"
-
-
-def digest(path):
-    with path.open("rb") as source:
-        return hashlib.file_digest(source, "sha256").hexdigest()
 
 
 def sources():

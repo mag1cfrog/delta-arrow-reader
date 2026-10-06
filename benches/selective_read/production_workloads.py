@@ -25,6 +25,9 @@ SOURCES = (Path(__file__), HERE / "oracle.py", HERE / "oracle-requirements.txt",
            HERE / "runners/run.py")
 PREDICATES = [("l_shipdate", "=", date(1995, 3, 15)), ("l_shipmode", "=", "AIR"),
               ("l_linenumber", "IN", frozenset([1]))]
+_SOURCE_SCANS = {}
+_PHYSICAL_SCANS = {}
+_EXTRA_KEY_SCANS = {}
 
 
 def query_fields(case, manifest):
@@ -211,6 +214,12 @@ def extra_keys(fixtures, manifest):
             {c for c, v in shapes.cases().items() if not v["deletion_vectors"] and v["shape"] in paired_shapes
              and (layout is None or v["layout"] == layout)},
             "shared DV union inventory does not match requested layout scope")
+    identities = tuple(oracle.file_identity(oracle.inside(fixtures, str(Path(t["path"]) / f["path"])))
+                       for t in bases for f in t["files"])
+    if identities in _EXTRA_KEY_SCANS:
+        extras = _EXTRA_KEY_SCANS[identities]
+        require(sorted(extras) == [tuple(k) for k in saved], "shared production deletion union changed")
+        return extras
     for table in bases:
         for item in table["files"]:
             minimum = None
@@ -228,25 +237,24 @@ def extra_keys(fixtures, manifest):
     require(minimum_match is not None, "DV bases have no matching rows")
     extras.add(minimum_match)
     require(sorted(extras) == [tuple(k) for k in saved], "shared production deletion union changed")
+    require(identities == tuple(oracle.file_identity(oracle.inside(fixtures, str(Path(t["path"]) / f["path"])))
+                                for t in bases for f in t["files"]), "DV union inputs changed during scan")
+    extras = frozenset(extras)
+    _EXTRA_KEY_SCANS[identities] = extras
     return extras
 
 
-def prepare_reference(fixtures, case, output, workload, quota):
-    import large_workloads
-    fixtures, output = Path(fixtures).resolve(), Path(output)
-    frozen = large_workloads.load(workload)
-    row = binding(frozen, fixtures, case)
-    manifest = oracle.load_json(fixtures / "manifest.json")
-    table = next(t for t in fixture_tables(manifest) if t["id"] == case)
-    source = next(s for s in manifest["sources"] if s["scale_factor"] == 10)
-    projection = row["projection"]
-    verified = oracle.objects(fixtures, table, source)
-    extras = extra_keys(fixtures, manifest) if table["deletion_vectors"] else set()
-    counts, expected, previous = [0, 0, 0, 0], [], None
-    projected_bytes, deleted_matches = [0], 0
+def scan_source(fixtures, source):
+    paths = [oracle.inside(fixtures, str(Path(source["path"]) / item["path"])) for item in source["files"]]
+    key = tuple((oracle.file_identity(path), item["rows"], item["sha256"])
+                for path, item in zip(paths, source["files"], strict=True))
+    if key in _SOURCE_SCANS:
+        counts, records = _SOURCE_SCANS[key]
+        require(counts[0] == source["rows"], "source row count changed")
+        return counts, records, True
+    counts, records, previous = [0, 0, 0, 0], [], None
     print("production oracle: scan original source", flush=True)
-    for item in source["files"]:
-        path = oracle.inside(fixtures, str(Path(source["path"]) / item["path"]))
+    for path, item in zip(paths, source["files"], strict=True):
         parquet = pq.ParquetFile(path)
         oracle.check_schema(parquet.schema_arrow, oracle.ORIGINAL)
         file_rows = 0
@@ -265,14 +273,34 @@ def prepare_reference(fixtures, case, output, workload, quota):
             for i, mask in enumerate(selected, 1):
                 counts[i] += pc.sum(pc.cast(mask, pa.int64())).as_py()
             for record in batch.filter(selected[-1]).to_pylist():
-                key = tuple(record[k] for k in oracle.KEYS)
-                if table["deletion_vectors"] and (oracle.deleted(record) or key in extras):
-                    deleted_matches += 1
-                else:
-                    expected.append(oracle.record(record, projection, derive_payloads=True, logical_bytes=projected_bytes))
+                records.append(oracle.record(record, oracle.ORIGINAL + oracle.PAYLOADS, derive_payloads=True))
         require(file_rows == item["rows"], "source file row count changed")
     require(counts[0] == source["rows"] and all(a > b > 0 for a, b in zip(counts, counts[1:])), "source predicate geometry changed")
     require(300 <= counts[-1] <= 2000, "production output exceeds the declared hundreds-of-rows shape")
+    require(key == tuple((oracle.file_identity(path), item["rows"], item["sha256"])
+                         for path, item in zip(paths, source["files"], strict=True)), "source changed during scan")
+    _SOURCE_SCANS[key] = tuple(counts), tuple(records)
+    return tuple(counts), tuple(records), False
+
+
+def prepare_reference(fixtures, case, output, workload, quota):
+    import large_workloads
+    fixtures, output = Path(fixtures).resolve(), Path(output)
+    frozen = large_workloads.load(workload)
+    row = binding(frozen, fixtures, case)
+    manifest = oracle.load_json(fixtures / "manifest.json")
+    table = next(t for t in fixture_tables(manifest) if t["id"] == case)
+    source = next(s for s in manifest["sources"] if s["scale_factor"] == 10)
+    projection = row["projection"]
+    verified = oracle.objects(fixtures, table, source)
+    extras = extra_keys(fixtures, manifest) if table["deletion_vectors"] else set()
+    counts, records, source_reused = scan_source(fixtures, source)
+    expected, projected_bytes, deleted_matches = [], [0], 0
+    for record in records:
+        if table["deletion_vectors"] and (oracle.deleted(record) or tuple(record[k] for k in oracle.KEYS) in extras):
+            deleted_matches += 1
+        else:
+            expected.append(oracle.record(record, projection, logical_bytes=projected_bytes))
     output.mkdir()
     reference = output / "reference.parquet"
     oracle.write_reference(reference, expected, projection, quota // 4)
@@ -281,6 +309,9 @@ def prepare_reference(fixtures, case, output, workload, quota):
     stored = [*oracle.ORIGINAL, *oracle.PAYLOADS, *[f"metric_{j:03}" for j in range(metric_count)]]
     saved_keys = [tuple(k) for f in table["files"] for k in f.get("deletion_vector", {}).get("logical_ids", [])]
     require(len(saved_keys) == len(set(saved_keys)), "duplicate deleted logical key")
+    scans = {"full_column_scans": 0, "reused_full_column_scans": 0, "source_scan_reused": source_reused,
+             "scan_batch_rows": 65536,
+             "reuse_guard": "unchanged local device/inode/size/mtime_ns/ctime_ns"}
 
     def fixture_batches():
         nonlocal actual_rows, actual_matches, deleted_rows
@@ -289,18 +320,30 @@ def prepare_reference(fixtures, case, output, workload, quota):
             if oracle.candidate(item["delta_stats"], PREDICATES):
                 candidates.append(item["path"])
             path = oracle.inside(fixtures, str(Path(table["path"]) / item["path"]))
+            identity = oracle.file_identity(path)
+            cached = _PHYSICAL_SCANS.get((identity, metric_count))
+            scans["reused_full_column_scans" if cached else "full_column_scans"] += 1
             parquet = pq.ParquetFile(path)
             require(parquet.schema_arrow.names == stored, "stored schema differs")
             oracle.check_schema(pa.schema([parquet.schema_arrow.field(c) for c in oracle.ORIGINAL + oracle.PAYLOADS]), oracle.ORIGINAL + oracle.PAYLOADS)
             dv = item.get("deletion_vector", {})
             by_ordinal = dict(zip(dv.get("physical_ordinals", []), map(tuple, dv.get("logical_ids", [])), strict=True))
             require(not table["deletion_vectors"] or bool(by_ordinal), "production file has an empty DV")
-            ordinal, matched, physical_matches = 0, False, []
-            for batch in parquet.iter_batches(batch_size=8192):
-                require(all(batch.column(c).null_count == 0 for c in oracle.ORIGINAL), "null in original fixture field")
-                check_metrics(batch, metric_count)
-                mask = masks(batch)[-1]
-                physical_matches.extend(ordinal + i for i in pc.indices_nonzero(mask).to_pylist())
+            ordinal, matched = 0, False
+            physical_matches = list(cached["ordinals"]) if cached else []
+            physical_batches = list(cached["batches"]) if cached else []
+            batches = parquet.iter_batches(batch_size=scans["scan_batch_rows"], columns=list(oracle.KEYS) if cached else None)
+            if cached and not table["deletion_vectors"]:
+                ordinal, batches = cached["rows"], []
+            for batch in batches:
+                if not cached:
+                    require(all(batch.column(c).null_count == 0 for c in oracle.ORIGINAL), "null in original fixture field")
+                    check_metrics(batch, metric_count)
+                    mask = masks(batch)[-1]
+                    physical_matches.extend(ordinal + i for i in pc.indices_nonzero(mask).to_pylist())
+                    selected = batch.filter(mask)
+                    if selected.num_rows:
+                        physical_batches.append(selected.select(oracle.ORIGINAL + oracle.PAYLOADS))
                 if table["deletion_vectors"]:
                     live = []
                     for i, (order, line) in enumerate(zip(batch.column("l_orderkey").to_pylist(), batch.column("l_linenumber").to_pylist())):
@@ -309,14 +352,32 @@ def prepare_reference(fixtures, case, output, workload, quota):
                         require((ordinal + i in by_ordinal) == deleted
                                 and (not deleted or by_ordinal[ordinal + i] == key), "wrong physical deletion ordinal/key")
                         deleted_rows += deleted
-                        live.append(not deleted)
-                    mask = pc.and_(mask, pa.array(live))
-                selected = batch.filter(mask)
-                if selected.num_rows:
-                    matched = True
-                    yield selected.select(projection)
+                        if not cached:
+                            live.append(not deleted)
+                    if not cached:
+                        mask = pc.and_(mask, pa.array(live))
+                if not cached:
+                    if table["deletion_vectors"]:
+                        selected = batch.filter(mask)
+                    if selected.num_rows:
+                        matched = True
+                        yield selected.select(projection)
                 ordinal += batch.num_rows
+            if cached:
+                deleted_keys = set(by_ordinal.values())
+                for batch in physical_batches:
+                    selected = batch
+                    if table["deletion_vectors"]:
+                        live = [key not in deleted_keys for key in zip(batch.column("l_orderkey").to_pylist(),
+                                                                      batch.column("l_linenumber").to_pylist())]
+                        selected = batch.filter(pa.array(live))
+                    if selected.num_rows:
+                        matched = True
+                        yield selected.select(projection)
             require(ordinal == item["rows"] and physical_matches == evidence["matching_ordinals"], "fixture rows/match geometry changed")
+            require(oracle.file_identity(path) == identity, "fixture changed during scan")
+            _PHYSICAL_SCANS[identity, metric_count] = {"rows": ordinal, "ordinals": tuple(physical_matches),
+                                                      "batches": tuple(physical_batches)}
             actual_rows += ordinal
             actual_matches += len(physical_matches)
             if matched:
@@ -329,6 +390,8 @@ def prepare_reference(fixtures, case, output, workload, quota):
         require(deleted_matches > 0 and len(expected) > 0 and 0 < len(candidates) < table["file_count"]
                 and summary["physical_rows"] == actual_rows and summary["deleted_rows"] == deleted_rows
                 and summary["live_rows"] == actual_rows - deleted_rows and summary["dv_files"] == table["file_count"], "invalid DV coverage/deletions")
+    for item in verified:
+        oracle.verify_object(fixtures, item)
     metadata = {"format": "selective-read-reference-v2", "status": "complete", **large_workloads.identity(workload),
                 "oracle_sha256": digest(Path(oracle.__file__)), "production_oracle_sha256": digest(Path(__file__)),
                 "oracle_dependencies_sha256": digest(oracle.REQUIREMENTS), "python": platform.python_version(),
@@ -349,6 +412,7 @@ def prepare_reference(fixtures, case, output, workload, quota):
                     "scope": "physical geometry before deletions, not reader decode counters"},
                 "derived_value_checks": {"payloads": "all qualifying output rows, independent SHA256",
                     "metrics": "all stored rows, independent Arrow arithmetic"},
+                "physical_validation": scans,
                 "verified_objects": verified, "reference_sha256": digest(reference),
                 "workload_manifest": str(Path(workload).resolve()), "oracle_limits": frozen["oracle_limits"],
                 "native_expression_sha256": row["native_expression_sha256"], "projected_logical_bytes": projected_bytes[0]}

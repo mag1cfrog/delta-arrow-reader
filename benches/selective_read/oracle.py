@@ -28,6 +28,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import duckdb
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "runners"))
+from run import digest as digest_file, file_identity
 
 PROTOCOL = Path(__file__).resolve().parents[2] / "docs/content/benchmarks/selective-read-protocol.md"
 REVISION = 2
@@ -81,11 +83,6 @@ def require(condition, message):
 
 def digest_bytes(data):
     return hashlib.sha256(data).hexdigest()
-
-
-def digest_file(path):
-    with Path(path).open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def load_json(path):
@@ -870,7 +867,8 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     prepare_parser = commands.add_parser("prepare", help="full-read a fixture and save an independent reference")
     prepare_parser.add_argument("--fixtures", type=Path, required=True)
-    prepare_parser.add_argument("--case", required=True)
+    prepare_parser.add_argument("--case", action="append", required=True,
+                                help="repeat to prepare cases together and reuse unchanged inputs")
     prepare_parser.add_argument("--output", type=Path, required=True)
     prepare_parser.add_argument("--duplicate-in-literal", action="store_true")
     prepare_parser.add_argument("--workload", type=Path)
@@ -880,7 +878,15 @@ def main():
     args = parser.parse_args()
     try:
         if args.command == "prepare":
-            output = prepare(args.fixtures, args.case, args.output, args.duplicate_in_literal, args.workload)
+            require(len(set(args.case)) == len(args.case), "duplicate preparation case")
+            if len(args.case) == 1:
+                output = prepare(args.fixtures, args.case[0], args.output, args.duplicate_in_literal, args.workload)
+            else:
+                require(all(re.fullmatch(r"[a-zA-Z0-9_.-]+", case) and case not in (".", "..") for case in args.case),
+                        "invalid batch preparation case")
+                args.output.mkdir()
+                output = [prepare(args.fixtures, case, args.output / case, args.duplicate_in_literal, args.workload)
+                          for case in args.case]
         else:
             output = check(args.reference, args.fixtures, args.result, args.identity)
     except (ValueError, KeyError, TypeError, StopIteration, OSError, duckdb.Error, pa.ArrowException) as error:
