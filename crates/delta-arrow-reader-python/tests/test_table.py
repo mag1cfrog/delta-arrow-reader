@@ -1,9 +1,12 @@
 from collections import UserDict
+import gc
 import json
 from pathlib import Path
 import tempfile
 from types import MappingProxyType
 import unittest
+
+import pyarrow as pa
 
 from delta_arrow_reader import DeltaReaderError, DeltaTable
 
@@ -21,18 +24,17 @@ class TableTests(unittest.TestCase):
                 {"name": "id", "type": "long", "nullable": False, "metadata": {}}
             ],
         }
+        self.metadata = {
+            "id": "python-test-table",
+            "format": {"provider": "parquet", "options": {}},
+            "schemaString": json.dumps(schema),
+            "partitionColumns": [],
+            "configuration": {},
+        }
         self.write_log(
             0,
             {"protocol": {"minReaderVersion": 1, "minWriterVersion": 2}},
-            {
-                "metaData": {
-                    "id": "python-test-table",
-                    "format": {"provider": "parquet", "options": {}},
-                    "schemaString": json.dumps(schema),
-                    "partitionColumns": [],
-                    "configuration": {},
-                }
-            },
+            {"metaData": self.metadata},
         )
 
     def write_log(self, version, *actions):
@@ -61,6 +63,106 @@ class TableTests(unittest.TestCase):
                 table = DeltaTable(self.location, version=version)
                 self.assertEqual(table.version, expected)
                 self.assertEqual(repr(table), f"DeltaTable(version={expected})")
+
+    def test_schema_preserves_types_and_metadata(self):
+        def field(name, datatype, nullable=True, metadata=None):
+            return {
+                "name": name, "type": datatype, "nullable": nullable,
+                "metadata": metadata or {},
+            }
+
+        fields = [
+            field("id", "long", False, {"comment": "identifier", "ordinal": 7}),
+            field("profile", {"type": "struct", "fields": [
+                field("age", "integer", False, {"comment": "years"}),
+                field("nickname", "string"),
+            ]}),
+            field("tags", {
+                "type": "array", "elementType": "string", "containsNull": False,
+            }),
+            field("attributes", {
+                "type": "map", "keyType": "string", "valueType": "long",
+                "valueContainsNull": False,
+            }),
+            field("amount", "decimal(10,2)", False),
+            field("event_ts", "timestamp"),
+            field("local_ts", "timestamp_ntz"),
+        ]
+        self.metadata["schemaString"] = json.dumps({"type": "struct", "fields": fields})
+        self.write_log(
+            1,
+            {"protocol": {
+                "minReaderVersion": 3, "minWriterVersion": 7,
+                "readerFeatures": ["timestampNtz"], "writerFeatures": ["timestampNtz"],
+            }},
+            {"metaData": self.metadata},
+        )
+        expected = pa.schema([
+            pa.field("id", pa.int64(), nullable=False,
+                     metadata={b"comment": b"identifier", b"ordinal": b"7"}),
+            pa.field("profile", pa.struct([
+                pa.field("age", pa.int32(), nullable=False, metadata={b"comment": b"years"}),
+                pa.field("nickname", pa.string()),
+            ])),
+            pa.field("tags", pa.list_(pa.field("element", pa.string(), nullable=False))),
+            pa.field("attributes", pa.map_(
+                pa.string(), pa.field("value", pa.int64(), nullable=False),
+            )),
+            pa.field("amount", pa.decimal128(10, 2), nullable=False),
+            pa.field("event_ts", pa.timestamp("us", tz="UTC")),
+            pa.field("local_ts", pa.timestamp("us")),
+        ])
+        table = DeltaTable(self.location)
+        schema = table.schema
+        self.assertIsInstance(schema, pa.Schema)
+        self.assertTrue(schema.equals(expected, check_metadata=True), schema)
+        self.assertTrue(pa.schema(table).equals(expected, check_metadata=True))
+        self.assertTrue(table.schema.equals(expected, check_metadata=True))
+        with self.assertRaises(AttributeError):
+            table.schema = expected
+        del table
+        gc.collect()
+        self.assertTrue(schema.equals(expected, check_metadata=True))
+        self.assertEqual(
+            DeltaTable(self.location, version=0).schema,
+            pa.schema([pa.field("id", pa.int64(), nullable=False)]),
+        )
+
+    def test_schema_capsule_outlives_table(self):
+        table = DeltaTable(self.location)
+        capsule = table.__arrow_c_schema__()
+        unused = table.__arrow_c_schema__()
+        del unused, table
+        gc.collect()
+
+        class ExportedSchema:
+            def __arrow_c_schema__(self):
+                return capsule
+
+        self.assertEqual(
+            pa.schema(ExportedSchema()),
+            pa.schema([pa.field("id", pa.int64(), nullable=False)]),
+        )
+
+    def test_schema_export_errors_are_redacted(self):
+        schema = json.loads(self.metadata["schemaString"])
+        schema["fields"][0]["name"] = "secret\0field"
+        nested = {"type": "struct", "fields": [{
+            "name": "nested", "type": schema, "nullable": True, "metadata": {},
+        }]}
+        for malformed in (schema, nested):
+            with self.subTest(schema=malformed):
+                self.metadata["schemaString"] = json.dumps(malformed)
+                self.write_log(1, {"metaData": self.metadata})
+                table = DeltaTable(self.location)
+                with self.assertRaises(DeltaReaderError) as caught:
+                    _ = table.schema
+                error = caught.exception
+                self.assertEqual(error.phase, "schema")
+                self.assertEqual(error.code, "schema_conversion")
+                self.assertNotIn("secret", str(error))
+                self.assertIsNone(error.__cause__)
+                self.assertIsNone(error.__context__)
 
     def test_version_validation(self):
         class Version(int):

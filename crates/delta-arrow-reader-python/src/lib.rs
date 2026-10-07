@@ -5,10 +5,11 @@ use std::sync::Arc;
 use ::delta_arrow_reader::{
     DeltaSnapshotSelection, DeltaStorageOptions, DeltaTable as CoreDeltaTable, DeltaTableBuilder,
 };
+use arrow::ffi::FFI_ArrowSchema;
 use pyo3::{
     exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyBool, PyDict, PyInt, PyMapping},
+    types::{PyBool, PyCapsule, PyDict, PyInt, PyMapping},
 };
 use tokio::runtime::Runtime;
 
@@ -18,6 +19,18 @@ pyo3::create_exception!(
     PyException,
     "A redacted reader failure with phase and code attributes."
 );
+
+fn reader_error(py: Python<'_>, message: String, phase: &str, code: &str) -> PyErr {
+    let exception = DeltaReaderError::new_err(message);
+    let value = exception.value(py);
+    if let Err(error) = value
+        .setattr("phase", phase)
+        .and_then(|()| value.setattr("code", code))
+    {
+        return error;
+    }
+    exception
+}
 
 /// One immutable Delta snapshot, loaded from a string or os.PathLike[str].
 ///
@@ -73,18 +86,11 @@ impl DeltaTable {
                 .map_err(|_| PyRuntimeError::new_err("failed to create the reader runtime"))?,
         );
         // ponytail: blocking wait; #417 adds signal checks and cleanup from runtime workers.
-        let result = py.detach(|| runtime.block_on(builder.load_table()));
-        let table = match result {
-            Ok(table) => table,
-            Err(error) => {
-                let exception = DeltaReaderError::new_err(error.to_string());
-                exception
-                    .value(py)
-                    .setattr("phase", error.phase().as_str())?;
-                exception.value(py).setattr("code", error.code())?;
-                return Err(exception);
-            }
-        };
+        let table = py
+            .detach(|| runtime.block_on(builder.load_table()))
+            .map_err(|error| {
+                reader_error(py, error.to_string(), error.phase().as_str(), error.code())
+            })?;
         Ok(Self {
             table,
             _runtime: runtime,
@@ -95,6 +101,37 @@ impl DeltaTable {
     #[getter]
     fn version(&self) -> u64 {
         self.table.version()
+    }
+
+    /// The logical schema as a pyarrow.Schema, independent of this table's lifetime.
+    #[getter]
+    fn schema(slf: Bound<'_, Self>) -> PyResult<Bound<'_, PyAny>> {
+        slf.py().import("pyarrow")?.call_method1("schema", (slf,))
+    }
+
+    /// Export a fresh Arrow schema capsule through the public Arrow protocol.
+    fn __arrow_c_schema__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
+        let schema = self.table.schema();
+        let export_error = || {
+            reader_error(
+                py,
+                "delta reader error: phase=schema code=schema_conversion reason=arrow_schema_export_failed"
+                    .to_owned(),
+                "schema",
+                "schema_conversion",
+            )
+        };
+        // Arrow 58's FFI exporter panics on NUL bytes in field names.
+        if schema
+            .flattened_fields()
+            .iter()
+            .any(|field| field.name().contains('\0'))
+        {
+            return Err(export_error());
+        }
+        let ffi_schema = FFI_ArrowSchema::try_from(schema.as_ref()).map_err(|_| export_error())?;
+        // The capsule drops the schema; Arrow's Drop releases it only if still owned.
+        PyCapsule::new_with_value(py, ffi_schema, c"arrow_schema")
     }
 
     fn __repr__(&self) -> String {

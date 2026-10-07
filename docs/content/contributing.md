@@ -19,8 +19,10 @@ cargo package --locked
 ## Build the Python package locally
 
 The Python package loads the latest Delta snapshot with `DeltaTable(location)`
-and exposes its read-only `version` property. Pass `version=0` to load a specific
-snapshot; omitting `version` or passing `None` loads the latest snapshot.
+and exposes its read-only `version` and `schema` properties. The schema is a
+`pyarrow.Schema` that remains usable after the table is deleted.
+Pass `version=0` to load a specific snapshot; omitting `version` or passing `None`
+loads the latest snapshot.
 Use `storage_options` to pass a mapping of string keys to string values to the
 storage backend. The constructor copies the mapping before loading.
 

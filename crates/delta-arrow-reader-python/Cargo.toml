@@ -13,6 +13,7 @@ name = "delta_arrow_reader"
 crate-type = ["cdylib"]
 
 [dependencies]
+arrow = { version = "58.3.0", features = ["ffi"] }
 delta-arrow-reader = { version = "0.6.2", path = "../.." }
 pyo3 = { version = "0.29", features = ["abi3-py310"] }
 tokio = { version = "1", features = ["rt-multi-thread"] }
