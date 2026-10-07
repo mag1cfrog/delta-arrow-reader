@@ -261,12 +261,7 @@ def report(campaign, output):
     comparison = identity(path)
     readers = reader_roster(comparison)
     require(comparison_identity(config) == comparison, "campaign workload changed")
-    seals = json.loads((campaign / "frozen.json").read_text())
-    require(seals == {name: digest(campaign / name) for name in ("campaign.json", "inventory.json", "schedule.json")}, "frozen campaign inputs changed")
-    inventory = json.loads((campaign / "inventory.json").read_text())
-    slots = json.loads((campaign / "schedule.json").read_text())
-    observations = [json.loads(line) for line in (campaign / "observations.jsonl").read_text().splitlines()]
-    summary = json.loads((campaign / "summary.json").read_text())
+    inventory, summary, observations, slots = runner.read_results(campaign)
     require(comparison_identity(summary) == comparison and all(comparison_identity(s) == comparison for s in slots),
             "schedule/summary workload changed")
     require(slots == runner.schedule(inventory, config["campaign_id"], comparison), "schedule differs from the frozen ordering rules")
@@ -287,8 +282,6 @@ def report(campaign, output):
                 and row["request"]["execution_mode"] == job["execution_mode"], "observation query changed")
         gate = inventory[row["job_id"]][row["reader_id"]]
         runner.validate(row["observation"], row["request"], row["reader_id"], gate if row["stage"] != "gate" else None)
-    require(summary["jobs"] == runner.summarize(inventory, slots, observations,
-            summary["timer_resolution"]["ratio_floor_ns"], summary["integrity_passed"]), "summary differs from raw observations")
     output.mkdir()
     rows = [{"job": job, "case": next(r for r in frozen["cases"] if r["case_id"] == job["case_id"]),
              "reader_id": reader, "gate": inventory[job["id"]][reader],

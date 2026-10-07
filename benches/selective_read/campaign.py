@@ -96,21 +96,14 @@ def plan_evidence(record, artifacts):
 
 def schedule(inventory, campaign_id, comparison=None, *, combined=None, gate_warmup=None, gate_diagnostics=None):
     slots = []
-    declared = [entry.get("combined_diagnostics", False) for entries in inventory.values() for entry in entries.values()]
-    require(all(type(value) is bool for value in declared) and len(set(declared)) <= 1,
-            "reader inventory has inconsistent diagnostic modes")
-    if combined is None:
-        combined = declared[0] if declared else False
-    warmed = [entry.get("gate_warmup", False) for entries in inventory.values() for entry in entries.values()]
-    require(all(type(value) is bool for value in warmed) and len(set(warmed)) <= 1,
-            "reader inventory has inconsistent warmup modes")
-    if gate_warmup is None:
-        gate_warmup = warmed[0] if warmed else False
-    diagnosed = [entry.get("gate_diagnostics", False) for entries in inventory.values() for entry in entries.values()]
-    require(all(type(value) is bool for value in diagnosed) and len(set(diagnosed)) <= 1,
-            "reader inventory has inconsistent gate-diagnostic modes")
-    if gate_diagnostics is None:
-        gate_diagnostics = diagnosed[0] if diagnosed else False
+    def mode(key, override, label):
+        values = [entry.get(key, False) for entries in inventory.values() for entry in entries.values()]
+        require(all(type(value) is bool for value in values) and len(set(values)) <= 1,
+                f"reader inventory has inconsistent {label} modes")
+        return (values[0] if values else False) if override is None else override
+    combined = mode("combined_diagnostics", combined, "diagnostic")
+    gate_warmup = mode("gate_warmup", gate_warmup, "warmup")
+    gate_diagnostics = mode("gate_diagnostics", gate_diagnostics, "gate-diagnostic")
     require(type(gate_diagnostics) is bool and (not gate_diagnostics or
             combined and gate_warmup and (comparison or {}).get("comparison_revision") == 6),
             "gate diagnostics require revision 6, combined diagnostics and gate warmup")
@@ -394,6 +387,18 @@ def summarize(inventory, slots, rows, resolution, integrity=True):
             reader.pop("_durations")
         result[job] = readers
     return result
+
+
+def read_results(directory, frozen_error="frozen campaign inputs changed"):
+    """Load frozen campaign results and verify their summary against the journal."""
+    frozen = json.loads((directory / "frozen.json").read_text())
+    require(frozen == {name: digest(directory / name) for name in ("campaign.json", "inventory.json", "schedule.json")}, frozen_error)
+    inventory, summary, slots = (json.loads((directory / (name + ".json")).read_text())
+                                 for name in ("inventory", "summary", "schedule"))
+    observations = [json.loads(line) for line in (directory / "observations.jsonl").read_text().splitlines()]
+    require(summary["jobs"] == summarize(inventory, slots, observations,
+            summary["timer_resolution"]["ratio_floor_ns"], summary["integrity_passed"]), "summary differs from raw observations")
+    return inventory, summary, observations, slots
 
 
 def execute(args):

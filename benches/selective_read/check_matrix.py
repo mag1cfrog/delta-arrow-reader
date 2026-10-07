@@ -7,6 +7,7 @@ import csv
 import json
 from pathlib import Path
 import tempfile
+from unittest import TestCase
 
 import matrix
 import oracle
@@ -46,12 +47,8 @@ def check(fixtures, prepared):
                   "native_expression_sha256": sample["native_expression_sha256"].get(reader)}}
         matrix.check_translation(record, sample)
         record["identity"]["native_expression_sha256"] = "0" * 64
-        try:
+        with TestCase().assertRaises(ValueError, msg="changed translation accepted"):
             matrix.check_translation(record, sample)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError("changed translation accepted")
     with tempfile.TemporaryDirectory(prefix="selective-read-matrix-") as temporary:
         root = Path(temporary)
         for field, replacement in (("cases", value["cases"][:-1]), ("catalog_sha256", "0" * 64)):
@@ -59,21 +56,13 @@ def check(fixtures, prepared):
             bad[field] = replacement
             path = root / (field + ".json")
             save(path, bad)
-            try:
+            with TestCase().assertRaises(ValueError, msg="changed matrix accepted: " + field):
                 matrix.load(path, fixtures)
-            except ValueError:
-                pass
-            else:
-                raise AssertionError("changed matrix accepted: " + field)
         bad = deepcopy(value)
         bad["cases"][0]["oracle"]["output_rows"] += 1
         save(root / "counts.json", bad)
-        try:
+        with TestCase().assertRaises(ValueError, msg="changed oracle counts accepted"):
             matrix.load(root / "counts.json", fixtures)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError("changed oracle counts accepted")
         inventory = {case: {r: {"status": "success", "runnable": True} for r in campaign.READERS} for case in cases}
         first = next(iter(cases))
         inventory[first]["daft"] = {"status": "unsupported", "runnable": False, "failure_reason": "test capability rejection"}
