@@ -22,8 +22,8 @@ samples for each reader, case, and way of running the query.
 
 The inputs use public TPC-H lineitem data at scale factor 10 (SF10), extended
 with synthetic numeric columns. These are custom scan queries, not standard
-TPC-H queries or a TPC-H score. The measurements are complete; the full raw
-reproduction archive is not yet published. See [data and reproduction](#data-and-reproduction).
+TPC-H queries or a TPC-H score. See [data and reproduction](#data-and-reproduction)
+for results, the evidence archive, and reproduction instructions.
 
 ## Open a table and read the result
 
