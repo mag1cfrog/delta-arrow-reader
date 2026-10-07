@@ -18,7 +18,8 @@ cargo package --locked
 
 ## Build the Python package locally
 
-The Python package currently exposes `__version__`; table loading is planned.
+The Python package loads the latest Delta snapshot with `DeltaTable(location)`
+and exposes its read-only `version` property.
 Run these commands from the repository root on Linux or macOS:
 
 ```console

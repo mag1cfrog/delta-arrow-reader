@@ -1267,7 +1267,9 @@ dependencies = [
 name = "delta-arrow-reader-python"
 version = "0.6.2"
 dependencies = [
+ "delta-arrow-reader",
  "pyo3",
+ "tokio",
 ]
 
 [[package]]
