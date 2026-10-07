@@ -9,24 +9,18 @@
   <a href="https://crates.io/crates/delta-arrow-reader"><img alt="crates.io" src="https://img.shields.io/crates/v/delta-arrow-reader.svg"></a>
 </p>
 
-Delta Arrow Reader is a read-only Rust library built for queries that need a
-small slice of a large Delta Lake table. It skips unnecessary data and streams
-Apache Arrow batches into your service, CLI, or pipeline.
+Delta Arrow Reader is a fast, memory-efficient Delta Lake reader for Rust.
 
-- **Pruning beyond files.** Skip irrelevant files and row groups. Where Parquet
-  page indexes allow it, use matching rows to read only the output pages you need.
-- **Filter first, decode less.** Evaluate supported predicates before decoding
-  output columns, so wide projections don't force unrelated data through the
-  decoder.
-- **Arrow as it arrives.** Process batches without buffering the whole result,
-  with bounded read scheduling.
+- **Get results faster.** Spend less time downloading and processing data your
+  query doesn't need.
+- **Use less memory.** Process results as they arrive, without keeping the whole
+  result in RAM.
+- **Keep deployment simple.** Add the reader to your Rust app, with optional SQL
+  through DataFusion.
 
-Use the Arrow stream directly, or query through DataFusion. Both use the same
-reader, with support for Delta snapshots, schema changes, and deletion vectors.
-
-See how it compares with delta-rs, DuckDB, Polars, and single-machine Spark in
-the [selective-read benchmarks](docs/content/benchmarks/selective-read-results.md),
-including the layouts where performance is close.
+**Faster than delta-rs, DuckDB, Polars, and single-machine Spark** in all eight
+of our [selective-read benchmark cases](docs/content/benchmarks/selective-read-results.md),
+measured by median query time.
 
 ## Get started
 
