@@ -31,11 +31,18 @@ python -m pip install 'maturin>=1.14,<2'
 maturin build --locked --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out target/python-wheels
 python -m pip install --force-reinstall target/python-wheels/*.whl
 python -I -m unittest discover -s crates/delta-arrow-reader-python/tests
+cargo test --locked -p delta-arrow-reader-python
 ```
 
 The isolated Python check imports the installed wheel without adding the current
 directory to its import path. Default Cargo commands still select the core crate;
 use `cargo check -p delta-arrow-reader-python` to check the binding crate directly.
+
+The binding's runtime owner lives in `crates/delta-arrow-reader-python/src/runtime.rs`.
+Its Rust tests cover retained ownership and shutdown from a runtime worker.
+The last owner starts shutdown without waiting for already-running blocking work,
+which may finish afterward. Loading still waits synchronously; signal checks are
+tracked in #417.
 
 ## Work on the documentation
 
