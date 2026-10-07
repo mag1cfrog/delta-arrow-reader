@@ -20,12 +20,12 @@ Delta Arrow Reader is a fast, memory-efficient Delta Lake reader for Rust.
 
 **Faster than delta-rs, DuckDB, Polars, and single-machine Spark** in all eight
 of our [selective-read benchmark cases](docs/content/benchmarks/selective-read-results.md),
-measured by median query time.
+using data derived from TPC-H lineitem at SF10. Results compare median query times.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/28a51093b363adb9aea506f176ba49ef6a33dc13/docs/content/assets/selective-read-readme-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/28a51093b363adb9aea506f176ba49ef6a33dc13/docs/content/assets/selective-read-readme-light.svg">
-  <img alt="Median query times across five Delta readers and all eight selective-read cases. Lower is faster. Left and right columns use different linear scales." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/28a51093b363adb9aea506f176ba49ef6a33dc13/docs/content/assets/selective-read-readme-light.svg" width="1000">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/f5f005ecfe06c97b2c95a847b59ace890a551ab8/docs/content/assets/selective-read-readme-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/f5f005ecfe06c97b2c95a847b59ace890a551ab8/docs/content/assets/selective-read-readme-light.svg">
+  <img alt="Median query times across five Delta readers and eight cases on 416-column and 90-column tables derived from TPC-H lineitem at SF10. Lower is faster. Columns use different linear scales." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/f5f005ecfe06c97b2c95a847b59ace890a551ab8/docs/content/assets/selective-read-readme-light.svg" width="1000">
 </picture>
 
 ## Get started
