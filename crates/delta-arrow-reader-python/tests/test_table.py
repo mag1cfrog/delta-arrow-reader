@@ -1,6 +1,8 @@
+from collections import UserDict
 import json
 from pathlib import Path
 import tempfile
+from types import MappingProxyType
 import unittest
 
 from delta_arrow_reader import DeltaReaderError, DeltaTable
@@ -96,6 +98,47 @@ class TableTests(unittest.TestCase):
                 self.assertEqual(caught.exception.phase, "snapshot")
                 self.assertEqual(caught.exception.code, "snapshot_load")
                 self.assertNotIn("secret", str(caught.exception))
+
+    def test_storage_options_accepts_mappings(self):
+        values = {"secret-option": "secret-value"}
+        cases = (None, {}, values, UserDict(values), MappingProxyType(values))
+        for options in cases:
+            with self.subTest(options=options):
+                table = DeltaTable(self.location, version=0, storage_options=options)
+                self.assertEqual(table.version, 0)
+                self.assertNotIn("secret", repr(table))
+        self.assertEqual(values, {"secret-option": "secret-value"})
+
+    def test_storage_options_requires_string_mapping(self):
+        cases = (
+            True,
+            1,
+            "secret-option",
+            [],
+            [("key", "value")],
+            {1: "value"},
+            {b"key": "value"},
+            {"key": 1},
+            {"key": None},
+            {"key": b"value"},
+            UserDict({"key": False}),
+        )
+        for options in cases:
+            with self.subTest(options=options), self.assertRaises(TypeError):
+                DeltaTable(self.location / "missing", storage_options=options)
+
+    def test_storage_options_are_forwarded_and_redacted(self):
+        # This invalid boolean fails during store construction, before any I/O.
+        values = {"allow_http": "secret-invalid-value"}
+        for options in (values, UserDict(values), MappingProxyType(values)):
+            with self.subTest(options=options):
+                with self.assertRaises(DeltaReaderError) as caught:
+                    DeltaTable("http://127.0.0.1:9/table", storage_options=options)
+                error = caught.exception
+                self.assertEqual(error.phase, "storage")
+                self.assertEqual(error.code, "storage_initialization")
+                for text in (str(error), repr(error), repr(error.args), repr(vars(error))):
+                    self.assertNotIn("secret", text)
 
     def test_location_requires_text(self):
         class BytesPath:

@@ -3,12 +3,12 @@
 use std::sync::Arc;
 
 use ::delta_arrow_reader::{
-    DeltaSnapshotSelection, DeltaTable as CoreDeltaTable, DeltaTableBuilder,
+    DeltaSnapshotSelection, DeltaStorageOptions, DeltaTable as CoreDeltaTable, DeltaTableBuilder,
 };
 use pyo3::{
     exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyBool, PyInt},
+    types::{PyBool, PyDict, PyInt, PyMapping},
 };
 use tokio::runtime::Runtime;
 
@@ -23,6 +23,7 @@ pyo3::create_exception!(
 ///
 /// With version=None, load the latest snapshot. Otherwise, version must be an
 /// integer from 0 to 2**64 - 1. Booleans are not accepted.
+/// storage_options accepts a mapping of string keys to string values.
 #[pyclass(module = "delta_arrow_reader", frozen)]
 struct DeltaTable {
     table: CoreDeltaTable,
@@ -33,11 +34,12 @@ struct DeltaTable {
 #[pymethods]
 impl DeltaTable {
     #[new]
-    #[pyo3(signature = (location, *, version=None))]
+    #[pyo3(signature = (location, *, version=None, storage_options=None))]
     fn new(
         py: Python<'_>,
         location: &Bound<'_, PyAny>,
         version: Option<&Bound<'_, PyInt>>,
+        storage_options: Option<&Bound<'_, PyMapping>>,
     ) -> PyResult<Self> {
         let location: String = py
             .import("os")?
@@ -59,7 +61,13 @@ impl DeltaTable {
                 DeltaSnapshotSelection::Version(version.extract::<u64>()?)
             }
         };
-        let builder = DeltaTableBuilder::new(location).with_snapshot_selection(selection);
+        let options: DeltaStorageOptions = match storage_options {
+            Some(options) => py.get_type::<PyDict>().call1((options,))?.extract()?,
+            None => DeltaStorageOptions::new(),
+        };
+        let builder = DeltaTableBuilder::new(location)
+            .with_snapshot_selection(selection)
+            .with_storage_options(options);
         let runtime = Arc::new(
             Runtime::new()
                 .map_err(|_| PyRuntimeError::new_err("failed to create the reader runtime"))?,

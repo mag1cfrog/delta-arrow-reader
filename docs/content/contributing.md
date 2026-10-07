@@ -21,6 +21,9 @@ cargo package --locked
 The Python package loads the latest Delta snapshot with `DeltaTable(location)`
 and exposes its read-only `version` property. Pass `version=0` to load a specific
 snapshot; omitting `version` or passing `None` loads the latest snapshot.
+Use `storage_options` to pass a mapping of string keys to string values to the
+storage backend. The constructor copies the mapping before loading.
+
 Run these commands from the repository root on Linux or macOS:
 
 ```console
