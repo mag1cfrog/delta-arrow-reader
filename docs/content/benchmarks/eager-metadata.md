@@ -1,8 +1,15 @@
-# Lazy and eager scan metadata
+# Compare lazy and eager metadata loading
 
-Use the provider-execution benchmark to compare repeated queries against one
-loaded table. Run a matched pair in which only the scan metadata mode and output
-path differ:
+Loading scan metadata once can reduce planning time for repeated queries, but
+it takes longer to initialize the table and retains metadata in memory. The
+useful comparison is the total time for a session, including initialization.
+
+The generated local fixture below compares lazy and eager metadata loading on
+the same table and queries. Change only the metadata mode and output path:
+
+## Run the comparison
+
+Run these commands from the repository root.
 
 ```bash
 cargo bench --locked -p delta-arrow-reader --bench reader --all-features -- \
@@ -37,6 +44,8 @@ cargo bench --locked -p delta-arrow-reader --bench reader --all-features -- \
   --provider-exec-parquet-full-file-read-threshold-bytes disabled \
   --provider-exec-repetitions 5
 ```
+
+## Read the measurements
 
 Each repetition loads and registers a new table, then runs the configured query
 three times against that same table. Keep `--seed`, the temporary directory,
@@ -78,41 +87,5 @@ the number of queries that reuse the loaded table. The local fixture above is a
 reproducible comparison of the two lifecycles; measure representative tables on
 their real storage before choosing a production default.
 
-## Representative real-S3 result
-
-On August 27, 2026, we also compared the modes against the latest snapshots of
-two production-shaped tables in S3. This used the direct Parquet backend through
-DataFusion, the unreleased eager-metadata implementation at commit `a6adb83`,
-16 target partitions, an 8,192-row batch size, and the same machine as the
-[reader comparison](../benchmarks.md#environment). One warmup pair was
-discarded. Four measured pairs alternated whether lazy or eager mode ran first;
-each isolated process loaded both tables once, then ran the HIP and schedule
-queries three times each.
-Table initialization and complete-session values below are medians across the
-four processes for each mode. Planning values are medians across the 12 query
-executions for each table and mode.
-
-| Measurement, median | Lazy | Eager | Difference |
-| --- | ---: | ---: | ---: |
-| Table initialization | 1.196 s | 4.089 s | +2.894 s |
-| Complete six-query session | 50.205 s | 42.451 s | -7.754 s (-15.4%) |
-| HIP physical planning | 2.097 s | 5.1 ms | -99.76% |
-| Schedule physical planning | 756 ms | 1.1 ms | -99.86% |
-
-Both modes returned the same results and performed the same Parquet I/O. Each
-HIP query returned 15,252,906 rows in 2,483 batches and read 505,642,366 bytes
-with 1,044 full-file GETs. Each schedule query returned 58,161 rows in 12
-batches and read 1,217,686 bytes with four range GETs and four full-file GETs.
-
-We measured memory separately because allocator state from a completed query can
-hide the retained-cache cost. Across six counterbalanced initialization-only
-pairs, loading both tables increased median resident memory from 38.5 MiB to
-68.7 MiB, a 30.2 MiB increase. Across four counterbalanced pairs that each ran
-one HIP and one schedule query, median peak resident memory increased from
-233.9 MiB to 248.9 MiB, a 15.0 MiB or 6.4% increase. These Linux measurements
-used `VmRSS` and `VmHWM` from `/proc/self/status`.
-
-This is a dated case study, not a universal performance promise or a pinned
-public fixture. The live table snapshots can advance. Cache memory scales with
-active-file metadata, statistics width, partition values, and deletion-vector
-metadata rather than table row count or total Parquet data size.
+For the public repeated-query results and the limits of that comparison, see
+[repeated queries](../../public/benchmarks/eager-metadata.md).

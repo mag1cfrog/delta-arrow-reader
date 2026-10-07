@@ -19,7 +19,7 @@ Delta Arrow Reader is a fast, memory-efficient Delta Lake reader.
   application, without running Spark.
 
 **Faster than delta-rs, DuckDB, Polars, and single-machine Spark** in all eight
-of our [filtered-read benchmarks](docs/content/benchmarks/selective-read-results.md),
+of our [filtered-read benchmarks](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/selective-read-results/),
 using TPC-H-derived tables with about 60 million rows each. Results compare median
 query times.
 
@@ -29,7 +29,7 @@ query times.
   <img alt="Five readers query Delta Lake tables with about 60 million rows derived from TPC-H. The four cases use deletion vectors to mark deleted rows, with matching rows grouped together or spread out in 416-column and 90-column tables. Dots show median seconds on a logarithmic axis; lower is faster. Labels also show each reader's time relative to Delta Arrow Reader." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/9c0fba18aa6ed8c6739e5dc0b74a1a081db1c241/docs/content/assets/selective-read-readme-light.svg" width="1000">
 </picture>
 
-<sub>Showing four cases using deletion vectors to mark deleted rows. <a href="docs/content/benchmarks/selective-read-results.md">Full results</a> include all eight cases, with and without deletion vectors.</sub>
+<sub>Showing four cases using deletion vectors to mark deleted rows. <a href="https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/selective-read-results/">Full results</a> include all eight cases, with and without deletion vectors.</sub>
 
 ## Get started
 
@@ -41,7 +41,7 @@ cargo add delta-arrow-reader --git https://github.com/mag1cfrog/delta-arrow-read
 cargo add tokio --features macros,rt-multi-thread
 ```
 
-[Python bindings are planned](https://mag1cfrog.github.io/delta-arrow-reader/project-direction/#python-can-proceed-independently); a Python package is not available yet.
+[Python bindings are planned](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/project-direction.md#python-can-proceed-independently); a Python package is not available yet.
 
 Read up to 100 rows from an existing Delta table:
 
@@ -68,3 +68,6 @@ Save this as `src/main.rs`, replace the table path, and run `cargo run`.
 [Read a table](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
 or [query with SQL](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/).
 See the [Rust API reference](https://docs.rs/delta-arrow-reader) for types and methods.
+
+For development and benchmark setup, see the
+[repository documentation](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/README.md).

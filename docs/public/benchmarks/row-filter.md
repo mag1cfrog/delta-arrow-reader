@@ -1,36 +1,35 @@
-# Parquet row-filter predicate decoding
+# Predicate decoding
 
-A Parquet row filter must decode the columns referenced by its predicate before
-it can decide which rows to keep. This benchmark compares decoding only those
-three columns with decoding the same columns plus 64 unrelated payload columns.
-Both cases apply the same predicate and return the same rows.
+To apply a `WHERE` condition, or predicate, a reader must decode the columns
+used by that condition. This benchmark compares decoding just those three
+columns with also decoding 64 columns that the filter does not use. Both cases
+apply the same filter and return the same rows.
 
 ## Result
 
-This five-repetition local run took place on August 28, 2026, using the same
-machine as the [reader comparison](../benchmarks.md#environment). Each value is
-the median across the five repetitions.
+This local run took place on August 28, 2026, on an AMD Ryzen 7 8845HS with
+8 cores, 16 threads, 27.95 GiB RAM, and NVMe storage, running Fedora 43 with
+Linux 6.19.14. Each value is the median of five repetitions.
 
-| Predicate projection | Predicate columns | Decode time | Peak RSS | Qualifying rows |
+| Filter input | Columns decoded | Decode time | Peak memory | Matching rows |
 | --- | ---: | ---: | ---: | ---: |
 | Narrow | 3 | 0.425 ms | 9.020 MiB | 16 |
 | Wide | 67 | 32.428 ms | 29.902 MiB | 16 |
 
-The wide case is the comparison baseline. It makes all 67 string columns
-available to the predicate even though the predicate references only three.
-Restricting the projection to those three columns reduced median predicate
-decoding time by 98.7%, from 32.428 ms to 0.425 ms. Median peak RSS fell by
-69.8%, from 29.902 MiB to 9.020 MiB. Put another way, the wide case took 76.3
-times as long and used 3.32 times the peak memory of the narrow case.
+Decoding only the three filter columns reduced median predicate decoding time
+by 98.7%, from 32.428 ms to 0.425 ms. Median peak memory fell by 69.8%, from
+29.902 MiB to 9.020 MiB. Peak memory is the process's resident set size (RSS),
+the memory it holds in RAM. One MiB is 1,048,576 bytes.
 
 Both cases returned the same 16 row IDs with a checksum of 122,880.
 
 ## Method
 
-The synthetic Parquet file contains four row groups of 4,096 rows, for 16,384
-rows in total. It has an integer `row_id`, three string columns used by the
-predicate, and 64 unrelated string payload columns. The predicate matches one
-row in every 1,024, and the output projection contains only `row_id`.
+The synthetic Parquet file contains 16,384 rows, split into four row groups
+(chunks of 4,096 rows). It has an integer `row_id`, three string columns used
+by the filter, and 64 unrelated string payload columns. The filter matches one
+row in every 1,024. The query's selected output columns, or output projection,
+contain only `row_id`.
 
 The narrow case gives the predicate its three referenced columns. The wide case
 gives it those columns and all 64 payload columns. Everything else, including
@@ -47,15 +46,15 @@ This benchmark isolates predicate decoding and evaluation. It does not measure
 an end-to-end Delta query, output-column decoding, or data-page I/O after rows
 have been selected.
 
-The wide predicate projection is an artificial control, not a delta-rs
-baseline. The [within-file controls](selective-read-within-file.md) compare
-all five readers with a narrow predicate and wide output on common inputs.
+The wide projection is an artificial control within Delta Arrow Reader. For
+a comparison with other readers, see [selective reads on wide tables](selective-read-results.md).
 
 ## Run the benchmark
 
 Run five repetitions and save the raw CSV output:
 
 ```bash
+mkdir -p target
 cargo bench --locked --bench row_filter -- --repetitions 5 \
   > target/row-filter.csv
 ```

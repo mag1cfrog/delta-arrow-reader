@@ -8,6 +8,7 @@
     "clippy.toml",
     "README.md",
     "docs/content/**/*.md",
+    "docs/public/**/*.md",
     "src/**",
     "tests/**",
     "benches/**"
