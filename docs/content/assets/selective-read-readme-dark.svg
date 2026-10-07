@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="824" viewBox="0 0 1200 824" role="img" aria-labelledby="title description">
-<title id="title">SF10 selective-read query times</title>
-<desc id="description">Eight TPC-H-derived cases compare five readers. Each group follows legend order. Bars show median seconds to open a table and consume the full result over five runs. Lower is faster. Both columns use linear axes starting at zero, with different scales: 40 seconds on the left and 200 on the right. Startup is excluded.</desc>
+<title id="title">TPC-H-derived selective-read query times</title>
+<desc id="description">Eight cases compare five readers on 416-column and 90-column Delta tables derived from TPC-H lineitem at SF10. Row labels describe stored table columns and matching-row layout. Each group follows legend order. Bars show median seconds to open a table and consume the full result over five runs. Lower is faster. Both columns use linear axes starting at zero, with different scales: 40 seconds on the left and 200 on the right. Startup is excluded.</desc>
 <style>text{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}</style>
 <defs><linearGradient id="page" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b0d10"/><stop offset="1" stop-color="#11151a"/></linearGradient></defs>
 <rect width="1200" height="824" fill="url(#page)"/>
-<text x="44" y="32" fill="#98a2b0" font-size="12" font-weight="700" letter-spacing="2">SELECTIVE DELTA LAKE READS</text>
+<text x="44" y="32" fill="#98a2b0" font-size="12" font-weight="700" letter-spacing="2">TPC-H-DERIVED DATA (SF10) | SELECTIVE DELTA LAKE READS</text>
 <text x="44" y="70" fill="#f0f2f5" font-size="32" font-weight="700">Fastest across eight workloads</text>
 <text x="44" y="99" fill="#98a2b0" font-size="16">Median query time over five runs, seconds. Lower is faster.</text>
 <rect x="44" y="121" width="10" height="10" rx="3" fill="#7dd3fc"/>
@@ -17,6 +17,7 @@
 <text x="643" y="131" fill="#f0f2f5" font-size="14">Polars</text>
 <rect x="780" y="121" width="10" height="10" rx="3" fill="#a5afba"/>
 <text x="798" y="131" fill="#f0f2f5" font-size="14">Spark (single machine)</text>
+<text x="44" y="197" fill="#98a2b0" font-size="13">Table / matches</text>
 <text x="180" y="172" fill="#f0f2f5" font-size="18" font-weight="600">Without deletion vectors</text>
 <line x1="180.0" y1="206" x2="180.0" y2="756" stroke="#29303a" stroke-dasharray="3 6"/>
 <text x="180.0" y="197" text-anchor="middle" fill="#98a2b0" font-size="13">0 s</text>
@@ -28,57 +29,58 @@
 <text x="426.0" y="197" text-anchor="middle" fill="#98a2b0" font-size="13">30 s</text>
 <line x1="508.0" y1="206" x2="508.0" y2="756" stroke="#29303a" stroke-dasharray="3 6"/>
 <text x="508.0" y="197" text-anchor="middle" fill="#98a2b0" font-size="13">40 s</text>
-<text x="44" y="263" fill="#f0f2f5" font-size="18" font-weight="500">Q2</text>
+<text x="44" y="263" fill="#f0f2f5" font-size="18" font-weight="500">416 columns</text>
 <text x="44" y="285" fill="#98a2b0" font-size="14">Localized</text>
-<rect x="180" y="220" width="45.88" height="14" rx="5" fill="#7dd3fc"><title>production.q2.localized: Delta Arrow Reader, 5.595 s</title></rect>
+<rect x="180" y="220" width="45.88" height="14" rx="5" fill="#7dd3fc"><title>416-column table, localized, without deletion vectors: Delta Arrow Reader, 5.595 s</title></rect>
 <text x="233.88" y="232" fill="#f0f2f5" font-size="13">5.595 s</text>
-<rect x="180" y="242" width="94.99" height="14" rx="5" fill="#53606e"><title>production.q2.localized: delta-rs, 11.584 s</title></rect>
+<rect x="180" y="242" width="94.99" height="14" rx="5" fill="#53606e"><title>416-column table, localized, without deletion vectors: delta-rs, 11.584 s</title></rect>
 <text x="282.99" y="254" fill="#98a2b0" font-size="13">11.584 s</text>
-<rect x="180" y="264" width="105.42" height="14" rx="5" fill="#697786"><title>production.q2.localized: DuckDB, 12.856 s</title></rect>
+<rect x="180" y="264" width="105.42" height="14" rx="5" fill="#697786"><title>416-column table, localized, without deletion vectors: DuckDB, 12.856 s</title></rect>
 <text x="293.42" y="276" fill="#98a2b0" font-size="13">12.856 s</text>
-<rect x="180" y="286" width="93.92" height="14" rx="5" fill="#83909e"><title>production.q2.localized: Polars, 11.454 s</title></rect>
+<rect x="180" y="286" width="93.92" height="14" rx="5" fill="#83909e"><title>416-column table, localized, without deletion vectors: Polars, 11.454 s</title></rect>
 <text x="281.92" y="298" fill="#98a2b0" font-size="13">11.454 s</text>
-<rect x="180" y="308" width="134.12" height="14" rx="5" fill="#a5afba"><title>production.q2.localized: Spark (single machine), 16.357 s</title></rect>
+<rect x="180" y="308" width="134.12" height="14" rx="5" fill="#a5afba"><title>416-column table, localized, without deletion vectors: Spark (single machine), 16.357 s</title></rect>
 <text x="322.12" y="320" fill="#98a2b0" font-size="13">16.357 s</text>
 <line x1="44" y1="345" x2="572" y2="345" stroke="#29303a" stroke-dasharray="4 7"/>
-<text x="44" y="403" fill="#f0f2f5" font-size="18" font-weight="500">Q2</text>
+<text x="44" y="403" fill="#f0f2f5" font-size="18" font-weight="500">416 columns</text>
 <text x="44" y="425" fill="#98a2b0" font-size="14">Scattered</text>
-<rect x="180" y="360" width="93.30" height="14" rx="5" fill="#7dd3fc"><title>production.q2.scattered: Delta Arrow Reader, 11.378 s</title></rect>
+<rect x="180" y="360" width="93.30" height="14" rx="5" fill="#7dd3fc"><title>416-column table, scattered, without deletion vectors: Delta Arrow Reader, 11.378 s</title></rect>
 <text x="281.30" y="372" fill="#f0f2f5" font-size="13">11.378 s</text>
-<rect x="180" y="382" width="96.54" height="14" rx="5" fill="#53606e"><title>production.q2.scattered: delta-rs, 11.773 s</title></rect>
+<rect x="180" y="382" width="96.54" height="14" rx="5" fill="#53606e"><title>416-column table, scattered, without deletion vectors: delta-rs, 11.773 s</title></rect>
 <text x="284.54" y="394" fill="#98a2b0" font-size="13">11.773 s</text>
-<rect x="180" y="404" width="106.85" height="14" rx="5" fill="#697786"><title>production.q2.scattered: DuckDB, 13.031 s</title></rect>
+<rect x="180" y="404" width="106.85" height="14" rx="5" fill="#697786"><title>416-column table, scattered, without deletion vectors: DuckDB, 13.031 s</title></rect>
 <text x="294.85" y="416" fill="#98a2b0" font-size="13">13.031 s</text>
-<rect x="180" y="426" width="95.16" height="14" rx="5" fill="#83909e"><title>production.q2.scattered: Polars, 11.605 s</title></rect>
+<rect x="180" y="426" width="95.16" height="14" rx="5" fill="#83909e"><title>416-column table, scattered, without deletion vectors: Polars, 11.605 s</title></rect>
 <text x="283.16" y="438" fill="#98a2b0" font-size="13">11.605 s</text>
-<rect x="180" y="448" width="162.92" height="14" rx="5" fill="#a5afba"><title>production.q2.scattered: Spark (single machine), 19.868 s</title></rect>
+<rect x="180" y="448" width="162.92" height="14" rx="5" fill="#a5afba"><title>416-column table, scattered, without deletion vectors: Spark (single machine), 19.868 s</title></rect>
 <text x="350.92" y="460" fill="#98a2b0" font-size="13">19.868 s</text>
 <line x1="44" y1="485" x2="572" y2="485" stroke="#29303a" stroke-dasharray="4 7"/>
-<text x="44" y="543" fill="#f0f2f5" font-size="18" font-weight="500">Q4</text>
+<text x="44" y="543" fill="#f0f2f5" font-size="18" font-weight="500">90 columns</text>
 <text x="44" y="565" fill="#98a2b0" font-size="14">Localized</text>
-<rect x="180" y="500" width="57.32" height="14" rx="5" fill="#7dd3fc"><title>production.q4.localized: Delta Arrow Reader, 6.990 s</title></rect>
+<rect x="180" y="500" width="57.32" height="14" rx="5" fill="#7dd3fc"><title>90-column table, localized, without deletion vectors: Delta Arrow Reader, 6.990 s</title></rect>
 <text x="245.32" y="512" fill="#f0f2f5" font-size="13">6.990 s</text>
-<rect x="180" y="522" width="188.32" height="14" rx="5" fill="#53606e"><title>production.q4.localized: delta-rs, 22.966 s</title></rect>
+<rect x="180" y="522" width="188.32" height="14" rx="5" fill="#53606e"><title>90-column table, localized, without deletion vectors: delta-rs, 22.966 s</title></rect>
 <text x="376.32" y="534" fill="#98a2b0" font-size="13">22.966 s</text>
-<rect x="180" y="544" width="195.29" height="14" rx="5" fill="#697786"><title>production.q4.localized: DuckDB, 23.816 s</title></rect>
+<rect x="180" y="544" width="195.29" height="14" rx="5" fill="#697786"><title>90-column table, localized, without deletion vectors: DuckDB, 23.816 s</title></rect>
 <text x="383.29" y="556" fill="#98a2b0" font-size="13">23.816 s</text>
-<rect x="180" y="566" width="187.46" height="14" rx="5" fill="#83909e"><title>production.q4.localized: Polars, 22.861 s</title></rect>
+<rect x="180" y="566" width="187.46" height="14" rx="5" fill="#83909e"><title>90-column table, localized, without deletion vectors: Polars, 22.861 s</title></rect>
 <text x="375.46" y="578" fill="#98a2b0" font-size="13">22.861 s</text>
-<rect x="180" y="588" width="134.75" height="14" rx="5" fill="#a5afba"><title>production.q4.localized: Spark (single machine), 16.433 s</title></rect>
+<rect x="180" y="588" width="134.75" height="14" rx="5" fill="#a5afba"><title>90-column table, localized, without deletion vectors: Spark (single machine), 16.433 s</title></rect>
 <text x="322.75" y="600" fill="#98a2b0" font-size="13">16.433 s</text>
 <line x1="44" y1="625" x2="572" y2="625" stroke="#29303a" stroke-dasharray="4 7"/>
-<text x="44" y="683" fill="#f0f2f5" font-size="18" font-weight="500">Q4</text>
+<text x="44" y="683" fill="#f0f2f5" font-size="18" font-weight="500">90 columns</text>
 <text x="44" y="705" fill="#98a2b0" font-size="14">Scattered</text>
-<rect x="180" y="640" width="188.18" height="14" rx="5" fill="#7dd3fc"><title>production.q4.scattered: Delta Arrow Reader, 22.949 s</title></rect>
+<rect x="180" y="640" width="188.18" height="14" rx="5" fill="#7dd3fc"><title>90-column table, scattered, without deletion vectors: Delta Arrow Reader, 22.949 s</title></rect>
 <text x="376.18" y="652" fill="#f0f2f5" font-size="13">22.949 s</text>
-<rect x="180" y="662" width="192.46" height="14" rx="5" fill="#53606e"><title>production.q4.scattered: delta-rs, 23.471 s</title></rect>
+<rect x="180" y="662" width="192.46" height="14" rx="5" fill="#53606e"><title>90-column table, scattered, without deletion vectors: delta-rs, 23.471 s</title></rect>
 <text x="380.46" y="674" fill="#98a2b0" font-size="13">23.471 s</text>
-<rect x="180" y="684" width="199.98" height="14" rx="5" fill="#697786"><title>production.q4.scattered: DuckDB, 24.388 s</title></rect>
+<rect x="180" y="684" width="199.98" height="14" rx="5" fill="#697786"><title>90-column table, scattered, without deletion vectors: DuckDB, 24.388 s</title></rect>
 <text x="387.98" y="696" fill="#98a2b0" font-size="13">24.388 s</text>
-<rect x="180" y="706" width="188.82" height="14" rx="5" fill="#83909e"><title>production.q4.scattered: Polars, 23.027 s</title></rect>
+<rect x="180" y="706" width="188.82" height="14" rx="5" fill="#83909e"><title>90-column table, scattered, without deletion vectors: Polars, 23.027 s</title></rect>
 <text x="376.82" y="718" fill="#98a2b0" font-size="13">23.027 s</text>
-<rect x="180" y="728" width="257.94" height="14" rx="5" fill="#a5afba"><title>production.q4.scattered: Spark (single machine), 31.456 s</title></rect>
+<rect x="180" y="728" width="257.94" height="14" rx="5" fill="#a5afba"><title>90-column table, scattered, without deletion vectors: Spark (single machine), 31.456 s</title></rect>
 <text x="445.94" y="740" fill="#98a2b0" font-size="13">31.456 s</text>
+<text x="628" y="197" fill="#98a2b0" font-size="13">Table / matches</text>
 <text x="764" y="172" fill="#f0f2f5" font-size="18" font-weight="600">With deletion vectors</text>
 <line x1="764.0" y1="206" x2="764.0" y2="756" stroke="#29303a" stroke-dasharray="3 6"/>
 <text x="764.0" y="197" text-anchor="middle" fill="#98a2b0" font-size="13">0 s</text>
@@ -90,56 +92,56 @@
 <text x="1010.0" y="197" text-anchor="middle" fill="#98a2b0" font-size="13">150 s</text>
 <line x1="1092.0" y1="206" x2="1092.0" y2="756" stroke="#29303a" stroke-dasharray="3 6"/>
 <text x="1092.0" y="197" text-anchor="middle" fill="#98a2b0" font-size="13">200 s</text>
-<text x="628" y="263" fill="#f0f2f5" font-size="18" font-weight="500">Q2</text>
+<text x="628" y="263" fill="#f0f2f5" font-size="18" font-weight="500">416 columns</text>
 <text x="628" y="285" fill="#98a2b0" font-size="14">Localized</text>
-<rect x="764" y="220" width="10.14" height="14" rx="5" fill="#7dd3fc"><title>production.q2.localized.dv: Delta Arrow Reader, 6.181 s</title></rect>
+<rect x="764" y="220" width="10.14" height="14" rx="5" fill="#7dd3fc"><title>416-column table, localized, with deletion vectors: Delta Arrow Reader, 6.181 s</title></rect>
 <text x="782.14" y="232" fill="#f0f2f5" font-size="13">6.181 s</text>
-<rect x="764" y="242" width="117.36" height="14" rx="5" fill="#53606e"><title>production.q2.localized.dv: delta-rs, 71.563 s</title></rect>
+<rect x="764" y="242" width="117.36" height="14" rx="5" fill="#53606e"><title>416-column table, localized, with deletion vectors: delta-rs, 71.563 s</title></rect>
 <text x="889.36" y="254" fill="#98a2b0" font-size="13">71.563 s</text>
-<rect x="764" y="264" width="24.55" height="14" rx="5" fill="#697786"><title>production.q2.localized.dv: DuckDB, 14.968 s</title></rect>
+<rect x="764" y="264" width="24.55" height="14" rx="5" fill="#697786"><title>416-column table, localized, with deletion vectors: DuckDB, 14.968 s</title></rect>
 <text x="796.55" y="276" fill="#98a2b0" font-size="13">14.968 s</text>
-<rect x="764" y="286" width="108.81" height="14" rx="5" fill="#83909e"><title>production.q2.localized.dv: Polars, 66.348 s</title></rect>
+<rect x="764" y="286" width="108.81" height="14" rx="5" fill="#83909e"><title>416-column table, localized, with deletion vectors: Polars, 66.348 s</title></rect>
 <text x="880.81" y="298" fill="#98a2b0" font-size="13">66.348 s</text>
-<rect x="764" y="308" width="31.27" height="14" rx="5" fill="#a5afba"><title>production.q2.localized.dv: Spark (single machine), 19.066 s</title></rect>
+<rect x="764" y="308" width="31.27" height="14" rx="5" fill="#a5afba"><title>416-column table, localized, with deletion vectors: Spark (single machine), 19.066 s</title></rect>
 <text x="803.27" y="320" fill="#98a2b0" font-size="13">19.066 s</text>
 <line x1="628" y1="345" x2="1156" y2="345" stroke="#29303a" stroke-dasharray="4 7"/>
-<text x="628" y="403" fill="#f0f2f5" font-size="18" font-weight="500">Q2</text>
+<text x="628" y="403" fill="#f0f2f5" font-size="18" font-weight="500">416 columns</text>
 <text x="628" y="425" fill="#98a2b0" font-size="14">Scattered</text>
-<rect x="764" y="360" width="19.63" height="14" rx="5" fill="#7dd3fc"><title>production.q2.scattered.dv: Delta Arrow Reader, 11.968 s</title></rect>
+<rect x="764" y="360" width="19.63" height="14" rx="5" fill="#7dd3fc"><title>416-column table, scattered, with deletion vectors: Delta Arrow Reader, 11.968 s</title></rect>
 <text x="791.63" y="372" fill="#f0f2f5" font-size="13">11.968 s</text>
-<rect x="764" y="382" width="118.22" height="14" rx="5" fill="#53606e"><title>production.q2.scattered.dv: delta-rs, 72.086 s</title></rect>
+<rect x="764" y="382" width="118.22" height="14" rx="5" fill="#53606e"><title>416-column table, scattered, with deletion vectors: delta-rs, 72.086 s</title></rect>
 <text x="890.22" y="394" fill="#98a2b0" font-size="13">72.086 s</text>
-<rect x="764" y="404" width="24.44" height="14" rx="5" fill="#697786"><title>production.q2.scattered.dv: DuckDB, 14.900 s</title></rect>
+<rect x="764" y="404" width="24.44" height="14" rx="5" fill="#697786"><title>416-column table, scattered, with deletion vectors: DuckDB, 14.900 s</title></rect>
 <text x="796.44" y="416" fill="#98a2b0" font-size="13">14.900 s</text>
-<rect x="764" y="426" width="108.71" height="14" rx="5" fill="#83909e"><title>production.q2.scattered.dv: Polars, 66.286 s</title></rect>
+<rect x="764" y="426" width="108.71" height="14" rx="5" fill="#83909e"><title>416-column table, scattered, with deletion vectors: Polars, 66.286 s</title></rect>
 <text x="880.71" y="438" fill="#98a2b0" font-size="13">66.286 s</text>
-<rect x="764" y="448" width="34.98" height="14" rx="5" fill="#a5afba"><title>production.q2.scattered.dv: Spark (single machine), 21.332 s</title></rect>
+<rect x="764" y="448" width="34.98" height="14" rx="5" fill="#a5afba"><title>416-column table, scattered, with deletion vectors: Spark (single machine), 21.332 s</title></rect>
 <text x="806.98" y="460" fill="#98a2b0" font-size="13">21.332 s</text>
 <line x1="628" y1="485" x2="1156" y2="485" stroke="#29303a" stroke-dasharray="4 7"/>
-<text x="628" y="543" fill="#f0f2f5" font-size="18" font-weight="500">Q4</text>
+<text x="628" y="543" fill="#f0f2f5" font-size="18" font-weight="500">90 columns</text>
 <text x="628" y="565" fill="#98a2b0" font-size="14">Localized</text>
-<rect x="764" y="500" width="12.02" height="14" rx="5" fill="#7dd3fc"><title>production.q4.localized.dv: Delta Arrow Reader, 7.329 s</title></rect>
+<rect x="764" y="500" width="12.02" height="14" rx="5" fill="#7dd3fc"><title>90-column table, localized, with deletion vectors: Delta Arrow Reader, 7.329 s</title></rect>
 <text x="784.02" y="512" fill="#f0f2f5" font-size="13">7.329 s</text>
-<rect x="764" y="522" width="292.88" height="14" rx="5" fill="#53606e"><title>production.q4.localized.dv: delta-rs, 178.588 s</title></rect>
+<rect x="764" y="522" width="292.88" height="14" rx="5" fill="#53606e"><title>90-column table, localized, with deletion vectors: delta-rs, 178.588 s</title></rect>
 <text x="1064.88" y="534" fill="#98a2b0" font-size="13">178.588 s</text>
-<rect x="764" y="544" width="41.15" height="14" rx="5" fill="#697786"><title>production.q4.localized.dv: DuckDB, 25.091 s</title></rect>
+<rect x="764" y="544" width="41.15" height="14" rx="5" fill="#697786"><title>90-column table, localized, with deletion vectors: DuckDB, 25.091 s</title></rect>
 <text x="813.15" y="556" fill="#98a2b0" font-size="13">25.091 s</text>
-<rect x="764" y="566" width="273.24" height="14" rx="5" fill="#83909e"><title>production.q4.localized.dv: Polars, 166.613 s</title></rect>
+<rect x="764" y="566" width="273.24" height="14" rx="5" fill="#83909e"><title>90-column table, localized, with deletion vectors: Polars, 166.613 s</title></rect>
 <text x="1045.24" y="578" fill="#98a2b0" font-size="13">166.613 s</text>
-<rect x="764" y="588" width="32.51" height="14" rx="5" fill="#a5afba"><title>production.q4.localized.dv: Spark (single machine), 19.822 s</title></rect>
+<rect x="764" y="588" width="32.51" height="14" rx="5" fill="#a5afba"><title>90-column table, localized, with deletion vectors: Spark (single machine), 19.822 s</title></rect>
 <text x="804.51" y="600" fill="#98a2b0" font-size="13">19.822 s</text>
 <line x1="628" y1="625" x2="1156" y2="625" stroke="#29303a" stroke-dasharray="4 7"/>
-<text x="628" y="683" fill="#f0f2f5" font-size="18" font-weight="500">Q4</text>
+<text x="628" y="683" fill="#f0f2f5" font-size="18" font-weight="500">90 columns</text>
 <text x="628" y="705" fill="#98a2b0" font-size="14">Scattered</text>
-<rect x="764" y="640" width="38.16" height="14" rx="5" fill="#7dd3fc"><title>production.q4.scattered.dv: Delta Arrow Reader, 23.267 s</title></rect>
+<rect x="764" y="640" width="38.16" height="14" rx="5" fill="#7dd3fc"><title>90-column table, scattered, with deletion vectors: Delta Arrow Reader, 23.267 s</title></rect>
 <text x="810.16" y="652" fill="#f0f2f5" font-size="13">23.267 s</text>
-<rect x="764" y="662" width="294.75" height="14" rx="5" fill="#53606e"><title>production.q4.scattered.dv: delta-rs, 179.729 s</title></rect>
+<rect x="764" y="662" width="294.75" height="14" rx="5" fill="#53606e"><title>90-column table, scattered, with deletion vectors: delta-rs, 179.729 s</title></rect>
 <text x="1066.75" y="674" fill="#98a2b0" font-size="13">179.729 s</text>
-<rect x="764" y="684" width="41.98" height="14" rx="5" fill="#697786"><title>production.q4.scattered.dv: DuckDB, 25.600 s</title></rect>
+<rect x="764" y="684" width="41.98" height="14" rx="5" fill="#697786"><title>90-column table, scattered, with deletion vectors: DuckDB, 25.600 s</title></rect>
 <text x="813.98" y="696" fill="#98a2b0" font-size="13">25.600 s</text>
-<rect x="764" y="706" width="274.00" height="14" rx="5" fill="#83909e"><title>production.q4.scattered.dv: Polars, 167.075 s</title></rect>
+<rect x="764" y="706" width="274.00" height="14" rx="5" fill="#83909e"><title>90-column table, scattered, with deletion vectors: Polars, 167.075 s</title></rect>
 <text x="1046.00" y="718" fill="#98a2b0" font-size="13">167.075 s</text>
-<rect x="764" y="728" width="53.26" height="14" rx="5" fill="#a5afba"><title>production.q4.scattered.dv: Spark (single machine), 32.477 s</title></rect>
+<rect x="764" y="728" width="53.26" height="14" rx="5" fill="#a5afba"><title>90-column table, scattered, with deletion vectors: Spark (single machine), 32.477 s</title></rect>
 <text x="825.26" y="740" fill="#98a2b0" font-size="13">32.477 s</text>
 <text x="44" y="780" fill="#98a2b0" font-size="13">8 logical CPUs | 8 GiB per reader | Emulated object storage: 200 ms +/-20 ms, shared 150 Mbps</text>
 <text x="44" y="802" fill="#98a2b0" font-size="13">Open table + full result; startup excluded. Linear scales differ by column. TPC-H-derived data, not a TPC-H score.</text>

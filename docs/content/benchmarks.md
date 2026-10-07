@@ -1,7 +1,7 @@
 # Benchmarks
 
-The [SF10 selective-read results](benchmarks/selective-read-results.md) cover
-eight public-data cases with delta-rs, DuckDB, Polars and Spark. That report is
+The [TPC-H-derived selective-read results](benchmarks/selective-read-results.md) cover
+eight SF10 cases with delta-rs, DuckDB, Polars and Spark. That report is
 under review. This page retains the earlier four-workload local MinIO comparison
 and its original reader versions.
 

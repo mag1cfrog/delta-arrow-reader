@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "spark")
 LABELS = ("Delta Arrow Reader", "delta-rs", "DuckDB", "Polars", "Spark (single machine)")
 LAYOUTS = ("q2.localized", "q2.scattered", "q4.localized", "q4.scattered")
+TABLE_COLUMNS = {"q2": 416, "q4": 90}
 PANELS = (("", "Without deletion vectors", 40), (".dv", "With deletion vectors", 200))
 
 
@@ -41,12 +42,12 @@ def render(theme_name, values):
         "dark": ("#53606e", "#697786", "#83909e", "#a5afba"),
     }[theme_name]
     parts = [f'''<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="824" viewBox="0 0 1200 824" role="img" aria-labelledby="title description">
-<title id="title">SF10 selective-read query times</title>
-<desc id="description">Eight TPC-H-derived cases compare five readers. Each group follows legend order. Bars show median seconds to open a table and consume the full result over five runs. Lower is faster. Both columns use linear axes starting at zero, with different scales: 40 seconds on the left and 200 on the right. Startup is excluded.</desc>
+<title id="title">TPC-H-derived selective-read query times</title>
+<desc id="description">Eight cases compare five readers on 416-column and 90-column Delta tables derived from TPC-H lineitem at SF10. Row labels describe stored table columns and matching-row layout. Each group follows legend order. Bars show median seconds to open a table and consume the full result over five runs. Lower is faster. Both columns use linear axes starting at zero, with different scales: 40 seconds on the left and 200 on the right. Startup is excluded.</desc>
 <style>text{{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}}</style>
 <defs><linearGradient id="page" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="{theme['background']}"/><stop offset="1" stop-color="{theme['background_end']}"/></linearGradient></defs>
 <rect width="1200" height="824" fill="url(#page)"/>
-<text x="44" y="32" fill="{theme['muted']}" font-size="12" font-weight="700" letter-spacing="2">SELECTIVE DELTA LAKE READS</text>
+<text x="44" y="32" fill="{theme['muted']}" font-size="12" font-weight="700" letter-spacing="2">TPC-H-DERIVED DATA (SF10) | SELECTIVE DELTA LAKE READS</text>
 <text x="44" y="70" fill="{theme['text']}" font-size="32" font-weight="700">Fastest across eight workloads</text>
 <text x="44" y="99" fill="{theme['muted']}" font-size="16">Median query time over five runs, seconds. Lower is faster.</text>''']
     for x, label, color in zip((44, 300, 465, 625, 780), LABELS, colors, strict=True):
@@ -57,6 +58,7 @@ def render(theme_name, values):
         left = 44 + column * 584
         plot_left = left + 136
         plot_width = 328
+        parts.append(f'<text x="{left}" y="197" fill="{theme["muted"]}" font-size="13">Table / matches</text>')
         parts.append(f'<text x="{plot_left}" y="172" fill="{theme["text"]}" font-size="18" font-weight="600">{heading}</text>')
         for tick in range(5):
             x = plot_left + plot_width * tick / 4
@@ -66,10 +68,11 @@ def render(theme_name, values):
             case = f"production.{layout}{suffix}"
             top = 220 + row * 140
             query, arrangement = layout.split(".")
+            case_label = f"{TABLE_COLUMNS[query]}-column table, {arrangement}, {heading.lower()}"
             assert all(values[case, READERS[0]] < values[case, reader] for reader in READERS[1:]), f"Headline does not match {case}"
             if row:
                 parts.append(f'<line x1="{left}" y1="{top - 15}" x2="{left + 528}" y2="{top - 15}" stroke="{theme["grid"]}" stroke-dasharray="4 7"/>')
-            parts.append(f'''<text x="{left}" y="{top + 43}" fill="{theme['text']}" font-size="18" font-weight="500">{query.upper()}</text>
+            parts.append(f'''<text x="{left}" y="{top + 43}" fill="{theme['text']}" font-size="18" font-weight="500">{TABLE_COLUMNS[query]} columns</text>
 <text x="{left}" y="{top + 65}" fill="{theme['muted']}" font-size="14">{arrangement.capitalize()}</text>''')
             for index, (reader, label, color) in enumerate(zip(READERS, LABELS, colors, strict=True)):
                 value = values[case, reader]
@@ -77,7 +80,7 @@ def render(theme_name, values):
                 width = value / maximum * plot_width
                 y = top + index * 22
                 label_color = theme["text"] if index == 0 else theme["muted"]
-                parts.append(f'''<rect x="{plot_left}" y="{y}" width="{width:.2f}" height="14" rx="5" fill="{color}"><title>{case}: {label}, {value:.3f} s</title></rect>
+                parts.append(f'''<rect x="{plot_left}" y="{y}" width="{width:.2f}" height="14" rx="5" fill="{color}"><title>{case_label}: {label}, {value:.3f} s</title></rect>
 <text x="{plot_left + width + 8:.2f}" y="{y + 12}" fill="{label_color}" font-size="13">{value:.3f} s</text>''')
     parts.append(f'''<text x="44" y="780" fill="{theme['muted']}" font-size="13">8 logical CPUs | 8 GiB per reader | Emulated object storage: 200 ms +/-20 ms, shared 150 Mbps</text>
 <text x="44" y="802" fill="{theme['muted']}" font-size="13">Open table + full result; startup excluded. Linear scales differ by column. TPC-H-derived data, not a TPC-H score.</text>
