@@ -8,6 +8,11 @@ or a TPC-H score.
 
 ## Reproduce a run
 
+The [evidence release](https://github.com/mag1cfrog/delta-arrow-reader/releases/tag/selective-read-benchmarks-2026-10-07)
+contains the complete recorded campaigns, reference outputs, frozen sources,
+and checksums. [Verify the archive or run a new campaign](EVIDENCE.md).
+The archive audit regenerates the published report and CSVs without the full tables.
+
 Run commands from the repository root and keep generated tables outside Git.
 The recorded runs use pinned inputs, reader builds, and execution contracts.
 Follow the version and hash requirements in each guide.
@@ -21,11 +26,15 @@ Follow the version and hash requirements in each guide.
 4. [Run the comparison](../../docs/content/benchmarks/selective-read-campaign.md),
    then [generate and audit the report](../../docs/content/benchmarks/selective-read-production-report.md).
 
-The complete raw campaign archive and a single clean-checkout reproduction
-package are not yet published. The linked guides describe the individual stages;
-the report's CSV and provenance downloads preserve the published measurements.
+The linked guides describe each preparation stage. The reproduction guide pins
+the reader and harness revisions and records the extent of delivery checks.
 
 ## Workload definitions
+
+These contracts preserve earlier revisions as well as the final comparison.
+Older Daft references, page settings, and pending-work notes are historical;
+use the [reproduction guide](EVIDENCE.md) and public report for revision 6.
+Keep the frozen documents unchanged when checking recorded hashes.
 
 - [Table layouts and queries](../../docs/content/benchmarks/selective-read-production-shapes.md)
 - [Execution contract](../../docs/content/benchmarks/selective-read-production-workloads.md)

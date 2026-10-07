@@ -255,7 +255,14 @@ links the commands for generating inputs, preparing readers, validating results,
 and running comparisons. Recorded runs require their pinned harness and input
 hashes. A new run with current source has its own identities.
 
-The complete raw campaign directories, including exact-value certificates,
-request captures, and native plans, are not yet published. A single
-clean-checkout reproduction package is also pending; the CSV downloads alone
-are not the full audit archive.
+The [complete evidence archive](https://github.com/mag1cfrog/delta-arrow-reader/releases/tag/selective-read-benchmarks-2026-10-07)
+includes raw campaigns, exact-value certificates and exports, request captures,
+native plans, frozen sources, fixture metadata, and checksums. Its audit regenerates
+the published report and all CSVs byte for byte and rechecks 120 retained query
+outputs against the references. Bulk tables and installed engines are excluded.
+
+The [reproduction guide](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/benches/selective_read/EVIDENCE.md)
+provides archive verification and pinned commands for new runs. Delivery checks
+also exercised fresh small fixtures and all five native readers, reusing the
+recorded engine binaries. No new full SF10 timing campaign was run for packaging;
+the archived report and provenance keep their original publication-status fields.
