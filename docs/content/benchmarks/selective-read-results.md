@@ -240,8 +240,9 @@ data allowance. New timing runs remain manual.
 
 ## Regenerate the README chart
 
-The light and dark SVGs use the open-query medians in the
-[summary extract](selective-read-summary.csv):
+The light and dark SVGs show the four deletion-vector cases using open-query
+medians from the [summary extract](selective-read-summary.csv). The tables above
+include all eight cases. Regenerate the README charts with:
 
 ```console
 python -B benches/render_selective_read_chart.py
