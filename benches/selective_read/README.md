@@ -45,10 +45,12 @@ Keep the frozen documents unchanged when checking recorded hashes.
 - [Validation as storage warmup](../../docs/content/benchmarks/selective-read-gate-warmup.md)
 - [Diagnostics during validation](../../docs/content/benchmarks/selective-read-gate-diagnostics.md)
 
-Raw case IDs use `q2` for the 416-column table and `q4` for the 90-column
-table. Keep those IDs, document bytes, and source paths unchanged when replaying
-recorded runs: the harness binds them by hash. Use table width, match layout,
-and deletion-vector state as names in user-facing reports.
+Frozen case IDs use `production.q2.*` for the 416-column table and
+`production.q4.*` for the 90-column table. The `localized` layout is called
+"grouped" in the public reports; `scattered` keeps the same name. Keep these
+IDs, document bytes, and source paths unchanged when replaying recorded runs:
+the harness binds them by hash. Use table width, match layout, and
+deletion-vector state as names in current explanations.
 
 ## Additional experiments
 
