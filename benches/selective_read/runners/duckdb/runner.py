@@ -15,8 +15,9 @@ import pyarrow as pa
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from run import comparison_identity, digest, query_count, save
-from python_common import checkpoint, correctness, event, json_hash, observation, require, runtime_metadata, sha, validate
+from run import digest, query_count, save
+from python_common import (checked_build, checkpoint, correctness, event, observation, reader_identity,
+                           require, runner_cli, runtime_metadata, timing_totals, validate, write_observation)
 
 CONFIG = {"threads": 8, "memory_limit": "4GiB", "enable_external_file_cache": False,
           "autoload_known_extensions": False, "autoinstall_known_extensions": False,
@@ -180,12 +181,7 @@ def execute(connection, request, output, record):
             query["physical_plan"] = name
         record["queries"].append(query)
     if timed:
-        durations = [q["completion_ns"] for q in record["queries"]]
-        if reuse:
-            record["initialization_plus_query1_ns"] = initialization + durations[0]
-            record["initialization_plus_all_queries_ns"] = initialization + sum(durations)
-        else:
-            record["open_query_ns"] = durations[0]
+        timing_totals(record)
     elif request["purpose"] != "io" and not request.get("validation_diagnostics"):
         record["provider_evidence"] = {"schema": connection.sql("DESCRIBE bench").fetchall(),
                                        "attach_options": record["settings"]["provider"]}
@@ -203,11 +199,7 @@ def run(request_path, output):
     connection = None
     record = observation(request)
     try:
-        build_path = HERE / "build.json"
-        build = json.loads(build_path.read_text())
-        require(build["reader_id"] == "duckdb" and build["executable_sha256"] == digest(Path(__file__))
-                and build["lockfile_sha256"] == digest(HERE / "lock.json")
-                and all(digest(HERE / name) == value for name, value in build["bundled_sha256"].items()), "stale runner build")
+        build_path, build = checked_build(Path(__file__), "duckdb")
         connection, engine = connect()
         require(runtime_metadata(engine) == build["runtime"], "runtime differs from the prepared build")
         statements = connection.extract_statements(request["canonical_sql"])
@@ -221,10 +213,7 @@ def run(request_path, output):
                     "delta_executor_environment": {"TOKIO_WORKER_THREADS": "8"}, "storage": storage_options,
                     "resource_budget": request["resource_budget"], "table_uri": request["table_uri"],
                     "execution_mode": request["execution_mode"], "output_delivery": "streaming"}
-        identity = {"reader_id": "duckdb", "reader_build_sha256": digest(build_path), "reader_config_sha256": json_hash(settings),
-                    **comparison_identity(request),
-                    **{name: request[name] for name in ("fixture_manifest_sha256", "case_id", "snapshot_version")},
-                    "canonical_sql_sha256": sha(request["canonical_sql"].encode()), "native_expression_sha256": None}
+        identity = reader_identity(request, "duckdb", build_path, settings)
         record.update(identity=identity, settings=settings, build_record=str(build_path), phase="correctness_gate")
         record["correctness"] = correctness(request, identity)
         execute(connection, request, output, record)
@@ -247,23 +236,16 @@ def run(request_path, output):
         if request["purpose"] == "timing":
             record["cleanup_ns"] = clock() - cleanup
         event(record, "cleanup_complete")
-    save(output / "record.json", record)
-    print(json.dumps(record))
-    return 0 if record["status"] == "success" else 1
+    return write_observation(output, record)
+
+
+def describe_build():
+    connection, engine = connect()
+    try:
+        print(json.dumps(runtime_metadata(engine)))
+    finally:
+        connection.close()
 
 
 if __name__ == "__main__":
-    try:
-        if sys.argv[1:] == ["--describe-build"]:
-            connection, engine = connect()
-            try:
-                print(json.dumps(runtime_metadata(engine)))
-            finally:
-                connection.close()
-        elif len(sys.argv) == 3:
-            sys.exit(run(Path(sys.argv[1]), Path(sys.argv[2])))
-        else:
-            raise ValueError("expected REQUEST.json NEW_OUTPUT_DIRECTORY")
-    except Exception as error:
-        print(json.dumps({"status": "invalid_input", "failure_reason": str(error)}), file=sys.stderr)
-        sys.exit(1)
+    runner_cli(run, describe_build)

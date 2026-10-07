@@ -12,7 +12,7 @@ import sysconfig
 from time import time_ns
 from urllib.parse import urlsplit
 
-from run import BUDGET, LARGE_IDENTITY_FIELDS, SAMPLING_IDENTITY_FIELDS, PRODUCTION_IDENTITY_FIELDS, comparison_identity, digest, query_count
+from run import BUDGET, LARGE_IDENTITY_FIELDS, SAMPLING_IDENTITY_FIELDS, PRODUCTION_IDENTITY_FIELDS, comparison_identity, digest, query_count, save
 
 HERE = Path(__file__).resolve().parent
 REQUEST_FIELDS = set("table_uri snapshot_version case_id canonical_sql comparison_revision protocol_sha256 "
@@ -58,6 +58,61 @@ def runtime_metadata(engine):
     return {**engine, "packages": packages, "python": sys.version, "python_executable_sha256": digest(Path("/proc/self/exe")),
             "python_abi": sysconfig.get_config_var("SOABI"), "python_build": list(platform.python_build()),
             "python_config_args": sysconfig.get_config_var("CONFIG_ARGS"), "libc": list(platform.libc_ver())}
+
+
+def checked_build(executable, reader):
+    directory = executable.resolve().parent
+    path = directory / "build.json"
+    build = json.loads(path.read_text())
+    require(build["reader_id"] == reader and build["executable_sha256"] == digest(executable)
+            and build["lockfile_sha256"] == digest(directory / "lock.json")
+            and all(digest(directory / name) == value for name, value in build["bundled_sha256"].items()),
+            "stale runner build")
+    return path, build
+
+
+def reader_identity(request, reader, build_path, settings, expression_sha256=None):
+    return {"reader_id": reader, "reader_build_sha256": digest(build_path), "reader_config_sha256": json_hash(settings),
+            **comparison_identity(request),
+            **{name: request[name] for name in ("fixture_manifest_sha256", "case_id", "snapshot_version")},
+            "canonical_sql_sha256": sha(request["canonical_sql"].encode()), "native_expression_sha256": expression_sha256}
+
+
+def timing_totals(record):
+    """Summarize captured query clocks without starting or ending any timer."""
+    durations = [query["completion_ns"] for query in record["queries"]]
+    if record["execution_mode"] == "reuse":
+        record["initialization_plus_query1_ns"] = record["initialization_ns"] + durations[0]
+        record["initialization_plus_all_queries_ns"] = record["initialization_ns"] + sum(durations)
+    else:
+        record["open_query_ns"] = durations[0]
+
+
+def redact_credentials(message):
+    for name in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"):
+        if os.environ.get(name):
+            message = message.replace(os.environ[name], "[redacted]")
+    return message
+
+
+def write_observation(output, record):
+    save(output / "record.json", record)
+    print(json.dumps(record))
+    return 0 if record["status"] == "success" else 1
+
+
+def runner_cli(run, describe_build):
+    """Keep the request/output arguments and JSON error contract common to readers."""
+    try:
+        if sys.argv[1:] == ["--describe-build"]:
+            describe_build()
+        elif len(sys.argv) == 3:
+            sys.exit(run(Path(sys.argv[1]), Path(sys.argv[2])))
+        else:
+            raise ValueError("expected REQUEST.json NEW_OUTPUT_DIRECTORY")
+    except Exception as error:
+        print(json.dumps({"status": "invalid_input", "failure_reason": str(error)}), file=sys.stderr)
+        sys.exit(1)
 
 
 def validate(request):
