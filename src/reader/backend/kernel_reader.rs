@@ -76,7 +76,7 @@ fn read_file(
         transform,
         ..
     } = task;
-    let location = resolve_data_file_url(plan.engine_context.table_url(), &path)?;
+    let location = resolve_data_file_url(plan.engine_context.file_resolution_url(), &path)?;
     let physical_predicate = if deletion_vector.is_present() {
         None
     } else {

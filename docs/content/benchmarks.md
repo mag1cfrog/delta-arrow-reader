@@ -121,6 +121,11 @@ for Delta Arrow Reader and 53.1.0 for delta-rs. Both builds used Arrow and
 Parquet 58.4.0. DuckDB, Polars, and Daft each ran in a separate Python process
 and returned batches through PyArrow 25.0.1.
 
+The DuckDB, Polars and Daft scripts and delta-rs build configuration used here
+are not published, so these results cannot be fully reproduced from this
+repository. The [public selective-read harness](benchmarks/selective-read-runners.md)
+runs a separate benchmark.
+
 Wall time covers table opening through consumption of the final Arrow batch.
 The timer starts after process startup and, for the Python readers, after
 imports. CPU time and peak RSS come from Linux process accounting around the

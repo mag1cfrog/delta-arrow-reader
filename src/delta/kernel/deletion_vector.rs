@@ -1,18 +1,49 @@
-//! Retain public DV descriptors while Kernel's scan callback exposes only opaque DvInfo.
+//! Preserve and prepare public DV descriptors for Kernel reads.
 
 use std::sync::LazyLock;
 
 use delta_kernel::{
     DeltaResult, Error,
-    actions::deletion_vector::DeletionVectorDescriptor,
+    actions::deletion_vector::{DeletionVectorDescriptor, DeletionVectorStorageType},
     engine_data::{FilteredRowVisitor, GetData, RowIndexIterator, TypedGetData},
     expressions::ColumnName,
     scan::ScanMetadata,
     schema::DataType,
 };
+use url::Url;
+
+use crate::delta::location::{object_store_path, same_store, with_object_store_path};
 
 #[derive(Clone)]
 pub(crate) struct KernelDeletionVectorHandle(pub(crate) DeletionVectorDescriptor);
+
+impl KernelDeletionVectorHandle {
+    /// Validate file locations and prepare their URLs for the table's configured store.
+    pub(super) fn descriptor_for_store(
+        &self,
+        table_url: &Url,
+    ) -> DeltaResult<DeletionVectorDescriptor> {
+        let Some(public_dv_url) = self.0.absolute_path(table_url)? else {
+            // Inline DVs carry their payload in the descriptor and need no URL conversion.
+            return Ok(self.0.clone());
+        };
+        if !same_store(table_url, &public_dv_url) {
+            return Err(Error::generic(
+                "deletion vector URL does not identify the configured table store",
+            ));
+        }
+
+        let object_path = object_store_path(&public_dv_url)?;
+        let store_relative_dv_url = with_object_store_path(public_dv_url, &object_path)?;
+        // Supply the resolved URL as absolute so Kernel uses it directly rather
+        // than resolving the original relative descriptor against the table again.
+        Ok(DeletionVectorDescriptor {
+            storage_type: DeletionVectorStorageType::PersistedAbsolute,
+            path_or_inline_dv: store_relative_dv_url.into(),
+            ..self.0.clone()
+        })
+    }
+}
 
 // Kernel 0.25's DvInfo hides its descriptor and compact bitmap accessor. Retain
 // the public descriptor from scan metadata, then delegate decoding to read().
