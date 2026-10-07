@@ -1,6 +1,6 @@
 # Benchmarks
 
-The [TPC-H-derived selective-read results](benchmarks/selective-read-results.md) cover
+The [TPC-H-derived selective-read results](../../public/benchmarks/selective-read-results.md) cover
 eight SF10 cases with delta-rs, DuckDB, Polars and Spark. That report is
 under review. This page retains the earlier four-workload local MinIO comparison
 and its original reader versions.
@@ -123,7 +123,7 @@ and returned batches through PyArrow 25.0.1.
 
 The DuckDB, Polars and Daft scripts and delta-rs build configuration used here
 are not published, so these results cannot be fully reproduced from this
-repository. The [public selective-read harness](benchmarks/selective-read-runners.md)
+repository. The [public selective-read harness](selective-read-runners.md)
 runs a separate benchmark.
 
 Wall time covers table opening through consumption of the final Arrow batch.
@@ -136,7 +136,7 @@ schemas matched the frozen workload expectations. Both deletion vectors in the
 reference table removed the same 43 rows, and the generated table removed the
 expected 200 rows.
 
-The [anonymized per-run results](benchmarks/reader-results.csv) include the
+The [anonymized per-run results](reader-results.csv) include the
 timing, resource use, and parity outcome for all 146 measured processes, along
 with the three unsupported Daft probes. The chart generator validates the file
 and computes the plotted medians.
@@ -176,14 +176,14 @@ change.
 
 ## Focused benchmarks
 
-- [Selective S3 case study](benchmarks/selective-s3.md) compares four existing
+- [Selective S3 case study](selective-s3.md) compares four existing
   selective queries across Lakehouse//RT Small (Beta), Serverless SQL Small,
   Delta Arrow Reader, and delta-rs, with every anonymized repetition available.
-- [Lazy and eager scan metadata](benchmarks/eager-metadata.md) compares when
+- [Lazy and eager scan metadata](eager-metadata.md) compares when
   Delta scan metadata is loaded and reused across repeated queries.
-- [Parquet row-filter predicate decoding](benchmarks/row-filter.md) compares
+- [Parquet row-filter predicate decoding](../../public/benchmarks/row-filter.md) compares
   decoding only predicate columns with decoding unrelated columns as well.
-- [Parquet page-index range reads](benchmarks/page-index.md) measures page-level
+- [Parquet page-index range reads](../../public/benchmarks/page-index.md) measures page-level
   reads for localized and scattered row-filter matches.
-- [Adaptive Parquet range planning](benchmarks/range-planning.md) compares
+- [Adaptive Parquet range planning](../../public/benchmarks/range-planning.md) compares
   exact and merged byte-range reads under controlled transport conditions.

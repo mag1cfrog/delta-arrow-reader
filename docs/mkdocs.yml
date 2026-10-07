@@ -3,13 +3,14 @@ site_url: https://mag1cfrog.github.io/delta-arrow-reader/
 site_description: Read Delta Lake tables as Apache Arrow streams or DataFusion tables.
 repo_name: mag1cfrog/delta-arrow-reader
 repo_url: https://github.com/mag1cfrog/delta-arrow-reader
-docs_dir: content
+docs_dir: public
 site_dir: .site
 
 theme:
   name: material
   variant: modern
   features:
+    - navigation.tabs
     - navigation.sections
     - content.code.copy
     - search.suggest
@@ -43,43 +44,13 @@ nav:
       - Scan planning: scan-planning.md
       - Read scheduling: read-scheduling.md
   - Performance:
-      - Reader benchmarks: benchmarks.md
-      - TPC-H-derived selective-read results: benchmarks/selective-read-results.md
-      - Q2/Q4-derived main workloads: benchmarks/selective-read-production-shapes.md
-      - Generate Q2/Q4-derived inputs: benchmarks/selective-read-production-fixtures.md
-      - Q2/Q4 execution contract: benchmarks/selective-read-production-workloads.md
-      - Public selective-read protocol: benchmarks/selective-read-protocol.md
-      - Large-workload benchmark plan: benchmarks/selective-read-large-workloads.md
-      - Reduced benchmark sampling: benchmarks/selective-read-sampling.md
-      - Combine plan and I/O diagnostics: benchmarks/selective-read-combined-diagnostics.md
-      - Use exact validation as storage warmup: benchmarks/selective-read-gate-warmup.md
-      - Collect diagnostics during exact validation: benchmarks/selective-read-gate-diagnostics.md
-      - Pilot capacity check: benchmarks/selective-read-pilot-capacity.md
-      - Generate public fixtures: benchmarks/selective-read-fixtures.md
-      - Validate public results: benchmarks/selective-read-oracle.md
-      - Run the reader comparisons: benchmarks/selective-read-runners.md
-      - Observe storage requests: benchmarks/selective-read-storage.md
-      - Run a selective-read campaign: benchmarks/selective-read-campaign.md
-      - Report staged Q2/Q4 campaigns: benchmarks/selective-read-production-report.md
-      - Run the Spark Delta pilot: benchmarks/selective-read-spark.md
-      - Q2/Q4 comparison with Spark: benchmarks/selective-read-spark-matrix.md
-      - Compare predicates and projection width: benchmarks/selective-read-matrix.md
-      - Compare file organizations: benchmarks/selective-read-files.md
-      - Compare pruning inside files: benchmarks/selective-read-within-file.md
-      - Compare deletion vectors: benchmarks/selective-read-deletion-vectors.md
-      - Focused benchmarks:
-          - Selective S3 case study: benchmarks/selective-s3.md
-          - Lazy and eager scan metadata: benchmarks/eager-metadata.md
-          - Parquet row-filter predicate decoding: benchmarks/row-filter.md
-          - Parquet page-index range reads: benchmarks/page-index.md
-          - Adaptive Parquet range planning: benchmarks/range-planning.md
+      - Overview: benchmarks.md
+      - Selective reads on wide tables: benchmarks/selective-read-results.md
+      - Repeated queries: benchmarks/eager-metadata.md
+      - Predicate decoding: benchmarks/row-filter.md
+      - Page-index reads: benchmarks/page-index.md
+      - Range planning: benchmarks/range-planning.md
   - Reference:
       - Execution options: reference/execution-options.md
       - Scan metrics: reference/metrics.md
       - Rust API: https://docs.rs/delta-arrow-reader
-  - Contributors:
-      - Project direction and Python: project-direction.md
-      - Frozen Spark SQL experiment: spark-sql-experiment.md
-      - Development: contributing.md
-      - Extraction parity: benchmark-parity.md
-      - Provenance: provenance.md

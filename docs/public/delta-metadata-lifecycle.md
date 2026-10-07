@@ -106,29 +106,6 @@ single query count is a reliable break-even point. The result depends on the
 table history, checkpoint shape, file count, available statistics, storage
 latency, query selectivity, and memory pressure.
 
-## Results from a real S3 workload
-
-On August 27, 2026, a real-S3 benchmark loaded two production-shaped tables
-and ran six queries:
-
-| Measurement | No warmup | Query-planning warmup |
-| --- | ---: | ---: |
-| Table initialization | 1.196 s | 4.089 s |
-| HIP physical planning | 2.097 s | 5.1 ms |
-| Schedule physical planning | 756 ms | 1.1 ms |
-| Complete six-query session | 50.205 s | 42.451 s |
-| Resident memory after initialization | 38.5 MiB | 68.7 MiB |
-| Full-session peak resident memory | 233.9 MiB | 248.9 MiB |
-
-The warmed run spent more time and memory during initialization. After that,
-physical planning fell from seconds to milliseconds, and the six-query
-session finished sooner. Both runs returned the same results and performed the
-same Parquet I/O.
-
-These numbers come from one workload. They are not a performance guarantee or
-a general break-even point. The [benchmark methodology, environment, and limitations](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/eager-metadata/#representative-real-s3-result)
-describe how the measurements were collected and what can affect them.
-
 ## Version and refresh behavior
 
 Every loaded table and cache represents one exact Delta version. Commits
@@ -169,5 +146,6 @@ The in-memory cache does not provide:
 - [Read a table with the streaming API](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
 - [Register and query a table with DataFusion](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/)
 - [Understand how scans are planned](https://mag1cfrog.github.io/delta-arrow-reader/scan-planning/)
-- [Review the benchmark methodology](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/eager-metadata/)
+- [See the repeated-query results](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/eager-metadata/)
+- [Compare metadata-loading modes](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/benchmarks/eager-metadata.md)
 - [Open the warmup Rust API](https://docs.rs/delta-arrow-reader/latest/delta_arrow_reader/struct.DeltaTableBuilder.html#method.with_warmup)

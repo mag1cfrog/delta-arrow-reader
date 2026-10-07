@@ -1,7 +1,7 @@
 # Development
 
 This page is for contributors working on Delta Arrow Reader itself. Applications
-that use the crate can start with the [installation guide](installation.md).
+that use the crate can start with the [installation guide](../public/installation.md).
 
 ## Run the local checks
 
@@ -18,7 +18,7 @@ cargo package --locked
 
 ## Work on the documentation
 
-The Markdown files in `docs/content/` are the source for the documentation
+The Markdown files in `docs/public/` are the source for the documentation
 site. The guides listed in `src/guides.rs` are also included in the generated
 Rust documentation.
 

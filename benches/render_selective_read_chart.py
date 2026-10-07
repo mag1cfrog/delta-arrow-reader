@@ -18,7 +18,7 @@ TIME_TICKS = (5, 10, 20, 50, 100, 200)
 
 
 def load_medians():
-    source = ROOT / "docs/content/benchmarks/selective-read-summary.csv"
+    source = ROOT / "docs/public/benchmarks/selective-read-summary.csv"
     with source.open(newline="") as stream:
         rows = [
             row for row in csv.DictReader(stream)
@@ -98,7 +98,7 @@ def main():
     args = parser.parse_args()
     values = load_medians()
     for theme in README_THEMES:
-        target = ROOT / f"docs/content/assets/selective-read-readme-{theme}.svg"
+        target = ROOT / f"docs/public/assets/selective-read-readme-{theme}.svg"
         rendered = render(theme, values)
         if args.check:
             assert target.read_text() == rendered, target

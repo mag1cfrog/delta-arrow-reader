@@ -127,9 +127,9 @@ coalescing nearby ranges and transferring unused bytes under different request
 latencies. Compare request counts alongside bytes and time; these controls do
 not add another network-latency matrix.
 
-The separate DAR [predicate-projection A/B](row-filter.md) deliberately gives a
+The separate DAR [predicate-projection A/B](../../public/benchmarks/row-filter.md) deliberately gives a
 predicate either its referenced columns or extra payload columns. The
-[offset-index A/B](page-index.md) compares indexed and unindexed files. These
+[offset-index A/B](../../public/benchmarks/page-index.md) compares indexed and unindexed files. These
 artificial controls explain mechanisms and are not delta-rs baselines. Their
 local scan/decode timers also differ from the five-reader open-and-query timer.
 

@@ -24,11 +24,9 @@ files.
 Both modes produce the same file tasks. Partition values, schema transforms,
 and deletion-vector information follow the selected files in either mode.
 
-In one dated real-S3 case study, query-planning warmup reduced the median time
-for a six-query session by 15.4% while adding 30.2 MiB of resident memory after
-initialization and 15.0 MiB to full-session peak memory. See the
-[methodology, results, and limitations](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/eager-metadata/#representative-real-s3-result)
-before applying those measurements to another table or workload.
+Query-planning warmup adds initialization time and retains metadata in memory.
+Use the [metadata comparison instructions](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/benchmarks/eager-metadata.md)
+to measure whether it reduces total time for your queries.
 
 To see how this initialization choice plays out across several queries, follow
 the [metadata warmup lifecycles](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/).

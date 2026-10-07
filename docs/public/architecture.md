@@ -117,9 +117,7 @@ a safe stopping point.
 ## Out of scope
 
 Delta Arrow Reader does not write Delta tables, manage transactions, create a
-Tokio runtime, or coordinate application workflows. The
-[provenance page](https://mag1cfrog.github.io/delta-arrow-reader/provenance/) records how this code was originally extracted
-from Delta Funnel.
+Tokio runtime, or coordinate application workflows.
 
 ## Go deeper
 

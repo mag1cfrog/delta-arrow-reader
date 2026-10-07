@@ -26,12 +26,6 @@ fits your application:
 ## After your first read
 
 - Learn [how the reader works](architecture.md).
-- Review the [reader benchmarks](benchmarks.md) and their test conditions.
+- Review the [performance reports](benchmarks.md) and their test conditions.
 - Look up a type or method in the
   [Rust API reference](https://docs.rs/delta-arrow-reader).
-
-## Project direction
-
-See the [core Reader and independent Python plan](project-direction.md). The
-[Spark/Sail experiment](spark-sql-experiment.md) is frozen; it is not a supported
-Spark-compatible frontend or a prerequisite for Python bindings.

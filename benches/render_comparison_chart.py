@@ -10,7 +10,7 @@ from statistics import median
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RESULTS = ROOT / "docs/content/benchmarks.md"
+RESULTS = ROOT / "docs/content/benchmarks/legacy-reader-comparison.md"
 MEASUREMENTS = ROOT / "docs/content/benchmarks/reader-results.csv"
 OUTPUT = ROOT / "docs/content/assets"
 READERS = ("Delta Arrow Reader", "delta-rs", "DuckDB", "Polars", "Daft")
