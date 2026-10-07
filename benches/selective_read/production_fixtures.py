@@ -183,7 +183,9 @@ def generate(args):
                         for batch in batches:
                             writer.write_batch(batch)
                 child.stdin.close()
-                require(child.wait(timeout=60) == 0, "native writer failed; see writer.log")
+                # Finalization shares the phase deadline with copying and streaming.
+                remaining = max(0, args.elapsed_limit_seconds - (time.monotonic() - started))
+                require(child.wait(timeout=remaining) == 0, "native writer failed; see writer.log")
             finally:
                 if child.poll() is None:
                     child.kill()
