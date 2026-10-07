@@ -230,3 +230,16 @@ source can generate a new campaign with new identities; editing old manifests
 to make them pass current-source checks would invalidate their provenance.
 Keep bulk tables outside Git and stage snapshots within the documented 192 GiB
 data allowance. New timing runs remain manual.
+
+## Regenerate the README chart
+
+The light and dark SVGs use the open-query medians in the
+[summary extract](selective-read-summary.csv):
+
+```console
+python -B benches/render_selective_read_chart.py
+```
+
+Add `--check` to verify the checked-in charts without rewriting them. The
+README pins its image URLs to the commit containing the SVGs so they also work
+on docs.rs. After changing the charts, update those URLs to the new asset commit.
