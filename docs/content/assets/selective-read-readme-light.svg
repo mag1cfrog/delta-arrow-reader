@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-labelledby="title description">
-<title id="title">Selective Delta reads with deletion vectors</title>
-<desc id="description">Four deletion-vector cases compare five readers on 416-column and 90-column Delta tables derived from TPC-H lineitem at SF10. Row labels describe stored table columns and matching-row layout. Each group follows legend order. Dots show median seconds to open a table and consume the full result over five runs. Lower is faster. All cases share a logarithmic time axis from 5 to 200 seconds, so equal time ratios span equal distances. Labels give seconds and, for other readers, their time divided by Delta Arrow Reader's time in the same case. Startup is excluded. The full report also includes four cases without deletion vectors.</desc>
+<title id="title">Faster Delta Lake reads</title>
+<desc id="description">Five readers query 416-column and 90-column Delta tables with about 60 million rows derived from TPC-H lineitem at SF10. All four cases use deletion vectors to mark deleted rows. Matching rows are grouped together or spread out within row groups. Each group follows legend order. Dots show median seconds to open a table and consume the full result over five runs. Lower is faster. All cases share a logarithmic time axis from 5 to 200 seconds, so equal time ratios span equal distances. Labels give seconds and, for other readers, their time divided by Delta Arrow Reader's time in the same case. Startup is excluded. The full report also includes four cases without deletion vectors.</desc>
 <style>text{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}</style>
 <defs><linearGradient id="page" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#f7f8fa"/></linearGradient></defs>
 <rect width="1200" height="700" fill="url(#page)"/>
-<text x="44" y="32" fill="#68707d" font-size="12" font-weight="700" letter-spacing="2">TPC-H-DERIVED DATA (SF10) | SELECTIVE DELTA LAKE READS</text>
-<text x="44" y="70" fill="#1f2328" font-size="32" font-weight="700">Fastest with deletion vectors</text>
-<text x="44" y="99" fill="#68707d" font-size="16">Median seconds over five runs (log scale). Lower is faster.</text>
+<text x="44" y="32" fill="#68707d" font-size="12" font-weight="700" letter-spacing="2">TPC-H-DERIVED DATA | ABOUT 60 MILLION ROWS PER TABLE</text>
+<text x="44" y="70" fill="#1f2328" font-size="32" font-weight="700">Faster Delta Lake reads</text>
+<text x="44" y="99" fill="#68707d" font-size="16">Query time in seconds (median of 5 runs). Log scale; lower is faster.</text>
 <text x="1156" y="99" text-anchor="end" fill="#68707d" font-size="13">Labels: seconds / time vs. Delta Arrow Reader</text>
 <rect x="44" y="121" width="10" height="10" rx="3" fill="#7dd3fc"/>
 <text x="62" y="131" fill="#1f2328" font-size="14">Delta Arrow Reader</text>
@@ -18,89 +18,89 @@
 <text x="643" y="131" fill="#1f2328" font-size="14">Polars</text>
 <rect x="780" y="121" width="10" height="10" rx="3" fill="#738091"/>
 <text x="798" y="131" fill="#1f2328" font-size="14">Spark (single machine)</text>
-<text x="44" y="159" fill="#68707d" font-size="13">Table / matches</text>
-<line x1="210.0" y1="170" x2="210.0" y2="650" stroke="#d9dee6" stroke-dasharray="3 6"/>
-<text x="210.0" y="159" text-anchor="middle" fill="#68707d" font-size="13">5 s</text>
-<line x1="341.53127729637526" y1="170" x2="341.53127729637526" y2="650" stroke="#d9dee6" stroke-dasharray="3 6"/>
-<text x="341.53127729637526" y="159" text-anchor="middle" fill="#68707d" font-size="13">10 s</text>
-<line x1="473.0625545927506" y1="170" x2="473.0625545927506" y2="650" stroke="#d9dee6" stroke-dasharray="3 6"/>
-<text x="473.0625545927506" y="159" text-anchor="middle" fill="#68707d" font-size="13">20 s</text>
-<line x1="646.9374454072492" y1="170" x2="646.9374454072492" y2="650" stroke="#d9dee6" stroke-dasharray="3 6"/>
-<text x="646.9374454072492" y="159" text-anchor="middle" fill="#68707d" font-size="13">50 s</text>
-<line x1="778.4687227036247" y1="170" x2="778.4687227036247" y2="650" stroke="#d9dee6" stroke-dasharray="3 6"/>
-<text x="778.4687227036247" y="159" text-anchor="middle" fill="#68707d" font-size="13">100 s</text>
-<line x1="910.0" y1="170" x2="910.0" y2="650" stroke="#d9dee6" stroke-dasharray="3 6"/>
-<text x="910.0" y="159" text-anchor="middle" fill="#68707d" font-size="13">200 s</text>
+<text x="44" y="159" fill="#68707d" font-size="13">Table / matching rows</text>
+<line x1="240.0" y1="170" x2="240.0" y2="650" stroke="#d9dee6" stroke-dasharray="3 6"/>
+<text x="240.0" y="159" text-anchor="middle" fill="#68707d" font-size="13">5 s</text>
+<line x1="371.53127729637526" y1="170" x2="371.53127729637526" y2="650" stroke="#d9dee6" stroke-dasharray="3 6"/>
+<text x="371.53127729637526" y="159" text-anchor="middle" fill="#68707d" font-size="13">10 s</text>
+<line x1="503.0625545927506" y1="170" x2="503.0625545927506" y2="650" stroke="#d9dee6" stroke-dasharray="3 6"/>
+<text x="503.0625545927506" y="159" text-anchor="middle" fill="#68707d" font-size="13">20 s</text>
+<line x1="676.9374454072492" y1="170" x2="676.9374454072492" y2="650" stroke="#d9dee6" stroke-dasharray="3 6"/>
+<text x="676.9374454072492" y="159" text-anchor="middle" fill="#68707d" font-size="13">50 s</text>
+<line x1="808.4687227036247" y1="170" x2="808.4687227036247" y2="650" stroke="#d9dee6" stroke-dasharray="3 6"/>
+<text x="808.4687227036247" y="159" text-anchor="middle" fill="#68707d" font-size="13">100 s</text>
+<line x1="940.0" y1="170" x2="940.0" y2="650" stroke="#d9dee6" stroke-dasharray="3 6"/>
+<text x="940.0" y="159" text-anchor="middle" fill="#68707d" font-size="13">200 s</text>
 <text x="44" y="223" fill="#1f2328" font-size="18" font-weight="500">416 columns</text>
-<text x="44" y="245" fill="#68707d" font-size="14">Localized</text>
-<line x1="210" y1="191" x2="250.23" y2="191" stroke="#7dd3fc" stroke-width="2"/>
-<circle cx="250.23" cy="191" r="6" fill="#7dd3fc"><title>416-column table, localized, with deletion vectors: Delta Arrow Reader, 6.181 s, 1.00 times Delta Arrow Reader's time</title></circle>
-<text x="262.23" y="195" fill="#1f2328" font-size="13">6.18 s</text>
-<line x1="210" y1="211" x2="714.98" y2="211" stroke="#e1e5ea" stroke-width="2"/>
-<circle cx="714.98" cy="211" r="6" fill="#e1e5ea"><title>416-column table, localized, with deletion vectors: delta-rs, 71.563 s, 11.58 times Delta Arrow Reader's time</title></circle>
-<text x="726.98" y="215" fill="#68707d" font-size="13">71.56 s / 11.58x</text>
-<line x1="210" y1="231" x2="418.07" y2="231" stroke="#b9c0c8" stroke-width="2"/>
-<circle cx="418.07" cy="231" r="6" fill="#b9c0c8"><title>416-column table, localized, with deletion vectors: DuckDB, 14.968 s, 2.42 times Delta Arrow Reader's time</title></circle>
-<text x="430.07" y="235" fill="#68707d" font-size="13">14.97 s / 2.42x</text>
-<line x1="210" y1="251" x2="700.62" y2="251" stroke="#96a1af" stroke-width="2"/>
-<circle cx="700.62" cy="251" r="6" fill="#96a1af"><title>416-column table, localized, with deletion vectors: Polars, 66.348 s, 10.73 times Delta Arrow Reader's time</title></circle>
-<text x="712.62" y="255" fill="#68707d" font-size="13">66.35 s / 10.73x</text>
-<line x1="210" y1="271" x2="463.99" y2="271" stroke="#738091" stroke-width="2"/>
-<circle cx="463.99" cy="271" r="6" fill="#738091"><title>416-column table, localized, with deletion vectors: Spark (single machine), 19.066 s, 3.08 times Delta Arrow Reader's time</title></circle>
-<text x="475.99" y="275" fill="#68707d" font-size="13">19.07 s / 3.08x</text>
+<text x="44" y="245" fill="#68707d" font-size="13">Matches grouped together</text>
+<line x1="240" y1="191" x2="280.23" y2="191" stroke="#7dd3fc" stroke-width="2"/>
+<circle cx="280.23" cy="191" r="6" fill="#7dd3fc"><title>416-column table, matches grouped together, with deletion vectors: Delta Arrow Reader, 6.181 s, 1.00 times Delta Arrow Reader's time</title></circle>
+<text x="292.23" y="195" fill="#1f2328" font-size="13">6.18 s</text>
+<line x1="240" y1="211" x2="744.98" y2="211" stroke="#e1e5ea" stroke-width="2"/>
+<circle cx="744.98" cy="211" r="6" fill="#e1e5ea"><title>416-column table, matches grouped together, with deletion vectors: delta-rs, 71.563 s, 11.58 times Delta Arrow Reader's time</title></circle>
+<text x="756.98" y="215" fill="#68707d" font-size="13">71.56 s / 11.58x</text>
+<line x1="240" y1="231" x2="448.07" y2="231" stroke="#b9c0c8" stroke-width="2"/>
+<circle cx="448.07" cy="231" r="6" fill="#b9c0c8"><title>416-column table, matches grouped together, with deletion vectors: DuckDB, 14.968 s, 2.42 times Delta Arrow Reader's time</title></circle>
+<text x="460.07" y="235" fill="#68707d" font-size="13">14.97 s / 2.42x</text>
+<line x1="240" y1="251" x2="730.62" y2="251" stroke="#96a1af" stroke-width="2"/>
+<circle cx="730.62" cy="251" r="6" fill="#96a1af"><title>416-column table, matches grouped together, with deletion vectors: Polars, 66.348 s, 10.73 times Delta Arrow Reader's time</title></circle>
+<text x="742.62" y="255" fill="#68707d" font-size="13">66.35 s / 10.73x</text>
+<line x1="240" y1="271" x2="493.99" y2="271" stroke="#738091" stroke-width="2"/>
+<circle cx="493.99" cy="271" r="6" fill="#738091"><title>416-column table, matches grouped together, with deletion vectors: Spark (single machine), 19.066 s, 3.08 times Delta Arrow Reader's time</title></circle>
+<text x="505.99" y="275" fill="#68707d" font-size="13">19.07 s / 3.08x</text>
 <line x1="44" y1="289" x2="1156" y2="289" stroke="#d9dee6" stroke-dasharray="4 7"/>
 <text x="44" y="343" fill="#1f2328" font-size="18" font-weight="500">416 columns</text>
-<text x="44" y="365" fill="#68707d" font-size="14">Scattered</text>
-<line x1="210" y1="311" x2="375.62" y2="311" stroke="#7dd3fc" stroke-width="2"/>
-<circle cx="375.62" cy="311" r="6" fill="#7dd3fc"><title>416-column table, scattered, with deletion vectors: Delta Arrow Reader, 11.968 s, 1.00 times Delta Arrow Reader's time</title></circle>
-<text x="387.62" y="315" fill="#1f2328" font-size="13">11.97 s</text>
-<line x1="210" y1="331" x2="716.36" y2="331" stroke="#e1e5ea" stroke-width="2"/>
-<circle cx="716.36" cy="331" r="6" fill="#e1e5ea"><title>416-column table, scattered, with deletion vectors: delta-rs, 72.086 s, 6.02 times Delta Arrow Reader's time</title></circle>
-<text x="728.36" y="335" fill="#68707d" font-size="13">72.09 s / 6.02x</text>
-<line x1="210" y1="351" x2="417.20" y2="351" stroke="#b9c0c8" stroke-width="2"/>
-<circle cx="417.20" cy="351" r="6" fill="#b9c0c8"><title>416-column table, scattered, with deletion vectors: DuckDB, 14.900 s, 1.24 times Delta Arrow Reader's time</title></circle>
-<text x="429.20" y="355" fill="#68707d" font-size="13">14.90 s / 1.24x</text>
-<line x1="210" y1="371" x2="700.44" y2="371" stroke="#96a1af" stroke-width="2"/>
-<circle cx="700.44" cy="371" r="6" fill="#96a1af"><title>416-column table, scattered, with deletion vectors: Polars, 66.286 s, 5.54 times Delta Arrow Reader's time</title></circle>
-<text x="712.44" y="375" fill="#68707d" font-size="13">66.29 s / 5.54x</text>
-<line x1="210" y1="391" x2="485.30" y2="391" stroke="#738091" stroke-width="2"/>
-<circle cx="485.30" cy="391" r="6" fill="#738091"><title>416-column table, scattered, with deletion vectors: Spark (single machine), 21.332 s, 1.78 times Delta Arrow Reader's time</title></circle>
-<text x="497.30" y="395" fill="#68707d" font-size="13">21.33 s / 1.78x</text>
+<text x="44" y="365" fill="#68707d" font-size="13">Matches spread out</text>
+<line x1="240" y1="311" x2="405.62" y2="311" stroke="#7dd3fc" stroke-width="2"/>
+<circle cx="405.62" cy="311" r="6" fill="#7dd3fc"><title>416-column table, matches spread out, with deletion vectors: Delta Arrow Reader, 11.968 s, 1.00 times Delta Arrow Reader's time</title></circle>
+<text x="417.62" y="315" fill="#1f2328" font-size="13">11.97 s</text>
+<line x1="240" y1="331" x2="746.36" y2="331" stroke="#e1e5ea" stroke-width="2"/>
+<circle cx="746.36" cy="331" r="6" fill="#e1e5ea"><title>416-column table, matches spread out, with deletion vectors: delta-rs, 72.086 s, 6.02 times Delta Arrow Reader's time</title></circle>
+<text x="758.36" y="335" fill="#68707d" font-size="13">72.09 s / 6.02x</text>
+<line x1="240" y1="351" x2="447.20" y2="351" stroke="#b9c0c8" stroke-width="2"/>
+<circle cx="447.20" cy="351" r="6" fill="#b9c0c8"><title>416-column table, matches spread out, with deletion vectors: DuckDB, 14.900 s, 1.24 times Delta Arrow Reader's time</title></circle>
+<text x="459.20" y="355" fill="#68707d" font-size="13">14.90 s / 1.24x</text>
+<line x1="240" y1="371" x2="730.44" y2="371" stroke="#96a1af" stroke-width="2"/>
+<circle cx="730.44" cy="371" r="6" fill="#96a1af"><title>416-column table, matches spread out, with deletion vectors: Polars, 66.286 s, 5.54 times Delta Arrow Reader's time</title></circle>
+<text x="742.44" y="375" fill="#68707d" font-size="13">66.29 s / 5.54x</text>
+<line x1="240" y1="391" x2="515.30" y2="391" stroke="#738091" stroke-width="2"/>
+<circle cx="515.30" cy="391" r="6" fill="#738091"><title>416-column table, matches spread out, with deletion vectors: Spark (single machine), 21.332 s, 1.78 times Delta Arrow Reader's time</title></circle>
+<text x="527.30" y="395" fill="#68707d" font-size="13">21.33 s / 1.78x</text>
 <line x1="44" y1="409" x2="1156" y2="409" stroke="#d9dee6" stroke-dasharray="4 7"/>
 <text x="44" y="463" fill="#1f2328" font-size="18" font-weight="500">90 columns</text>
-<text x="44" y="485" fill="#68707d" font-size="14">Localized</text>
-<line x1="210" y1="431" x2="282.56" y2="431" stroke="#7dd3fc" stroke-width="2"/>
-<circle cx="282.56" cy="431" r="6" fill="#7dd3fc"><title>90-column table, localized, with deletion vectors: Delta Arrow Reader, 7.329 s, 1.00 times Delta Arrow Reader's time</title></circle>
-<text x="294.56" y="435" fill="#1f2328" font-size="13">7.33 s</text>
-<line x1="210" y1="451" x2="888.51" y2="451" stroke="#e1e5ea" stroke-width="2"/>
-<circle cx="888.51" cy="451" r="6" fill="#e1e5ea"><title>90-column table, localized, with deletion vectors: delta-rs, 178.588 s, 24.37 times Delta Arrow Reader's time</title></circle>
-<text x="900.51" y="455" fill="#68707d" font-size="13">178.59 s / 24.37x</text>
-<line x1="210" y1="471" x2="516.09" y2="471" stroke="#b9c0c8" stroke-width="2"/>
-<circle cx="516.09" cy="471" r="6" fill="#b9c0c8"><title>90-column table, localized, with deletion vectors: DuckDB, 25.091 s, 3.42 times Delta Arrow Reader's time</title></circle>
-<text x="528.09" y="475" fill="#68707d" font-size="13">25.09 s / 3.42x</text>
-<line x1="210" y1="491" x2="875.34" y2="491" stroke="#96a1af" stroke-width="2"/>
-<circle cx="875.34" cy="491" r="6" fill="#96a1af"><title>90-column table, localized, with deletion vectors: Polars, 166.613 s, 22.73 times Delta Arrow Reader's time</title></circle>
-<text x="887.34" y="495" fill="#68707d" font-size="13">166.61 s / 22.73x</text>
-<line x1="210" y1="511" x2="471.36" y2="511" stroke="#738091" stroke-width="2"/>
-<circle cx="471.36" cy="511" r="6" fill="#738091"><title>90-column table, localized, with deletion vectors: Spark (single machine), 19.822 s, 2.70 times Delta Arrow Reader's time</title></circle>
-<text x="483.36" y="515" fill="#68707d" font-size="13">19.82 s / 2.70x</text>
+<text x="44" y="485" fill="#68707d" font-size="13">Matches grouped together</text>
+<line x1="240" y1="431" x2="312.56" y2="431" stroke="#7dd3fc" stroke-width="2"/>
+<circle cx="312.56" cy="431" r="6" fill="#7dd3fc"><title>90-column table, matches grouped together, with deletion vectors: Delta Arrow Reader, 7.329 s, 1.00 times Delta Arrow Reader's time</title></circle>
+<text x="324.56" y="435" fill="#1f2328" font-size="13">7.33 s</text>
+<line x1="240" y1="451" x2="918.51" y2="451" stroke="#e1e5ea" stroke-width="2"/>
+<circle cx="918.51" cy="451" r="6" fill="#e1e5ea"><title>90-column table, matches grouped together, with deletion vectors: delta-rs, 178.588 s, 24.37 times Delta Arrow Reader's time</title></circle>
+<text x="930.51" y="455" fill="#68707d" font-size="13">178.59 s / 24.37x</text>
+<line x1="240" y1="471" x2="546.09" y2="471" stroke="#b9c0c8" stroke-width="2"/>
+<circle cx="546.09" cy="471" r="6" fill="#b9c0c8"><title>90-column table, matches grouped together, with deletion vectors: DuckDB, 25.091 s, 3.42 times Delta Arrow Reader's time</title></circle>
+<text x="558.09" y="475" fill="#68707d" font-size="13">25.09 s / 3.42x</text>
+<line x1="240" y1="491" x2="905.34" y2="491" stroke="#96a1af" stroke-width="2"/>
+<circle cx="905.34" cy="491" r="6" fill="#96a1af"><title>90-column table, matches grouped together, with deletion vectors: Polars, 166.613 s, 22.73 times Delta Arrow Reader's time</title></circle>
+<text x="917.34" y="495" fill="#68707d" font-size="13">166.61 s / 22.73x</text>
+<line x1="240" y1="511" x2="501.36" y2="511" stroke="#738091" stroke-width="2"/>
+<circle cx="501.36" cy="511" r="6" fill="#738091"><title>90-column table, matches grouped together, with deletion vectors: Spark (single machine), 19.822 s, 2.70 times Delta Arrow Reader's time</title></circle>
+<text x="513.36" y="515" fill="#68707d" font-size="13">19.82 s / 2.70x</text>
 <line x1="44" y1="529" x2="1156" y2="529" stroke="#d9dee6" stroke-dasharray="4 7"/>
 <text x="44" y="583" fill="#1f2328" font-size="18" font-weight="500">90 columns</text>
-<text x="44" y="605" fill="#68707d" font-size="14">Scattered</text>
-<line x1="210" y1="551" x2="501.78" y2="551" stroke="#7dd3fc" stroke-width="2"/>
-<circle cx="501.78" cy="551" r="6" fill="#7dd3fc"><title>90-column table, scattered, with deletion vectors: Delta Arrow Reader, 23.267 s, 1.00 times Delta Arrow Reader's time</title></circle>
-<text x="513.78" y="555" fill="#1f2328" font-size="13">23.27 s</text>
-<line x1="210" y1="571" x2="889.72" y2="571" stroke="#e1e5ea" stroke-width="2"/>
-<circle cx="889.72" cy="571" r="6" fill="#e1e5ea"><title>90-column table, scattered, with deletion vectors: delta-rs, 179.729 s, 7.72 times Delta Arrow Reader's time</title></circle>
-<text x="901.72" y="575" fill="#68707d" font-size="13">179.73 s / 7.72x</text>
-<line x1="210" y1="591" x2="519.90" y2="591" stroke="#b9c0c8" stroke-width="2"/>
-<circle cx="519.90" cy="591" r="6" fill="#b9c0c8"><title>90-column table, scattered, with deletion vectors: DuckDB, 25.600 s, 1.10 times Delta Arrow Reader's time</title></circle>
-<text x="531.90" y="595" fill="#68707d" font-size="13">25.60 s / 1.10x</text>
-<line x1="210" y1="611" x2="875.87" y2="611" stroke="#96a1af" stroke-width="2"/>
-<circle cx="875.87" cy="611" r="6" fill="#96a1af"><title>90-column table, scattered, with deletion vectors: Polars, 167.075 s, 7.18 times Delta Arrow Reader's time</title></circle>
-<text x="887.87" y="615" fill="#68707d" font-size="13">167.08 s / 7.18x</text>
-<line x1="210" y1="631" x2="565.06" y2="631" stroke="#738091" stroke-width="2"/>
-<circle cx="565.06" cy="631" r="6" fill="#738091"><title>90-column table, scattered, with deletion vectors: Spark (single machine), 32.477 s, 1.40 times Delta Arrow Reader's time</title></circle>
-<text x="577.06" y="635" fill="#68707d" font-size="13">32.48 s / 1.40x</text>
-<text x="44" y="680" fill="#68707d" font-size="13">Four deletion-vector cases shown. Open table + full result; process startup excluded.</text>
+<text x="44" y="605" fill="#68707d" font-size="13">Matches spread out</text>
+<line x1="240" y1="551" x2="531.78" y2="551" stroke="#7dd3fc" stroke-width="2"/>
+<circle cx="531.78" cy="551" r="6" fill="#7dd3fc"><title>90-column table, matches spread out, with deletion vectors: Delta Arrow Reader, 23.267 s, 1.00 times Delta Arrow Reader's time</title></circle>
+<text x="543.78" y="555" fill="#1f2328" font-size="13">23.27 s</text>
+<line x1="240" y1="571" x2="919.72" y2="571" stroke="#e1e5ea" stroke-width="2"/>
+<circle cx="919.72" cy="571" r="6" fill="#e1e5ea"><title>90-column table, matches spread out, with deletion vectors: delta-rs, 179.729 s, 7.72 times Delta Arrow Reader's time</title></circle>
+<text x="931.72" y="575" fill="#68707d" font-size="13">179.73 s / 7.72x</text>
+<line x1="240" y1="591" x2="549.90" y2="591" stroke="#b9c0c8" stroke-width="2"/>
+<circle cx="549.90" cy="591" r="6" fill="#b9c0c8"><title>90-column table, matches spread out, with deletion vectors: DuckDB, 25.600 s, 1.10 times Delta Arrow Reader's time</title></circle>
+<text x="561.90" y="595" fill="#68707d" font-size="13">25.60 s / 1.10x</text>
+<line x1="240" y1="611" x2="905.87" y2="611" stroke="#96a1af" stroke-width="2"/>
+<circle cx="905.87" cy="611" r="6" fill="#96a1af"><title>90-column table, matches spread out, with deletion vectors: Polars, 167.075 s, 7.18 times Delta Arrow Reader's time</title></circle>
+<text x="917.87" y="615" fill="#68707d" font-size="13">167.08 s / 7.18x</text>
+<line x1="240" y1="631" x2="595.06" y2="631" stroke="#738091" stroke-width="2"/>
+<circle cx="595.06" cy="631" r="6" fill="#738091"><title>90-column table, matches spread out, with deletion vectors: Spark (single machine), 32.477 s, 1.40 times Delta Arrow Reader's time</title></circle>
+<text x="607.06" y="635" fill="#68707d" font-size="13">32.48 s / 1.40x</text>
+<text x="44" y="680" fill="#68707d" font-size="13">Four cases with deleted rows (deletion vectors). Includes opening the table and reading all results; process startup excluded.</text>
 </svg>
