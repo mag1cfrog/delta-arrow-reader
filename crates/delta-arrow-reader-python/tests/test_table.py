@@ -52,6 +52,51 @@ class TableTests(unittest.TestCase):
         with self.assertRaises(AttributeError):
             original.version = 1
 
+    def test_selects_snapshot_version(self):
+        self.write_log(1, {"commitInfo": {"operation": "WRITE"}})
+        for version, expected in ((None, 1), (0, 0), (1, 1)):
+            with self.subTest(version=version):
+                table = DeltaTable(self.location, version=version)
+                self.assertEqual(table.version, expected)
+                self.assertEqual(repr(table), f"DeltaTable(version={expected})")
+
+    def test_version_validation(self):
+        class Version(int):
+            def __lt__(self, other):
+                return False
+
+            def __index__(self):
+                return 123
+
+        self.assertEqual(DeltaTable(self.location, version=Version(0)).version, 0)
+        with self.assertRaises(TypeError):
+            DeltaTable(self.location, 0)
+        cases = (
+            (True, TypeError),
+            (False, TypeError),
+            (0.0, TypeError),
+            ("0", TypeError),
+            (b"0", TypeError),
+            (object(), TypeError),
+            (-1, ValueError),
+            (-(2**100), ValueError),
+            (Version(-1), ValueError),
+            (2**64, OverflowError),
+            (2**100, OverflowError),
+        )
+        for version, error in cases:
+            with self.subTest(version=version), self.assertRaises(error):
+                DeltaTable(self.location / "missing", version=version)
+
+    def test_missing_snapshot_version(self):
+        for version in (1, 2**64 - 1):
+            with self.subTest(version=version):
+                with self.assertRaises(DeltaReaderError) as caught:
+                    DeltaTable(self.location, version=version)
+                self.assertEqual(caught.exception.phase, "snapshot")
+                self.assertEqual(caught.exception.code, "snapshot_load")
+                self.assertNotIn("secret", str(caught.exception))
+
     def test_location_requires_text(self):
         class BytesPath:
             def __fspath__(self):

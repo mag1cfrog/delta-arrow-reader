@@ -2,10 +2,13 @@
 
 use std::sync::Arc;
 
-use ::delta_arrow_reader::{DeltaTable as CoreDeltaTable, DeltaTableBuilder};
+use ::delta_arrow_reader::{
+    DeltaSnapshotSelection, DeltaTable as CoreDeltaTable, DeltaTableBuilder,
+};
 use pyo3::{
-    exceptions::{PyException, PyRuntimeError},
+    exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
+    types::{PyBool, PyInt},
 };
 use tokio::runtime::Runtime;
 
@@ -17,6 +20,9 @@ pyo3::create_exception!(
 );
 
 /// One immutable Delta snapshot, loaded from a string or os.PathLike[str].
+///
+/// With version=None, load the latest snapshot. Otherwise, version must be an
+/// integer from 0 to 2**64 - 1. Booleans are not accepted.
 #[pyclass(module = "delta_arrow_reader", frozen)]
 struct DeltaTable {
     table: CoreDeltaTable,
@@ -27,17 +33,39 @@ struct DeltaTable {
 #[pymethods]
 impl DeltaTable {
     #[new]
-    fn new(py: Python<'_>, location: &Bound<'_, PyAny>) -> PyResult<Self> {
+    #[pyo3(signature = (location, *, version=None))]
+    fn new(
+        py: Python<'_>,
+        location: &Bound<'_, PyAny>,
+        version: Option<&Bound<'_, PyInt>>,
+    ) -> PyResult<Self> {
         let location: String = py
             .import("os")?
             .call_method1("fspath", (location,))?
             .extract()?;
+        let selection = match version {
+            None => DeltaSnapshotSelection::Latest,
+            Some(version) => {
+                if version.is_instance_of::<PyBool>() {
+                    return Err(PyTypeError::new_err("version must be an integer, not bool"));
+                }
+                // Validate the integer value even if a subclass overrides comparisons.
+                let version = py
+                    .get_type::<PyInt>()
+                    .call_method1("__index__", (version,))?;
+                if version.lt(0)? {
+                    return Err(PyValueError::new_err("version must be nonnegative"));
+                }
+                DeltaSnapshotSelection::Version(version.extract::<u64>()?)
+            }
+        };
+        let builder = DeltaTableBuilder::new(location).with_snapshot_selection(selection);
         let runtime = Arc::new(
             Runtime::new()
                 .map_err(|_| PyRuntimeError::new_err("failed to create the reader runtime"))?,
         );
         // ponytail: blocking wait; #417 adds signal checks and cleanup from runtime workers.
-        let result = py.detach(|| runtime.block_on(DeltaTableBuilder::new(location).load_table()));
+        let result = py.detach(|| runtime.block_on(builder.load_table()));
         let table = match result {
             Ok(table) => table,
             Err(error) => {

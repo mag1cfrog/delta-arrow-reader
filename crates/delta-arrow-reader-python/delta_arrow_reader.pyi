@@ -7,6 +7,8 @@ class DeltaReaderError(Exception):
     code: str
 
 class DeltaTable:
-    def __init__(self, location: str | PathLike[str]) -> None: ...
+    def __init__(
+        self, location: str | PathLike[str], *, version: int | None = None
+    ) -> None: ...
     @property
     def version(self) -> int: ...
