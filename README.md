@@ -36,7 +36,8 @@ query times.
 Install the Rust crate from crates.io with `cargo add` (Rust 1.94 or later).
 [Python bindings are planned](https://mag1cfrog.github.io/delta-arrow-reader/project-direction/#python-can-proceed-independently); a Python package is not available yet.
 
-Add the reader and the dependencies used by the example:
+The example uses Tokio to run async code and `futures-util` to read the batch
+stream. Add them with the reader:
 
 ```bash
 cargo add delta-arrow-reader futures-util
