@@ -443,7 +443,7 @@ impl DirectParquetReader {
         &self,
         task: &DeltaScanFileTask,
     ) -> Result<ParquetFileObject, DeltaReaderError> {
-        let path = resolve_data_file_path(self.engine_context.table_url(), &task.path)?;
+        let path = resolve_data_file_path(self.engine_context.file_resolution_url(), &task.path)?;
         let file_size = task.file_size.ok_or_else(|| {
             data_file_error(
                 "data_file_size_missing",

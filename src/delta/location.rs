@@ -1,7 +1,89 @@
 //! Delta table location normalization.
 
+use object_store::{ObjectStoreScheme, azure::AzureConfigKey, path::Path};
+use url::{Position, Url};
+
 use super::kernel::parse_table_location;
-use crate::{DeltaReaderError, error::InvalidTableLocationSnafu};
+use crate::{DeltaReaderError, DeltaStorageOptions, error::InvalidTableLocationSnafu};
+
+/// Includes an Azure container supplied through options in the base for file URLs.
+pub(crate) fn file_resolution_url(
+    mut table_url: Url,
+    storage_options: &DeltaStorageOptions,
+) -> delta_kernel::DeltaResult<Url> {
+    if table_url.scheme() != "https"
+        || table_url.path() != "/"
+        || !matches!(
+            ObjectStoreScheme::parse(&table_url),
+            Ok((ObjectStoreScheme::MicrosoftAzure, _))
+        )
+    {
+        return Ok(table_url);
+    }
+    // Use object_store's option aliases and last-value-wins order.
+    let Some((_, container)) = storage_options.iter().rev().find(|(key, _)| {
+        matches!(
+            key.to_ascii_lowercase().parse::<AzureConfigKey>(),
+            Ok(AzureConfigKey::ContainerName)
+        )
+    }) else {
+        return Ok(table_url);
+    };
+    // Resolve paths as for an explicit HTTPS container URL, retaining HTTPS
+    // parsing rules for paths that contain backslashes or another authority.
+    table_url
+        .path_segments_mut()
+        .map_err(|()| delta_kernel::Error::generic("invalid configured Azure container"))?
+        .clear()
+        .push(container)
+        .push("");
+    Ok(table_url)
+}
+
+pub(crate) fn object_store_path(url: &Url) -> object_store::Result<Path> {
+    if let Some(path) = s3_virtual_host_path_workaround(url)? {
+        return Ok(path);
+    }
+    match ObjectStoreScheme::parse(url) {
+        Ok((_, path)) => Ok(path),
+        // Registered custom stores use the URL's path. Invalid keys still fail
+        // Path validation here; object_store's parse error type is private.
+        Err(_) => Ok(Path::from_url_path(url.path())?),
+    }
+}
+
+// object_store mistakes virtual-hosted buckets starting with "s3" for path-style URLs.
+// Remove this helper and its call once our minimum object_store version fixes
+// https://github.com/mag1cfrog/delta-arrow-reader/issues/399.
+fn s3_virtual_host_path_workaround(url: &Url) -> object_store::Result<Option<Path>> {
+    if url.scheme() == "https"
+        && url.host_str().is_some_and(|host| {
+            host.starts_with("s3") && host.contains(".s3.") && host.ends_with(".amazonaws.com")
+        })
+    {
+        return Ok(Some(Path::from_url_path(url.path())?));
+    }
+    Ok(None)
+}
+
+/// Replaces the URL path with a store-relative object key for Kernel I/O.
+/// Encodes the key once, preserves the URL's trailing directory slash, and
+/// removes query strings and fragments.
+pub(crate) fn with_object_store_path(mut url: Url, path: &Path) -> delta_kernel::DeltaResult<Url> {
+    let directory = url.path().ends_with('/');
+    {
+        let mut segments = url
+            .path_segments_mut()
+            .map_err(|()| delta_kernel::Error::generic("object store URL cannot contain a path"))?;
+        segments.clear().extend(path.parts());
+        if directory {
+            segments.push("");
+        }
+    }
+    url.set_query(None);
+    url.set_fragment(None);
+    Ok(url)
+}
 
 /// Normalizes a Delta table path or URL for snapshot loading.
 pub(crate) fn normalize_table_location(table_location: &str) -> Result<url::Url, DeltaReaderError> {
@@ -12,11 +94,99 @@ pub(crate) fn normalize_table_location(table_location: &str) -> Result<url::Url,
         .fail();
     }
 
-    parse_table_location(table_location).map_err(|_| {
-        InvalidTableLocationSnafu {
-            reason: "invalid_table_location",
+    parse_table_location(table_location)
+        .ok()
+        .filter(|url| path_namespace(url).is_some())
+        .ok_or_else(|| {
+            InvalidTableLocationSnafu {
+                reason: "invalid_table_location",
+            }
+            .build()
+        })
+}
+
+// Compare the full authority, including an ABFS container in the username.
+// Endpoint aliases cannot be inferred from bucket names: options may select a
+// private store. Azure's documented account/container aliases are handled below.
+pub(crate) fn same_store(table: &Url, file: &Url) -> bool {
+    let (Some(table_namespace), Some(file_namespace)) =
+        (path_namespace(table), path_namespace(file))
+    else {
+        return false;
+    };
+    storage_identity(table, table_namespace) == storage_identity(file, file_namespace)
+}
+
+#[derive(PartialEq, Eq)]
+enum StorageIdentity<'a> {
+    Azure {
+        account: &'a str,
+        service: &'a str,
+        container: &'a str,
+    },
+    Url {
+        scheme: &'a str,
+        authority: &'a str,
+        namespace: &'a str,
+    },
+}
+
+fn storage_identity<'a>(url: &'a Url, namespace: &'a str) -> StorageIdentity<'a> {
+    // object_store maps qualified ABFS and HTTPS Azure URLs to the account's
+    // blob endpoint. Both spellings identify the same store, including dfs/blob
+    // aliases. Core Azure and Fabric remain distinct services.
+    let container = match url.scheme() {
+        "https" if url.username().is_empty() => Some(namespace),
+        "az" | "abfs" | "abfss" if !url.username().is_empty() => Some(url.username()),
+        _ => None,
+    };
+    if let Some(container) = container
+        && url.password().is_none()
+        && url.port().is_none_or(|port| port == 443)
+        && let Some((account, suffix)) = url.host_str().and_then(|host| host.split_once('.'))
+    {
+        let service = match suffix {
+            "dfs.core.windows.net" | "blob.core.windows.net" => Some("core"),
+            "dfs.fabric.microsoft.com" | "blob.fabric.microsoft.com" => Some("fabric"),
+            _ => None,
+        };
+        if let Some(service) = service {
+            return StorageIdentity::Azure {
+                account,
+                service,
+                container,
+            };
         }
-        .build()
+    }
+    StorageIdentity::Url {
+        scheme: storage_scheme(url),
+        authority: &url[Position::BeforeUsername..Position::AfterPort],
+        namespace,
+    }
+}
+
+fn storage_scheme(url: &Url) -> &str {
+    match url.scheme() {
+        "s3a" => "s3",
+        // These short forms all take the container from the host and use the
+        // configured account. Qualified ABFS URLs are handled separately above.
+        "az" | "adl" | "azure" | "abfs" | "abfss" if url.username().is_empty() => "az",
+        "az" | "abfs" | "abfss" => "abfs",
+        scheme => scheme,
+    }
+}
+
+fn path_namespace(url: &Url) -> Option<&str> {
+    // A prefix removed by object_store identifies the bucket/container, not
+    // part of the object key. Keep it in identity checks for relative paths too.
+    // Invalid paths have no identity; two failures must never compare equal.
+    let full = Path::from_url_path(url.path()).ok()?;
+    let key = object_store_path(url).ok()?;
+    Some(if full != key {
+        let path = url.path().strip_prefix('/').unwrap_or(url.path());
+        path.split('/').next().unwrap_or("")
+    } else {
+        ""
     })
 }
 

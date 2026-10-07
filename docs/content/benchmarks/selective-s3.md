@@ -130,7 +130,7 @@ to compare the scale of remote work in this sample, not to claim universal
 byte efficiency. delta-rs is absent from this table because its benchmark path
 did not expose an equivalent counter.
 
-## The same-machine Rust baseline was not close
+## Same-machine comparison with delta-rs
 
 delta-rs ran beside Delta Arrow Reader on the same laptop, against the same S3
 objects and pinned Delta snapshots. It executed the same query shapes and

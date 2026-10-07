@@ -33,7 +33,7 @@ result from a much larger Delta table in S3.
 From a laptop over the public internet, Delta Arrow Reader had lower median
 query times than Databricks Serverless SQL Small on all four queries. Q2 was
 too variable for a clear conclusion. Against Lakehouse//RT Small (Beta), its
-median was lower on Q3 and within 33.8% on Q1 and Q4.
+median was lower on Q3, within 33.8% on Q1 and Q4, and 2.33 times as long on Q2.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-readme-dark.svg">
