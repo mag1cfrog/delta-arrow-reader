@@ -85,7 +85,6 @@ pub enum WarmupMode {
 ///
 /// ```no_run
 /// use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaScalar, DeltaTableBuilder};
-/// use futures_util::TryStreamExt;
 ///
 /// # async fn read_table() -> Result<(), Box<dyn std::error::Error>> {
 /// let table = DeltaTableBuilder::new("/tmp/example-delta-table")
@@ -104,7 +103,7 @@ pub enum WarmupMode {
 ///     .await?;
 /// let mut batches = scan.into_stream();
 ///
-/// while let Some(batch) = batches.try_next().await? {
+/// while let Some(batch) = batches.next_batch().await? {
 ///     println!("rows={}", batch.num_rows());
 /// }
 /// # Ok(())
@@ -625,7 +624,7 @@ impl DeltaScan {
 /// Pull-driven stream of finalized logical Arrow batches from one Delta scan.
 ///
 /// The stream has no inherent whole-result collection method. Callers that
-/// intentionally materialize a result must opt into a stream extension trait.
+/// intentionally materialize a result can import [`TryStreamExt`](crate::TryStreamExt).
 ///
 /// ```compile_fail
 /// use delta_arrow_reader::DeltaBatchStream;
@@ -650,6 +649,15 @@ pub struct DeltaBatchStream {
 }
 
 impl DeltaBatchStream {
+    /// Reads the next batch, returning `None` when the stream is exhausted.
+    ///
+    /// # Errors
+    ///
+    /// Propagates errors from reading or processing a batch. The stream ends after an error.
+    pub async fn next_batch(&mut self) -> Result<Option<RecordBatch>, DeltaReaderError> {
+        futures_util::TryStreamExt::try_next(self).await
+    }
+
     /// Returns a shared handle to the visible logical output schema.
     pub fn schema(&self) -> SchemaRef {
         Arc::clone(&self.schema)
@@ -1476,12 +1484,14 @@ mod tests {
         assert_eq!(metrics.snapshot().scheduler_batches_emitted, 2);
         assert_eq!(limiter.active_file_reads(), 2);
 
+        // Cancelling a pending read must leave the next batch available.
+        assert!(stream.next_batch().now_or_never().is_none());
         first_partition_gate.notify_one();
         let mut ids = vec![batch_id(
-            &stream.next().await.ok_or("second batch missing")??,
+            &stream.next_batch().await?.ok_or("second batch missing")?,
         )];
-        while let Some(batch) = stream.next().await {
-            ids.push(batch_id(&batch?));
+        while let Some(batch) = stream.next_batch().await? {
+            ids.push(batch_id(&batch));
         }
         assert_eq!(ids, [2, 10, 20]);
         assert_eq!(metrics.snapshot().scheduler_batches_emitted, 4);

@@ -12,6 +12,7 @@ pub use reader::datafusion;
 
 pub use delta::DeltaProtocol;
 pub use error::{DeltaReaderError, DeltaReaderPhase};
+pub use futures_util::TryStreamExt;
 #[doc(hidden)]
 pub mod diagnostics {
     pub mod parquet_range_planning {
