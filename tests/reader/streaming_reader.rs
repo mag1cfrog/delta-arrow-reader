@@ -21,14 +21,12 @@ use delta_arrow_reader::{
     DeltaStorageOptions, WarmupMode,
 };
 use delta_arrow_reader::{
-    DeltaScan, DeltaScanExecutionOptions, DeltaScanMetrics, DeltaTableBuilder,
+    DeltaScan, DeltaScanExecutionOptions, DeltaScanMetrics, DeltaTableBuilder, TryStreamExt,
 };
 use delta_kernel::Snapshot;
 use delta_kernel_default_engine::{
     DefaultEngineBuilder, executor::tokio::TokioMultiThreadExecutor, storage::store_from_url,
 };
-use futures_util::StreamExt;
-use futures_util::TryStreamExt;
 use parquet::{arrow::ArrowWriter, file::properties::WriterProperties};
 use serde_json::{Value, json};
 
@@ -277,9 +275,13 @@ fn runtime() -> TestResult<tokio::runtime::Runtime> {
 }
 
 async fn collect_scan(scan: DeltaScan) -> TestResult<(Vec<RecordBatch>, DeltaScanMetrics)> {
-    let stream = scan.into_stream();
+    let mut stream = scan.into_stream();
     let metrics = stream.metrics();
-    let batches = stream.try_collect().await?;
+    let mut batches = Vec::new();
+    while let Some(batch) = stream.next_batch().await? {
+        batches.push(batch);
+    }
+    assert!(stream.next_batch().await?.is_none());
     Ok((batches, metrics))
 }
 
@@ -986,8 +988,9 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
             .await?;
 
         let idle = table.scan().with_target_partitions(1)?.build().await?;
-        let idle_stream = idle.into_stream();
+        let mut idle_stream = idle.into_stream();
         let idle_metrics = idle_stream.metrics();
+        drop(idle_stream.next_batch());
         assert_eq!(idle_metrics.snapshot().file_tasks_started, 0);
         drop(idle_stream);
         tokio::task::yield_now().await;
@@ -996,7 +999,7 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
         let partial = table.scan().with_target_partitions(1)?.build().await?;
         let mut partial_stream = partial.into_stream();
         let partial_metrics = partial_stream.metrics();
-        let first = partial_stream.next().await.expect("first batch")?;
+        let first = partial_stream.next_batch().await?.expect("first batch");
         assert!(first.num_rows() > 0);
         drop(partial_stream);
         tokio::task::yield_now().await;
@@ -1010,12 +1013,11 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
         let mut stream = scan.into_stream();
         let metrics = stream.metrics();
         let error = stream
-            .next()
+            .next_batch()
             .await
-            .expect("one error item")
             .expect_err("missing file must fail");
         assert_eq!(error.phase(), DeltaReaderPhase::DataFileRead);
-        assert!(stream.next().await.is_none());
+        assert!(stream.next_batch().await?.is_none());
         assert_eq!(metrics.snapshot().file_tasks_started, 1);
         Ok::<_, Box<dyn Error>>(())
     })
