@@ -32,7 +32,7 @@ use delta_kernel_default_engine::{DefaultEngineBuilder, storage::store_from_url_
 use object_store::ObjectStore;
 use url::Url;
 
-use super::location::{object_store_path, same_store, with_object_store_path};
+use super::location::{object_store_path, with_object_store_path};
 use crate::{DeltaComparison, DeltaPredicate, DeltaScalar, DeltaStorageOptions};
 
 #[allow(dead_code)]
@@ -588,18 +588,7 @@ impl DeltaKernelEngineContext {
         &self,
         deletion_vector: &KernelDeletionVectorHandle,
     ) -> delta_kernel::DeltaResult<roaring::RoaringTreemap> {
-        let mut descriptor = deletion_vector.0.clone();
-        if let Some(location) = descriptor.absolute_path(&self.public_table_url)? {
-            if !same_store(&self.public_table_url, &location) {
-                return Err(delta_kernel::Error::generic(
-                    "deletion vector URL does not identify the configured table store",
-                ));
-            }
-            let path = object_store_path(&location)?;
-            descriptor.storage_type =
-                delta_kernel::actions::deletion_vector::DeletionVectorStorageType::PersistedAbsolute;
-            descriptor.path_or_inline_dv = with_object_store_path(location, &path)?.into();
-        }
+        let descriptor = deletion_vector.descriptor_for_store(&self.public_table_url)?;
         descriptor.read(
             self.engine.storage_handler(),
             &self.store_relative_table_url,
