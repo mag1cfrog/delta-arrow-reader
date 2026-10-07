@@ -7,14 +7,8 @@ use super::kernel::parse_table_location;
 use crate::{DeltaReaderError, error::InvalidTableLocationSnafu};
 
 pub(crate) fn object_store_path(url: &Url) -> object_store::Result<Path> {
-    // object_store 0.13 treats any AWS host starting with "s3" as path-style,
-    // including virtual-hosted buckets such as s3bucket.s3.us-east-1.amazonaws.com.
-    if url.scheme() == "https"
-        && url.host_str().is_some_and(|host| {
-            host.starts_with("s3") && host.contains(".s3.") && host.ends_with(".amazonaws.com")
-        })
-    {
-        return Ok(Path::from_url_path(url.path())?);
+    if let Some(path) = s3_virtual_host_path_workaround(url)? {
+        return Ok(path);
     }
     match ObjectStoreScheme::parse(url) {
         Ok((_, path)) => Ok(path),
@@ -22,6 +16,20 @@ pub(crate) fn object_store_path(url: &Url) -> object_store::Result<Path> {
         // Path validation here; object_store's parse error type is private.
         Err(_) => Ok(Path::from_url_path(url.path())?),
     }
+}
+
+// object_store mistakes virtual-hosted buckets starting with "s3" for path-style URLs.
+// Remove this helper and its call once our minimum object_store version fixes
+// https://github.com/mag1cfrog/delta-arrow-reader/issues/399.
+fn s3_virtual_host_path_workaround(url: &Url) -> object_store::Result<Option<Path>> {
+    if url.scheme() == "https"
+        && url.host_str().is_some_and(|host| {
+            host.starts_with("s3") && host.contains(".s3.") && host.ends_with(".amazonaws.com")
+        })
+    {
+        return Ok(Some(Path::from_url_path(url.path())?));
+    }
+    Ok(None)
 }
 
 /// Kernel expects a URL whose path is already relative to its configured store.
