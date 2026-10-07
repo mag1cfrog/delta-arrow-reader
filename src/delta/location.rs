@@ -32,7 +32,9 @@ fn s3_virtual_host_path_workaround(url: &Url) -> object_store::Result<Option<Pat
     Ok(None)
 }
 
-/// Kernel expects a URL whose path is already relative to its configured store.
+/// Replaces the URL path with a store-relative object key for Kernel I/O.
+/// Encodes the key once, preserves the URL's trailing directory slash, and
+/// removes query strings and fragments.
 pub(crate) fn with_object_store_path(mut url: Url, path: &Path) -> delta_kernel::DeltaResult<Url> {
     let directory = url.path().ends_with('/');
     {

@@ -186,16 +186,23 @@ async fn cloud_table_locations_use_bucket_relative_keys_in_both_backends() -> Te
                     continue;
                 }
                 if kind == "foreign-dv" {
-                    let error = result.err().ok_or("foreign DV returned rows")?;
-                    assert!(matches!(error, DeltaReaderError::DeletionVectorRead { .. }));
+                    let error = result.err().ok_or_else(|| {
+                        format!("foreign DV returned rows: {table_url}, {backend:?}, {kind}")
+                    })?;
                     assert!(
-                        error
-                            .source()
-                            .ok_or("missing DV error source")?
-                            .to_string()
-                            .contains(
-                                "deletion vector URL does not identify the configured table store"
-                            )
+                        matches!(error, DeltaReaderError::DeletionVectorRead { .. }),
+                        "{table_url}, {backend:?}, {kind}: {error:?}"
+                    );
+                    let source = error.source().ok_or_else(|| {
+                        format!(
+                            "missing DV error source: {table_url}, {backend:?}, {kind}: {error:?}"
+                        )
+                    })?;
+                    assert!(
+                        source.to_string().contains(
+                            "deletion vector URL does not identify the configured table store"
+                        ),
+                        "{table_url}, {backend:?}, {kind}: {error:?}"
                     );
                     continue;
                 }
