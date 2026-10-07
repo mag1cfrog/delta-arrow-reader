@@ -33,9 +33,10 @@ query times.
 
 ## Get started
 
-Requires Rust 1.94 or later. [Python bindings are planned](https://mag1cfrog.github.io/delta-arrow-reader/project-direction/#python-can-proceed-independently).
+Install the Rust crate from crates.io with `cargo add` (Rust 1.94 or later).
+[Python bindings are planned](https://mag1cfrog.github.io/delta-arrow-reader/project-direction/#python-can-proceed-independently); a Python package is not available yet.
 
-In your Rust project, add:
+Add the reader and the dependencies used by the example:
 
 ```bash
 cargo add delta-arrow-reader futures-util
