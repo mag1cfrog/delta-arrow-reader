@@ -1,0 +1,16 @@
+[package]
+name = "delta-arrow-reader-python"
+version.workspace = true
+edition = "2024"
+rust-version = "1.94"
+license-file = "../../LICENSE"
+repository = "https://github.com/mag1cfrog/delta-arrow-reader"
+description = "Python bindings for the read-only Delta Lake to Apache Arrow reader"
+publish = false
+
+[lib]
+name = "delta_arrow_reader"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.29", features = ["abi3-py310"] }
