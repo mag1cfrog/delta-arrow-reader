@@ -1,5 +1,10 @@
 # Benchmarks
 
+The [TPC-H-derived selective-read results](benchmarks/selective-read-results.md) cover
+eight SF10 cases with delta-rs, DuckDB, Polars and Spark. That report is
+under review. This page retains the earlier four-workload local MinIO comparison
+and its original reader versions.
+
 We compared Delta Arrow Reader with delta-rs, DuckDB, Polars, and Daft on four
 workloads. Delta Arrow Reader had the lowest median time on every workload an
 alternative could run. Polars completed all four workloads. Daft completed the
