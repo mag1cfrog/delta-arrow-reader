@@ -44,6 +44,7 @@ nav:
       - Read scheduling: read-scheduling.md
   - Performance:
       - Reader benchmarks: benchmarks.md
+      - SF10 selective-read results: benchmarks/selective-read-results.md
       - Q2/Q4-derived main workloads: benchmarks/selective-read-production-shapes.md
       - Generate Q2/Q4-derived inputs: benchmarks/selective-read-production-fixtures.md
       - Q2/Q4 execution contract: benchmarks/selective-read-production-workloads.md

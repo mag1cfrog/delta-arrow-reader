@@ -1,0 +1,81 @@
+case_id,reader_id,execution_mode,run_id,status,scope,requests,response_bytes,candidate_files,matching_files,touched_parquet_files,parquet_get_files,parquet_head_files,listing_requests,listing_response_bytes,delta_log_requests,delta_log_response_bytes,parquet_requests,parquet_response_bytes,deletion_vector_requests,deletion_vector_response_bytes,other_requests,other_response_bytes
+production.q2.localized,delta-arrow-reader,open,r6-adf4f54-q2-localized-gatewarm-r2-00051,success,one query,334,70172128,5,5,5,5,0,1,812,3,6999473,330,63171843,0,0,0,0
+production.q2.localized,delta-rs,open,r6-adf4f54-q2-localized-gatewarm-r2-00052,success,one query,56,178791367,5,5,5,5,0,1,812,3,6999473,52,171791082,0,0,0,0
+production.q2.localized,duckdb,open,r6-adf4f54-q2-localized-gatewarm-r2-00053,success,one query,42,188266494,5,5,5,5,5,1,812,6,17497832,35,170767850,0,0,0,0
+production.q2.localized,polars,open,r6-adf4f54-q2-localized-gatewarm-r2-00054,success,one query,44,184901533,5,5,5,5,5,1,812,3,6999473,40,177901248,0,0,0,0
+production.q2.localized,spark,open,r6-adf4f54-q2-localized-gatewarm-r2-00055,success,one query,452,75112495,5,5,5,5,5,7,4825,6,6998906,435,68108764,0,0,4,0
+production.q2.localized,delta-arrow-reader,reuse,r6-adf4f54-q2-localized-gatewarm-r2-00057,success,initialization and two queries,694,123413844,5,5,5,5,0,1,812,3,6999473,690,116413559,0,0,0,0
+production.q2.localized,delta-rs,reuse,r6-adf4f54-q2-localized-gatewarm-r2-00058,success,initialization and two queries,86,347839682,5,5,5,5,0,1,812,3,6999473,82,340839397,0,0,0,0
+production.q2.localized,duckdb,reuse,r6-adf4f54-q2-localized-gatewarm-r2-00059,success,initialization and two queries,76,355534891,5,5,5,5,5,1,812,5,13998379,70,341535700,0,0,0,0
+production.q2.localized,polars,reuse,r6-adf4f54-q2-localized-gatewarm-r2-00060,success,initialization and two queries,84,362802781,5,5,5,5,5,1,812,3,6999473,80,355802496,0,0,0,0
+production.q2.localized,spark,reuse,r6-adf4f54-q2-localized-gatewarm-r2-00061,success,initialization and two queries,887,143221259,5,5,5,5,5,7,4825,6,6998906,870,136217528,0,0,4,0
+production.q2.scattered,delta-arrow-reader,open,r6-dcf2fa8-q2-scattered-00065,success,one query,44,179926971,5,5,5,5,0,1,812,3,6999473,40,172926686,0,0,0,0
+production.q2.scattered,delta-rs,open,r6-dcf2fa8-q2-scattered-00066,success,one query,58,182781688,5,5,5,5,0,1,812,3,6999473,54,175781403,0,0,0,0
+production.q2.scattered,duckdb,open,r6-dcf2fa8-q2-scattered-00067,success,one query,42,189383565,5,5,5,5,5,1,812,6,17497832,35,171884921,0,0,0,0
+production.q2.scattered,polars,open,r6-dcf2fa8-q2-scattered-00068,success,one query,44,186039703,5,5,5,5,5,1,812,3,6999473,40,179039418,0,0,0,0
+production.q2.scattered,spark,open,r6-dcf2fa8-q2-scattered-00069,success,one query,132,184794827,5,5,5,5,5,7,4825,6,6998906,115,177791096,0,0,4,0
+production.q2.scattered,delta-arrow-reader,reuse,r6-dcf2fa8-q2-scattered-00075,success,initialization and two queries,84,352853657,5,5,5,5,0,1,812,3,6999473,80,345853372,0,0,0,0
+production.q2.scattered,delta-rs,reuse,r6-dcf2fa8-q2-scattered-00076,success,initialization and two queries,88,355570817,5,5,5,5,0,1,812,3,6999473,84,348570532,0,0,0,0
+production.q2.scattered,duckdb,reuse,r6-dcf2fa8-q2-scattered-00077,success,initialization and two queries,76,357769033,5,5,5,5,5,1,812,5,13998379,70,343769842,0,0,0,0
+production.q2.scattered,polars,reuse,r6-dcf2fa8-q2-scattered-00078,success,initialization and two queries,84,365079121,5,5,5,5,5,1,812,3,6999473,80,358078836,0,0,0,0
+production.q2.scattered,spark,reuse,r6-dcf2fa8-q2-scattered-00079,success,initialization and two queries,247,362585923,5,5,5,5,5,7,4825,6,6998906,230,355582192,0,0,4,0
+production.q2.localized.dv,delta-arrow-reader,open,r6-09b262a-q2-localized-dv-staged-00051,success,one query,343,77253459,5,5,5,5,0,1,1146,5,14073403,330,63171843,7,7067,0,0
+production.q2.localized.dv,delta-rs,open,r6-09b262a-q2-localized-dv-staged-00052,success,one query,56,1193081591,5,5,5,5,0,1,1146,5,14073403,45,1179002061,5,4981,0,0
+production.q2.localized.dv,duckdb,open,r6-09b262a-q2-localized-dv-staged-00053,success,one query,52,205956625,5,5,5,5,5,1,1146,11,35182648,35,170767850,5,4981,0,0
+production.q2.localized.dv,polars,open,r6-09b262a-q2-localized-dv-staged-00054,success,one query,311,1193209032,5,5,5,5,5,1,1146,5,14073403,175,1179002061,130,132422,0,0
+production.q2.localized.dv,spark,open,r6-09b262a-q2-localized-dv-staged-00055,success,one query,506,82213616,5,5,5,5,5,7,7142,10,14072830,435,68108764,50,24880,4,0
+production.q2.localized.dv,delta-arrow-reader,reuse,r6-09b262a-q2-localized-dv-staged-00057,success,initialization and two queries,712,130504040,5,5,5,5,0,1,1146,5,14073403,690,116413559,16,15932,0,0
+production.q2.localized.dv,delta-rs,reuse,r6-09b262a-q2-localized-dv-staged-00058,success,initialization and two queries,96,2370841932,5,5,5,5,0,1,1146,5,14073403,80,2356757421,10,9962,0,0
+production.q2.localized.dv,duckdb,reuse,r6-09b262a-q2-localized-dv-staged-00059,success,initialization and two queries,90,369693041,5,5,5,5,5,1,1146,9,28146233,70,341535700,10,9962,0,0
+production.q2.localized.dv,polars,reuse,r6-09b262a-q2-localized-dv-staged-00060,success,initialization and two queries,616,2372343515,5,5,5,5,5,1,1146,5,14073403,350,2358004122,260,264844,0,0
+production.q2.localized.dv,spark,reuse,r6-09b262a-q2-localized-dv-staged-00061,success,initialization and two queries,991,150347260,5,5,5,5,5,7,7142,10,14072830,870,136217528,100,49760,4,0
+production.q2.scattered.dv,delta-arrow-reader,open,r6-dcf2fa8-q2-scattered-dv-stage2-00065,success,one query,53,187008172,5,5,5,5,0,1,1146,5,14073405,40,172926686,7,6935,0,0
+production.q2.scattered.dv,delta-rs,open,r6-dcf2fa8-q2-scattered-dv-stage2-00066,success,one query,56,1201116508,5,5,5,5,0,1,1146,5,14073405,45,1187036984,5,4973,0,0
+production.q2.scattered.dv,duckdb,open,r6-dcf2fa8-q2-scattered-dv-stage2-00067,success,one query,52,207073693,5,5,5,5,5,1,1146,11,35182653,35,171884921,5,4973,0,0
+production.q2.scattered.dv,polars,open,r6-dcf2fa8-q2-scattered-dv-stage2-00068,success,one query,311,1201243941,5,5,5,5,5,1,1146,5,14073405,175,1187036984,130,132406,0,0
+production.q2.scattered.dv,spark,open,r6-dcf2fa8-q2-scattered-dv-stage2-00069,success,one query,186,191895910,5,5,5,5,5,7,7142,10,14072832,115,177791096,50,24840,4,0
+production.q2.scattered.dv,delta-arrow-reader,reuse,r6-dcf2fa8-q2-scattered-dv-stage2-00075,success,initialization and two queries,100,359942025,5,5,5,5,0,1,1146,5,14073405,80,345853372,14,14102,0,0
+production.q2.scattered.dv,delta-rs,reuse,r6-dcf2fa8-q2-scattered-dv-stage2-00076,success,initialization and two queries,96,2386911694,5,5,5,5,0,1,1146,5,14073405,80,2372827197,10,9946,0,0
+production.q2.scattered.dv,duckdb,reuse,r6-dcf2fa8-q2-scattered-dv-stage2-00077,success,initialization and two queries,90,371927171,5,5,5,5,5,1,1146,9,28146237,70,343769842,10,9946,0,0
+production.q2.scattered.dv,polars,reuse,r6-dcf2fa8-q2-scattered-dv-stage2-00078,success,initialization and two queries,616,2388413331,5,5,5,5,5,1,1146,5,14073405,350,2374073968,260,264812,0,0
+production.q2.scattered.dv,spark,reuse,r6-dcf2fa8-q2-scattered-dv-stage2-00079,success,initialization and two queries,351,369711846,5,5,5,5,5,7,7142,10,14072832,230,355582192,100,49680,4,0
+production.q4.localized,delta-arrow-reader,open,r6-09b262a-q4-localized-final-00051,success,one query,400,94793084,6,6,6,6,0,1,811,3,945899,396,93846374,0,0,0,0
+production.q4.localized,delta-rs,open,r6-09b262a-q4-localized-final-00052,success,one query,66,390563478,6,6,6,6,0,1,811,3,945899,62,389616768,0,0,0,0
+production.q4.localized,duckdb,open,r6-09b262a-q4-localized-final-00053,success,one query,43,397880529,6,6,6,6,6,1,811,6,2363897,36,395515821,0,0,0,0
+production.q4.localized,polars,open,r6-09b262a-q4-localized-final-00054,success,one query,70,402200278,6,6,6,6,6,1,811,3,945899,66,401253568,0,0,0,0
+production.q4.localized,spark,open,r6-09b262a-q4-localized-final-00055,success,one query,541,77796064,6,6,6,6,6,7,4818,6,945332,524,76845914,0,0,4,0
+production.q4.localized,delta-arrow-reader,reuse,r6-09b262a-q4-localized-final-00057,success,initialization and two queries,844,157795781,6,6,6,6,0,1,811,3,945899,840,156849071,0,0,0,0
+production.q4.localized,delta-rs,reuse,r6-09b262a-q4-localized-final-00058,success,initialization and two queries,102,778904045,6,6,6,6,0,1,811,3,945899,98,777957335,0,0,0,0
+production.q4.localized,duckdb,reuse,r6-09b262a-q4-localized-final-00059,success,initialization and two queries,78,792923684,6,6,6,6,6,1,811,5,1891231,72,791031642,0,0,0,0
+production.q4.localized,polars,reuse,r6-09b262a-q4-localized-final-00060,success,initialization and two queries,136,803453846,6,6,6,6,6,1,811,3,945899,132,802507136,0,0,0,0
+production.q4.localized,spark,reuse,r6-09b262a-q4-localized-final-00061,success,initialization and two queries,1065,154641978,6,6,6,6,6,7,4818,6,945332,1048,153691828,0,0,4,0
+production.q4.scattered,delta-arrow-reader,open,r6-09b262a-q4-scattered-final-00051,success,one query,58,398980720,6,6,6,6,0,1,811,3,945899,54,398034010,0,0,0,0
+production.q4.scattered,delta-rs,open,r6-09b262a-q4-scattered-final-00052,success,one query,66,400560284,6,6,6,6,0,1,811,3,945899,62,399613574,0,0,0,0
+production.q4.scattered,duckdb,open,r6-09b262a-q4-scattered-final-00053,success,one query,55,400552146,6,6,6,6,6,1,811,6,2363897,48,398187438,0,0,0,0
+production.q4.scattered,polars,open,r6-09b262a-q4-scattered-final-00054,success,one query,70,404997313,6,6,6,6,6,1,811,3,945899,66,404050603,0,0,0,0
+production.q4.scattered,spark,open,r6-09b262a-q4-scattered-final-00055,success,one query,149,401690197,6,6,6,6,6,7,4818,6,945332,132,400740047,0,0,4,0
+production.q4.scattered,delta-arrow-reader,reuse,r6-09b262a-q4-scattered-final-00057,success,initialization and two queries,112,797014730,6,6,6,6,0,1,811,3,945899,108,796068020,0,0,0,0
+production.q4.scattered,delta-rs,reuse,r6-09b262a-q4-scattered-final-00058,success,initialization and two queries,102,798897341,6,6,6,6,0,1,811,3,945899,98,797950631,0,0,0,0
+production.q4.scattered,duckdb,reuse,r6-09b262a-q4-scattered-final-00059,success,initialization and two queries,102,798266918,6,6,6,6,6,1,811,5,1891231,96,796374876,0,0,0,0
+production.q4.scattered,polars,reuse,r6-09b262a-q4-scattered-final-00060,success,initialization and two queries,136,809047916,6,6,6,6,6,1,811,3,945899,132,808101206,0,0,0,0
+production.q4.scattered,spark,reuse,r6-09b262a-q4-scattered-final-00061,success,initialization and two queries,281,802430244,6,6,6,6,6,7,4818,6,945332,264,801480094,0,0,4,0
+production.q4.localized.dv,delta-arrow-reader,open,r6-09b262a-q4-localized-dv-final-00051,success,one query,408,95786477,6,6,6,6,0,1,1144,5,1926125,396,93846374,6,12834,0,0
+production.q4.localized.dv,delta-rs,open,r6-09b262a-q4-localized-dv-final-00052,success,one query,114,3061076036,6,6,6,6,0,1,1144,5,1926125,102,3059135933,6,12834,0,0
+production.q4.localized.dv,duckdb,open,r6-09b262a-q4-localized-dv-final-00053,success,one query,54,400344252,6,6,6,6,6,1,1144,11,4814453,36,395515821,6,12834,0,0
+production.q4.localized.dv,polars,open,r6-09b262a-q4-localized-dv-final-00054,success,one query,492,3061390003,6,6,6,6,6,1,1144,5,1926125,426,3059333346,60,129388,0,0
+production.q4.localized.dv,spark,open,r6-09b262a-q4-localized-dv-final-00055,success,one query,605,78842734,6,6,6,6,6,7,7128,10,1925552,524,76845914,60,64140,4,0
+production.q4.localized.dv,delta-arrow-reader,reuse,r6-09b262a-q4-localized-dv-final-00057,success,initialization and two queries,861,158808355,6,6,6,6,0,1,1144,5,1926125,840,156849071,15,32015,0,0
+production.q4.localized.dv,delta-rs,reuse,r6-09b262a-q4-localized-dv-final-00058,success,initialization and two queries,210,6119635784,6,6,6,6,0,1,1144,5,1926125,192,6117682847,12,25668,0,0
+production.q4.localized.dv,duckdb,reuse,r6-09b262a-q4-localized-dv-final-00059,success,initialization and two queries,94,794910131,6,6,6,6,6,1,1144,9,3851677,72,791031642,12,25668,0,0
+production.q4.localized.dv,polars,reuse,r6-09b262a-q4-localized-dv-final-00060,success,initialization and two queries,978,6120852737,6,6,6,6,6,1,1144,5,1926125,852,6118666692,120,258776,0,0
+production.q4.localized.dv,spark,reuse,r6-09b262a-q4-localized-dv-final-00061,success,initialization and two queries,1189,155752788,6,6,6,6,6,7,7128,10,1925552,1048,153691828,120,128280,4,0
+production.q4.scattered.dv,delta-arrow-reader,open,r6-09b262a-q4-scattered-dv-final-00051,success,one query,67,399976208,6,6,6,6,0,1,1144,5,1926125,54,398034010,7,14929,0,0
+production.q4.scattered.dv,delta-rs,open,r6-09b262a-q4-scattered-dv-final-00052,success,one query,114,3082166814,6,6,6,6,0,1,1144,5,1926125,102,3080226711,6,12834,0,0
+production.q4.scattered.dv,duckdb,open,r6-09b262a-q4-scattered-dv-final-00053,success,one query,66,403015869,6,6,6,6,6,1,1144,11,4814453,48,398187438,6,12834,0,0
+production.q4.scattered.dv,polars,open,r6-09b262a-q4-scattered-dv-final-00054,success,one query,492,3082480635,6,6,6,6,6,1,1144,5,1926125,426,3080423978,60,129388,0,0
+production.q4.scattered.dv,spark,open,r6-09b262a-q4-scattered-dv-final-00055,success,one query,213,402736867,6,6,6,6,6,7,7128,10,1925552,132,400740047,60,64140,4,0
+production.q4.scattered.dv,delta-arrow-reader,reuse,r6-09b262a-q4-scattered-dv-final-00057,success,initialization and two queries,128,798025205,6,6,6,6,0,1,1144,5,1926125,108,796068020,14,29916,0,0
+production.q4.scattered.dv,delta-rs,reuse,r6-09b262a-q4-scattered-dv-final-00058,success,initialization and two queries,210,6161817194,6,6,6,6,0,1,1144,5,1926125,192,6159864257,12,25668,0,0
+production.q4.scattered.dv,duckdb,reuse,r6-09b262a-q4-scattered-dv-final-00059,success,initialization and two queries,118,800253365,6,6,6,6,6,1,1144,9,3851677,96,796374876,12,25668,0,0
+production.q4.scattered.dv,polars,reuse,r6-09b262a-q4-scattered-dv-final-00060,success,initialization and two queries,978,6163034001,6,6,6,6,6,1,1144,5,1926125,852,6160847956,120,258776,0,0
+production.q4.scattered.dv,spark,reuse,r6-09b262a-q4-scattered-dv-final-00061,success,initialization and two queries,405,803541054,6,6,6,6,6,7,7128,10,1925552,264,801480094,120,128280,4,0

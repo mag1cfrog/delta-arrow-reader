@@ -4,186 +4,32 @@
   <strong>Delta Lake in. Arrow batches out. No Spark required.</strong>
 </h3>
 
-Delta Arrow Reader is a read-only Rust library that streams Delta Lake data as
-Arrow batches, with optional SQL through DataFusion.
-
 <p align="center">
   <a href="https://docs.rs/delta-arrow-reader"><img alt="Rust API" src="https://docs.rs/delta-arrow-reader/badge.svg"></a>
   <a href="https://crates.io/crates/delta-arrow-reader"><img alt="crates.io" src="https://img.shields.io/crates/v/delta-arrow-reader.svg"></a>
 </p>
 
-The [Delta Arrow Reader documentation](https://mag1cfrog.github.io/delta-arrow-reader/)
-has guided examples and design details.
+Delta Arrow Reader is a read-only Rust library built for queries that need a
+small slice of a large Delta Lake table. It skips unnecessary data and streams
+Apache Arrow batches into your service, CLI, or pipeline.
 
-## When to use it
+- **Pruning beyond files.** Skip irrelevant files and row groups. Where Parquet
+  page indexes allow it, use matching rows to read only the output pages you need.
+- **Filter first, decode less.** Evaluate supported predicates before decoding
+  output columns, so wide projections don't force unrelated data through the
+  decoder.
+- **Arrow as it arrives.** Process batches without buffering the whole result,
+  with bounded read scheduling.
 
-Delta Arrow Reader is meant for Rust services, command-line tools, and data
-pipelines that read Delta Lake tables. It is a good fit when:
+Use the Arrow stream directly, or query through DataFusion. Both use the same
+reader, with support for Delta snapshots, schema changes, and deletion vectors.
 
-- You need to read a large table without holding all of it in memory.
-- You want to process each batch as soon as it arrives.
-- Your application already works with Arrow data.
-- You want to run SQL through DataFusion.
+See how it compares with delta-rs, DuckDB, Polars, and single-machine Spark in
+the [selective-read benchmarks](docs/content/benchmarks/selective-read-results.md),
+including the layouts where performance is close.
 
-## A laptop vs. Databricks Serverless SQL
+## Get started
 
-These queries came from an existing production sample. Each pulled a small
-result from a much larger Delta table in S3.
-
-From a laptop over the public internet, Delta Arrow Reader had lower median
-query times than Databricks Serverless SQL Small on all four queries. Q2 was
-too variable for a clear conclusion. Against Lakehouse//RT Small (Beta), its
-median was lower on Q3 and within 33.8% on Q1 and Q4.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-readme-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-readme-light.svg">
-  <img alt="Median query times for Delta Arrow Reader on a laptop, Lakehouse RT Small (Beta), and Serverless SQL Small across four selective queries. Q2 is inconclusive." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-readme-light.svg" width="1000">
-</picture>
-
-In this test on the same laptop, delta-rs median query times were up to
-[71.75 times as long](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/selective-s3/#limits),
-with 6.4 times as much peak memory.
-
-The [anonymized case study](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/selective-s3/)
-publishes every measured run, the query shapes, remote byte counts, cache
-checks, and limitations.
-
-*Tested August 31, 2026. [Databricks notes](https://docs.databricks.com/aws/en/compute/sql-warehouse/real-time)
-that the performance and supported features of Lakehouse//RT (Beta) may change
-before general availability.*
-
-## Why not...
-
-Delta Arrow Reader has one job: read Delta tables and stream Arrow batches. The
-alternatives below do much more, and their Delta paths carry that extra weight.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/reader-benchmark-wall-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/reader-benchmark-wall-light.svg">
-  <img alt="Wall-time comparison across five Delta readers and four workloads" src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/reader-benchmark-wall-light.svg" width="1000">
-</picture>
-
-### Spark or Trino
-
-Spark is where Delta Lake grew up, and Trino is a proven distributed query
-engine. If a cluster is already part of your system, either can fit well. If
-you only need a small, single-node read service, neither does. You would still
-carry a JVM, a full query runtime, and the operational machinery of a
-distributed system just to stream Arrow batches.
-
------
-
-### The "read everything" engines
-
-DuckDB, Polars, and Daft aim to be one engine for many formats. For Delta reads,
-the results were poor. DuckDB took 5.1-13.1 times as long as Delta Arrow Reader,
-and Polars took 1.6-22.7 times as long. Daft managed only the text projection out
-of four workloads; it took 2.0 times as long and rejected the deletion-vector
-tables. All three also used more memory in every comparable run. See the
-[benchmark setup and complete results](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/).
-
------
-
-### delta-rs
-
-delta-rs is the closest alternative, but it also covers the full Delta
-lifecycle, including writes. Delta Arrow Reader narrows that scope to
-asynchronous reads, bounded memory, Arrow streaming, and efficient deletion
-vectors. Across the two projection workloads, Delta Arrow Reader ranged from
-roughly even with delta-rs to finishing 25% sooner. **On deletion-vector tables,
-delta-rs took 3.7 times as long to return one live row and 4.8 times as long to
-scan the full table.**
-
-That gap matters because Databricks now
-[recommends deletion vectors for most tables and is rolling out automatic enablement for new tables](https://docs.databricks.com/aws/en/admin/workspace-settings/deletion-vectors).
-
-## Installation
-
-Add the reader, Tokio, and the futures utilities used by the example:
-
-```console
-cargo add delta-arrow-reader futures-util
-cargo add tokio --features macros,rt-multi-thread
-```
-
-For DataFusion, follow the
-[DataFusion installation instructions](https://mag1cfrog.github.io/delta-arrow-reader/installation/#datafusion-adapter)
-to add the matching dependencies.
-
-## Read a table
-
-Load a table and consume its batches from asynchronous code:
-
-```rust,no_run
-use delta_arrow_reader::DeltaTableBuilder;
-use futures_util::TryStreamExt;
-
-# async fn read_table() -> Result<(), Box<dyn std::error::Error>> {
-let table = DeltaTableBuilder::new("/tmp/example-delta-table")
-    .load_table()
-    .await?;
-let mut batches = table.scan().build().await?.into_stream();
-
-while let Some(batch) = batches.try_next().await? {
-    println!("rows={}", batch.num_rows());
-}
-# Ok(())
-# }
-```
-
-Loading a table selects the latest or requested version and reads its schema.
-By default, the reader evaluates Delta scan metadata, which it uses to choose
-files, each time it builds a scan. For repeated queries against the same loaded
-table,
-[eager scan-metadata initialization](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/#reuse-scan-metadata-across-queries)
-caches that metadata in memory when the table loads. Later scans can reuse the
-cache through either the streaming API or DataFusion. Each scan still reads
-its Parquet data separately when it runs.
-
-The
-[streaming reader quickstart](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
-shows how to select columns, filter rows, limit results, and inspect metrics.
-
-## Query with DataFusion
-
-Enable the `datafusion` feature to query a Delta table through a DataFusion
-`SessionContext`. Registration gives an already loaded table a name in
-DataFusion. It does not change when the reader evaluates scan metadata, and
-Parquet data is read only when DataFusion executes a query.
-
-The [DataFusion quickstart](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/)
-walks through registration and a first SQL query. It also shows how to
-[reuse scan metadata across SQL queries](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/#reuse-scan-metadata-across-sql-queries).
-
-## Scope
-
-The reader can load the latest or a selected table snapshot. It supports column
-selection, row filters, result limits, deletion vectors, bounded read
-scheduling, and optional DataFusion integration.
-
-It does not write Delta tables, manage transactions, create a Tokio runtime, or
-provide Delta Funnel orchestration, reporting, or Python APIs.
-
-## Project direction
-
-The core remains a read-only Delta-to-Arrow reader with optional DataFusion
-integration. [Python Reader bindings](https://mag1cfrog.github.io/delta-arrow-reader/project-direction/)
-are planned independently of SQL compatibility. The
-[Spark/Sail experiment](https://mag1cfrog.github.io/delta-arrow-reader/spark-sql-experiment/)
-is frozen and is not a supported Spark-compatible frontend.
-
-## Documentation
-
-- [Streaming reader quickstart](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
-- [DataFusion quickstart](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/)
-- [Architecture](https://mag1cfrog.github.io/delta-arrow-reader/architecture/)
-- [Execution options](https://mag1cfrog.github.io/delta-arrow-reader/reference/execution-options/)
-- [Scan metrics](https://mag1cfrog.github.io/delta-arrow-reader/reference/metrics/)
-- [Reader benchmarks](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/)
-- [Rust API reference](https://docs.rs/delta-arrow-reader)
-
-## Development
-
-For local checks and documentation setup, see the
-[development guide](https://mag1cfrog.github.io/delta-arrow-reader/contributing/).
+The [documentation](https://mag1cfrog.github.io/delta-arrow-reader/) covers setup
+and guides for streaming and SQL. The
+[Rust API reference](https://docs.rs/delta-arrow-reader) has the types and methods.
