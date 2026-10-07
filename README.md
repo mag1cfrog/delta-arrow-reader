@@ -22,6 +22,12 @@ Delta Arrow Reader is a fast, memory-efficient Delta Lake reader for Rust.
 of our [selective-read benchmark cases](docs/content/benchmarks/selective-read-results.md),
 measured by median query time.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/28a51093b363adb9aea506f176ba49ef6a33dc13/docs/content/assets/selective-read-readme-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/28a51093b363adb9aea506f176ba49ef6a33dc13/docs/content/assets/selective-read-readme-light.svg">
+  <img alt="Median query times across five Delta readers and all eight selective-read cases. Lower is faster. Left and right columns use different linear scales." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/28a51093b363adb9aea506f176ba49ef6a33dc13/docs/content/assets/selective-read-readme-light.svg" width="1000">
+</picture>
+
 ## Get started
 
 The [documentation](https://mag1cfrog.github.io/delta-arrow-reader/) covers setup
