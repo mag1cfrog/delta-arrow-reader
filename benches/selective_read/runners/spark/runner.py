@@ -13,8 +13,10 @@ sys.path[:0] = [str(HERE), str(HERE / "spark")]
 import pyarrow as pa
 import pyspark
 from pyspark.sql import SparkSession
-from run import comparison_identity, digest, query_count, save
-from python_common import checkpoint, correctness, event, json_hash, observation, require, runtime_metadata, scan_sql, sha, validate
+from run import digest, query_count, save
+from python_common import (checkpoint, correctness, event, json_hash, observation, reader_identity,
+                           redact_credentials, require, runner_cli, runtime_metadata, scan_sql,
+                           timing_totals, validate, write_observation)
 
 CONFIG = {"spark.master": "local[8]", "spark.driver.memory": "4g", "spark.default.parallelism": "8",
           "spark.sql.shuffle.partitions": "8", "spark.databricks.delta.snapshotPartitions": "8",
@@ -120,10 +122,7 @@ def run(request_path, output):
                     "provider": {"api": "spark.read.format(delta).option(versionAsOf, n).load(uri)",
                                  "query_api": "spark.sql(canonical_sql).toArrow()", "cache_or_persist": False},
                     "output_delivery": "collected", "runtime_scope": "revision 6; historical untimed pilot only"}
-        identity = {"reader_id": "spark", "reader_build_sha256": digest(HERE / "build.json"),
-                    "reader_config_sha256": json_hash(settings), **comparison_identity(request),
-                    **{name: request[name] for name in ("fixture_manifest_sha256", "case_id", "snapshot_version")},
-                    "canonical_sql_sha256": sha(request["canonical_sql"].encode()), "native_expression_sha256": None}
+        identity = reader_identity(request, "spark", HERE / "build.json", settings)
         record.update(identity=identity, settings=settings, build_record=str(HERE / "build.json"),
                       native_session_configuration=dict(session.sparkContext.getConf().getAll()))
         record["phase"] = "correctness_gate"
@@ -176,20 +175,12 @@ def run(request_path, output):
             record["queries"].append(query)
             del relation, table
         if timed:
-            durations = [q["completion_ns"] for q in record["queries"]]
-            if reuse:
-                record["initialization_plus_query1_ns"] = record["initialization_ns"] + durations[0]
-                record["initialization_plus_all_queries_ns"] = record["initialization_ns"] + sum(durations)
-            else:
-                record["open_query_ns"] = durations[0]
+            timing_totals(record)
             if [q["output_rows"] for q in record["queries"]] != record["correctness"]["expected_output_rows"]:
                 record.update(status="validation_failed", failure_reason="timed output row count differs from the validated result")
         record.update(phase="complete", capability={"status": "supported", "scope": "requested query and snapshot"})
     except Exception as error:
-        reason = str(error)
-        for name in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"):
-            if os.environ.get(name):
-                reason = reason.replace(os.environ[name], "[redacted]")
+        reason = redact_credentials(str(error))
         record.update(status="validation_failed" if record["phase"] == "correctness_gate" else failure_status(error),
                       failure_reason=reason)
         if record["phase"] == "query":
@@ -206,19 +197,12 @@ def run(request_path, output):
         if timed:
             record["cleanup_ns"] = clock() - cleanup_start
         event(record, "cleanup_complete")
-    save(output / "record.json", record)
-    print(json.dumps(record))
-    return 0 if record["status"] == "success" else 1
+    return write_observation(output, record)
+
+
+def describe_build():
+    print(json.dumps(runtime()))
 
 
 if __name__ == "__main__":
-    try:
-        if sys.argv[1:] == ["--describe-build"]:
-            print(json.dumps(runtime()))
-        elif len(sys.argv) == 3:
-            sys.exit(run(Path(sys.argv[1]), Path(sys.argv[2])))
-        else:
-            raise ValueError("expected REQUEST.json NEW_OUTPUT_DIRECTORY")
-    except Exception as error:
-        print(json.dumps({"status": "invalid_input", "failure_reason": str(error)}), file=sys.stderr)
-        sys.exit(1)
+    runner_cli(run, describe_build)

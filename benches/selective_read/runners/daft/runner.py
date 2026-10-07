@@ -25,8 +25,10 @@ from deltalake.exceptions import DeltaError, DeltaProtocolError
 import pyarrow as pa
 
 sys.path.insert(0, str(HERE))
-from run import comparison_identity, digest, query_count, save
-from python_common import checkpoint, correctness, event, json_hash, observation, require, runtime_metadata, scan_sql, sha, validate
+from run import digest, query_count, save
+from python_common import (checked_build, checkpoint, correctness, event, json_hash, observation,
+                           reader_identity, redact_credentials, require, runner_cli, runtime_metadata,
+                           scan_sql, sha, timing_totals, validate, write_observation)
 
 EXECUTION = {"default_morsel_size": 8192, "scantask_max_parallel": 8, "maintain_order": False}
 
@@ -173,12 +175,7 @@ def execute(request, config, output, record):
         record["queries"].append(result_record)
         del stream, plan
     if timed:
-        durations = [q["completion_ns"] for q in record["queries"]]
-        if reuse:
-            record["initialization_plus_query1_ns"] = initialization + durations[0]
-            record["initialization_plus_all_queries_ns"] = initialization + sum(durations)
-        else:
-            record["open_query_ns"] = durations[0]
+        timing_totals(record)
     elif request["purpose"] != "io":
         record["provider_evidence"] = {"schema": str(source.schema().to_pyarrow_schema()),
                                        "native_expression": expression_identity(request["canonical_sql"], request["comparison_revision"])}
@@ -192,11 +189,7 @@ def run(request_path, output):
     output.mkdir()
     record = observation(request)
     try:
-        build_path = HERE / "build.json"
-        build = json.loads(build_path.read_text())
-        require(build["reader_id"] == "daft" and build["executable_sha256"] == digest(Path(__file__))
-                and build["lockfile_sha256"] == digest(HERE / "lock.json")
-                and all(digest(HERE / name) == value for name, value in build["bundled_sha256"].items()), "stale runner build")
+        build_path, build = checked_build(Path(__file__), "daft")
         require(runtime_metadata(engine()) == build["runtime"], "runtime differs from the prepared build")
         config, storage_record = storage(request["table_uri"])
         settings = {"daft": native_settings(), "provider": {"api": "daft.read_deltalake", "ignore_deletion_vectors": False,
@@ -210,10 +203,7 @@ def run(request_path, output):
         if request["purpose"] == "timing":
             record["phase"] = "correctness_gate"
         expression = expression_identity(request["canonical_sql"], request["comparison_revision"])
-        identity = {"reader_id": "daft", "reader_build_sha256": digest(build_path), "reader_config_sha256": json_hash(settings),
-                    **comparison_identity(request),
-                    **{name: request[name] for name in ("fixture_manifest_sha256", "case_id", "snapshot_version")},
-                    "canonical_sql_sha256": sha(request["canonical_sql"].encode()), "native_expression_sha256": json_hash(expression)}
+        identity = reader_identity(request, "daft", build_path, settings, json_hash(expression))
         record.update(identity=identity, settings=settings, build_record=str(build_path), phase="correctness_gate")
         record["correctness"] = correctness(request, identity)
         execute(request, config, output, record)
@@ -223,11 +213,7 @@ def run(request_path, output):
         unsupported = isinstance(error, (NotImplementedError, DeltaProtocolError)) or (
             isinstance(error, DeltaError) and str(error).startswith("Kernel error: Unsupported:"))
         record["status"] = "validation_failed" if record["phase"] == "correctness_gate" else "unsupported" if unsupported else "operational_failure"
-        message = str(error)
-        for name in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"):
-            if os.environ.get(name):
-                message = message.replace(os.environ[name], "[redacted]")
-        record["failure_reason"] = message
+        record["failure_reason"] = redact_credentials(str(error))
         if record["phase"] != "correctness_gate":
             record["capability"]["status"] = "unsupported" if unsupported else "probe_failed"
     finally:
@@ -236,19 +222,12 @@ def run(request_path, output):
         if request["purpose"] == "timing":
             record["cleanup_ns"] = clock() - cleanup
         event(record, "cleanup_complete")
-    save(output / "record.json", record)
-    print(json.dumps(record))
-    return 0 if record["status"] == "success" else 1
+    return write_observation(output, record)
+
+
+def describe_build():
+    print(json.dumps(runtime_metadata(engine())))
 
 
 if __name__ == "__main__":
-    try:
-        if sys.argv[1:] == ["--describe-build"]:
-            print(json.dumps(runtime_metadata(engine())))
-        elif len(sys.argv) == 3:
-            sys.exit(run(Path(sys.argv[1]), Path(sys.argv[2])))
-        else:
-            raise ValueError("expected REQUEST.json NEW_OUTPUT_DIRECTORY")
-    except Exception as error:
-        print(json.dumps({"status": "invalid_input", "failure_reason": str(error)}), file=sys.stderr)
-        sys.exit(1)
+    runner_cli(run, describe_build)

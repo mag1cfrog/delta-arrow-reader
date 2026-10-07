@@ -27,8 +27,10 @@ import polars as pl
 import pyarrow as pa
 
 sys.path.insert(0, str(HERE))
-from run import comparison_identity, digest, query_count, save
-from python_common import checkpoint, correctness, event, json_hash, observation, require, runtime_metadata, scan_sql, sha, validate
+from run import digest, query_count, save
+from python_common import (checked_build, checkpoint, correctness, event, json_hash, observation,
+                           reader_identity, redact_credentials, require, runner_cli, runtime_metadata,
+                           scan_sql, timing_totals, validate, write_observation)
 
 DELTA_OPTIONS = {"without_files": False, "log_buffer_size": 8, "skip_stats": False}
 COLLECT_OPTIONS = {"chunk_size": 8192, "maintain_order": False, "lazy": False, "engine": "streaming"}
@@ -161,12 +163,7 @@ def execute(request, options, output, record):
         record["queries"].append(observation)
         del plan
     if timed:
-        durations = [q["completion_ns"] for q in record["queries"]]
-        if reuse:
-            record["initialization_plus_query1_ns"] = initialization + durations[0]
-            record["initialization_plus_all_queries_ns"] = initialization + sum(durations)
-        else:
-            record["open_query_ns"] = durations[0]
+        timing_totals(record)
     elif request["purpose"] != "io":
         record["provider_evidence"] = {"schema": {k: str(v) for k, v in source.collect_schema().items()},
                                        "native_expression": expression_identity(request["canonical_sql"])}
@@ -180,11 +177,7 @@ def run(request_path, output):
     output.mkdir()
     record = observation(request)
     try:
-        build_path = HERE / "build.json"
-        build = json.loads(build_path.read_text())
-        require(build["reader_id"] == "polars" and build["executable_sha256"] == digest(Path(__file__))
-                and build["lockfile_sha256"] == digest(HERE / "lock.json")
-                and all(digest(HERE / name) == value for name, value in build["bundled_sha256"].items()), "stale runner build")
+        build_path, build = checked_build(Path(__file__), "polars")
         require(runtime_metadata(engine()) == build["runtime"], "runtime differs from the prepared build")
         options, storage_record = storage(request["table_uri"])
         settings = {"polars_environment": ENVIRONMENT, "polars_config": pl.Config.state(), "thread_pool_size": pl.thread_pool_size(),
@@ -201,10 +194,7 @@ def run(request_path, output):
         if request["purpose"] == "timing":
             record["phase"] = "correctness_gate"
         expression = expression_identity(request["canonical_sql"])
-        identity = {"reader_id": "polars", "reader_build_sha256": digest(build_path), "reader_config_sha256": json_hash(settings),
-                    **comparison_identity(request),
-                    **{name: request[name] for name in ("fixture_manifest_sha256", "case_id", "snapshot_version")},
-                    "canonical_sql_sha256": sha(request["canonical_sql"].encode()), "native_expression_sha256": json_hash(expression)}
+        identity = reader_identity(request, "polars", build_path, settings, json_hash(expression))
         record.update(identity=identity, settings=settings, build_record=str(build_path), phase="correctness_gate")
         record["correctness"] = correctness(request, identity)
         execute(request, options, output, record)
@@ -214,11 +204,7 @@ def run(request_path, output):
         unsupported = isinstance(error, DeltaProtocolError) or (
             isinstance(error, DeltaError) and str(error).startswith("Kernel error: Unsupported:"))
         record["status"] = "validation_failed" if record["phase"] == "correctness_gate" else "unsupported" if unsupported else "operational_failure"
-        message = str(error)
-        for name in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"):
-            if os.environ.get(name):
-                message = message.replace(os.environ[name], "[redacted]")
-        record["failure_reason"] = message
+        record["failure_reason"] = redact_credentials(str(error))
         if record["phase"] != "correctness_gate":
             record["capability"]["status"] = "unsupported" if unsupported else "probe_failed"
     finally:
@@ -227,19 +213,12 @@ def run(request_path, output):
         if request["purpose"] == "timing":
             record["cleanup_ns"] = clock() - cleanup
         event(record, "cleanup_complete")
-    save(output / "record.json", record)
-    print(json.dumps(record))
-    return 0 if record["status"] == "success" else 1
+    return write_observation(output, record)
+
+
+def describe_build():
+    print(json.dumps(runtime_metadata(engine())))
 
 
 if __name__ == "__main__":
-    try:
-        if sys.argv[1:] == ["--describe-build"]:
-            print(json.dumps(runtime_metadata(engine())))
-        elif len(sys.argv) == 3:
-            sys.exit(run(Path(sys.argv[1]), Path(sys.argv[2])))
-        else:
-            raise ValueError("expected REQUEST.json NEW_OUTPUT_DIRECTORY")
-    except Exception as error:
-        print(json.dumps({"status": "invalid_input", "failure_reason": str(error)}), file=sys.stderr)
-        sys.exit(1)
+    runner_cli(run, describe_build)
