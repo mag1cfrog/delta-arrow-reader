@@ -21,13 +21,13 @@ impl KernelDeletionVectorHandle {
     /// Validate file locations and prepare their URLs for the table's configured store.
     pub(super) fn descriptor_for_store(
         &self,
-        public_table_url: &Url,
+        table_url: &Url,
     ) -> DeltaResult<DeletionVectorDescriptor> {
-        let Some(public_dv_url) = self.0.absolute_path(public_table_url)? else {
+        let Some(public_dv_url) = self.0.absolute_path(table_url)? else {
             // Inline DVs carry their payload in the descriptor and need no URL conversion.
             return Ok(self.0.clone());
         };
-        if !same_store(public_table_url, &public_dv_url) {
+        if !same_store(table_url, &public_dv_url) {
             return Err(Error::generic(
                 "deletion vector URL does not identify the configured table store",
             ));

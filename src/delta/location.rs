@@ -1,10 +1,44 @@
 //! Delta table location normalization.
 
-use object_store::{ObjectStoreScheme, path::Path};
+use object_store::{ObjectStoreScheme, azure::AzureConfigKey, path::Path};
 use url::{Position, Url};
 
 use super::kernel::parse_table_location;
-use crate::{DeltaReaderError, error::InvalidTableLocationSnafu};
+use crate::{DeltaReaderError, DeltaStorageOptions, error::InvalidTableLocationSnafu};
+
+/// Includes an Azure container supplied through options in the base for file URLs.
+pub(crate) fn file_resolution_url(
+    mut table_url: Url,
+    storage_options: &DeltaStorageOptions,
+) -> delta_kernel::DeltaResult<Url> {
+    if table_url.scheme() != "https"
+        || table_url.path() != "/"
+        || !matches!(
+            ObjectStoreScheme::parse(&table_url),
+            Ok((ObjectStoreScheme::MicrosoftAzure, _))
+        )
+    {
+        return Ok(table_url);
+    }
+    // Use object_store's option aliases and last-value-wins order.
+    let Some((_, container)) = storage_options.iter().rev().find(|(key, _)| {
+        matches!(
+            key.to_ascii_lowercase().parse::<AzureConfigKey>(),
+            Ok(AzureConfigKey::ContainerName)
+        )
+    }) else {
+        return Ok(table_url);
+    };
+    // Resolve paths as for an explicit HTTPS container URL, retaining HTTPS
+    // parsing rules for paths that contain backslashes or another authority.
+    table_url
+        .path_segments_mut()
+        .map_err(|()| delta_kernel::Error::generic("invalid configured Azure container"))?
+        .clear()
+        .push(container)
+        .push("");
+    Ok(table_url)
+}
 
 pub(crate) fn object_store_path(url: &Url) -> object_store::Result<Path> {
     if let Some(path) = s3_virtual_host_path_workaround(url)? {
