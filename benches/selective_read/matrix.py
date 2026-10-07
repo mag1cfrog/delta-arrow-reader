@@ -224,18 +224,12 @@ def check_translation(record, case):
 
 
 def report(campaign, output):
-    from campaign import READERS, summarize
+    from campaign import READERS, read_results
     config = json.loads((campaign / "campaign.json").read_text())
     require(config.get("matrix") is not None, "campaign did not use a prepared query matrix")
     prepared = load(Path(config["matrix"]["path"]), Path(config["fixtures"]))
     require(digest(Path(config["matrix"]["path"])) == config["matrix"]["sha256"], "campaign matrix changed")
-    inventory = json.loads((campaign / "inventory.json").read_text())
-    summary = json.loads((campaign / "summary.json").read_text())
-    observations = [json.loads(line) for line in (campaign / "observations.jsonl").read_text().splitlines()]
-    slots = json.loads((campaign / "schedule.json").read_text())
-    frozen = json.loads((campaign / "frozen.json").read_text())
-    require(frozen == {name: digest(campaign / name) for name in ("campaign.json", "inventory.json", "schedule.json")}, "frozen campaign inputs changed")
-    require(summary["jobs"] == summarize(inventory, slots, observations, summary["timer_resolution"]["ratio_floor_ns"], summary["integrity_passed"]), "summary differs from raw observations")
+    inventory, summary, observations, _ = read_results(campaign)
     output.mkdir()
     rows = []
     for case in prepared["cases"]:

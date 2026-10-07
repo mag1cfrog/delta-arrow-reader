@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+from unittest import TestCase
 
 import campaign
 import run
@@ -65,12 +66,8 @@ def check():
     reduced = comparison | {"comparison_revision": 4, "sampling_sha256": run.digest(run.SAMPLING)}
     assert run.comparison_identity(reduced) == reduced
     for change in ({"sampling_sha256": "0" * 64}, {"sampling_sha256": None}, {"comparison_revision": 3}):
-        try:
+        with TestCase().assertRaises(ValueError, msg="stale or missing sampling identity accepted"):
             run.comparison_identity(reduced | change)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError("stale or missing sampling identity accepted")
     for count in range(6):
         for subset in combinations(campaign.READERS, count):
             entries = {r: {"runnable": r in subset, "status": "success" if r in subset else "unsupported"} for r in campaign.READERS}
@@ -171,12 +168,8 @@ def check():
                 if mode == "success":
                     assert len(result["queries"]) == 2 and result["supervision"]["last_phase"] == "cleanup"
         bad = {"status": "success"}
-        try:
+        with TestCase().assertRaises((KeyError, ValueError), msg="malformed success accepted"):
             campaign.validate(bad, {}, "delta-arrow-reader")
-        except (KeyError, ValueError):
-            pass
-        else:
-            raise AssertionError("malformed success accepted")
     print("passed: all 32 reader subsets, historical and five-sample schedules, two-query sessions, identity rejection, missing/failed slots and subprocess watchdogs")
 
 

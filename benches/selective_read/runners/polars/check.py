@@ -6,6 +6,7 @@ from pathlib import Path
 import runpy
 import shutil
 import sys
+from unittest import TestCase
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -31,12 +32,8 @@ def native_probes(binary, output):
             plan = adapter["query"](source, "SELECT id, value, label FROM bench" + predicate)
             counts.append(sum(frame.height for frame in plan.collect_batches(**adapter["COLLECT_OPTIONS"])))
         assert counts == [9, 2], counts
-        try:
+        with TestCase().assertRaises(Exception, msg="fresh scan succeeded without the log"):
             adapter["scan"]({"table_uri": table.as_uri(), "snapshot_version": 1}, {}).collect_schema()
-        except Exception:
-            pass
-        else:
-            raise AssertionError("fresh scan succeeded without the log")
     finally:
         (table / "hidden-log").rename(table / "_delta_log")
     run.save(output / "native-reuse.json", {"status": "passed", "rows": counts,

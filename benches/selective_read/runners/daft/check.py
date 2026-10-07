@@ -7,6 +7,7 @@ from pathlib import Path
 import runpy
 import shutil
 import sys
+from unittest import TestCase
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -34,12 +35,8 @@ def native_probes(binary, output):
                 counts.append(sum(batch.num_rows for batch in stream))
             assert source._result is None and plan._result is None, "native result was cached"
         assert counts == [9, 2], counts
-        try:
+        with TestCase().assertRaises(Exception, msg="fresh scan succeeded without the log"):
             adapter["scan"]({"table_uri": table.as_uri(), "snapshot_version": 1}, config)
-        except Exception:
-            pass
-        else:
-            raise AssertionError("fresh scan succeeded without the log")
     finally:
         (table / "hidden-log").rename(table / "_delta_log")
     run.save(output / "native-reuse.json", {"status": "passed", "rows": counts,
