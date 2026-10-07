@@ -23,10 +23,12 @@ of our [selective-read benchmark cases](docs/content/benchmarks/selective-read-r
 using data derived from TPC-H lineitem at SF10. Results compare median query times.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/f5f005ecfe06c97b2c95a847b59ace890a551ab8/docs/content/assets/selective-read-readme-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/f5f005ecfe06c97b2c95a847b59ace890a551ab8/docs/content/assets/selective-read-readme-light.svg">
-  <img alt="Median query times across five Delta readers and eight cases on 416-column and 90-column tables derived from TPC-H lineitem at SF10. Lower is faster. Columns use different linear scales." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/f5f005ecfe06c97b2c95a847b59ace890a551ab8/docs/content/assets/selective-read-readme-light.svg" width="1000">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/c92041b68282a37e44505a0ccc1b443bc7b377bd/docs/content/assets/selective-read-readme-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/c92041b68282a37e44505a0ccc1b443bc7b377bd/docs/content/assets/selective-read-readme-light.svg">
+  <img alt="Median query times across five Delta readers and four deletion-vector cases on 416-column and 90-column tables derived from TPC-H lineitem at SF10. Lower is faster; all bars share a linear 0-200 second scale." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/c92041b68282a37e44505a0ccc1b443bc7b377bd/docs/content/assets/selective-read-readme-light.svg" width="1000">
 </picture>
+
+<sub>Showing the four cases with deletion vectors. <a href="docs/content/benchmarks/selective-read-results.md">Full results</a> include all eight cases, with and without deletion vectors.</sub>
 
 ## Get started
 
