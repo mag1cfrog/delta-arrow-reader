@@ -1,12 +1,14 @@
 """Check source predicates and fractional stripe boundaries without large data."""
 
 from datetime import date
+from contextlib import nullcontext
+import io
 import json
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import duckdb
 import pyarrow as pa
@@ -17,6 +19,36 @@ import production_fixtures as fixtures
 
 
 class ProductionShapeCheck(unittest.TestCase):
+    def test_writer_finish_uses_remaining_phase_budget_and_reaps_on_timeout(self):
+        files = [{"stripe": 0, "file_index": i, "rows": 100,
+                  "candidate": i == 0, "matching_rows": int(i == 0)} for i in range(2)]
+        shape = {**shapes.definitions()["q4"], "stripes": 1}
+        for elapsed, remaining in ((120, 3480), (3550, 50), (3601, 0)):
+            with self.subTest(elapsed=elapsed), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                args = SimpleNamespace(source=root, plan=root / "plan.json", output=root / "output",
+                                       writer=root / "writer", command="probe", shape="q4", probe=None,
+                                       layout=None, elapsed_limit_seconds=3600, disk_limit_mib=196608)
+                child = Mock(stdin=io.BytesIO())
+                child.wait.side_effect = [fixtures.subprocess.TimeoutExpired("writer", remaining), -9]
+                child.poll.return_value = None
+                batches = pa.RecordBatchReader.from_batches(pa.schema([]), [])
+                with patch.object(fixtures, "inputs", return_value=({}, {"bytes": 1000, "path": "source"}, [], shape, files)), \
+                     patch.object(fixtures.shutil, "disk_usage", return_value=SimpleNamespace(free=80 * fixtures.GIB)), \
+                     patch.object(fixtures.shutil, "copyfile"), \
+                     patch.object(fixtures, "bounded", return_value=nullcontext()), \
+                     patch.object(fixtures.duckdb, "connect") as connect, \
+                     patch.object(fixtures.subprocess, "Popen", return_value=child), \
+                     patch.object(fixtures.time, "monotonic", side_effect=[100, 100 + elapsed]):
+                    connect.return_value.__enter__.return_value.execute.return_value.to_arrow_reader.return_value = batches
+                    with self.assertRaises(fixtures.subprocess.TimeoutExpired):
+                        fixtures.generate(args)
+                self.assertEqual(child.wait.call_args_list[0].kwargs, {"timeout": remaining})
+                self.assertTrue(child.stdin.closed)
+                child.kill.assert_called_once_with()
+                self.assertEqual(child.wait.call_count, 2)
+                self.assertFalse((args.output / "manifest.json").exists())
+
     def test_probe_reserves_its_estimate_not_the_entire_allocation(self):
         files = [{"stripe": s, "file_index": i, "rows": 100,
                   "candidate": i == 0, "matching_rows": int(i == 0)}
