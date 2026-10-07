@@ -33,11 +33,10 @@ query times.
 
 ## Get started
 
-Install the reader and Tokio (Rust 1.94 or later). The example uses `next_batch()`,
-available on `main` ahead of the next crates.io release:
+Install the reader and Tokio (Rust 1.94 or later):
 
 ```bash
-cargo add delta-arrow-reader --git https://github.com/mag1cfrog/delta-arrow-reader --branch main
+cargo add delta-arrow-reader
 cargo add tokio --features macros,rt-multi-thread
 ```
 
