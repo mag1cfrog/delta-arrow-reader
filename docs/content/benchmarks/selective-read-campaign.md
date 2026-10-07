@@ -141,7 +141,12 @@ every scheduled warmup and timing sample to succeed. Ties and losses remain
 visible. Durations below the recorded clock resolution yield no ratio. Raw
 durations and byte counts are integers; interpolated summaries can be fractional.
 
-Plan export starts after the entire timing schedule. Historical I/O diagnostics have
+By default, plan export starts after the entire timing schedule. The revision 6
+[gate-diagnostics amendment](selective-read-gate-diagnostics.md) instead records
+I/O and four readers' plans during exact validation, retaining separate DuckDB
+EXPLAIN invocations. It keeps every independent timing slot.
+
+Historical I/O diagnostics have
 one traced warmup round in fixed order and one in reverse, followed by two
 measured diagnostic rounds in those orders. Each traced observation has a
 separate untraced run of the same query, ordered off/on in the first round and

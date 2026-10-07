@@ -246,7 +246,7 @@ def invoke(binary, payload, output, fixtures=None, reference=None, *, env=None, 
             "process_user_cpu_ns", "process_system_cpu_ns", "process_cpu_ns", "peak_rss_bytes", "process_elapsed_ns")})
     if returncode == 0 and record["status"] == "success" and payload["purpose"] == "validation" and not defer_validation:
         check_result(record, output, fixtures, reference, payload)
-    if payload["purpose"] in ("diagnostic", "io"):
+    if payload["purpose"] in ("diagnostic", "io") or payload.get("validation_diagnostics"):
         record["diagnostic_process"] = {"started_ns": started, "exited_ns": exited}
     save(output / "observation.json", record)
     return record

@@ -156,7 +156,7 @@ def run(request_path, output):
             if index + 1 == query_count(request):
                 if timed:
                     record["session_elapsed_ns"] = clock() - session_start
-                elif request["purpose"] in ("diagnostic", "io"):
+                elif request["purpose"] in ("diagnostic", "io") or request.get("validation_diagnostics"):
                     record["diagnostic_session_ns"] = clock() - session_start
                 record["_cleanup_start"] = clock()
             checkpoint(record, "query_end", index, {k: query[k] for k in
@@ -169,7 +169,7 @@ def run(request_path, output):
                 name = f"query-{index}.identity.json"
                 save(output / name, identity | {"result_sha256": digest(result)})
                 query.update(result=result.name, identity=name)
-            if request["purpose"] == "diagnostic":
+            if request["purpose"] == "diagnostic" or request.get("validation_diagnostics"):
                 name = f"query-{index}.plan.txt"
                 (output / name).write_text(relation._jdf.queryExecution().toString() + "\n")
                 query["physical_plan"] = name

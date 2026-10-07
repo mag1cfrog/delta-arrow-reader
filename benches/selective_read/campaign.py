@@ -31,6 +31,7 @@ SESSIONS = {"reuse.li": "li.clustered.eq2-in20", "reuse.wide": "wide.clustered.e
 DEFAULT_CASES = ("li.clustered.eq2-in20", "li.shuffled.eq2-in20")
 COMBINED_DIAGNOSTICS = run.PROTOCOL.with_name("selective-read-combined-diagnostics.md")
 GATE_WARMUP = run.PROTOCOL.with_name("selective-read-gate-warmup.md")
+GATE_DIAGNOSTICS = run.PROTOCOL.with_name("selective-read-gate-diagnostics.md")
 
 
 def validation_warmup(config):
@@ -57,6 +58,20 @@ def combined_diagnostics(config):
     return enabled
 
 
+def validation_diagnostics(config):
+    enabled = config.get("gate_diagnostics", False)
+    require(type(enabled) is bool, "gate diagnostics must be a boolean")
+    if enabled:
+        require(config.get("comparison_revision") == 6 and config.get("combined_diagnostics") is True
+                and config.get("gate_warmup") is True
+                and config.get("gate_diagnostics_amendment_sha256") == digest(GATE_DIAGNOSTICS),
+                "missing or stale gate-diagnostic mode/amendment")
+    else:
+        require(config.get("gate_diagnostics_amendment_sha256") is None,
+                "separate gate diagnostics cannot carry the amendment")
+    return enabled
+
+
 def slot_purpose(slot, combined=False):
     if slot["stage"] == "gate":
         return "validation"
@@ -79,7 +94,7 @@ def plan_evidence(record, artifacts):
     return evidence
 
 
-def schedule(inventory, campaign_id, comparison=None, *, combined=None, gate_warmup=None):
+def schedule(inventory, campaign_id, comparison=None, *, combined=None, gate_warmup=None, gate_diagnostics=None):
     slots = []
     declared = [entry.get("combined_diagnostics", False) for entries in inventory.values() for entry in entries.values()]
     require(all(type(value) is bool for value in declared) and len(set(declared)) <= 1,
@@ -91,6 +106,14 @@ def schedule(inventory, campaign_id, comparison=None, *, combined=None, gate_war
             "reader inventory has inconsistent warmup modes")
     if gate_warmup is None:
         gate_warmup = warmed[0] if warmed else False
+    diagnosed = [entry.get("gate_diagnostics", False) for entries in inventory.values() for entry in entries.values()]
+    require(all(type(value) is bool for value in diagnosed) and len(set(diagnosed)) <= 1,
+            "reader inventory has inconsistent gate-diagnostic modes")
+    if gate_diagnostics is None:
+        gate_diagnostics = diagnosed[0] if diagnosed else False
+    require(type(gate_diagnostics) is bool and (not gate_diagnostics or
+            combined and gate_warmup and (comparison or {}).get("comparison_revision") == 6),
+            "gate diagnostics require revision 6, combined diagnostics and gate warmup")
     require(type(gate_warmup) is bool and (not gate_warmup or (comparison or {}).get("comparison_revision") == 6),
             "gate warmup requires comparison revision 6")
     if gate_warmup:
@@ -121,11 +144,13 @@ def schedule(inventory, campaign_id, comparison=None, *, combined=None, gate_war
         orders *= math.ceil((samples if reduced else 10) / len(orders))
         for repetition, order in enumerate(orders[:samples] if reduced else orders):
             add(job, "timing", order, repetition)
-    # No tracing or plan capture until every timing slot has finished.
+    # Separate diagnostic invocations follow every timing slot.
     for job, entries in inventory.items():
         readers = tuple(r for r in roster if entries[r]["runnable"])
         # DuckDB EXPLAIN reads additional data; keep it outside the I/O invocation.
         add(job, "plan", tuple(r for r in readers if r == "duckdb") if combined else readers, 0)
+        if gate_diagnostics:
+            continue
         if reduced:
             add(job, "diagnostic", readers, 0, traced=True)
             continue
@@ -143,9 +168,13 @@ def schedule(inventory, campaign_id, comparison=None, *, combined=None, gate_war
 def validate_diagnostics(config, inventory, slots, observations):
     combined = combined_diagnostics(config)
     gate_warmup = validation_warmup(config)
+    gate_diagnostics = validation_diagnostics(config)
     require(slots == schedule(inventory, config["campaign_id"], run.comparison_identity(config),
-                             combined=combined, gate_warmup=gate_warmup),
+                             combined=combined, gate_warmup=gate_warmup, gate_diagnostics=gate_diagnostics),
             "schedule differs from the declared diagnostic mode")
+    if gate_diagnostics:
+        require(all(entry.get("gate_diagnostics") is True for entries in inventory.values() for entry in entries.values()),
+                "gate diagnostics were not declared in the frozen inventory")
     if gate_warmup:
         require(all(entry.get("gate_warmup") is True for entries in inventory.values() for entry in entries.values()),
                 "gate warmup was not declared in the frozen inventory")
@@ -166,13 +195,18 @@ def validate_diagnostics(config, inventory, slots, observations):
             require(all(row[key] == value for key, value in by_id[row["run_id"]].items()),
                     "observation differs from the declared diagnostic schedule")
         require(row["request"]["purpose"] == slot_purpose(row, combined), "diagnostic purpose changed")
+        if gate_diagnostics:
+            is_gate = row["stage"] == "gate"
+            require(row["request"].get("validation_diagnostics", False) is is_gate and
+                    (not is_gate or row["traced"] is True), "gate diagnostic request/tracing changed")
         record = row["observation"]
         if record["status"] != "success":
             continue
-        if row["request"]["purpose"] == "diagnostic":
+        if row["request"]["purpose"] == "diagnostic" or (
+                gate_diagnostics and row["stage"] == "gate" and row["reader_id"] != "duckdb"):
             require(record.get("plan_artifacts") == plan_evidence(record, Path(row["artifacts"])),
                     "native plan artifacts changed")
-        if row["stage"] == "diagnostic":
+        if row["stage"] == "diagnostic" or gate_diagnostics and row["stage"] == "gate":
             require(record["storage_capture"]["status"] == "passed" and
                     record["storage_environment"]["trace_enabled"] and record.get("storage_io") is not None,
                     "combined diagnostic lacks reconciled I/O")
@@ -185,7 +219,14 @@ def warmed_gate(gate, observations):
             and gate.get("status") == "success" and isinstance(gate.get("identity"), dict)
             and record.get("status") == "success" and record.get("identity") == gate.get("identity")
             and record.get("correctness", {}).get("status") == "passed"
-            and record.get("cleanup", {}).get("status") == "passed")
+            and record.get("cleanup", {}).get("status") == "passed"
+            and (not gate.get("gate_diagnostics") or (
+                row.get("traced") is True and row.get("request", {}).get("validation_diagnostics") is True
+                and record.get("validation_diagnostics") is True
+                and record.get("storage_capture", {}).get("status") == "passed"
+                and record.get("storage_environment", {}).get("trace_enabled") is True
+                and isinstance(record.get("storage_io"), dict)
+                and (row.get("reader_id") == "duckdb" or bool(record.get("plan_artifacts"))))))
 
 
 def distribution(values):
@@ -239,6 +280,23 @@ def validate(record, payload, reader, gate=None):
         require(identity == gate["identity"], "validated build/configuration changed")
     if payload["purpose"] in ("validation", "timing"):
         require(record["correctness"]["status"] == "passed", "missing correctness gate")
+    if payload.get("validation_diagnostics"):
+        require(payload["validation_diagnostics"] is True and payload["purpose"] == "validation"
+                and payload["comparison_revision"] == 6 and record.get("validation_diagnostics") is True,
+                "undeclared native gate diagnostics")
+        require(record.get("storage_capture", {}).get("status") == "passed"
+                and record.get("storage_environment", {}).get("trace_enabled") is True
+                and isinstance(record.get("storage_io"), dict)
+                and integer(record.get("diagnostic_session_ns")), "missing reconciled gate I/O")
+        require(len([e for e in record.get("diagnostic_events", []) if e["event"] == "stream_complete"]) == count,
+                "missing gate stream boundaries")
+        require(all(q["completion_ns"] is None and q["first_batch_ns"] is None for q in queries)
+                and record["open_query_ns"] is None and record["session_elapsed_ns"] is None,
+                "diagnostic gate contains timing samples")
+        if reader != "duckdb":
+            require(len(record.get("plan_artifacts", [])) == count, "missing gate native plans")
+        else:
+            require(all(q["physical_plan"] is None for q in queries), "DuckDB EXPLAIN entered gate I/O")
     if payload["purpose"] != "timing":
         return
     for query in queries:
@@ -303,10 +361,15 @@ def summarize(inventory, slots, rows, resolution, integrity=True):
             diagnostics = {stage: [by_id.get(s["run_id"], {"run_id": s["run_id"], "status": "not_run"})
                                   for s in selected if s["stage"] == stage]
                            for stage in ("diagnostic", "observer_baseline")}
+            if gate.get("gate_diagnostics"):
+                diagnostics["diagnostic"] = [by_id.get(gate.get("run_id"),
+                    {"run_id": gate.get("run_id"), "status": "not_run"})]
             readers[reader]["diagnostics"] = {stage: [{"run_id": row["run_id"], "status": row["status"],
                 "session_ns": row.get("observation", {}).get("diagnostic_session_ns"),
                 "io": row.get("observation", {}).get("storage_io")} for row in stage_rows]
                 for stage, stage_rows in diagnostics.items()}
+            if gate.get("gate_diagnostics"):
+                readers[reader]["diagnostics"]["diagnostic"][0]["source"] = "exact-validation-gate"
             overhead = {stage: [r.get("observation", {}).get("diagnostic_session_ns") for r in observations]
                         for stage, observations in diagnostics.items()}
             if all(len(v) == 2 and all(integer(x) for x in v) for v in overhead.values()) and all(
@@ -366,14 +429,18 @@ def execute_cached(args):
     require(not (workload and prepared), "use one workload revision per campaign")
     comparison = large_workloads.identity(workload_path) if workload else {
         "comparison_revision": 2, "protocol_sha256": digest(run.PROTOCOL)}
-    combined = getattr(args, "combined_diagnostics", False)
+    gate_diagnostics = getattr(args, "gate_diagnostics", False)
+    combined = getattr(args, "combined_diagnostics", False) or gate_diagnostics
     diagnostic_config = {"combined_diagnostics": combined,
                          **({"diagnostics_amendment_sha256": digest(COMBINED_DIAGNOSTICS)} if combined else {})}
     combined_diagnostics(comparison | diagnostic_config)
-    gate_warmup = getattr(args, "gate_warmup", False)
+    gate_warmup = getattr(args, "gate_warmup", False) or gate_diagnostics
     warming_config = {"gate_warmup": gate_warmup,
                       **({"warmup_amendment_sha256": digest(GATE_WARMUP)} if gate_warmup else {})}
     validation_warmup(comparison | warming_config)
+    gate_diagnostic_config = {"gate_diagnostics": gate_diagnostics,
+        **({"gate_diagnostics_amendment_sha256": digest(GATE_DIAGNOSTICS)} if gate_diagnostics else {})}
+    validation_diagnostics(comparison | diagnostic_config | warming_config | gate_diagnostic_config)
     roster = run.reader_roster(comparison)
     require(set(binaries) <= set(roster), "binary is outside the comparison reader roster")
     if prepared:
@@ -420,6 +487,8 @@ def execute_cached(args):
         sources.append(COMBINED_DIAGNOSTICS)
     if gate_warmup:
         sources.append(GATE_WARMUP)
+    if gate_diagnostics:
+        sources.append(GATE_DIAGNOSTICS)
     if prepared:
         sources += [HERE / "matrix.py", matrix.CATALOG, matrix.EXPRESSIONS, args.matrix.resolve()]
     if workload:
@@ -429,7 +498,7 @@ def execute_cached(args):
         if comparison["comparison_revision"] in (5, 6):
             sources += [run.SPARK_MATRIX if comparison["comparison_revision"] == 6 else run.PRODUCTION, HERE / "production_workloads.py"]
     hashes = {str(p): digest(p) for p in sources}
-    save(output / "campaign.json", {"campaign_id": campaign_id, **comparison, **diagnostic_config, **warming_config,
+    save(output / "campaign.json", {"campaign_id": campaign_id, **comparison, **diagnostic_config, **warming_config, **gate_diagnostic_config,
          "fixtures": str(fixtures), "upload": str(args.upload.resolve()),
          "upload_sha256": digest(args.upload), "server": config, "reader_builds": builds, "jobs": jobs,
          "upload_verification": receipt.get("verification"), "in_process_upload": bool(upload_tables),
@@ -448,6 +517,8 @@ def execute_cached(args):
             payload = dict(templates[job["id"]], campaign_id=campaign_id, run_id=slot["run_id"], purpose=purpose,
                            repetition=slot["repetition"], order=slot["order"],
                            correctness_file=gate["correctness_file"] if gate else None)
+            if gate_diagnostics and stage == "gate":
+                payload["validation_diagnostics"] = True
             destination = output / slot["run_id"]
             if abort_reason:
                 record = {"status": "not_run", "failure_reason": abort_reason}
@@ -458,9 +529,10 @@ def execute_cached(args):
                     if record.get("cleanup", {}).get("status") != "passed":
                         abort_reason = "previous invocation did not prove process/server cleanup: " + slot["run_id"]
                     try:
-                        validate(record, payload, slot["reader_id"], gate)
-                        if combined and record["status"] == "success" and purpose == "diagnostic":
+                        if combined and record["status"] == "success" and (purpose == "diagnostic" or
+                                gate_diagnostics and stage == "gate" and slot["reader_id"] != "duckdb"):
                             record["plan_artifacts"] = plan_evidence(record, destination)
+                        validate(record, payload, slot["reader_id"], gate)
                         if prepared or workload:
                             matrix.check_translation(record, cases[job["case_id"]])
                     except (ValueError, KeyError, TypeError) as error:
@@ -501,14 +573,15 @@ def execute_cached(args):
                     entry = entries[reader] = {"runnable": False, "status": "preparation_failed", "failure_reason": missing,
                                                "case_id": job["case_id"], "execution_mode": job["execution_mode"],
                                                **({"combined_diagnostics": True} if combined else {}),
-                                               **({"gate_warmup": True} if gate_warmup else {})}
+                                               **({"gate_warmup": True} if gate_warmup else {}),
+                                               **({"gate_diagnostics": True} if gate_diagnostics else {})}
                     if missing:
                         continue
                     if reader not in binaries:
                         entry.update(status="operational_failure", failure_reason="reader build not supplied")
                         continue
                     slot = {"run_id": f"{campaign_id}-gate-{len(rows):05d}", "job_id": job["id"], "reader_id": reader,
-                            "stage": "gate", "repetition": 0, "order": roster.index(reader), "traced": False,
+                            "stage": "gate", "repetition": 0, "order": roster.index(reader), "traced": gate_diagnostics,
                             **(comparison if workload else {})}
                     record = invoke(slot, job)
                     entry.update(status=record["status"], runnable=record["status"] == "success", run_id=slot["run_id"],
@@ -516,7 +589,8 @@ def execute_cached(args):
                                  correctness_file=str(output / slot["run_id"] / "correctness.json"),
                                  reference=str(reference), reference_sha256=digest(reference / "reference.json"))
             save(output / "inventory.json", inventory)
-            slots = schedule(inventory, campaign_id, comparison if workload else None, combined=combined, gate_warmup=gate_warmup)
+            slots = schedule(inventory, campaign_id, comparison if workload else None, combined=combined,
+                             gate_warmup=gate_warmup, gate_diagnostics=gate_diagnostics)
             save(output / "schedule.json", slots)
             frozen = {name: digest(output / name) for name in ("campaign.json", "inventory.json", "schedule.json")}
             save(output / "frozen.json", frozen)
@@ -553,6 +627,8 @@ if __name__ == "__main__":
                         help="revision 6: capture plans during traced I/O, retaining separate DuckDB EXPLAIN")
     parser.add_argument("--gate-warmup", action="store_true",
                         help="revision 6: one snapshot, use exact open/reuse gates as storage warmup")
+    parser.add_argument("--gate-diagnostics", action="store_true",
+                        help="revision 6: collect I/O and plans in exact gates; implies combined diagnostics and gate warmup")
     sessions = parser.add_mutually_exclusive_group()
     sessions.add_argument("--session", action="append", help="repeat for selected sessions; checked against the workload")
     sessions.add_argument("--no-sessions", action="store_true", help="run only the isolated cases")

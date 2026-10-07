@@ -54,6 +54,8 @@ pub struct Request {
     profile: String,
     execution_mode: String,
     purpose: String,
+    #[serde(default)]
+    validation_diagnostics: bool,
     resource_budget: Value,
     correctness_file: Option<PathBuf>,
     campaign_id: Option<String>,
@@ -103,6 +105,8 @@ impl Request {
             || self.run_id.is_empty()
             || self.canonical_sql.trim().is_empty()
             || self.resource_budget != budget()
+            || self.validation_diagnostics
+                && (self.comparison_revision != 6 || self.purpose != "validation")
         {
             return Err("invalid request or settings differ from the frozen protocol".into());
         }
@@ -301,7 +305,10 @@ fn nanos(start: Instant) -> u64 {
 }
 
 fn event(record: &mut Value, name: &str, index: Option<usize>) {
-    if record["purpose"] == "diagnostic" || record["purpose"] == "io" {
+    if record["purpose"] == "diagnostic"
+        || record["purpose"] == "io"
+        || record["validation_diagnostics"] == true
+    {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("valid UTC clock");
@@ -442,7 +449,9 @@ async fn execute(
         if index + 1 == request.query_count() {
             if request.timed() {
                 record["session_elapsed_ns"] = json!(nanos(session_start));
-            } else if matches!(request.purpose.as_str(), "diagnostic" | "io") {
+            } else if matches!(request.purpose.as_str(), "diagnostic" | "io")
+                || request.validation_diagnostics
+            {
                 record["diagnostic_session_ns"] = json!(nanos(session_start));
             }
             *cleanup_start = Some(Instant::now());
@@ -473,7 +482,7 @@ async fn execute(
             query["result"] = json!(format!("query-{index}.arrow"));
             query["identity"] = json!(identity_name);
         }
-        if request.purpose == "diagnostic" {
+        if request.purpose == "diagnostic" || request.validation_diagnostics {
             let name = format!("query-{index}.plan.txt");
             fs::write(
                 output.join(&name),
@@ -561,6 +570,9 @@ fn run(request_path: &Path, output: &Path) -> Result<bool> {
             "process_cpu_ns": null, "peak_rss_bytes": null, "reason": "storage observer and process scheduler are separate roadmap slices"},
         "external_resource_limits": {"cpu_affinity": null, "process_memory_bytes": null,
             "reason": "launcher must enforce and record the CPU affinity and process memory limit"}});
+    if request.validation_diagnostics {
+        record["validation_diagnostics"] = json!(true);
+    }
     let mut cleanup_start = None;
     match correctness(&request, &record["identity"]) {
         Err(error) => {

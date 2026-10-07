@@ -154,7 +154,7 @@ def execute(connection, request, output, record):
                 if index + 1 == count:
                     if timed:
                         record["session_elapsed_ns"] = clock() - session_start
-                    elif request["purpose"] in ("diagnostic", "io"):
+                    elif request["purpose"] in ("diagnostic", "io") or request.get("validation_diagnostics"):
                         record["diagnostic_session_ns"] = clock() - session_start
                     record["_cleanup_start"] = clock()
                 checkpoint(record, "query_end", index, {"query_index": index, "output_rows": rows, "output_batches": batches,
@@ -186,9 +186,12 @@ def execute(connection, request, output, record):
             record["initialization_plus_all_queries_ns"] = initialization + sum(durations)
         else:
             record["open_query_ns"] = durations[0]
-    elif request["purpose"] != "io":
+    elif request["purpose"] != "io" and not request.get("validation_diagnostics"):
         record["provider_evidence"] = {"schema": connection.sql("DESCRIBE bench").fetchall(),
                                        "attach_options": record["settings"]["provider"]}
+    elif request.get("validation_diagnostics"):
+        record["provider_evidence"] = {"schema": None, "attach_options": record["settings"]["provider"],
+            "schema_unavailable_reason": "exact Arrow result schema is exported; separate EXPLAIN retains provider schema"}
     record["phase"] = "complete"
     record["capability"] = {"status": "supported", "scope": "requested query and snapshot", "evidence_run_id": request["run_id"]}
 

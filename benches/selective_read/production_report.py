@@ -22,6 +22,7 @@ def conditions(config):
     cpu_model = sorted({(key.strip(), value.strip()) for line in server["cpu_info"].splitlines()
                         for key, _, value in [line.partition(":")] if key.strip() in model_fields})
     return {"reader_builds": config["reader_builds"], "resource_budget": BUDGET,
+            "gate_diagnostics": runner.validation_diagnostics(config),
             "server_build_sha256": server["build_sha256"], "cpus": server["cpus"],
             "topology": server["topology"], "cpu_model": cpu_model, "kernel": server["kernel"],
             "cache_policy": config["cache_policy"],
@@ -52,6 +53,7 @@ def report_cached(definition, campaigns, output):
             config = json.loads((campaign / "campaign.json").read_text())
             combined = runner.combined_diagnostics(config)
             gate_warmup = runner.validation_warmup(config)
+            gate_diagnostics = runner.validation_diagnostics(config)
             comparison = comparison_identity(config)
             require(all(comparison.get(k) == v for k, v in identity.items() if k != "workload_manifest_sha256"),
                     "campaign is not from the same formal protocol")
@@ -60,9 +62,6 @@ def report_cached(definition, campaigns, output):
             shared = observed
             audited = large_workloads.report(campaign, Path(scratch) / str(index))
             observations = [json.loads(line) for line in (campaign / "observations.jsonl").read_text().splitlines()]
-            if combined or gate_warmup:
-                runner.validate_diagnostics(config, json.loads((campaign / "inventory.json").read_text()),
-                                            json.loads((campaign / "schedule.json").read_text()), observations)
             for row in observations:
                 record = row["observation"]
                 if record["status"] == "success":
@@ -100,6 +99,8 @@ def report_cached(definition, campaigns, output):
                             "in_process_upload": config.get("in_process_upload", False),
                             "combined_diagnostics": combined,
                             "gate_warmup": gate_warmup,
+                            "gate_diagnostics": gate_diagnostics,
+                            "gate_diagnostics_amendment_sha256": config.get("gate_diagnostics_amendment_sha256"),
                             "warmup_amendment_sha256": config.get("warmup_amendment_sha256"),
                             "diagnostics_amendment_sha256": config.get("diagnostics_amendment_sha256"),
                             "status": audited["status"], "workload_manifest_sha256": comparison["workload_manifest_sha256"],
@@ -149,9 +150,10 @@ def markdown(result):
             opened, reused = (entries[case, mode, reader] for mode in MODES)
             lines.append(f"| {case} | {reader} | {opened['status']} | {seconds(opened, 'open_query_ns')} | {reused['status']} | {seconds(reused, 'initialization_plus_query1_ns')} | {seconds(reused, 'query_1.completion_ns')} |")
     lines += ["", "The JSON report retains IQRs, sample statuses, eligible ratios, exact-gate evidence, file/group/page geometry",
-              "and separate I/O diagnostics. An incomplete campaign remains visible and cannot complete a case.", "",
+              "and I/O diagnostics outside timing. An incomplete campaign remains visible and cannot complete a case.", "",
               "Each campaign declares whether plans share its untimed I/O invocation. DuckDB EXPLAIN remains separate;",
-              "the JSON retains diagnostic modes and plan hashes. Diagnostic sessions are excluded from timing distributions.", "",
+              "the JSON retains diagnostic modes and plan hashes, including I/O collected in exact gates when declared.",
+              "Diagnostic sessions are excluded from timing distributions.", "",
               "Warmup may come from the exact validation gate or a separate invocation, as declared per campaign.",
               "Compare readers within the same case and declared warming method; samples are not pooled across methods.", "",
               "Matching cases and query profiles are taken from one audited campaign each. Samples are never pooled across retries.", ""]

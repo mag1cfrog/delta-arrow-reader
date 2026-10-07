@@ -270,6 +270,7 @@ def report(campaign, output):
     require(comparison_identity(summary) == comparison and all(comparison_identity(s) == comparison for s in slots),
             "schedule/summary workload changed")
     require(slots == runner.schedule(inventory, config["campaign_id"], comparison), "schedule differs from the frozen ordering rules")
+    runner.validate_diagnostics(config, inventory, slots, observations)
     jobs = {j["id"]: j for j in config["jobs"]}
     require(set(jobs) == set(inventory) == set(summary["jobs"]), "campaign inventory differs from jobs")
     for job, entries in inventory.items():
