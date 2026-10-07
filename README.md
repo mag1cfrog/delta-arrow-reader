@@ -33,22 +33,20 @@ query times.
 
 ## Get started
 
-Install the Rust crate from crates.io with `cargo add` (Rust 1.94 or later).
-[Python bindings are planned](https://mag1cfrog.github.io/delta-arrow-reader/project-direction/#python-can-proceed-independently); a Python package is not available yet.
-
-The example uses Tokio to run async code and `futures-util` to read the batch
-stream. Add them with the reader:
+Install the reader and Tokio (Rust 1.94 or later). The example uses `next_batch()`,
+available on `main` ahead of the next crates.io release:
 
 ```bash
-cargo add delta-arrow-reader futures-util
+cargo add delta-arrow-reader --git https://github.com/mag1cfrog/delta-arrow-reader --branch main
 cargo add tokio --features macros,rt-multi-thread
 ```
+
+[Python bindings are planned](https://mag1cfrog.github.io/delta-arrow-reader/project-direction/#python-can-proceed-independently); a Python package is not available yet.
 
 Read up to 100 rows from an existing Delta table:
 
 ```rust,no_run
 use delta_arrow_reader::DeltaTableBuilder;
-use futures_util::TryStreamExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -58,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let scan = table.scan().with_limit(100).build().await?;
     let mut batches = scan.into_stream();
 
-    while let Some(batch) = batches.try_next().await? {
+    while let Some(batch) = batches.next_batch().await? {
         println!("Read {} rows", batch.num_rows());
     }
     Ok(())
