@@ -33,7 +33,37 @@ query times.
 
 ## Get started
 
-Available for Rust today. [Python bindings are planned](https://mag1cfrog.github.io/delta-arrow-reader/project-direction/#python-can-proceed-independently).
+Install the reader and Tokio (Rust 1.94 or later). The example uses `next_batch()`,
+available on `main` ahead of the next crates.io release:
+
+```bash
+cargo add delta-arrow-reader --git https://github.com/mag1cfrog/delta-arrow-reader --branch main
+cargo add tokio --features macros,rt-multi-thread
+```
+
+[Python bindings are planned](https://mag1cfrog.github.io/delta-arrow-reader/project-direction/#python-can-proceed-independently); a Python package is not available yet.
+
+Read up to 100 rows from an existing Delta table:
+
+```rust,no_run
+use delta_arrow_reader::DeltaTableBuilder;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let table = DeltaTableBuilder::new("/path/to/delta-table")
+        .load_table()
+        .await?;
+    let scan = table.scan().with_limit(100).build().await?;
+    let mut batches = scan.into_stream();
+
+    while let Some(batch) = batches.next_batch().await? {
+        println!("Read {} rows", batch.num_rows());
+    }
+    Ok(())
+}
+```
+
+Save this as `src/main.rs`, replace the table path, and run `cargo run`.
 
 [Read a table](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
 or [query with SQL](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/).
