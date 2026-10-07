@@ -2,6 +2,59 @@
 
 ## Unreleased
 
+## [0.6.2](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.1...v0.6.2) - 2026-10-07
+
+### Added
+
+- simplify reading Delta batches ([#409](https://github.com/mag1cfrog/delta-arrow-reader/pull/409))
+- show timing quartiles in benchmark reports ([#390](https://github.com/mag1cfrog/delta-arrow-reader/pull/390))
+- replace Daft with Spark in the formal benchmark roster ([#377](https://github.com/mag1cfrog/delta-arrow-reader/pull/377))
+- aggregate audited staged Q2/Q4 reports ([#371](https://github.com/mag1cfrog/delta-arrow-reader/pull/371))
+- support staged production DV pairs ([#361](https://github.com/mag1cfrog/delta-arrow-reader/pull/361))
+- add Parquet page byte controls for selective reads ([#359](https://github.com/mag1cfrog/delta-arrow-reader/pull/359))
+- validate staged Q2/Q4 Delta workload pairs ([#358](https://github.com/mag1cfrog/delta-arrow-reader/pull/358))
+- store benchmark references in compressed Parquet ([#351](https://github.com/mag1cfrog/delta-arrow-reader/pull/351))
+- add paired wide file-organization benchmarks ([#349](https://github.com/mag1cfrog/delta-arrow-reader/pull/349))
+- add large-workload query and reuse contracts ([#348](https://github.com/mag1cfrog/delta-arrow-reader/pull/348))
+- add bounded selective-read scale ladders ([#347](https://github.com/mag1cfrog/delta-arrow-reader/pull/347))
+
+### Documentation
+
+- correct benchmark archive publication status ([#414](https://github.com/mag1cfrog/delta-arrow-reader/pull/414))
+- make the documentation site user-facing ([#411](https://github.com/mag1cfrog/delta-arrow-reader/pull/411))
+- add a short README quickstart ([#408](https://github.com/mag1cfrog/delta-arrow-reader/pull/408))
+- simplify README and add selective-read results draft ([#406](https://github.com/mag1cfrog/delta-arrow-reader/pull/406))
+- explain float row-group pruning without NaN counts ([#385](https://github.com/mag1cfrog/delta-arrow-reader/pull/385))
+- qualify historical README performance claims ([#382](https://github.com/mag1cfrog/delta-arrow-reader/pull/382))
+- define large-workload benchmark calibration ([#346](https://github.com/mag1cfrog/delta-arrow-reader/pull/346))
+- expand selective-read benchmarks to five readers ([#331](https://github.com/mag1cfrog/delta-arrow-reader/pull/331))
+- freeze public selective-read benchmark protocol ([#325](https://github.com/mag1cfrog/delta-arrow-reader/pull/325))
+- record verified upstream Parquet resolution
+- record closure of stopped Spark issue backlog
+- freeze Spark experiment and unblock core Python bindings
+
+### Fixed
+
+- normalize cloud table paths and clarify benchmark context ([#398](https://github.com/mag1cfrog/delta-arrow-reader/pull/398))
+- collect benchmark diagnostics during exact validation ([#396](https://github.com/mag1cfrog/delta-arrow-reader/pull/396))
+- reuse checksums across benchmark staging and execution ([#394](https://github.com/mag1cfrog/delta-arrow-reader/pull/394))
+- reuse benchmark gates and validated metadata bindings ([#392](https://github.com/mag1cfrog/delta-arrow-reader/pull/392))
+- combine selective-read diagnostics without extra storage reads ([#389](https://github.com/mag1cfrog/delta-arrow-reader/pull/389))
+- reuse unchanged benchmark validation inputs ([#387](https://github.com/mag1cfrog/delta-arrow-reader/pull/387))
+- validate data-file identity in both backends ([#383](https://github.com/mag1cfrog/delta-arrow-reader/pull/383))
+- stage verified benchmark snapshots within the data budget ([#369](https://github.com/mag1cfrog/delta-arrow-reader/pull/369))
+- bind formal execution conditions to archived fixtures ([#367](https://github.com/mag1cfrog/delta-arrow-reader/pull/367))
+- allow staged formal production workloads ([#365](https://github.com/mag1cfrog/delta-arrow-reader/pull/365))
+- count shared Q2 fixture bytes once ([#360](https://github.com/mag1cfrog/delta-arrow-reader/pull/360))
+
+### Maintenance
+
+- publish portable selective-read benchmark evidence ([#412](https://github.com/mag1cfrog/delta-arrow-reader/pull/412))
+
+### Performance
+
+- account for reclaimable cgroup file cache ([#384](https://github.com/mag1cfrog/delta-arrow-reader/pull/384))
+
 ## [0.6.1](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.0...v0.6.1) - 2026-09-25
 
 ### Documentation
