@@ -1,9 +1,11 @@
 """Shared bounded Delta snapshot/DV checks, independent of the reader engine."""
 
+import argparse
 import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -12,6 +14,60 @@ import check as shared_check
 import run
 
 CORPUS = Path(__file__).resolve().parents[3] / "tests/reader/fixtures/external_writer/corpus"
+
+
+def check_cli(check, description, native_probes=None):
+    if native_probes is not None and len(sys.argv) == 4 and sys.argv[1] == "--native-probes":
+        native_probes(Path(sys.argv[2]), Path(sys.argv[3]))
+        return
+    parser = argparse.ArgumentParser(description=description)
+    for name in ("binary", "fixtures", "output"):
+        parser.add_argument("--" + name, type=Path, required=True)
+    args = parser.parse_args()
+    check(args.binary, args.fixtures, args.output)
+
+
+def capability_report(reader, binary, output, observations, scope="bounded fixtures; rerun against exact campaign fixtures"):
+    public = json.loads((output / "public-cases/checks.json").read_text())["invocations"]
+    summary = {"status": "passed", "public_contract_invocations": public}
+    summary.update({"capability_invocations": len(observations), "total_invocations": public + len(observations)}
+                   if reader == "duckdb" else {"capability_checks": len(observations)})
+    run.save(output / "capabilities.json", {**summary, "reader": reader,
+        "build_sha256": run.digest(binary.with_name("build.json")), "corpus_manifest_sha256": run.digest(CORPUS / "manifest.json"),
+        "scope": scope, "observations": observations})
+    print(json.dumps(summary))
+
+
+def type_semantics(binary, payload, source, output, observations):
+    for sql, expected in (
+        ("SELECT label, id, value FROM bench WHERE value IS NULL OR label IS NULL",
+         pa.Table.from_pylist([r for r in source.to_pylist() if r["value"] is None or r["label"] is None],
+                             schema=source.schema).select(["label", "id", "value"])),
+        ("SELECT id, value, label FROM bench WHERE id IN (2, 2, NULL)", source.slice(1, 1)),
+    ):
+        destination = output / f"types-{len(observations)}"
+        result = probe(binary, dict(payload, canonical_sql=sql), destination)
+        exported(result, destination, expected)
+        assert result["identity"]["native_expression_sha256"], result
+        observations.append({"path": destination.name, "status": "passed", "feature": "null/IN/projection semantics"})
+
+
+def stale_expression(reader, binary, fixtures, output):
+    proof = output / f"public-cases/{reader}-li.clustered.eq2-in20-open-validation/correctness.json"
+    changed = json.loads(proof.read_text())
+    changed["checks"][0]["native_expression_sha256"] = "0" * 64
+    bad_proof = output / "stale-expression.json"
+    run.save(bad_proof, changed)
+    return run.invoke(binary, run.request(fixtures, "li.clustered.eq2-in20", "open", "timing", "stale-expression", correctness=bad_proof),
+                      output / "expression-rejected")
+
+
+def native_reuse(script, binary, output, observations):
+    command = [str(binary.with_name("venv") / "bin/python"), "-I", "-B", str(Path(script).resolve()),
+               "--native-probes", str(binary.resolve()), str(output.resolve())]
+    with (output / "native-probes.log").open("x") as log:
+        subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True)
+    observations.append({"path": "native-reuse.json", "status": "passed", "feature": "native snapshot reuse"})
 
 
 def probe(binary, payload, output, env=None):

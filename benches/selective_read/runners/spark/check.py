@@ -1,6 +1,5 @@
 """Check Spark capabilities and revision 6 clocks against the saved Delta corpus."""
 
-import argparse
 import json
 from pathlib import Path
 import resource
@@ -11,7 +10,7 @@ import pyarrow as pa
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 import run
-from capabilities import CORPUS, delta_capabilities, exported, probe
+from capabilities import check_cli, CORPUS, delta_capabilities, exported, probe
 
 
 def revision6(binary, fixtures, output):
@@ -86,9 +85,4 @@ def check(binary, fixtures, output):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--binary", type=Path, required=True)
-    parser.add_argument("--fixtures", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
-    args = parser.parse_args()
-    check(args.binary, args.fixtures, args.output)
+    check_cli(check, __doc__)
