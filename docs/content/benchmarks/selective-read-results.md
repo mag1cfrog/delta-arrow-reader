@@ -241,8 +241,10 @@ data allowance. New timing runs remain manual.
 ## Regenerate the README chart
 
 The light and dark SVGs show the four deletion-vector cases using open-query
-medians from the [summary extract](selective-read-summary.csv). The tables above
-include all eight cases. Regenerate the README charts with:
+medians from the [summary extract](selective-read-summary.csv). The shared
+logarithmic time axis gives equal distances to equal time ratios. Labels show
+seconds and each other reader's time divided by DAR's time in the same case.
+The tables above include all eight cases. Regenerate the README charts with:
 
 ```console
 python -B benches/render_selective_read_chart.py
