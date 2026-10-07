@@ -33,7 +33,37 @@ query times.
 
 ## Get started
 
-Available for Rust today. [Python bindings are planned](https://mag1cfrog.github.io/delta-arrow-reader/project-direction/#python-can-proceed-independently).
+Requires Rust 1.94 or later. [Python bindings are planned](https://mag1cfrog.github.io/delta-arrow-reader/project-direction/#python-can-proceed-independently).
+
+In your Rust project, add:
+
+```bash
+cargo add delta-arrow-reader futures-util
+cargo add tokio --features macros,rt-multi-thread
+```
+
+Read up to 100 rows from an existing Delta table:
+
+```rust,no_run
+use delta_arrow_reader::DeltaTableBuilder;
+use futures_util::TryStreamExt;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let table = DeltaTableBuilder::new("/path/to/delta-table")
+        .load_table()
+        .await?;
+    let scan = table.scan().with_limit(100).build().await?;
+    let mut batches = scan.into_stream();
+
+    while let Some(batch) = batches.try_next().await? {
+        println!("Read {} rows", batch.num_rows());
+    }
+    Ok(())
+}
+```
+
+Save this as `src/main.rs`, replace the table path, and run `cargo run`.
 
 [Read a table](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
 or [query with SQL](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/).
