@@ -1,6 +1,5 @@
 """Check DuckDB's public-case contract and bounded Delta/streaming capabilities."""
 
-import argparse
 import json
 import os
 from pathlib import Path
@@ -11,7 +10,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 import check as shared_check
 import run
-from capabilities import CORPUS, delta_capabilities, probe
+from capabilities import capability_report, check_cli, delta_capabilities, probe
 
 
 def check(binary, fixtures, output):
@@ -55,7 +54,8 @@ def check(binary, fixtures, output):
 
     changed = output / "changed-extension"
     changed.mkdir()
-    for name in (binary.name, "python_common.py", "run.py", "oracle.py", "protocol.md", "lock.json", "build.json"):
+    bundled = json.loads(binary.with_name("build.json").read_text())["bundled_sha256"]
+    for name in (binary.name, "lock.json", "build.json", *bundled):
         shutil.copy2(binary.with_name(name), changed / name)
     (changed / "httpfs.duckdb_extension").write_bytes(b"not the locked extension")
     result = probe(changed / binary.name, payload, output / "extension-rejected")
@@ -94,19 +94,8 @@ def check(binary, fixtures, output):
     else:
         raise AssertionError("oracle accepted incorrect values")
 
-    public = json.loads((output / "public-cases/checks.json").read_text())["invocations"]
-    summary = {"status": "passed", "public_contract_invocations": public,
-               "capability_invocations": len(observations), "total_invocations": public + len(observations)}
-    run.save(output / "capabilities.json", {**summary, "reader": "duckdb",
-        "build_sha256": run.digest(binary.with_name("build.json")), "corpus_manifest_sha256": run.digest(CORPUS / "manifest.json"),
-        "scope": "bounded fixtures; rerun against exact campaign fixtures", "observations": observations})
-    print(json.dumps(summary))
+    capability_report("duckdb", binary, output, observations)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--binary", type=Path, required=True)
-    parser.add_argument("--fixtures", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
-    args = parser.parse_args()
-    check(args.binary, args.fixtures, args.output)
+    check_cli(check, __doc__)
