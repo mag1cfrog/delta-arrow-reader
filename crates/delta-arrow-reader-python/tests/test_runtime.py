@@ -50,12 +50,54 @@ def interrupt_loading():
             worker.join()
 
 
-def interrupt_reading():
+def http_fixture():
     root = Path(__file__).resolve().parents[3]
     spec = importlib.util.spec_from_file_location("reader_https", root / "tests/reader/https.py")
     http = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(http)
     directory = root / "tests/reader/fixtures/external_writer/corpus/nested_mapping/table"
+    return http, directory
+
+
+def interrupt_planning():
+    http, directory = http_fixture()
+    planning = threading.Event()
+    release = threading.Event()
+
+    class Storage(http.Storage):
+        def do_GET(self):
+            if planning.is_set() and self.path.endswith("/00000000000000000000.json"):
+                planning.clear()
+                # This Python thread can run only if planning releases the GIL.
+                print("planning", flush=True)
+                # Keep metadata blocked beyond the parent's 15-second deadline.
+                if not release.wait(30):
+                    self.send_error(400, "test planning was not interrupted")
+                    return
+            super().do_GET()
+
+    with http.serve(partial(Storage, directory=str(directory))) as server:
+        table = DeltaTable(
+            f"http://127.0.0.1:{server.server_port}/",
+            storage_options={"allow_http": "true"},
+        )
+        planning.set()
+        try:
+            table.scan()
+        except KeyboardInterrupt:
+            pass
+        else:
+            raise AssertionError("planning completed without KeyboardInterrupt")
+        finally:
+            # Kernel work already running may finish after the wait is interrupted.
+            release.set()
+        with table.to_reader() as reader:
+            assert reader.read_all().num_rows == 6
+        print("interrupted", flush=True)
+
+
+def interrupt_reading():
+    http, directory = http_fixture()
     disconnected = threading.Event()
     requests = []
 
@@ -102,6 +144,10 @@ class RuntimeTests(unittest.TestCase):
         self.assert_interrupted("loading")
 
     @unittest.skipUnless(os.name == "posix", "requires POSIX subprocess SIGINT")
+    def test_planning_releases_gil_and_preserves_keyboard_interrupt(self):
+        self.assert_interrupted("planning")
+
+    @unittest.skipUnless(os.name == "posix", "requires POSIX subprocess SIGINT")
     def test_batch_read_releases_gil_and_cancels_on_sigint(self):
         self.assert_interrupted("reading")
 
@@ -127,6 +173,8 @@ class RuntimeTests(unittest.TestCase):
 if __name__ == "__main__":
     if sys.argv[1:] == ["--interrupt-loading"]:
         interrupt_loading()
+    elif sys.argv[1:] == ["--interrupt-planning"]:
+        interrupt_planning()
     elif sys.argv[1:] == ["--interrupt-reading"]:
         interrupt_reading()
     else:
