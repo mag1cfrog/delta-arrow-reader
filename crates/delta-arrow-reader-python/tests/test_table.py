@@ -638,6 +638,51 @@ class TableTests(unittest.TestCase):
                 self.assertEqual(table.version, expected)
                 self.assertEqual(repr(table), f"DeltaTable(version={expected})")
 
+    def test_refresh_preserves_original_table_and_reader(self):
+        self.write_log(1, self.write_parquet("first.parquet", [1, 2]))
+        table = DeltaTable(self.location, version=1)
+        with table.to_reader() as original_reader:
+            self.write_log(2, self.write_parquet("second.parquet", [3, 4]))
+            refreshed = table.refresh()
+            self.assertIsNot(refreshed, table)
+            self.assertEqual(refreshed.version, 2)
+            self.assertEqual(table.version, 1)
+            with table.to_reader() as reader:
+                self.assertEqual(reader.read_all().to_pydict(), {"id": [1, 2]})
+            self.assertEqual(original_reader.read_all().to_pydict(), {"id": [1, 2]})
+
+        del table
+        gc.collect()
+        with refreshed.to_reader() as reader:
+            self.assertCountEqual(reader.read_all().column("id").to_pylist(), [1, 2, 3, 4])
+
+    def test_refresh_without_new_commit_returns_a_new_table(self):
+        self.write_log(1, self.write_parquet("rows.parquet", [1, 2]))
+        table = DeltaTable(self.location)
+        refreshed = table.refresh()
+        self.assertIsNot(refreshed, table)
+        self.assertEqual(refreshed.version, table.version)
+        self.assertTrue(refreshed.schema.equals(table.schema, check_metadata=True))
+        with refreshed.to_reader() as reader:
+            self.assertEqual(reader.read_all().to_pydict(), {"id": [1, 2]})
+
+    def test_failed_refresh_preserves_original_table(self):
+        self.write_log(1, self.write_parquet("rows.parquet", [1, 2]))
+        table = DeltaTable(self.location)
+        (self.log / f"{2:020}.json").write_text("secret-invalid-json\n", encoding="utf-8")
+        with self.assertRaises(DeltaReaderError) as caught:
+            table.refresh()
+        error = caught.exception
+        self.assertEqual(error.phase, "snapshot")
+        self.assertEqual(error.code, "snapshot_load")
+        for text in (str(error), repr(error), repr(error.args), repr(vars(error))):
+            self.assertNotIn("secret", text)
+        self.assertIsNone(error.__cause__)
+        self.assertIsNone(error.__context__)
+        self.assertEqual(table.version, 1)
+        with table.to_reader() as reader:
+            self.assertEqual(reader.read_all().to_pydict(), {"id": [1, 2]})
+
     def test_schema_and_reader_preserve_types_values_and_metadata(self):
         def field(name, datatype, nullable=True, metadata=None):
             return {

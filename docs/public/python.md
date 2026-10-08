@@ -37,9 +37,18 @@ to read every row. Planning reads Delta metadata; Parquet reads begin when you
 request the first batch.
 
 The table stays on the snapshot it loaded, even if another process writes new
-commits. Each reader created from it reads that same snapshot. Create another
-`DeltaTable(location)` to load the latest version, or pass `version=0` to select
-that version explicitly.
+commits. Each reader created from it reads that same snapshot. To load the latest
+snapshot, call `refresh()`:
+
+```python
+latest = table.refresh()
+print(f"Original: {table.version}, refreshed: {latest.version}")
+```
+
+Refresh returns a new table. The original table and its readers keep their
+snapshot, even if refresh fails. If no new commits exist, the returned table has
+the same version. To select a specific version, use
+`DeltaTable(location, version=0)`.
 
 ## Use the Arrow stream interface and stop early
 

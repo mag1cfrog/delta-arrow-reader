@@ -117,6 +117,23 @@ impl DeltaTable {
         Ok(Self { table, runtime })
     }
 
+    /// Load the latest snapshot and return it as a new table.
+    ///
+    /// This table and its existing scans keep their original snapshot, including
+    /// when refresh fails. The new table shares this table's runtime.
+    fn refresh(&self, py: Python<'_>) -> PyResult<Self> {
+        let table = self
+            .runtime
+            .wait(py, self.table.refresh())?
+            .map_err(|error| {
+                reader_error(py, error.to_string(), error.phase().as_str(), error.code())
+            })?;
+        Ok(Self {
+            table,
+            runtime: Arc::clone(&self.runtime),
+        })
+    }
+
     /// The loaded snapshot version.
     #[getter]
     fn version(&self) -> u64 {
