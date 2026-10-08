@@ -12,6 +12,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from urllib.parse import parse_qs, quote, urlsplit
 
 DAR = Path(sys.argv.pop(1)).resolve()
 VERSION = sys.argv.pop(1)
@@ -252,6 +253,62 @@ class ProcessTests(unittest.TestCase):
                                       1, "snapshot", "snapshot_load")
                 finally:
                     path.unlink()
+
+    def test_explicit_version_stops_before_auxiliary_listing_pages(self):
+        (self.cwd / "bucket").mkdir()
+        for table_name in ["table", "secret%name"]:
+            table = self.metadata_table().rename(self.cwd / "bucket" / table_name)
+            commit = "00000000000000000000.json"
+            commit_size = (table / "_delta_log" / commit).stat().st_size
+            for last_entry in ["_last_checkpoint", "_sidecars/part.parquet", "_staged_commits/commit.json"]:
+                with self.subTest(table=table_name, last_entry=last_entry):
+                    class PaginatedStorageHandler(RecordingStorageHandler):
+                        def do_GET(self):
+                            query = parse_qs(urlsplit(self.path).query)
+                            if query.get("list-type") != ["2"]:
+                                return super().do_GET()
+                            self.server.requests.append((self.path, None, self.client_address[1]))
+                            if "continuation-token" in query:
+                                self.send_error(403, "unnecessary listing page")
+                                return
+                            # The nested entry sorts before the valid commit and must
+                            # be skipped without ending the listing at its leaf name.
+                            entries = [("00000000000000000000.aaa/zzz", 1),
+                                       (commit, commit_size), (last_entry, 1)]
+                            contents = "".join(
+                                f"<Contents><Key>{table_name}/_delta_log/{name}</Key>"
+                                "<LastModified>2026-01-01T00:00:00Z</LastModified>"
+                                f"<Size>{size}</Size></Contents>" for name, size in entries
+                            )
+                            data = (
+                                '<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">'
+                                "<IsTruncated>true</IsTruncated>"
+                                "<NextContinuationToken>auxiliary-page</NextContinuationToken>"
+                                + contents + "</ListBucketResult>"
+                            ).encode()
+                            self.send_response(200)
+                            self.send_header("Content-Type", "application/xml")
+                            self.send_header("Content-Length", str(len(data)))
+                            self.end_headers()
+                            self.wfile.write(data)
+
+                    with http.serve(functools.partial(PaginatedStorageHandler, directory=self.cwd)) as server:
+                        options = self.options(json.dumps({
+                            "aws_endpoint_url_s3": f"http://127.0.0.1:{server.server_port}",
+                            "aws_region": "us-east-1", "aws_skip_signature": "true", "allow_http": "true",
+                        }).encode())
+                        for version in ["0", "999"]:
+                            server.requests.clear()
+                            result = self.invoke("inspect", "--table-version", version,
+                                                 "--storage-options-file", options,
+                                                 f"s3://bucket/{quote(table_name)}")
+                            if version == "0":
+                                self.assertEqual(self.assert_inspection(result)["table_version"], "0")
+                            else:
+                                self.assert_error(result, 1, "snapshot", "snapshot_load")
+                            listings = [path for path, *_ in server.requests
+                                        if "list-type" in parse_qs(urlsplit(path).query)]
+                            self.assertEqual(len(listings), 1, server.requests)
 
     def test_reader_errors_preserve_core_diagnostic_and_redact_secrets(self):
         table = self.metadata_table()

@@ -50,6 +50,17 @@ impl StorageHandler for VersionedEngine {
         let version = self.version;
         let files = self.engine.storage_handler().list_from(path)?;
         let files = files
+            // In a sorted listing, entries after '9' cannot be versioned log files.
+            // Stop before filtering so auxiliary directories are never paged through.
+            .take_while(move |file| {
+                file.as_ref().map_or(true, |file| {
+                    file.location
+                        .path_segments()
+                        .and_then(|mut segments| segments.nth(log_file_depth? - 1))
+                        .and_then(|name| name.as_bytes().first())
+                        .is_none_or(|byte| *byte <= b'9')
+                })
+            })
             // The listing is recursive; only direct log entries belong to this snapshot.
             // Comparing depth also avoids differing percent encoding in listed URLs.
             .filter(move |file| {
