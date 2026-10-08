@@ -459,7 +459,7 @@ impl DirectParquetReader {
             selection
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .predicate_projection = Some(projection.clone());
+                .predicate_columns = Some(projection.clone());
         }
         let predicate = ArrowPredicateFn::new(projection, move |batch| {
             // Virtual columns are appended and always included by parquet-rs. Use
@@ -489,7 +489,7 @@ impl DirectParquetReader {
                 selection
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .observe(&indexes, &mask)?;
+                    .record_matches(&indexes, &mask)?;
             }
             Ok(mask)
         });

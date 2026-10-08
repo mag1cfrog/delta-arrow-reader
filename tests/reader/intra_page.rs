@@ -12,7 +12,9 @@ use bytes::Bytes;
 use parquet::{
     arrow::ArrowWriter,
     basic::{Compression, Encoding},
-    file::properties::{EnabledStatistics, WriterProperties, WriterVersion},
+    file::properties::{
+        EnabledStatistics, WriterProperties, WriterPropertiesBuilder, WriterVersion,
+    },
 };
 use serde_json::json;
 
@@ -26,12 +28,23 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 const ROWS: usize = 65_539;
 const MATCHES: &[i64] = &[0, 1, 8191, 8192, 16383, 16384, 32767, 32768, 32769, 65536];
 
-fn fixture(
-    codec: Compression,
-    dictionary: bool,
-    indexes: bool,
-    compressible: bool,
-    version: WriterVersion,
+fn fixture_properties() -> WriterPropertiesBuilder {
+    WriterProperties::builder()
+        .set_writer_version(WriterVersion::PARQUET_1_0)
+        .set_compression(Compression::UNCOMPRESSED)
+        .set_dictionary_enabled(false)
+        .set_encoding(Encoding::PLAIN)
+        .set_statistics_enabled(EnabledStatistics::Page)
+        .set_offset_index_disabled(false)
+        .set_max_row_group_row_count(Some(32_769))
+        .set_data_page_row_count_limit(16_384)
+        .set_data_page_size_limit(1024 * 1024)
+        .set_write_batch_size(1_024)
+}
+
+fn create_table(
+    properties: WriterPropertiesBuilder,
+    repeated_value: Option<i64>,
 ) -> TestResult<RealParquetDeltaTable> {
     let mut fields = vec![Field::new("id", DataType::Int64, false)];
     let mut columns = vec![Arc::new(Int64Array::from_iter_values(0..ROWS as i64)) as ArrayRef];
@@ -46,7 +59,7 @@ fn fixture(
             random ^= random << 13;
             random ^= random >> 7;
             random ^= random << 17;
-            (column != 7 && random & 1 == 0).then_some(if compressible { 7 } else { random as i64 })
+            (column != 7 && random & 1 == 0).then_some(repeated_value.unwrap_or(random as i64))
         });
         columns.push(Arc::new(Int64Array::from_iter(values)) as ArrayRef);
     }
@@ -56,19 +69,7 @@ fn fixture(
     )));
     let schema = Arc::new(Schema::new(fields));
     let batch = RecordBatch::try_new(schema.clone(), columns)?;
-    let properties = WriterProperties::builder()
-        .set_writer_version(version)
-        .set_compression(codec)
-        .set_dictionary_enabled(dictionary)
-        .set_encoding(Encoding::PLAIN)
-        .set_statistics_enabled(EnabledStatistics::Page)
-        .set_offset_index_disabled(!indexes)
-        .set_max_row_group_row_count(Some(32_769))
-        .set_data_page_row_count_limit(16_384)
-        .set_data_page_size_limit(1024 * 1024)
-        .set_write_batch_size(1_024)
-        .build();
-    let mut writer = ArrowWriter::try_new(Vec::new(), schema.clone(), Some(properties))?;
+    let mut writer = ArrowWriter::try_new(Vec::new(), schema.clone(), Some(properties.build()))?;
     writer.write(&batch)?;
     let bytes = writer.into_inner()?;
     let fields: Vec<_> = schema
@@ -91,7 +92,7 @@ fn fixture(
     )
 }
 
-fn predicate(matches: &[i64]) -> DeltaPredicate {
+fn id_filter(matches: &[i64]) -> DeltaPredicate {
     DeltaPredicate::Or(
         matches
             .iter()
@@ -126,7 +127,7 @@ async fn scan(
     Ok((concat_batches(&schema, &batches)?, metrics.snapshot()))
 }
 
-fn experimental() -> DeltaScanExecutionOptions {
+fn intra_page_options() -> DeltaScanExecutionOptions {
     DeltaScanExecutionOptions::new().with_experimental_intra_page_reads(true)
 }
 
@@ -170,13 +171,13 @@ async fn intra_page_public_scan_matches_baseline_and_reads_fewer_bytes() -> Test
         Compression::UNCOMPRESSED,
         Compression::ZSTD(Default::default()),
     ] {
-        let root = fixture(codec, false, true, false, WriterVersion::PARQUET_1_0)?;
+        let root = create_table(fixture_properties().set_compression(codec), None)?;
         for dv in [false, true] {
             if dv {
                 add_dv(&root)?;
             }
-            let (expected, baseline) = scan(&root, Default::default(), predicate(MATCHES)).await?;
-            let (actual, optimized) = scan(&root, experimental(), predicate(MATCHES)).await?;
+            let (expected, baseline) = scan(&root, Default::default(), id_filter(MATCHES)).await?;
+            let (actual, optimized) = scan(&root, intra_page_options(), id_filter(MATCHES)).await?;
             assert_eq!(actual, expected);
             assert_eq!(actual.num_rows(), MATCHES.len() - if dv { 2 } else { 0 });
             assert!(
@@ -189,22 +190,22 @@ async fn intra_page_public_scan_matches_baseline_and_reads_fewer_bytes() -> Test
                 op: DeltaComparison::GtEq,
                 value: DeltaScalar::Int64(0),
             };
-            let (dense, _) = scan(&root, experimental(), dense_predicate.clone()).await?;
+            let (dense, _) = scan(&root, intra_page_options(), dense_predicate.clone()).await?;
             let (expected, _) = scan(&root, Default::default(), dense_predicate).await?;
             assert_eq!(dense, expected);
             assert_eq!(dense.num_rows(), ROWS - if dv { 2 } else { 0 });
-            let (empty, _) = scan(&root, experimental(), predicate(&[-1])).await?;
+            let (empty, _) = scan(&root, intra_page_options(), id_filter(&[-1])).await?;
             assert_eq!(empty.num_rows(), 0);
             // A nullable payload used by both the predicate and projection must
             // retain complete bytes for Parquet's predicate cache.
             let compound = DeltaPredicate::And(vec![
-                predicate(MATCHES),
+                id_filter(MATCHES),
                 DeltaPredicate::IsNotNull {
                     column: "payload_0".into(),
                 },
             ]);
             let (expected, _) = scan(&root, Default::default(), compound.clone()).await?;
-            let (actual, _) = scan(&root, experimental(), compound).await?;
+            let (actual, _) = scan(&root, intra_page_options(), compound).await?;
             assert_eq!(actual, expected);
             assert!(actual.num_rows() > 0 && actual.num_rows() < MATCHES.len());
         }
@@ -214,46 +215,25 @@ async fn intra_page_public_scan_matches_baseline_and_reads_fewer_bytes() -> Test
 
 #[tokio::test]
 async fn intra_page_unsupported_layouts_match_baseline() -> TestResult {
-    for (codec, dictionary, indexes, compressible, version) in [
+    for (properties, repeated_value) in [
         (
-            Compression::SNAPPY,
-            false,
-            true,
-            false,
-            WriterVersion::PARQUET_1_0,
+            fixture_properties().set_compression(Compression::SNAPPY),
+            None,
         ),
         (
-            Compression::ZSTD(Default::default()),
-            false,
-            true,
-            true,
-            WriterVersion::PARQUET_1_0,
+            fixture_properties().set_compression(Compression::ZSTD(Default::default())),
+            Some(7),
         ),
+        (fixture_properties().set_dictionary_enabled(true), Some(7)),
+        (fixture_properties().set_offset_index_disabled(true), None),
         (
-            Compression::UNCOMPRESSED,
-            true,
-            true,
-            true,
-            WriterVersion::PARQUET_1_0,
-        ),
-        (
-            Compression::UNCOMPRESSED,
-            false,
-            false,
-            false,
-            WriterVersion::PARQUET_1_0,
-        ),
-        (
-            Compression::UNCOMPRESSED,
-            false,
-            true,
-            false,
-            WriterVersion::PARQUET_2_0,
+            fixture_properties().set_writer_version(WriterVersion::PARQUET_2_0),
+            None,
         ),
     ] {
-        let root = fixture(codec, dictionary, indexes, compressible, version)?;
-        let (expected, _) = scan(&root, Default::default(), predicate(MATCHES)).await?;
-        let (actual, _) = scan(&root, experimental(), predicate(MATCHES)).await?;
+        let root = create_table(properties, repeated_value)?;
+        let (expected, _) = scan(&root, Default::default(), id_filter(MATCHES)).await?;
+        let (actual, _) = scan(&root, intra_page_options(), id_filter(MATCHES)).await?;
         assert_eq!(actual, expected);
     }
     Ok(())
@@ -262,24 +242,18 @@ async fn intra_page_unsupported_layouts_match_baseline() -> TestResult {
 #[tokio::test]
 async fn intra_page_explicit_range_policies_keep_their_reads() -> TestResult {
     use delta_arrow_reader::diagnostics::parquet_range_planning::Policy as ParquetRangeReadPolicy;
-    let root = fixture(
-        Compression::UNCOMPRESSED,
-        false,
-        true,
-        false,
-        WriterVersion::PARQUET_1_0,
-    )?;
+    let root = create_table(fixture_properties(), None)?;
     for policy in [
         ParquetRangeReadPolicy::ExactRanges,
         ParquetRangeReadPolicy::MergeRangesWithinOneMegabyte,
         ParquetRangeReadPolicy::StoreImplementation,
     ] {
         let options = DeltaScanExecutionOptions::new().with_parquet_range_read_policy(policy);
-        let (expected, baseline) = scan(&root, options, predicate(MATCHES)).await?;
+        let (expected, baseline) = scan(&root, options, id_filter(MATCHES)).await?;
         let (actual, optimized) = scan(
             &root,
             options.with_experimental_intra_page_reads(true),
-            predicate(MATCHES),
+            id_filter(MATCHES),
         )
         .await?;
         assert_eq!(actual, expected);
@@ -297,13 +271,7 @@ async fn intra_page_explicit_range_policies_keep_their_reads() -> TestResult {
 
 #[tokio::test]
 async fn intra_page_projection_limits_and_selection_reset_preserve_rows() -> TestResult {
-    let root = fixture(
-        Compression::UNCOMPRESSED,
-        false,
-        true,
-        false,
-        WriterVersion::PARQUET_1_0,
-    )?;
+    let root = create_table(fixture_properties(), None)?;
     add_dv(&root)?;
     let table = DeltaTableBuilder::new(root.path().to_string_lossy())
         .load_table()
@@ -315,16 +283,16 @@ async fn intra_page_projection_limits_and_selection_reset_preserve_rows() -> Tes
             op: DeltaComparison::Lt,
             value: DeltaScalar::Int64(8_193),
         },
-        predicate(MATCHES),
+        id_filter(MATCHES),
     ]);
     let (expected, _) = scan(&root, Default::default(), overflow.clone()).await?;
-    let (actual, _) = scan(&root, experimental(), overflow).await?;
+    let (actual, _) = scan(&root, intra_page_options(), overflow).await?;
     assert_eq!(actual, expected);
 
     // Skip the first row group, hide the predicate column and apply the limit
     // after DV filtering. Empty projections must still retain their row count.
     let matches = [32_769, 65_536, 65_537, 65_538];
-    let (expected, _) = scan(&root, Default::default(), predicate(&matches)).await?;
+    let (expected, _) = scan(&root, Default::default(), id_filter(&matches)).await?;
     assert_eq!(expected.num_rows(), 3);
     for indices in [&[][..], &[8][..], &[3, 1][..]] {
         for limit in [0, 1, 2, usize::MAX] {
@@ -335,9 +303,9 @@ async fn intra_page_projection_limits_and_selection_reset_preserve_rows() -> Tes
                 .scan()
                 .with_target_partitions(1)?
                 .with_projection(projection)
-                .with_predicate(predicate(&matches))
+                .with_predicate(id_filter(&matches))
                 .with_limit(limit)
-                .with_execution_options(experimental())
+                .with_execution_options(intra_page_options())
                 .build()
                 .await?;
             let stream = scan.into_stream();
@@ -359,12 +327,9 @@ async fn intra_page_datafusion_repartitioned_dv_scan_matches_baseline() -> TestR
     use delta_arrow_reader::datafusion::{
         DeltaTableProvider, IntraFileRepartitioning, ScanOptions, collect_scan_metrics,
     };
-    let root = fixture(
-        Compression::ZSTD(Default::default()),
-        false,
-        true,
-        false,
-        WriterVersion::PARQUET_1_0,
+    let root = create_table(
+        fixture_properties().set_compression(Compression::ZSTD(Default::default())),
+        None,
     )?;
     for dv in [false, true] {
         if dv {
@@ -426,13 +391,7 @@ async fn intra_page_datafusion_repartitioned_dv_scan_matches_baseline() -> TestR
 #[tokio::test]
 async fn intra_page_corrupt_or_truncated_input_fails_the_scan() -> TestResult {
     use parquet::{file::metadata::ParquetMetaDataReader, thrift::TSerializable};
-    let root = fixture(
-        Compression::UNCOMPRESSED,
-        false,
-        true,
-        false,
-        WriterVersion::PARQUET_1_0,
-    )?;
+    let root = create_table(fixture_properties(), None)?;
     let path = root.path().join(root.data_file_path());
     let original = Bytes::from(fs::read(&path)?);
     let metadata = ParquetMetaDataReader::new().parse_and_finish(&original)?;
@@ -446,13 +405,13 @@ async fn intra_page_corrupt_or_truncated_input_fails_the_scan() -> TestResult {
     corrupt[body..body + 4].copy_from_slice(&u32::MAX.to_le_bytes());
     fs::write(&path, corrupt)?;
     assert!(
-        scan(&root, experimental(), predicate(MATCHES))
+        scan(&root, intra_page_options(), id_filter(MATCHES))
             .await
             .is_err()
     );
     fs::write(&path, &original[..original.len() - 10])?;
     assert!(
-        scan(&root, experimental(), predicate(MATCHES))
+        scan(&root, intra_page_options(), id_filter(MATCHES))
             .await
             .is_err()
     );
