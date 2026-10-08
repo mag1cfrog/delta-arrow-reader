@@ -1,4 +1,6 @@
-use std::future::Future;
+use std::{future::Future, pin::pin, time::Duration};
+
+use pyo3::prelude::*;
 
 /// Binding-owned runtime that can be released from any owning thread.
 pub(crate) struct Runtime {
@@ -17,6 +19,28 @@ impl Runtime {
             .as_ref()
             .expect("runtime is only taken during drop")
             .block_on(future)
+    }
+
+    /// Check signals on the calling Python thread between waits without the GIL.
+    /// Returning a signal error drops the owned future, cancelling further polling.
+    pub(crate) fn wait<F>(&self, py: Python<'_>, future: F) -> PyResult<F::Output>
+    where
+        F: Future + Send,
+        F::Output: Send,
+    {
+        let mut future = pin!(future);
+        py.check_signals()?;
+        loop {
+            let result = py.detach(|| {
+                self.block_on(async {
+                    tokio::time::timeout(Duration::from_millis(100), future.as_mut()).await
+                })
+            });
+            py.check_signals()?;
+            if let Ok(result) = result {
+                return Ok(result);
+            }
+        }
     }
 }
 

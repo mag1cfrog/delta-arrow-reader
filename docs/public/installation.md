@@ -111,3 +111,8 @@ that the constructor copies before loading.
 Reader failures raise `delta_arrow_reader.DeltaReaderError` with a redacted
 message and `phase` and `code` attributes. Invalid arguments raise Python's
 `TypeError`, `ValueError`, or `OverflowError`.
+
+Loading releases the GIL so other Python threads can run. When loading on Python's
+main thread, Ctrl+C raises `KeyboardInterrupt` and cancels the pending operation.
+Synchronous Kernel work already running may still finish after interruption;
+cancellation does not stop it immediately.
