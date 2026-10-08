@@ -175,6 +175,114 @@ class TableTests(unittest.TestCase):
         del futures, results, stream
         gc.collect()
 
+    def test_requested_schema_is_borrowed_and_export_stays_single_use(self):
+        self.write_log(1, self.write_parquet("rows.parquet", [1, 2]))
+        table = DeltaTable(self.location)
+        requested = table.__arrow_c_schema__()
+        stream = table.scan()
+        capsule = stream.__arrow_c_stream__(requested)
+        with self.assertRaises(RuntimeError):
+            stream.__arrow_c_stream__(requested)
+
+        class ExportedSchema:
+            def __arrow_c_schema__(self):
+                return requested
+
+        # Export borrows the request; its owner can still consume the capsule.
+        self.assertEqual(pa.schema(ExportedSchema()), table.schema)
+
+        class ExportedStream:
+            def __arrow_c_stream__(self, requested_schema=None):
+                return capsule
+
+        with pa.RecordBatchReader.from_stream(ExportedStream()) as reader:
+            self.assertEqual(reader.read_all().to_pydict(), {"id": [1, 2]})
+        closed = table.scan()
+        closed.close()
+        with self.assertRaises(RuntimeError):
+            closed.__arrow_c_stream__(table.__arrow_c_schema__())
+
+    def test_invalid_schema_requests_leave_stream_available(self):
+        table = DeltaTable(self.location)
+        released = table.__arrow_c_schema__()
+
+        class ExportedSchema:
+            def __arrow_c_schema__(self):
+                return released
+
+        pa.schema(ExportedSchema())
+        wrong_kind = pa.array([1]).__arrow_c_array__()[1]
+        cases = [
+            (object(), TypeError),
+            (table.schema, TypeError),
+            (wrong_kind, ValueError),
+            (released, ValueError),
+            (pa.int64().__arrow_c_schema__(), ValueError),
+        ]
+        incompatible = [
+            pa.schema([]),
+            pa.schema([pa.field("secret-field", pa.int64(), nullable=False)]),
+            pa.schema([pa.field("id", pa.int64(), nullable=True)]),
+            table.schema.with_metadata({b"secret": b"value"}),
+            table.schema.with_metadata({b"secret": b"\xff"}),
+            pa.schema([table.schema.field(0).with_metadata({b"secret": b"value"})]),
+        ]
+        cases.extend((schema.__arrow_c_schema__(), ValueError) for schema in incompatible)
+        for requested, error_type in cases:
+            with self.subTest(requested=requested), table.scan() as stream:
+                with self.assertRaises(error_type) as caught:
+                    stream.__arrow_c_stream__(requested)
+                self.assertNotIn("secret", str(caught.exception))
+                with pa.RecordBatchReader.from_stream(stream, schema=table.schema) as reader:
+                    self.assertEqual(reader.schema, table.schema)
+
+    def test_schema_requests_distinguish_representations_from_incompatible_types(self):
+        array = {"type": "array", "elementType": "string", "containsNull": True}
+        nested = {"type": "struct", "fields": [
+            {"name": "child", "type": "long", "nullable": True, "metadata": {}},
+        ]}
+        mapping = {
+            "type": "map", "keyType": "string", "valueType": "long",
+            "valueContainsNull": True,
+        }
+        cases = [
+            ("long", pa.int32(), NotImplementedError),
+            ("long", pa.uint64(), NotImplementedError),
+            ("long", pa.dictionary(pa.int8(), pa.int64()), NotImplementedError),
+            ("long", pa.run_end_encoded(pa.int16(), pa.int64()), NotImplementedError),
+            ("long", pa.string(), ValueError),
+            ("string", pa.large_string(), NotImplementedError),
+            ("string", pa.string_view(), NotImplementedError),
+            ("binary", pa.large_binary(), NotImplementedError),
+            ("float", pa.float64(), NotImplementedError),
+            ("decimal(10,2)", pa.decimal256(10, 2), NotImplementedError),
+            ("decimal(10,2)", pa.decimal128(11, 2), ValueError),
+            ("timestamp", pa.timestamp("ns", tz="UTC"), NotImplementedError),
+            ("timestamp", pa.timestamp("us"), ValueError),
+            ("date", pa.date64(), NotImplementedError),
+            (array, pa.large_list(pa.field("element", pa.large_string())), NotImplementedError),
+            (array, pa.list_(pa.field("secret-child", pa.string())), ValueError),
+            (nested, pa.struct([pa.field("child", pa.int32())]), NotImplementedError),
+            (nested, pa.struct([pa.field("secret-child", pa.int64())]), ValueError),
+            (mapping, pa.map_(pa.large_string(), pa.int64()), NotImplementedError),
+            (mapping, pa.map_(pa.field("secret-key", pa.string(), nullable=False), pa.int64()), ValueError),
+            (mapping, pa.map_(pa.string(), pa.int64(), keys_sorted=True), ValueError),
+        ]
+        for source_type, requested_type, error_type in cases:
+            with self.subTest(source_type=source_type, requested_type=requested_type):
+                schema = json.loads(self.metadata["schemaString"])
+                schema["fields"][0]["type"] = source_type
+                self.metadata["schemaString"] = json.dumps(schema)
+                self.write_log(1, {"metaData": self.metadata})
+                table = DeltaTable(self.location)
+                requested = pa.schema([table.schema.field(0).with_type(requested_type)])
+                with table.scan() as stream:
+                    with self.assertRaises(error_type) as caught:
+                        pa.RecordBatchReader.from_stream(stream, schema=requested)
+                    self.assertNotIn("secret", str(caught.exception))
+                    with pa.RecordBatchReader.from_stream(stream, schema=table.schema) as reader:
+                        self.assertTrue(reader.schema.equals(table.schema, check_metadata=True))
+
     def test_latest_snapshot_is_immutable(self):
         original = DeltaTable(self.location)
         self.assertEqual(original.version, 0)
@@ -251,6 +359,8 @@ class TableTests(unittest.TestCase):
         self.assertTrue(schema.equals(expected, check_metadata=True), schema)
         self.assertTrue(pa.schema(table).equals(expected, check_metadata=True))
         self.assertTrue(table.schema.equals(expected, check_metadata=True))
+        with pa.RecordBatchReader.from_stream(table.scan(), schema=expected) as reader:
+            self.assertTrue(reader.schema.equals(expected, check_metadata=True))
         with self.assertRaises(AttributeError):
             table.schema = expected
         del table

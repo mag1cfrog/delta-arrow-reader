@@ -122,7 +122,7 @@ the equivalent reader construction is:
 import pyarrow as pa
 
 with table.scan() as stream:
-    with pa.RecordBatchReader.from_stream(stream) as reader:
+    with pa.RecordBatchReader.from_stream(stream, schema=table.schema) as reader:
         for batch in reader:
             print(batch.num_rows)
             break  # Both context managers still close on early exit.
@@ -133,6 +133,12 @@ can be exported once. Closing it before export releases the scan; subsequent
 export attempts raise `RuntimeError`. After export, the consumer owns cleanup,
 so closing the original stream does not close the consumer. Repeated `close()`
 calls are harmless, and context-manager exit does not suppress exceptions.
+
+The optional `schema` request must match the scan schema, including field order,
+names, nullability, and metadata. Incompatible schemas raise `ValueError`.
+Requests for alternate Arrow representations, such as a different integer width
+or string encoding, raise `NotImplementedError`; the exporter does not cast or
+project data. A rejected request leaves the stream available for another attempt.
 
 `location` also accepts a string path or a supported storage URL. Pass backend
 settings through `storage_options`, a mapping of string keys to string values
