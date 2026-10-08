@@ -683,6 +683,54 @@ class TableTests(unittest.TestCase):
         with table.to_reader() as reader:
             self.assertEqual(reader.read_all().to_pydict(), {"id": [1, 2]})
 
+    def test_warmup_and_refresh_reuse_metadata_without_reading_parquet(self):
+        http = self.http_support()
+        data_requested = Event()
+
+        class Storage(http.Storage):
+            def send_head(self):
+                if self.path.endswith(".parquet"):
+                    data_requested.set()
+                return super().send_head()
+
+        self.write_log(1, self.write_parquet("first.parquet", [1, 2]))
+        with http.serve(partial(Storage, directory=str(self.location))) as server:
+            table = DeltaTable(
+                f"http://127.0.0.1:{server.server_port}/",
+                storage_options={"allow_http": "true"},
+                warmup="query_planning",
+            )
+            server.requests.clear()
+            with table.scan():
+                self.assertEqual(server.requests, [])
+            self.assertFalse(data_requested.is_set())
+
+            for version in (1, 2):
+                with self.subTest(version=version):
+                    if version == 2:
+                        self.write_log(2, self.write_parquet("second.parquet", [3, 4]))
+                    table = table.refresh()
+                    self.assertEqual(table.version, version)
+                    if version == 1:
+                        self.assertEqual(server.requests, [])
+                    server.requests.clear()
+                    with table.scan():
+                        self.assertEqual(server.requests, [])
+                    self.assertFalse(data_requested.is_set())
+
+            with table.to_reader() as reader:
+                self.assertCountEqual(reader.read_all().column("id").to_pylist(), [1, 2, 3, 4])
+            self.assertTrue(data_requested.is_set())
+
+    def test_warmup_validation(self):
+        for value in (None, True, 1, 0.0, b"none", [], {}, object()):
+            with self.subTest(warmup=value), self.assertRaises(TypeError):
+                DeltaTable(self.location / "missing", warmup=value)
+        for value in ("", "NONE", "query-planning", "secret-invalid"):
+            with self.subTest(warmup=value), self.assertRaises(ValueError) as caught:
+                DeltaTable(self.location / "missing", warmup=value)
+            self.assertNotIn("secret", str(caught.exception))
+
     def test_schema_and_reader_preserve_types_values_and_metadata(self):
         def field(name, datatype, nullable=True, metadata=None):
             return {
@@ -925,14 +973,19 @@ class TableTests(unittest.TestCase):
                 self.assertIsNone(error.__context__)
         self.assertEqual(DeltaTable(self.location).version, 0)
 
-    def test_protocol_validation_stays_deferred(self):
+    def test_protocol_validation_is_deferred_without_warmup(self):
         self.write_log(
             1, {"protocol": {"minReaderVersion": 4, "minWriterVersion": 2}}
         )
-        table = DeltaTable(self.location)
-        self.assertEqual(table.version, 1)
+        for options in ({}, {"warmup": "none"}):
+            with self.subTest(options=options):
+                table = DeltaTable(self.location, **options)
+                self.assertEqual(table.version, 1)
+                with self.assertRaises(DeltaReaderError) as caught:
+                    table.to_reader()
+                self.assertEqual(caught.exception.phase, "protocol")
         with self.assertRaises(DeltaReaderError) as caught:
-            table.to_reader()
+            DeltaTable(self.location, warmup="query_planning")
         self.assertEqual(caught.exception.phase, "protocol")
 
     def test_process_exits_after_successful_and_failed_loading(self):

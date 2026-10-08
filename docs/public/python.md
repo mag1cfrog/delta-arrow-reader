@@ -50,6 +50,21 @@ snapshot, even if refresh fails. If no new commits exist, the returned table has
 the same version. To select a specific version, use
 `DeltaTable(location, version=0)`.
 
+## Prepare metadata for repeated scans
+
+Use `warmup="query_planning"` to load and retain active-file metadata during table
+construction. Later scans reuse it, and refresh updates it for the new snapshot
+or reuses it when the version is unchanged. Warmup does not read Parquet data.
+
+```python
+prepared = DeltaTable(location, warmup="query_planning")
+```
+
+The default, `warmup="none"`, leaves this work to individual scans. With warmup
+enabled, unsupported table protocols fail during construction rather than at
+scan planning. Other strings raise `ValueError`; non-string values raise
+`TypeError`.
+
 ## Use the Arrow stream interface and stop early
 
 `to_reader()` returns a `pyarrow.RecordBatchReader`. You can also construct one

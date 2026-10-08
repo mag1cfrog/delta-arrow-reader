@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 from os import PathLike
 from types import TracebackType
+from typing import Literal
 
 import pyarrow
 
@@ -29,6 +30,7 @@ class DeltaTable:
         *,
         version: int | None = None,
         storage_options: Mapping[str, str] | None = None,
+        warmup: Literal["none", "query_planning"] = "none",
     ) -> None: ...
     def refresh(self) -> DeltaTable: ...
     @property

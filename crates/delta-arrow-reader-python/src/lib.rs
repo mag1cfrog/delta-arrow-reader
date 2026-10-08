@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use ::delta_arrow_reader::{
     DeltaSnapshotSelection, DeltaStorageOptions, DeltaTable as CoreDeltaTable, DeltaTableBuilder,
+    WarmupMode,
 };
 use arrow::{datatypes::Schema, ffi::FFI_ArrowSchema};
 use pyo3::{
@@ -63,6 +64,8 @@ fn export_schema(py: Python<'_>, schema: &Schema) -> PyResult<FFI_ArrowSchema> {
 /// With version=None, load the latest snapshot. Otherwise, version must be an
 /// integer from 0 to 2**64 - 1. Booleans are not accepted.
 /// storage_options accepts a mapping of string keys to string values.
+/// warmup="none" defers planning metadata to scans; "query_planning" prepares
+/// reusable planning metadata during loading without reading Parquet data.
 #[pyclass(module = "delta_arrow_reader", frozen)]
 struct DeltaTable {
     table: CoreDeltaTable,
@@ -73,12 +76,13 @@ struct DeltaTable {
 #[pymethods]
 impl DeltaTable {
     #[new]
-    #[pyo3(signature = (location, *, version=None, storage_options=None))]
+    #[pyo3(signature = (location, *, version=None, storage_options=None, warmup="none"))]
     fn new(
         py: Python<'_>,
         location: &Bound<'_, PyAny>,
         version: Option<&Bound<'_, PyInt>>,
         storage_options: Option<&Bound<'_, PyMapping>>,
+        warmup: &str,
     ) -> PyResult<Self> {
         let location: String = py
             .import("os")?
@@ -104,9 +108,19 @@ impl DeltaTable {
             Some(options) => py.get_type::<PyDict>().call1((options,))?.extract()?,
             None => DeltaStorageOptions::new(),
         };
+        let warmup = match warmup {
+            "none" => WarmupMode::None,
+            "query_planning" => WarmupMode::QueryPlanning,
+            _ => {
+                return Err(PyValueError::new_err(
+                    "warmup must be 'none' or 'query_planning'",
+                ));
+            }
+        };
         let builder = DeltaTableBuilder::new(location)
             .with_snapshot_selection(selection)
-            .with_storage_options(options);
+            .with_storage_options(options)
+            .with_warmup(warmup);
         let runtime = Arc::new(
             Runtime::new()
                 .map_err(|_| PyRuntimeError::new_err("failed to create the reader runtime"))?,
