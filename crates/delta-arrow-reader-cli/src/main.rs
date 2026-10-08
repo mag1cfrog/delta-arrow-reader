@@ -30,7 +30,7 @@ enum Command {
         /// Use '--' before a table path beginning with '-'.
         table: String,
         /// Unsigned decimal snapshot version; default: latest.
-        #[arg(long, value_name = "N", value_parser = parse_version)]
+        #[arg(long, value_name = "N", value_parser = parse_table_version)]
         table_version: Option<u64>,
         /// Local JSON object of string keys and string values.
         /// At most 1 MiB; '-' is a filename, not stdin.
@@ -76,7 +76,7 @@ impl Error {
         json!({"phase": phase, "code": code, "message": self.to_string()})
     }
 
-    fn status(&self) -> ExitCode {
+    fn exit_code(&self) -> ExitCode {
         ExitCode::from(match self {
             Self::Argument | Self::InputJson | Self::InputIo { .. } => 2,
             Self::Runtime { .. } | Self::Reader { .. } => 1,
@@ -85,7 +85,7 @@ impl Error {
     }
 }
 
-fn parse_version(value: &str) -> Result<u64, Error> {
+fn parse_table_version(value: &str) -> Result<u64, Error> {
     ensure!(
         !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()),
         ArgumentSnafu
@@ -93,7 +93,7 @@ fn parse_version(value: &str) -> Result<u64, Error> {
     value.parse().map_err(|_| ArgumentSnafu.build())
 }
 
-fn inspection_json(version: u64, schema: &Schema) -> Vec<u8> {
+fn encode_inspection_json(version: u64, schema: &Schema) -> Vec<u8> {
     // Arrow Schema's Serde representation contains only JSON-compatible types.
     // Keep upstream serialization, including metadata and nested field order.
     let mut output = json!({
@@ -128,7 +128,7 @@ fn run() -> Result<(), Error> {
                 },
         }) => {
             let storage_options = match storage_options_file {
-                Some(path) => input::read_json::<input::StorageOptions>(&path)?.0,
+                Some(path) => input::read_json_file::<input::StorageOptionsInput>(&path)?.0,
                 None => Default::default(),
             };
             let builder = DeltaTableBuilder::new(table)
@@ -137,10 +137,19 @@ fn run() -> Result<(), Error> {
                     DeltaSnapshotSelection::Version,
                 ))
                 .with_storage_options(storage_options);
-            let runtime = tokio::runtime::Runtime::new().context(RuntimeSnafu)?;
+            let runtime = tokio::runtime::Builder::new_multi_thread()
+                // Inspection needs one async worker. Set it explicitly so an inherited
+                // TOKIO_WORKER_THREADS cannot make Tokio panic before returning an error.
+                .worker_threads(1)
+                .enable_all()
+                .build()
+                .context(RuntimeSnafu)?;
             let result = runtime.block_on(async {
                 let table = builder.load_table().await.context(ReaderSnafu)?;
-                Ok(inspection_json(table.version(), table.schema().as_ref()))
+                Ok(encode_inspection_json(
+                    table.version(),
+                    table.schema().as_ref(),
+                ))
             });
             // Blocking core work must not delay process shutdown after this command finishes.
             runtime.shutdown_background();
@@ -160,7 +169,7 @@ fn main() -> ExitCode {
         Err(error) => {
             let mut stderr = io::stderr().lock();
             let _ = writeln!(stderr, "{}", error.diagnostic()).and_then(|()| stderr.flush());
-            error.status()
+            error.exit_code()
         }
     }
 }
@@ -201,7 +210,7 @@ mod tests {
             ],
             HashMap::from([("owner".into(), "table author".into())]),
         );
-        let encoded = inspection_json(u64::MAX, &schema);
+        let encoded = encode_inspection_json(u64::MAX, &schema);
         assert_eq!(encoded.last(), Some(&b'\n'));
         assert_eq!(encoded.iter().filter(|&&byte| byte == b'\n').count(), 1);
         let actual: Value = serde_json::from_slice(&encoded).unwrap();
@@ -229,7 +238,7 @@ mod tests {
     }
 
     #[test]
-    fn version_accepts_full_unsigned_range_and_storage_preserves_strings() {
+    fn table_version_accepts_full_unsigned_range() {
         for text in ["0", "000", "18446744073709551615"] {
             let cli =
                 Cli::try_parse_from(["dar", "inspect", "--table-version", text, "table"]).unwrap();
@@ -237,7 +246,11 @@ mod tests {
                 matches!(cli.command, Command::Inspect {table_version: Some(version), ..} if version == text.parse::<u64>().unwrap())
             );
         }
-        let options: input::StorageOptions = serde_json::from_str(
+    }
+
+    #[test]
+    fn storage_options_preserve_strings() {
+        let options: input::StorageOptionsInput = serde_json::from_str(
             r#"{"AWS_ACCESS_KEY_ID":" secret, value ","MixedCase":"unchanged"}"#,
         )
         .unwrap();

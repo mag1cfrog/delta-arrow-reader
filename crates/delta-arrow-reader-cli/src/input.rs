@@ -11,7 +11,7 @@ use crate::{Error, InputIoSnafu, InputJsonSnafu};
 
 const MAX_JSON_BYTES: u64 = 1024 * 1024;
 
-pub(crate) fn read_json<T: DeserializeOwned>(path: &str) -> Result<T, Error> {
+pub(crate) fn read_json_file<T: DeserializeOwned>(path: &str) -> Result<T, Error> {
     let file = File::open(path).context(InputIoSnafu)?;
     let mut bytes = Vec::new();
     file.take(MAX_JSON_BYTES + 1)
@@ -21,14 +21,14 @@ pub(crate) fn read_json<T: DeserializeOwned>(path: &str) -> Result<T, Error> {
     serde_json::from_slice(&bytes).map_err(|_| InputJsonSnafu.build())
 }
 
-pub(crate) struct StorageOptions(pub(crate) DeltaStorageOptions);
+pub(crate) struct StorageOptionsInput(pub(crate) DeltaStorageOptions);
 
-impl<'de> Deserialize<'de> for StorageOptions {
+impl<'de> Deserialize<'de> for StorageOptionsInput {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct StringMap;
+        struct StorageOptionsVisitor;
 
-        impl<'de> Visitor<'de> for StringMap {
-            type Value = StorageOptions;
+        impl<'de> Visitor<'de> for StorageOptionsVisitor {
+            type Value = StorageOptionsInput;
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                 formatter.write_str("a string map with unique keys")
@@ -41,10 +41,10 @@ impl<'de> Deserialize<'de> for StorageOptions {
                         return Err(serde::de::Error::custom("duplicate object key"));
                     }
                 }
-                Ok(StorageOptions(options))
+                Ok(StorageOptionsInput(options))
             }
         }
 
-        deserializer.deserialize_map(StringMap)
+        deserializer.deserialize_map(StorageOptionsVisitor)
     }
 }

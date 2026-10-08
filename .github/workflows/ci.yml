@@ -196,8 +196,6 @@ jobs:
           mkdir "$RUNNER_TEMP/python-source"
           tar -xzf "$RUNNER_TEMP"/python-sdist/*.tar.gz -C "$RUNNER_TEMP/python-source" --strip-components=1
           cd "$RUNNER_TEMP/python-source"
-          # Maturin omits the CLI member; prune its lock entries while keeping dependency versions.
-          cargo update --workspace --offline
           maturin build --locked --release --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out "$RUNNER_TEMP/python-wheels"
       - name: Test installed wheel
         working-directory: ${{ runner.temp }}

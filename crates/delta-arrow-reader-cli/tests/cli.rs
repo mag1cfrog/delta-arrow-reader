@@ -1,7 +1,10 @@
 use std::{
     fs::{self, File},
+    io::{self, Read},
     path::Path,
-    process::Command,
+    process::{Command, Output, Stdio},
+    thread,
+    time::{Duration, Instant},
 };
 
 use arrow::{
@@ -20,10 +23,11 @@ fn external_writer_schemas_round_trip() -> Result<(), Box<dyn std::error::Error>
         ("deletion_vectors", "1"),
     ] {
         let fixture = corpus.join(name);
-        let output = Command::new(env!("CARGO_BIN_EXE_dar"))
-            .arg("inspect")
-            .arg(fixture.join("table"))
-            .output()?;
+        let output = run_with_timeout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .arg("inspect")
+                .arg(fixture.join("table")),
+        )?;
         assert!(
             output.status.success(),
             "{}",
@@ -48,7 +52,7 @@ fn external_writer_schemas_round_trip() -> Result<(), Box<dyn std::error::Error>
                 }
             }
         }
-        assert_fields(
+        assert_fixture_schema_fields(
             schema.fields(),
             expected.fields(),
             delta_schema["fields"].as_array().unwrap(),
@@ -58,7 +62,50 @@ fn external_writer_schemas_round_trip() -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
-fn assert_fields(actual: &Fields, oracle: &Fields, delta: &[Value]) {
+fn run_with_timeout(command: &mut Command) -> io::Result<Output> {
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let mut stdout = child.stdout.take().unwrap();
+    let mut stderr = child.stderr.take().unwrap();
+    // Drain both pipes while waiting so a full pipe cannot block the child.
+    thread::scope(|scope| {
+        let stdout = scope.spawn(move || {
+            let mut bytes = Vec::new();
+            stdout.read_to_end(&mut bytes).map(|_| bytes)
+        });
+        let stderr = scope.spawn(move || {
+            let mut bytes = Vec::new();
+            stderr.read_to_end(&mut bytes).map(|_| bytes)
+        });
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break Ok(status),
+                Err(error) => break Err(error),
+                Ok(None) if Instant::now() >= deadline => {
+                    break Err(io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        "CLI fixture timed out",
+                    ));
+                }
+                Ok(None) => thread::sleep(Duration::from_millis(10)),
+            }
+        };
+        if status.is_err() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        Ok(Output {
+            status: status?,
+            stdout: stdout.join().unwrap()?,
+            stderr: stderr.join().unwrap()?,
+        })
+    })
+}
+
+fn assert_fixture_schema_fields(actual: &Fields, oracle: &Fields, delta: &[Value]) {
     assert_eq!(actual.len(), oracle.len());
     assert_eq!(actual.len(), delta.len());
     for ((actual, expected), delta) in actual.iter().zip(oracle).zip(delta) {
@@ -80,7 +127,7 @@ fn assert_fields(actual: &Fields, oracle: &Fields, delta: &[Value]) {
             .collect();
         assert_eq!(actual.metadata(), &metadata);
         match (actual.data_type(), expected.data_type()) {
-            (DataType::Struct(actual), DataType::Struct(expected)) => assert_fields(
+            (DataType::Struct(actual), DataType::Struct(expected)) => assert_fixture_schema_fields(
                 actual,
                 expected,
                 delta["type"]["fields"].as_array().unwrap(),

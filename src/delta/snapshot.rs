@@ -1352,7 +1352,7 @@ mod tests {
     fn snapshot_failures_are_redacted_and_preserve_the_kernel_source()
     -> Result<(), Box<dyn std::error::Error>> {
         let table = DeltaLogTable::new("missing-version")?;
-        for version in [2, u64::MAX] {
+        for version in [2, 1_000_000_000_000, u64::MAX - 1, u64::MAX] {
             let result = load_delta_table_snapshot_blocking(
                 &table.0.to_string_lossy(),
                 &DeltaStorageOptions::new(),

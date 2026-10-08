@@ -5,6 +5,8 @@
     ".github/workflows/ci.yml",
     "Cargo.toml",
     "Cargo.lock",
+    "pyproject.toml",
+    "delta_arrow_reader.pyi",
     "clippy.toml",
     "LICENSE",
     "NOTICE",

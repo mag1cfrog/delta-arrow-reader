@@ -664,7 +664,7 @@ fn eager_scan_metadata_supports_concurrent_planning_without_the_delta_log() -> T
 }
 
 #[test]
-fn eager_scan_metadata_preserves_pruning_from_a_parsed_stats_only_checkpoint() -> TestResult {
+fn fixed_snapshot_preserves_pruning_from_a_parsed_stats_only_checkpoint() -> TestResult {
     runtime()?.block_on(async {
         let fixture =
             TestTable::two_versions_with_parsed_stats_only_checkpoint("eager-checkpoint")?;
@@ -687,6 +687,7 @@ fn eager_scan_metadata_preserves_pruning_from_a_parsed_stats_only_checkpoint() -
         );
 
         let table = DeltaTableBuilder::new(fixture.uri())
+            .with_snapshot_selection(DeltaSnapshotSelection::Version(1))
             .with_warmup(WarmupMode::QueryPlanning)
             .load_table()
             .await?;

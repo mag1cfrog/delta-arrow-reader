@@ -20,6 +20,8 @@ readme = "README.md"
 keywords = ["delta-lake", "arrow", "parquet", "datafusion"]
 categories = ["asynchronous", "database"]
 exclude = [
+    "pyproject.toml",
+    "delta_arrow_reader.pyi",
     ".github/**",
     ".gitignore",
     "benches/incremental_refresh.rs",

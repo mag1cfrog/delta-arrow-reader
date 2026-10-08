@@ -155,7 +155,9 @@ leave stdout empty. Consumers must check the process status and discard output
 from any unsuccessful invocation, including partial output after a write
 failure. Status 3 is preserved even when stderr cannot be written.
 
-Each inspection runs in one process with its own Tokio runtime. Runtime
-shutdown does not wait indefinitely for blocking background work. Linux
-signals keep their normal termination behavior: a killed process is
-unsuccessful and need not emit an error object.
+Each inspection runs in one process. The CLI starts its Tokio runtime with
+one async worker and ignores `TOKIO_WORKER_THREADS`, so malformed inherited
+values cannot cause a panic. Runtime shutdown does not wait for unfinished
+blocking work, including core engine cleanup. Linux signals keep their normal
+termination behavior: a killed process is unsuccessful and need not emit an
+error object.

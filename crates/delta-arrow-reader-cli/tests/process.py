@@ -24,13 +24,23 @@ http = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(http)
 
 
-class Storage(http.Storage):
+class RecordingStorageHandler(http.Storage):
     def do_PROPFIND(self):
         self.server.requests.append((self.path, None, self.client_address[1]))
         super().do_PROPFIND()
 
 
 class ProcessTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        temporary = tempfile.TemporaryDirectory(prefix="dar-process-faults-")
+        cls.addClassCleanup(temporary.cleanup)
+        cls.fault_library = Path(temporary.name) / "process_faults.so"
+        subprocess.run(
+            ["cc", "-shared", "-fPIC", str(Path(__file__).with_name("process_faults.c")),
+             "-o", str(cls.fault_library), "-ldl"], check=True, capture_output=True, timeout=30,
+        )
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="secret-dar-")
         self.addCleanup(temporary.cleanup)
@@ -43,7 +53,7 @@ class ProcessTests(unittest.TestCase):
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15, **kwargs,
         )
 
-    def error(self, result, status, phase, code):
+    def assert_error(self, result, status, phase, code):
         self.assertEqual(result.returncode, status, result)
         self.assertEqual(result.stdout, b"")
         self.assertTrue(result.stderr.endswith(b"\n"))
@@ -55,7 +65,7 @@ class ProcessTests(unittest.TestCase):
         self.assertNotIn(b"secret", result.stderr)
         return diagnostic
 
-    def success(self, result):
+    def assert_inspection(self, result):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, b"")
         self.assertTrue(result.stdout.endswith(b"\n"))
@@ -89,8 +99,8 @@ class ProcessTests(unittest.TestCase):
         return path
 
     def test_static_help_and_version_outside_checkout(self):
-        # Tokio would panic on this value if a runtime were started.
-        self.env["TOKIO_WORKER_THREADS"] = "0"
+        # Any attempted runtime worker creation fails, even with an explicit count.
+        self.env.update(LD_PRELOAD=str(self.fault_library), DAR_TEST_REJECT_THREADS="1")
         for args in [("--help",), ("-h",), ("inspect", "--help"), ("inspect", "-h"),
                      ("help", "inspect"),
                      ("inspect", "--storage-options-file", "secret-missing", "--help")]:
@@ -108,9 +118,16 @@ class ProcessTests(unittest.TestCase):
             self.assertEqual((result.returncode, result.stdout, result.stderr),
                              (0, f"dar {VERSION}\n".encode(), b""))
 
+    def test_inspection_ignores_inherited_tokio_worker_count(self):
+        table = self.metadata_table()
+        for count in ["0", "secret-invalid-count", "9999999999999999999999999", "secret-\udcff"]:
+            with self.subTest(count=count):
+                self.env["TOKIO_WORKER_THREADS"] = count
+                self.assert_inspection(self.invoke("inspect", table))
+
     def test_local_validation_before_any_table_request(self):
-        self.env["TOKIO_WORKER_THREADS"] = "0"
-        with http.serve(functools.partial(Storage, directory=self.cwd)) as server:
+        self.env.update(LD_PRELOAD=str(self.fault_library), DAR_TEST_REJECT_THREADS="1")
+        with http.serve(functools.partial(RecordingStorageHandler, directory=self.cwd)) as server:
             table = f"http://127.0.0.1:{server.server_port}/secret-table"
             cases = [(), ("secret-command",), ("inspect",), ("inspect", table, "secret-extra"),
                      ("inspect", "--secret-option", table), ("inspect", "--table-version"),
@@ -122,7 +139,7 @@ class ProcessTests(unittest.TestCase):
                 cases.append(("inspect", "--table-version", version, table))
             for args in cases:
                 with self.subTest(args=args):
-                    self.error(self.invoke(*args), 2, "configuration", "invalid_cli_argument")
+                    self.assert_error(self.invoke(*args), 2, "configuration", "invalid_cli_argument")
 
             for content in [b"", b"secret", b"{", b"{}secret", b"{}{}", b"\xff",
                             b'"secret"', b"[]", b"null", b'{"secret":1}', b'{"secret":true}',
@@ -130,78 +147,93 @@ class ProcessTests(unittest.TestCase):
                             b'{"secret":"a","secret":"b"}', b'{"a":"a","\\u0061":"b"}',
                             b'{"secret":"\xff"}', b"{}" + b" " * (LIMIT - 1)]:
                 with self.subTest(content=content[:50], size=len(content)):
-                    self.error(self.invoke("inspect", "--storage-options-file", self.options(content), table),
+                    self.assert_error(self.invoke("inspect", "--storage-options-file", self.options(content), table),
                                2, "configuration", "invalid_input_json")
             for path in [self.cwd / "secret-missing", self.cwd, "-"]:
-                self.error(self.invoke("inspect", "--storage-options-file", path, table),
+                self.assert_error(self.invoke("inspect", "--storage-options-file", path, table),
                            2, "configuration", "input_file_io")
             self.assertEqual(server.requests, [])
 
     def test_json_size_limit_stops_reading_and_counts_bytes(self):
         table = self.metadata_table()
         for content in [b"{}", b"{}" + b" " * (LIMIT - 2)]:
-            self.success(self.invoke("inspect", "--storage-options-file", self.options(content), table))
-        self.error(self.invoke("inspect", "--storage-options-file", "/dev/zero", table),
+            self.assert_inspection(self.invoke("inspect", "--storage-options-file", self.options(content), table))
+        self.assert_error(self.invoke("inspect", "--storage-options-file", "/dev/zero", table),
                    2, "configuration", "invalid_input_json")
         content = json.dumps({"secret": "\u00e9" * (LIMIT // 2)}, ensure_ascii=False).encode()
         self.assertLess(len(content.decode()), LIMIT)
-        self.error(self.invoke("inspect", "--storage-options-file", self.options(content), table),
+        self.assert_error(self.invoke("inspect", "--storage-options-file", self.options(content), table),
                    2, "configuration", "invalid_input_json")
 
     def test_empty_schema_relative_path_file_url_and_literal_dash_file(self):
         table = self.metadata_table()
         expected = {"format_version": 1, "table_version": "0", "schema": {"fields": [], "metadata": {}}}
-        self.assertEqual(self.success(self.invoke("inspect", "--", table.name)), expected)
-        self.assertEqual(self.success(self.invoke("inspect", table.as_uri())), expected)
+        self.assertEqual(self.assert_inspection(self.invoke("inspect", "--", table.name)), expected)
+        self.assertEqual(self.assert_inspection(self.invoke("inspect", table.as_uri())), expected)
         (self.cwd / "-").write_text("{}", encoding="utf-8")
-        self.assertEqual(self.success(self.invoke("inspect", "--storage-options-file", "-", table)), expected)
+        self.assertEqual(self.assert_inspection(self.invoke("inspect", "--storage-options-file", "-", table)), expected)
 
     def test_latest_historical_and_missing_data_files(self):
         for name, latest in [("partitioned", "0"), ("nested_mapping", "1"), ("deletion_vectors", "1")]:
             with self.subTest(name=name):
                 table = self.cwd / name
                 shutil.copytree(CORPUS / name / "table/_delta_log", table / "_delta_log")
-                current = self.success(self.invoke("inspect", table))
-                original = self.success(self.invoke("inspect", "--table-version", "0", table))
+                current = self.assert_inspection(self.invoke("inspect", table))
+                original = self.assert_inspection(self.invoke("inspect", "--table-version", "0", table))
                 self.assertEqual(current["table_version"], latest)
                 self.assertEqual(original["table_version"], "0")
                 if name == "nested_mapping":
-                    def child(schema):
+                    def city_field(schema):
                         return schema["schema"]["fields"][2]["data_type"]["Struct"][1]
-                    self.assertEqual(child(current)["name"], "city")
-                    self.assertEqual(child(original)["name"], "old_city")
-                    self.assertEqual(child(current)["metadata"]["delta.columnMapping.id"], "5")
+                    self.assertEqual(city_field(current)["name"], "city")
+                    self.assertEqual(city_field(original)["name"], "old_city")
+                    self.assertEqual(city_field(current)["metadata"]["delta.columnMapping.id"], "5")
 
     def test_schema_metadata_and_unscannable_protocol_are_inspectable(self):
         table = self.metadata_table([{"name": "secret-name", "type": "string", "nullable": False,
                                       "metadata": {"comment": "secret requested metadata"}}], protocol=4)
-        field = self.success(self.invoke("inspect", table))["schema"]["fields"][0]
+        field = self.assert_inspection(self.invoke("inspect", table))["schema"]["fields"][0]
         self.assertEqual(field["name"], "secret-name")
         self.assertEqual(field["metadata"]["comment"], "secret requested metadata")
         self.assertFalse(field["nullable"])
+
+    def test_version_preflight_ignores_unrelated_and_newer_log_files(self):
+        table = self.metadata_table()
+        log = table / "_delta_log"
+        (log / "00000000000000000001.json").write_text("secret invalid JSON\n", encoding="utf-8")
+        value = self.assert_inspection(self.invoke("inspect", "--table-version", "0", table))
+        self.assertEqual(value["table_version"], "0")
+        version = 1_000_000_000_000
+        (log / f"{version:020}.crc").write_text("{}", encoding="utf-8")
+        nested = log / f"{version:020}.nested"
+        nested.mkdir()
+        (nested / "00000000000000000000.json").write_text("{}", encoding="utf-8")
+        self.assert_error(self.invoke("inspect", "--table-version", str(version), table),
+                          1, "snapshot", "snapshot_load")
 
     def test_reader_errors_preserve_core_diagnostic_and_redact_secrets(self):
         table = self.metadata_table()
         for location, phase, code in [(self.cwd / "secret-missing", "table_location", "invalid_table_location"),
                                       (self.cwd, "snapshot", "snapshot_load"),
                                       ("unknown://secret-user:secret-password@host/table?token=secret-token", "storage", "storage_initialization")]:
-            diagnostic = self.error(self.invoke("inspect", location), 1, phase, code)
+            diagnostic = self.assert_error(self.invoke("inspect", location), 1, phase, code)
             self.assertTrue(diagnostic["message"].startswith(f"delta reader error: phase={phase} code={code} reason="))
-        self.error(self.invoke("inspect", "--table-version", "999", table), 1, "snapshot", "snapshot_load")
-        self.error(self.invoke("inspect", "--table-version", "18446744073709551615", table),
-                   1, "snapshot", "snapshot_load")
+        for version in ["999", "1000000000000", "18446744073709551614", "18446744073709551615"]:
+            with self.subTest(version=version):
+                self.assert_error(self.invoke("inspect", "--table-version", version, table),
+                                  1, "snapshot", "snapshot_load")
         invalid = self.options(b'{"allow_http":"secret-invalid-value"}')
-        self.error(self.invoke("inspect", "--storage-options-file", invalid, "http://127.0.0.1:9/secret-table"),
+        self.assert_error(self.invoke("inspect", "--storage-options-file", invalid, "http://127.0.0.1:9/secret-table"),
                    1, "storage", "storage_initialization")
         table = self.metadata_table([{
             "name": "secret-array", "type": {"type": "array", "elementType": "string", "containsNull": True},
             "nullable": True, "metadata": {"delta.columnMapping.nested.ids": "secret-invalid-object"},
         }])
-        self.error(self.invoke("inspect", table), 1, "schema", "schema_conversion")
+        self.assert_error(self.invoke("inspect", table), 1, "schema", "schema_conversion")
 
     def test_http_inspection_reads_only_metadata(self):
-        with http.serve(functools.partial(Storage, directory=CORPUS / "deletion_vectors/table")) as server:
-            value = self.success(self.invoke("inspect", "--storage-options-file", self.options(b'{"allow_http":"true"}'),
+        with http.serve(functools.partial(RecordingStorageHandler, directory=CORPUS / "deletion_vectors/table")) as server:
+            value = self.assert_inspection(self.invoke("inspect", "--storage-options-file", self.options(b'{"allow_http":"true"}'),
                                              f"http://127.0.0.1:{server.server_port}/"))
             self.assertEqual(value["table_version"], "1")
             self.assertTrue(server.requests)
@@ -215,14 +247,14 @@ class ProcessTests(unittest.TestCase):
                 result = subprocess.run([DAR, *args], cwd=self.cwd, env=self.env, stdout=sink,
                                         stderr=subprocess.PIPE, timeout=15)
             result.stdout = b""
-            self.error(result, 3, "execution", "output_write")
+            self.assert_error(result, 3, "execution", "output_write")
         read_fd, write_fd = os.pipe()
         os.close(read_fd)
         with os.fdopen(write_fd, "wb") as sink:
             result = subprocess.run([DAR, "inspect", table], cwd=self.cwd, env=self.env, stdout=sink,
                                     stderr=subprocess.PIPE, timeout=15)
         result.stdout = b""
-        self.error(result, 3, "execution", "output_write")
+        self.assert_error(result, 3, "execution", "output_write")
         with open("/dev/full", "wb") as sink:
             result = subprocess.run([DAR, "--version"], stdout=sink, stderr=sink, timeout=15)
         self.assertEqual(result.returncode, 3)
@@ -232,7 +264,7 @@ class ProcessTests(unittest.TestCase):
             with self.subTest(signal=signum):
                 started, disconnected = threading.Event(), threading.Event()
 
-                class HeldStorage(Storage):
+                class BlockingStorageHandler(RecordingStorageHandler):
                     def send_head(self):
                         started.set()
                         self.wait_for_disconnect(disconnected)
@@ -240,7 +272,7 @@ class ProcessTests(unittest.TestCase):
                     def do_PROPFIND(self):
                         self.send_head()
 
-                with http.serve(functools.partial(HeldStorage, directory=self.cwd)) as server:
+                with http.serve(functools.partial(BlockingStorageHandler, directory=self.cwd)) as server:
                     args = [DAR, "inspect", "--storage-options-file", self.options(b'{"allow_http":"true"}'),
                             f"http://127.0.0.1:{server.server_port}/"]
                     with subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=self.env) as process:
@@ -257,6 +289,30 @@ class ProcessTests(unittest.TestCase):
                             if process.poll() is None:
                                 process.kill()
                                 process.communicate(timeout=10)
+
+    def test_completion_does_not_wait_for_unused_blocking_prefetch(self):
+        for invalid_schema in [False, True]:
+            with self.subTest(invalid_schema=invalid_schema):
+                fields = [{
+                    "name": "secret-array", "type": {"type": "array", "elementType": "string", "containsNull": True},
+                    "nullable": True, "metadata": {"delta.columnMapping.nested.ids": "secret-invalid-object"},
+                }] if invalid_schema else []
+                table = self.metadata_table(fields)
+                log = table / "_delta_log"
+                old = log / "00000000000000000000.json"
+                latest = log / "00000000000000000001.json"
+                latest.write_bytes(old.read_bytes())
+                old.write_text("unused invalid JSON\n", encoding="utf-8")
+                started = self.cwd / "open-started"
+                started.unlink(missing_ok=True)
+                self.env.update(LD_PRELOAD=str(self.fault_library), DAR_TEST_BLOCKED_OPEN=str(old),
+                                DAR_TEST_LATEST_LOG=str(latest), DAR_TEST_OPEN_STARTED=str(started))
+                result = self.invoke("inspect", table)
+                self.assertTrue(started.exists(), "unused blocking prefetch never started")
+                if invalid_schema:
+                    self.assert_error(result, 1, "schema", "schema_conversion")
+                else:
+                    self.assertEqual(self.assert_inspection(result)["table_version"], "1")
 
 
 if __name__ == "__main__":
