@@ -53,11 +53,17 @@ indexes, using uncompressed data or Zstd raw blocks without checksums. Other
 layouts use ordinary reads. Explicit range-read policy overrides also retain
 their ordinary behavior.
 
-Fewer downloaded bytes can mean many more requests. The experiment allows up to
-512 concurrent experimental range reads across the process and spends at most
-16 MiB per fetch on probes and selected data. It does not yet select a plan from
-network measurements. Compare both elapsed time and request counts before
-enabling it for your workload.
+Fewer bytes can mean more requests. The reader uses latency and throughput
+observed during ordinary queries to compare partial reads with complete pages,
+including probes and dependent request rounds. Partial reads must save more than
+10% of the estimated cost. Missing evidence, dense selections or unavailable
+shared request capacity retain ordinary reads, so enabling the option may have
+no effect on a cold or local scan. It sends no calibration requests.
+
+Probes and selected data share the original page request's byte budget. Each
+round reserves free capacity from a process-wide ceiling of 512 planned range
+reads, shared with ordinary reads; 512 is not a per-file target. Compare elapsed
+time and request counts before enabling this experimental option for a workload.
 
 ## DataFusion scan options
 

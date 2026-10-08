@@ -16,12 +16,14 @@ use object_store::{
     OBJECT_STORE_COALESCE_DEFAULT, ObjectMeta, ObjectStore, ObjectStoreScheme, PutMultipartOptions,
     PutOptions, PutPayload, PutResult, RenameOptions, Result, path::Path,
 };
+use tokio::sync::SemaphorePermit;
 use tracing::Instrument;
 use url::Url;
 
 use super::range_planning::{
-    ChosenRangePlan, RangePlanDecision, TransportEstimate, bandwidth_delay_bytes,
-    choose_range_plan, execute_range_plan, merge_ranges, range_bytes, request_waves,
+    ChosenRangePlan, RANGE_READ_PERMITS, RangePlanDecision, TransportEstimate,
+    bandwidth_delay_bytes, choose_range_plan, execute_range_plan, merge_ranges, range_bytes,
+    request_waves,
 };
 use crate::{
     DeltaScanMetrics,
@@ -180,6 +182,23 @@ impl MeteredParquetObjectStore {
         self.range_read_estimator.current_transport_estimate()
     }
 
+    pub(super) fn transport_estimate(&self) -> Option<TransportEstimate> {
+        self.current_transport_estimate().estimate
+    }
+
+    #[cfg(test)]
+    pub(super) fn seed_transport_estimate(&self, estimate: TransportEstimate) {
+        for _ in 0..MIN_TRANSPORT_SAMPLES {
+            self.range_read_estimator.record(TransportObservation {
+                request_latency: estimate.request_latency,
+                throughput: Some(ThroughputSample {
+                    bytes_received: MIN_THROUGHPUT_SAMPLE_BYTES,
+                    bytes_per_second: estimate.shared_throughput_bytes_per_second,
+                }),
+            });
+        }
+    }
+
     /// Records transport evidence after every physical range in a chosen plan finishes.
     ///
     /// Overlapping payload intervals count once when calculating delivery time. This produces
@@ -201,6 +220,7 @@ impl MeteredParquetObjectStore {
         self.metrics.record_parquet_data_file_physical_range_plan(
             plan.physical_ranges.len(),
             plan.planned_bytes,
+            MAX_CONCURRENT_PARQUET_RANGE_READS,
         );
         match plan.decision {
             RangePlanDecision::ColdStart => self
@@ -222,19 +242,73 @@ impl MeteredParquetObjectStore {
         requested_ranges: &[Range<u64>],
         physical_ranges: &[Range<u64>],
     ) -> Result<(Vec<Bytes>, Duration)> {
+        let concurrency = physical_ranges
+            .len()
+            .min(MAX_CONCURRENT_PARQUET_RANGE_READS);
+        // Reserve before timing requests so contention is not mistaken for network latency.
+        let permits = RANGE_READ_PERMITS
+            .acquire_many(concurrency as u32)
+            .await
+            .map_err(|error| object_store::Error::Generic {
+                store: "delta-arrow-reader",
+                source: Box::new(error),
+            })?;
+        self.read_reserved_ranges(location, requested_ranges, physical_ranges, &permits)
+            .await
+    }
+
+    /// Reads a partial-page plan without coalescing again. Return complete physical
+    /// buffers so page reconstruction can reuse bytes read while filling gaps.
+    pub(super) async fn read_partial_ranges(
+        &self,
+        location: &Path,
+        requested_ranges: &[Range<u64>],
+        physical_ranges: &[Range<u64>],
+        permits: &SemaphorePermit<'_>,
+    ) -> Result<Vec<Bytes>> {
+        let exact_ranges = merge_ranges(requested_ranges, 0);
+        self.metrics
+            .record_parquet_data_file_exact_ranges_requested(
+                exact_ranges.len(),
+                range_bytes(&exact_ranges),
+            );
+        self.metrics.record_parquet_data_file_physical_range_plan(
+            physical_ranges.len(),
+            range_bytes(physical_ranges),
+            permits.num_permits(),
+        );
+        self.read_reserved_ranges(location, physical_ranges, physical_ranges, permits)
+            .await
+            .map(|(bytes, _)| bytes)
+    }
+
+    /// The reservation covers every request in this round, including store retries.
+    async fn read_reserved_ranges(
+        &self,
+        location: &Path,
+        requested_ranges: &[Range<u64>],
+        physical_ranges: &[Range<u64>],
+        permits: &SemaphorePermit<'_>,
+    ) -> Result<(Vec<Bytes>, Duration)> {
         let plan_started = Instant::now();
         let completed_reads = Arc::new(Mutex::new(Vec::with_capacity(physical_ranges.len())));
-        let results = execute_range_plan(requested_ranges, physical_ranges, |range| {
-            let completed_reads = Arc::clone(&completed_reads);
-            async move {
-                let (bytes, completed_read) = self.read_range_with_timing(location, range).await?;
-                completed_reads
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .push(completed_read);
-                Ok::<Bytes, object_store::Error>(bytes)
-            }
-        })
+        let results = execute_range_plan(
+            requested_ranges,
+            physical_ranges,
+            permits.num_permits(),
+            |range| {
+                let completed_reads = Arc::clone(&completed_reads);
+                async move {
+                    let (bytes, completed_read) =
+                        self.read_range_with_timing(location, range).await?;
+                    completed_reads
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .push(completed_read);
+                    Ok::<Bytes, object_store::Error>(bytes)
+                }
+            },
+        )
         .await?;
         let observed_plan_time = plan_started.elapsed();
         self.record_completed_range_reads(
@@ -524,6 +598,7 @@ impl ObjectStore for MeteredParquetObjectStore {
                 self.metrics.record_parquet_data_file_physical_range_plan(
                     physical_ranges.len(),
                     range_bytes(&physical_ranges),
+                    MAX_CONCURRENT_PARQUET_RANGE_READS,
                 );
                 let (results, _) = self
                     .read_physical_ranges(location, ranges, &physical_ranges)
@@ -1242,6 +1317,59 @@ mod tests {
                 "{strategy:?}"
             );
         }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn reserved_reads_report_actual_requests_bytes_and_concurrency() -> Result<()> {
+        let inner = Arc::new(InMemory::new());
+        let path = Path::from("data.parquet");
+        inner.put(&path, vec![42_u8; 64].into()).await?;
+        let metrics = direct_metrics();
+        let store = MeteredParquetObjectStore::new(
+            inner,
+            metrics.clone(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        );
+        let ranges: Vec<_> = (0..32).map(|i| i * 2..i * 2 + 1).collect();
+        let budget = tokio::sync::Semaphore::new(32);
+        let permits = budget.try_acquire_many(32).expect("free budget");
+        let data = store
+            .read_partial_ranges(&path, &ranges, &ranges, &permits)
+            .await?;
+        assert_eq!(data, vec![Bytes::from_static(&[42]); 32]);
+        let snapshot = metrics.snapshot();
+        assert_eq!(
+            snapshot.parquet_data_file_physical_range_requests_planned,
+            Some(32)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_physical_range_bytes_planned,
+            Some(32)
+        );
+        let diagnostic = metrics.parquet_range_planning_diagnostic_snapshot();
+        assert_eq!(diagnostic.max_concurrent_physical_range_requests, 32);
+        assert_eq!(diagnostic.physical_range_request_waves_planned, 1);
+        // The cache must receive the complete physical buffer, while requested
+        // byte metrics retain the smaller logical ranges before gap merging.
+        let data = store
+            .read_partial_ranges(
+                &path,
+                &[0..1, 3..4],
+                std::slice::from_ref(&(0..4)),
+                &permits,
+            )
+            .await?;
+        assert_eq!(data, vec![Bytes::from_static(&[42; 4])]);
+        let snapshot = metrics.snapshot();
+        assert_eq!(
+            snapshot.parquet_data_file_exact_range_bytes_requested,
+            Some(34)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_physical_range_bytes_planned,
+            Some(36)
+        );
         Ok(())
     }
 
