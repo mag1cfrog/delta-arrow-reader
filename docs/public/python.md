@@ -199,6 +199,25 @@ A supplied integer must be from `1` through `2 * sys.maxsize + 1`. Booleans and
 other types raise `TypeError`, zero and negative values raise `ValueError`, and
 values above the maximum raise `OverflowError`.
 
+## Buffer small Parquet files
+
+`parquet_full_file_read_threshold_bytes` lets the `"direct"` backend fetch files
+at or below the threshold once and serve subsequent Parquet range reads from
+memory. The Rust default, `None`, disables full-file buffering:
+
+```python
+small_files = ScanExecutionOptions(parquet_full_file_read_threshold_bytes=1024 * 1024)
+with table.to_reader(execution_options=small_files) as reader:
+    print(reader.read_all().num_rows)
+```
+
+This example buffers files up to and including 1 MiB. Each qualifying file is
+held in memory during reading. Larger files use ordinary range reads. The
+`"delta_kernel"` backend ignores this setting.
+
+Pass `None` to disable buffering. A supplied integer has the same positive
+range and error behavior as `parquet_metadata_size_hint_bytes`.
+
 ## Use the Arrow stream interface and stop early
 
 `to_reader()` returns a `pyarrow.RecordBatchReader`. You can also construct one

@@ -20,6 +20,7 @@ class ScanExecutionOptions:
         output_buffer_batches_per_partition: int = 1,
         prefetch_files_per_partition: int = 2,
         parquet_metadata_size_hint_bytes: int | None = 65536,
+        parquet_full_file_read_threshold_bytes: int | None = None,
     ) -> None: ...
     @property
     def parquet_backend(self) -> Literal["direct", "delta_kernel"]: ...
@@ -33,6 +34,8 @@ class ScanExecutionOptions:
     def prefetch_files_per_partition(self) -> int: ...
     @property
     def parquet_metadata_size_hint_bytes(self) -> int | None: ...
+    @property
+    def parquet_full_file_read_threshold_bytes(self) -> int | None: ...
 
 class RecordBatchStream:
     """Single-use Arrow exporter created by DeltaTable.scan(), with no public constructor."""

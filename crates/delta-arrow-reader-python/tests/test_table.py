@@ -573,7 +573,7 @@ class TableTests(unittest.TestCase):
             with self.subTest(count=count), self.assertRaises(error_type):
                 ScanExecutionOptions(prefetch_files_per_partition=count)
 
-    def test_metadata_hint_defaults_and_validation(self):
+    def test_parquet_byte_options_defaults_and_validation(self):
         class Size(int):
             def __lt__(self, other):
                 return False
@@ -581,23 +581,27 @@ class TableTests(unittest.TestCase):
             def __index__(self):
                 return 1
 
-        self.assertEqual(ScanExecutionOptions().parquet_metadata_size_hint_bytes, 65536)
-        for size in (None, 1, 65536, Size(2), 2 * sys.maxsize + 1):
-            with self.subTest(size=size):
-                options = ScanExecutionOptions(parquet_metadata_size_hint_bytes=size)
-                self.assertEqual(options.parquet_metadata_size_hint_bytes, size)
-                with self.assertRaises(AttributeError):
-                    options.parquet_metadata_size_hint_bytes = None
-        for size, error_type in (
-            (True, TypeError), (False, TypeError), (1.0, TypeError),
-            ("1", TypeError), (b"1", TypeError), ([], TypeError),
-            ({}, TypeError), (object(), TypeError), (0, ValueError),
-            (Size(0), ValueError), (-1, ValueError), (-2**100, ValueError),
-            (Size(-1), ValueError), (2 * sys.maxsize + 2, OverflowError),
-            (2**100, OverflowError),
+        for name, default in (
+            ("parquet_metadata_size_hint_bytes", 65536),
+            ("parquet_full_file_read_threshold_bytes", None),
         ):
-            with self.subTest(size=size), self.assertRaises(error_type):
-                ScanExecutionOptions(parquet_metadata_size_hint_bytes=size)
+            self.assertEqual(getattr(ScanExecutionOptions(), name), default)
+            for size in (None, 1, 65536, Size(2), 2 * sys.maxsize + 1):
+                with self.subTest(name=name, size=size):
+                    options = ScanExecutionOptions(**{name: size})
+                    self.assertEqual(getattr(options, name), size)
+                    with self.assertRaises(AttributeError):
+                        setattr(options, name, None)
+            for size, error_type in (
+                (True, TypeError), (False, TypeError), (1.0, TypeError),
+                ("1", TypeError), (b"1", TypeError), ([], TypeError),
+                ({}, TypeError), (object(), TypeError), (0, ValueError),
+                (Size(0), ValueError), (-1, ValueError), (-2**100, ValueError),
+                (Size(-1), ValueError), (2 * sys.maxsize + 2, OverflowError),
+                (2**100, OverflowError),
+            ):
+                with self.subTest(name=name, size=size), self.assertRaises(error_type):
+                    ScanExecutionOptions(**{name: size})
 
     def test_metadata_hint_controls_requests_and_preserves_table_defaults(self):
         http = self.http_support()
@@ -637,6 +641,47 @@ class TableTests(unittest.TestCase):
                             # Parquet always starts with at least its 8-byte footer.
                             expected_bytes = 8 if backend == "delta_kernel" else first_bytes
                             self.assertEqual(ranges[0], f"bytes={size - expected_bytes}-{size - 1}")
+
+    def test_full_file_threshold_controls_requests_and_preserves_table_defaults(self):
+        http = self.http_support()
+        action = self.write_parquet("rows.parquet", [1, 2, 3])
+        self.write_log(1, action)
+        size = action["add"]["size"]
+        with http.serve(partial(http.Storage, directory=str(self.location))) as server:
+            for backend in ("direct", "delta_kernel"):
+                table = DeltaTable(
+                    f"http://127.0.0.1:{server.server_port}/",
+                    storage_options={"allow_http": "true"},
+                    execution_options=ScanExecutionOptions(
+                        parquet_backend=backend, parquet_metadata_size_hint_bytes=None,
+                        parquet_full_file_read_threshold_bytes=size,
+                    ),
+                )
+                overrides = [(None, True), (ScanExecutionOptions(parquet_backend=backend), False)]
+                for threshold, buffered in (
+                    (None, False), (size - 1, False), (size, True),
+                    (size + 1, True), (2 * sys.maxsize + 1, True),
+                ):
+                    overrides.append((ScanExecutionOptions(
+                        parquet_backend=backend, parquet_full_file_read_threshold_bytes=threshold,
+                    ), buffered))
+                overrides.append((None, True))
+                for method in ("scan", "to_reader"):
+                    for options, buffered in overrides:
+                        with self.subTest(backend=backend, method=method, options=options):
+                            server.requests.clear()
+                            result = getattr(table, method)(execution_options=options)
+                            reader = (pa.RecordBatchReader.from_stream(result)
+                                      if method == "scan" else result)
+                            with reader:
+                                self.assertEqual(reader.read_all().to_pydict(), {"id": [1, 2, 3]})
+                            ranges = [r for path, r, _ in server.requests
+                                      if path.endswith(".parquet")]
+                            if buffered and backend == "direct":
+                                self.assertEqual(ranges, [None], "expected one full-file request")
+                            else:
+                                self.assertTrue(ranges)
+                                self.assertNotIn(None, ranges, "expected only range requests")
 
     def test_execution_options_bound_file_admission(self):
         http = self.http_support()

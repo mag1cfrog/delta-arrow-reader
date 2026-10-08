@@ -52,6 +52,8 @@ fn optional_positive_usize(value: &Bound<'_, PyAny>) -> PyResult<Option<usize>> 
 /// It accepts nonnegative integers fitting usize; 0 disables file prefetch.
 /// parquet_metadata_size_hint_bytes defaults to 65536 for the direct backend.
 /// Explicit None disables the hint; supplied integers must be positive and fit usize.
+/// parquet_full_file_read_threshold_bytes defaults to None (disabled). A positive
+/// integer enables full-file buffering in the direct backend for files at or below it.
 #[pyclass(module = "delta_arrow_reader", frozen)]
 pub(crate) struct ScanExecutionOptions {
     pub(crate) options: DeltaScanExecutionOptions,
@@ -68,6 +70,7 @@ impl ScanExecutionOptions {
         output_buffer_batches_per_partition=DeltaScanExecutionOptions::new().output_buffer_batches_per_partition(),
         prefetch_files_per_partition=DeltaScanExecutionOptions::new().prefetch_files_per_partition(),
         parquet_metadata_size_hint_bytes=DeltaScanExecutionOptions::new().parquet_metadata_size_hint_bytes(),
+        parquet_full_file_read_threshold_bytes=DeltaScanExecutionOptions::new().parquet_full_file_read_threshold_bytes(),
     ))]
     fn new(
         parquet_backend: &str,
@@ -80,6 +83,8 @@ impl ScanExecutionOptions {
         #[pyo3(from_py_with = optional_positive_usize)] parquet_metadata_size_hint_bytes: Option<
             usize,
         >,
+        #[pyo3(from_py_with = optional_positive_usize)]
+        parquet_full_file_read_threshold_bytes: Option<usize>,
     ) -> PyResult<Self> {
         let backend = match parquet_backend {
             "direct" => ParquetReaderBackend::Direct,
@@ -103,6 +108,8 @@ impl ScanExecutionOptions {
                 .map_err(|error| PyValueError::new_err(error.to_string()))?
                 .with_prefetch_files_per_partition(prefetch_files_per_partition)
                 .with_parquet_metadata_size_hint_bytes(parquet_metadata_size_hint_bytes)
+                .map_err(|error| PyValueError::new_err(error.to_string()))?
+                .with_parquet_full_file_read_threshold_bytes(parquet_full_file_read_threshold_bytes)
                 .map_err(|error| PyValueError::new_err(error.to_string()))?,
         })
     }
@@ -138,5 +145,10 @@ impl ScanExecutionOptions {
     #[getter]
     fn parquet_metadata_size_hint_bytes(&self) -> Option<usize> {
         self.options.parquet_metadata_size_hint_bytes()
+    }
+
+    #[getter]
+    fn parquet_full_file_read_threshold_bytes(&self) -> Option<usize> {
+        self.options.parquet_full_file_read_threshold_bytes()
     }
 }
