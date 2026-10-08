@@ -9,6 +9,7 @@ from types import MappingProxyType
 import unittest
 
 import pyarrow as pa
+import pyarrow.parquet as pq
 
 from delta_arrow_reader import DeltaReaderError, DeltaTable
 
@@ -43,6 +44,62 @@ class TableTests(unittest.TestCase):
         (self.log / f"{version:020}.json").write_text(
             "".join(json.dumps(action) + "\n" for action in actions), encoding="utf-8"
         )
+
+    def write_parquet(self, name, values):
+        path = self.location / name
+        schema = pa.schema([pa.field("id", pa.int64(), nullable=False)])
+        pq.write_table(pa.table({"id": values}, schema=schema), path)
+        return {"add": {
+            "path": name, "partitionValues": {}, "size": path.stat().st_size,
+            "modificationTime": 0, "dataChange": True,
+        }}
+
+    def test_reader_and_batches_outlive_table(self):
+        self.write_log(
+            1, self.write_parquet("first.parquet", [1, 2]),
+            self.write_parquet("second.parquet", [3, 4]),
+        )
+        table = DeltaTable(self.location)
+        reader = table.to_reader()
+        other = table.to_reader()
+        schema = table.schema
+        self.assertIsInstance(reader, pa.RecordBatchReader)
+        del table
+        gc.collect()
+
+        self.assertEqual(reader.schema, schema)
+        batch = reader.read_next_batch()
+        self.assertEqual(batch.column(0).to_pylist(), [1, 2])
+        self.assertEqual(reader.read_all().to_pydict(), {"id": [3, 4]})
+        with self.assertRaises(StopIteration):
+            reader.read_next_batch()
+        reader.close()
+        self.assertEqual(other.read_all().to_pydict(), {"id": [1, 2, 3, 4]})
+        other.close()
+        del reader, other
+        gc.collect()
+        self.assertEqual(batch.column(0).to_pylist(), [1, 2])
+
+    def test_reader_errors_stay_terminal_and_redacted(self):
+        self.write_log(1, self.write_parquet("secret-data.parquet", [1, 2]))
+        (self.location / "secret-data.parquet").unlink()
+        # Planning can finish even though the data file is already missing.
+        reader = DeltaTable(self.location).to_reader()
+        try:
+            for _ in range(2):
+                with self.assertRaises(pa.ArrowInvalid) as caught:
+                    reader.read_next_batch()
+                self.assertIn("phase=data_file_read code=data_file_read", str(caught.exception))
+                self.assertNotIn("secret", str(caught.exception))
+        finally:
+            reader.close()
+
+    def test_empty_reader_preserves_schema(self):
+        table = DeltaTable(self.location)
+        with table.to_reader() as reader:
+            empty = reader.read_all()
+        self.assertEqual(empty.schema, table.schema)
+        self.assertEqual(empty.num_rows, 0)
 
     def test_latest_snapshot_is_immutable(self):
         original = DeltaTable(self.location)
@@ -165,6 +222,10 @@ class TableTests(unittest.TestCase):
                 self.assertNotIn("secret", str(error))
                 self.assertIsNone(error.__cause__)
                 self.assertIsNone(error.__context__)
+                with self.assertRaises(DeltaReaderError) as caught:
+                    table.to_reader()
+                self.assertEqual(caught.exception.code, "schema_conversion")
+                self.assertNotIn("secret", str(caught.exception))
 
     def test_version_validation(self):
         class Version(int):
@@ -287,7 +348,11 @@ class TableTests(unittest.TestCase):
         self.write_log(
             1, {"protocol": {"minReaderVersion": 4, "minWriterVersion": 2}}
         )
-        self.assertEqual(DeltaTable(self.location).version, 1)
+        table = DeltaTable(self.location)
+        self.assertEqual(table.version, 1)
+        with self.assertRaises(DeltaReaderError) as caught:
+            table.to_reader()
+        self.assertEqual(caught.exception.phase, "protocol")
 
     def test_process_exits_after_successful_and_failed_loading(self):
         empty = self.location / "empty-table"

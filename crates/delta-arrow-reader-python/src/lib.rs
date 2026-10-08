@@ -1,13 +1,14 @@
 //! Python package entrypoint.
 
 mod runtime;
+mod stream;
 
 use std::sync::Arc;
 
 use ::delta_arrow_reader::{
     DeltaSnapshotSelection, DeltaStorageOptions, DeltaTable as CoreDeltaTable, DeltaTableBuilder,
 };
-use arrow::ffi::FFI_ArrowSchema;
+use arrow::{datatypes::Schema, ffi::FFI_ArrowSchema};
 use pyo3::{
     exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
@@ -15,6 +16,7 @@ use pyo3::{
 };
 
 use crate::runtime::Runtime;
+use crate::stream::RecordBatchStream;
 
 pyo3::create_exception!(
     delta_arrow_reader,
@@ -33,6 +35,27 @@ fn reader_error(py: Python<'_>, message: String, phase: &str, code: &str) -> PyE
         return error;
     }
     exception
+}
+
+fn export_schema(py: Python<'_>, schema: &Schema) -> PyResult<FFI_ArrowSchema> {
+    let export_error = || {
+        reader_error(
+            py,
+            "delta reader error: phase=schema code=schema_conversion reason=arrow_schema_export_failed"
+                .to_owned(),
+            "schema",
+            "schema_conversion",
+        )
+    };
+    // Arrow 58's FFI exporter panics on NUL bytes in field names.
+    if schema
+        .flattened_fields()
+        .iter()
+        .any(|field| field.name().contains('\0'))
+    {
+        return Err(export_error());
+    }
+    FFI_ArrowSchema::try_from(schema).map_err(|_| export_error())
 }
 
 /// One immutable Delta snapshot, loaded from a string or os.PathLike[str].
@@ -111,27 +134,31 @@ impl DeltaTable {
 
     /// Export a fresh Arrow schema capsule through the public Arrow protocol.
     fn __arrow_c_schema__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
-        let schema = self.table.schema();
-        let export_error = || {
-            reader_error(
-                py,
-                "delta reader error: phase=schema code=schema_conversion reason=arrow_schema_export_failed"
-                    .to_owned(),
-                "schema",
-                "schema_conversion",
-            )
-        };
-        // Arrow 58's FFI exporter panics on NUL bytes in field names.
-        if schema
-            .flattened_fields()
-            .iter()
-            .any(|field| field.name().contains('\0'))
-        {
-            return Err(export_error());
-        }
-        let ffi_schema = FFI_ArrowSchema::try_from(schema.as_ref()).map_err(|_| export_error())?;
+        let ffi_schema = export_schema(py, self.table.schema().as_ref())?;
         // The capsule drops the schema; Arrow's Drop releases it only if still owned.
         PyCapsule::new_with_value(py, ffi_schema, c"arrow_schema")
+    }
+
+    /// Stream all columns and rows through a pyarrow.RecordBatchReader.
+    ///
+    /// Planning reads Delta metadata; data-file reads start on the first pull.
+    /// The reader retains its snapshot and runtime independently of this table.
+    fn to_reader<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let scan = self
+            ._runtime
+            .wait(py, self.table.scan().build())?
+            .map_err(|error| {
+                reader_error(py, error.to_string(), error.phase().as_str(), error.code())
+            })?;
+        // Validate before Arrow's C callback exports the schema.
+        export_schema(py, scan.schema().as_ref())?;
+        let stream = Py::new(
+            py,
+            RecordBatchStream::new(scan.into_stream(), Arc::clone(&self._runtime)),
+        )?;
+        py.import("pyarrow")?
+            .getattr("RecordBatchReader")?
+            .call_method1("from_stream", (stream,))
     }
 
     fn __repr__(&self) -> String {

@@ -69,8 +69,8 @@ clients' existing interfaces.
 
 ## Python
 
-The Python package loads Delta snapshots and exposes their versions and Arrow
-schemas. Row streaming is planned. The package is not published on PyPI yet.
+The Python package loads Delta snapshots, exposes their versions and Arrow
+schemas, and streams rows through PyArrow. The package is not published on PyPI yet.
 
 Use Python 3.10 or newer and Rust 1.94 or newer to install from source. From the
 repository root, run these commands on Linux or macOS:
@@ -81,7 +81,7 @@ python3 -m venv target/python-venv
 python -m pip install ./crates/delta-arrow-reader-python
 ```
 
-Installation also installs PyArrow 18 or newer. To inspect a table, replace
+Installation also installs PyArrow 18 or newer. To read a table, replace
 `/path/to/delta-table` with an existing local Delta table:
 
 ```python
@@ -94,6 +94,10 @@ table = DeltaTable(location)
 print(table.version)
 print(table.schema)
 
+with table.to_reader() as reader:
+    for batch in reader:
+        print(batch.num_rows)
+
 original = DeltaTable(location, version=0)
 print(original.schema)
 ```
@@ -104,15 +108,26 @@ Each table keeps the snapshot it loaded, even if new commits arrive. Its
 `version` and `schema` properties are read-only, and the `pyarrow.Schema`
 remains usable after the table is deleted.
 
+Each `to_reader()` call creates an independent `pyarrow.RecordBatchReader` over
+all columns and rows of that snapshot. Planning reads Delta metadata; Parquet
+reads start when you request a batch. Use a `with` block to close the reader,
+including when you stop early. Readers and returned batches remain usable after
+the table is deleted. Calling `reader.read_all()` materializes all remaining rows
+in memory.
+
 `location` also accepts a string path or a supported storage URL. Pass backend
 settings through `storage_options`, a mapping of string keys to string values
 that the constructor copies before loading.
 
-Reader failures raise `delta_arrow_reader.DeltaReaderError` with a redacted
-message and `phase` and `code` attributes. Invalid arguments raise Python's
-`TypeError`, `ValueError`, or `OverflowError`.
+Loading and planning failures raise `delta_arrow_reader.DeltaReaderError` with a
+redacted message and `phase` and `code` attributes. Failures while consuming a
+reader raise PyArrow exceptions with redacted `phase` and `code` text in the
+message. Invalid arguments raise Python's `TypeError`, `ValueError`, or
+`OverflowError`.
 
-Loading releases the GIL so other Python threads can run. When loading on Python's
-main thread, Ctrl+C raises `KeyboardInterrupt` and cancels the pending operation.
+Loading, planning, and batch reads release the GIL so other Python threads can
+run. When loading or planning on Python's main thread, Ctrl+C raises
+`KeyboardInterrupt` and cancels the pending operation. Interruption during a
+batch read reaches the caller as a PyArrow exception.
 Synchronous Kernel work already running may still finish after interruption;
 cancellation does not stop it immediately.

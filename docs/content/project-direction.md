@@ -56,8 +56,9 @@ shutdown. The binding owns its runtime; import must not start it, and the Rust
 core must not acquire a hidden runtime. Keep existing redacted error contracts.
 
 The Python package now builds from source with type stubs and the Rust workspace's
-shared version. It supports snapshot loading and schema/version inspection.
-Streaming, platform wheels and publishing remain planned work. Python asyncio,
+shared version. It supports snapshot loading, schema/version inspection, and
+full-table PyArrow readers. Projection, limits, public stream exports, platform
+wheels and publishing remain planned work. Python asyncio,
 writes, a dataframe/query product and JavaScript bindings remain outside this
 first release.
 
