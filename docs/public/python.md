@@ -160,6 +160,24 @@ backend buffers, and batches you retain also use memory. The option accepts the
 same positive integer range and raises the same errors as
 `max_concurrent_file_reads_per_partition`; `None` is not accepted.
 
+## Set file prefetch depth
+
+`prefetch_files_per_partition` controls how many future file streams each
+partition prepares when using the `"direct"` backend. The Rust default is `2`.
+Set it to `0` to disable prefetch of future files:
+
+```python
+no_prefetch = ScanExecutionOptions(prefetch_files_per_partition=0)
+with table.to_reader(execution_options=no_prefetch) as reader:
+    print(reader.read_all().num_rows)
+```
+
+The scan and per-partition file-read limits still apply. The `"delta_kernel"`
+backend ignores this setting. A supplied value must be an integer from `0`
+through `2 * sys.maxsize + 1`. `None`, booleans, and other types raise `TypeError`,
+negative values raise `ValueError`, and values above the maximum raise
+`OverflowError`.
+
 ## Use the Arrow stream interface and stop early
 
 `to_reader()` returns a `pyarrow.RecordBatchReader`. You can also construct one
