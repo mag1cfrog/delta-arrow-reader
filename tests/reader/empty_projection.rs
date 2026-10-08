@@ -78,8 +78,13 @@ async fn streaming_empty_projection_preserves_live_rows() -> TestResult {
         let table = DeltaTableBuilder::new(fixture.path().to_string_lossy())
             .load_table()
             .await?;
-        for threshold in [None, Some(usize::MAX)] {
+        for (backend, threshold) in [
+            (ParquetReaderBackend::Direct, None),
+            (ParquetReaderBackend::Direct, Some(usize::MAX)),
+            (ParquetReaderBackend::DeltaKernel, None),
+        ] {
             let options = DeltaScanExecutionOptions::new()
+                .with_parquet_backend(backend)
                 .with_parquet_full_file_read_threshold_bytes(threshold)?;
             let scan = table
                 .scan()
@@ -93,7 +98,12 @@ async fn streaming_empty_projection_preserves_live_rows() -> TestResult {
                 .into_stream()
                 .try_collect::<Vec<_>>()
                 .await
-                .map_err(|error| format!("{} {threshold:?}: {error}", fixture.path().display()))?;
+                .map_err(|error| {
+                    format!(
+                        "{} {backend:?} {threshold:?}: {error}",
+                        fixture.path().display()
+                    )
+                })?;
             assert_empty_batches(&batches, expected_rows);
         }
     }
@@ -111,29 +121,40 @@ async fn streaming_partition_only_projection_preserves_live_rows() -> TestResult
         let table = DeltaTableBuilder::new(fixture.path().to_string_lossy())
             .load_table()
             .await?;
-        for projection in [vec![], vec!["region"]] {
-            let scan = table
-                .scan()
-                .with_projection(projection.clone())
-                .build()
-                .await?;
-            let expected_schema = scan.schema();
-            let batches = scan.into_stream().try_collect::<Vec<_>>().await?;
-            assert_eq!(
-                batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
-                3 - deleted.len()
-            );
-            for batch in batches {
-                assert_eq!(batch.schema(), expected_schema);
-                if !projection.is_empty() {
-                    assert_eq!(batch.schema().field(0).name(), "region");
-                    assert_eq!(batch.schema().field(0).data_type(), &DataType::Utf8);
-                    let regions = batch
-                        .column(0)
-                        .as_any()
-                        .downcast_ref::<StringArray>()
-                        .ok_or("expected partition strings")?;
-                    assert!(regions.iter().all(|value| value == Some("west")));
+        for backend in [
+            ParquetReaderBackend::Direct,
+            ParquetReaderBackend::DeltaKernel,
+        ] {
+            for projection in [vec![], vec!["region"]] {
+                for limit in [1, usize::MAX] {
+                    let scan = table
+                        .scan()
+                        .with_projection(projection.clone())
+                        .with_execution_options(
+                            DeltaScanExecutionOptions::new().with_parquet_backend(backend),
+                        )
+                        .with_limit(limit)
+                        .build()
+                        .await?;
+                    let expected_schema = scan.schema();
+                    let batches = scan.into_stream().try_collect::<Vec<_>>().await?;
+                    assert_eq!(
+                        batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
+                        (3 - deleted.len()).min(limit)
+                    );
+                    for batch in batches {
+                        assert_eq!(batch.schema(), expected_schema);
+                        if !projection.is_empty() {
+                            assert_eq!(batch.schema().field(0).name(), "region");
+                            assert_eq!(batch.schema().field(0).data_type(), &DataType::Utf8);
+                            let regions = batch
+                                .column(0)
+                                .as_any()
+                                .downcast_ref::<StringArray>()
+                                .ok_or("expected partition strings")?;
+                            assert!(regions.iter().all(|value| value == Some("west")));
+                        }
+                    }
                 }
             }
         }
@@ -210,7 +231,12 @@ mod datafusion {
             let table = DeltaTableBuilder::new(fixture.path().to_string_lossy())
                 .load_table()
                 .await?;
-            for use_arrow_view_types in [false, true] {
+            for (backend, use_arrow_view_types) in [
+                (ParquetReaderBackend::Direct, false),
+                (ParquetReaderBackend::Direct, true),
+                (ParquetReaderBackend::DeltaKernel, false),
+                (ParquetReaderBackend::DeltaKernel, true),
+            ] {
                 let context = SessionContext::new_with_config(
                     SessionConfig::new()
                         .with_batch_size(127)
@@ -219,6 +245,8 @@ mod datafusion {
                 let provider = Arc::new(DeltaTableProvider::try_new(
                     table.clone(),
                     ScanOptions {
+                        execution_options: DeltaScanExecutionOptions::new()
+                            .with_parquet_backend(backend),
                         use_arrow_view_types,
                         ..Default::default()
                     },
@@ -257,12 +285,19 @@ mod datafusion {
             let table = DeltaTableBuilder::new(fixture.path().to_string_lossy())
                 .load_table()
                 .await?;
-            for use_arrow_view_types in [false, true] {
+            for (backend, use_arrow_view_types) in [
+                (ParquetReaderBackend::Direct, false),
+                (ParquetReaderBackend::Direct, true),
+                (ParquetReaderBackend::DeltaKernel, false),
+                (ParquetReaderBackend::DeltaKernel, true),
+            ] {
                 let context =
                     SessionContext::new_with_config(SessionConfig::new().with_batch_size(1));
                 let provider = Arc::new(DeltaTableProvider::try_new(
                     table.clone(),
                     ScanOptions {
+                        execution_options: DeltaScanExecutionOptions::new()
+                            .with_parquet_backend(backend),
                         use_arrow_view_types,
                         ..Default::default()
                     },
