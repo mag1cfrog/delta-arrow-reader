@@ -126,6 +126,23 @@ Zero, negative values, and values above the core limit that still fit `usize`
 raise `ValueError`. Positive integers larger than `2 * sys.maxsize + 1` raise
 `OverflowError`.
 
+## Limit concurrent file reads across a scan
+
+Set `max_concurrent_file_reads_per_scan` to cap concurrent file reads across all
+partitions in one scan. Both the scan and per-partition limits apply:
+
+```python
+scan_limit = ScanExecutionOptions(max_concurrent_file_reads_per_scan=2)
+with table.to_reader(target_partitions=4, execution_options=scan_limit) as reader:
+    print(reader.read_all().num_rows)
+```
+
+At most two files are read concurrently across these partitions. Omit the option
+or pass `None` to derive the limit from the partition target multiplied by the
+per-partition limit, capped at the core's concurrency capacity. `None` is the
+Rust default. A supplied integer has the same bounds and error behavior as
+`max_concurrent_file_reads_per_partition`.
+
 ## Use the Arrow stream interface and stop early
 
 `to_reader()` returns a `pyarrow.RecordBatchReader`. You can also construct one

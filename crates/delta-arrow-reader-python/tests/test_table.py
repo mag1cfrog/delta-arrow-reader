@@ -501,7 +501,7 @@ class TableTests(unittest.TestCase):
                 with self.subTest(method=method, value=value), self.assertRaises(TypeError):
                     method(execution_options=value)
 
-    def test_partition_read_limit_defaults_and_validation(self):
+    def test_file_read_limit_defaults_and_validation(self):
         class Count(int):
             def __le__(self, other):
                 return False
@@ -510,26 +510,32 @@ class TableTests(unittest.TestCase):
                 return 1
 
         maximum = sys.maxsize >> 2
-        self.assertEqual(ScanExecutionOptions().max_concurrent_file_reads_per_partition, 3)
-        for count in (1, 2, Count(2), maximum):
-            with self.subTest(count=count):
-                options = ScanExecutionOptions(max_concurrent_file_reads_per_partition=count)
-                self.assertEqual(options.max_concurrent_file_reads_per_partition, count)
-                with self.assertRaises(AttributeError):
-                    options.max_concurrent_file_reads_per_partition = 1
-        for count, error_type in (
-            (None, TypeError), (True, TypeError), (False, TypeError),
-            (1.0, TypeError), ("1", TypeError), (b"1", TypeError),
-            ([], TypeError), ({}, TypeError), (object(), TypeError),
-            (0, ValueError), (Count(0), ValueError), (-1, ValueError),
-            (-2**100, ValueError), (Count(-1), ValueError),
-            (maximum + 1, ValueError), (2 * sys.maxsize + 1, ValueError),
-            (2 * sys.maxsize + 2, OverflowError), (2**100, OverflowError),
+        with self.assertRaises(TypeError):
+            ScanExecutionOptions(max_concurrent_file_reads_per_partition=None)
+        for name, default in (
+            ("max_concurrent_file_reads_per_partition", 3),
+            ("max_concurrent_file_reads_per_scan", None),
         ):
-            with self.subTest(count=count), self.assertRaises(error_type):
-                ScanExecutionOptions(max_concurrent_file_reads_per_partition=count)
+            self.assertEqual(getattr(ScanExecutionOptions(), name), default)
+            for count in (1, 2, Count(2), maximum, default):
+                with self.subTest(name=name, count=count):
+                    options = ScanExecutionOptions(**{name: count})
+                    self.assertEqual(getattr(options, name), count)
+                    with self.assertRaises(AttributeError):
+                        setattr(options, name, 1)
+            for count, error_type in (
+                (True, TypeError), (False, TypeError),
+                (1.0, TypeError), ("1", TypeError), (b"1", TypeError),
+                ([], TypeError), ({}, TypeError), (object(), TypeError),
+                (0, ValueError), (Count(0), ValueError), (-1, ValueError),
+                (-2**100, ValueError), (Count(-1), ValueError),
+                (maximum + 1, ValueError), (2 * sys.maxsize + 1, ValueError),
+                (2 * sys.maxsize + 2, OverflowError), (2**100, OverflowError),
+            ):
+                with self.subTest(name=name, count=count), self.assertRaises(error_type):
+                    ScanExecutionOptions(**{name: count})
 
-    def test_partition_read_limit_bounds_file_admission(self):
+    def test_file_read_limits_bound_file_admission(self):
         http = self.http_support()
         self.write_log(1, *(self.write_parquet(f"{i}.parquet", [i]) for i in range(4)))
         requested = set()
@@ -550,35 +556,39 @@ class TableTests(unittest.TestCase):
 
         with http.serve(partial(Storage, directory=str(self.location))) as server:
             for backend in ("direct", "delta_kernel"):
-                table = DeltaTable(
-                    f"http://127.0.0.1:{server.server_port}/",
-                    storage_options={"allow_http": "true"},
-                    execution_options=ScanExecutionOptions(
-                        parquet_backend=backend, max_concurrent_file_reads_per_partition=1,
-                    ),
-                )
-                override = ScanExecutionOptions(
-                    parquet_backend=backend, max_concurrent_file_reads_per_partition=2,
-                )
-                # Kernel reads files serially within each partition.
-                override_reads = 2 if backend == "direct" else 1
-                for options, expected_reads in ((None, 1), (override, override_reads),
-                                                (None, 1), (ScanExecutionOptions(), 3)):
-                    with self.subTest(backend=backend, expected_reads=expected_reads):
-                        requested.clear()
-                        for event in (admitted, exceeded, release):
-                            event.clear()
-                        with table.to_reader(target_partitions=1, execution_options=options) as reader:
-                            with ThreadPoolExecutor(max_workers=1) as executor:
-                                result = executor.submit(reader.read_all)
-                                try:
-                                    self.assertTrue(admitted.wait(10), requested)
-                                    self.assertFalse(exceeded.wait(0.1), requested)
-                                finally:
-                                    release.set()
-                                self.assertCountEqual(
-                                    result.result(timeout=10).column("id").to_pylist(), range(4),
-                                )
+                for name, target in (("max_concurrent_file_reads_per_partition", 1),
+                                     ("max_concurrent_file_reads_per_scan", 2)):
+                    table = DeltaTable(
+                        f"http://127.0.0.1:{server.server_port}/",
+                        storage_options={"allow_http": "true"},
+                        execution_options=ScanExecutionOptions(parquet_backend=backend, **{name: 1}),
+                    )
+                    override = ScanExecutionOptions(parquet_backend=backend, **{name: 2})
+                    # Kernel reads files serially within each partition.
+                    override_reads = 2 if backend == "direct" or target == 2 else 1
+                    default_reads = min(4, 3 * target)
+                    cases = [(None, 1), (override, override_reads), (None, 1),
+                             (ScanExecutionOptions(), default_reads)]
+                    if name == "max_concurrent_file_reads_per_scan":
+                        cases.append((ScanExecutionOptions(
+                            parquet_backend=backend, max_concurrent_file_reads_per_scan=None,
+                        ), 4 if backend == "direct" else 2))
+                    for options, expected_reads in cases:
+                        with self.subTest(backend=backend, name=name, expected_reads=expected_reads):
+                            requested.clear()
+                            for event in (admitted, exceeded, release):
+                                event.clear()
+                            with table.to_reader(target_partitions=target, execution_options=options) as reader:
+                                with ThreadPoolExecutor(max_workers=1) as executor:
+                                    result = executor.submit(reader.read_all)
+                                    try:
+                                        self.assertTrue(admitted.wait(10), requested)
+                                        self.assertFalse(exceeded.wait(0.1), requested)
+                                    finally:
+                                        release.set()
+                                    self.assertCountEqual(
+                                        result.result(timeout=10).column("id").to_pylist(), range(4),
+                                    )
 
     def test_backend_overrides_preserve_table_defaults_and_refresh(self):
         http = self.http_support()
