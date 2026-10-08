@@ -17,6 +17,14 @@ fn fixtures() -> TestResult<Vec<(RealParquetDeltaTable, usize)>> {
     Ok(vec![
         (RealParquetDeltaTable::new_default("empty-no-dv")?, 3),
         (
+            RealParquetDeltaTable::new_with_column_mapping("empty-column-mapping")?,
+            3,
+        ),
+        (
+            RealParquetDeltaTable::new_with_nested_column_mapping("empty-nested-mapping")?,
+            3,
+        ),
+        (
             RealParquetDeltaTable::new_with_deletion_vector("empty-dv-none", &[])?,
             3,
         ),

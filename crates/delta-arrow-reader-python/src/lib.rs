@@ -1,20 +1,22 @@
 //! Python package entrypoint.
 
 mod runtime;
+mod stream;
 
 use std::sync::Arc;
 
 use ::delta_arrow_reader::{
     DeltaSnapshotSelection, DeltaStorageOptions, DeltaTable as CoreDeltaTable, DeltaTableBuilder,
 };
-use arrow::ffi::FFI_ArrowSchema;
+use arrow::{datatypes::Schema, ffi::FFI_ArrowSchema};
 use pyo3::{
     exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyBool, PyCapsule, PyDict, PyInt, PyMapping},
+    types::{PyBool, PyCapsule, PyDict, PyInt, PyList, PyMapping, PyTuple},
 };
 
 use crate::runtime::Runtime;
+use crate::stream::RecordBatchStream;
 
 pyo3::create_exception!(
     delta_arrow_reader,
@@ -35,6 +37,27 @@ fn reader_error(py: Python<'_>, message: String, phase: &str, code: &str) -> PyE
     exception
 }
 
+fn export_schema(py: Python<'_>, schema: &Schema) -> PyResult<FFI_ArrowSchema> {
+    let export_error = || {
+        reader_error(
+            py,
+            "delta reader error: phase=schema code=schema_conversion reason=arrow_schema_export_failed"
+                .to_owned(),
+            "schema",
+            "schema_conversion",
+        )
+    };
+    // Arrow 58's FFI exporter panics on NUL bytes in field names.
+    if schema
+        .flattened_fields()
+        .iter()
+        .any(|field| field.name().contains('\0'))
+    {
+        return Err(export_error());
+    }
+    FFI_ArrowSchema::try_from(schema).map_err(|_| export_error())
+}
+
 /// One immutable Delta snapshot, loaded from a string or os.PathLike[str].
 ///
 /// With version=None, load the latest snapshot. Otherwise, version must be an
@@ -44,7 +67,7 @@ fn reader_error(py: Python<'_>, message: String, phase: &str, code: &str) -> PyE
 struct DeltaTable {
     table: CoreDeltaTable,
     // Keep the executor alive for the snapshot's storage engine.
-    _runtime: Arc<Runtime>,
+    runtime: Arc<Runtime>,
 }
 
 #[pymethods]
@@ -91,10 +114,7 @@ impl DeltaTable {
         let table = runtime.wait(py, builder.load_table())?.map_err(|error| {
             reader_error(py, error.to_string(), error.phase().as_str(), error.code())
         })?;
-        Ok(Self {
-            table,
-            _runtime: runtime,
-        })
+        Ok(Self { table, runtime })
     }
 
     /// The loaded snapshot version.
@@ -111,27 +131,72 @@ impl DeltaTable {
 
     /// Export a fresh Arrow schema capsule through the public Arrow protocol.
     fn __arrow_c_schema__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
-        let schema = self.table.schema();
-        let export_error = || {
-            reader_error(
-                py,
-                "delta reader error: phase=schema code=schema_conversion reason=arrow_schema_export_failed"
-                    .to_owned(),
-                "schema",
-                "schema_conversion",
-            )
-        };
-        // Arrow 58's FFI exporter panics on NUL bytes in field names.
-        if schema
-            .flattened_fields()
-            .iter()
-            .any(|field| field.name().contains('\0'))
-        {
-            return Err(export_error());
-        }
-        let ffi_schema = FFI_ArrowSchema::try_from(schema.as_ref()).map_err(|_| export_error())?;
+        let ffi_schema = export_schema(py, self.table.schema().as_ref())?;
         // The capsule drops the schema; Arrow's Drop releases it only if still owned.
         PyCapsule::new_with_value(py, ffi_schema, c"arrow_schema")
+    }
+
+    /// Plan a scan and return a single-use Arrow stream exporter.
+    ///
+    /// columns=None selects all columns. A list or tuple of names selects columns
+    /// in that order; an empty list selects no columns while retaining row counts.
+    /// limit=None reads all rows. Otherwise, limit must be a nonnegative integer
+    /// that fits the platform's usize. Booleans are not accepted.
+    /// Planning reads Delta metadata; data-file reads start on the first pull.
+    /// The stream retains its snapshot and runtime independently of this table.
+    #[pyo3(signature = (*, columns=None, limit=None))]
+    fn scan(
+        &self,
+        py: Python<'_>,
+        columns: Option<&Bound<'_, PyAny>>,
+        limit: Option<&Bound<'_, PyInt>>,
+    ) -> PyResult<RecordBatchStream> {
+        let mut builder = self.table.scan();
+        if let Some(columns) = columns {
+            if !columns.is_instance_of::<PyList>() && !columns.is_instance_of::<PyTuple>() {
+                return Err(PyTypeError::new_err(
+                    "columns must be a list or tuple of strings, or None",
+                ));
+            }
+            builder = builder.with_projection(columns.extract::<Vec<String>>()?);
+        }
+        if let Some(limit) = limit {
+            if limit.is_instance_of::<PyBool>() {
+                return Err(PyTypeError::new_err("limit must be an integer, not bool"));
+            }
+            // Validate the integer value even if a subclass overrides comparisons.
+            let limit = py.get_type::<PyInt>().call_method1("__index__", (limit,))?;
+            if limit.lt(0)? {
+                return Err(PyValueError::new_err("limit must be nonnegative"));
+            }
+            builder = builder.with_limit(limit.extract::<usize>()?);
+        }
+        let scan = self.runtime.wait(py, builder.build())?.map_err(|error| {
+            reader_error(py, error.to_string(), error.phase().as_str(), error.code())
+        })?;
+        // Validate before Arrow's C callback exports the schema.
+        export_schema(py, scan.schema().as_ref())?;
+        Ok(RecordBatchStream::new(
+            scan.into_stream(),
+            Arc::clone(&self.runtime),
+        ))
+    }
+
+    /// Plan a scan and consume it as a pyarrow.RecordBatchReader.
+    ///
+    /// columns and limit accept the same selections as scan().
+    /// Use a with block to close the reader, including when stopping early.
+    #[pyo3(signature = (*, columns=None, limit=None))]
+    fn to_reader<'py>(
+        &self,
+        py: Python<'py>,
+        columns: Option<&Bound<'_, PyAny>>,
+        limit: Option<&Bound<'_, PyInt>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let stream = Py::new(py, self.scan(py, columns, limit)?)?;
+        py.import("pyarrow")?
+            .getattr("RecordBatchReader")?
+            .call_method1("from_stream", (stream,))
     }
 
     fn __repr__(&self) -> String {
@@ -148,9 +213,18 @@ fn delta_arrow_reader(module: &Bound<'_, PyModule>) -> PyResult<()> {
         .call_method1("version", ("delta-arrow-reader",))?;
     module.add("__version__", version)?;
     module.add_class::<DeltaTable>()?;
+    module.add_class::<RecordBatchStream>()?;
     module.add(
         "DeltaReaderError",
         module.py().get_type::<DeltaReaderError>(),
     )?;
-    module.add("__all__", ["__version__", "DeltaTable", "DeltaReaderError"])
+    module.add(
+        "__all__",
+        [
+            "__version__",
+            "DeltaTable",
+            "DeltaReaderError",
+            "RecordBatchStream",
+        ],
+    )
 }

@@ -18,7 +18,7 @@ cargo package --locked
 
 ## Build the Python package locally
 
-For source installation and a table inspection example, see the
+For source installation and a table reading example, see the
 [Python installation guide](../public/installation.md#python).
 
 To build and test the wheel directly, run these commands from the repository
@@ -39,17 +39,18 @@ directory to its import path. Default Cargo commands still select the core crate
 use `cargo check -p delta-arrow-reader-python` to check the binding crate directly.
 
 The binding's runtime owner lives in `crates/delta-arrow-reader-python/src/runtime.rs`.
-Table loading uses its `wait` method, which releases the GIL during bounded waits
-and checks Python signals on the calling thread. Future scan and reader waits
-should use the same method. An interruption drops the pending future; synchronous
+Table loading, scan planning, and batch reads use its `wait` method, which releases
+the GIL during bounded waits and checks Python signals on the calling thread.
+An interruption drops the pending future; synchronous
 Kernel work already running may still finish. The last runtime owner starts
 shutdown without waiting for that blocking work.
 
 The Rust tests cover retained ownership and shutdown from a runtime worker.
-On POSIX systems, the Python runtime test delays a local HTTP response while
-loading a table in a subprocess, sends SIGINT, and checks for `KeyboardInterrupt`
-and clean process exit. The HTTP handler also verifies that another Python thread
-can run during loading.
+On POSIX systems, the Python runtime tests delay local HTTP responses during
+loading, planning, and batch reads in subprocesses. They send SIGINT and check
+for `KeyboardInterrupt` during loading or planning, a terminal PyArrow exception
+during a batch read, and clean process exit. The HTTP handlers also verify that
+another Python thread can run during these waits.
 
 ## Work on the documentation
 

@@ -40,8 +40,8 @@ cargo add delta-arrow-reader
 cargo add tokio --features macros,rt-multi-thread
 ```
 
-For Python, [build from source to inspect table snapshots](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python).
-Python row streaming and published wheels are planned.
+For Python, [build from source to read tables with PyArrow](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python).
+Published Python wheels are planned.
 
 Read up to 100 rows from an existing Delta table:
 

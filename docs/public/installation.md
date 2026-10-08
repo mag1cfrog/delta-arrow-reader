@@ -69,8 +69,8 @@ clients' existing interfaces.
 
 ## Python
 
-The Python package loads Delta snapshots and exposes their versions and Arrow
-schemas. Row streaming is planned. The package is not published on PyPI yet.
+The Python package loads Delta snapshots, exposes their versions and Arrow
+schemas, and streams rows through PyArrow. The package is not published on PyPI yet.
 
 Use Python 3.10 or newer and Rust 1.94 or newer to install from source. From the
 repository root, run these commands on Linux or macOS:
@@ -81,8 +81,11 @@ python3 -m venv target/python-venv
 python -m pip install ./crates/delta-arrow-reader-python
 ```
 
-Installation also installs PyArrow 18 or newer. To inspect a table, replace
-`/path/to/delta-table` with an existing local Delta table:
+Installation also installs PyArrow 18 or newer. The
+[Python quickstart](https://mag1cfrog.github.io/delta-arrow-reader/python/)
+uses a sample table included in the repository.
+
+To read your own table, replace `/path/to/delta-table` with its local path:
 
 ```python
 from pathlib import Path
@@ -94,6 +97,10 @@ table = DeltaTable(location)
 print(table.version)
 print(table.schema)
 
+with table.to_reader() as reader:
+    for batch in reader:
+        print(batch.num_rows)
+
 original = DeltaTable(location, version=0)
 print(original.schema)
 ```
@@ -104,15 +111,65 @@ Each table keeps the snapshot it loaded, even if new commits arrive. Its
 `version` and `schema` properties are read-only, and the `pyarrow.Schema`
 remains usable after the table is deleted.
 
+Each `to_reader()` call creates an independent `pyarrow.RecordBatchReader` over
+the selected columns and rows of that snapshot. Planning reads Delta metadata;
+Parquet reads start when you request a batch. Use a `with` block to close the reader,
+including when you stop early. Readers and returned batches remain usable after
+the table is deleted. Calling `reader.read_all()` materializes all remaining rows
+in memory.
+
+To pass a stream to an Arrow consumer directly, use `table.scan()`. For PyArrow,
+the equivalent reader construction is:
+
+```python
+import pyarrow as pa
+
+with table.scan() as stream:
+    with pa.RecordBatchReader.from_stream(stream, schema=table.schema) as reader:
+        for batch in reader:
+            print(batch.num_rows)
+            break  # Both context managers still close on early exit.
+```
+
+`scan()` returns a `RecordBatchStream`, which has no public constructor. A stream
+can be exported once. Closing it before export releases the scan; subsequent
+export attempts raise `RuntimeError`. After export, the consumer owns cleanup,
+so closing the original stream does not close the consumer. Repeated `close()`
+calls are harmless, and context-manager exit does not suppress exceptions.
+
+Both methods accept a keyword-only `columns` argument. Omit it or pass `None`
+to read all columns. A list or tuple selects columns in the given order, such as
+`table.to_reader(columns=["value", "id"])` on a table with those columns. An empty
+list or tuple selects no columns while preserving row counts. Bare strings and
+non-string entries raise `TypeError`; unknown or repeated column names raise
+`DeltaReaderError` with code `invalid_projection`.
+
+Both methods also accept a keyword-only `limit` argument. Omit it or pass `None`
+to read all rows, or use a nonnegative integer to cap the result, such as
+`table.to_reader(columns=["value", "id"], limit=100)`. The integer must fit Rust's
+`usize` on the platform; larger values raise `OverflowError`. Negative values
+raise `ValueError`, and booleans and other types raise `TypeError`. `limit=0`
+returns an empty result with the selected schema without reading data files.
+
+The optional `schema` request must match the scan schema, including field order,
+names, nullability, and metadata. Incompatible schemas raise `ValueError`.
+Requests for alternate Arrow representations, such as a different integer width
+or string encoding, raise `NotImplementedError`; the exporter does not cast or
+project data. A rejected request leaves the stream available for another attempt.
+
 `location` also accepts a string path or a supported storage URL. Pass backend
 settings through `storage_options`, a mapping of string keys to string values
 that the constructor copies before loading.
 
-Reader failures raise `delta_arrow_reader.DeltaReaderError` with a redacted
-message and `phase` and `code` attributes. Invalid arguments raise Python's
-`TypeError`, `ValueError`, or `OverflowError`.
+Loading and planning failures raise `delta_arrow_reader.DeltaReaderError` with a
+redacted message and `phase` and `code` attributes. Failures while consuming a
+reader raise PyArrow exceptions with redacted `phase` and `code` text in the
+message. Invalid arguments raise Python's `TypeError`, `ValueError`, or
+`OverflowError`.
 
-Loading releases the GIL so other Python threads can run. When loading on Python's
-main thread, Ctrl+C raises `KeyboardInterrupt` and cancels the pending operation.
+Loading, planning, and batch reads release the GIL so other Python threads can
+run. When loading or planning on Python's main thread, Ctrl+C raises
+`KeyboardInterrupt` and cancels the pending operation. Interruption during a
+batch read reaches the caller as a PyArrow exception.
 Synchronous Kernel work already running may still finish after interruption;
 cancellation does not stop it immediately.
