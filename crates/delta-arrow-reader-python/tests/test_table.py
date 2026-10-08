@@ -5,6 +5,8 @@ from decimal import Decimal
 from functools import partial
 import gc
 import importlib.util
+import inspect
+from itertools import product
 import json
 from pathlib import Path
 import subprocess
@@ -339,14 +341,16 @@ class TableTests(unittest.TestCase):
                 self.assertEqual(table.version, fixture["snapshot_version"])
                 # Spark's oracle omits the Delta column-mapping metadata.
                 self.assertTrue(schema.equals(expected.schema, check_metadata=False))
-                for method in ("scan", "to_reader"):
+                for method, backend in product(("scan", "to_reader"), ("direct", "delta_kernel")):
                     for columns in (None, expected.schema.names[::-1], []):
-                        with self.subTest(method=method, columns=columns):
+                        with self.subTest(method=method, backend=backend, columns=columns):
                             selected = expected if columns is None else expected.select(columns)
                             projected_schema = schema if columns is None else pa.schema(
                                 [schema.field(name) for name in columns], metadata=schema.metadata,
                             )
-                            result = getattr(table, method)(columns=columns)
+                            result = getattr(table, method)(
+                                columns=columns, execution_options=ScanExecutionOptions(parquet_backend=backend),
+                            )
                             reader = (pa.RecordBatchReader.from_stream(result, schema=projected_schema)
                                       if method == "scan" else result)
                             with reader:
@@ -364,14 +368,17 @@ class TableTests(unittest.TestCase):
         with table.to_reader() as reader:
             full = reader.read_all()
         self.assertEqual(full.num_rows, 360)
-        for method in ("scan", "to_reader"):
+        for method, backend in product(("scan", "to_reader"), ("direct", "delta_kernel")):
             for columns in (None, ["region", "id"], ("label", "id"), ["region"], [], ()):
                 for limit in (None, 0, 1, 100, 101, 121, 360, 361, 2 * sys.maxsize + 1):
-                    with self.subTest(method=method, columns=columns, limit=limit):
+                    with self.subTest(method=method, backend=backend, columns=columns, limit=limit):
                         expected = full if columns is None else full.select(columns)
                         if limit is not None:
                             expected = expected.slice(0, min(limit, full.num_rows))
-                        result = getattr(table, method)(columns=columns, limit=limit)
+                        result = getattr(table, method)(
+                            columns=columns, limit=limit,
+                            execution_options=ScanExecutionOptions(parquet_backend=backend),
+                        )
                         reader = (pa.RecordBatchReader.from_stream(result)
                                   if method == "scan" else result)
                         with reader:
@@ -479,6 +486,18 @@ class TableTests(unittest.TestCase):
                 with self.assertRaises(TypeError):
                     method(None, None, 1)
 
+    def test_execution_options_signature_reports_actual_defaults(self):
+        signature = inspect.signature(ScanExecutionOptions)
+        arguments = signature.bind()
+        arguments.apply_defaults()
+        defaults = ScanExecutionOptions()
+        forwarded = ScanExecutionOptions(**arguments.kwargs)
+        for name, parameter in signature.parameters.items():
+            with self.subTest(name=name):
+                self.assertEqual(parameter.kind, inspect.Parameter.KEYWORD_ONLY)
+                self.assertEqual(parameter.default, getattr(defaults, name))
+                self.assertEqual(getattr(forwarded, name), getattr(defaults, name))
+
     def test_scan_execution_options_are_immutable_and_validate_backends(self):
         self.assertEqual(ScanExecutionOptions().parquet_backend, "direct")
         for backend in ("direct", "delta_kernel"):
@@ -528,8 +547,9 @@ class TableTests(unittest.TestCase):
         ):
             self.assertEqual(getattr(ScanExecutionOptions(), name), default)
             if default is not None:
-                with self.subTest(name=name), self.assertRaises(TypeError):
+                with self.subTest(name=name), self.assertRaises(TypeError) as caught:
                     ScanExecutionOptions(**{name: None})
+                self.assertIn(name, str(caught.exception))
             for count in (1, 2, Count(2), maximum, default):
                 with self.subTest(name=name, count=count):
                     options = ScanExecutionOptions(**{name: count})
@@ -545,8 +565,9 @@ class TableTests(unittest.TestCase):
                 (maximum + 1, ValueError), (2 * sys.maxsize + 1, ValueError),
                 (2 * sys.maxsize + 2, OverflowError), (2**100, OverflowError),
             ):
-                with self.subTest(name=name, count=count), self.assertRaises(error_type):
+                with self.subTest(name=name, count=count), self.assertRaises(error_type) as caught:
                     ScanExecutionOptions(**{name: count})
+                self.assertIn(name, str(caught.exception))
 
     def test_prefetch_depth_defaults_and_validation(self):
         class Count(int):
@@ -570,8 +591,9 @@ class TableTests(unittest.TestCase):
             (-1, ValueError), (-2**100, ValueError), (Count(-1), ValueError),
             (2 * sys.maxsize + 2, OverflowError), (2**100, OverflowError),
         ):
-            with self.subTest(count=count), self.assertRaises(error_type):
+            with self.subTest(count=count), self.assertRaises(error_type) as caught:
                 ScanExecutionOptions(prefetch_files_per_partition=count)
+            self.assertIn("prefetch_files_per_partition", str(caught.exception))
 
     def test_parquet_byte_options_defaults_and_validation(self):
         class Size(int):
@@ -600,8 +622,9 @@ class TableTests(unittest.TestCase):
                 (Size(-1), ValueError), (2 * sys.maxsize + 2, OverflowError),
                 (2**100, OverflowError),
             ):
-                with self.subTest(name=name, size=size), self.assertRaises(error_type):
+                with self.subTest(name=name, size=size), self.assertRaises(error_type) as caught:
                     ScanExecutionOptions(**{name: size})
+                self.assertIn(name, str(caught.exception))
 
     def test_metadata_hint_controls_requests_and_preserves_table_defaults(self):
         http = self.http_support()

@@ -2,42 +2,66 @@
 
 use delta_arrow_reader::{DeltaScanExecutionOptions, ParquetReaderBackend};
 use pyo3::{
-    exceptions::{PyTypeError, PyValueError},
+    exceptions::{PyOverflowError, PyTypeError, PyValueError},
     prelude::*,
     types::{PyBool, PyInt},
 };
 
-fn usize_at_least(value: &Bound<'_, PyAny>, minimum: usize) -> PyResult<usize> {
-    if value.is_instance_of::<PyBool>() {
-        return Err(PyTypeError::new_err("expected an integer, not bool"));
+fn usize_at_least(value: &Bound<'_, PyAny>, minimum: usize, name: &str) -> PyResult<usize> {
+    if !value.is_instance_of::<PyInt>() || value.is_instance_of::<PyBool>() {
+        return Err(PyTypeError::new_err(format!(
+            "{name} must be an integer, not bool"
+        )));
     }
-    // The builtin rejects non-integers and bypasses subclass overrides.
+    // Validate the integer value even if a subclass overrides comparisons.
     let value = value
         .py()
         .get_type::<PyInt>()
         .call_method1("__index__", (value,))?;
     if value.lt(minimum)? {
         return Err(PyValueError::new_err(format!(
-            "expected an integer >= {minimum}"
+            "{name} must be >= {minimum}"
         )));
     }
-    value.extract()
+    value.extract().map_err(|error: PyErr| {
+        if error.is_instance_of::<PyOverflowError>(value.py()) {
+            PyOverflowError::new_err(format!("{name} does not fit usize"))
+        } else {
+            error
+        }
+    })
 }
 
-fn positive_usize(value: &Bound<'_, PyAny>) -> PyResult<usize> {
-    usize_at_least(value, 1)
-}
-
-fn nonnegative_usize(value: &Bound<'_, PyAny>) -> PyResult<usize> {
-    usize_at_least(value, 0)
-}
-
-fn optional_positive_usize(value: &Bound<'_, PyAny>) -> PyResult<Option<usize>> {
+fn optional_positive_usize(value: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<usize>> {
     if value.is_none() {
         Ok(None)
     } else {
-        positive_usize(value).map(Some)
+        usize_at_least(value, 1, name).map(Some)
     }
+}
+
+fn scan_read_limit(value: &Bound<'_, PyAny>) -> PyResult<Option<usize>> {
+    optional_positive_usize(value, "max_concurrent_file_reads_per_scan")
+}
+
+fn partition_read_limit(value: &Bound<'_, PyAny>) -> PyResult<usize> {
+    usize_at_least(value, 1, "max_concurrent_file_reads_per_partition")
+}
+
+fn output_buffer_batches(value: &Bound<'_, PyAny>) -> PyResult<usize> {
+    usize_at_least(value, 1, "output_buffer_batches_per_partition")
+}
+
+fn file_prefetch_depth(value: &Bound<'_, PyAny>) -> PyResult<usize> {
+    usize_at_least(value, 0, "prefetch_files_per_partition")
+}
+
+fn parquet_metadata_size_hint(value: &Bound<'_, PyAny>) -> PyResult<Option<usize>> {
+    optional_positive_usize(value, "parquet_metadata_size_hint_bytes")
+}
+
+fn parquet_full_file_read_threshold(value: &Bound<'_, PyAny>) -> PyResult<Option<usize>> {
+    optional_positive_usize(value, "parquet_full_file_read_threshold_bytes")
 }
 
 /// Immutable execution settings shared by tables and individual scans.
@@ -72,18 +96,23 @@ impl ScanExecutionOptions {
         parquet_metadata_size_hint_bytes=DeltaScanExecutionOptions::new().parquet_metadata_size_hint_bytes(),
         parquet_full_file_read_threshold_bytes=DeltaScanExecutionOptions::new().parquet_full_file_read_threshold_bytes(),
     ))]
+    #[pyo3(text_signature = "(*, parquet_backend='direct', \
+        max_concurrent_file_reads_per_scan=None, \
+        max_concurrent_file_reads_per_partition=3, \
+        output_buffer_batches_per_partition=1, \
+        prefetch_files_per_partition=2, \
+        parquet_metadata_size_hint_bytes=65536, \
+        parquet_full_file_read_threshold_bytes=None)")]
     fn new(
         parquet_backend: &str,
-        #[pyo3(from_py_with = optional_positive_usize)] max_concurrent_file_reads_per_scan: Option<
+        #[pyo3(from_py_with = scan_read_limit)] max_concurrent_file_reads_per_scan: Option<usize>,
+        #[pyo3(from_py_with = partition_read_limit)] max_concurrent_file_reads_per_partition: usize,
+        #[pyo3(from_py_with = output_buffer_batches)] output_buffer_batches_per_partition: usize,
+        #[pyo3(from_py_with = file_prefetch_depth)] prefetch_files_per_partition: usize,
+        #[pyo3(from_py_with = parquet_metadata_size_hint)] parquet_metadata_size_hint_bytes: Option<
             usize,
         >,
-        #[pyo3(from_py_with = positive_usize)] max_concurrent_file_reads_per_partition: usize,
-        #[pyo3(from_py_with = positive_usize)] output_buffer_batches_per_partition: usize,
-        #[pyo3(from_py_with = nonnegative_usize)] prefetch_files_per_partition: usize,
-        #[pyo3(from_py_with = optional_positive_usize)] parquet_metadata_size_hint_bytes: Option<
-            usize,
-        >,
-        #[pyo3(from_py_with = optional_positive_usize)]
+        #[pyo3(from_py_with = parquet_full_file_read_threshold)]
         parquet_full_file_read_threshold_bytes: Option<usize>,
     ) -> PyResult<Self> {
         let backend = match parquet_backend {
