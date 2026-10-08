@@ -74,7 +74,7 @@ use crate::{
 
 struct DirectParquetReader {
     engine_context: Arc<DeltaKernelEngineContext>,
-    store: Arc<dyn ObjectStore>,
+    store: Arc<MeteredParquetObjectStore>,
     execution_options: DeltaScanExecutionOptions,
     metrics: DeltaScanMetrics,
     metadata_cache: Option<Arc<ParquetMetadataCache>>,
@@ -84,6 +84,7 @@ struct ParquetFileObject {
     store: Arc<dyn ObjectStore>,
     path: Path,
     file_size: u64,
+    buffered: bool,
 }
 
 struct PhysicalParquetStream {
@@ -217,6 +218,7 @@ impl DirectParquetReader {
     ) -> Result<PhysicalParquetStream, DeltaReaderError> {
         let object = self.parquet_object_for_task(task).await?;
         let selection = (self.execution_options.experimental_intra_page_reads()
+            && !object.buffered
             && options.row_filter.is_some()
             && self.execution_options.parquet_range_read_policy()
                 == crate::reader::ParquetRangeReadPolicy::Automatic)
@@ -318,6 +320,8 @@ impl DirectParquetReader {
             Arc::clone(&metadata.parquet),
             selection,
             object.file_size,
+            Arc::clone(&self.store),
+            object.path.clone(),
         )
         .map_err(|error| data_file_error("parquet_read_setup_failed", error))?;
         Ok((
@@ -510,9 +514,10 @@ impl DirectParquetReader {
         })?;
 
         Ok(ParquetFileObject {
-            store: Arc::clone(&self.store),
+            store: self.store.clone(),
             path,
             file_size,
+            buffered: false,
         })
     }
 
@@ -552,6 +557,7 @@ impl DirectParquetReader {
                 reason: "parquet_file_buffer_initialization_failed",
             })?;
         object.store = store;
+        object.buffered = true;
         Ok(object)
     }
 }

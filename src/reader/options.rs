@@ -134,10 +134,11 @@ impl DeltaScanExecutionOptions {
     /// Explicit range-read policies other than `Automatic` disable this optimization.
     /// The Delta Kernel backend ignores this direct-reader option.
     ///
-    /// This trades fewer bytes for more requests. It currently uses a 16 MiB
-    /// per-fetch budget and at most 512 process-wide concurrent experimental range
-    /// reads. It does not adapt to network conditions; test your workload before
-    /// enabling it. Passing `false` restores ordinary reads.
+    /// Recent query traffic supplies latency and throughput estimates. Partial
+    /// reads must beat the ordinary plan by more than ten percent, including
+    /// probes and dependent request rounds. Missing evidence, dense selections,
+    /// or insufficient shared request capacity retain ordinary reads. No network
+    /// calibration requests are made. Passing `false` restores ordinary reads.
     pub const fn with_experimental_intra_page_reads(mut self, enabled: bool) -> Self {
         self.experimental_intra_page_reads = enabled;
         self

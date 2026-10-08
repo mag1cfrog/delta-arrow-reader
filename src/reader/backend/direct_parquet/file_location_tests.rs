@@ -159,7 +159,11 @@ async fn data_file_location_alias_reads_the_declared_object_not_a_prefixed_decoy
                     (mode == "buffered").then_some(correct.len()),
                 )?;
             let mut reader = reader(table, options)?;
-            reader.store = store;
+            reader.store = Arc::new(MeteredParquetObjectStore::new(
+                store,
+                reader.metrics.clone(),
+                MultiRangeReadStrategy::UseStoreImplementation,
+            ));
             if mode == "cached" {
                 reader = reader.with_metadata_cache(Arc::default());
                 // Prime metadata for the wrong object as well. The URL must not

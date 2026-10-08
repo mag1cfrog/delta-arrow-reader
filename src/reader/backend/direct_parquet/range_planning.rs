@@ -4,12 +4,33 @@ use std::{future::Future, ops::Range, time::Duration};
 
 use bytes::Bytes;
 use futures_util::{StreamExt, TryStreamExt, stream};
+use tokio::sync::{Semaphore, SemaphorePermit};
 
 use crate::reader::options::MAX_CONCURRENT_PARQUET_RANGE_READS;
 
 const MAX_RANGE_READ_REQUESTS: usize = 64;
 const MAX_BYTE_AMPLIFICATION: u128 = 4;
-const DECISION_MARGIN_PERCENT: u128 = 10;
+pub(super) const DECISION_MARGIN_PERCENT: u128 = 10;
+
+// A process-wide ceiling, not a concurrency target for each file or scan.
+pub(super) const MAX_SHARED_RANGE_READS: usize = 512;
+pub(super) static RANGE_READ_PERMITS: Semaphore = Semaphore::const_new(MAX_SHARED_RANGE_READS);
+
+/// Reserve currently free capacity without queuing speculative partial reads.
+/// Each dependent round reserves only the capacity its requests can use.
+pub(super) fn reserve_partial_read_capacity(
+    budget: &Semaphore,
+    request_count: usize,
+) -> Option<SemaphorePermit<'_>> {
+    let available = budget
+        .available_permits()
+        .min(MAX_SHARED_RANGE_READS)
+        .min(request_count);
+    if available == 0 && request_count != 0 {
+        return None;
+    }
+    budget.try_acquire_many(available as u32).ok()
+}
 
 /// Recent transport conditions used to compare physical range-read plans.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -263,7 +284,7 @@ pub(super) fn request_waves(request_count: usize, max_concurrent_reads: usize) -
 }
 
 /// Scores a plan as transferred bytes plus one bandwidth-delay cost per request wave.
-fn plan_score(
+pub(super) fn plan_score(
     plan: &[Range<u64>],
     estimate: TransportEstimate,
     max_concurrent_reads: usize,
@@ -273,6 +294,65 @@ fn plan_score(
         (request_waves(plan.len(), max_concurrent_reads) as u128)
             .saturating_mul(bandwidth_delay_bytes),
     )
+}
+
+/// Chooses a physical plan within a byte budget using the available concurrency.
+///
+/// Merging the cheapest gaps minimizes bytes at each request count. Score those
+/// counts without materializing every candidate, then build only the winner.
+pub(super) fn choose_bounded_range_plan(
+    requested_ranges: &[Range<u64>],
+    estimate: TransportEstimate,
+    concurrency: usize,
+    byte_budget: u128,
+) -> Option<Vec<Range<u64>>> {
+    let exact = merge_ranges(requested_ranges, 0);
+    let exact_bytes = range_bytes(&exact);
+    if exact_bytes > byte_budget || (concurrency == 0 && !exact.is_empty()) {
+        return None;
+    }
+    let mut gaps: Vec<_> = exact
+        .windows(2)
+        .enumerate()
+        .map(|(index, ranges)| (ranges[1].start - ranges[0].end, index))
+        .collect();
+    gaps.sort_unstable();
+    let mut bytes = exact_bytes;
+    let wave_cost = bandwidth_delay_bytes(estimate);
+    let cost = |bytes: u128, count| {
+        bytes.saturating_add(wave_cost.saturating_mul(request_waves(count, concurrency) as u128))
+    };
+    let mut scores = vec![cost(bytes, exact.len())];
+    for (merged, (gap, _)) in gaps.iter().enumerate() {
+        bytes += u128::from(*gap);
+        if bytes > byte_budget {
+            break;
+        }
+        scores.push(cost(bytes, exact.len() - merged - 1));
+    }
+    let best = scores.iter().copied().min()?;
+    let competitive = best.saturating_add(best.saturating_mul(DECISION_MARGIN_PERCENT) / 100);
+    // Earlier candidates transfer fewer bytes, matching the ordinary planner's margin.
+    let merge_count = scores.iter().position(|score| *score <= competitive)?;
+    let mut merge = vec![false; gaps.len()];
+    for (_, index) in gaps.iter().take(merge_count) {
+        merge[*index] = true;
+    }
+    let Some(first) = exact.first() else {
+        return Some(Vec::new());
+    };
+    let mut plan = Vec::with_capacity(exact.len() - merge_count);
+    let mut current = first.clone();
+    for (index, next) in exact.iter().enumerate().skip(1) {
+        if merge[index - 1] {
+            current.end = next.end;
+        } else {
+            plan.push(current);
+            current = next.clone();
+        }
+    }
+    plan.push(current);
+    Some(plan)
 }
 
 /// Returns the bytes transferable during one typical request-latency interval.
@@ -286,24 +366,29 @@ pub(super) fn bandwidth_delay_bytes(estimate: TransportEstimate) -> u128 {
 
 /// Executes an already chosen physical plan and returns one result for each requested range.
 ///
-/// Physical reads run with the same concurrency bound as the previous object-store
-/// helper. Results are sliced back into the caller's original order, including duplicate
+/// Physical reads run within the caller's reserved concurrency. Results are sliced
+/// back into the caller's original order, including duplicate
 /// and overlapping requests.
 pub(super) async fn execute_range_plan<F, E, Fut>(
     requested_ranges: &[Range<u64>],
     physical_ranges: &[Range<u64>],
-    read: F,
+    concurrency: usize,
+    mut read: F,
 ) -> Result<Vec<Bytes>, E>
 where
     F: Send + FnMut(Range<u64>) -> Fut,
     E: Send,
     Fut: Future<Output = Result<Bytes, E>> + Send,
 {
-    let bytes: Vec<_> = stream::iter(physical_ranges.iter().cloned())
-        .map(read)
-        .buffered(MAX_CONCURRENT_PARQUET_RANGE_READS)
+    let mut bytes: Vec<_> = stream::iter(physical_ranges.iter().cloned().enumerate())
+        .map(|(index, range)| {
+            let result = read(range);
+            async move { result.await.map(|bytes| (index, bytes)) }
+        })
+        .buffer_unordered(concurrency.max(1))
         .try_collect()
         .await?;
+    bytes.sort_unstable_by_key(|(index, _)| *index);
 
     Ok(requested_ranges
         .iter()
@@ -311,7 +396,7 @@ where
             let physical_index =
                 physical_ranges.partition_point(|range| range.start <= requested_range.start) - 1;
             let physical_range = &physical_ranges[physical_index];
-            let physical_bytes = &bytes[physical_index];
+            let physical_bytes = &bytes[physical_index].1;
             let start = (requested_range.start - physical_range.start) as usize;
             let end = (requested_range.end - physical_range.start) as usize;
             physical_bytes.slice(start..end.min(physical_bytes.len()))
@@ -426,6 +511,66 @@ mod tests {
     }
 
     #[test]
+    fn bounded_plans_trade_bytes_for_waves_with_the_reserved_capacity() {
+        use super::choose_bounded_range_plan;
+        let ranges = spaced_ranges(&[900; 10]);
+        let slow = TransportEstimate {
+            request_latency: Duration::from_millis(1),
+            shared_throughput_bytes_per_second: 1_000,
+        };
+        let fast = TransportEstimate {
+            shared_throughput_bytes_per_second: 100_000_000,
+            ..slow
+        };
+        let delayed = TransportEstimate {
+            request_latency: Duration::from_secs(100),
+            ..slow
+        };
+        assert_eq!(
+            choose_bounded_range_plan(&ranges, slow, 1, 10_100),
+            Some(ranges.clone())
+        );
+        for estimate in [fast, delayed] {
+            assert_eq!(
+                choose_bounded_range_plan(&ranges, estimate, 1, 10_100),
+                Some(std::iter::once(0..10_100).collect())
+            );
+            assert_eq!(
+                choose_bounded_range_plan(&ranges, estimate, 11, 10_100),
+                Some(ranges.clone())
+            );
+            // The budget prohibits even one merge, regardless of latency.
+            assert_eq!(
+                choose_bounded_range_plan(&ranges, estimate, 1, 1_100),
+                Some(ranges.clone())
+            );
+        }
+        assert!(choose_bounded_range_plan(&ranges, slow, 1, 1_099).is_none());
+        assert!(choose_bounded_range_plan(&ranges, slow, 0, 10_100).is_none());
+        assert_eq!(choose_bounded_range_plan(&[], slow, 0, 0), Some(vec![]));
+    }
+
+    #[tokio::test]
+    async fn shared_capacity_reservations_do_not_queue_and_release_on_cancellation() {
+        use super::reserve_partial_read_capacity;
+        use tokio::sync::Semaphore;
+        let budget = Semaphore::new(4);
+        let first = reserve_partial_read_capacity(&budget, 3).expect("free capacity");
+        let second = reserve_partial_read_capacity(&budget, 3).expect("remaining capacity");
+        assert_eq!((first.num_permits(), second.num_permits()), (3, 1));
+        assert!(reserve_partial_read_capacity(&budget, 1).is_none());
+        // Ordinary reads wait on the same budget. Cancelling a waiter releases
+        // its place in Tokio's queue; cancelling a holder drops its permits.
+        let mut waiting = Box::pin(budget.acquire_many(2));
+        assert!(futures_util::poll!(&mut waiting).is_pending());
+        drop(waiting);
+        drop(first);
+        assert_eq!(budget.available_permits(), 3);
+        drop(second);
+        assert_eq!(budget.available_permits(), 4);
+    }
+
+    #[test]
     fn cold_plan_limits_requests_without_exceeding_byte_amplification() {
         let dense_ranges = spaced_ranges(&[1; 99]);
         assert_eq!(
@@ -503,7 +648,7 @@ mod tests {
         let data = Bytes::from_static(b"0123456789abcdef");
 
         let results =
-            execute_range_plan(&requested_ranges, &physical_ranges, |range| {
+            execute_range_plan(&requested_ranges, &physical_ranges, 10, |range| {
                 let data = data.clone();
                 async move {
                     Ok::<Bytes, Infallible>(data.slice(range.start as usize..range.end as usize))

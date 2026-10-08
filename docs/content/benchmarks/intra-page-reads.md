@@ -1,8 +1,9 @@
 # Experimental partial-page reads
 
-This is the implementation and reproduction record for [#420](https://github.com/mag1cfrog/delta-arrow-reader/issues/420).
+This records the opt-in reader from [#420](https://github.com/mag1cfrog/delta-arrow-reader/issues/420)
+and transport-aware planning from [#421](https://github.com/mag1cfrog/delta-arrow-reader/issues/421).
 The option is disabled by default. [#419](https://github.com/mag1cfrog/delta-arrow-reader/issues/419)
-tracks the later transport model, performance validation and decision about defaults.
+tracks performance validation and the decision about defaults.
 
 ## Run the portable checks
 
@@ -17,8 +18,10 @@ The tests generate a small Delta table locally. They require no service, Python
 environment, downloaded dataset, local Cargo patch or experiment environment
 variable. The fixture has three row groups, page boundaries, deterministic
 nullable payloads, an all-null column and optional DV deletions. Checks compare
-all returned values and nulls with ordinary decoding, and require fewer received
-Parquet bytes for the supported sparse scans. Checks also cover dense and empty
+all returned values and nulls with ordinary decoding. Local scans without
+transport evidence must retain ordinary I/O. Decoder tests inject deterministic
+transport estimates and require fewer received bytes only when partial reads
+are economical. Checks also cover dense and empty
 selections, hidden predicate columns, empty projections, limits after DV filtering,
 and a dense row group followed by a sparse one. DataFusion splits the file into
 multiple tasks to check original row coordinates after repartitioning.
@@ -28,8 +31,9 @@ codecs, dictionary encoding, V2 pages, checksums, missing indexes, corrupt level
 and truncated input. Multi-frame Zstd pages and padded null levels are checked
 against Parquet's standard decoder before verifying fallback. Request failures
 and cancellation must release pending reads and concurrency permits. These are
-correctness checks, not timings for the published benchmark. They run in the
-existing test jobs.
+correctness checks, not timings for the published benchmark. Planner checks cover
+bandwidth, latency, the decision margin, dependent probes and shared capacity.
+They run in the existing test jobs.
 
 ## Integration and limits
 
@@ -48,19 +52,39 @@ structures return errors; the standard decoder handles errors in fallback
 formats. These checks cannot detect arbitrary value corruption in files that
 have no integrity checks.
 
+The planner reuses the passive latency/throughput estimator from ordinary range
+reads. It scores each dependent round as bytes plus request waves multiplied by
+the bandwidth-delay cost. Partial reads, including probes already issued, must
+beat the ordinary plan by more than 10%. Missing transport evidence, selections
+covering at least half a row group, uncertain savings or unavailable capacity
+use ordinary reads. Probes themselves also supply transport observations; there
+are no calibration requests.
+
+Each round reserves currently free capacity from a process-wide ceiling of 512
+planned range reads, shared with ordinary range plans. Ordinary plans retain
+their per-plan limit of 10. A round uses its reserved concurrency for both scoring
+and execution, then releases it before parsing or requesting the next round.
+Partial plans do not queue for permits. Dropping a future or encountering a
+request error drops outstanding reads, buffers and reservations. Store retry
+behavior is unchanged and stays within the reservation.
+
 Each experimental fetch is limited to 4,096 candidate pages, 8,192 selected rows
 in one row group, 20 probe rounds and 32,768 requests. A candidate page is at most
-8 MiB and 1,048,576 rows. The original requested ranges total at most 128 MiB.
-Probes, ordinary output pages and selected values share a byte budget of the
-smaller of 16 MiB or half the originally requested bytes. Reaching a limit uses
-ordinary reads, after any probes already issued. A process-wide semaphore caps
-experimental range reads at 512; dropping the read future releases its requests
-and buffers. Ordinary reads retain their existing concurrency settings.
+8 MiB and 1,048,576 rows. The original requested ranges total at most 128 MiB;
+probes, ordinary output pages and selected values together cannot exceed that
+original byte count. The planner chooses how much gap filling is worth paying
+for, and transport does not merge the chosen ranges again. A later fallback may
+still reread complete pages after probes already issued.
+
+The `delta_arrow_reader::diagnostics::intra_page` tracing target reports
+eligibility and fallback reasons. Cost decisions include estimated byte-equivalent
+costs, planned bytes and requests, probe rounds and reserved concurrency. They
+contain no object paths or credentials.
 
 Explicit range-read policies other than `Automatic` suppress the experiment.
-The `DeltaKernel` backend ignores it. These are fixed experimental limits, not a
-network cost model. [#421](https://github.com/mag1cfrog/delta-arrow-reader/issues/421)
-will compare bounded plans against the ordinary reader's plan before choosing one.
+The `DeltaKernel` backend ignores it. Files buffered in memory use ordinary
+reads without returning to the remote store. The original 16 MiB / 512 prototype
+settings are not fixed per-fetch defaults in this implementation.
 
 ## Original prototype evidence
 

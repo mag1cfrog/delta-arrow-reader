@@ -244,7 +244,7 @@ async fn intra_page_tracking_column_name_preserves_user_data() -> TestResult {
 }
 
 #[tokio::test]
-async fn intra_page_public_scan_matches_baseline_and_reads_fewer_bytes() -> TestResult {
+async fn intra_page_public_scan_without_transport_evidence_matches_baseline() -> TestResult {
     assert!(!DeltaScanExecutionOptions::default().experimental_intra_page_reads());
     for codec in [
         Compression::UNCOMPRESSED,
@@ -259,9 +259,11 @@ async fn intra_page_public_scan_matches_baseline_and_reads_fewer_bytes() -> Test
             let (actual, optimized) = scan(&root, intra_page_options(), id_filter(MATCHES)).await?;
             assert_eq!(actual, expected);
             assert_eq!(actual.num_rows(), MATCHES.len() - if dv { 2 } else { 0 });
+            // Local reads supply no remote transport evidence. Opting in must
+            // retain ordinary I/O until the cost model has usable observations.
             assert!(
                 optimized.parquet_data_file_bytes_received
-                    < baseline.parquet_data_file_bytes_received,
+                    == baseline.parquet_data_file_bytes_received,
                 "{codec:?}, DV={dv}: optimized {optimized:?}, baseline {baseline:?}"
             );
             let dense_predicate = DeltaPredicate::Compare {
@@ -455,7 +457,7 @@ async fn intra_page_datafusion_repartitioned_dv_scan_matches_baseline() -> TestR
             if let Some((expected, bytes)) = &baseline {
                 assert_eq!(&actual, expected);
                 assert!(
-                    snapshot.parquet_data_file_bytes_received < *bytes,
+                    snapshot.parquet_data_file_bytes_received == *bytes,
                     "DV={dv}: baseline bytes={bytes:?}, experimental={snapshot:?}; plan={display}"
                 );
             } else {
