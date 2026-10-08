@@ -2,13 +2,15 @@ from collections import UserDict
 from concurrent.futures import ThreadPoolExecutor
 import ctypes
 from decimal import Decimal
+from functools import partial
 import gc
+import importlib.util
 import json
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
-from threading import Barrier
+from threading import Barrier, Event
 from types import MappingProxyType
 import unittest
 
@@ -161,6 +163,49 @@ class TableTests(unittest.TestCase):
                 self.assertNotIn("secret", str(caught.exception))
         finally:
             reader.close()
+
+    def test_unused_streams_and_zero_limit_do_not_read_parquet(self):
+        support = (Path(__file__).resolve().parents[3] / "tests/reader/https.py")
+        spec = importlib.util.spec_from_file_location("reader_https", support)
+        http = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(http)
+        data_requested = Event()
+
+        class Storage(http.Storage):
+            def send_head(self):
+                if self.path.endswith(".parquet"):
+                    data_requested.set()
+                return super().send_head()
+
+        self.write_log(1, self.write_parquet("rows.parquet", [1, 2]))
+        with http.serve(partial(Storage, directory=str(self.location))) as server:
+            table = DeltaTable(
+                f"http://127.0.0.1:{server.server_port}/",
+                storage_options={"allow_http": "true"},
+            )
+            self.assertTrue(server.requests, "snapshot loading must contact the server")
+            # Give background work time to reach the server if laziness regresses.
+            with table.scan():
+                self.assertFalse(data_requested.wait(0.1), server.requests)
+            unused = table.scan()
+            del unused
+            capsule = table.scan().__arrow_c_stream__()
+            self.assertFalse(data_requested.wait(0.1), server.requests)
+            del capsule
+            gc.collect()
+            with table.to_reader() as reader:
+                self.assertEqual(reader.schema, table.schema)
+                self.assertFalse(data_requested.wait(0.1), server.requests)
+            with table.to_reader(limit=0) as reader:
+                self.assertEqual(reader.read_all().num_rows, 0)
+            self.assertFalse(data_requested.wait(0.1), server.requests)
+            self.assertFalse(any(path.endswith(".parquet") for path, _, _ in server.requests))
+
+            with table.to_reader() as reader:
+                batch = reader.read_next_batch()
+            self.assertEqual(batch.column(0).to_pylist(), [1, 2])
+            self.assertTrue(data_requested.is_set())
+            self.assertTrue(any(path.endswith(".parquet") for path, _, _ in server.requests))
 
     def test_empty_reader_preserves_schema(self):
         table = DeltaTable(self.location)
