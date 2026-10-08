@@ -211,6 +211,53 @@ class TableTests(unittest.TestCase):
             self.assertTrue(data_requested.is_set())
             self.assertTrue(any(path.endswith(".parquet") for path, _, _ in server.requests))
 
+    def test_reader_failure_cancels_pending_io(self):
+        http = self.http_support()
+        self.write_log(
+            1, self.write_parquet("secret-failed.parquet", [1, 2]),
+            self.write_parquet("secret-pending.parquet", [3, 4]),
+        )
+        pending = Event()
+        disconnected = Event()
+        failed_with_pending_read = Event()
+        requests = []
+
+        class Storage(http.Storage):
+            def do_GET(self):
+                if not self.path.endswith(".parquet"):
+                    return super().do_GET()
+                requests.append(self.path)
+                if self.path == "/secret-failed.parquet":
+                    if pending.wait(10):
+                        failed_with_pending_read.set()
+                    self.send_error(400, "secret-response-message")
+                    return
+                pending.set()
+                self.connection.settimeout(10)
+                try:
+                    if self.rfile.read(1) == b"":
+                        disconnected.set()
+                except ConnectionError:
+                    disconnected.set()
+                except TimeoutError:
+                    self.send_error(400, "test read was not cancelled")
+
+        with http.serve(partial(Storage, directory=str(self.location))) as server:
+            table = DeltaTable(
+                f"http://127.0.0.1:{server.server_port}/",
+                storage_options={"allow_http": "true"},
+            )
+            with table.to_reader() as reader:
+                for _ in range(2):
+                    with self.assertRaises(pa.ArrowInvalid) as caught:
+                        reader.read_next_batch()
+                    self.assertIn("phase=data_file_read code=data_file_read", str(caught.exception))
+                    self.assertNotIn("secret", str(caught.exception))
+                self.assertTrue(failed_with_pending_read.is_set(), "failure preceded the pending read")
+                # Observe cancellation while both the failed reader and table live.
+                self.assertTrue(disconnected.wait(10), "failure left the HTTP read pending")
+                self.assertCountEqual(requests, ["/secret-failed.parquet", "/secret-pending.parquet"])
+
     def test_paused_reader_bounds_reads_and_close_cancels_pending_io(self):
         http = self.http_support()
         # One 1024-row batch per row group makes read-ahead visible as HTTP requests.

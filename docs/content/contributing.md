@@ -46,10 +46,11 @@ Kernel work already running may still finish. The last runtime owner starts
 shutdown without waiting for that blocking work.
 
 The Rust tests cover retained ownership and shutdown from a runtime worker.
-On POSIX systems, the Python runtime test delays a local HTTP response while
-loading a table in a subprocess, sends SIGINT, and checks for `KeyboardInterrupt`
-and clean process exit. The HTTP handler also verifies that another Python thread
-can run during loading.
+On POSIX systems, the Python runtime tests delay local HTTP responses during
+loading, planning, and batch reads in subprocesses. They send SIGINT and check
+for `KeyboardInterrupt` during loading or planning, a terminal PyArrow exception
+during a batch read, and clean process exit. The HTTP handlers also verify that
+another Python thread can run during these waits.
 
 ## Work on the documentation
 
