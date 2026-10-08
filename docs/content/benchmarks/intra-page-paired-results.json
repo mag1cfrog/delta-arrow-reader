@@ -1,0 +1,374 @@
+{
+  "status": "DAR-only records: 36 original sessions plus 12 separately recorded primary-profile repeat sessions. Default remains disabled.",
+  "timed_sessions": 36,
+  "exactly_validated_query_exports": 24,
+  "sample_csv_sha256": "62df4b5465f15c929f9a7bb7cd351cfa241f1495949c5ef075ff552b2efd3a32",
+  "source_report_sha256": "48aad07e24eecb0684ae4338b8538e452cb69f821e324aa6c736decbf2a75fa6",
+  "plan_sha256": "711c652a5adf6f7459500278b11899ea515ee47a64308dc3ae881c2816ba84fc",
+  "analysis_script_sha256": "4d1eab6e05d9cbdab5f83c7f5445feb386f1c2c431ff5b832f9ae59c264b3b9b",
+  "export_script_sha256": "dbca4cae5976c891a4c544b5a01279b68a9538c23d494f762ad96a359db890e6",
+  "retained_artifact_directory": "/home/hanbo/repo/selective-read-intra-page-paired-20261008",
+  "method": {
+    "scope": "Original TPC-H-derived SF10 scattered DV tables, snapshots and SQL. This is not a rerun of the published five-reader comparison.",
+    "sampling": "Three fresh-process sessions per mode/table/network on one executable. Each initializes one provider and runs two sequential queries. Every declared sample is retained; none was replaced.",
+    "order": [
+      [
+        "off",
+        "auto"
+      ],
+      [
+        "auto",
+        "off"
+      ],
+      [
+        "off",
+        "auto"
+      ]
+    ],
+    "initialization": "Both modes load planning metadata. Automatic mode also profiles the network during initialization with a five-second sampling limit. Each automatic session transferred 13.5 MiB in 396 calibration requests before the first query.",
+    "timing": "Query durations exclude initialization. Add initialization to the first query within each session before taking medians. Report the second query separately. The session includes initialization and both queries.",
+    "io": "Split Parquet I/O at the two 64 KiB tail reads per candidate file, checked against object sizes in the verified upload receipts. Profiling requests precede the first query. All Parquet responses completed with HTTP 206. Session HTTP counters include all object classes and both queries.",
+    "resources": {
+      "batch_rows": 8192,
+      "datafusion_pool_bytes": 4294967296,
+      "logical_cpus": 8,
+      "max_blocking_threads": 64,
+      "process_memory_bytes": 8589934592,
+      "target_partitions": 8,
+      "worker_threads": 8,
+      "cpu_affinity": {
+        "observer": [
+          6
+        ],
+        "reader": [
+          0,
+          1,
+          2,
+          3,
+          8,
+          9,
+          10,
+          11
+        ],
+        "server": [
+          4,
+          5
+        ]
+      },
+      "proxy_cpu": 7
+    },
+    "cache": "fresh processes; reused OS and MinIO caches; validation before timing",
+    "preparation": "This campaign completed compilation and metadata-only verification before timing, without regenerating, uploading or rehashing the large fixtures. An unrelated build overlapped part of the primary network measurements; see host_load.",
+    "correctness": "Before timing each case, both modes exported both queries. All 24 exports matched every reference value and null, with 894 rows. Timed queries also returned 894 rows.",
+    "retries": "Unknown. Repeated identical ranges are counted but cannot identify SDK retries.",
+    "incomplete_bodies": "Incomplete responses were confined to delta_log objects. Per-session counts are retained; they are not retry counts. No Parquet response was incomplete.",
+    "decision_logs": "Cost decisions and measured profiles are from separate validation runs, not the timing samples. Query byte/request counters come from each timing sample itself."
+  },
+  "host_load": {
+    "observed_interference": "Unrelated maturin/cargo/rustc activity was observed while 90-primary was running. The campaign controller was paused before starting the 1 Gbps profiles, while the active case finished. It resumed after ten seconds without a detected build.",
+    "caveat": "The host was shared. Polling does not establish isolation, and the 150 Mbps timings must not be presented as a clean reproduction of the earlier gains.",
+    "pause": {
+      "pid": 1914370,
+      "paused_ns": 1791491079000212813,
+      "reason": "Hold the campaign controller before starting the next profile while an unrelated build is running. The active 90-primary subprocess continues to completion.",
+      "resumed_ns": 1791491160964275544
+    },
+    "subsequent_polling": {
+      "first_ns": 1791491220775295932,
+      "last_ns": 1791491396315437200,
+      "interval_seconds": 5,
+      "snapshots": 36,
+      "snapshots_with_builds": 0
+    },
+    "observations_sha256": "3c93eeb5731b1f6d0eab5371ab49f55afe7f60bc7b1f88e9ff6f2f4d217c78ab",
+    "monitor_sha256": "c6be5819b0c9b5bd67c67e3aaa194a4afa6dccffd68e7b645cc434f314cfa3c3"
+  },
+  "networks": [
+    {
+      "jitter_ms": 20,
+      "latency_ms": 200,
+      "mbps": 150,
+      "name": "primary",
+      "seed": "0"
+    },
+    {
+      "jitter_ms": 0,
+      "latency_ms": 1,
+      "mbps": 1000,
+      "name": "low",
+      "seed": "0"
+    },
+    {
+      "jitter_ms": 20,
+      "latency_ms": 200,
+      "mbps": 1000,
+      "name": "high-bandwidth",
+      "seed": "0"
+    }
+  ],
+  "network_proxy_source_sha256": {
+    "network.py": "9352d4685076568449bc37320a227278366c45acbb52a39ed972007db824544e",
+    "network_proxy.go": "5d0051d91e42000e341058e6ff11ba59c75731560524d5262ad0d84c46b36c79"
+  },
+  "fixture_verification": {
+    "fixtures": [
+      {
+        "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+        "object_bytes": 70972418471,
+        "objects": 262,
+        "source_upload": "/home/hanbo/repo/selective-read-intra-page-full-20261007/upload-q2.json",
+        "source_upload_sha256": "e2d965a0b7601883a2ed9bb56c1a203bafadfaf55faad2c03d28b9a490dc727c",
+        "verification": "Every current object length and server FULL_OBJECT SHA256 match the retained upload receipt.",
+        "verified_ns": 1791490508265051424
+      },
+      {
+        "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+        "object_bytes": 32463889602,
+        "objects": 122,
+        "source_upload": "/home/hanbo/repo/selective-read-intra-page-full-20261007/upload-q4.json",
+        "source_upload_sha256": "b00eb912d2bebe8164390c5d371e738c10b03b9cb5a06258ee47a3ba622ff917",
+        "verification": "Every current object length and server FULL_OBJECT SHA256 match the retained upload receipt.",
+        "verified_ns": 1791490508364968076
+      }
+    ],
+    "server_sha256": "3b0587a25ae9cd217c5a736ac9f77d96eec82c2a4991599922eb2cc5b9e52138"
+  },
+  "fixtures": {
+    "416": {
+      "case_id": "production.q2.scattered.dv",
+      "comparison_revision": 6,
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+      "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+      "snapshot_version": 1,
+      "output_rows": 894,
+      "oracle_sha256": "1e97d04bc787b5f807e7ad817cd2e339579c261759d1779538e0ad53d9cbfddc",
+      "workload_manifest_sha256": "d67e605e806e951219646c22bcc4ebe849b2dcdf16e1e737cff399bfc000f8e4",
+      "projected_columns": 69
+    },
+    "90": {
+      "case_id": "production.q4.scattered.dv",
+      "comparison_revision": 6,
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+      "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+      "snapshot_version": 1,
+      "output_rows": 894,
+      "oracle_sha256": "1e97d04bc787b5f807e7ad817cd2e339579c261759d1779538e0ad53d9cbfddc",
+      "workload_manifest_sha256": "d67e605e806e951219646c22bcc4ebe849b2dcdf16e1e737cff399bfc000f8e4",
+      "projected_columns": 71
+    }
+  },
+  "build": {
+    "reader_git_commit": "2c312d9c71acfcc630b0fe478651e58df66f46a1",
+    "harness_git_commit": "2c312d9c71acfcc630b0fe478651e58df66f46a1",
+    "git_status": "",
+    "executable_sha256": "0237e226f67b24da797468da8a55fdcdd6e203162a65aa87392f2dfb00d2da59",
+    "lockfile_sha256": "3e33227b8d98d1fbb4840f013ce48ceb9ad19fad8f460e4a0152c1737e514893",
+    "rustflags": "-C target-cpu=x86-64",
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "target": "x86_64-unknown-linux-gnu",
+    "command": [
+      "cargo",
+      "+1.98.1",
+      "build",
+      "--release",
+      "--locked",
+      "--manifest-path",
+      "/home/hanbo/repo/delta-arrow-reader-intra-page-paired/benches/selective_read/runners/dar/Cargo.toml",
+      "-j6"
+    ],
+    "build_record_sha256": "0528ca99098adb63e54f7b34bd37b75fe6704de6f8644cb6f821b7e02e3f701f"
+  },
+  "experiments": {
+    "416-primary": {
+      "experiment_sha256": "c8494538e012fddd099fa1544334dadd7da5da40dfb36f0f304919754dc69f9c",
+      "network_proxy_binary_sha256": "b82acaf906dd87a63f79a573c6e78546d830fdd6db11a412f57ede6023ba976c",
+      "correctness_sha256": {
+        "off": "74d237cf891a773bd7a4076f1f2888adc06ab4c39070d4c47559efb3bd36f2a8",
+        "auto": "0ee9bf1140bae1672a235254133687be682b91eebf3bce8000ffd5a868fc489a"
+      },
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 10,
+        "none": 24,
+        "profile_predicts_no_savings": 2
+      },
+      "validation_network_profile": [
+        "2026-10-08T20:17:25.160654Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed status=\"complete\" elapsed_micros=1994899 requests=396 bytes_received=14155776 request_latency_micros=211476 throughput_bytes_per_second=18698003 request_overhead_bytes=7291"
+      ]
+    },
+    "90-primary": {
+      "experiment_sha256": "3a11a5eece501cf41cadb8e3a8b4696004c579eab7c941f777e3592d917daf29",
+      "network_proxy_binary_sha256": "b82acaf906dd87a63f79a573c6e78546d830fdd6db11a412f57ede6023ba976c",
+      "correctness_sha256": {
+        "off": "7a04431b2ac08b57ecb124734679b6fac704369dbc22ff04220d371195e83a82",
+        "auto": "242fba1104799b42facfd8bb20ed45bbc879c2cf3082540ca420fe5584b3e9f2"
+      },
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 12,
+        "none": 36
+      },
+      "validation_network_profile": [
+        "2026-10-08T20:20:39.411030Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed status=\"complete\" elapsed_micros=2098785 requests=396 bytes_received=14155776 request_latency_micros=225036 throughput_bytes_per_second=18744416 request_overhead_bytes=13904"
+      ]
+    },
+    "416-low": {
+      "experiment_sha256": "1d673d3f9ded78044189032afe624bf983e6bda819d35df5a16f60f09307cb89",
+      "network_proxy_binary_sha256": "b82acaf906dd87a63f79a573c6e78546d830fdd6db11a412f57ede6023ba976c",
+      "correctness_sha256": {
+        "off": "b84fccfc53a29461eeb6bccba25ca7ba213df2fe95fc2daadadfb4f86a4595e8",
+        "auto": "f3ec440a8a51d096b58f12c9c1629e8a4a24c28130c02ea0e79611b8a67f850d"
+      },
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 10,
+        "profile_predicts_no_savings": 10
+      },
+      "validation_network_profile": [
+        "2026-10-08T20:26:05.953867Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed status=\"complete\" elapsed_micros=408694 requests=396 bytes_received=14155776 request_latency_micros=56641 throughput_bytes_per_second=113493741 request_overhead_bytes=39628"
+      ]
+    },
+    "90-low": {
+      "experiment_sha256": "8f5a63253289f5f5ce2dc8e2b47f5ac17f7d0e6e351fe0e84342ead786952f84",
+      "network_proxy_binary_sha256": "b82acaf906dd87a63f79a573c6e78546d830fdd6db11a412f57ede6023ba976c",
+      "correctness_sha256": {
+        "off": "67c5798816b84842603061279e4e49fbb7bf02418237665f96d9017be281ec3a",
+        "auto": "3a13baff9b82d5f09f1b9314e185850b43d72b99d11a7abfdace8058da75e388"
+      },
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 12,
+        "profile_predicts_no_savings": 12
+      },
+      "validation_network_profile": [
+        "2026-10-08T20:26:38.343569Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed status=\"complete\" elapsed_micros=299888 requests=396 bytes_received=14155776 request_latency_micros=19931 throughput_bytes_per_second=124674921 request_overhead_bytes=53086"
+      ]
+    },
+    "416-high-bandwidth": {
+      "experiment_sha256": "cdb1b46db6b5d13c2d24ff8cb466bed1bf8ba5816d9e0ab5c5db32eea57fa2b6",
+      "network_proxy_binary_sha256": "b82acaf906dd87a63f79a573c6e78546d830fdd6db11a412f57ede6023ba976c",
+      "correctness_sha256": {
+        "off": "bfdb34210ba8f59d0cb73f08614bdb08b28bac896f08d5384daf6372831db6c2",
+        "auto": "5dd4efb21defc3a9921c6d22c154ff8f186ccc8fd2fa39f6c0e9aa3b0dfbffb5"
+      },
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 10,
+        "profile_predicts_no_savings": 10
+      },
+      "validation_network_profile": [
+        "2026-10-08T20:27:37.862613Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed status=\"complete\" elapsed_micros=1460361 requests=396 bytes_received=14155776 request_latency_micros=211804 throughput_bytes_per_second=76344534 request_overhead_bytes=21345"
+      ]
+    },
+    "90-high-bandwidth": {
+      "experiment_sha256": "3c47d57c58f0e6e26a7180994a3506f98928fa02cb12c62ad17a5c15306c6850",
+      "network_proxy_binary_sha256": "b82acaf906dd87a63f79a573c6e78546d830fdd6db11a412f57ede6023ba976c",
+      "correctness_sha256": {
+        "off": "0d46ebe7ca955e68a3881d89962844c94c32ca3f67f5802f9fd21fe383e8c3bf",
+        "auto": "a0ad0dbb4c36aa09b6708c2d568e4d411741cfb1ed783c4e2b19ff91372fc9a0"
+      },
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 12,
+        "profile_predicts_no_savings": 12
+      },
+      "validation_network_profile": [
+        "2026-10-08T20:28:43.270773Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed status=\"complete\" elapsed_micros=1495470 requests=396 bytes_received=14155776 request_latency_micros=215928 throughput_bytes_per_second=69839105 request_overhead_bytes=20366"
+      ]
+    }
+  },
+  "remaining": [
+    "Investigate initialization-profile stability and the 416-column primary-profile cost decision; the repeat without detected background builds did not reproduce its earlier gains.",
+    "Explain the first-query timing differences where ordinary Parquet I/O was retained.",
+    "Simultaneous queries sharing one process-wide request budget.",
+    "Local, no-DV, dense-selection and unsupported-format controls on this build.",
+    "Real S3 validation before considering default enablement."
+  ],
+  "total_timed_sessions": 48,
+  "total_exactly_validated_query_exports": 32,
+  "primary_repeat": {
+    "purpose": "Primary-profile repeat after the user reported other work complete; retain all earlier samples separately.",
+    "retained_artifact_directory": "/home/hanbo/repo/selective-read-intra-page-primary-repeat-20261008",
+    "timed_sessions": 12,
+    "exactly_validated_query_exports": 8,
+    "sample_csv": "intra-page-primary-repeat-samples.csv",
+    "sample_csv_sha256": "d8a3622d987f537809f57e23016ea62403b8ffe59de447fa137bf4edf101dcec",
+    "source_report_sha256": "20dd9bb6504803d21b92e17e7be493a82c657fe43c1f7abc6eaa625ddc92c885",
+    "plan_sha256": "810a9f8e8ed9d34bfc7dd22f51136cf141d9b49daa391ad13927bbed65ad7376",
+    "analysis_script_sha256": "d2d052dae7ed3e93dea04d7c1e6269db9b565ec9911efb428693c7863b6aab33",
+    "export_script_sha256": "d2d75750ce7fc2799e92e5f39c5d6197e6752508f8c8663385a804e2c5cfb942",
+    "build_record_sha256": "0528ca99098adb63e54f7b34bd37b75fe6704de6f8644cb6f821b7e02e3f701f",
+    "sampling": "Same executable, fixtures, snapshots, SQL, resource limits, harness and alternating order as the original campaign. Three fresh-process sessions per mode/table, each initialization plus two sequential queries. All repeat samples are retained separately.",
+    "network": {
+      "jitter_ms": 20,
+      "latency_ms": 200,
+      "mbps": 150,
+      "name": "primary",
+      "seed": "0"
+    },
+    "preparation": "Reused the frozen executable and retained data. Verified all 384 current object lengths and server SHA256 values before timing. No fixture regeneration, upload, full-table rehash or reader rebuild.",
+    "host_load": {
+      "user_report": "Other tasks were reported complete before this repeat.",
+      "first_ns": 1791493062760202425,
+      "last_ns": 1791493534164808691,
+      "interval_seconds": 5,
+      "snapshots": 95,
+      "snapshots_with_builds": 0,
+      "monitor_sha256": "9e5576471d6e7d16eec90f2249d8a0fc5209f2d39642f9dab3e36376fa9e0f30",
+      "scope": "Compiler-process polling and host CPU/load observations throughout the campaign. No compiler activity was detected; this is not exclusive CPU reservation."
+    },
+    "fixture_verification": {
+      "fixtures": [
+        {
+          "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+          "object_bytes": 70972418471,
+          "objects": 262,
+          "source_upload": "/home/hanbo/repo/selective-read-intra-page-full-20261007/upload-q2.json",
+          "source_upload_sha256": "e2d965a0b7601883a2ed9bb56c1a203bafadfaf55faad2c03d28b9a490dc727c",
+          "verification": "Every current object length and server FULL_OBJECT SHA256 match the retained upload receipt.",
+          "verified_ns": 1791492992982552168
+        },
+        {
+          "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+          "object_bytes": 32463889602,
+          "objects": 122,
+          "source_upload": "/home/hanbo/repo/selective-read-intra-page-full-20261007/upload-q4.json",
+          "source_upload_sha256": "b00eb912d2bebe8164390c5d371e738c10b03b9cb5a06258ee47a3ba622ff917",
+          "verification": "Every current object length and server FULL_OBJECT SHA256 match the retained upload receipt.",
+          "verified_ns": 1791492993087009781
+        }
+      ],
+      "server_sha256": "60ea29c478181a645037b421c3a7033e13e7b0285525ea2d01b98a5fb972580d"
+    },
+    "experiments": {
+      "416-primary": {
+        "experiment_sha256": "90a47d28f75b74debba25e18ec6d700b9b8b8cd48f41956792be2b291b847393",
+        "network_proxy_binary_sha256": "b82acaf906dd87a63f79a573c6e78546d830fdd6db11a412f57ede6023ba976c",
+        "correctness_sha256": {
+          "off": "8993a59ee25f44edfc7b9df21c41fe0b679c48647fc3ecc49dc6f26e340e2d33",
+          "auto": "5d65f41ab51389af206f460bfc53262fc02b9bd7f75607c621c763f326d8a682"
+        },
+        "validation_fallback_reasons": {
+          "selection_or_layout_ineligible": 10,
+          "profile_predicts_no_savings": 10
+        },
+        "validation_network_profile": [
+          "2026-10-08T20:58:10.710911Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed status=\"complete\" elapsed_micros=2010673 requests=396 bytes_received=14155776 request_latency_micros=211960 throughput_bytes_per_second=18673121 request_overhead_bytes=9090"
+        ]
+      },
+      "90-primary": {
+        "experiment_sha256": "953b244d7a4d2b716ca4403c09fd6d08b36e7388ce212be15f672d236c0d583d",
+        "network_proxy_binary_sha256": "b82acaf906dd87a63f79a573c6e78546d830fdd6db11a412f57ede6023ba976c",
+        "correctness_sha256": {
+          "off": "39200e7bb86d6d4d0e32e74fe2ce24f3fb7047c6fe6a399a3dedd863900f8314",
+          "auto": "a8453e1d9ae10dad9548a2cb8dff807aaa8f3fd970cb31671eb5af09e1f074a7"
+        },
+        "validation_fallback_reasons": {
+          "selection_or_layout_ineligible": 12,
+          "none": 36
+        },
+        "validation_network_profile": [
+          "2026-10-08T21:01:41.387330Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed status=\"complete\" elapsed_micros=1977819 requests=396 bytes_received=14155776 request_latency_micros=217697 throughput_bytes_per_second=18731443 request_overhead_bytes=5378"
+        ]
+      }
+    },
+    "findings": "All three 416-column automatic sessions retained ordinary query I/O. All three 90-column automatic sessions read fewer Parquet bytes. The 416-column validation profile completed but rejected partial reads before probes because predicted savings did not clear the 10% margin; timing runs do not emit decision logs."
+  }
+}
