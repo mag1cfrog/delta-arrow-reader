@@ -680,7 +680,7 @@ fn eager_scan_metadata_supports_concurrent_planning_without_the_delta_log() -> T
 }
 
 #[test]
-fn eager_scan_metadata_preserves_pruning_from_a_parsed_stats_only_checkpoint() -> TestResult {
+fn fixed_snapshot_preserves_pruning_from_a_parsed_stats_only_checkpoint() -> TestResult {
     runtime()?.block_on(async {
         let fixture =
             TestTable::two_versions_with_parsed_stats_only_checkpoint("eager-checkpoint")?;
@@ -696,13 +696,15 @@ fn eager_scan_metadata_preserves_pruning_from_a_parsed_stats_only_checkpoint() -
         let delta_log = fixture.0.join("_delta_log");
         fs::remove_file(delta_log.join("00000000000000000000.json"))?;
         fs::remove_file(delta_log.join("00000000000000000001.json"))?;
-        assert!(
-            delta_log
-                .join("00000000000000000001.checkpoint.parquet")
-                .is_file()
-        );
+        // A complete checkpoint remains usable even across a large gap after log cleanup.
+        let version = 1_000_000_000_000;
+        fs::rename(
+            delta_log.join("00000000000000000001.checkpoint.parquet"),
+            delta_log.join(format!("{version:020}.checkpoint.parquet")),
+        )?;
 
         let table = DeltaTableBuilder::new(fixture.uri())
+            .with_snapshot_selection(DeltaSnapshotSelection::Version(version))
             .with_warmup(WarmupMode::QueryPlanning)
             .load_table()
             .await?;
@@ -720,7 +722,7 @@ fn eager_scan_metadata_preserves_pruning_from_a_parsed_stats_only_checkpoint() -
         )
         .await?;
 
-        assert_eq!(table.version(), 1);
+        assert_eq!(table.version(), version);
         assert_eq!(sorted_ids(&batches), [5, 6, 7, 8]);
         assert_eq!(metrics.snapshot().files_planned, 1);
         Ok::<_, Box<dyn Error>>(())

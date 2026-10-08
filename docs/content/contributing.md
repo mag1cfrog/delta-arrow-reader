@@ -28,7 +28,7 @@ root on Linux or macOS:
 python3 -m venv target/python-venv
 . target/python-venv/bin/activate
 python -m pip install 'maturin>=1.14,<2'
-maturin build --locked --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out target/python-wheels
+maturin build --locked --out target/python-wheels
 python -m pip install --force-reinstall target/python-wheels/*.whl
 python -I -m unittest discover -s crates/delta-arrow-reader-python/tests
 cargo test --locked -p delta-arrow-reader-python
@@ -37,6 +37,10 @@ cargo test --locked -p delta-arrow-reader-python
 The isolated Python check imports the installed wheel without adding the current
 directory to its import path. Default Cargo commands still select the core crate;
 use `cargo check -p delta-arrow-reader-python` to check the binding crate directly.
+
+Python packaging configuration and the type stub live at the repository root.
+Use `maturin sdist --out target/python-sdist` to package Git-tracked workspace
+files with their matching lockfile. Track new source files before packaging.
 
 The binding's runtime owner lives in `crates/delta-arrow-reader-python/src/runtime.rs`.
 Table loading, scan planning, and batch reads use its `wait` method, which releases

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/delta-arrow-reader-python"]
+members = ["crates/delta-arrow-reader-python", "crates/delta-arrow-reader-cli"]
 default-members = ["."]
 resolver = "3"
 
@@ -20,6 +20,8 @@ readme = "README.md"
 keywords = ["delta-lake", "arrow", "parquet", "datafusion"]
 categories = ["asynchronous", "database"]
 exclude = [
+    "pyproject.toml",
+    "delta_arrow_reader.pyi",
     ".github/**",
     ".gitignore",
     "benches/incremental_refresh.rs",

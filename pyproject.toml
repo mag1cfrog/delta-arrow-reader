@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "delta-arrow-reader"
 dynamic = ["version"]
 description = "Read-only Delta Lake to Apache Arrow reader"
-readme = "../../README.md"
+readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
 dependencies = ["pyarrow>=18.0.0"]
@@ -17,5 +17,6 @@ Issues = "https://github.com/mag1cfrog/delta-arrow-reader/issues"
 
 [tool.maturin]
 bindings = "pyo3"
-# Keep stubs beside pyproject.toml when Maturin relocates it to the sdist root.
-include = [{ path = "delta_arrow_reader.pyi", format = "sdist" }]
+manifest-path = "crates/delta-arrow-reader-python/Cargo.toml"
+# Preserve the complete workspace and its matching Cargo.lock in source archives.
+sdist-generator = "git"

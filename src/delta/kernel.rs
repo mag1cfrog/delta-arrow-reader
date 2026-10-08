@@ -1,6 +1,7 @@
 //! Private boundary for stability-sensitive `delta_kernel` APIs.
 
 mod deletion_vector;
+mod versioned_engine;
 
 pub(crate) use deletion_vector::KernelDeletionVectorHandle;
 
@@ -30,10 +31,12 @@ use delta_kernel::{
 pub(crate) use delta_kernel_default_engine::storage::insert_url_handler;
 use delta_kernel_default_engine::{DefaultEngineBuilder, storage::store_from_url_opts};
 use object_store::ObjectStore;
+use tokio::runtime::Handle;
 use url::Url;
 
 use super::location::{file_resolution_url, object_store_path, with_object_store_path};
 use crate::{DeltaComparison, DeltaPredicate, DeltaScalar, DeltaStorageOptions};
+use versioned_engine::VersionedEngine;
 
 #[allow(dead_code)]
 pub(crate) const TABLE_FEATURES_READER_VERSION: i32 = TABLE_FEATURES_MIN_READER_VERSION;
@@ -58,7 +61,21 @@ pub(crate) struct DeltaKernelEngineContext {
     /// the container when an Azure account URL takes it from storage options.
     file_resolution_url: Url,
     object_store: Arc<dyn ObjectStore>,
-    engine: Arc<dyn Engine + Send + Sync>,
+    engine: Option<Arc<dyn Engine + Send + Sync>>,
+}
+
+impl Drop for DeltaKernelEngineContext {
+    fn drop(&mut self) {
+        if let Some(engine) = self.engine.take() {
+            if let Ok(runtime) = Handle::try_current() {
+                // Kernel joins its background runtime on drop. Offload that join so
+                // the caller's shutdown policy also covers unfinished Kernel I/O.
+                runtime.spawn_blocking(move || drop(engine));
+            } else {
+                drop(engine);
+            }
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -130,7 +147,7 @@ impl KernelPhysicalToLogicalTransform {
         let physical_rows = batch.num_rows();
         let data: Box<dyn delta_kernel::EngineData> = Box::new(ArrowEngineData::new(batch));
         let batch = transform_to_logical(
-            engine_context.engine.as_ref(),
+            engine_context.engine().as_ref(),
             data,
             &schemas.physical,
             schemas.logical.as_ref(),
@@ -183,13 +200,13 @@ impl KernelScan {
                     .map(|batch| Box::new(ArrowEngineData::new(batch)) as Box<dyn EngineData>)
                     .collect::<Vec<_>>();
                 collect_scan_files(self.scan.scan_metadata_from(
-                    engine_context.engine.as_ref(),
+                    engine_context.engine().as_ref(),
                     snapshot_version,
                     data,
                     None,
                 )?)
             }
-            None => collect_scan_files(self.scan.scan_metadata(engine_context.engine.as_ref())?),
+            None => collect_scan_files(self.scan.scan_metadata(engine_context.engine().as_ref())?),
         }
     }
 
@@ -197,7 +214,7 @@ impl KernelScan {
         &self,
         engine_context: &DeltaKernelEngineContext,
     ) -> delta_kernel::DeltaResult<Arc<[RecordBatch]>> {
-        materialize_scan_metadata(self.scan.scan_metadata(engine_context.engine.as_ref())?)
+        materialize_scan_metadata(self.scan.scan_metadata(engine_context.engine().as_ref())?)
     }
 
     pub(crate) fn materialize_scan_metadata_from(
@@ -212,7 +229,7 @@ impl KernelScan {
             .map(|batch| Box::new(ArrowEngineData::new(batch)) as Box<dyn EngineData>)
             .collect::<Vec<_>>();
         materialize_scan_metadata(self.scan.scan_metadata_from(
-            engine_context.engine.as_ref(),
+            engine_context.engine().as_ref(),
             existing_version,
             existing_data,
             None,
@@ -552,7 +569,7 @@ impl DeltaKernelEngineContext {
             public_table_url,
             file_resolution_url,
             object_store,
-            engine,
+            engine: Some(engine),
         })
     }
 
@@ -564,8 +581,11 @@ impl DeltaKernelEngineContext {
         &self.file_resolution_url
     }
 
-    pub(crate) fn engine(&self) -> &(dyn Engine + Send + Sync) {
-        self.engine.as_ref()
+    #[expect(clippy::expect_used, reason = "the engine is only taken during Drop")]
+    pub(crate) fn engine(&self) -> &Arc<dyn Engine + Send + Sync> {
+        self.engine
+            .as_ref()
+            .expect("engine is only taken during drop")
     }
 
     #[allow(dead_code)]
@@ -579,7 +599,7 @@ impl DeltaKernelEngineContext {
         predicate: &DeltaKernelPredicate,
         batch: RecordBatch,
     ) -> delta_kernel::DeltaResult<BooleanArray> {
-        let evaluator = self.engine.evaluation_handler().new_predicate_evaluator(
+        let evaluator = self.engine().evaluation_handler().new_predicate_evaluator(
             Arc::clone(&schemas.physical),
             Arc::clone(predicate.as_ref()),
         )?;
@@ -607,11 +627,28 @@ impl DeltaKernelEngineContext {
             self.file_resolution_url.clone(),
             &object_store_path(&self.file_resolution_url)?,
         )?;
-        let mut builder = Snapshot::builder_for(store_relative_table_url);
-        if let Some(version) = version {
-            builder = builder.at_version(version);
-        }
-        builder.build(self.engine.as_ref()).map(KernelSnapshot)
+        let builder = Snapshot::builder_for(store_relative_table_url);
+        let snapshot = match version {
+            None => builder.build(self.engine().as_ref())?,
+            Some(version) => {
+                if version == u64::MAX {
+                    return Err(delta_kernel::Error::generic(
+                        "snapshot version exceeds the supported Kernel range",
+                    ));
+                }
+                // Load the latest snapshot within a bounded listing. Kernel's
+                // at_version searches backward across numeric gaps in the log.
+                let engine = VersionedEngine::new(Arc::clone(self.engine()), version);
+                let snapshot = builder.build(&engine)?;
+                if snapshot.version() != version {
+                    return Err(delta_kernel::Error::generic(
+                        "snapshot version is unavailable",
+                    ));
+                }
+                snapshot
+            }
+        };
+        Ok(KernelSnapshot(snapshot))
     }
 
     pub(crate) fn refresh_snapshot(
@@ -619,7 +656,7 @@ impl DeltaKernelEngineContext {
         existing_snapshot: &KernelSnapshot,
     ) -> delta_kernel::DeltaResult<KernelSnapshot> {
         Snapshot::builder_from(Arc::clone(&existing_snapshot.0))
-            .build(self.engine.as_ref())
+            .build(self.engine().as_ref())
             .map(KernelSnapshot)
     }
 
@@ -629,7 +666,7 @@ impl DeltaKernelEngineContext {
         deletion_vector: &KernelDeletionVectorHandle,
     ) -> delta_kernel::DeltaResult<roaring::RoaringTreemap> {
         let descriptor = deletion_vector.descriptor_for_store(&self.file_resolution_url)?;
-        descriptor.read(self.engine.storage_handler(), &self.file_resolution_url)
+        descriptor.read(self.engine().storage_handler(), &self.file_resolution_url)
     }
 }
 
