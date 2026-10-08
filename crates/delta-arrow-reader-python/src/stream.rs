@@ -15,7 +15,10 @@ use pyo3::{
 
 use crate::runtime::Runtime;
 
-/// Single-use exporter consumed by PyArrow's public from_stream method.
+/// Single-use Arrow stream exporter, created by DeltaTable.scan().
+///
+/// Pass this object to pyarrow.RecordBatchReader.from_stream(). After export,
+/// the consumer owns cleanup; closing this object does not close the consumer.
 #[pyclass(module = "delta_arrow_reader", frozen)]
 pub(crate) struct RecordBatchStream {
     reader: Mutex<Option<BatchReader>>,
@@ -36,6 +39,7 @@ impl RecordBatchStream {
 
 #[pymethods]
 impl RecordBatchStream {
+    /// Export once. Schema requests are not supported yet.
     #[pyo3(signature = (requested_schema=None))]
     fn __arrow_c_stream__<'py>(
         &self,
@@ -52,12 +56,37 @@ impl RecordBatchStream {
             .lock()
             .map_err(|_| PyRuntimeError::new_err("stream is unavailable"))?
             .take()
-            .ok_or_else(|| PyRuntimeError::new_err("stream has already been exported"))?;
+            .ok_or_else(|| PyRuntimeError::new_err("stream has already been exported or closed"))?;
         PyCapsule::new_with_value(
             py,
             FFI_ArrowArrayStream::new(Box::new(reader)),
             c"arrow_array_stream",
         )
+    }
+
+    /// Release an unexported stream. Repeated calls have no effect.
+    fn close(&self) -> PyResult<()> {
+        let reader = self
+            .reader
+            .lock()
+            .map_err(|_| PyRuntimeError::new_err("stream is unavailable"))?
+            .take();
+        // Drop scan resources after releasing the mutex.
+        drop(reader);
+        Ok(())
+    }
+
+    fn __enter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __exit__(
+        &self,
+        _exc_type: &Bound<'_, PyAny>,
+        _exc_value: &Bound<'_, PyAny>,
+        _traceback: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        self.close()
     }
 }
 

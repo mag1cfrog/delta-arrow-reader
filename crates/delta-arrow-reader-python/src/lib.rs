@@ -139,11 +139,11 @@ impl DeltaTable {
         PyCapsule::new_with_value(py, ffi_schema, c"arrow_schema")
     }
 
-    /// Stream all columns and rows through a pyarrow.RecordBatchReader.
+    /// Plan a full-table scan and return a single-use Arrow stream exporter.
     ///
     /// Planning reads Delta metadata; data-file reads start on the first pull.
-    /// The reader retains its snapshot and runtime independently of this table.
-    fn to_reader<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    /// The stream retains its snapshot and runtime independently of this table.
+    fn scan(&self, py: Python<'_>) -> PyResult<RecordBatchStream> {
         let scan = self
             ._runtime
             .wait(py, self.table.scan().build())?
@@ -152,10 +152,17 @@ impl DeltaTable {
             })?;
         // Validate before Arrow's C callback exports the schema.
         export_schema(py, scan.schema().as_ref())?;
-        let stream = Py::new(
-            py,
-            RecordBatchStream::new(scan.into_stream(), Arc::clone(&self._runtime)),
-        )?;
+        Ok(RecordBatchStream::new(
+            scan.into_stream(),
+            Arc::clone(&self._runtime),
+        ))
+    }
+
+    /// Plan a full-table scan and consume it as a pyarrow.RecordBatchReader.
+    ///
+    /// Use a with block to close the reader, including when stopping early.
+    fn to_reader<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let stream = Py::new(py, self.scan(py)?)?;
         py.import("pyarrow")?
             .getattr("RecordBatchReader")?
             .call_method1("from_stream", (stream,))
@@ -175,9 +182,18 @@ fn delta_arrow_reader(module: &Bound<'_, PyModule>) -> PyResult<()> {
         .call_method1("version", ("delta-arrow-reader",))?;
     module.add("__version__", version)?;
     module.add_class::<DeltaTable>()?;
+    module.add_class::<RecordBatchStream>()?;
     module.add(
         "DeltaReaderError",
         module.py().get_type::<DeltaReaderError>(),
     )?;
-    module.add("__all__", ["__version__", "DeltaTable", "DeltaReaderError"])
+    module.add(
+        "__all__",
+        [
+            "__version__",
+            "DeltaTable",
+            "DeltaReaderError",
+            "RecordBatchStream",
+        ],
+    )
 }

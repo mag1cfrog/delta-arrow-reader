@@ -115,6 +115,25 @@ including when you stop early. Readers and returned batches remain usable after
 the table is deleted. Calling `reader.read_all()` materializes all remaining rows
 in memory.
 
+To pass a stream to an Arrow consumer directly, use `table.scan()`. For PyArrow,
+the equivalent reader construction is:
+
+```python
+import pyarrow as pa
+
+with table.scan() as stream:
+    with pa.RecordBatchReader.from_stream(stream) as reader:
+        for batch in reader:
+            print(batch.num_rows)
+            break  # Both context managers still close on early exit.
+```
+
+`scan()` returns a `RecordBatchStream`, which has no public constructor. A stream
+can be exported once. Closing it before export releases the scan; subsequent
+export attempts raise `RuntimeError`. After export, the consumer owns cleanup,
+so closing the original stream does not close the consumer. Repeated `close()`
+calls are harmless, and context-manager exit does not suppress exceptions.
+
 `location` also accepts a string path or a supported storage URL. Pass backend
 settings through `storage_options`, a mapping of string keys to string values
 that the constructor copies before loading.

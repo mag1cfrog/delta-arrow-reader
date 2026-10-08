@@ -1,17 +1,19 @@
 from collections import UserDict
+from concurrent.futures import ThreadPoolExecutor
 import gc
 import json
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from threading import Barrier
 from types import MappingProxyType
 import unittest
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from delta_arrow_reader import DeltaReaderError, DeltaTable
+from delta_arrow_reader import DeltaReaderError, DeltaTable, RecordBatchStream
 
 
 class TableTests(unittest.TestCase):
@@ -100,6 +102,78 @@ class TableTests(unittest.TestCase):
             empty = reader.read_all()
         self.assertEqual(empty.schema, table.schema)
         self.assertEqual(empty.num_rows, 0)
+
+    def test_stream_exports_once_and_consumer_survives_close(self):
+        with self.assertRaises(TypeError):
+            RecordBatchStream()
+        self.write_log(1, self.write_parquet("rows.parquet", [1, 2]))
+        stream = DeltaTable(self.location).scan()
+        self.assertIsInstance(stream, RecordBatchStream)
+        with pa.RecordBatchReader.from_stream(stream) as reader:
+            with self.assertRaises(RuntimeError):
+                stream.__arrow_c_stream__()
+            stream.close()
+            stream.close()
+            del stream
+            gc.collect()
+            self.assertEqual(reader.read_all().to_pydict(), {"id": [1, 2]})
+
+    def test_stream_context_closes_without_suppressing_errors(self):
+        table = DeltaTable(self.location)
+        for error in (None, ValueError("consumer failed")):
+            with self.subTest(error=error):
+                stream = table.scan()
+                try:
+                    with stream as entered:
+                        self.assertIs(entered, stream)
+                        if error is not None:
+                            raise error
+                except ValueError as caught:
+                    self.assertIs(caught, error)
+                else:
+                    self.assertIsNone(error)
+                stream.close()
+                with self.assertRaises(RuntimeError):
+                    stream.__arrow_c_stream__()
+
+    def test_stream_capsule_outlives_exporter(self):
+        self.write_log(1, self.write_parquet("rows.parquet", [1, 2]))
+        stream = DeltaTable(self.location).scan()
+        capsule = stream.__arrow_c_stream__()
+        del stream
+        gc.collect()
+
+        class ExportedStream:
+            def __arrow_c_stream__(self, requested_schema=None):
+                return capsule
+
+        with pa.RecordBatchReader.from_stream(ExportedStream()) as reader:
+            del capsule
+            gc.collect()
+            batch = reader.read_next_batch()
+        del reader
+        gc.collect()
+        self.assertEqual(batch.column(0).to_pylist(), [1, 2])
+
+    def test_concurrent_stream_export_has_one_owner(self):
+        stream = DeltaTable(self.location).scan()
+        ready = Barrier(2)
+
+        def export():
+            ready.wait(timeout=5)
+            try:
+                return stream.__arrow_c_stream__()
+            except RuntimeError:
+                return None
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(export) for _ in range(2)]
+            results = [future.result(timeout=10) for future in futures]
+        self.assertEqual(sum(result is not None for result in results), 1)
+        # The unconsumed capsule owns cleanup even if the exporter is closed.
+        stream.close()
+        del futures, results, stream
+        gc.collect()
 
     def test_latest_snapshot_is_immutable(self):
         original = DeltaTable(self.location)
