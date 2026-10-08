@@ -143,13 +143,16 @@ impl DeltaTable {
     ///
     /// columns=None selects all columns. A list or tuple of names selects columns
     /// in that order; an empty list selects no columns while retaining row counts.
+    /// limit=None reads all rows. Otherwise, limit must be a nonnegative integer
+    /// that fits the platform's usize. Booleans are not accepted.
     /// Planning reads Delta metadata; data-file reads start on the first pull.
     /// The stream retains its snapshot and runtime independently of this table.
-    #[pyo3(signature = (*, columns=None))]
+    #[pyo3(signature = (*, columns=None, limit=None))]
     fn scan(
         &self,
         py: Python<'_>,
         columns: Option<&Bound<'_, PyAny>>,
+        limit: Option<&Bound<'_, PyInt>>,
     ) -> PyResult<RecordBatchStream> {
         let mut builder = self.table.scan();
         if let Some(columns) = columns {
@@ -159,6 +162,17 @@ impl DeltaTable {
                 ));
             }
             builder = builder.with_projection(columns.extract::<Vec<String>>()?);
+        }
+        if let Some(limit) = limit {
+            if limit.is_instance_of::<PyBool>() {
+                return Err(PyTypeError::new_err("limit must be an integer, not bool"));
+            }
+            // Validate the integer value even if a subclass overrides comparisons.
+            let limit = py.get_type::<PyInt>().call_method1("__index__", (limit,))?;
+            if limit.lt(0)? {
+                return Err(PyValueError::new_err("limit must be nonnegative"));
+            }
+            builder = builder.with_limit(limit.extract::<usize>()?);
         }
         let scan = self._runtime.wait(py, builder.build())?.map_err(|error| {
             reader_error(py, error.to_string(), error.phase().as_str(), error.code())
@@ -173,15 +187,16 @@ impl DeltaTable {
 
     /// Plan a scan and consume it as a pyarrow.RecordBatchReader.
     ///
-    /// columns accepts the same selection as scan(): None, a list, or a tuple.
+    /// columns and limit accept the same selections as scan().
     /// Use a with block to close the reader, including when stopping early.
-    #[pyo3(signature = (*, columns=None))]
+    #[pyo3(signature = (*, columns=None, limit=None))]
     fn to_reader<'py>(
         &self,
         py: Python<'py>,
         columns: Option<&Bound<'_, PyAny>>,
+        limit: Option<&Bound<'_, PyInt>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let stream = Py::new(py, self.scan(py, columns)?)?;
+        let stream = Py::new(py, self.scan(py, columns, limit)?)?;
         py.import("pyarrow")?
             .getattr("RecordBatchReader")?
             .call_method1("from_stream", (stream,))

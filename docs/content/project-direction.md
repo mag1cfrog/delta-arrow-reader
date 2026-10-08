@@ -57,8 +57,8 @@ core must not acquire a hidden runtime. Keep existing redacted error contracts.
 
 The Python package now builds from source with type stubs and the Rust workspace's
 shared version. It supports snapshot loading, schema/version inspection, column
-projection, PyArrow readers, and single-use stream exports. Limits, platform wheels
-and publishing remain planned work. Python asyncio, writes, a dataframe/query
+projection, row limits, PyArrow readers, and single-use stream exports. Platform
+wheels and publishing remain planned work. Python asyncio, writes, a dataframe/query
 product and JavaScript bindings remain outside this first release.
 
 ## Optional SQL access through DataFusion Python

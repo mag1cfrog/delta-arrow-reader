@@ -105,7 +105,7 @@ class TableTests(unittest.TestCase):
                 self.assertEqual(empty.schema, table.schema if columns is None else pa.schema([]))
                 self.assertEqual(empty.num_rows, 0)
 
-    def test_projection_preserves_order_values_and_zero_column_row_counts(self):
+    def test_projection_and_limits_preserve_order_values_and_row_counts(self):
         fixture = (Path(__file__).resolve().parents[3]
                    / "tests/reader/fixtures/external_writer/corpus/partitioned/table")
         table = DeltaTable(fixture)
@@ -114,21 +114,66 @@ class TableTests(unittest.TestCase):
         self.assertEqual(full.num_rows, 360)
         for method in ("scan", "to_reader"):
             for columns in (None, ["region", "id"], ("label", "id"), ["region"], [], ()):
+                for limit in (None, 0, 1, 100, 101, 121, 360, 361, 2 * sys.maxsize + 1):
+                    with self.subTest(method=method, columns=columns, limit=limit):
+                        expected = full if columns is None else full.select(columns)
+                        if limit is not None:
+                            expected = expected.slice(0, min(limit, full.num_rows))
+                        result = getattr(table, method)(columns=columns, limit=limit)
+                        reader = (pa.RecordBatchReader.from_stream(result)
+                                  if method == "scan" else result)
+                        with reader:
+                            batches = list(reader)
+                            actual = pa.Table.from_batches(batches, schema=reader.schema)
+                        self.assertTrue(actual.equals(expected, check_metadata=True))
+                        self.assertEqual(actual.num_rows, expected.num_rows)
+                        if columns is not None and not columns and expected.num_rows:
+                            self.assertTrue(batches)
+                            for batch in batches:
+                                self.assertEqual(batch.num_columns, 0)
+                                self.assertGreater(batch.num_rows, 0)
+
+    def test_zero_limit_preserves_schema_without_reading_data_files(self):
+        self.write_log(1, self.write_parquet("rows.parquet", [1, 2]))
+        (self.location / "rows.parquet").unlink()
+        table = DeltaTable(self.location)
+        for method in ("scan", "to_reader"):
+            for columns in (None, []):
                 with self.subTest(method=method, columns=columns):
-                    expected = full if columns is None else full.select(columns)
-                    result = getattr(table, method)(columns=columns)
+                    result = getattr(table, method)(columns=columns, limit=0)
                     reader = (pa.RecordBatchReader.from_stream(result)
                               if method == "scan" else result)
                     with reader:
-                        batches = list(reader)
-                        actual = pa.Table.from_batches(batches, schema=reader.schema)
-                    self.assertTrue(actual.equals(expected, check_metadata=True))
-                    self.assertEqual(actual.num_rows, full.num_rows)
-                    if columns is not None and not columns:
-                        self.assertTrue(batches)
-                        for batch in batches:
-                            self.assertEqual(batch.num_columns, 0)
-                            self.assertGreater(batch.num_rows, 0)
+                        self.assertEqual(reader.schema, table.schema if columns is None else pa.schema([]))
+                        self.assertEqual(list(reader), [])
+
+    def test_limit_validation_is_shared_by_both_entrypoints(self):
+        class Limit(int):
+            def __lt__(self, other):
+                return False
+
+            def __index__(self):
+                return 123
+
+        self.write_log(1, self.write_parquet("rows.parquet", [1, 2]))
+        table = DeltaTable(self.location)
+        for method in ("scan", "to_reader"):
+            with self.subTest(method=method):
+                result = getattr(table, method)(limit=Limit(1))
+                reader = (pa.RecordBatchReader.from_stream(result)
+                          if method == "scan" else result)
+                with reader:
+                    self.assertEqual(reader.read_all().to_pydict(), {"id": [1]})
+                for limit, error_type in (
+                    (True, TypeError), (False, TypeError), (1.0, TypeError),
+                    ("1", TypeError), (b"1", TypeError), (object(), TypeError),
+                    (-1, ValueError), (-2**100, ValueError), (Limit(-1), ValueError),
+                    (2 * sys.maxsize + 2, OverflowError), (2**100, OverflowError),
+                ):
+                    with self.subTest(limit=limit), self.assertRaises(error_type):
+                        getattr(table, method)(limit=limit)
+                with self.assertRaises(TypeError):
+                    getattr(table, method)(None, 1)
 
     def test_projection_validation_is_shared_by_both_entrypoints(self):
         table = DeltaTable(self.location)

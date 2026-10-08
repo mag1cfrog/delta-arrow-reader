@@ -37,7 +37,9 @@ class DeltaTable:
     def __arrow_c_schema__(self) -> object: ...
     def scan(
         self, *, columns: list[str] | tuple[str, ...] | None = None,
+        limit: int | None = None,
     ) -> RecordBatchStream: ...
     def to_reader(
         self, *, columns: list[str] | tuple[str, ...] | None = None,
+        limit: int | None = None,
     ) -> pyarrow.RecordBatchReader: ...

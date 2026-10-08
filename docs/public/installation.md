@@ -109,7 +109,7 @@ Each table keeps the snapshot it loaded, even if new commits arrive. Its
 remains usable after the table is deleted.
 
 Each `to_reader()` call creates an independent `pyarrow.RecordBatchReader` over
-the selected columns and all rows of that snapshot. Planning reads Delta metadata;
+the selected columns and rows of that snapshot. Planning reads Delta metadata;
 Parquet reads start when you request a batch. Use a `with` block to close the reader,
 including when you stop early. Readers and returned batches remain usable after
 the table is deleted. Calling `reader.read_all()` materializes all remaining rows
@@ -140,6 +140,13 @@ to read all columns. A list or tuple selects columns in the given order, such as
 list or tuple selects no columns while preserving row counts. Bare strings and
 non-string entries raise `TypeError`; unknown or repeated column names raise
 `DeltaReaderError` with code `invalid_projection`.
+
+Both methods also accept a keyword-only `limit` argument. Omit it or pass `None`
+to read all rows, or use a nonnegative integer to cap the result, such as
+`table.to_reader(columns=["value", "id"], limit=100)`. The integer must fit Rust's
+`usize` on the platform; larger values raise `OverflowError`. Negative values
+raise `ValueError`, and booleans and other types raise `TypeError`. `limit=0`
+returns an empty result with the selected schema without reading data files.
 
 The optional `schema` request must match the scan schema, including field order,
 names, nullability, and metadata. Incompatible schemas raise `ValueError`.
