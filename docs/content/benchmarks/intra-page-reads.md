@@ -163,42 +163,52 @@ separate reads of the same range.
 
 ## Paired network checks on the merged implementation
 
-The [36 sessions](intra-page-paired-samples.csv) and
+The [original 36 sessions](intra-page-paired-samples.csv),
+[12-session primary-profile repeat](intra-page-primary-repeat-samples.csv) and
 [provenance](intra-page-paired-results.json) use one executable built from clean
-commit `2c312d9c71acfcc630b0fe478651e58df66f46a1`. Each table/network combination
-has three alternating off/auto pairs. Every session starts a fresh process,
-initializes the table, then runs two sequential queries. All 24 separate
-validation exports matched every reference value and null across 894 rows.
+commit `2c312d9c71acfcc630b0fe478651e58df66f46a1`. Each campaign uses three
+alternating off/auto pairs per table/network combination. Every session starts
+a fresh process, initializes the table, then runs two sequential queries.
+All 32 separate validation exports matched every reference value and null across
+894 rows. Every declared sample is retained, including slow runs.
 
-These are exploratory measurements on a shared host. An unrelated Rust build
-was observed during the 90-column 150 Mbps case. The campaign waited for builds
-to finish before starting the 1 Gbps profiles. Every declared sample is retained,
-including slow runs. The primary timings need an uncontended rerun before they
-can establish reproducible gains.
+An unrelated Rust build was observed during the original 90-column 150 Mbps
+case. After other work was reported complete, both primary-profile cases were
+repeated with the same binary and verified data. No compiler activity appeared
+in 95 process snapshots at five-second intervals during the repeat. This checks
+for background builds; it does not reserve the host's CPUs exclusively.
 
-At 200 ms +/-20 ms and 150 Mbps, medians in seconds were:
+The repeat at 200 ms +/-20 ms and 150 Mbps produced these medians in seconds:
 
 | Table columns | Mode | Initialization | First query | Initialization + first query | Second query |
 | --- | --- | ---: | ---: | ---: | ---: |
-| 416 | Off | 1.55 | 10.35 | 11.90 | 10.34 |
-| 416 | Auto | 3.55 | 7.53 | 11.08 | 7.49 |
-| 90 | Off | 0.90 | 22.34 | 23.24 | 22.31 |
-| 90 | Auto | 3.05 | 16.92 | 19.80 | 12.40 |
+| 416 | Off | 1.56 | 10.35 | 11.91 | 10.37 |
+| 416 | Auto | 3.57 | 10.35 | 13.91 | 10.34 |
+| 90 | Off | 0.90 | 22.31 | 23.22 | 22.32 |
+| 90 | Auto | 2.89 | 11.05 | 13.95 | 11.10 |
 
-Automatic first-query times ranged from 7.47 to 10.35 seconds for 416 columns
-and 11.97 to 22.30 seconds for 90 columns. One automatic session per table
-retained ordinary I/O for both queries, after paying the profiling cost.
-In those sessions, initialization plus the first query took 14.27 and
-25.39 seconds. Timing runs have no decision logs, so their precise fallback
-reason is not established by the separate validation logs.
+All three 416-column automatic sessions retained ordinary I/O for both queries:
+172,926,686 Parquet bytes and 40 requests per query. First-query times ranged
+from 10.34 to 10.36 seconds. Profiling added about two seconds without reducing
+query time. In the separate validation run, profiling completed successfully,
+but every eligible read was rejected before probing because the predicted
+savings did not clear the 10% margin. Timing runs have no decision logs, so
+their exact rejection reason is not established by that validation log.
 
-Median first-query Parquet bytes fell from 172,926,686 to 81,908,881 for 416
-columns, and from 398,034,010 to 168,152,593 for 90 columns. Median requests
-rose from 40 to 15,070 and from 54 to 19,715, with a peak of 512 concurrent
-requests. Each automatic initialization added 13.5 MiB across 396 requests,
-outside those query counters.
+All three 90-column automatic sessions used fewer Parquet bytes. First-query
+times ranged from 10.69 to 11.25 seconds. Median bytes fell from 398,034,010 to
+131,787,714, while median requests rose from 54 to 23,972, with a peak of 512
+concurrent requests. Each automatic initialization added 13.5 MiB across 396
+requests, outside these query counters.
 
-The two 1 Gbps controls produced these medians in seconds:
+The earlier 150 Mbps samples remain in the original CSV. Automatic first-query
+times ranged from 7.47 to 10.35 seconds for 416 columns and 11.97 to 22.30 seconds
+for 90 columns, with one ordinary-I/O session per table. The repeat confirms the
+90-column gain but does not reproduce the 416-column gain. Background builds
+alone therefore do not explain the missing benefit; the initialization profile
+and cost decision still need investigation.
+
+The original two 1 Gbps controls produced these medians in seconds:
 
 | Latency | Table columns | Off first query | Auto first query | Off initialization + first | Auto initialization + first |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -213,11 +223,11 @@ initialization at low latency and 1.4-1.5 seconds at high latency. Identical I/O
 did not guarantee identical query times: the low-latency 90-column first query
 was 0.29 seconds slower at the median, while its second query was effectively
 equal at 3.26 seconds. These samples do not isolate the cause of that difference.
-The CSV retains every timing, byte/request count, CPU observation and peak RSS;
-the JSON records the build interference and sampling limits.
+The CSV files retain every timing, byte/request count, CPU observation and peak
+RSS; the JSON separates the original campaign from the primary-profile repeat.
 
-The option remains disabled by default. Profile stability and uncontended
-timings need follow-up before the remaining concurrent-query, local, no-DV,
+The option remains disabled by default. The 416-column cost decision needs
+follow-up, alongside the remaining concurrent-query, local, no-DV,
 dense-selection, unsupported-format and real-S3 checks in
 [#422](https://github.com/mag1cfrog/delta-arrow-reader/issues/422).
 The published five-reader comparison is unchanged.

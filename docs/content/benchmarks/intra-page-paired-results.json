@@ -1,5 +1,5 @@
 {
-  "status": "DAR-only exploratory paired checks; shared-host interference was observed; default remains disabled.",
+  "status": "DAR-only records: 36 original sessions plus 12 separately recorded primary-profile repeat sessions. Default remains disabled.",
   "timed_sessions": 36,
   "exactly_validated_query_exports": 24,
   "sample_csv_sha256": "62df4b5465f15c929f9a7bb7cd351cfa241f1495949c5ef075ff552b2efd3a32",
@@ -275,10 +275,100 @@
     }
   },
   "remaining": [
-    "Initialization-profile stability and a paired primary-profile rerun on an uncontended host.",
+    "Investigate initialization-profile stability and the 416-column primary-profile cost decision; the repeat without detected background builds did not reproduce its earlier gains.",
     "Explain the first-query timing differences where ordinary Parquet I/O was retained.",
     "Simultaneous queries sharing one process-wide request budget.",
     "Local, no-DV, dense-selection and unsupported-format controls on this build.",
     "Real S3 validation before considering default enablement."
-  ]
+  ],
+  "total_timed_sessions": 48,
+  "total_exactly_validated_query_exports": 32,
+  "primary_repeat": {
+    "purpose": "Primary-profile repeat after the user reported other work complete; retain all earlier samples separately.",
+    "retained_artifact_directory": "/home/hanbo/repo/selective-read-intra-page-primary-repeat-20261008",
+    "timed_sessions": 12,
+    "exactly_validated_query_exports": 8,
+    "sample_csv": "intra-page-primary-repeat-samples.csv",
+    "sample_csv_sha256": "d8a3622d987f537809f57e23016ea62403b8ffe59de447fa137bf4edf101dcec",
+    "source_report_sha256": "20dd9bb6504803d21b92e17e7be493a82c657fe43c1f7abc6eaa625ddc92c885",
+    "plan_sha256": "810a9f8e8ed9d34bfc7dd22f51136cf141d9b49daa391ad13927bbed65ad7376",
+    "analysis_script_sha256": "d2d052dae7ed3e93dea04d7c1e6269db9b565ec9911efb428693c7863b6aab33",
+    "export_script_sha256": "d2d75750ce7fc2799e92e5f39c5d6197e6752508f8c8663385a804e2c5cfb942",
+    "build_record_sha256": "0528ca99098adb63e54f7b34bd37b75fe6704de6f8644cb6f821b7e02e3f701f",
+    "sampling": "Same executable, fixtures, snapshots, SQL, resource limits, harness and alternating order as the original campaign. Three fresh-process sessions per mode/table, each initialization plus two sequential queries. All repeat samples are retained separately.",
+    "network": {
+      "jitter_ms": 20,
+      "latency_ms": 200,
+      "mbps": 150,
+      "name": "primary",
+      "seed": "0"
+    },
+    "preparation": "Reused the frozen executable and retained data. Verified all 384 current object lengths and server SHA256 values before timing. No fixture regeneration, upload, full-table rehash or reader rebuild.",
+    "host_load": {
+      "user_report": "Other tasks were reported complete before this repeat.",
+      "first_ns": 1791493062760202425,
+      "last_ns": 1791493534164808691,
+      "interval_seconds": 5,
+      "snapshots": 95,
+      "snapshots_with_builds": 0,
+      "monitor_sha256": "9e5576471d6e7d16eec90f2249d8a0fc5209f2d39642f9dab3e36376fa9e0f30",
+      "scope": "Compiler-process polling and host CPU/load observations throughout the campaign. No compiler activity was detected; this is not exclusive CPU reservation."
+    },
+    "fixture_verification": {
+      "fixtures": [
+        {
+          "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+          "object_bytes": 70972418471,
+          "objects": 262,
+          "source_upload": "/home/hanbo/repo/selective-read-intra-page-full-20261007/upload-q2.json",
+          "source_upload_sha256": "e2d965a0b7601883a2ed9bb56c1a203bafadfaf55faad2c03d28b9a490dc727c",
+          "verification": "Every current object length and server FULL_OBJECT SHA256 match the retained upload receipt.",
+          "verified_ns": 1791492992982552168
+        },
+        {
+          "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+          "object_bytes": 32463889602,
+          "objects": 122,
+          "source_upload": "/home/hanbo/repo/selective-read-intra-page-full-20261007/upload-q4.json",
+          "source_upload_sha256": "b00eb912d2bebe8164390c5d371e738c10b03b9cb5a06258ee47a3ba622ff917",
+          "verification": "Every current object length and server FULL_OBJECT SHA256 match the retained upload receipt.",
+          "verified_ns": 1791492993087009781
+        }
+      ],
+      "server_sha256": "60ea29c478181a645037b421c3a7033e13e7b0285525ea2d01b98a5fb972580d"
+    },
+    "experiments": {
+      "416-primary": {
+        "experiment_sha256": "90a47d28f75b74debba25e18ec6d700b9b8b8cd48f41956792be2b291b847393",
+        "network_proxy_binary_sha256": "b82acaf906dd87a63f79a573c6e78546d830fdd6db11a412f57ede6023ba976c",
+        "correctness_sha256": {
+          "off": "8993a59ee25f44edfc7b9df21c41fe0b679c48647fc3ecc49dc6f26e340e2d33",
+          "auto": "5d65f41ab51389af206f460bfc53262fc02b9bd7f75607c621c763f326d8a682"
+        },
+        "validation_fallback_reasons": {
+          "selection_or_layout_ineligible": 10,
+          "profile_predicts_no_savings": 10
+        },
+        "validation_network_profile": [
+          "2026-10-08T20:58:10.710911Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed status=\"complete\" elapsed_micros=2010673 requests=396 bytes_received=14155776 request_latency_micros=211960 throughput_bytes_per_second=18673121 request_overhead_bytes=9090"
+        ]
+      },
+      "90-primary": {
+        "experiment_sha256": "953b244d7a4d2b716ca4403c09fd6d08b36e7388ce212be15f672d236c0d583d",
+        "network_proxy_binary_sha256": "b82acaf906dd87a63f79a573c6e78546d830fdd6db11a412f57ede6023ba976c",
+        "correctness_sha256": {
+          "off": "39200e7bb86d6d4d0e32e74fe2ce24f3fb7047c6fe6a399a3dedd863900f8314",
+          "auto": "a8453e1d9ae10dad9548a2cb8dff807aaa8f3fd970cb31671eb5af09e1f074a7"
+        },
+        "validation_fallback_reasons": {
+          "selection_or_layout_ineligible": 12,
+          "none": 36
+        },
+        "validation_network_profile": [
+          "2026-10-08T21:01:41.387330Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed status=\"complete\" elapsed_micros=1977819 requests=396 bytes_received=14155776 request_latency_micros=217697 throughput_bytes_per_second=18731443 request_overhead_bytes=5378"
+        ]
+      }
+    },
+    "findings": "All three 416-column automatic sessions retained ordinary query I/O. All three 90-column automatic sessions read fewer Parquet bytes. The 416-column validation profile completed but rejected partial reads before probes because predicted savings did not clear the 10% margin; timing runs do not emit decision logs."
+  }
 }
