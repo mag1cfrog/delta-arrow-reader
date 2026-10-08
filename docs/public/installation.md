@@ -81,8 +81,10 @@ python3 -m venv target/python-venv
 python -m pip install ./crates/delta-arrow-reader-python
 ```
 
-Installation also installs PyArrow 18 or newer. To read a table, replace
-`/path/to/delta-table` with an existing local Delta table:
+Installation also installs PyArrow 18 or newer. The [Python quickstart](python.md)
+uses a sample table included in the repository.
+
+To read your own table, replace `/path/to/delta-table` with its local path:
 
 ```python
 from pathlib import Path
