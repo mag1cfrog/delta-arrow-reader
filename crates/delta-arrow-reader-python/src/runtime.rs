@@ -61,9 +61,46 @@ mod tests {
         time::Duration,
     };
 
+    use pyo3::{exceptions::PyKeyboardInterrupt, prelude::*};
+
     use super::Runtime;
 
     const TIMEOUT: Duration = Duration::from_secs(10);
+
+    #[test]
+    fn interruption_drops_pending_work_and_keeps_runtime_usable() {
+        // Initialize and check signals on the same thread, Python's main thread.
+        Python::initialize();
+        Python::attach(|py| {
+            let signal = py.import("signal").unwrap();
+            let sigint = signal.getattr("SIGINT").unwrap();
+            let previous = signal
+                .call_method1(
+                    "signal",
+                    (&sigint, signal.getattr("default_int_handler").unwrap()),
+                )
+                .unwrap();
+            let runtime = Runtime::new().unwrap();
+            let (release, pending) = tokio::sync::oneshot::channel::<()>();
+            let (admit, work) = mpsc::channel();
+            let error = runtime
+                .wait(py, async move {
+                    // SAFETY: PyErr_SetInterrupt may be called without the GIL.
+                    unsafe { pyo3::ffi::PyErr_SetInterrupt() };
+                    // Bound the test if signal handling regresses.
+                    let _ = tokio::time::timeout(TIMEOUT, pending).await;
+                    admit.send(()).unwrap();
+                })
+                .unwrap_err();
+            assert!(error.is_instance_of::<PyKeyboardInterrupt>(py));
+            // Both channel endpoints owned by the future must be gone already.
+            assert!(release.send(()).is_err());
+            assert_eq!(work.try_recv(), Err(mpsc::TryRecvError::Disconnected));
+            assert_eq!(runtime.wait(py, async { 42 }).unwrap(), 42);
+
+            signal.call_method1("signal", (sigint, previous)).unwrap();
+        });
+    }
 
     #[test]
     fn retained_owner_keeps_runtime_usable() {
