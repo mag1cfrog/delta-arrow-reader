@@ -1,5 +1,5 @@
 [build-system]
-requires = ["maturin>=1.13,<2"]
+requires = ["maturin>=1.14,<2"]
 build-backend = "maturin"
 
 [project]
@@ -17,3 +17,5 @@ Issues = "https://github.com/mag1cfrog/delta-arrow-reader/issues"
 
 [tool.maturin]
 bindings = "pyo3"
+# Keep stubs beside pyproject.toml when Maturin relocates it to the sdist root.
+include = [{ path = "delta_arrow_reader.pyi", format = "sdist" }]
