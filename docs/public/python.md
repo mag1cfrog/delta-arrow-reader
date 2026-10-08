@@ -50,6 +50,30 @@ snapshot, even if refresh fails. If no new commits exist, the returned table has
 the same version. To select a specific version, use
 `DeltaTable(location, version=0)`.
 
+## Filter null values
+
+Both `scan()` and `to_reader()` accept `filters`. Use `"is"` with `None` to select
+null values, or `"is not"` with `None` to select non-null values:
+
+```python
+with table.to_reader(
+    columns=["id"], filters=[("label", "is not", None)], limit=10,
+) as reader:
+    print(reader.read_all().to_pydict())
+```
+
+A list of `(column, operator, value)` tuples combines conditions with AND.
+A list of lists combines AND groups with OR. For example,
+`[[("label", "is", None)], [("region", "is", None)]]` selects rows where either
+column is null. Omitting `filters`, passing `None`, or passing `[]` disables
+filtering. An empty inner AND group is true, so `[[]]` selects every row.
+
+Filters use top-level logical column names, including columns omitted from the
+output. They apply before `limit`, and deleted rows remain excluded. Malformed
+groups and non-string column names or operators raise `TypeError`. Unknown
+operators and null tests with a value other than `None` raise `ValueError`.
+Invalid column references raise a redacted `DeltaReaderError`.
+
 ## Prepare metadata for repeated scans
 
 Use `warmup="query_planning"` to load and retain active-file metadata during table

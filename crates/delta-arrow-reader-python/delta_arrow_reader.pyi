@@ -7,6 +7,8 @@ import pyarrow
 
 __version__: str
 
+_Filter = tuple[str, Literal["is", "is not"], None]
+
 class DeltaReaderError(Exception):
     phase: str
     code: str
@@ -67,12 +69,14 @@ class DeltaTable:
     def __arrow_c_schema__(self) -> object: ...
     def scan(
         self, *, columns: list[str] | tuple[str, ...] | None = None,
+        filters: list[_Filter] | list[list[_Filter]] | None = None,
         limit: int | None = None,
         target_partitions: int | None = None,
         execution_options: ScanExecutionOptions | None = None,
     ) -> RecordBatchStream: ...
     def to_reader(
         self, *, columns: list[str] | tuple[str, ...] | None = None,
+        filters: list[_Filter] | list[list[_Filter]] | None = None,
         limit: int | None = None,
         target_partitions: int | None = None,
         execution_options: ScanExecutionOptions | None = None,

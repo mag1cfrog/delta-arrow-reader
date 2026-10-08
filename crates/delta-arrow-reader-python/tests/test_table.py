@@ -392,6 +392,105 @@ class TableTests(unittest.TestCase):
                                 self.assertEqual(batch.num_columns, 0)
                                 self.assertGreater(batch.num_rows, 0)
 
+    def test_null_filter_groups_preserve_projection_limits_and_deletion_vectors(self):
+        corpus = (Path(__file__).resolve().parents[3]
+                  / "tests/reader/fixtures/external_writer/corpus")
+        manifest = json.loads((corpus / "manifest.json").read_text(encoding="utf-8"))
+        for fixture in manifest["fixtures"]:
+            directory = corpus / fixture["name"]
+            with pa.ipc.open_file(directory / fixture["expected_schema_and_rows"]) as source:
+                rows = source.read_all().to_pylist()
+            all_ids = [row["id"] for row in rows]
+            null_ids = [row["id"] for row in rows if row["value"] is None]
+            non_null_ids = [row["id"] for row in rows if row["value"] is not None]
+            cases = (
+                (None, all_ids), ([], all_ids), ([[]], all_ids),
+                ([("value", "is", None)], null_ids),
+                ([("value", "is not", None)], non_null_ids),
+                ([("value", "is", None), ("id", "is not", None)], null_ids),
+                ([("value", "is", None), ("value", "is not", None)], []),
+                ([[("value", "is", None), ("id", "is not", None)],
+                  [("value", "is not", None)]], all_ids),
+                ([[("value", "is", None)], []], all_ids),
+            )
+            table = DeltaTable(directory / "table")
+            for method, backend, columns, limit in product(
+                ("scan", "to_reader"), ("direct", "delta_kernel"), (["id"], []), (None, 1),
+            ):
+                for filters, expected_ids in cases:
+                    with self.subTest(fixture=fixture["name"], method=method, backend=backend,
+                                      columns=columns, limit=limit, filters=filters):
+                        result = getattr(table, method)(
+                            columns=columns, filters=filters, limit=limit,
+                            execution_options=ScanExecutionOptions(parquet_backend=backend),
+                        )
+                        reader = (pa.RecordBatchReader.from_stream(result)
+                                  if method == "scan" else result)
+                        with reader:
+                            actual = reader.read_all()
+                        self.assertEqual(actual.schema.names, columns)
+                        self.assertEqual(actual.num_rows, len(expected_ids) if limit is None
+                                         else min(limit, len(expected_ids)))
+                        if columns:
+                            actual_ids = actual.column("id").to_pylist()
+                            if limit is None:
+                                self.assertCountEqual(actual_ids, expected_ids)
+                            else:
+                                self.assertTrue(set(actual_ids) <= set(expected_ids))
+
+    def test_filter_validation_is_shared_and_redacted_before_planning(self):
+        class SecretValue:
+            def __str__(self):
+                raise AssertionError("filter values must not be stringified")
+
+            __repr__ = __str__
+
+        table = DeltaTable(self.location)
+        (self.log / f"{0:020}.json").unlink()
+        malformed = (
+            True, 1, "secret-filter", {}, ("id", "is", None),
+            [("id", "is")], [("id", "is", None, "secret-extra")],
+            [["id", "is", None]], [[[("id", "is", None)]]],
+            [("id", "is", None), [("id", "is", None)]],
+            [[("id", "is", None)], ("id", "is", None)],
+            [(1, "is", None)], [(b"id", "is", None)],
+            [("id", 1, None)], [("id", b"is", None)],
+            [[], [("id", "is")]],
+        )
+        invalid = (
+            [("id", "secret-operator", None)], [("id", "IS", None)],
+            [("id", "is", 1)], [("id", "is not", "secret-value")],
+            [("id", "is", SecretValue())],
+        )
+        for method in (table.scan, table.to_reader):
+            for cases, error_type in ((malformed, TypeError), (invalid, ValueError)):
+                for index, filters in enumerate(cases):
+                    with self.subTest(method=method.__name__, error_type=error_type, index=index):
+                        with self.assertRaises(error_type) as caught:
+                            method(filters=filters)
+                        self.assertNotIn("secret", str(caught.exception))
+            for column in ("", "missing-secret", "id.secret"):
+                for filters in ([(column, "is", None)], [[], [(column, "is not", None)]]):
+                    with self.subTest(method=method.__name__, column=column):
+                        with self.assertRaises(DeltaReaderError) as caught:
+                            method(filters=filters)
+                        self.assertEqual(caught.exception.phase, "scan_planning")
+                        self.assertEqual(caught.exception.code, "unsupported_predicate")
+                        self.assertNotIn("secret", str(caught.exception))
+
+    def test_filter_inputs_are_copied_before_returning_a_reader(self):
+        self.write_log(1, self.write_parquet("rows.parquet", [1, 2]))
+        table = DeltaTable(self.location)
+        for method in ("scan", "to_reader"):
+            with self.subTest(method=method):
+                filters = [[("id", "is", None)]]
+                result = getattr(table, method)(filters=filters)
+                filters[0].clear()
+                reader = (pa.RecordBatchReader.from_stream(result)
+                          if method == "scan" else result)
+                with reader:
+                    self.assertEqual(reader.read_all().num_rows, 0)
+
     def test_zero_limit_preserves_schema_without_reading_data_files(self):
         self.write_log(1, self.write_parquet("rows.parquet", [1, 2]))
         (self.location / "rows.parquet").unlink()
