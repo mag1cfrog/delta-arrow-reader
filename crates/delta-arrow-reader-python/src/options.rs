@@ -50,6 +50,8 @@ fn optional_positive_usize(value: &Bound<'_, PyAny>) -> PyResult<Option<usize>> 
 /// and accepts the same positive integer range as the per-partition read limit.
 /// prefetch_files_per_partition defaults to 2 future files for the direct backend.
 /// It accepts nonnegative integers fitting usize; 0 disables file prefetch.
+/// parquet_metadata_size_hint_bytes defaults to 65536 for the direct backend.
+/// Explicit None disables the hint; supplied integers must be positive and fit usize.
 #[pyclass(module = "delta_arrow_reader", frozen)]
 pub(crate) struct ScanExecutionOptions {
     pub(crate) options: DeltaScanExecutionOptions,
@@ -65,6 +67,7 @@ impl ScanExecutionOptions {
         max_concurrent_file_reads_per_partition=DeltaScanExecutionOptions::new().max_concurrent_file_reads_per_partition(),
         output_buffer_batches_per_partition=DeltaScanExecutionOptions::new().output_buffer_batches_per_partition(),
         prefetch_files_per_partition=DeltaScanExecutionOptions::new().prefetch_files_per_partition(),
+        parquet_metadata_size_hint_bytes=DeltaScanExecutionOptions::new().parquet_metadata_size_hint_bytes(),
     ))]
     fn new(
         parquet_backend: &str,
@@ -74,6 +77,9 @@ impl ScanExecutionOptions {
         #[pyo3(from_py_with = positive_usize)] max_concurrent_file_reads_per_partition: usize,
         #[pyo3(from_py_with = positive_usize)] output_buffer_batches_per_partition: usize,
         #[pyo3(from_py_with = nonnegative_usize)] prefetch_files_per_partition: usize,
+        #[pyo3(from_py_with = optional_positive_usize)] parquet_metadata_size_hint_bytes: Option<
+            usize,
+        >,
     ) -> PyResult<Self> {
         let backend = match parquet_backend {
             "direct" => ParquetReaderBackend::Direct,
@@ -95,7 +101,9 @@ impl ScanExecutionOptions {
                 .map_err(|error| PyValueError::new_err(error.to_string()))?
                 .with_output_buffer_batches_per_partition(output_buffer_batches_per_partition)
                 .map_err(|error| PyValueError::new_err(error.to_string()))?
-                .with_prefetch_files_per_partition(prefetch_files_per_partition),
+                .with_prefetch_files_per_partition(prefetch_files_per_partition)
+                .with_parquet_metadata_size_hint_bytes(parquet_metadata_size_hint_bytes)
+                .map_err(|error| PyValueError::new_err(error.to_string()))?,
         })
     }
 
@@ -125,5 +133,10 @@ impl ScanExecutionOptions {
     #[getter]
     fn prefetch_files_per_partition(&self) -> usize {
         self.options.prefetch_files_per_partition()
+    }
+
+    #[getter]
+    fn parquet_metadata_size_hint_bytes(&self) -> Option<usize> {
+        self.options.parquet_metadata_size_hint_bytes()
     }
 }

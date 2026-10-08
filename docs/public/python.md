@@ -178,6 +178,27 @@ through `2 * sys.maxsize + 1`. `None`, booleans, and other types raise `TypeErro
 negative values raise `ValueError`, and values above the maximum raise
 `OverflowError`.
 
+## Set the Parquet metadata size hint
+
+`parquet_metadata_size_hint_bytes` controls how many bytes the `"direct"` backend
+initially requests from the end of each Parquet file to load its metadata.
+Omitting it keeps the Rust default of `65536` bytes. Pass `None` to disable the
+hint:
+
+```python
+no_metadata_hint = ScanExecutionOptions(parquet_metadata_size_hint_bytes=None)
+with table.to_reader(execution_options=no_metadata_hint) as reader:
+    print(reader.read_all().num_rows)
+```
+
+The reader fetches more bytes if the initial request does not contain all the
+metadata. It always requests at least the 8-byte Parquet footer and never requests
+beyond the file. The `"delta_kernel"` backend ignores this hint.
+
+A supplied integer must be from `1` through `2 * sys.maxsize + 1`. Booleans and
+other types raise `TypeError`, zero and negative values raise `ValueError`, and
+values above the maximum raise `OverflowError`.
+
 ## Use the Arrow stream interface and stop early
 
 `to_reader()` returns a `pyarrow.RecordBatchReader`. You can also construct one
