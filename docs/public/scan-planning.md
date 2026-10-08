@@ -34,7 +34,7 @@ the [metadata warmup lifecycles](https://mag1cfrog.github.io/delta-arrow-reader/
 For remote storage, `WarmupMode::Network` also measures transfer speed and
 request costs before the first query:
 
-```rust,no_run
+```no_run
 # use delta_arrow_reader::{DeltaTableBuilder, WarmupMode};
 # async fn example() -> Result<(), delta_arrow_reader::DeltaReaderError> {
 let table = DeltaTableBuilder::new("s3://bucket/table")
