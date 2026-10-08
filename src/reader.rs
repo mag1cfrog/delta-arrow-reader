@@ -28,6 +28,7 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
+    time::Duration,
 };
 
 use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};
@@ -35,6 +36,7 @@ use futures_util::Stream;
 use snafu::ResultExt;
 
 use self::{
+    backend::direct_parquet::ParquetRangeReadEstimator,
     planning::{
         DeltaScanPartitionTargetOptions, DeltaScanPlan, build_physical_row_predicate, plan_scan,
     },
@@ -74,6 +76,16 @@ pub enum WarmupMode {
     None,
     /// Loads and retains the active-file metadata used during query planning.
     QueryPlanning,
+    /// Retains query-planning metadata and samples remote data-file reads.
+    ///
+    /// The time limit applies to network sampling, after metadata loading. Sampling is
+    /// best effort, uses at most three files, and schedules at most 13.5 MiB of payload.
+    /// Only the Direct backend with an automatic range policy on a built-in remote
+    /// store performs network sampling. Other settings keep metadata warmup only.
+    Network {
+        /// Maximum time spent sampling network reads. Zero skips sampling.
+        max_duration: Duration,
+    },
 }
 
 /// Configures and loads one immutable Delta table snapshot.
@@ -191,7 +203,18 @@ impl DeltaTableBuilder {
             validate_protocol(snapshot.protocol())?;
             materialize_eager_scan_metadata(snapshot).await?
         };
-        Ok(DeltaTable::new(snapshot, self.execution_options))
+        let mut table = DeltaTable::new(snapshot, self.execution_options);
+        if let WarmupMode::Network { max_duration } = self.warmup
+            && let Some(estimator) = backend::direct_parquet::warmup_network(
+                table.snapshot.as_ref(),
+                self.execution_options,
+                max_duration,
+            )
+            .await
+        {
+            table.range_read_estimator = estimator;
+        }
+        Ok(table)
     }
 
     /// Loads a Delta Kernel snapshot without converting its logical Arrow schema.
@@ -304,6 +327,7 @@ impl fmt::Debug for DeltaTableSnapshot {
 pub struct DeltaTable {
     snapshot: Arc<ArrowTableSnapshot>,
     execution_options: DeltaScanExecutionOptions,
+    range_read_estimator: Arc<ParquetRangeReadEstimator>,
 }
 
 impl DeltaTable {
@@ -311,6 +335,7 @@ impl DeltaTable {
         Self {
             snapshot: Arc::new(snapshot),
             execution_options,
+            range_read_estimator: Arc::default(),
         }
     }
 
@@ -370,7 +395,11 @@ impl DeltaTable {
                 reason: "snapshot_refresh_task_failed",
             })
             .and_then(|result| result)?;
-        Ok(Self::new(snapshot, self.execution_options))
+        Ok(Self {
+            snapshot: Arc::new(snapshot),
+            execution_options: self.execution_options,
+            range_read_estimator: Arc::clone(&self.range_read_estimator),
+        })
     }
 
     /// Starts configuring a new single-use scan.
@@ -531,6 +560,7 @@ impl<'table> DeltaScanBuilder<'table> {
                     predicate,
                     limit: self.limit,
                     physical_row_predicate,
+                    range_read_estimator: Arc::clone(&self.table.range_read_estimator),
                 })
             }
             Err(error) => {
@@ -567,6 +597,7 @@ pub struct DeltaScan {
     predicate: Option<DeltaPredicate>,
     limit: Option<usize>,
     physical_row_predicate: Option<DeltaKernelPredicate>,
+    range_read_estimator: Arc<ParquetRangeReadEstimator>,
 }
 
 impl DeltaScan {
@@ -598,7 +629,13 @@ impl DeltaScan {
             let admission: FileAdmissionPolicy<_> = Arc::new(|_| Ok(FileAdmissionDecision::Admit));
             let executor = match backend {
                 ParquetReaderBackend::Direct => {
-                    direct_parquet_executor(&self.plan, None, self.physical_row_predicate)
+                    backend::direct_parquet::direct_parquet_file_executor(
+                        &self.plan,
+                        None,
+                        self.physical_row_predicate,
+                        self.range_read_estimator,
+                        None,
+                    )
                 }
                 ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.plan),
             };
@@ -764,20 +801,6 @@ impl Drop for DeltaBatchStream {
         self.done = true;
         trace_execution_dropped(self.snapshot_version, self.backend, self.partition_count);
     }
-}
-
-pub(crate) fn direct_parquet_executor(
-    plan: &Arc<DeltaScanPlan>,
-    output_batch_size_rows: Option<usize>,
-    row_predicate: Option<crate::delta::kernel::DeltaKernelPredicate>,
-) -> FileExecutor<planning::DeltaScanFileTask, FileBatchStream> {
-    backend::direct_parquet::direct_parquet_file_executor(
-        plan,
-        output_batch_size_rows,
-        row_predicate,
-        Arc::default(),
-        None,
-    )
 }
 
 pub(crate) fn delta_kernel_executor(

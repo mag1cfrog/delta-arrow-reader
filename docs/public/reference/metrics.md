@@ -91,8 +91,8 @@ are not network billing counters.
 - Partial-page rounds contribute their unmerged requested ranges and selected
   physical plans to the byte and request counters. Their decisions use the
   `delta_arrow_reader::diagnostics::intra_page` tracing target instead of the
-  ordinary plan decision counters. Request waves use each round's reserved
-  concurrency.
+  ordinary plan decision counters. Planned request waves use each round's
+  concurrency limit. Shared capacity can add queueing time during execution.
 - For visible plans with requested bytes, aggregate byte amplification is
   `parquet_data_file_physical_range_bytes_planned` divided by
   `parquet_data_file_exact_range_bytes_requested`. Calculate the ratio from the

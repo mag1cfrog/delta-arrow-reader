@@ -56,13 +56,16 @@ their ordinary behavior.
 Fewer bytes can mean more requests. The reader uses latency and throughput
 observed during ordinary queries to compare partial reads with complete pages,
 including probes and dependent request rounds. Partial reads must save more than
-10% of the estimated cost. Missing evidence, dense selections or unavailable
-shared request capacity retain ordinary reads, so enabling the option may have
-no effect on a cold or local scan. It sends no calibration requests.
+10% of the estimated cost. Missing evidence, dense selections or uncertain
+savings retain ordinary reads, so enabling the option may have
+no effect on a cold or local scan. Enabling this scan option adds no calibration
+requests. To sample remote storage before querying, separately select
+[`WarmupMode::Network`](../scan-planning.md#choose-a-warmup-mode) during table loading.
 
-Probes and selected data share the original page request's byte budget. Each
-round reserves free capacity from a process-wide ceiling of 512 planned range
-reads, shared with ordinary reads; 512 is not a per-file target. Compare elapsed
+Probes and selected data share the original page request's byte budget. Planned
+range requests share a process-wide ceiling of 512 concurrent reads. Each request
+waits for one slot and releases it when its response finishes, including retries.
+Ordinary plans retain their per-plan limit of 10. Compare elapsed
 time and request counts before enabling this experimental option for a workload.
 
 ## DataFusion scan options
