@@ -1105,16 +1105,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn provider_scopes_the_range_estimator_and_repartitioning_creates_a_metadata_cache()
+    async fn table_scopes_the_range_estimator_and_repartitioning_creates_a_metadata_cache()
     -> TestResult {
         let fixture = TestTable::partitioned("shared-range-read-estimator")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let provider = DeltaTableProvider::try_new(table.clone(), ScanOptions::default())?;
-        let separate_provider = DeltaTableProvider::try_new(table, ScanOptions::default())?;
+        let shared_provider = DeltaTableProvider::try_new(table.clone(), ScanOptions::default())?;
+        let separate_table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
+        let separate_provider =
+            DeltaTableProvider::try_new(separate_table, ScanOptions::default())?;
         let context = SessionContext::new();
 
         let first = provider.scan(&context.state(), None, &[], None).await?;
         let second = provider.scan(&context.state(), None, &[], None).await?;
+        let shared = shared_provider
+            .scan(&context.state(), None, &[], None)
+            .await?;
         let separate = separate_provider
             .scan(&context.state(), None, &[], None)
             .await?;
@@ -1139,6 +1145,24 @@ mod tests {
         assert!(Arc::ptr_eq(
             &first.range_read_estimator,
             &second.range_read_estimator
+        ));
+        let shared = shared
+            .as_ref()
+            .downcast_ref::<DeltaScanExec>()
+            .ok_or("expected shared scan")?;
+        assert!(Arc::ptr_eq(
+            &first.range_read_estimator,
+            &shared.range_read_estimator
+        ));
+        let native = table.scan().build().await?;
+        let refreshed = table.refresh().await?;
+        assert!(Arc::ptr_eq(
+            &first.range_read_estimator,
+            &native.range_read_estimator
+        ));
+        assert!(Arc::ptr_eq(
+            &first.range_read_estimator,
+            &refreshed.range_read_estimator
         ));
         assert!(Arc::ptr_eq(
             &first.range_read_estimator,

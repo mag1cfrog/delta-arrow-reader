@@ -11,6 +11,7 @@ use super::super::compact_thrift::{invalid_metadata, read_field, read_i64};
 pub(super) const MAX_PAGE_BYTES: usize = 8 * 1024 * 1024;
 pub(super) const MAX_PAGE_ROWS: usize = 1024 * 1024;
 pub(super) const PAGE_PREFIX_BYTES: u64 = 4096;
+pub(super) const MAX_ZSTD_BLOCK_BYTES: usize = 131_072;
 
 pub(super) struct Page {
     pub(super) range: Range<u64>,
@@ -304,7 +305,7 @@ fn parse_zstd_blocks(
             _ => return Err(Unsupported),
         }
         let size = (header >> 3) as usize;
-        if size > 131_072
+        if size > MAX_ZSTD_BLOCK_BYTES
             || offset + 3 + size as u64 > body.end
             || decoded + size > uncompressed_size
         {

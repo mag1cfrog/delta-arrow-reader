@@ -4,7 +4,7 @@ use std::{future::Future, ops::Range, time::Duration};
 
 use bytes::Bytes;
 use futures_util::{StreamExt, TryStreamExt, stream};
-use tokio::sync::{Semaphore, SemaphorePermit};
+use tokio::sync::Semaphore;
 
 use crate::reader::options::MAX_CONCURRENT_PARQUET_RANGE_READS;
 
@@ -15,22 +15,6 @@ pub(super) const DECISION_MARGIN_PERCENT: u128 = 10;
 // A process-wide ceiling, not a concurrency target for each file or scan.
 pub(super) const MAX_SHARED_RANGE_READS: usize = 512;
 pub(super) static RANGE_READ_PERMITS: Semaphore = Semaphore::const_new(MAX_SHARED_RANGE_READS);
-
-/// Reserve currently free capacity without queuing speculative partial reads.
-/// Each dependent round reserves only the capacity its requests can use.
-pub(super) fn reserve_partial_read_capacity(
-    budget: &Semaphore,
-    request_count: usize,
-) -> Option<SemaphorePermit<'_>> {
-    let available = budget
-        .available_permits()
-        .min(MAX_SHARED_RANGE_READS)
-        .min(request_count);
-    if available == 0 && request_count != 0 {
-        return None;
-    }
-    budget.try_acquire_many(available as u32).ok()
-}
 
 /// Recent transport conditions used to compare physical range-read plans.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -281,7 +265,34 @@ pub(super) fn plan_score(
     )
 }
 
-/// Chooses a physical plan within a byte budget using the available concurrency.
+/// Scores pipelined partial reads in shared-bandwidth byte units.
+///
+/// Requests waiting for their first byte can overlap other responses. One
+/// request, one wave, or concurrency one still pays latency plus transfer time.
+pub(super) fn partial_plan_cost(
+    bytes: u128,
+    requests: usize,
+    estimate: TransportEstimate,
+    concurrency: usize,
+    request_overhead_bytes: u128,
+) -> u128 {
+    let latency = bandwidth_delay_bytes(estimate);
+    let waves = request_waves(requests, concurrency) as u128;
+    let latency_cost = latency.saturating_mul(waves);
+    // ponytail: approximate steady pipelining; unequal range sizes can reduce overlap.
+    let overlap = (bytes.saturating_mul(concurrency.saturating_sub(1) as u128)
+        / concurrency.max(1) as u128)
+        .min(latency_cost.saturating_sub(latency));
+    let transport_cost = bytes.saturating_add(latency_cost).saturating_sub(overlap);
+    // Request handling and transport run concurrently. Completion intervals
+    // already include small-response delivery, so adding the costs counts it twice.
+    let processing_cost = request_overhead_bytes
+        .saturating_mul(requests as u128)
+        .saturating_add(if requests == 0 { 0 } else { latency });
+    transport_cost.max(processing_cost)
+}
+
+/// Chooses a physical plan within a byte budget and concurrency limit.
 ///
 /// Merging the cheapest gaps minimizes bytes at each request count. Score those
 /// counts, including observed per-request overhead, then build only the winner.
@@ -304,11 +315,8 @@ pub(super) fn choose_bounded_range_plan(
         .collect();
     gaps.sort_unstable();
     let mut bytes = exact_bytes;
-    let wave_cost = bandwidth_delay_bytes(estimate);
-    let cost = |bytes: u128, count| {
-        bytes
-            .saturating_add(wave_cost.saturating_mul(request_waves(count, concurrency) as u128))
-            .saturating_add(request_overhead_bytes.saturating_mul(count as u128))
+    let cost = |bytes, count| {
+        partial_plan_cost(bytes, count, estimate, concurrency, request_overhead_bytes)
     };
     let mut scores = vec![cost(bytes, exact.len())];
     for (merged, (gap, _)) in gaps.iter().enumerate() {
@@ -363,7 +371,7 @@ pub(super) fn bandwidth_delay_bytes(estimate: TransportEstimate) -> u128 {
 
 /// Executes an already chosen physical plan and returns one result for each requested range.
 ///
-/// Physical reads run within the caller's reserved concurrency. Results are sliced
+/// Physical reads run within the caller's concurrency limit. Results are sliced
 /// back into the caller's original order, including duplicate
 /// and overlapping requests.
 pub(super) async fn execute_range_plan<F, E, Fut>(
@@ -508,7 +516,24 @@ mod tests {
     }
 
     #[test]
-    fn bounded_plans_trade_bytes_for_waves_with_the_reserved_capacity() {
+    fn partial_cost_accounts_for_overlap_without_hiding_serial_latency() {
+        use super::partial_plan_cost;
+        let estimate = TransportEstimate {
+            request_latency: Duration::from_millis(100),
+            shared_throughput_bytes_per_second: 1_000,
+        };
+        assert_eq!(partial_plan_cost(0, 0, estimate, 4, 0), 0);
+        assert_eq!(partial_plan_cost(400, 1, estimate, 4, 0), 500);
+        assert_eq!(partial_plan_cost(400, 4, estimate, 4, 0), 500);
+        assert_eq!(partial_plan_cost(400, 8, estimate, 1, 0), 1_200);
+        assert_eq!(partial_plan_cost(400, 8, estimate, 4, 0), 500);
+        assert_eq!(partial_plan_cost(4, 4, estimate, 2, 0), 202);
+        assert_eq!(partial_plan_cost(4, 4, estimate, 2, 10), 202);
+        assert_eq!(partial_plan_cost(4, 4, estimate, 2, 100), 500);
+    }
+
+    #[test]
+    fn bounded_plans_trade_bytes_for_waves_with_the_concurrency_limit() {
         use super::choose_bounded_range_plan;
         let ranges = spaced_ranges(&[900; 10]);
         let slow = TransportEstimate {
@@ -545,11 +570,10 @@ mod tests {
         assert!(choose_bounded_range_plan(&ranges, slow, 1, 1_099, 0).is_none());
         assert!(choose_bounded_range_plan(&ranges, slow, 0, 10_100, 0).is_none());
         assert_eq!(choose_bounded_range_plan(&[], slow, 0, 0, 0), Some(vec![]));
-        // Even one wave can be expensive when each request adds processing work.
-        // The ten-percent margin still favors leaving the last gap unread.
+        // Balance processing capacity against transfer time, including in one wave.
         assert_eq!(
             choose_bounded_range_plan(&ranges, slow, 11, 10_100, 2_000),
-            Some(vec![0..9_100, 10_000..10_100])
+            Some(vec![0..7_100, 8_000..8_100, 9_000..9_100, 10_000..10_100])
         );
     }
 
@@ -592,7 +616,13 @@ mod tests {
                         overhead,
                     );
                     let score = |plan: &Vec<Range<u64>>| {
-                        plan_score(plan, estimate, concurrency) + overhead * plan.len() as u128
+                        super::partial_plan_cost(
+                            range_bytes(plan),
+                            plan.len(),
+                            estimate,
+                            concurrency,
+                            overhead,
+                        )
                     };
                     let Some(best) = candidates.iter().map(score).min() else {
                         assert!(actual.is_none());
@@ -611,26 +641,6 @@ mod tests {
                 }
             }
         }
-    }
-
-    #[tokio::test]
-    async fn shared_capacity_reservations_do_not_queue_and_release_on_cancellation() {
-        use super::reserve_partial_read_capacity;
-        use tokio::sync::Semaphore;
-        let budget = Semaphore::new(4);
-        let first = reserve_partial_read_capacity(&budget, 3).expect("free capacity");
-        let second = reserve_partial_read_capacity(&budget, 3).expect("remaining capacity");
-        assert_eq!((first.num_permits(), second.num_permits()), (3, 1));
-        assert!(reserve_partial_read_capacity(&budget, 1).is_none());
-        // Ordinary reads wait on the same budget. Cancelling a waiter releases
-        // its place in Tokio's queue; cancelling a holder drops its permits.
-        let mut waiting = Box::pin(budget.acquire_many(2));
-        assert!(futures_util::poll!(&mut waiting).is_pending());
-        drop(waiting);
-        drop(first);
-        assert_eq!(budget.available_permits(), 3);
-        drop(second);
-        assert_eq!(budget.available_permits(), 4);
     }
 
     #[test]

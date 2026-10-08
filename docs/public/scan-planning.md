@@ -21,8 +21,8 @@ retained metadata to Delta Kernel through `Scan::scan_metadata_from`; Delta
 Kernel remains responsible for applying the query predicate and selecting
 files.
 
-Both modes produce the same file tasks. Partition values, schema transforms,
-and deletion-vector information follow the selected files in either mode.
+These modes produce the same file tasks. Partition values, schema transforms,
+and deletion-vector information follow the selected files in every mode.
 
 Query-planning warmup adds initialization time and retains metadata in memory.
 Use the [metadata comparison instructions](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/benchmarks/eager-metadata.md)
@@ -30,6 +30,36 @@ to measure whether it reduces total time for your queries.
 
 To see how this initialization choice plays out across several queries, follow
 the [metadata warmup lifecycles](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/).
+
+For remote storage, `WarmupMode::Network` also measures transfer speed and
+request costs before the first query:
+
+```rust,no_run
+# use delta_arrow_reader::{DeltaTableBuilder, WarmupMode};
+# async fn example() -> Result<(), delta_arrow_reader::DeltaReaderError> {
+let table = DeltaTableBuilder::new("s3://bucket/table")
+    .with_warmup(WarmupMode::Network {
+        max_duration: std::time::Duration::from_secs(5),
+    })
+    .load_table()
+    .await?;
+# Ok(())
+# }
+```
+
+The time limit covers network sampling after metadata loading. Sampling uses
+up to three active files of at least 4 MiB each, found in the retained metadata.
+It schedules 13.5 MiB across 396 range requests; store retries can add traffic.
+Timed-out, failed or insufficient samples are discarded without failing table
+loading. A zero duration skips sampling.
+
+Network warmup applies to the Direct backend's automatic range policy on
+built-in remote stores. Other settings retain metadata warmup only. The profile
+stays in memory and is shared by scans, table clones and refreshed snapshots.
+Uncontended reads keep updating it as conditions change. It can reject costly
+partial-page attempts before probing, but does not enable that experimental
+option or guarantee that every cost estimate is accurate. Include initialization
+in measurements to check whether warmup pays for your workload.
 
 ## Choose a partition target
 

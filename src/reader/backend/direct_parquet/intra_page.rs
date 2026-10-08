@@ -9,7 +9,7 @@ mod page;
 use std::{
     ops::Range,
     sync::{Arc, Mutex},
-    time::Instant,
+    time::Duration,
 };
 
 use arrow::{
@@ -29,14 +29,14 @@ use parquet::{
     errors::{ParquetError, Result},
     file::metadata::ParquetMetaData,
 };
-use tokio::sync::{Semaphore, SemaphorePermit};
+use tokio::sync::Semaphore;
 
 use super::{
     metered_object_store::MeteredParquetObjectStore,
     range_planning::{
-        DECISION_MARGIN_PERCENT, RANGE_READ_PERMITS, TransportEstimate, bandwidth_delay_bytes,
-        choose_bounded_range_plan, choose_range_plan, plan_score, range_bytes,
-        reserve_partial_read_capacity,
+        DECISION_MARGIN_PERCENT, MAX_SHARED_RANGE_READS, RANGE_READ_PERMITS, TransportEstimate,
+        bandwidth_delay_bytes, choose_bounded_range_plan, choose_range_plan, partial_plan_cost,
+        plan_score, range_bytes,
     },
 };
 use crate::reader::options::MAX_CONCURRENT_PARQUET_RANGE_READS;
@@ -230,21 +230,19 @@ impl IntraPageReader {
         requested_ranges: &[Range<u64>],
         ranges: Vec<Range<u64>>,
         cache: &mut RangeCache,
-        permits: &SemaphorePermit<'_>,
-    ) -> Result<()> {
-        let data = self
+        budget: &Semaphore,
+    ) -> Result<Option<Duration>> {
+        let (data, elapsed) = self
             .store
-            .read_partial_ranges(&self.path, requested_ranges, &ranges, permits)
+            .read_partial_ranges(&self.path, requested_ranges, &ranges, budget)
             .await
             .map_err(|error| ParquetError::External(Box::new(error)))?;
         cache.entries.extend(ranges.into_iter().zip(data));
-        Ok(())
+        Ok(elapsed)
     }
 
     async fn read_ranges(&mut self, ranges: Vec<Range<u64>>) -> Result<Vec<Bytes>> {
         let result = self.try_partial_read(&ranges).await?;
-        // Release the partial-read reservation before the ordinary path reserves
-        // its own capacity. No extra retries or detached reads are introduced.
         match result {
             Some(bytes) => Ok(bytes),
             None => self.inner.get_byte_ranges(ranges).await,
@@ -317,13 +315,83 @@ impl IntraPageReader {
                 ordinary_predicted_cost_bytes = ordinary_cost,
                 partial_predicted_cost_bytes = cost,
                 planned_bytes = bytes, planned_requests = requests, probe_rounds = rounds,
-                effective_concurrency = concurrency,
+                concurrency_limit = concurrency,
                 "Partial-page read decision");
         };
+        let overhead = self.store.request_overhead_bytes();
+        let mut request_overhead_bytes = overhead.unwrap_or(0);
+        if overhead.is_some() {
+            let Some(mut values) = estimated_value_ranges(pages, selected_rows) else {
+                return Ok(None);
+            };
+            values.extend_from_slice(&ordinary_ranges);
+            // Compare both plans in shared-capacity units. Splitting bandwidth
+            // per file while keeping all request slots would underprice small reads.
+            let concurrency = MAX_SHARED_RANGE_READS;
+            let Some(plan) = choose_bounded_range_plan(
+                &values,
+                estimate,
+                concurrency,
+                byte_budget,
+                request_overhead_bytes,
+            ) else {
+                return Ok(None);
+            };
+            let prefixes: Vec<_> = pages
+                .iter()
+                .map(|page| {
+                    page.range.start
+                        ..(page.range.start + page::PAGE_PREFIX_BYTES).min(page.range.end)
+                })
+                .collect();
+            // In a supported raw Zstd frame this large, at least one block header
+            // lies beyond the prefix. It needs a dependent probe before values.
+            let block_probes = pages
+                .iter()
+                .filter(|page| {
+                    matches!(page.compression, Compression::ZSTD(_))
+                        && page.range.end - page.range.start
+                            > page::PAGE_PREFIX_BYTES + page::MAX_ZSTD_BLOCK_BYTES as u64 + 3
+                })
+                .count();
+            let block_probe_bytes = block_probes as u128 * 3;
+            let cost = partial_plan_cost(
+                range_bytes(&plan),
+                plan.len(),
+                estimate,
+                concurrency,
+                request_overhead_bytes,
+            )
+            .saturating_add(partial_plan_cost(
+                range_bytes(&prefixes),
+                prefixes.len(),
+                estimate,
+                concurrency,
+                request_overhead_bytes,
+            ))
+            .saturating_add(partial_plan_cost(
+                block_probe_bytes,
+                block_probes,
+                estimate,
+                concurrency,
+                request_overhead_bytes,
+            ));
+            if !partial_read_has_clear_savings(cost, ordinary_cost) {
+                trace(
+                    "preflight",
+                    "profile_predicts_no_savings",
+                    cost,
+                    range_bytes(&plan) + range_bytes(&prefixes) + block_probe_bytes,
+                    plan.len() + prefixes.len() + block_probes,
+                    0,
+                    concurrency,
+                );
+                return Ok(None);
+            }
+        }
         let mut cache = RangeCache::default();
         let mut request_count = 0;
         let mut total_cost = 0_u128;
-        let mut request_overhead_bytes = 0_u128;
         let mut probing = true;
         let mut next_ranges = pages
             .iter()
@@ -345,19 +413,7 @@ impl IntraPageReader {
                 return Ok(None);
             }
             let probe_rounds = round + usize::from(probing);
-            let Some(mut permits) = reserve_partial_read_capacity(budget, next_ranges.len()) else {
-                trace(
-                    phase,
-                    "shared_request_budget_busy",
-                    total_cost,
-                    cache.byte_len() as u128,
-                    request_count,
-                    round,
-                    0,
-                );
-                return Ok(None);
-            };
-            let concurrency = permits.num_permits();
+            let concurrency = MAX_SHARED_RANGE_READS;
             let Some(read_ranges) = choose_bounded_range_plan(
                 &next_ranges,
                 estimate,
@@ -376,15 +432,15 @@ impl IntraPageReader {
                 );
                 return Ok(None);
             };
-            // Gap merging may leave fewer requests than the initial reservation.
-            let unused = permits.num_permits().saturating_sub(read_ranges.len());
-            drop(permits.split(unused));
-            let concurrency = permits.num_permits();
             let round_requests = read_ranges.len();
             request_count += round_requests;
-            let transport_cost = plan_score(&read_ranges, estimate, concurrency);
-            let round_cost = transport_cost
-                .saturating_add(request_overhead_bytes.saturating_mul(round_requests as u128));
+            let round_cost = partial_plan_cost(
+                range_bytes(&read_ranges),
+                round_requests,
+                estimate,
+                concurrency,
+                request_overhead_bytes,
+            );
             // Probes must leave room for at least one dependent data wave.
             // Charge each round separately, even when it has just one request.
             let predicted_cost = total_cost
@@ -413,24 +469,19 @@ impl IntraPageReader {
             if reason != "none" {
                 return Ok(None);
             }
-            let started = Instant::now();
-            self.fetch_ranges(&next_ranges, read_ranges, &mut cache, &permits)
+            let elapsed = self
+                .fetch_ranges(&next_ranges, read_ranges, &mut cache, budget)
                 .await?;
-            drop(permits);
-            let observed_cost = started
-                .elapsed()
-                .as_nanos()
-                .saturating_mul(u128::from(estimate.shared_throughput_bytes_per_second))
-                / 1_000_000_000;
-            total_cost = total_cost.saturating_add(observed_cost.max(round_cost));
-            // Charge processing and contention that the transport-only model missed.
-            // ponytail: use this fetch's probes; share a request-rate profile if reuse warrants it.
-            request_overhead_bytes = request_overhead_bytes.max(
-                observed_cost
-                    .saturating_sub(transport_cost)
-                    .checked_div(round_requests as u128)
-                    .unwrap_or(0),
-            );
+            let observed_cost = elapsed.map(|elapsed| {
+                elapsed
+                    .as_nanos()
+                    .saturating_mul(u128::from(estimate.shared_throughput_bytes_per_second))
+                    / 1_000_000_000
+            });
+            // Waiting behind another plan is not extra work performed by this one.
+            total_cost = total_cost.saturating_add(observed_cost.unwrap_or(0).max(round_cost));
+            request_overhead_bytes =
+                request_overhead_bytes.max(self.store.request_overhead_bytes().unwrap_or(0));
             tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
                 phase, observed_cost_bytes = observed_cost, request_overhead_bytes,
                 "Partial-page read round completed");
@@ -498,6 +549,27 @@ impl AsyncFileReader for IntraPageReader {
 
 fn invalid_data(reason: &str) -> ParquetError {
     ParquetError::General(format!("invalid intra-page data: {reason}"))
+}
+
+/// Approximate value positions for cost comparison only; these ranges never perform I/O.
+fn estimated_value_ranges(pages: &[Page], selected_rows: &[u64]) -> Option<Vec<Range<u64>>> {
+    let mut ranges = Vec::new();
+    for page in pages {
+        let first = selected_rows.partition_point(|row| *row < page.first_file_row);
+        let end = page.first_file_row.checked_add(page.row_count as u64)?;
+        for row in selected_rows[first..].iter().take_while(|row| **row < end) {
+            // ponytail: assume evenly spread values; exact nullable/compressed offsets need probes.
+            let offset = u128::from(row - page.first_file_row)
+                * u128::from(page.range.end - page.range.start)
+                / page.row_count as u128;
+            let start = page.range.start + u64::try_from(offset).ok()?;
+            ranges.push(start..start.saturating_add(8).min(page.range.end));
+            if ranges.len() > MAX_REQUESTS {
+                return None;
+            }
+        }
+    }
+    Some(ranges)
 }
 
 // Prefer ordinary reads unless the gain exceeds the planner's uncertainty margin.
@@ -762,21 +834,6 @@ mod tests {
             request_latency: std::time::Duration::from_millis(80),
             shared_throughput_bytes_per_second: 1_000_000,
         };
-        let held = budget.acquire_many(2).await?;
-        assert!(
-            reader
-                .read_partial_pages(
-                    std::slice::from_ref(&page.range),
-                    std::slice::from_ref(&page),
-                    &selected,
-                    estimate,
-                    &budget
-                )
-                .await?
-                .is_none()
-        );
-        assert_eq!(metrics.snapshot().parquet_data_file_bytes_received, Some(0));
-        drop(held);
         assert!(
             reader
                 .read_partial_pages(
@@ -792,6 +849,27 @@ mod tests {
         assert_eq!(
             metrics.snapshot().parquet_data_file_bytes_received,
             Some(page::PAGE_PREFIX_BYTES)
+        );
+        // With a measured profile, the required second block probe can be
+        // predicted from page size before either probe is issued.
+        reader.store.seed_transport_estimate(estimate);
+        reader.store.seed_request_overhead(Duration::ZERO);
+        assert!(
+            reader
+                .read_partial_pages(
+                    std::slice::from_ref(&page.range),
+                    std::slice::from_ref(&page),
+                    &selected,
+                    estimate,
+                    &budget,
+                )
+                .await?
+                .is_none()
+        );
+        assert_eq!(
+            metrics.snapshot().parquet_data_file_bytes_received,
+            Some(page::PAGE_PREFIX_BYTES),
+            "known block probes must be charged before I/O"
         );
         let estimate = TransportEstimate {
             request_latency: std::time::Duration::from_millis(1),
@@ -1002,11 +1080,12 @@ mod tests {
             memory.put(&path, bytes.clone().into()).await?;
             for dense in [false, true] {
                 let mut baseline = None;
-                for (enabled, estimate) in [
-                    (false, None),
-                    (true, None),
-                    (true, Some(economical)),
-                    (true, Some(expensive)),
+                for (enabled, estimate, overhead) in [
+                    (false, None, None),
+                    (true, None, None),
+                    (true, Some(economical), None),
+                    (true, Some(expensive), None),
+                    (true, Some(economical), Some(Duration::from_secs(1))),
                 ] {
                     let metrics = metrics();
                     let store = Arc::new(MeteredParquetObjectStore::new(
@@ -1016,6 +1095,9 @@ mod tests {
                     ));
                     if let Some(estimate) = estimate {
                         store.seed_transport_estimate(estimate);
+                    }
+                    if let Some(overhead) = overhead {
+                        store.seed_request_overhead(overhead);
                     }
                     let mut inner = ParquetObjectReader::new(store.clone(), path.clone())
                         .with_file_size(bytes.len() as u64);
@@ -1088,7 +1170,7 @@ mod tests {
                             &output, expected,
                             "{codec:?}, dense={dense}, estimate={estimate:?}"
                         );
-                        if !dense && estimate == Some(economical) {
+                        if !dense && estimate == Some(economical) && overhead.is_none() {
                             assert!(
                                 received < *original_bytes,
                                 "partial reads were not selected: {received} >= {original_bytes}"
@@ -1147,13 +1229,12 @@ mod tests {
         let job_budget = budget.clone();
         let job_reader = Arc::clone(&reader);
         let job = tokio::spawn(async move {
-            let permits = reserve_partial_read_capacity(&job_budget, 2).expect("free budget");
             job_reader
                 .fetch_ranges(
                     &[0..size / 2, size / 2..size],
                     vec![0..size / 2, size / 2..size],
                     &mut RangeCache::default(),
-                    &permits,
+                    &job_budget,
                 )
                 .await
         });
@@ -1162,7 +1243,6 @@ mod tests {
         assert!(job.await.is_err_and(|error| error.is_cancelled()));
         assert!(gated.was_cancelled());
         assert_eq!(budget.available_permits(), 2);
-        let permits = reserve_partial_read_capacity(&budget, 2).ok_or("leaked permits")?;
         let mut cache = RangeCache::default();
         // InMemory clips the end to the object size. Reject that short response
         // before it can become zero-filled selected values in a reconstructed page.
@@ -1171,7 +1251,7 @@ mod tests {
                 &[0..1, 1..size + 1],
                 vec![0..1, 1..size + 1],
                 &mut cache,
-                &permits,
+                &budget,
             )
             .await
             .err()
@@ -1183,7 +1263,7 @@ mod tests {
                     &[0..1, size..size + 1],
                     vec![0..1, size..size + 1],
                     &mut cache,
-                    &permits
+                    &budget
                 )
                 .await
                 .is_err()
@@ -1205,7 +1285,7 @@ mod tests {
                 &[0..size / 2, size / 2..size],
                 vec![0..size / 2, size / 2..size],
                 &mut cache,
-                &permits,
+                &budget,
             ),
         )
         .await?
@@ -1214,7 +1294,6 @@ mod tests {
         assert!(error.to_string().contains("injected range failure"));
         assert!(gated.was_cancelled());
         assert!(cache.entries.is_empty());
-        drop(permits);
         assert_eq!(budget.available_permits(), 2);
         Ok(())
     }

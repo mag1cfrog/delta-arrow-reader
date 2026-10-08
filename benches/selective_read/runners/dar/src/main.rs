@@ -11,10 +11,30 @@ use serde_json::{Value, json};
 
 const READER: &str = "delta-arrow-reader";
 
+fn warmup(reuse: bool) -> common::Result<WarmupMode> {
+    match std::env::var("DAR_NETWORK_WARMUP").as_deref() {
+        Ok("on") => Ok(WarmupMode::Network {
+            max_duration: std::time::Duration::from_secs(5),
+        }),
+        Err(std::env::VarError::NotPresent) | Ok("off") => Ok(if reuse {
+            WarmupMode::QueryPlanning
+        } else {
+            WarmupMode::None
+        }),
+        _ => Err("DAR_NETWORK_WARMUP must be off or on".into()),
+    }
+}
+
 fn options() -> common::Result<ScanOptions> {
+    let intra_page = match std::env::var("DAR_INTRA_PAGE_READS").as_deref() {
+        Err(std::env::VarError::NotPresent) | Ok("off") => false,
+        Ok("auto") => true,
+        _ => return Err("DAR_INTRA_PAGE_READS must be off or auto".into()),
+    };
     Ok(ScanOptions {
         execution_options: DeltaScanExecutionOptions::new()
             .with_parquet_backend(ParquetReaderBackend::Direct)
+            .with_experimental_intra_page_reads(intra_page)
             .with_max_concurrent_file_reads_per_scan(Some(24))?
             .with_max_concurrent_file_reads_per_partition(3)?
             .with_output_buffer_batches_per_partition(1)?
@@ -31,7 +51,7 @@ fn provider_settings(_: &SessionContext, reuse: bool) -> common::Result<Value> {
     Ok(json!({
         "entry_point": "DeltaTableBuilder -> datafusion::register_table",
         "scan_options": format!("{:?}", options()?),
-        "warmup": if reuse { "QueryPlanning" } else { "None" },
+        "warmup": format!("{:?}", warmup(reuse)?),
         "generic_parquet_options": "Direct backend uses its own pruning and decoding path; inspect diagnostic plan",
     }))
 }
@@ -64,11 +84,7 @@ async fn register(context: &SessionContext, request: &common::Request) -> common
         .with_storage_options(storage)
         .with_snapshot_selection(DeltaSnapshotSelection::Version(request.snapshot_version))
         .with_execution_options(scan.execution_options)
-        .with_warmup(if request.reuse() {
-            WarmupMode::QueryPlanning
-        } else {
-            WarmupMode::None
-        })
+        .with_warmup(warmup(request.reuse())?)
         .load_table()
         .await?;
     if table.version() != request.snapshot_version {
@@ -96,5 +112,12 @@ fn unsupported(error: &(dyn std::error::Error + 'static)) -> bool {
 }
 
 fn main() {
+    if let Ok(filter) = std::env::var("RUST_LOG") {
+        tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_ansi(false)
+            .with_writer(std::io::stderr)
+            .init();
+    }
     common::main();
 }
