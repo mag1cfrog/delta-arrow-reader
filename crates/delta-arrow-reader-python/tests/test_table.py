@@ -1,5 +1,6 @@
 from collections import UserDict
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
 import gc
 import json
 from pathlib import Path
@@ -104,6 +105,38 @@ class TableTests(unittest.TestCase):
                     empty = reader.read_all()
                 self.assertEqual(empty.schema, table.schema if columns is None else pa.schema([]))
                 self.assertEqual(empty.num_rows, 0)
+
+    def test_external_writer_fixtures_match_spark(self):
+        corpus = (Path(__file__).resolve().parents[3]
+                  / "tests/reader/fixtures/external_writer/corpus")
+        manifest = json.loads((corpus / "manifest.json").read_text(encoding="utf-8"))
+        for fixture in manifest["fixtures"]:
+            with self.subTest(fixture=fixture["name"]):
+                directory = corpus / fixture["name"]
+                with pa.ipc.open_file(directory / fixture["expected_schema_and_rows"]) as source:
+                    expected = source.read_all()
+                table = DeltaTable(directory / "table")
+                schema = table.schema
+                self.assertEqual(table.version, fixture["snapshot_version"])
+                # Spark's oracle omits the Delta column-mapping metadata.
+                self.assertTrue(schema.equals(expected.schema, check_metadata=False))
+                for method in ("scan", "to_reader"):
+                    for columns in (None, expected.schema.names[::-1], []):
+                        with self.subTest(method=method, columns=columns):
+                            selected = expected if columns is None else expected.select(columns)
+                            projected_schema = schema if columns is None else pa.schema(
+                                [schema.field(name) for name in columns], metadata=schema.metadata,
+                            )
+                            result = getattr(table, method)(columns=columns)
+                            reader = (pa.RecordBatchReader.from_stream(result, schema=projected_schema)
+                                      if method == "scan" else result)
+                            with reader:
+                                actual = reader.read_all()
+                            self.assertTrue(actual.schema.equals(projected_schema, check_metadata=True))
+                            self.assertEqual(actual.num_rows, fixture["expected_row_count"])
+                            if actual.num_columns:
+                                actual = actual.sort_by([("id", "ascending")])
+                            self.assertTrue(actual.equals(selected, check_metadata=False))
 
     def test_projection_and_limits_preserve_order_values_and_row_counts(self):
         fixture = (Path(__file__).resolve().parents[3]
@@ -396,7 +429,7 @@ class TableTests(unittest.TestCase):
                 self.assertEqual(table.version, expected)
                 self.assertEqual(repr(table), f"DeltaTable(version={expected})")
 
-    def test_schema_preserves_types_and_metadata(self):
+    def test_schema_and_reader_preserve_types_values_and_metadata(self):
         def field(name, datatype, nullable=True, metadata=None):
             return {
                 "name": name, "type": datatype, "nullable": nullable,
@@ -444,6 +477,22 @@ class TableTests(unittest.TestCase):
             pa.field("event_ts", pa.timestamp("us", tz="UTC")),
             pa.field("local_ts", pa.timestamp("us")),
         ])
+        values = pa.table({
+            "id": [1, 2, 3],
+            "profile": [{"age": 7, "nickname": ""}, None, {"age": 0, "nickname": None}],
+            "tags": [["tag", ""], None, []],
+            "attributes": [[("key", 4)], None, []],
+            "amount": [Decimal("-123.45"), Decimal("0.00"), Decimal("99999999.99")],
+            # Microseconds include fractional seconds and values before the epoch.
+            "event_ts": [1_234_567, None, -1],
+            "local_ts": [9_876_543, None, -9_876_543],
+        }, schema=expected)
+        path = self.location / "types.parquet"
+        pq.write_table(values, path)
+        self.write_log(2, {"add": {
+            "path": path.name, "partitionValues": {}, "size": path.stat().st_size,
+            "modificationTime": 0, "dataChange": True,
+        }})
         table = DeltaTable(self.location)
         schema = table.schema
         self.assertIsInstance(schema, pa.Schema)
@@ -452,6 +501,9 @@ class TableTests(unittest.TestCase):
         self.assertTrue(table.schema.equals(expected, check_metadata=True))
         with pa.RecordBatchReader.from_stream(table.scan(), schema=expected) as reader:
             self.assertTrue(reader.schema.equals(expected, check_metadata=True))
+            self.assertTrue(reader.read_all().equals(values, check_metadata=True))
+        with table.to_reader() as reader:
+            self.assertTrue(reader.read_all().equals(values, check_metadata=True))
         with self.assertRaises(AttributeError):
             table.schema = expected
         del table

@@ -122,6 +122,11 @@ impl KernelPhysicalToLogicalTransform {
         let Some(transform) = self.0.clone() else {
             return Ok(batch);
         };
+        // Kernel emits an empty struct transform for mapped zero-column scans.
+        // Its evaluator cannot infer a row count without child arrays.
+        if schemas.logical.num_fields() == 0 && batch.num_columns() == 0 {
+            return Ok(batch);
+        }
         let physical_rows = batch.num_rows();
         let data: Box<dyn delta_kernel::EngineData> = Box::new(ArrowEngineData::new(batch));
         let batch = transform_to_logical(
