@@ -769,15 +769,13 @@ impl PhysicalParquetStream {
             reason: "parquet_batch_read_failed",
         })?;
         let row_indexes = if self.include_original_row_index {
-            let index = batch
-                .schema()
-                .index_of(ORIGINAL_ROW_INDEX_COLUMN)
-                .map_err(|error| data_file_error("parquet_row_index_missing", error))?;
+            // The virtual row number is appended after all physical columns.
+            // A user field may have the same name, so do not look it up by name.
             Some(
                 batch
-                    .column(index)
-                    .as_any()
-                    .downcast_ref::<Int64Array>()
+                    .columns()
+                    .last()
+                    .and_then(|column| column.as_any().downcast_ref::<Int64Array>())
                     .ok_or_else(|| {
                         data_file_error(
                             "parquet_row_index_type_mismatch",

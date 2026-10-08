@@ -165,6 +165,85 @@ fn add_dv(root: &RealParquetDeltaTable) -> TestResult {
 }
 
 #[tokio::test]
+async fn intra_page_tracking_column_name_preserves_user_data() -> TestResult {
+    // A user column can have the same name as the internal virtual row number,
+    // including a nullable field added after the Parquet file was written.
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("id", DataType::Int64, false),
+        Field::new(
+            "__delta_arrow_reader_original_row_index",
+            DataType::Int64,
+            true,
+        ),
+    ]));
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(Int64Array::from_iter_values(0..ROWS as i64)),
+            Arc::new(Int64Array::from_iter_values(1..ROWS as i64 + 1)),
+        ],
+    )?;
+    let fields: Vec<_> = schema.fields().iter().map(|field| {
+        json!({"name":field.name(),"type":"long","nullable":field.is_nullable(),"metadata":{}})
+    }).collect();
+    for present_in_file in [false, true] {
+        let physical = if present_in_file {
+            batch.clone()
+        } else {
+            batch.project(&[0])?
+        };
+        let mut writer = ArrowWriter::try_new(
+            Vec::new(),
+            physical.schema(),
+            Some(fixture_properties().build()),
+        )?;
+        writer.write(&physical)?;
+        let root = RealParquetDeltaTable::new_with_raw_parquet(
+            "intra-page-column-name",
+            &writer.into_inner()?,
+            ROWS,
+            &json!({"protocol":{"minReaderVersion":1,"minWriterVersion":2}}),
+            &json!({"metaData":{"id":"intra-page-column-name",
+                "format":{"provider":"parquet","options":{}},
+                "schemaString":json!({"type":"struct","fields":fields}).to_string(),
+                "partitionColumns":[],"configuration":{}}}),
+        )?;
+        for dv in [false, true] {
+            if dv {
+                add_dv(&root)?;
+            }
+            let ids: Vec<_> = MATCHES
+                .iter()
+                .copied()
+                .filter(|id| !dv || ![0, 32_769].contains(id))
+                .collect();
+            let expected = RecordBatch::try_new(
+                schema.clone(),
+                vec![
+                    Arc::new(Int64Array::from(ids.clone())),
+                    Arc::new(Int64Array::from_iter(
+                        ids.iter().map(|id| present_in_file.then_some(id + 1)),
+                    )),
+                ],
+            )?;
+            for enabled in [false, true] {
+                let (actual, _) = scan(
+                    &root,
+                    DeltaScanExecutionOptions::new().with_experimental_intra_page_reads(enabled),
+                    id_filter(MATCHES),
+                )
+                .await?;
+                assert_eq!(
+                    actual, expected,
+                    "present={present_in_file}, DV={dv}, enabled={enabled}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn intra_page_public_scan_matches_baseline_and_reads_fewer_bytes() -> TestResult {
     assert!(!DeltaScanExecutionOptions::default().experimental_intra_page_reads());
     for codec in [

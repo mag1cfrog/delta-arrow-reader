@@ -231,6 +231,9 @@ fn match_target_field_to_parquet_root(
     let Some((index, file_field)) = parquet_arrow_schema
         .fields()
         .iter()
+        // Virtual columns are appended after the physical roots and cannot
+        // supply a missing data field, even when their names happen to match.
+        .take(parquet_roots.len())
         .enumerate()
         .find(|(_, file_field)| file_field.name() == target_field.name())
     else {
