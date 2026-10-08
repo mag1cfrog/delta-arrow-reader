@@ -161,10 +161,71 @@ comes from overlapping trace intervals. Repeated requests are counted, but are
 not labelled as retries because the proxy cannot distinguish SDK retries from
 separate reads of the same range.
 
-## Initialization profiling and cost-model measurements
+## Paired network checks on the merged implementation
+
+The [36 sessions](intra-page-paired-samples.csv) and
+[provenance](intra-page-paired-results.json) use one executable built from clean
+commit `2c312d9c71acfcc630b0fe478651e58df66f46a1`. Each table/network combination
+has three alternating off/auto pairs. Every session starts a fresh process,
+initializes the table, then runs two sequential queries. All 24 separate
+validation exports matched every reference value and null across 894 rows.
+
+These are exploratory measurements on a shared host. An unrelated Rust build
+was observed during the 90-column 150 Mbps case. The campaign waited for builds
+to finish before starting the 1 Gbps profiles. Every declared sample is retained,
+including slow runs. The primary timings need an uncontended rerun before they
+can establish reproducible gains.
+
+At 200 ms +/-20 ms and 150 Mbps, medians in seconds were:
+
+| Table columns | Mode | Initialization | First query | Initialization + first query | Second query |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 416 | Off | 1.55 | 10.35 | 11.90 | 10.34 |
+| 416 | Auto | 3.55 | 7.53 | 11.08 | 7.49 |
+| 90 | Off | 0.90 | 22.34 | 23.24 | 22.31 |
+| 90 | Auto | 3.05 | 16.92 | 19.80 | 12.40 |
+
+Automatic first-query times ranged from 7.47 to 10.35 seconds for 416 columns
+and 11.97 to 22.30 seconds for 90 columns. One automatic session per table
+retained ordinary I/O for both queries, after paying the profiling cost.
+In those sessions, initialization plus the first query took 14.27 and
+25.39 seconds. Timing runs have no decision logs, so their precise fallback
+reason is not established by the separate validation logs.
+
+Median first-query Parquet bytes fell from 172,926,686 to 81,908,881 for 416
+columns, and from 398,034,010 to 168,152,593 for 90 columns. Median requests
+rose from 40 to 15,070 and from 54 to 19,715, with a peak of 512 concurrent
+requests. Each automatic initialization added 13.5 MiB across 396 requests,
+outside those query counters.
+
+The two 1 Gbps controls produced these medians in seconds:
+
+| Latency | Table columns | Off first query | Auto first query | Off initialization + first | Auto initialization + first |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 ms, no jitter | 416 | 1.45 | 1.48 | 1.75 | 2.08 |
+| 1 ms, no jitter | 90 | 3.26 | 3.55 | 3.32 | 3.90 |
+| 200 ms +/-20 ms | 416 | 2.91 | 2.94 | 4.01 | 5.44 |
+| 200 ms +/-20 ms | 90 | 4.47 | 4.66 | 5.34 | 7.01 |
+
+All 24 automatic queries in these controls retained ordinary Parquet bytes and
+request counts, without extra page probes. Profiling added about 0.3 seconds to
+initialization at low latency and 1.4-1.5 seconds at high latency. Identical I/O
+did not guarantee identical query times: the low-latency 90-column first query
+was 0.29 seconds slower at the median, while its second query was effectively
+equal at 3.26 seconds. These samples do not isolate the cause of that difference.
+The CSV retains every timing, byte/request count, CPU observation and peak RSS;
+the JSON records the build interference and sampling limits.
+
+The option remains disabled by default. Profile stability and uncontended
+timings need follow-up before the remaining concurrent-query, local, no-DV,
+dense-selection, unsupported-format and real-S3 checks in
+[#422](https://github.com/mag1cfrog/delta-arrow-reader/issues/422).
+The published five-reader comparison is unchanged.
+
+## Earlier profiling fix validation
 
 The [samples](intra-page-calibration-samples.csv) and
-[build records](intra-page-calibration-results.json) retain the latest fix-validation
+[build records](intra-page-calibration-results.json) retain earlier fix-validation
 runs on the same two scattered DV tables. Automatic mode ran three fresh-process
 sessions per table and network. Each session initialized the table, including
 network profiling, then ran two queries. Both validation queries matched all
@@ -203,8 +264,8 @@ and 3.33 versus 3.31 seconds for 90 columns. Profiling still added about
 2.06 versus 1.73 seconds, and 3.70 versus 3.37 seconds, respectively.
 
 These are DAR-only observations with reused OS/MinIO caches. The option remains
-disabled by default. A final paired campaign, simultaneous queries, broader
-network and format controls, and real S3 validation remain under
+disabled by default. The paired campaign above follows these measurements;
+simultaneous queries, broader format controls and real S3 validation remain under
 [#422](https://github.com/mag1cfrog/delta-arrow-reader/issues/422).
 
 ## Earlier baseline network measurements
