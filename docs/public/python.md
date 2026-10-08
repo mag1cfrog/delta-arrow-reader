@@ -37,9 +37,186 @@ to read every row. Planning reads Delta metadata; Parquet reads begin when you
 request the first batch.
 
 The table stays on the snapshot it loaded, even if another process writes new
-commits. Each reader created from it reads that same snapshot. Create another
-`DeltaTable(location)` to load the latest version, or pass `version=0` to select
-that version explicitly.
+commits. Each reader created from it reads that same snapshot. To load the latest
+snapshot, call `refresh()`:
+
+```python
+latest = table.refresh()
+print(f"Original: {table.version}, refreshed: {latest.version}")
+```
+
+Refresh returns a new table. The original table and its readers keep their
+snapshot, even if refresh fails. If no new commits exist, the returned table has
+the same version. To select a specific version, use
+`DeltaTable(location, version=0)`.
+
+## Prepare metadata for repeated scans
+
+Use `warmup="query_planning"` to load and retain active-file metadata during table
+construction. Later scans reuse it, and refresh updates it for the new snapshot
+or reuses it when the version is unchanged. Warmup does not read Parquet data.
+
+```python
+prepared = DeltaTable(location, warmup="query_planning")
+```
+
+The default, `warmup="none"`, leaves this work to individual scans. With warmup
+enabled, unsupported table protocols fail during construction rather than at
+scan planning. Other strings raise `ValueError`; non-string values raise
+`TypeError`.
+
+## Set the scan partition target
+
+Both `scan()` and `to_reader()` accept `target_partitions` to override automatic
+scan partition planning. The default, `None`, keeps automatic planning.
+
+```python
+with table.to_reader(columns=["id"], limit=10, target_partitions=2) as reader:
+    print(reader.read_all().num_rows)
+```
+
+A supplied value must be an integer from `1` through `2 * sys.maxsize + 1`.
+Booleans and other types raise `TypeError`, zero and negative values raise
+`ValueError`, and values above the maximum raise `OverflowError`.
+
+## Choose a Parquet reader
+
+`ScanExecutionOptions` is an immutable configuration object. Its
+`parquet_backend` defaults to `"direct"`, which reads Parquet files through the
+asynchronous reader. Use `"delta_kernel"` to delegate reads to Delta Kernel:
+
+```python
+from delta_arrow_reader import ScanExecutionOptions
+
+kernel_options = ScanExecutionOptions(parquet_backend="delta_kernel")
+configured = DeltaTable(location, execution_options=kernel_options)
+with configured.to_reader(columns=["id"], limit=10) as reader:
+    print(reader.read_all().num_rows)
+
+with configured.to_reader(execution_options=ScanExecutionOptions(), limit=10) as reader:
+    print(reader.read_all().num_rows)
+```
+
+The second reader uses the default `"direct"` backend. Both `scan()` and
+`to_reader()` accept `execution_options`. An override replaces the complete
+configuration for that scan. Omitting it or passing `None` uses the table's
+settings. Later scans and refreshed tables keep the table's configuration.
+
+Pass a `ScanExecutionOptions` object, not a dictionary. Other types raise
+`TypeError`. For `parquet_backend`, unsupported strings raise `ValueError` and
+non-string values raise `TypeError`.
+
+## Limit concurrent file reads per partition
+
+Set `max_concurrent_file_reads_per_partition` to limit how many files each scan
+partition can read at once. It applies to both Parquet backends and defaults to
+the Rust reader's value of `3`. This is an upper bound; actual concurrency may be
+lower.
+
+```python
+serial_reads = ScanExecutionOptions(max_concurrent_file_reads_per_partition=1)
+with table.to_reader(target_partitions=1, execution_options=serial_reads) as reader:
+    print(reader.read_all().num_rows)
+```
+
+This example uses one partition and reads one file at a time. The setting is a
+positive integer no greater than `sys.maxsize >> 2`, the core's concurrency
+capacity. `None`, booleans, and other non-integer values raise `TypeError`.
+Zero, negative values, and values above the core limit that still fit `usize`
+raise `ValueError`. Positive integers larger than `2 * sys.maxsize + 1` raise
+`OverflowError`.
+
+## Limit concurrent file reads across a scan
+
+Set `max_concurrent_file_reads_per_scan` to cap concurrent file reads across all
+partitions in one scan. Both the scan and per-partition limits apply:
+
+```python
+scan_limit = ScanExecutionOptions(max_concurrent_file_reads_per_scan=2)
+with table.to_reader(target_partitions=4, execution_options=scan_limit) as reader:
+    print(reader.read_all().num_rows)
+```
+
+At most two files are read concurrently across these partitions. Omit the option
+or pass `None` to derive the limit from the partition target multiplied by the
+per-partition limit, capped at the core's concurrency capacity. `None` is the
+Rust default. A supplied integer has the same bounds and error behavior as
+`max_concurrent_file_reads_per_partition`.
+
+## Set the output batch buffer
+
+`output_buffer_batches_per_partition` sets how many batches each partition can
+queue for the consumer. The Rust default is `1`. A larger buffer lets the
+producer read further ahead while the consumer processes earlier batches:
+
+```python
+buffered = ScanExecutionOptions(output_buffer_batches_per_partition=2)
+with table.to_reader(execution_options=buffered) as reader:
+    print(reader.read_all().num_rows)
+```
+
+The value counts queued batches, not rows or bytes. Batches being prepared,
+backend buffers, and batches you retain also use memory. The option accepts the
+same positive integer range and raises the same errors as
+`max_concurrent_file_reads_per_partition`; `None` is not accepted.
+
+## Set file prefetch depth
+
+`prefetch_files_per_partition` controls how many future file streams each
+partition prepares when using the `"direct"` backend. The Rust default is `2`.
+Set it to `0` to disable prefetch of future files:
+
+```python
+no_prefetch = ScanExecutionOptions(prefetch_files_per_partition=0)
+with table.to_reader(execution_options=no_prefetch) as reader:
+    print(reader.read_all().num_rows)
+```
+
+The scan and per-partition file-read limits still apply. The `"delta_kernel"`
+backend ignores this setting. A supplied value must be an integer from `0`
+through `2 * sys.maxsize + 1`. `None`, booleans, and other types raise `TypeError`,
+negative values raise `ValueError`, and values above the maximum raise
+`OverflowError`.
+
+## Set the Parquet metadata size hint
+
+`parquet_metadata_size_hint_bytes` controls how many bytes the `"direct"` backend
+initially requests from the end of each Parquet file to load its metadata.
+Omitting it keeps the Rust default of `65536` bytes. Pass `None` to disable the
+hint:
+
+```python
+no_metadata_hint = ScanExecutionOptions(parquet_metadata_size_hint_bytes=None)
+with table.to_reader(execution_options=no_metadata_hint) as reader:
+    print(reader.read_all().num_rows)
+```
+
+The reader fetches more bytes if the initial request does not contain all the
+metadata. It always requests at least the 8-byte Parquet footer and never requests
+beyond the file. The `"delta_kernel"` backend ignores this hint.
+
+A supplied integer must be from `1` through `2 * sys.maxsize + 1`. Booleans and
+other types raise `TypeError`, zero and negative values raise `ValueError`, and
+values above the maximum raise `OverflowError`.
+
+## Buffer small Parquet files
+
+`parquet_full_file_read_threshold_bytes` lets the `"direct"` backend fetch files
+at or below the threshold once and serve subsequent Parquet range reads from
+memory. The Rust default, `None`, disables full-file buffering:
+
+```python
+small_files = ScanExecutionOptions(parquet_full_file_read_threshold_bytes=1024 * 1024)
+with table.to_reader(execution_options=small_files) as reader:
+    print(reader.read_all().num_rows)
+```
+
+This example buffers files up to and including 1 MiB. Each qualifying file is
+held in memory during reading. Larger files use ordinary range reads. The
+`"delta_kernel"` backend ignores this setting.
+
+Pass `None` to disable buffering. A supplied integer has the same positive
+range and error behavior as `parquet_metadata_size_hint_bytes`.
 
 ## Use the Arrow stream interface and stop early
 

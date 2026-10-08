@@ -3,7 +3,11 @@
 use std::sync::Arc;
 
 use arrow::record_batch::RecordBatch;
-use delta_kernel::{FileMeta, engine::arrow_data::EngineDataArrowExt};
+use delta_kernel::{
+    FileMeta,
+    engine::arrow_data::EngineDataArrowExt,
+    schema::{MetadataColumnSpec, StructField, StructType},
+};
 use futures_util::stream;
 use snafu::ResultExt;
 use tokio::{sync::mpsc, task::JoinHandle};
@@ -108,13 +112,30 @@ fn read_file(
         )
     })?;
     let metadata = FileMeta::new(location, modification_time_ms, size);
+    let mut physical_schema = plan.kernel_schemas.physical();
+    let empty_physical_projection = physical_schema.num_fields() == 0;
+    if empty_physical_projection {
+        // Kernel 0.25 panics when fixing up a zero-column Parquet batch.
+        // Its virtual row index preserves row counts without reading a data
+        // column; remove it before applying the planned logical transform.
+        physical_schema = Arc::new(
+            StructType::try_new([StructField::create_metadata_column(
+                "__delta_arrow_reader_row_index",
+                MetadataColumnSpec::RowIndex,
+            )])
+            .boxed()
+            .context(DataFileReadSnafu {
+                reason: "parquet_read_setup_failed",
+            })?,
+        );
+    }
     let batches = plan
         .engine_context
         .engine()
         .parquet_handler()
         .read_parquet_files(
             std::slice::from_ref(&metadata),
-            plan.kernel_schemas.physical(),
+            physical_schema,
             physical_predicate,
         )
         .boxed()
@@ -129,11 +150,14 @@ fn read_file(
         let batch = batch.boxed().context(DataFileReadSnafu {
             reason: "parquet_batch_read_failed",
         })?;
-        let batch = EngineDataArrowExt::try_into_record_batch(batch)
+        let mut batch = EngineDataArrowExt::try_into_record_batch(batch)
             .boxed()
             .context(DataFileReadSnafu {
                 reason: "parquet_arrow_conversion_failed",
             })?;
+        if empty_physical_projection {
+            batch.remove_column(0);
+        }
         let batch = transform
             .apply(plan.engine_context.as_ref(), &plan.kernel_schemas, batch)
             .boxed()
