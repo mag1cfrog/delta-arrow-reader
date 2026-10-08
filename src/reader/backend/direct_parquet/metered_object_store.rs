@@ -267,7 +267,7 @@ impl MeteredParquetObjectStore {
     }
 
     /// Samples large transfers and small requests without decoding file contents.
-    pub(super) async fn warmup(&self, files: &[(Path, u64)]) -> Result<bool> {
+    pub(super) async fn warmup(&self, files: &[(Path, u64)], budget: &Semaphore) -> Result<bool> {
         if files.is_empty() {
             return Ok(false);
         }
@@ -280,19 +280,29 @@ impl MeteredParquetObjectStore {
             let ranges: Vec<_> = (0..4)
                 .map(|index| start + index * chunk..start + (index + 1) * chunk)
                 .collect();
-            self.read_physical_ranges(path, &ranges, &ranges).await?;
+            self.read_ranges_with_concurrency(
+                path,
+                &ranges,
+                &ranges,
+                MAX_CONCURRENT_PARQUET_RANGE_READS,
+                budget,
+            )
+            .await?;
         }
         if self.transport_estimate().is_none() {
             return Ok(false);
         }
         for (path, size) in files.iter().cycle().take(MIN_TRANSPORT_SAMPLES) {
-            let ranges: Vec<_> = (1..=128)
+            // Replenish the request slots instead of measuring one burst, whose
+            // completion spacing can mostly reflect latency jitter.
+            let count = (2 * MAX_SHARED_RANGE_READS) as u64;
+            let ranges: Vec<_> = (1..=count)
                 .map(|index| {
-                    let start = (size - SMALL_REQUEST_BYTES) / 129 * index;
+                    let start = (size - SMALL_REQUEST_BYTES) / (count + 1) * index;
                     start..start + SMALL_REQUEST_BYTES
                 })
                 .collect();
-            self.read_partial_ranges(path, &ranges, &ranges, &RANGE_READ_PERMITS)
+            self.read_partial_ranges(path, &ranges, &ranges, budget)
                 .await?;
         }
         Ok(self
@@ -465,11 +475,16 @@ impl MeteredParquetObjectStore {
         let can_sample = active_read.can_sample() && !queued;
         // Contention measures neither isolated capacity nor per-request processing cost.
         // Retain passive transport collection when no shared profile was initialized.
-        if !queued && (can_sample || !self.range_read_estimator.require_isolated_reads) {
+        // High concurrency can queue work at the server. It measures request
+        // capacity, not the baseline latency and bandwidth of ordinary reads.
+        if concurrency <= MAX_CONCURRENT_PARQUET_RANGE_READS
+            && !queued
+            && (can_sample || !self.range_read_estimator.require_isolated_reads)
+        {
             self.record_completed_range_reads(&completed);
         }
-        let request_interval = (can_sample && completed.len() <= concurrency)
-            .then(|| request_completion_interval(&completed))
+        let request_interval = can_sample
+            .then(|| request_completion_interval(&completed, concurrency))
             .flatten();
         self.metrics
             .record_parquet_range_successful_plan_time(plan_started.elapsed());
@@ -484,10 +499,16 @@ impl MeteredParquetObjectStore {
     }
 }
 
-/// Estimates request capacity from the central half of a small-response wave.
-/// A common latency shift cancels out; isolated slow responses do not set the rate.
-fn request_completion_interval(completed: &[CompletedRangeRead]) -> Option<Duration> {
+/// Estimates sustained capacity from the central half of replenished small reads.
+/// One burst cannot distinguish request capacity from latency jitter. Require at
+/// least two waves; trim startup and tail completions before measuring the rate.
+fn request_completion_interval(
+    completed: &[CompletedRangeRead],
+    concurrency: usize,
+) -> Option<Duration> {
     if completed.len() < 4
+        || concurrency == 0
+        || completed.len() / 2 < concurrency
         || completed
             .iter()
             .any(|read| read.bytes_received as u128 > u128::from(SMALL_REQUEST_BYTES))
@@ -498,7 +519,8 @@ fn request_completion_interval(completed: &[CompletedRangeRead]) -> Option<Durat
     times.sort_unstable();
     let first = times.len() / 4;
     let last = times.len() - first - 1;
-    // ponytail: jitter spread can lower the estimated capacity; repeated samples use a median.
+    // ponytail: a bounded sample approximates sustained flow; use longer samples
+    // if real-store measurements show the three-sample median remains unstable.
     Some(times[last].duration_since(times[first]) / (last - first) as u32)
 }
 
@@ -1063,6 +1085,8 @@ mod tests {
 
     #[tokio::test]
     async fn network_warmup_bounds_reads_and_handles_cancellation() -> Result<()> {
+        // Concurrent tests must not consume this calibration's request slots.
+        let budget = tokio::sync::Semaphore::new(super::MAX_SHARED_RANGE_READS);
         let memory = InMemory::new();
         let path = Path::from("data.parquet");
         let size = 8 * 1024 * 1024;
@@ -1081,13 +1105,16 @@ mod tests {
         );
         let store = store
             .with_range_read_estimator(Arc::new(ParquetRangeReadEstimator::for_network_warmup()));
-        assert!(!store.warmup(&[]).await?);
-        assert!(!store.warmup(&[(path.clone(), 1)]).await?);
+        assert!(!store.warmup(&[], &budget).await?);
+        assert!(!store.warmup(&[(path.clone(), 1)], &budget).await?);
         let files = [(path.clone(), size as u64)];
-        assert!(store.warmup(&files).await?);
+        assert!(store.warmup(&files, &budget).await?);
         let counts = store.metrics.snapshot();
-        assert_eq!(counts.parquet_data_file_range_get_operations, Some(396));
-        assert_eq!(counts.parquet_data_file_bytes_received, Some(14_155_776));
+        assert_eq!(counts.parquet_data_file_range_get_operations, Some(3_084));
+        assert_eq!(counts.parquet_data_file_bytes_received, Some(25_165_824));
+        let profile = store.current_transport_estimate();
+        assert_eq!(profile.latency_sample_count, 3);
+        assert_eq!(profile.throughput_sample_count, 3);
         let estimate = store.transport_estimate().ok_or_else(|| Error::Generic {
             store: "test",
             source: "missing warmup estimate".into(),
@@ -1129,7 +1156,7 @@ mod tests {
         .with_range_read_estimator(Arc::new(ParquetRangeReadEstimator::for_network_warmup()));
         contended.seed_transport_estimate(estimate);
         let _peer = contended.range_read_estimator.start_read();
-        assert!(!contended.warmup(&files).await?);
+        assert!(!contended.warmup(&files, &budget).await?);
         assert!(contended.request_overhead_bytes().is_none());
         // Cancelling a stalled warmup must not leave a usable partial profile.
         let stalled = MeteredParquetObjectStore::new(
@@ -1144,7 +1171,7 @@ mod tests {
             MultiRangeReadStrategy::ChooseAutomatically,
         );
         assert!(
-            tokio::time::timeout(Duration::from_millis(1), stalled.warmup(&files))
+            tokio::time::timeout(Duration::from_millis(1), stalled.warmup(&files, &budget))
                 .await
                 .is_err()
         );
@@ -1160,7 +1187,7 @@ mod tests {
         );
         assert!(
             store
-                .warmup(&[(Path::from("missing.parquet"), size as u64)])
+                .warmup(&[(Path::from("missing.parquet"), size as u64)], &budget)
                 .await
                 .is_err()
         );
@@ -1168,7 +1195,7 @@ mod tests {
     }
 
     #[test]
-    fn request_capacity_uses_completions_without_fixed_latency_or_tail_outliers() {
+    fn request_capacity_needs_replenished_reads() {
         use super::request_completion_interval;
         let started = Instant::now();
         for (count, latency) in [(4, 1), (4, 200), (8, 1), (8, 200)] {
@@ -1185,12 +1212,20 @@ mod tests {
                 .collect();
             completed[0].payload_finished += Duration::from_secs(1);
             assert_eq!(
-                request_completion_interval(&completed),
+                request_completion_interval(&completed, count as usize / 2),
                 Some(Duration::from_millis(2))
             );
-            assert_eq!(request_completion_interval(&completed[..3]), None);
+            assert_eq!(
+                request_completion_interval(&completed, count as usize),
+                None
+            );
+            assert_eq!(request_completion_interval(&completed, 0), None);
+            assert_eq!(request_completion_interval(&completed[..3], 1), None);
             completed[0].bytes_received += 1;
-            assert_eq!(request_completion_interval(&completed), None);
+            assert_eq!(
+                request_completion_interval(&completed, count as usize / 2),
+                None
+            );
         }
     }
 
