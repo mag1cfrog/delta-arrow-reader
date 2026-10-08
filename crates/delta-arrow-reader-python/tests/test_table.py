@@ -1,5 +1,6 @@
 from collections import UserDict
 from concurrent.futures import ThreadPoolExecutor
+import ctypes
 from decimal import Decimal
 import gc
 import json
@@ -82,6 +83,70 @@ class TableTests(unittest.TestCase):
         del reader, other
         gc.collect()
         self.assertEqual(batch.column(0).to_pylist(), [1, 2])
+
+    def test_arrow_handoff_shares_primitive_buffer_after_reader_release(self):
+        # Public Arrow C Data / C Stream layouts, used only to observe the handoff.
+        class ArrowArray(ctypes.Structure):
+            pass
+
+        ArrowArray._fields_ = [
+            ("length", ctypes.c_int64),
+            ("null_count", ctypes.c_int64),
+            ("offset", ctypes.c_int64),
+            ("n_buffers", ctypes.c_int64),
+            ("n_children", ctypes.c_int64),
+            ("buffers", ctypes.POINTER(ctypes.c_void_p)),
+            ("children", ctypes.POINTER(ctypes.POINTER(ArrowArray))),
+            ("dictionary", ctypes.POINTER(ArrowArray)),
+            ("release", ctypes.c_void_p),
+            ("private_data", ctypes.c_void_p),
+        ]
+
+        class ArrowArrayStream(ctypes.Structure):
+            _fields_ = [
+                ("get_schema", ctypes.c_void_p),
+                ("get_next", ctypes.c_void_p),
+                ("get_last_error", ctypes.c_void_p),
+                ("release", ctypes.c_void_p),
+                ("private_data", ctypes.c_void_p),
+            ]
+
+        self.write_log(1, self.write_parquet("rows.parquet", [1, 2, 3]))
+        stream = DeltaTable(self.location).scan()
+        capsule = stream.__arrow_c_stream__()
+        del stream
+        get_pointer = ctypes.pythonapi["PyCapsule_GetPointer"]
+        get_pointer.argtypes = [ctypes.py_object, ctypes.c_char_p]
+        get_pointer.restype = ctypes.POINTER(ArrowArrayStream)
+        native = get_pointer(capsule, b"arrow_array_stream")
+        get_next_type = ctypes.CFUNCTYPE(
+            ctypes.c_int, ctypes.c_void_p, ctypes.POINTER(ArrowArray),
+        )
+        original_next = get_next_type(native.contents.get_next)
+        addresses = []
+
+        @get_next_type
+        def observe_next(native_stream, output):
+            status = original_next(native_stream, output)
+            if status == 0 and output.contents.release:
+                addresses.append(output.contents.children[0].contents.buffers[1])
+            return status
+
+        # Keep the observer alive until PyArrow closes the reader. The native
+        # release callbacks retain ownership of the stream and its arrays.
+        native.contents.get_next = ctypes.cast(observe_next, ctypes.c_void_p).value
+
+        class ExportedStream:
+            def __arrow_c_stream__(self, requested_schema=None):
+                return capsule
+
+        with pa.RecordBatchReader.from_stream(ExportedStream()) as reader:
+            batch = reader.read_next_batch()
+            self.assertEqual(addresses, [batch.column(0).buffers()[1].address])
+        del reader, capsule, native
+        gc.collect()
+        self.assertEqual(batch.column(0).buffers()[1].address, addresses[0])
+        self.assertEqual(batch.column(0).to_pylist(), [1, 2, 3])
 
     def test_reader_errors_stay_terminal_and_redacted(self):
         self.write_log(1, self.write_parquet("secret-data.parquet", [1, 2]))
