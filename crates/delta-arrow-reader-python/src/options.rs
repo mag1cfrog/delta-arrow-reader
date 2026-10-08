@@ -36,6 +36,8 @@ fn optional_positive_usize(value: &Bound<'_, PyAny>) -> PyResult<Option<usize>> 
 /// integer within the core's concurrency capacity. Booleans are not accepted.
 /// max_concurrent_file_reads_per_scan accepts the same integer range or None.
 /// Its default, None, derives the total from the partition target and limit.
+/// output_buffer_batches_per_partition defaults to 1 queued batch per partition
+/// and accepts the same positive integer range as the per-partition read limit.
 #[pyclass(module = "delta_arrow_reader", frozen)]
 pub(crate) struct ScanExecutionOptions {
     pub(crate) options: DeltaScanExecutionOptions,
@@ -49,6 +51,7 @@ impl ScanExecutionOptions {
         parquet_backend="direct",
         max_concurrent_file_reads_per_scan=DeltaScanExecutionOptions::new().max_concurrent_file_reads_per_scan(),
         max_concurrent_file_reads_per_partition=DeltaScanExecutionOptions::new().max_concurrent_file_reads_per_partition(),
+        output_buffer_batches_per_partition=DeltaScanExecutionOptions::new().output_buffer_batches_per_partition(),
     ))]
     fn new(
         parquet_backend: &str,
@@ -56,6 +59,7 @@ impl ScanExecutionOptions {
             usize,
         >,
         #[pyo3(from_py_with = positive_usize)] max_concurrent_file_reads_per_partition: usize,
+        #[pyo3(from_py_with = positive_usize)] output_buffer_batches_per_partition: usize,
     ) -> PyResult<Self> {
         let backend = match parquet_backend {
             "direct" => ParquetReaderBackend::Direct,
@@ -74,6 +78,8 @@ impl ScanExecutionOptions {
                 .with_max_concurrent_file_reads_per_partition(
                     max_concurrent_file_reads_per_partition,
                 )
+                .map_err(|error| PyValueError::new_err(error.to_string()))?
+                .with_output_buffer_batches_per_partition(output_buffer_batches_per_partition)
                 .map_err(|error| PyValueError::new_err(error.to_string()))?,
         })
     }
@@ -94,5 +100,10 @@ impl ScanExecutionOptions {
     #[getter]
     fn max_concurrent_file_reads_per_partition(&self) -> usize {
         self.options.max_concurrent_file_reads_per_partition()
+    }
+
+    #[getter]
+    fn output_buffer_batches_per_partition(&self) -> usize {
+        self.options.output_buffer_batches_per_partition()
     }
 }

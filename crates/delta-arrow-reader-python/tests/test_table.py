@@ -278,14 +278,14 @@ class TableTests(unittest.TestCase):
                 group = ranges.get(self.headers.get("Range")) if self.path.endswith(".parquet") else None
                 if group is not None:
                     groups.append(group)
-                    if group == 3:
+                    if group == blocked_group:
                         pending.set()
                         self.wait_for_disconnect(disconnected)
                         return
-                    if group > 3:
+                    if group > blocked_group:
                         unexpected.set()
                 super().do_GET()
-                if group == 2:
+                if group is not None and group == blocked_group - 1:
                     prepared.set()
 
         with http.serve(partial(Storage, directory=str(self.location))) as server:
@@ -293,20 +293,28 @@ class TableTests(unittest.TestCase):
                 f"http://127.0.0.1:{server.server_port}/",
                 storage_options={"allow_http": "true"},
             )
-            with table.to_reader() as reader:
-                first = reader.read_next_batch()
-                self.assertEqual(first.column(0).to_pylist(), list(range(1024)))
-                self.assertTrue(prepared.wait(10), groups)
-                # The core buffers one batch and prepares one more before waiting.
-                self.assertFalse(pending.wait(0.2), groups)
-                self.assertEqual(groups, [0, 1, 2])
-                second = reader.read_next_batch()
-                self.assertEqual(second.column(0).to_pylist(), list(range(1024, 2048)))
-                self.assertTrue(pending.wait(10), groups)
-                reader.close()
-                self.assertTrue(disconnected.wait(10), "close left the HTTP read pending")
-                self.assertFalse(unexpected.wait(0.2), groups)
-                self.assertEqual(groups, [0, 1, 2, 3])
+            override = ScanExecutionOptions(output_buffer_batches_per_partition=4)
+            for options, capacity in ((None, 1), (override, 4), (None, 1)):
+                with self.subTest(capacity=capacity):
+                    for event in (prepared, pending, disconnected, unexpected):
+                        event.clear()
+                    groups.clear()
+                    # After the first batch, the core queues capacity batches
+                    # and prepares one more before waiting for the consumer.
+                    blocked_group = capacity + 2
+                    with table.to_reader(execution_options=options) as reader:
+                        first = reader.read_next_batch()
+                        self.assertEqual(first.column(0).to_pylist(), list(range(1024)))
+                        self.assertTrue(prepared.wait(10), groups)
+                        self.assertFalse(pending.wait(0.2), groups)
+                        self.assertEqual(groups, list(range(blocked_group)))
+                        second = reader.read_next_batch()
+                        self.assertEqual(second.column(0).to_pylist(), list(range(1024, 2048)))
+                        self.assertTrue(pending.wait(10), groups)
+                        reader.close()
+                        self.assertTrue(disconnected.wait(10), "close left the HTTP read pending")
+                        self.assertFalse(unexpected.wait(0.2), groups)
+                        self.assertEqual(groups, list(range(blocked_group + 1)))
 
     def test_empty_reader_preserves_schema(self):
         table = DeltaTable(self.location)
@@ -501,7 +509,7 @@ class TableTests(unittest.TestCase):
                 with self.subTest(method=method, value=value), self.assertRaises(TypeError):
                     method(execution_options=value)
 
-    def test_file_read_limit_defaults_and_validation(self):
+    def test_execution_capacity_defaults_and_validation(self):
         class Count(int):
             def __le__(self, other):
                 return False
@@ -510,13 +518,15 @@ class TableTests(unittest.TestCase):
                 return 1
 
         maximum = sys.maxsize >> 2
-        with self.assertRaises(TypeError):
-            ScanExecutionOptions(max_concurrent_file_reads_per_partition=None)
         for name, default in (
             ("max_concurrent_file_reads_per_partition", 3),
             ("max_concurrent_file_reads_per_scan", None),
+            ("output_buffer_batches_per_partition", 1),
         ):
             self.assertEqual(getattr(ScanExecutionOptions(), name), default)
+            if default is not None:
+                with self.subTest(name=name), self.assertRaises(TypeError):
+                    ScanExecutionOptions(**{name: None})
             for count in (1, 2, Count(2), maximum, default):
                 with self.subTest(name=name, count=count):
                     options = ScanExecutionOptions(**{name: count})

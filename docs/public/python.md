@@ -143,6 +143,23 @@ per-partition limit, capped at the core's concurrency capacity. `None` is the
 Rust default. A supplied integer has the same bounds and error behavior as
 `max_concurrent_file_reads_per_partition`.
 
+## Set the output batch buffer
+
+`output_buffer_batches_per_partition` sets how many batches each partition can
+queue for the consumer. The Rust default is `1`. A larger buffer lets the
+producer read further ahead while the consumer processes earlier batches:
+
+```python
+buffered = ScanExecutionOptions(output_buffer_batches_per_partition=2)
+with table.to_reader(execution_options=buffered) as reader:
+    print(reader.read_all().num_rows)
+```
+
+The value counts queued batches, not rows or bytes. Batches being prepared,
+backend buffers, and batches you retain also use memory. The option accepts the
+same positive integer range and raises the same errors as
+`max_concurrent_file_reads_per_partition`; `None` is not accepted.
+
 ## Use the Arrow stream interface and stop early
 
 `to_reader()` returns a `pyarrow.RecordBatchReader`. You can also construct one

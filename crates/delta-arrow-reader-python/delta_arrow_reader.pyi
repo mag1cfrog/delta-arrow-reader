@@ -17,6 +17,7 @@ class ScanExecutionOptions:
         self, *, parquet_backend: Literal["direct", "delta_kernel"] = "direct",
         max_concurrent_file_reads_per_scan: int | None = None,
         max_concurrent_file_reads_per_partition: int = 3,
+        output_buffer_batches_per_partition: int = 1,
     ) -> None: ...
     @property
     def parquet_backend(self) -> Literal["direct", "delta_kernel"]: ...
@@ -24,6 +25,8 @@ class ScanExecutionOptions:
     def max_concurrent_file_reads_per_scan(self) -> int | None: ...
     @property
     def max_concurrent_file_reads_per_partition(self) -> int: ...
+    @property
+    def output_buffer_batches_per_partition(self) -> int: ...
 
 class RecordBatchStream:
     """Single-use Arrow exporter created by DeltaTable.scan(), with no public constructor."""
