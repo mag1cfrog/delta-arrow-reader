@@ -284,12 +284,13 @@ pub(super) fn plan_score(
 /// Chooses a physical plan within a byte budget using the available concurrency.
 ///
 /// Merging the cheapest gaps minimizes bytes at each request count. Score those
-/// counts without materializing every candidate, then build only the winner.
+/// counts, including observed per-request overhead, then build only the winner.
 pub(super) fn choose_bounded_range_plan(
     requested_ranges: &[Range<u64>],
     estimate: TransportEstimate,
     concurrency: usize,
     byte_budget: u128,
+    request_overhead_bytes: u128,
 ) -> Option<Vec<Range<u64>>> {
     let exact = merge_ranges(requested_ranges, 0);
     let exact_bytes = range_bytes(&exact);
@@ -305,7 +306,9 @@ pub(super) fn choose_bounded_range_plan(
     let mut bytes = exact_bytes;
     let wave_cost = bandwidth_delay_bytes(estimate);
     let cost = |bytes: u128, count| {
-        bytes.saturating_add(wave_cost.saturating_mul(request_waves(count, concurrency) as u128))
+        bytes
+            .saturating_add(wave_cost.saturating_mul(request_waves(count, concurrency) as u128))
+            .saturating_add(request_overhead_bytes.saturating_mul(count as u128))
     };
     let mut scores = vec![cost(bytes, exact.len())];
     for (merged, (gap, _)) in gaps.iter().enumerate() {
@@ -400,7 +403,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{convert::Infallible, time::Duration};
+    use std::{convert::Infallible, ops::Range, time::Duration};
 
     use bytes::Bytes;
 
@@ -521,27 +524,33 @@ mod tests {
             ..slow
         };
         assert_eq!(
-            choose_bounded_range_plan(&ranges, slow, 1, 10_100),
+            choose_bounded_range_plan(&ranges, slow, 1, 10_100, 0),
             Some(ranges.clone())
         );
         for estimate in [fast, delayed] {
             assert_eq!(
-                choose_bounded_range_plan(&ranges, estimate, 1, 10_100),
+                choose_bounded_range_plan(&ranges, estimate, 1, 10_100, 0),
                 Some(std::iter::once(0..10_100).collect())
             );
             assert_eq!(
-                choose_bounded_range_plan(&ranges, estimate, 11, 10_100),
+                choose_bounded_range_plan(&ranges, estimate, 11, 10_100, 0),
                 Some(ranges.clone())
             );
             // The budget prohibits even one merge, regardless of latency.
             assert_eq!(
-                choose_bounded_range_plan(&ranges, estimate, 1, 1_100),
+                choose_bounded_range_plan(&ranges, estimate, 1, 1_100, 0),
                 Some(ranges.clone())
             );
         }
-        assert!(choose_bounded_range_plan(&ranges, slow, 1, 1_099).is_none());
-        assert!(choose_bounded_range_plan(&ranges, slow, 0, 10_100).is_none());
-        assert_eq!(choose_bounded_range_plan(&[], slow, 0, 0), Some(vec![]));
+        assert!(choose_bounded_range_plan(&ranges, slow, 1, 1_099, 0).is_none());
+        assert!(choose_bounded_range_plan(&ranges, slow, 0, 10_100, 0).is_none());
+        assert_eq!(choose_bounded_range_plan(&[], slow, 0, 0, 0), Some(vec![]));
+        // Even one wave can be expensive when each request adds processing work.
+        // The ten-percent margin still favors leaving the last gap unread.
+        assert_eq!(
+            choose_bounded_range_plan(&ranges, slow, 11, 10_100, 2_000),
+            Some(vec![0..9_100, 10_000..10_100])
+        );
     }
 
     #[test]
@@ -574,26 +583,32 @@ mod tests {
                     })
                     .filter(|plan| range_bytes(plan) <= byte_budget)
                     .collect();
-                let actual =
-                    choose_bounded_range_plan(&requested, estimate, concurrency, byte_budget);
-                let Some(best) = candidates
-                    .iter()
-                    .map(|plan| plan_score(plan, estimate, concurrency))
-                    .min()
-                else {
-                    assert!(actual.is_none());
-                    continue;
-                };
-                let competitive = best + best * DECISION_MARGIN_PERCENT / 100;
-                let expected = candidates
-                    .iter()
-                    .filter(|plan| plan_score(plan, estimate, concurrency) <= competitive)
-                    .min_by_key(|plan| (range_bytes(plan), plan.len()));
-                assert_eq!(
-                    actual.as_ref(),
-                    expected,
-                    "concurrency={concurrency}, budget={byte_budget}"
-                );
+                for overhead in [0, 2, 30, 500] {
+                    let actual = choose_bounded_range_plan(
+                        &requested,
+                        estimate,
+                        concurrency,
+                        byte_budget,
+                        overhead,
+                    );
+                    let score = |plan: &Vec<Range<u64>>| {
+                        plan_score(plan, estimate, concurrency) + overhead * plan.len() as u128
+                    };
+                    let Some(best) = candidates.iter().map(score).min() else {
+                        assert!(actual.is_none());
+                        continue;
+                    };
+                    let competitive = best + best * DECISION_MARGIN_PERCENT / 100;
+                    let expected = candidates
+                        .iter()
+                        .filter(|plan| score(plan) <= competitive)
+                        .min_by_key(|plan| (range_bytes(plan), plan.len()));
+                    assert_eq!(
+                        actual.as_ref(),
+                        expected,
+                        "concurrency={concurrency}, budget={byte_budget}, overhead={overhead}"
+                    );
+                }
             }
         }
     }

@@ -9,6 +9,7 @@ mod page;
 use std::{
     ops::Range,
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
 use arrow::{
@@ -322,6 +323,7 @@ impl IntraPageReader {
         let mut cache = RangeCache::default();
         let mut request_count = 0;
         let mut total_cost = 0_u128;
+        let mut request_overhead_bytes = 0_u128;
         let mut probing = true;
         let mut next_ranges = pages
             .iter()
@@ -361,6 +363,7 @@ impl IntraPageReader {
                 estimate,
                 concurrency,
                 byte_budget.saturating_sub(cache.byte_len() as u128),
+                request_overhead_bytes,
             ) else {
                 trace(
                     phase,
@@ -377,15 +380,20 @@ impl IntraPageReader {
             let unused = permits.num_permits().saturating_sub(read_ranges.len());
             drop(permits.split(unused));
             let concurrency = permits.num_permits();
-            request_count += read_ranges.len();
-            total_cost = total_cost.saturating_add(plan_score(&read_ranges, estimate, concurrency));
+            let round_requests = read_ranges.len();
+            request_count += round_requests;
+            let transport_cost = plan_score(&read_ranges, estimate, concurrency);
+            let round_cost = transport_cost
+                .saturating_add(request_overhead_bytes.saturating_mul(round_requests as u128));
             // Probes must leave room for at least one dependent data wave.
             // Charge each round separately, even when it has just one request.
-            let predicted_cost = total_cost.saturating_add(if probing {
-                ordinary_bytes.saturating_add(bandwidth_delay_bytes(estimate))
-            } else {
-                0
-            });
+            let predicted_cost = total_cost
+                .saturating_add(round_cost)
+                .saturating_add(if probing {
+                    ordinary_bytes.saturating_add(bandwidth_delay_bytes(estimate))
+                } else {
+                    0
+                });
             let reason = if request_count > MAX_REQUESTS {
                 "request_budget"
             } else if !partial_read_has_clear_savings(predicted_cost, ordinary_cost) {
@@ -405,9 +413,27 @@ impl IntraPageReader {
             if reason != "none" {
                 return Ok(None);
             }
+            let started = Instant::now();
             self.fetch_ranges(&next_ranges, read_ranges, &mut cache, &permits)
                 .await?;
             drop(permits);
+            let observed_cost = started
+                .elapsed()
+                .as_nanos()
+                .saturating_mul(u128::from(estimate.shared_throughput_bytes_per_second))
+                / 1_000_000_000;
+            total_cost = total_cost.saturating_add(observed_cost.max(round_cost));
+            // Charge processing and contention that the transport-only model missed.
+            // ponytail: use this fetch's probes; share a request-rate profile if reuse warrants it.
+            request_overhead_bytes = request_overhead_bytes.max(
+                observed_cost
+                    .saturating_sub(transport_cost)
+                    .checked_div(round_requests as u128)
+                    .unwrap_or(0),
+            );
+            tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
+                phase, observed_cost_bytes = observed_cost, request_overhead_bytes,
+                "Partial-page read round completed");
             if !probing {
                 return Ok(Some(
                     ranges
