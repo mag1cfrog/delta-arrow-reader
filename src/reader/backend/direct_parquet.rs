@@ -1,5 +1,7 @@
 //! Direct asynchronous Parquet data-file reader.
 
+mod compact_thrift;
+mod intra_page;
 mod metadata_cache;
 mod metered_object_store;
 mod nan_counts;
@@ -12,7 +14,10 @@ mod file_location_tests;
 #[cfg(test)]
 mod int96_tests;
 
-use std::{ops::Range, sync::Arc};
+use std::{
+    ops::Range,
+    sync::{Arc, Mutex},
+};
 
 use arrow::{
     array::Int64Array,
@@ -40,6 +45,7 @@ use super::{data_file_error, file_location::resolve_data_file_path};
 pub(crate) use self::metadata_cache::ParquetMetadataCache;
 pub(crate) use self::metered_object_store::ParquetRangeReadEstimator;
 use self::{
+    intra_page::{IntraPageReader, SelectedRows, SharedSelection},
     metadata_cache::CachedParquetMetadata,
     metered_object_store::{MeteredParquetObjectStore, MultiRangeReadStrategy},
     nan_counts::NanCounts,
@@ -81,7 +87,7 @@ struct ParquetFileObject {
 }
 
 struct PhysicalParquetStream {
-    stream: ParquetRecordBatchStream<ParquetObjectReader>,
+    stream: ParquetRecordBatchStream<IntraPageReader>,
     schema_alignment: ParquetSchemaAlignment,
     include_original_row_index: bool,
 }
@@ -210,20 +216,28 @@ impl DirectParquetReader {
         options: PhysicalParquetStreamOptions<'_>,
     ) -> Result<PhysicalParquetStream, DeltaReaderError> {
         let object = self.parquet_object_for_task(task).await?;
+        let selection = (self.execution_options.experimental_intra_page_reads()
+            && options.row_filter.is_some()
+            && self.execution_options.parquet_range_read_policy()
+                == crate::reader::ParquetRangeReadPolicy::Automatic)
+            .then(|| Arc::new(Mutex::new(SelectedRows::default())));
         let (builder, metadata) = self
             .create_stream_builder(
                 &object,
                 target_schema,
                 options.include_original_row_index,
                 options.row_filter.is_some(),
+                selection.clone(),
             )
             .await?;
-        let schema_alignment = build_schema_alignment(
+        let mut schema_alignment = build_schema_alignment(
             builder.parquet_schema(),
             builder.schema(),
             Arc::clone(target_schema),
         )
         .map_err(|error| data_file_error("parquet_schema_match_failed", error))?;
+        // Strip the tracking-only virtual column even for tables without DV.
+        schema_alignment.needs_batch_reshape |= selection.is_some();
         let projection =
             ProjectionMask::roots(builder.parquet_schema(), schema_alignment.projected_roots());
         let mut builder = Self::apply_row_group_selection(
@@ -237,7 +251,7 @@ impl DirectParquetReader {
 
         // When a row predicate is present, build its filter with a projection limited to the
         // columns that predicate references.
-        builder = self.apply_row_filter(builder, target_schema, options.row_filter)?;
+        builder = self.apply_row_filter(builder, target_schema, options.row_filter, selection)?;
 
         if let Some(batch_size) = options.output_batch_size_rows {
             builder = builder.with_batch_size(batch_size);
@@ -268,20 +282,24 @@ impl DirectParquetReader {
         target_schema: &SchemaRef,
         include_original_row_index: bool,
         has_row_filter: bool,
+        selection: Option<SharedSelection>,
     ) -> Result<
         (
-            ParquetRecordBatchStreamBuilder<ParquetObjectReader>,
+            ParquetRecordBatchStreamBuilder<IntraPageReader>,
             Arc<CachedParquetMetadata>,
         ),
         DeltaReaderError,
     > {
         let mut reader = ParquetObjectReader::new(Arc::clone(&object.store), object.path.clone())
             .with_file_size(object.file_size);
-        let reader_options = arrow_reader_options(include_original_row_index, has_row_filter)
-            .boxed()
-            .context(DataFileReadSnafu {
-                reason: "parquet_row_index_setup_failed",
-            })?;
+        let reader_options = arrow_reader_options(
+            include_original_row_index || selection.is_some(),
+            has_row_filter,
+        )
+        .boxed()
+        .context(DataFileReadSnafu {
+            reason: "parquet_row_index_setup_failed",
+        })?;
         let metadata = self
             .load_parquet_metadata(&object.path, object.file_size, &mut reader, &reader_options)
             .await?;
@@ -295,6 +313,13 @@ impl DirectParquetReader {
             reason: "parquet_read_setup_failed",
         })?;
 
+        let reader = IntraPageReader::new(
+            reader,
+            Arc::clone(&metadata.parquet),
+            selection,
+            object.file_size,
+        )
+        .map_err(|error| data_file_error("parquet_read_setup_failed", error))?;
         Ok((
             ParquetRecordBatchStreamBuilder::new_with_metadata(reader, arrow_metadata),
             metadata,
@@ -306,13 +331,13 @@ impl DirectParquetReader {
     /// Selection combines the task's approximate byte range with metadata pruning. A selected
     /// range always expands to complete Parquet row groups.
     fn apply_row_group_selection(
-        builder: ParquetRecordBatchStreamBuilder<ParquetObjectReader>,
+        builder: ParquetRecordBatchStreamBuilder<IntraPageReader>,
         nan_counts: &NanCounts,
         schema_alignment: &ParquetSchemaAlignment,
         parquet_byte_range: Option<&Range<u64>>,
         file_size: u64,
         row_group_predicate: Option<&DeltaKernelPredicate>,
-    ) -> Result<ParquetRecordBatchStreamBuilder<ParquetObjectReader>, DeltaReaderError> {
+    ) -> Result<ParquetRecordBatchStreamBuilder<IntraPageReader>, DeltaReaderError> {
         let row_groups = pruned_row_groups(
             builder.metadata(),
             nan_counts,
@@ -337,10 +362,11 @@ impl DirectParquetReader {
     /// When no filter was requested, this returns the builder unchanged.
     fn apply_row_filter(
         &self,
-        builder: ParquetRecordBatchStreamBuilder<ParquetObjectReader>,
+        builder: ParquetRecordBatchStreamBuilder<IntraPageReader>,
         target_schema: &SchemaRef,
         row_filter: Option<RowFilterInput<'_>>,
-    ) -> Result<ParquetRecordBatchStreamBuilder<ParquetObjectReader>, DeltaReaderError> {
+        selection: Option<SharedSelection>,
+    ) -> Result<ParquetRecordBatchStreamBuilder<IntraPageReader>, DeltaReaderError> {
         let Some(row_filter) = row_filter else {
             return Ok(builder);
         };
@@ -351,6 +377,7 @@ impl DirectParquetReader {
                 target_schema,
                 builder.parquet_schema(),
                 builder.schema(),
+                selection,
             )
             .map_err(|error| data_file_error("parquet_schema_match_failed", error))?;
 
@@ -418,6 +445,7 @@ impl DirectParquetReader {
         target_schema: &SchemaRef,
         parquet_schema: &SchemaDescriptor,
         parquet_arrow_schema: &SchemaRef,
+        selection: Option<SharedSelection>,
     ) -> Result<RowFilter, delta_kernel::Error> {
         let target_indices = predicate_root_indices(predicate, target_schema)?;
         let predicate_schema = Arc::new(target_schema.project(&target_indices)?);
@@ -427,13 +455,43 @@ impl DirectParquetReader {
         let engine_context = Arc::clone(&self.engine_context);
         let predicate = predicate.clone();
         let kernel_schemas = kernel_schemas.clone();
+        if let Some(selection) = &selection {
+            selection
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .predicate_columns = Some(projection.clone());
+        }
         let predicate = ArrowPredicateFn::new(projection, move |batch| {
+            // Virtual columns are appended and always included by parquet-rs. Use
+            // position, not a name or extension that could also occur in a real field.
+            let indexes = selection
+                .as_ref()
+                .map(|_| {
+                    batch
+                        .columns()
+                        .last()
+                        .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
+                        .cloned()
+                        .ok_or_else(|| {
+                            arrow::error::ArrowError::ComputeError(
+                                "missing intra-page row numbers".into(),
+                            )
+                        })
+                })
+                .transpose()?;
             let batch = schema_alignment
                 .reshape_batch_to_target_schema(batch)
                 .map_err(|error| arrow::error::ArrowError::ExternalError(Box::new(error)))?;
-            engine_context
+            let mask = engine_context
                 .evaluate_predicate(&kernel_schemas, &predicate, batch)
-                .map_err(|error| arrow::error::ArrowError::ExternalError(Box::new(error)))
+                .map_err(|error| arrow::error::ArrowError::ExternalError(Box::new(error)))?;
+            if let (Some(selection), Some(indexes)) = (&selection, indexes) {
+                selection
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .record_matches(&indexes, &mask)?;
+            }
+            Ok(mask)
         });
 
         Ok(RowFilter::new(vec![Box::new(predicate)]))
@@ -711,15 +769,13 @@ impl PhysicalParquetStream {
             reason: "parquet_batch_read_failed",
         })?;
         let row_indexes = if self.include_original_row_index {
-            let index = batch
-                .schema()
-                .index_of(ORIGINAL_ROW_INDEX_COLUMN)
-                .map_err(|error| data_file_error("parquet_row_index_missing", error))?;
+            // The virtual row number is appended after all physical columns.
+            // A user field may have the same name, so do not look it up by name.
             Some(
                 batch
-                    .column(index)
-                    .as_any()
-                    .downcast_ref::<Int64Array>()
+                    .columns()
+                    .last()
+                    .and_then(|column| column.as_any().downcast_ref::<Int64Array>())
                     .ok_or_else(|| {
                         data_file_error(
                             "parquet_row_index_type_mismatch",
@@ -925,12 +981,12 @@ mod tests {
     }
 
     #[derive(Clone, Copy)]
-    enum GateRequest {
+    pub(super) enum GateRequest {
         FullGet,
         Range(usize),
     }
 
-    struct GatedObjectStore {
+    pub(super) struct GatedObjectStore {
         inner: Arc<dyn ObjectStore>,
         gate_full_get: bool,
         range_target: AtomicUsize,
@@ -944,7 +1000,7 @@ mod tests {
     }
 
     impl GatedObjectStore {
-        fn new(inner: Arc<dyn ObjectStore>, request: GateRequest) -> Arc<Self> {
+        pub(super) fn new(inner: Arc<dyn ObjectStore>, request: GateRequest) -> Arc<Self> {
             let (gate_full_get, range_target) = match request {
                 GateRequest::FullGet => (true, 0),
                 GateRequest::Range(target) => (false, target),
@@ -967,7 +1023,7 @@ mod tests {
             Self::new(inner, GateRequest::Range(0))
         }
 
-        async fn wait_started(&self) {
+        pub(super) async fn wait_started(&self) {
             self.started
                 .acquire()
                 .await
@@ -975,7 +1031,7 @@ mod tests {
                 .forget();
         }
 
-        fn was_cancelled(&self) -> bool {
+        pub(super) fn was_cancelled(&self) -> bool {
             self.cancelled.load(Ordering::Acquire)
         }
 
@@ -991,10 +1047,11 @@ mod tests {
         }
 
         fn fail_next_range(&self) {
-            self.fail_range_target.store(
-                self.range_calls.load(Ordering::Acquire) + 1,
-                Ordering::Release,
-            );
+            self.fail_range(self.range_calls.load(Ordering::Acquire) + 1);
+        }
+
+        pub(super) fn fail_range(&self, range: usize) {
+            self.fail_range_target.store(range, Ordering::Release);
         }
 
         fn corrupt_next_range(&self) {
@@ -2823,6 +2880,7 @@ mod tests {
             &schema,
             &parquet_schema,
             &schema,
+            None,
         )?;
         let projection = row_filter.predicates()[0].projection();
         assert!(projection.leaf_included(0));
@@ -2865,6 +2923,7 @@ mod tests {
             &nested_schema,
             &nested_parquet_schema,
             &nested_schema,
+            None,
         )?;
         let nested_projection = nested_filter.predicates()[0].projection();
         assert!(!nested_projection.leaf_included(0));
@@ -2893,6 +2952,7 @@ mod tests {
             &mapped_schema,
             &mapped_parquet_schema,
             &file_schema,
+            None,
         )?;
         let mapped_projection = mapped_filter.predicates()[0].projection();
         assert!(mapped_projection.leaf_included(0));

@@ -62,6 +62,7 @@ pub struct DeltaScanExecutionOptions {
     parquet_metadata_size_hint_bytes: Option<usize>,
     parquet_full_file_read_threshold_bytes: Option<usize>,
     parquet_range_read_policy: ParquetRangeReadPolicy,
+    experimental_intra_page_reads: bool,
 }
 
 impl DeltaScanExecutionOptions {
@@ -77,6 +78,7 @@ impl DeltaScanExecutionOptions {
             parquet_metadata_size_hint_bytes: Some(DEFAULT_PARQUET_METADATA_SIZE_HINT_BYTES),
             parquet_full_file_read_threshold_bytes: None,
             parquet_range_read_policy: ParquetRangeReadPolicy::Automatic,
+            experimental_intra_page_reads: false,
         }
     }
 
@@ -117,6 +119,28 @@ impl DeltaScanExecutionOptions {
 
     pub(crate) const fn parquet_range_read_policy(&self) -> ParquetRangeReadPolicy {
         self.parquet_range_read_policy
+    }
+
+    /// Whether experimental partial-page reads are enabled for the direct backend.
+    pub const fn experimental_intra_page_reads(&self) -> bool {
+        self.experimental_intra_page_reads
+    }
+
+    /// Enables experimental partial reads of flat nullable PLAIN INT64 pages.
+    ///
+    /// Disabled by default. The direct reader uses predicate-derived row numbers to
+    /// read selected values from uncompressed pages or Zstd raw blocks without
+    /// checksums. Unsupported layouts and bounded-work limits use ordinary reads.
+    /// Explicit range-read policies other than `Automatic` disable this optimization.
+    /// The Delta Kernel backend ignores this direct-reader option.
+    ///
+    /// This trades fewer bytes for more requests. It currently uses a 16 MiB
+    /// per-fetch budget and at most 512 process-wide concurrent experimental range
+    /// reads. It does not adapt to network conditions; test your workload before
+    /// enabling it. Passing `false` restores ordinary reads.
+    pub const fn with_experimental_intra_page_reads(mut self, enabled: bool) -> Self {
+        self.experimental_intra_page_reads = enabled;
+        self
     }
 
     /// Selects a Parquet reader backend.
@@ -287,6 +311,7 @@ mod tests {
         );
         assert_eq!(DeltaScanExecutionOptions::default(), options);
         assert_eq!(options.parquet_backend(), ParquetReaderBackend::Direct);
+        assert!(!options.experimental_intra_page_reads());
         assert_eq!(options.max_concurrent_file_reads_per_scan(), None);
         assert_eq!(options.max_concurrent_file_reads_per_partition(), 3);
         assert_eq!(options.output_buffer_batches_per_partition(), 1);
@@ -304,6 +329,7 @@ mod tests {
     fn builders_set_every_public_option() -> Result<(), Box<dyn std::error::Error>> {
         let options = DeltaScanExecutionOptions::new()
             .with_parquet_backend(ParquetReaderBackend::DeltaKernel)
+            .with_experimental_intra_page_reads(true)
             .with_max_concurrent_file_reads_per_scan(Some(8))?
             .with_max_concurrent_file_reads_per_partition(4)?
             .with_output_buffer_batches_per_partition(2)?
@@ -312,6 +338,7 @@ mod tests {
             .with_parquet_full_file_read_threshold_bytes(Some(1024))?;
 
         assert_eq!(options.parquet_backend(), ParquetReaderBackend::DeltaKernel);
+        assert!(options.experimental_intra_page_reads());
         assert_eq!(options.max_concurrent_file_reads_per_scan(), Some(8));
         assert_eq!(options.max_concurrent_file_reads_per_partition(), 4);
         assert_eq!(options.output_buffer_batches_per_partition(), 2);

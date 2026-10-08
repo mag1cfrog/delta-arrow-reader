@@ -1,0 +1,194 @@
+{
+  "scope": "Experimental DAR comparison only; original tables, SQL, snapshot and DV; no new competitor runs.",
+  "method": {
+    "samples_per_mode_and_case": 3,
+    "order": [
+      "baseline",
+      "budget16-c512",
+      "budget16-c512",
+      "baseline",
+      "baseline",
+      "budget16-c512"
+    ],
+    "timing": "Native open_query_ns includes opening the Delta table, planning, predicate evaluation, DV handling and consumption of all output batches.",
+    "cache": "Fresh reader processes; reused MinIO and OS caches; validation warms each mode.",
+    "network": {
+      "latency_ms": 200,
+      "jitter_ms": 20,
+      "mbps": 150,
+      "seed": "0"
+    },
+    "network_boundary": "Shared progressively paced HTTP response bodies; headers and TLS are not shaped.",
+    "resources": {
+      "logical_cpus": [
+        0,
+        1,
+        2,
+        3,
+        8,
+        9,
+        10,
+        11
+      ],
+      "physical_cores": 4,
+      "process_memory_bytes": 8589934592
+    },
+    "experiment": "Real predicate-derived row selection; 16 MiB per-row-group final-fetch budget including probes and ordinary output pages; up to 512 concurrent Parquet range reads process-wide.",
+    "preparation": "Generation, compilation and upload excluded and not running during timed samples."
+  },
+  "limitations": [
+    "Local experimental Parquet dependency changes, not an existing production configuration.",
+    "Partial reads cover flat nullable PLAIN INT64 in uncompressed pages or Zstd raw blocks without checksums; other encodings fall back to complete pages.",
+    "Request counts increase substantially; this is the existing MinIO plus network-proxy profile, not a new real-S3 measurement.",
+    "Three-sample paired experiment does not replace the published five-reader formal campaign."
+  ],
+  "build": {
+    "reader_id": "delta-arrow-reader",
+    "executable_sha256": "1e0bd1dd3a6fdbf6bf1beb0a57e7d3bda474b8074f15761e334cad0785fef2e3",
+    "lockfile_sha256": "0e119df41afd567756d34af36b693b79d54a352189a0168c7b864805388c9b09",
+    "base_commit": "2751f062e7bee4fe9866bb7fa23e4314d39714e4",
+    "scope": "Experimental Parquet dependency and DAR transport; same binary, mode in provider settings."
+  },
+  "format_controls": [
+    {
+      "fixture": "scattered",
+      "matched_standard_decoder": true
+    },
+    {
+      "fixture": "uncompressed",
+      "matched_standard_decoder": true
+    },
+    {
+      "fixture": "checksum",
+      "matched_standard_decoder": true
+    },
+    {
+      "fixture": "dictionary",
+      "matched_standard_decoder": true
+    },
+    {
+      "fixture": "compressed",
+      "matched_standard_decoder": true
+    }
+  ],
+  "source_report_sha256": "022b18ad6d0f2ef0251df8e70c0c23f9f16a41f41f04cb5b515a28c8ad6aa708",
+  "source_sha256": {
+    "restore_q2.py": "481b105183b87b7ace076afe4ff00bb484623b540af472b0d18bcca87f33420e",
+    "prepare_storage.py": "7303212cdf1467b46e8613ec282d6d874380d4d9ec282ac1de71a01d7eb7ad57",
+    "run_queries.py": "b59c23497a40d37c3bb94c5780ac77ff05e3ab008e3be396d3982b90fb5e75e2",
+    "check_parquet.rs": "2e31a690c889fd3e8a1104bde9002b77d192c033dca7c1b7cad5297a4f5356c4",
+    "reader-changes.patch": "1c1cac4c097d9c20d114a676358d19024a1db14958c63d117daad5f3970a3295",
+    "parquet-changes.patch": "0105ff2182a0889fab1de48eebd24edbdb61ea757967cd78aa4f2aecf07455a9",
+    "parquet/src/arrow/push_decoder/reader_builder/intra_page.rs": "50bdec855ffac91527ddd51a707bf435dae543d4c924a76aadb58616bfe9f706",
+    "parquet/src/arrow/push_decoder/reader_builder/data.rs": "377e9f1e10f3e6e2a7f245439eb60eca839ffb138cce0353e535dcf6ce3bd15b",
+    "parquet/src/arrow/push_decoder/reader_builder/mod.rs": "ebb44d7d95a9acd48989b7144c0244f1afb242f2af40b77883c9935071d45513",
+    "target/release/build.json": "d07a7292bdf1d345cf32f0f99bfeb878a0d56cf157a7203f3238f93814d505ae",
+    "parquet-controls.json": "397fcc0feb847c6a3fd12cc9322e0f3c586435451bb4d65c7cb4ccde3fdc1263"
+  },
+  "cases": [
+    {
+      "case": "production.q2.scattered.dv",
+      "table_columns": 416,
+      "results": {
+        "baseline": {
+          "seconds": [
+            11.880991207,
+            11.868712508,
+            11.907674036
+          ],
+          "median_seconds": 11.880991207,
+          "bytes": [
+            186250523,
+            186249508,
+            186220726
+          ],
+          "requests": [
+            53,
+            52,
+            54
+          ],
+          "rows": [
+            894,
+            894,
+            894
+          ]
+        },
+        "budget16-c512": {
+          "seconds": [
+            8.502702352,
+            8.488449278,
+            8.45633064
+          ],
+          "median_seconds": 8.488449278,
+          "bytes": [
+            100466536,
+            100467443,
+            100437180
+          ],
+          "requests": [
+            13981,
+            13982,
+            13981
+          ],
+          "rows": [
+            894,
+            894,
+            894
+          ]
+        }
+      }
+    },
+    {
+      "case": "production.q4.scattered.dv",
+      "table_columns": 90,
+      "results": {
+        "baseline": {
+          "seconds": [
+            23.281887316,
+            23.214862415,
+            23.239248005
+          ],
+          "median_seconds": 23.239248005,
+          "bytes": [
+            399702479,
+            399706957,
+            399701576
+          ],
+          "requests": [
+            68,
+            69,
+            66
+          ],
+          "rows": [
+            894,
+            894,
+            894
+          ]
+        },
+        "budget16-c512": {
+          "seconds": [
+            13.550489237,
+            13.578702693,
+            13.481172914
+          ],
+          "median_seconds": 13.550489237,
+          "bytes": [
+            106012680,
+            106041985,
+            105979970
+          ],
+          "requests": [
+            27996,
+            27996,
+            27996
+          ],
+          "rows": [
+            894,
+            894,
+            894
+          ]
+        }
+      }
+    }
+  ]
+}

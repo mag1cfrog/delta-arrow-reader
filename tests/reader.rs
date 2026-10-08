@@ -15,6 +15,8 @@ mod execution_capacities;
 mod external_writer;
 #[path = "reader/https.rs"]
 mod https;
+#[path = "reader/intra_page.rs"]
+mod intra_page;
 #[path = "reader/legacy_lists.rs"]
 mod legacy_lists;
 #[path = "reader/nested_nullability.rs"]
