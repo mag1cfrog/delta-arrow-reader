@@ -257,7 +257,7 @@ fn scalar_array(scalar: &DeltaScalar) -> Result<ArrayRef, ArrowError> {
     Ok(array)
 }
 
-fn column_data_type<'a>(
+pub(super) fn column_data_type<'a>(
     schema: &'a Schema,
     column: &str,
 ) -> Result<&'a DataType, DeltaReaderError> {

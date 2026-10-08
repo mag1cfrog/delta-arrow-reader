@@ -363,6 +363,53 @@ fn table_loads_versions_and_public_state_is_redacted() -> TestResult {
 }
 
 #[test]
+fn predicate_column_types_use_loaded_schema_and_shared_validation() -> TestResult {
+    use super::support::RealParquetDeltaTable;
+
+    runtime()?.block_on(async {
+        for fixture in [
+            RealParquetDeltaTable::new_with_supported_types("predicate-column-types")?,
+            RealParquetDeltaTable::new_with_column_mapping("predicate-logical-columns")?,
+        ] {
+            let table = DeltaTableBuilder::new(fixture.path().to_string_lossy())
+                .load_table()
+                .await?;
+            let schema = table.schema();
+            // Type lookup must still work without the log or data files.
+            fs::remove_dir_all(fixture.path())?;
+            for field in schema.fields() {
+                assert_eq!(
+                    table.predicate_column_type(field.name())?,
+                    *field.data_type()
+                );
+            }
+            for column in ["", "profile.secret", "missing-secret"] {
+                let error = table
+                    .predicate_column_type(column)
+                    .expect_err("invalid column must be rejected");
+                let scan_error = match table
+                    .scan()
+                    .with_predicate(DeltaPredicate::IsNull {
+                        column: column.into(),
+                    })
+                    .build()
+                    .await
+                {
+                    Ok(_) => return Err("scan must reject the same column".into()),
+                    Err(error) => error,
+                };
+                assert_eq!(error.phase(), DeltaReaderPhase::ScanPlanning);
+                assert_eq!(error.code(), "unsupported_predicate");
+                assert_eq!(error.to_string(), scan_error.to_string());
+                assert!(!error.to_string().contains("secret"));
+                assert!(!format!("{error:?}").contains("secret"));
+            }
+        }
+        Ok(())
+    })
+}
+
+#[test]
 fn refresh_returns_a_new_latest_table_and_keeps_the_original_immutable() -> TestResult {
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("refresh-lazy")?;
