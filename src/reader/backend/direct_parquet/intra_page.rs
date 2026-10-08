@@ -226,13 +226,14 @@ impl IntraPageReader {
 
     async fn fetch_ranges(
         &self,
+        requested_ranges: &[Range<u64>],
         ranges: Vec<Range<u64>>,
         cache: &mut RangeCache,
         permits: &SemaphorePermit<'_>,
     ) -> Result<()> {
-        let (data, _) = self
+        let data = self
             .store
-            .read_reserved_ranges(&self.path, &ranges, &ranges, permits)
+            .read_partial_ranges(&self.path, requested_ranges, &ranges, permits)
             .await
             .map_err(|error| ParquetError::External(Box::new(error)))?;
         cache.entries.extend(ranges.into_iter().zip(data));
@@ -287,12 +288,20 @@ impl IntraPageReader {
         estimate: TransportEstimate,
         budget: &Semaphore,
     ) -> Result<Option<Vec<Bytes>>> {
-        let whole_plan = choose_range_plan(ranges, Some(estimate));
-        let whole_cost = plan_score(
-            &whole_plan.physical_ranges,
+        let ordinary_plan = choose_range_plan(ranges, Some(estimate));
+        let ordinary_cost = plan_score(
+            &ordinary_plan.physical_ranges,
             estimate,
             MAX_CONCURRENT_PARQUET_RANGE_READS,
         );
+        // Unsupported output columns still require complete reads. Charge their
+        // known bytes before probing any candidate pages.
+        let ordinary_ranges: Vec<_> = ranges
+            .iter()
+            .filter(|range| !pages.iter().any(|page| page.range == **range))
+            .cloned()
+            .collect();
+        let ordinary_bytes = range_bytes(&ordinary_ranges);
         // Never spend more bytes on probes and data than the original page request.
         let byte_budget = range_bytes(ranges);
         let trace = |phase,
@@ -304,7 +313,7 @@ impl IntraPageReader {
                      concurrency: usize| {
             tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
                 eligible = true, phase, fallback_reason = reason,
-                whole_predicted_cost_bytes = whole_cost,
+                ordinary_predicted_cost_bytes = ordinary_cost,
                 partial_predicted_cost_bytes = cost,
                 planned_bytes = bytes, planned_requests = requests, probe_rounds = rounds,
                 effective_concurrency = concurrency,
@@ -312,7 +321,7 @@ impl IntraPageReader {
         };
         let mut cache = RangeCache::default();
         let mut request_count = 0;
-        let mut spent_cost = 0_u128;
+        let mut total_cost = 0_u128;
         let mut probing = true;
         let mut next_ranges = pages
             .iter()
@@ -325,7 +334,7 @@ impl IntraPageReader {
                 trace(
                     phase,
                     "probe_round_limit",
-                    spent_cost,
+                    total_cost,
                     cache.byte_len() as u128,
                     request_count,
                     round,
@@ -334,11 +343,11 @@ impl IntraPageReader {
                 return Ok(None);
             }
             let probe_rounds = round + usize::from(probing);
-            let Some(permits) = reserve_partial_read_capacity(budget, next_ranges.len()) else {
+            let Some(mut permits) = reserve_partial_read_capacity(budget, next_ranges.len()) else {
                 trace(
                     phase,
                     "shared_request_budget_busy",
-                    spent_cost,
+                    total_cost,
                     cache.byte_len() as u128,
                     request_count,
                     round,
@@ -356,7 +365,7 @@ impl IntraPageReader {
                 trace(
                     phase,
                     "byte_budget",
-                    spent_cost,
+                    total_cost,
                     cache.byte_len() as u128,
                     request_count,
                     round,
@@ -364,18 +373,22 @@ impl IntraPageReader {
                 );
                 return Ok(None);
             };
+            // Gap merging may leave fewer requests than the initial reservation.
+            let unused = permits.num_permits().saturating_sub(read_ranges.len());
+            drop(permits.split(unused));
+            let concurrency = permits.num_permits();
             request_count += read_ranges.len();
-            spent_cost = spent_cost.saturating_add(plan_score(&read_ranges, estimate, concurrency));
+            total_cost = total_cost.saturating_add(plan_score(&read_ranges, estimate, concurrency));
             // Probes must leave room for at least one dependent data wave.
             // Charge each round separately, even when it has just one request.
-            let predicted_cost = spent_cost.saturating_add(if probing {
-                bandwidth_delay_bytes(estimate)
+            let predicted_cost = total_cost.saturating_add(if probing {
+                ordinary_bytes.saturating_add(bandwidth_delay_bytes(estimate))
             } else {
                 0
             });
             let reason = if request_count > MAX_REQUESTS {
                 "request_budget"
-            } else if !partial_read_is_cheaper(predicted_cost, whole_cost) {
+            } else if !partial_read_has_clear_savings(predicted_cost, ordinary_cost) {
                 "uncertain_savings"
             } else {
                 "none"
@@ -392,7 +405,8 @@ impl IntraPageReader {
             if reason != "none" {
                 return Ok(None);
             }
-            self.fetch_ranges(read_ranges, &mut cache, &permits).await?;
+            self.fetch_ranges(&next_ranges, read_ranges, &mut cache, &permits)
+                .await?;
             drop(permits);
             if !probing {
                 return Ok(Some(
@@ -420,7 +434,7 @@ impl IntraPageReader {
                     trace(
                         "data",
                         "request_budget",
-                        spent_cost,
+                        total_cost,
                         cache.byte_len() as u128,
                         request_count,
                         probe_rounds,
@@ -433,12 +447,7 @@ impl IntraPageReader {
             next_ranges = if probing {
                 probe_ranges
             } else {
-                data_ranges.extend(
-                    ranges
-                        .iter()
-                        .filter(|r| !pages.iter().any(|p| p.range == **r))
-                        .cloned(),
-                );
+                data_ranges.extend_from_slice(&ordinary_ranges);
                 data_ranges
             };
         }
@@ -466,8 +475,8 @@ fn invalid_data(reason: &str) -> ParquetError {
 }
 
 // Prefer ordinary reads unless the gain exceeds the planner's uncertainty margin.
-fn partial_read_is_cheaper(partial_cost: u128, whole_cost: u128) -> bool {
-    partial_cost.saturating_mul(100) < whole_cost.saturating_mul(100 - DECISION_MARGIN_PERCENT)
+fn partial_read_has_clear_savings(partial_cost: u128, ordinary_cost: u128) -> bool {
+    partial_cost.saturating_mul(100) < ordinary_cost.saturating_mul(100 - DECISION_MARGIN_PERCENT)
 }
 
 #[cfg(test)]
@@ -707,20 +716,20 @@ mod tests {
         memory.put(&path, full.clone().into()).await?;
         let metrics = metrics();
         let store = Arc::new(MeteredParquetObjectStore::new(
-            memory,
+            memory.clone(),
             metrics.clone(),
             MultiRangeReadStrategy::ChooseAutomatically,
         ));
         let metadata = Arc::new(
             ParquetMetaDataReader::new().parse_and_finish(&Bytes::from(parquet_bytes()?))?,
         );
-        let reader = IntraPageReader::new(
+        let mut reader = IntraPageReader::new(
             ParquetObjectReader::new(store.clone(), path.clone()).with_file_size(full.len() as u64),
             metadata,
             None,
             full.len() as u64,
             store,
-            path,
+            path.clone(),
         )?;
         let budget = Semaphore::new(2);
         let estimate = TransportEstimate {
@@ -780,6 +789,40 @@ mod tests {
             );
         }
         assert_eq!(budget.available_permits(), 2);
+
+        let snapshot = metrics.snapshot();
+        assert_eq!(
+            snapshot.parquet_data_file_physical_range_bytes_planned,
+            snapshot.parquet_data_file_bytes_received
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_physical_range_requests_planned,
+            snapshot.parquet_data_file_range_get_operations
+        );
+
+        // Most bytes belong to columns that cannot use partial reads. Their
+        // known cost should rule out speculative probes before any I/O starts.
+        let mixed_bytes = full.repeat(21);
+        reader.file_size = mixed_bytes.len() as u64;
+        memory.put(&path, mixed_bytes.into()).await?;
+        let received_before = metrics.snapshot().parquet_data_file_bytes_received;
+        assert!(
+            reader
+                .read_partial_pages(
+                    &[page.range.clone(), page.range.end..reader.file_size],
+                    std::slice::from_ref(&page),
+                    &selected,
+                    estimate,
+                    &budget,
+                )
+                .await?
+                .is_none()
+        );
+        assert_eq!(
+            metrics.snapshot().parquet_data_file_bytes_received,
+            received_before,
+            "known full-read bytes must be charged before probing"
+        );
 
         for (frame_checksum, page_crc) in [(true, None), (false, Some(1))] {
             let mut frame = frame.clone();
@@ -921,7 +964,7 @@ mod tests {
                 .set_compression(codec)
                 .set_dictionary_enabled(false)
                 .set_statistics_enabled(EnabledStatistics::Page)
-                .set_max_row_group_row_count(Some(32_769))
+                .set_max_row_group_row_count(Some(16_384))
                 .set_data_page_row_count_limit(16_384)
                 .set_write_batch_size(1_024)
                 .build();
@@ -985,7 +1028,9 @@ mod tests {
                             .downcast_ref::<Int64Array>()
                             .expect("id");
                         let mask = BooleanArray::from_iter(
-                            ids.values().iter().map(|id| Some(dense || id % 8_191 == 0)),
+                            ids.values()
+                                .iter()
+                                .map(|id| Some(if dense { id % 2 == 0 } else { id % 8_191 == 0 })),
                         );
                         if let Some(selection) = &selection {
                             let row_numbers = batch
@@ -1034,9 +1079,9 @@ mod tests {
                 }
             }
         }
-        assert!(partial_read_is_cheaper(89, 100));
-        assert!(!partial_read_is_cheaper(90, 100));
-        assert!(!partial_read_is_cheaper(u128::MAX, u128::MAX));
+        assert!(partial_read_has_clear_savings(89, 100));
+        assert!(!partial_read_has_clear_savings(90, 100));
+        assert!(!partial_read_has_clear_savings(u128::MAX, u128::MAX));
         Ok(())
     }
 
@@ -1079,6 +1124,7 @@ mod tests {
             let permits = reserve_partial_read_capacity(&job_budget, 2).expect("free budget");
             job_reader
                 .fetch_ranges(
+                    &[0..size / 2, size / 2..size],
                     vec![0..size / 2, size / 2..size],
                     &mut RangeCache::default(),
                     &permits,
@@ -1095,14 +1141,24 @@ mod tests {
         // InMemory clips the end to the object size. Reject that short response
         // before it can become zero-filled selected values in a reconstructed page.
         let error = reader
-            .fetch_ranges(vec![0..1, 1..size + 1], &mut cache, &permits)
+            .fetch_ranges(
+                &[0..1, 1..size + 1],
+                vec![0..1, 1..size + 1],
+                &mut cache,
+                &permits,
+            )
             .await
             .err()
             .ok_or("short range response accepted")?;
         assert!(error.to_string().contains("unexpected length"));
         assert!(
             reader
-                .fetch_ranges(vec![0..1, size..size + 1], &mut cache, &permits)
+                .fetch_ranges(
+                    &[0..1, size..size + 1],
+                    vec![0..1, size..size + 1],
+                    &mut cache,
+                    &permits
+                )
                 .await
                 .is_err()
         );
@@ -1119,7 +1175,12 @@ mod tests {
         let reader = super::IntraPageReader::new(inner, metadata, None, size, metered, path)?;
         let error = tokio::time::timeout(
             Duration::from_secs(5),
-            reader.fetch_ranges(vec![0..size / 2, size / 2..size], &mut cache, &permits),
+            reader.fetch_ranges(
+                &[0..size / 2, size / 2..size],
+                vec![0..size / 2, size / 2..size],
+                &mut cache,
+                &permits,
+            ),
         )
         .await?
         .err()

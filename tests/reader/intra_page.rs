@@ -256,15 +256,16 @@ async fn intra_page_public_scan_without_transport_evidence_matches_baseline() ->
                 add_dv(&root)?;
             }
             let (expected, baseline) = scan(&root, Default::default(), id_filter(MATCHES)).await?;
-            let (actual, optimized) = scan(&root, intra_page_options(), id_filter(MATCHES)).await?;
+            let (actual, experimental) =
+                scan(&root, intra_page_options(), id_filter(MATCHES)).await?;
             assert_eq!(actual, expected);
             assert_eq!(actual.num_rows(), MATCHES.len() - if dv { 2 } else { 0 });
             // Local reads supply no remote transport evidence. Opting in must
             // retain ordinary I/O until the cost model has usable observations.
             assert!(
-                optimized.parquet_data_file_bytes_received
+                experimental.parquet_data_file_bytes_received
                     == baseline.parquet_data_file_bytes_received,
-                "{codec:?}, DV={dv}: optimized {optimized:?}, baseline {baseline:?}"
+                "{codec:?}, DV={dv}: experimental {experimental:?}, baseline {baseline:?}"
             );
             let dense_predicate = DeltaPredicate::Compare {
                 column: "id".into(),
@@ -331,7 +332,7 @@ async fn intra_page_explicit_range_policies_keep_their_reads() -> TestResult {
     ] {
         let options = DeltaScanExecutionOptions::new().with_parquet_range_read_policy(policy);
         let (expected, baseline) = scan(&root, options, id_filter(MATCHES)).await?;
-        let (actual, optimized) = scan(
+        let (actual, experimental) = scan(
             &root,
             options.with_experimental_intra_page_reads(true),
             id_filter(MATCHES),
@@ -339,11 +340,11 @@ async fn intra_page_explicit_range_policies_keep_their_reads() -> TestResult {
         .await?;
         assert_eq!(actual, expected);
         assert_eq!(
-            optimized.parquet_data_file_bytes_received,
+            experimental.parquet_data_file_bytes_received,
             baseline.parquet_data_file_bytes_received
         );
         assert_eq!(
-            optimized.parquet_data_file_range_get_operations,
+            experimental.parquet_data_file_range_get_operations,
             baseline.parquet_data_file_range_get_operations
         );
     }

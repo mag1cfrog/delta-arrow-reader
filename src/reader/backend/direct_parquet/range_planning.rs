@@ -246,22 +246,7 @@ fn candidate_range_plans(
         .min(MAX_RANGE_READ_REQUESTS / max_concurrent_reads);
     for target_waves in (1..=highest_target_wave).rev() {
         let target_count = target_waves * max_concurrent_reads;
-        let mut merge_gap = vec![false; exact_plan.len() - 1];
-        for (_, index) in gaps.iter().take(exact_plan.len() - target_count) {
-            merge_gap[*index] = true;
-        }
-
-        let mut plan = Vec::with_capacity(target_count);
-        let mut current_range = exact_plan[0].clone();
-        for (index, next_range) in exact_plan.iter().enumerate().skip(1) {
-            if merge_gap[index - 1] {
-                current_range.end = next_range.end;
-            } else {
-                plan.push(current_range);
-                current_range = next_range.clone();
-            }
-        }
-        plan.push(current_range);
+        let plan = merge_smallest_gaps(&exact_plan, &gaps, exact_plan.len() - target_count);
         if range_bytes(&plan) > max_planned_bytes {
             break;
         }
@@ -334,13 +319,22 @@ pub(super) fn choose_bounded_range_plan(
     let competitive = best.saturating_add(best.saturating_mul(DECISION_MARGIN_PERCENT) / 100);
     // Earlier candidates transfer fewer bytes, matching the ordinary planner's margin.
     let merge_count = scores.iter().position(|score| *score <= competitive)?;
-    let mut merge = vec![false; gaps.len()];
-    for (_, index) in gaps.iter().take(merge_count) {
+    Some(merge_smallest_gaps(&exact, &gaps, merge_count))
+}
+
+/// Builds a plan by merging the first `merge_count` gaps in ascending size order.
+fn merge_smallest_gaps(
+    exact: &[Range<u64>],
+    sorted_gaps: &[(u64, usize)],
+    merge_count: usize,
+) -> Vec<Range<u64>> {
+    let Some(first) = exact.first() else {
+        return Vec::new();
+    };
+    let mut merge = vec![false; exact.len() - 1];
+    for (_, index) in sorted_gaps.iter().take(merge_count) {
         merge[*index] = true;
     }
-    let Some(first) = exact.first() else {
-        return Some(Vec::new());
-    };
     let mut plan = Vec::with_capacity(exact.len() - merge_count);
     let mut current = first.clone();
     for (index, next) in exact.iter().enumerate().skip(1) {
@@ -352,7 +346,7 @@ pub(super) fn choose_bounded_range_plan(
         }
     }
     plan.push(current);
-    Some(plan)
+    plan
 }
 
 /// Returns the bytes transferable during one typical request-latency interval.
@@ -548,6 +542,60 @@ mod tests {
         assert!(choose_bounded_range_plan(&ranges, slow, 1, 1_099).is_none());
         assert!(choose_bounded_range_plan(&ranges, slow, 0, 10_100).is_none());
         assert_eq!(choose_bounded_range_plan(&[], slow, 0, 0), Some(vec![]));
+    }
+
+    #[test]
+    fn bounded_planner_matches_exhaustive_small_plans() {
+        use super::{DECISION_MARGIN_PERCENT, choose_bounded_range_plan};
+        let requested = [200..210, 0..5, 13..23, 0..10, 80..90];
+        let exact = [0..10, 13..23, 80..90, 200..210];
+        for concurrency in 1..=5 {
+            for byte_budget in [39, 40, 43, 100, 210] {
+                let estimate = TransportEstimate {
+                    request_latency: Duration::from_millis(100),
+                    shared_throughput_bytes_per_second: 1_000,
+                };
+                // Enumerate every cut between ranges, independent of the greedy
+                // gap ordering used by the implementation.
+                let candidates: Vec<_> = (0..8)
+                    .map(|cuts| {
+                        let mut plan = Vec::new();
+                        let mut current = exact[0].clone();
+                        for (index, next) in exact.iter().enumerate().skip(1) {
+                            if cuts & (1 << (index - 1)) == 0 {
+                                current.end = next.end;
+                            } else {
+                                plan.push(current);
+                                current = next.clone();
+                            }
+                        }
+                        plan.push(current);
+                        plan
+                    })
+                    .filter(|plan| range_bytes(plan) <= byte_budget)
+                    .collect();
+                let actual =
+                    choose_bounded_range_plan(&requested, estimate, concurrency, byte_budget);
+                let Some(best) = candidates
+                    .iter()
+                    .map(|plan| plan_score(plan, estimate, concurrency))
+                    .min()
+                else {
+                    assert!(actual.is_none());
+                    continue;
+                };
+                let competitive = best + best * DECISION_MARGIN_PERCENT / 100;
+                let expected = candidates
+                    .iter()
+                    .filter(|plan| plan_score(plan, estimate, concurrency) <= competitive)
+                    .min_by_key(|plan| (range_bytes(plan), plan.len()));
+                assert_eq!(
+                    actual.as_ref(),
+                    expected,
+                    "concurrency={concurrency}, budget={byte_budget}"
+                );
+            }
+        }
     }
 
     #[tokio::test]

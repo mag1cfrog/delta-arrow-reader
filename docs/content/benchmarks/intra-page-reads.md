@@ -58,12 +58,15 @@ the bandwidth-delay cost. Partial reads, including probes already issued, must
 beat the ordinary plan by more than 10%. Missing transport evidence, selections
 covering at least half a row group, uncertain savings or unavailable capacity
 use ordinary reads. Probes themselves also supply transport observations; there
-are no calibration requests.
+are no calibration requests. Bytes belonging to output columns that need complete
+reads are included before probing, so known costs can rule out the optimization
+without extra I/O.
 
 Each round reserves currently free capacity from a process-wide ceiling of 512
 planned range reads, shared with ordinary range plans. Ordinary plans retain
 their per-plan limit of 10. A round uses its reserved concurrency for both scoring
-and execution, then releases it before parsing or requesting the next round.
+and execution, then releases it before parsing or requesting the next round. If gap merging
+reduces the request count, excess reserved capacity is released before I/O.
 Partial plans do not queue for permits. Dropping a future or encountering a
 request error drops outstanding reads, buffers and reservations. Store retry
 behavior is unchanged and stays within the reservation.
