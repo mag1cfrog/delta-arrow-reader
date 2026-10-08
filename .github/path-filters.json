@@ -6,10 +6,13 @@
     "Cargo.toml",
     "Cargo.lock",
     "clippy.toml",
+    "LICENSE",
+    "NOTICE",
     "README.md",
     "docs/content/**/*.md",
     "docs/public/**/*.md",
     "src/**",
+    "crates/delta-arrow-reader-python/**",
     "tests/**",
     "benches/**"
   ],

@@ -1,0 +1,292 @@
+from collections import UserDict
+import gc
+import json
+from pathlib import Path
+import tempfile
+from types import MappingProxyType
+import unittest
+
+import pyarrow as pa
+
+from delta_arrow_reader import DeltaReaderError, DeltaTable
+
+
+class TableTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="secret-table-")
+        self.addCleanup(temporary.cleanup)
+        self.location = Path(temporary.name)
+        self.log = self.location / "_delta_log"
+        self.log.mkdir()
+        schema = {
+            "type": "struct",
+            "fields": [
+                {"name": "id", "type": "long", "nullable": False, "metadata": {}}
+            ],
+        }
+        self.metadata = {
+            "id": "python-test-table",
+            "format": {"provider": "parquet", "options": {}},
+            "schemaString": json.dumps(schema),
+            "partitionColumns": [],
+            "configuration": {},
+        }
+        self.write_log(
+            0,
+            {"protocol": {"minReaderVersion": 1, "minWriterVersion": 2}},
+            {"metaData": self.metadata},
+        )
+
+    def write_log(self, version, *actions):
+        (self.log / f"{version:020}.json").write_text(
+            "".join(json.dumps(action) + "\n" for action in actions), encoding="utf-8"
+        )
+
+    def test_latest_snapshot_is_immutable(self):
+        original = DeltaTable(self.location)
+        self.assertEqual(original.version, 0)
+        self.assertEqual(repr(original), "DeltaTable(version=0)")
+        self.write_log(1, {"commitInfo": {"operation": "WRITE"}})
+        for location in (self.location, str(self.location), self.location.as_uri()):
+            with self.subTest(location=location):
+                table = DeltaTable(location)
+                self.assertEqual(table.version, 1)
+                self.assertNotIn(str(self.location), repr(table))
+        self.assertEqual(original.version, 0)
+        with self.assertRaises(AttributeError):
+            original.version = 1
+
+    def test_selects_snapshot_version(self):
+        self.write_log(1, {"commitInfo": {"operation": "WRITE"}})
+        for version, expected in ((None, 1), (0, 0), (1, 1)):
+            with self.subTest(version=version):
+                table = DeltaTable(self.location, version=version)
+                self.assertEqual(table.version, expected)
+                self.assertEqual(repr(table), f"DeltaTable(version={expected})")
+
+    def test_schema_preserves_types_and_metadata(self):
+        def field(name, datatype, nullable=True, metadata=None):
+            return {
+                "name": name, "type": datatype, "nullable": nullable,
+                "metadata": metadata or {},
+            }
+
+        fields = [
+            field("id", "long", False, {"comment": "identifier", "ordinal": 7}),
+            field("profile", {"type": "struct", "fields": [
+                field("age", "integer", False, {"comment": "years"}),
+                field("nickname", "string"),
+            ]}),
+            field("tags", {
+                "type": "array", "elementType": "string", "containsNull": False,
+            }),
+            field("attributes", {
+                "type": "map", "keyType": "string", "valueType": "long",
+                "valueContainsNull": False,
+            }),
+            field("amount", "decimal(10,2)", False),
+            field("event_ts", "timestamp"),
+            field("local_ts", "timestamp_ntz"),
+        ]
+        self.metadata["schemaString"] = json.dumps({"type": "struct", "fields": fields})
+        self.write_log(
+            1,
+            {"protocol": {
+                "minReaderVersion": 3, "minWriterVersion": 7,
+                "readerFeatures": ["timestampNtz"], "writerFeatures": ["timestampNtz"],
+            }},
+            {"metaData": self.metadata},
+        )
+        expected = pa.schema([
+            pa.field("id", pa.int64(), nullable=False,
+                     metadata={b"comment": b"identifier", b"ordinal": b"7"}),
+            pa.field("profile", pa.struct([
+                pa.field("age", pa.int32(), nullable=False, metadata={b"comment": b"years"}),
+                pa.field("nickname", pa.string()),
+            ])),
+            pa.field("tags", pa.list_(pa.field("element", pa.string(), nullable=False))),
+            pa.field("attributes", pa.map_(
+                pa.string(), pa.field("value", pa.int64(), nullable=False),
+            )),
+            pa.field("amount", pa.decimal128(10, 2), nullable=False),
+            pa.field("event_ts", pa.timestamp("us", tz="UTC")),
+            pa.field("local_ts", pa.timestamp("us")),
+        ])
+        table = DeltaTable(self.location)
+        schema = table.schema
+        self.assertIsInstance(schema, pa.Schema)
+        self.assertTrue(schema.equals(expected, check_metadata=True), schema)
+        self.assertTrue(pa.schema(table).equals(expected, check_metadata=True))
+        self.assertTrue(table.schema.equals(expected, check_metadata=True))
+        with self.assertRaises(AttributeError):
+            table.schema = expected
+        del table
+        gc.collect()
+        self.assertTrue(schema.equals(expected, check_metadata=True))
+        self.assertEqual(
+            DeltaTable(self.location, version=0).schema,
+            pa.schema([pa.field("id", pa.int64(), nullable=False)]),
+        )
+
+    def test_schema_capsule_outlives_table(self):
+        table = DeltaTable(self.location)
+        capsule = table.__arrow_c_schema__()
+        unused = table.__arrow_c_schema__()
+        del unused, table
+        gc.collect()
+
+        class ExportedSchema:
+            def __arrow_c_schema__(self):
+                return capsule
+
+        self.assertEqual(
+            pa.schema(ExportedSchema()),
+            pa.schema([pa.field("id", pa.int64(), nullable=False)]),
+        )
+
+    def test_schema_export_errors_are_redacted(self):
+        schema = json.loads(self.metadata["schemaString"])
+        schema["fields"][0]["name"] = "secret\0field"
+        nested = {"type": "struct", "fields": [{
+            "name": "nested", "type": schema, "nullable": True, "metadata": {},
+        }]}
+        for malformed in (schema, nested):
+            with self.subTest(schema=malformed):
+                self.metadata["schemaString"] = json.dumps(malformed)
+                self.write_log(1, {"metaData": self.metadata})
+                table = DeltaTable(self.location)
+                with self.assertRaises(DeltaReaderError) as caught:
+                    _ = table.schema
+                error = caught.exception
+                self.assertEqual(error.phase, "schema")
+                self.assertEqual(error.code, "schema_conversion")
+                self.assertNotIn("secret", str(error))
+                self.assertIsNone(error.__cause__)
+                self.assertIsNone(error.__context__)
+
+    def test_version_validation(self):
+        class Version(int):
+            def __lt__(self, other):
+                return False
+
+            def __index__(self):
+                return 123
+
+        self.assertEqual(DeltaTable(self.location, version=Version(0)).version, 0)
+        with self.assertRaises(TypeError):
+            DeltaTable(self.location, 0)
+        cases = (
+            (True, TypeError),
+            (False, TypeError),
+            (0.0, TypeError),
+            ("0", TypeError),
+            (b"0", TypeError),
+            (object(), TypeError),
+            (-1, ValueError),
+            (-(2**100), ValueError),
+            (Version(-1), ValueError),
+            (2**64, OverflowError),
+            (2**100, OverflowError),
+        )
+        for version, error in cases:
+            with self.subTest(version=version), self.assertRaises(error):
+                DeltaTable(self.location / "missing", version=version)
+
+    def test_missing_snapshot_version(self):
+        for version in (1, 2**64 - 1):
+            with self.subTest(version=version):
+                with self.assertRaises(DeltaReaderError) as caught:
+                    DeltaTable(self.location, version=version)
+                self.assertEqual(caught.exception.phase, "snapshot")
+                self.assertEqual(caught.exception.code, "snapshot_load")
+                self.assertNotIn("secret", str(caught.exception))
+
+    def test_storage_options_accepts_mappings(self):
+        values = {"secret-option": "secret-value"}
+        cases = (None, {}, values, UserDict(values), MappingProxyType(values))
+        for options in cases:
+            with self.subTest(options=options):
+                table = DeltaTable(self.location, version=0, storage_options=options)
+                self.assertEqual(table.version, 0)
+                self.assertNotIn("secret", repr(table))
+        self.assertEqual(values, {"secret-option": "secret-value"})
+
+    def test_storage_options_requires_string_mapping(self):
+        cases = (
+            True,
+            1,
+            "secret-option",
+            [],
+            [("key", "value")],
+            {1: "value"},
+            {b"key": "value"},
+            {"key": 1},
+            {"key": None},
+            {"key": b"value"},
+            UserDict({"key": False}),
+        )
+        for options in cases:
+            with self.subTest(options=options), self.assertRaises(TypeError):
+                DeltaTable(self.location / "missing", storage_options=options)
+
+    def test_storage_options_are_forwarded_and_redacted(self):
+        # This invalid boolean fails during store construction, before any I/O.
+        values = {"allow_http": "secret-invalid-value"}
+        for options in (values, UserDict(values), MappingProxyType(values)):
+            with self.subTest(options=options):
+                with self.assertRaises(DeltaReaderError) as caught:
+                    DeltaTable("http://127.0.0.1:9/table", storage_options=options)
+                error = caught.exception
+                self.assertEqual(error.phase, "storage")
+                self.assertEqual(error.code, "storage_initialization")
+                for text in (str(error), repr(error), repr(error.args), repr(vars(error))):
+                    self.assertNotIn("secret", text)
+
+    def test_location_requires_text(self):
+        class BytesPath:
+            def __fspath__(self):
+                return b"secret-table"
+
+        for location in (None, 42, True, object(), b"secret-table", BytesPath()):
+            with self.subTest(location=location), self.assertRaises(TypeError):
+                DeltaTable(location)
+
+    def test_reader_errors_are_redacted(self):
+        empty = self.location / "secret-empty-table"
+        empty.mkdir()
+        cases = (
+            (
+                self.location / "secret-missing-table",
+                "table_location",
+                "invalid_table_location",
+            ),
+            (empty, "snapshot", "snapshot_load"),
+            (
+                "unknown://secret-user:secret-password@host/table?token=secret-token",
+                "storage",
+                "storage_initialization",
+            ),
+        )
+        for location, phase, code in cases:
+            with self.subTest(location=location):
+                with self.assertRaises(DeltaReaderError) as caught:
+                    DeltaTable(location)
+                error = caught.exception
+                self.assertEqual(error.phase, phase)
+                self.assertEqual(error.code, code)
+                self.assertIn(f"phase={phase} code={code}", str(error))
+                for text in (str(error), repr(error), repr(error.args), repr(vars(error))):
+                    self.assertNotIn("secret", text)
+                self.assertIsNone(error.__cause__)
+                self.assertIsNone(error.__context__)
+        self.assertEqual(DeltaTable(self.location).version, 0)
+
+    def test_protocol_validation_stays_deferred(self):
+        self.write_log(
+            1, {"protocol": {"minReaderVersion": 4, "minWriterVersion": 2}}
+        )
+        self.assertEqual(DeltaTable(self.location).version, 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

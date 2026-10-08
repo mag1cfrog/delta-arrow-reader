@@ -35,17 +35,19 @@ error, ownership and validation contracts rather than redesigning them.
 | Work | Existing owner | Boundary |
 | --- | --- | --- |
 | Install/import, load a latest or versioned snapshot, schema/version, reader errors | [#102](https://github.com/mag1cfrog/delta-arrow-reader/issues/102) | Independently actionable; no Spark or SQL frontend prerequisite |
+| Shared interruptible waits and runtime shutdown | [#417](https://github.com/mag1cfrog/delta-arrow-reader/issues/417) | Verify through table loading before adding streaming |
 | Projection/limits, Arrow C Stream and `pyarrow.RecordBatchReader` | [#105](https://github.com/mag1cfrog/delta-arrow-reader/issues/105) | Reuse the native scan; no eager collection or second producer queue |
 | Refresh and existing scan/resource controls | [#106](https://github.com/mag1cfrog/delta-arrow-reader/issues/106) | New snapshots do not retarget existing readers |
 | Supported predicates and exact schema-aware scalar conversion | [#107](https://github.com/mag1cfrog/delta-arrow-reader/issues/107) | Core predicate semantics; no Spark parsing or new expression language |
-| Platform wheels, installed-package checks and publishing | [#109](https://github.com/mag1cfrog/delta-arrow-reader/issues/109) | Core Reader release; neither Spark nor a SQL session API is required |
+| Platform wheels and installed-package checks | [#418](https://github.com/mag1cfrog/delta-arrow-reader/issues/418) | Validate the completed Reader API on all four wheel targets |
+| Release-plz and Trusted Publishing integration | [#109](https://github.com/mag1cfrog/delta-arrow-reader/issues/109) | Reuse the validated wheel builder; first publication remains on #101's release checklist |
 
-The intended sequence remains packaging/loading, streaming, then controls and
-filters, followed by validated distribution. The native `#113 blocks #102`
+The implementation order is #102, #417, #105, then both #106 and #107, followed
+by #418 and #109. The native `#113 blocks #102`
 relationship and the `#112 blocks #109` SQL-release gate have been removed.
 The Spark experiment and deferred SQL investigation were detached from the first
-Python release umbrella. Publishing retains direct prerequisites on controls
-(#106) and filters (#107), which in turn depend on the preceding Reader leaves.
+Python release umbrella. Publishing depends on the validated wheel builder
+(#418), controls (#106), and filters (#107).
 
 The binding must preserve single-transfer Arrow ownership, retained batches and
 readers after Python table deletion, terminal errors rather than successful EOF,
@@ -53,11 +55,11 @@ early close, GIL release during blocking work, interruption and safe final runti
 shutdown. The binding owns its runtime; import must not start it, and the Rust
 core must not acquire a hidden runtime. Keep existing redacted error contracts.
 
-The existing package identity, stubs, shared version, platform targets and
-publishing controls remain planned work. They are not delivered by this cleanup.
-Dependency pins in older issues must be checked against the chosen implementation
-baseline before coding. Python asyncio, writes, a dataframe/query product and
-JavaScript bindings remain outside this first release.
+The Python package now builds from source with type stubs and the Rust workspace's
+shared version. It supports snapshot loading and schema/version inspection.
+Streaming, platform wheels and publishing remain planned work. Python asyncio,
+writes, a dataframe/query product and JavaScript bindings remain outside this
+first release.
 
 ## Optional SQL access through DataFusion Python
 

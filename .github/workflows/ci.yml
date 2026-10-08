@@ -156,6 +156,52 @@ jobs:
       - if: matrix.task == 'Package'
         run: cargo package --locked
 
+  python-package:
+    name: Python Package
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - name: Read Rust version
+        id: rust-version
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
+          components: clippy
+      - name: Cache Cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci
+          cache-targets: false
+          save-if: false
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Lint Python bindings
+        run: cargo clippy --locked -p delta-arrow-reader-python --all-targets -- -D warnings
+      - name: Build Python wheel from sdist
+        run: |
+          python -m pip install 'maturin>=1.14,<2'
+          maturin sdist --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out "$RUNNER_TEMP/python-sdist"
+          mkdir "$RUNNER_TEMP/python-source"
+          tar -xzf "$RUNNER_TEMP"/python-sdist/*.tar.gz -C "$RUNNER_TEMP/python-source" --strip-components=1
+          cd "$RUNNER_TEMP/python-source"
+          maturin build --locked --release --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out "$RUNNER_TEMP/python-wheels"
+      - name: Test installed wheel
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -m venv "$RUNNER_TEMP/python-venv"
+          "$RUNNER_TEMP/python-venv/bin/python" -m pip install --only-binary=:all: "$RUNNER_TEMP"/python-wheels/*.whl
+          "$RUNNER_TEMP/python-venv/bin/python" -I -m unittest discover -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests"
+
   selective-read-fixtures:
     name: Public Fixture Smoke
     needs: changes
@@ -219,7 +265,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [changes, feature-tests, platform-tests, checks, selective-read-fixtures]
+    needs: [changes, feature-tests, platform-tests, checks, python-package, selective-read-fixtures]
     if: always()
     runs-on: ubuntu-latest
 
@@ -248,6 +294,11 @@ jobs:
 
           if [ "${{ needs.checks.result }}" != "success" ]; then
             echo "Checks did not pass: ${{ needs.checks.result }}"
+            exit 1
+          fi
+
+          if [ "${{ needs.python-package.result }}" != "success" ]; then
+            echo "Python Package did not pass: ${{ needs.python-package.result }}"
             exit 1
           fi
 

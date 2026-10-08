@@ -16,6 +16,27 @@ RUSTDOCFLAGS="-D warnings" cargo doc --locked --all-features --no-deps
 cargo package --locked
 ```
 
+## Build the Python package locally
+
+For source installation and a table inspection example, see the
+[Python installation guide](../public/installation.md#python).
+
+To build and test the wheel directly, run these commands from the repository
+root on Linux or macOS:
+
+```console
+python3 -m venv target/python-venv
+. target/python-venv/bin/activate
+python -m pip install 'maturin>=1.14,<2'
+maturin build --locked --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out target/python-wheels
+python -m pip install --force-reinstall target/python-wheels/*.whl
+python -I -m unittest discover -s crates/delta-arrow-reader-python/tests
+```
+
+The isolated Python check imports the installed wheel without adding the current
+directory to its import path. Default Cargo commands still select the core crate;
+use `cargo check -p delta-arrow-reader-python` to check the binding crate directly.
+
 ## Work on the documentation
 
 The Markdown files in `docs/public/` are the source for the documentation

@@ -40,7 +40,8 @@ cargo add delta-arrow-reader
 cargo add tokio --features macros,rt-multi-thread
 ```
 
-[Python bindings are planned](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/project-direction.md#python-can-proceed-independently); a Python package is not available yet.
+For Python, [build from source to inspect table snapshots](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python).
+Python row streaming and published wheels are planned.
 
 Read up to 100 rows from an existing Delta table:
 
