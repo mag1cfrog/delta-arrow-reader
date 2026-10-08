@@ -12,7 +12,7 @@ use arrow::{datatypes::Schema, ffi::FFI_ArrowSchema};
 use pyo3::{
     exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyBool, PyCapsule, PyDict, PyInt, PyMapping},
+    types::{PyBool, PyCapsule, PyDict, PyInt, PyList, PyMapping, PyTuple},
 };
 
 use crate::runtime::Runtime;
@@ -139,17 +139,30 @@ impl DeltaTable {
         PyCapsule::new_with_value(py, ffi_schema, c"arrow_schema")
     }
 
-    /// Plan a full-table scan and return a single-use Arrow stream exporter.
+    /// Plan a scan and return a single-use Arrow stream exporter.
     ///
+    /// columns=None selects all columns. A list or tuple of names selects columns
+    /// in that order; an empty list selects no columns while retaining row counts.
     /// Planning reads Delta metadata; data-file reads start on the first pull.
     /// The stream retains its snapshot and runtime independently of this table.
-    fn scan(&self, py: Python<'_>) -> PyResult<RecordBatchStream> {
-        let scan = self
-            ._runtime
-            .wait(py, self.table.scan().build())?
-            .map_err(|error| {
-                reader_error(py, error.to_string(), error.phase().as_str(), error.code())
-            })?;
+    #[pyo3(signature = (*, columns=None))]
+    fn scan(
+        &self,
+        py: Python<'_>,
+        columns: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<RecordBatchStream> {
+        let mut builder = self.table.scan();
+        if let Some(columns) = columns {
+            if !columns.is_instance_of::<PyList>() && !columns.is_instance_of::<PyTuple>() {
+                return Err(PyTypeError::new_err(
+                    "columns must be a list or tuple of strings, or None",
+                ));
+            }
+            builder = builder.with_projection(columns.extract::<Vec<String>>()?);
+        }
+        let scan = self._runtime.wait(py, builder.build())?.map_err(|error| {
+            reader_error(py, error.to_string(), error.phase().as_str(), error.code())
+        })?;
         // Validate before Arrow's C callback exports the schema.
         export_schema(py, scan.schema().as_ref())?;
         Ok(RecordBatchStream::new(
@@ -158,11 +171,17 @@ impl DeltaTable {
         ))
     }
 
-    /// Plan a full-table scan and consume it as a pyarrow.RecordBatchReader.
+    /// Plan a scan and consume it as a pyarrow.RecordBatchReader.
     ///
+    /// columns accepts the same selection as scan(): None, a list, or a tuple.
     /// Use a with block to close the reader, including when stopping early.
-    fn to_reader<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let stream = Py::new(py, self.scan(py)?)?;
+    #[pyo3(signature = (*, columns=None))]
+    fn to_reader<'py>(
+        &self,
+        py: Python<'py>,
+        columns: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let stream = Py::new(py, self.scan(py, columns)?)?;
         py.import("pyarrow")?
             .getattr("RecordBatchReader")?
             .call_method1("from_stream", (stream,))

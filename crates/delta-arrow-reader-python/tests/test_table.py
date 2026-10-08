@@ -98,10 +98,56 @@ class TableTests(unittest.TestCase):
 
     def test_empty_reader_preserves_schema(self):
         table = DeltaTable(self.location)
+        for columns in (None, []):
+            with self.subTest(columns=columns):
+                with table.to_reader(columns=columns) as reader:
+                    empty = reader.read_all()
+                self.assertEqual(empty.schema, table.schema if columns is None else pa.schema([]))
+                self.assertEqual(empty.num_rows, 0)
+
+    def test_projection_preserves_order_values_and_zero_column_row_counts(self):
+        fixture = (Path(__file__).resolve().parents[3]
+                   / "tests/reader/fixtures/external_writer/corpus/partitioned/table")
+        table = DeltaTable(fixture)
         with table.to_reader() as reader:
-            empty = reader.read_all()
-        self.assertEqual(empty.schema, table.schema)
-        self.assertEqual(empty.num_rows, 0)
+            full = reader.read_all()
+        self.assertEqual(full.num_rows, 360)
+        for method in ("scan", "to_reader"):
+            for columns in (None, ["region", "id"], ("label", "id"), ["region"], [], ()):
+                with self.subTest(method=method, columns=columns):
+                    expected = full if columns is None else full.select(columns)
+                    result = getattr(table, method)(columns=columns)
+                    reader = (pa.RecordBatchReader.from_stream(result)
+                              if method == "scan" else result)
+                    with reader:
+                        batches = list(reader)
+                        actual = pa.Table.from_batches(batches, schema=reader.schema)
+                    self.assertTrue(actual.equals(expected, check_metadata=True))
+                    self.assertEqual(actual.num_rows, full.num_rows)
+                    if columns is not None and not columns:
+                        self.assertTrue(batches)
+                        for batch in batches:
+                            self.assertEqual(batch.num_columns, 0)
+                            self.assertGreater(batch.num_rows, 0)
+
+    def test_projection_validation_is_shared_by_both_entrypoints(self):
+        table = DeltaTable(self.location)
+        for method in (table.scan, table.to_reader):
+            with self.subTest(method=method.__name__):
+                for columns in ("id", b"id", {"id"}, {"id": 1}, iter(["id"]), 1, True,
+                                [1], [None], [b"id"], ["id", object()]):
+                    with self.subTest(columns=columns), self.assertRaises(TypeError):
+                        method(columns=columns)
+                with self.assertRaises(TypeError):
+                    method(["id"])
+                for columns, reason in ((["secret-column"], "column_not_found"),
+                                        (["id", "id"], "duplicate_column")):
+                    with self.subTest(columns=columns), self.assertRaises(DeltaReaderError) as caught:
+                        method(columns=columns)
+                    self.assertEqual(caught.exception.phase, "scan_planning")
+                    self.assertEqual(caught.exception.code, "invalid_projection")
+                    self.assertIn(f"reason={reason}", str(caught.exception))
+                    self.assertNotIn("secret", str(caught.exception))
 
     def test_stream_exports_once_and_consumer_survives_close(self):
         with self.assertRaises(TypeError):
