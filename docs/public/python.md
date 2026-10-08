@@ -65,6 +65,20 @@ enabled, unsupported table protocols fail during construction rather than at
 scan planning. Other strings raise `ValueError`; non-string values raise
 `TypeError`.
 
+## Set the scan partition target
+
+Both `scan()` and `to_reader()` accept `target_partitions` to override automatic
+scan partition planning. The default, `None`, keeps automatic planning.
+
+```python
+with table.to_reader(columns=["id"], limit=10, target_partitions=2) as reader:
+    print(reader.read_all().num_rows)
+```
+
+A supplied value must be an integer from `1` through `2 * sys.maxsize + 1`.
+Booleans and other types raise `TypeError`, zero and negative values raise
+`ValueError`, and values above the maximum raise `OverflowError`.
+
 ## Use the Arrow stream interface and stop early
 
 `to_reader()` returns a `pyarrow.RecordBatchReader`. You can also construct one

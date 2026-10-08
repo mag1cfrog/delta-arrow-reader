@@ -417,6 +417,58 @@ class TableTests(unittest.TestCase):
                 with self.assertRaises(TypeError):
                     getattr(table, method)(None, 1)
 
+    def test_partition_targets_preserve_rows_projection_and_limits(self):
+        self.write_log(
+            1, self.write_parquet("first.parquet", [1, 2]),
+            self.write_parquet("second.parquet", [3, 4]),
+            self.write_parquet("third.parquet", [5, 6]),
+        )
+        table = DeltaTable(self.location)
+        for method in ("scan", "to_reader"):
+            for target in (None, 1, 2, 8, 2 * sys.maxsize + 1):
+                for columns, limit in ((["id"], None), (["id"], 3), ([], 3)):
+                    with self.subTest(method=method, target=target, columns=columns, limit=limit):
+                        result = getattr(table, method)(
+                            columns=columns, limit=limit, target_partitions=target,
+                        )
+                        reader = (pa.RecordBatchReader.from_stream(result)
+                                  if method == "scan" else result)
+                        with reader:
+                            actual = reader.read_all()
+                        self.assertEqual(actual.num_rows, 6 if limit is None else limit)
+                        self.assertEqual(actual.schema, table.schema if columns else pa.schema([]))
+                        if columns:
+                            values = actual.column("id").to_pylist()
+                            if limit is None:
+                                self.assertCountEqual(values, [1, 2, 3, 4, 5, 6])
+                            else:
+                                self.assertEqual(len(set(values)), limit)
+                                self.assertTrue(set(values) <= {1, 2, 3, 4, 5, 6})
+
+    def test_target_partitions_validation_is_shared_by_both_entrypoints(self):
+        class Partitions(int):
+            def __le__(self, other):
+                return False
+
+            def __index__(self):
+                return 123
+
+        table = DeltaTable(self.location)
+        for method in (table.scan, table.to_reader):
+            with self.subTest(method=method.__name__):
+                method(target_partitions=Partitions(1)).close()
+                for target, error_type in (
+                    (True, TypeError), (False, TypeError), (1.0, TypeError),
+                    ("1", TypeError), (b"1", TypeError), (object(), TypeError),
+                    (0, ValueError), (Partitions(0), ValueError), (-1, ValueError),
+                    (-2**100, ValueError), (Partitions(-1), ValueError),
+                    (2 * sys.maxsize + 2, OverflowError), (2**100, OverflowError),
+                ):
+                    with self.subTest(target=target), self.assertRaises(error_type):
+                        method(target_partitions=target)
+                with self.assertRaises(TypeError):
+                    method(None, None, 1)
+
     def test_projection_validation_is_shared_by_both_entrypoints(self):
         table = DeltaTable(self.location)
         for method in (table.scan, table.to_reader):

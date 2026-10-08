@@ -173,14 +173,17 @@ impl DeltaTable {
     /// in that order; an empty list selects no columns while retaining row counts.
     /// limit=None reads all rows. Otherwise, limit must be a nonnegative integer
     /// that fits the platform's usize. Booleans are not accepted.
+    /// target_partitions=None uses automatic partition planning. An override must
+    /// be a positive integer that fits usize; booleans are not accepted.
     /// Planning reads Delta metadata; data-file reads start on the first pull.
     /// The stream retains its snapshot and runtime independently of this table.
-    #[pyo3(signature = (*, columns=None, limit=None))]
+    #[pyo3(signature = (*, columns=None, limit=None, target_partitions=None))]
     fn scan(
         &self,
         py: Python<'_>,
         columns: Option<&Bound<'_, PyAny>>,
         limit: Option<&Bound<'_, PyInt>>,
+        target_partitions: Option<&Bound<'_, PyInt>>,
     ) -> PyResult<RecordBatchStream> {
         let mut builder = self.table.scan();
         if let Some(columns) = columns {
@@ -202,6 +205,25 @@ impl DeltaTable {
             }
             builder = builder.with_limit(limit.extract::<usize>()?);
         }
+        if let Some(target_partitions) = target_partitions {
+            if target_partitions.is_instance_of::<PyBool>() {
+                return Err(PyTypeError::new_err(
+                    "target_partitions must be an integer, not bool",
+                ));
+            }
+            // Validate the integer value even if a subclass overrides comparisons.
+            let target_partitions = py
+                .get_type::<PyInt>()
+                .call_method1("__index__", (target_partitions,))?;
+            if target_partitions.le(0)? {
+                return Err(PyValueError::new_err("target_partitions must be positive"));
+            }
+            builder = builder
+                .with_target_partitions(target_partitions.extract::<usize>()?)
+                .map_err(|error| {
+                    reader_error(py, error.to_string(), error.phase().as_str(), error.code())
+                })?;
+        }
         let scan = self.runtime.wait(py, builder.build())?.map_err(|error| {
             reader_error(py, error.to_string(), error.phase().as_str(), error.code())
         })?;
@@ -215,16 +237,17 @@ impl DeltaTable {
 
     /// Plan a scan and consume it as a pyarrow.RecordBatchReader.
     ///
-    /// columns and limit accept the same selections as scan().
+    /// columns, limit, and target_partitions accept the same selections as scan().
     /// Use a with block to close the reader, including when stopping early.
-    #[pyo3(signature = (*, columns=None, limit=None))]
+    #[pyo3(signature = (*, columns=None, limit=None, target_partitions=None))]
     fn to_reader<'py>(
         &self,
         py: Python<'py>,
         columns: Option<&Bound<'_, PyAny>>,
         limit: Option<&Bound<'_, PyInt>>,
+        target_partitions: Option<&Bound<'_, PyInt>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let stream = Py::new(py, self.scan(py, columns, limit)?)?;
+        let stream = Py::new(py, self.scan(py, columns, limit, target_partitions)?)?;
         py.import("pyarrow")?
             .getattr("RecordBatchReader")?
             .call_method1("from_stream", (stream,))

@@ -41,8 +41,10 @@ class DeltaTable:
     def scan(
         self, *, columns: list[str] | tuple[str, ...] | None = None,
         limit: int | None = None,
+        target_partitions: int | None = None,
     ) -> RecordBatchStream: ...
     def to_reader(
         self, *, columns: list[str] | tuple[str, ...] | None = None,
         limit: int | None = None,
+        target_partitions: int | None = None,
     ) -> pyarrow.RecordBatchReader: ...
