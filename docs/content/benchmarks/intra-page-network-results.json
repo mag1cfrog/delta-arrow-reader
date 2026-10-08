@@ -1,0 +1,468 @@
+{
+  "status": "partial validation; default promotion is not justified",
+  "reader_git_commit": "5d599ac692c91e9c4a2665749c8eeedc6b475e7e",
+  "executable_sha256": "16876b5878164a392a014bcf6b6a07e155658edd062b5ce1c5a2dae842a94ade",
+  "lockfile_sha256": "3e33227b8d98d1fbb4840f013ce48ceb9ad19fad8f460e4a0152c1737e514893",
+  "timed_samples": 58,
+  "exactly_validated_query_exports": 52,
+  "sample_csv_sha256": "3688029fa07e5835a24b48f545f3ad933beaa4a4016c6f1d6f6875a122aa2262",
+  "method": {
+    "modes": [
+      "off",
+      "auto"
+    ],
+    "forced_mode": false,
+    "timing": "Fresh processes. Open includes table initialization and one complete query. Reuse records initialization and two complete queries; second-query time excludes initialization.",
+    "io_and_resources": "HTTP bodies/requests and process CPU/RSS cover the entire session, including both queries for reuse.",
+    "resources": {
+      "logical_cpus": [
+        0,
+        1,
+        2,
+        3,
+        8,
+        9,
+        10,
+        11
+      ],
+      "physical_cores": 4,
+      "process_memory_bytes": 8589934592
+    },
+    "cache": "Reused OS/MinIO caches, exact validation before timing, fresh reader processes.",
+    "order": "Alternating off/auto, auto/off, off/auto for three-pair runs. One-pair controls use off/auto.",
+    "additional_samples": "The low-latency one-pair control found large regressions, so three more pairs were run. All four pairs are retained.",
+    "scope": "DAR only on the original SF10 TPC-H-derived scattered tables and SQL. No competing readers rerun; published results unchanged.",
+    "no_dv_control": "Snapshot 0 of the same 416-column table, validated against the retained independent no-DV reference (895 rows).",
+    "preparation": "Generation, compilation, upload verification and reference hashing excluded; no preparation during timed samples.",
+    "proxy": "Shared progressive HTTP response bodies; connection setup is included in query time, but headers and TLS are not shaped.",
+    "retries": "Not identifiable from repeated ranges; no claim of zero retries."
+  },
+  "fixture_verification": [
+    {
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "object_bytes": 70972418471,
+      "objects": 262,
+      "source_upload": "/home/hanbo/repo/selective-read-intra-page-full-20261007/upload-q2.json",
+      "source_upload_sha256": "e2d965a0b7601883a2ed9bb56c1a203bafadfaf55faad2c03d28b9a490dc727c",
+      "verification": "Every current object length and server FULL_OBJECT SHA256 match the retained upload receipt."
+    },
+    {
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "object_bytes": 32463889602,
+      "objects": 122,
+      "source_upload": "/home/hanbo/repo/selective-read-intra-page-full-20261007/upload-q4.json",
+      "source_upload_sha256": "b00eb912d2bebe8164390c5d371e738c10b03b9cb5a06258ee47a3ba622ff917",
+      "verification": "Every current object length and server FULL_OBJECT SHA256 match the retained upload receipt."
+    }
+  ],
+  "remaining": [
+    "Correct cold-start availability and measured cost-model misses before another promotion decision.",
+    "Simultaneous queries in one process sharing the request budget.",
+    "Dense-selection and unsupported-format network controls; portable correctness tests already exist.",
+    "Real S3 validation: no experiment bucket/object target was configured. Local SSO configuration alone is not a measurement."
+  ],
+  "experiments": [
+    {
+      "id": "416-200ms-150mbps",
+      "table_columns": 416,
+      "deletion_vectors": true,
+      "execution": "open",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      },
+      "samples_per_mode": 3,
+      "harness_sha256": "cea0e3e2c773ecfa74c7450a9b2dc97ce9d018dc54cdb8c1ef43106326604b91",
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+      "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+      "snapshot_version": 1,
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 5,
+        "insufficient_transport_evidence": 5
+      },
+      "validation_accepted_partial_data_rounds": 0
+    },
+    {
+      "id": "416-local",
+      "table_columns": 416,
+      "deletion_vectors": true,
+      "execution": "open",
+      "network": null,
+      "samples_per_mode": 1,
+      "harness_sha256": "5286ad71688f50567024ba061b59b8ee83dd3c5e350f3063a7b0c956010329e2",
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+      "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+      "snapshot_version": 1,
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 5,
+        "insufficient_transport_evidence": 5
+      },
+      "validation_accepted_partial_data_rounds": 0
+    },
+    {
+      "id": "416-no-dv-reuse-200ms-150mbps",
+      "table_columns": 416,
+      "deletion_vectors": false,
+      "execution": "reuse",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      },
+      "samples_per_mode": 1,
+      "harness_sha256": "5286ad71688f50567024ba061b59b8ee83dd3c5e350f3063a7b0c956010329e2",
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+      "reference_sha256": "04c4741863a8b537c98d941cb3914a97d0cd2effa42a3f157c356c4d725b35f2",
+      "snapshot_version": 0,
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 10,
+        "insufficient_transport_evidence": 5,
+        "none": 5,
+        "shared_request_budget_busy": 2,
+        "uncertain_savings": 2
+      },
+      "validation_accepted_partial_data_rounds": 1
+    },
+    {
+      "id": "416-open-1ms-1000mbps",
+      "table_columns": 416,
+      "deletion_vectors": true,
+      "execution": "open",
+      "network": {
+        "jitter_ms": 0,
+        "latency_ms": 1,
+        "mbps": 1000,
+        "seed": "0"
+      },
+      "samples_per_mode": 1,
+      "harness_sha256": "5286ad71688f50567024ba061b59b8ee83dd3c5e350f3063a7b0c956010329e2",
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+      "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+      "snapshot_version": 1,
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 5,
+        "insufficient_transport_evidence": 5
+      },
+      "validation_accepted_partial_data_rounds": 0
+    },
+    {
+      "id": "416-open-200ms-1000mbps",
+      "table_columns": 416,
+      "deletion_vectors": true,
+      "execution": "open",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 1000,
+        "seed": "0"
+      },
+      "samples_per_mode": 1,
+      "harness_sha256": "5286ad71688f50567024ba061b59b8ee83dd3c5e350f3063a7b0c956010329e2",
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+      "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+      "snapshot_version": 1,
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 5,
+        "insufficient_transport_evidence": 5
+      },
+      "validation_accepted_partial_data_rounds": 0
+    },
+    {
+      "id": "416-reuse-1ms-1000mbps",
+      "table_columns": 416,
+      "deletion_vectors": true,
+      "execution": "reuse",
+      "network": {
+        "jitter_ms": 0,
+        "latency_ms": 1,
+        "mbps": 1000,
+        "seed": "0"
+      },
+      "samples_per_mode": 1,
+      "harness_sha256": "5286ad71688f50567024ba061b59b8ee83dd3c5e350f3063a7b0c956010329e2",
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+      "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+      "snapshot_version": 1,
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 10,
+        "insufficient_transport_evidence": 5,
+        "none": 8,
+        "shared_request_budget_busy": 3
+      },
+      "validation_accepted_partial_data_rounds": 2
+    },
+    {
+      "id": "416-reuse-1ms-1000mbps-confirm",
+      "table_columns": 416,
+      "deletion_vectors": true,
+      "execution": "reuse",
+      "network": {
+        "jitter_ms": 0,
+        "latency_ms": 1,
+        "mbps": 1000,
+        "seed": "0"
+      },
+      "samples_per_mode": 3,
+      "harness_sha256": "5286ad71688f50567024ba061b59b8ee83dd3c5e350f3063a7b0c956010329e2",
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+      "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+      "snapshot_version": 1,
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 10,
+        "insufficient_transport_evidence": 5,
+        "none": 12,
+        "shared_request_budget_busy": 1
+      },
+      "validation_accepted_partial_data_rounds": 4
+    },
+    {
+      "id": "416-reuse-200ms-1000mbps",
+      "table_columns": 416,
+      "deletion_vectors": true,
+      "execution": "reuse",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 1000,
+        "seed": "0"
+      },
+      "samples_per_mode": 1,
+      "harness_sha256": "5286ad71688f50567024ba061b59b8ee83dd3c5e350f3063a7b0c956010329e2",
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+      "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+      "snapshot_version": 1,
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 10,
+        "insufficient_transport_evidence": 5,
+        "none": 4,
+        "uncertain_savings": 5
+      },
+      "validation_accepted_partial_data_rounds": 0
+    },
+    {
+      "id": "416-reuse-200ms-150mbps",
+      "table_columns": 416,
+      "deletion_vectors": true,
+      "execution": "reuse",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      },
+      "samples_per_mode": 3,
+      "harness_sha256": "d25b1b3026839369749cd83f021ac1c86ee26c90edeef2c29a98226346495840",
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+      "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+      "snapshot_version": 1,
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 10,
+        "insufficient_transport_evidence": 5,
+        "none": 5,
+        "uncertain_savings": 3,
+        "shared_request_budget_busy": 1
+      },
+      "validation_accepted_partial_data_rounds": 1
+    },
+    {
+      "id": "90-200ms-150mbps",
+      "table_columns": 90,
+      "deletion_vectors": true,
+      "execution": "open",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      },
+      "samples_per_mode": 3,
+      "harness_sha256": "cea0e3e2c773ecfa74c7450a9b2dc97ce9d018dc54cdb8c1ef43106326604b91",
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+      "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+      "snapshot_version": 1,
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 6,
+        "insufficient_transport_evidence": 6
+      },
+      "validation_accepted_partial_data_rounds": 0
+    },
+    {
+      "id": "90-local",
+      "table_columns": 90,
+      "deletion_vectors": true,
+      "execution": "open",
+      "network": null,
+      "samples_per_mode": 1,
+      "harness_sha256": "5286ad71688f50567024ba061b59b8ee83dd3c5e350f3063a7b0c956010329e2",
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+      "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+      "snapshot_version": 1,
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 6,
+        "insufficient_transport_evidence": 6
+      },
+      "validation_accepted_partial_data_rounds": 0
+    },
+    {
+      "id": "90-open-1ms-1000mbps",
+      "table_columns": 90,
+      "deletion_vectors": true,
+      "execution": "open",
+      "network": {
+        "jitter_ms": 0,
+        "latency_ms": 1,
+        "mbps": 1000,
+        "seed": "0"
+      },
+      "samples_per_mode": 1,
+      "harness_sha256": "5286ad71688f50567024ba061b59b8ee83dd3c5e350f3063a7b0c956010329e2",
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+      "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+      "snapshot_version": 1,
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 6,
+        "insufficient_transport_evidence": 6
+      },
+      "validation_accepted_partial_data_rounds": 0
+    },
+    {
+      "id": "90-open-200ms-1000mbps",
+      "table_columns": 90,
+      "deletion_vectors": true,
+      "execution": "open",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 1000,
+        "seed": "0"
+      },
+      "samples_per_mode": 1,
+      "harness_sha256": "5286ad71688f50567024ba061b59b8ee83dd3c5e350f3063a7b0c956010329e2",
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+      "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+      "snapshot_version": 1,
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 6,
+        "insufficient_transport_evidence": 6
+      },
+      "validation_accepted_partial_data_rounds": 0
+    },
+    {
+      "id": "90-reuse-1ms-1000mbps",
+      "table_columns": 90,
+      "deletion_vectors": true,
+      "execution": "reuse",
+      "network": {
+        "jitter_ms": 0,
+        "latency_ms": 1,
+        "mbps": 1000,
+        "seed": "0"
+      },
+      "samples_per_mode": 1,
+      "harness_sha256": "5286ad71688f50567024ba061b59b8ee83dd3c5e350f3063a7b0c956010329e2",
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+      "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+      "snapshot_version": 1,
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 12,
+        "insufficient_transport_evidence": 6,
+        "none": 6,
+        "shared_request_budget_busy": 4
+      },
+      "validation_accepted_partial_data_rounds": 2
+    },
+    {
+      "id": "90-reuse-1ms-1000mbps-confirm",
+      "table_columns": 90,
+      "deletion_vectors": true,
+      "execution": "reuse",
+      "network": {
+        "jitter_ms": 0,
+        "latency_ms": 1,
+        "mbps": 1000,
+        "seed": "0"
+      },
+      "samples_per_mode": 3,
+      "harness_sha256": "5286ad71688f50567024ba061b59b8ee83dd3c5e350f3063a7b0c956010329e2",
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+      "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+      "snapshot_version": 1,
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 12,
+        "insufficient_transport_evidence": 6,
+        "none": 6,
+        "shared_request_budget_busy": 4
+      },
+      "validation_accepted_partial_data_rounds": 2
+    },
+    {
+      "id": "90-reuse-200ms-1000mbps",
+      "table_columns": 90,
+      "deletion_vectors": true,
+      "execution": "reuse",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 1000,
+        "seed": "0"
+      },
+      "samples_per_mode": 1,
+      "harness_sha256": "5286ad71688f50567024ba061b59b8ee83dd3c5e350f3063a7b0c956010329e2",
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+      "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+      "snapshot_version": 1,
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 12,
+        "insufficient_transport_evidence": 6,
+        "none": 4,
+        "uncertain_savings": 5
+      },
+      "validation_accepted_partial_data_rounds": 1
+    },
+    {
+      "id": "90-reuse-200ms-150mbps",
+      "table_columns": 90,
+      "deletion_vectors": true,
+      "execution": "reuse",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      },
+      "samples_per_mode": 3,
+      "harness_sha256": "d25b1b3026839369749cd83f021ac1c86ee26c90edeef2c29a98226346495840",
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+      "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+      "snapshot_version": 1,
+      "validation_fallback_reasons": {
+        "selection_or_layout_ineligible": 12,
+        "insufficient_transport_evidence": 6,
+        "none": 7,
+        "uncertain_savings": 4,
+        "shared_request_budget_busy": 1
+      },
+      "validation_accepted_partial_data_rounds": 1
+    }
+  ]
+}

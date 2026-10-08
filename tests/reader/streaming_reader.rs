@@ -446,6 +446,22 @@ fn refresh_updates_and_reuses_query_planning_metadata() -> TestResult {
 }
 
 #[test]
+fn network_warmup_keeps_local_metadata_loading_independent_of_data_files() -> TestResult {
+    runtime()?.block_on(async {
+        let fixture = TestTable::missing_data_file("network-warmup-local")?;
+        let table = DeltaTableBuilder::new(fixture.uri())
+            .with_warmup(WarmupMode::Network {
+                max_duration: std::time::Duration::from_secs(1),
+            })
+            .load_table()
+            .await?;
+        fixture.disable_delta_log()?;
+        assert!(table.scan().build().await.is_ok());
+        Ok::<_, Box<dyn Error>>(())
+    })
+}
+
+#[test]
 fn refresh_rebuilds_query_planning_metadata_across_a_new_checkpoint() -> TestResult {
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("refresh-checkpoint")?;
