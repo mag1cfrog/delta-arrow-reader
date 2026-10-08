@@ -2,6 +2,8 @@ from collections import UserDict
 import gc
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 from types import MappingProxyType
 import unittest
@@ -286,6 +288,33 @@ class TableTests(unittest.TestCase):
             1, {"protocol": {"minReaderVersion": 4, "minWriterVersion": 2}}
         )
         self.assertEqual(DeltaTable(self.location).version, 1)
+
+    def test_process_exits_after_successful_and_failed_loading(self):
+        empty = self.location / "empty-table"
+        empty.mkdir()
+        script = """
+import sys
+from delta_arrow_reader import DeltaReaderError, DeltaTable
+
+try:
+    table = DeltaTable(sys.argv[1])
+except DeltaReaderError as error:
+    assert error.code == "snapshot_load"
+    print("failed")
+else:
+    assert table.version == 0
+    print("loaded")
+# Keep the successful table alive through interpreter shutdown.
+"""
+        for location, expected in ((self.location, "loaded"), (empty, "failed")):
+            with self.subTest(result=expected):
+                result = subprocess.run(
+                    [sys.executable, "-I", "-c", script, str(location)],
+                    capture_output=True, text=True, timeout=15,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, expected + "\n")
+                self.assertEqual(result.stderr, "")
 
 
 if __name__ == "__main__":

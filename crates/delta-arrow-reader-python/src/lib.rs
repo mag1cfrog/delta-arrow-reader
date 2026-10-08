@@ -1,5 +1,7 @@
 //! Python package entrypoint.
 
+mod runtime;
+
 use std::sync::Arc;
 
 use ::delta_arrow_reader::{
@@ -11,7 +13,8 @@ use pyo3::{
     prelude::*,
     types::{PyBool, PyCapsule, PyDict, PyInt, PyMapping},
 };
-use tokio::runtime::Runtime;
+
+use crate::runtime::Runtime;
 
 pyo3::create_exception!(
     delta_arrow_reader,
@@ -85,12 +88,9 @@ impl DeltaTable {
             Runtime::new()
                 .map_err(|_| PyRuntimeError::new_err("failed to create the reader runtime"))?,
         );
-        // ponytail: blocking wait; #417 adds signal checks and cleanup from runtime workers.
-        let table = py
-            .detach(|| runtime.block_on(builder.load_table()))
-            .map_err(|error| {
-                reader_error(py, error.to_string(), error.phase().as_str(), error.code())
-            })?;
+        let table = runtime.wait(py, builder.load_table())?.map_err(|error| {
+            reader_error(py, error.to_string(), error.phase().as_str(), error.code())
+        })?;
         Ok(Self {
             table,
             _runtime: runtime,
