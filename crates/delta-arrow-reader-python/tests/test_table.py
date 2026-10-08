@@ -51,14 +51,21 @@ class TableTests(unittest.TestCase):
             "".join(json.dumps(action) + "\n" for action in actions), encoding="utf-8"
         )
 
-    def write_parquet(self, name, values):
+    def write_parquet(self, name, values, **options):
         path = self.location / name
         schema = pa.schema([pa.field("id", pa.int64(), nullable=False)])
-        pq.write_table(pa.table({"id": values}, schema=schema), path)
+        pq.write_table(pa.table({"id": values}, schema=schema), path, **options)
         return {"add": {
             "path": name, "partitionValues": {}, "size": path.stat().st_size,
             "modificationTime": 0, "dataChange": True,
         }}
+
+    def http_support(self):
+        support = (Path(__file__).resolve().parents[3] / "tests/reader/https.py")
+        spec = importlib.util.spec_from_file_location("reader_https", support)
+        http = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(http)
+        return http
 
     def test_reader_and_batches_outlive_table(self):
         self.write_log(
@@ -165,10 +172,7 @@ class TableTests(unittest.TestCase):
             reader.close()
 
     def test_unused_streams_and_zero_limit_do_not_read_parquet(self):
-        support = (Path(__file__).resolve().parents[3] / "tests/reader/https.py")
-        spec = importlib.util.spec_from_file_location("reader_https", support)
-        http = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(http)
+        http = self.http_support()
         data_requested = Event()
 
         class Storage(http.Storage):
@@ -206,6 +210,68 @@ class TableTests(unittest.TestCase):
             self.assertEqual(batch.column(0).to_pylist(), [1, 2])
             self.assertTrue(data_requested.is_set())
             self.assertTrue(any(path.endswith(".parquet") for path, _, _ in server.requests))
+
+    def test_paused_reader_bounds_reads_and_close_cancels_pending_io(self):
+        http = self.http_support()
+        # One 1024-row batch per row group makes read-ahead visible as HTTP requests.
+        self.write_log(1, self.write_parquet(
+            "rows.parquet", range(32 * 1024), row_group_size=1024,
+            compression="NONE", use_dictionary=False,
+        ))
+        metadata = pq.read_metadata(self.location / "rows.parquet")
+        ranges = {}
+        for index in range(metadata.num_row_groups):
+            column = metadata.row_group(index).column(0)
+            start = column.data_page_offset
+            end = start + column.total_compressed_size - 1
+            ranges[f"bytes={start}-{end}"] = index
+        prepared = Event()
+        pending = Event()
+        disconnected = Event()
+        unexpected = Event()
+        groups = []
+
+        class Storage(http.Storage):
+            def do_GET(self):
+                group = ranges.get(self.headers.get("Range")) if self.path.endswith(".parquet") else None
+                if group is not None:
+                    groups.append(group)
+                    if group == 3:
+                        pending.set()
+                        self.connection.settimeout(10)
+                        try:
+                            if self.rfile.read(1) == b"":
+                                disconnected.set()
+                        except ConnectionError:
+                            disconnected.set()
+                        except TimeoutError:
+                            self.send_error(400, "test read was not cancelled")
+                        return
+                    if group > 3:
+                        unexpected.set()
+                super().do_GET()
+                if group == 2:
+                    prepared.set()
+
+        with http.serve(partial(Storage, directory=str(self.location))) as server:
+            table = DeltaTable(
+                f"http://127.0.0.1:{server.server_port}/",
+                storage_options={"allow_http": "true"},
+            )
+            with table.to_reader() as reader:
+                first = reader.read_next_batch()
+                self.assertEqual(first.column(0).to_pylist(), list(range(1024)))
+                self.assertTrue(prepared.wait(10), groups)
+                # The core buffers one batch and prepares one more before waiting.
+                self.assertFalse(pending.wait(0.2), groups)
+                self.assertEqual(groups, [0, 1, 2])
+                second = reader.read_next_batch()
+                self.assertEqual(second.column(0).to_pylist(), list(range(1024, 2048)))
+                self.assertTrue(pending.wait(10), groups)
+                reader.close()
+                self.assertTrue(disconnected.wait(10), "close left the HTTP read pending")
+                self.assertFalse(unexpected.wait(0.2), groups)
+                self.assertEqual(groups, [0, 1, 2, 3])
 
     def test_empty_reader_preserves_schema(self):
         table = DeltaTable(self.location)
