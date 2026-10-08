@@ -1,6 +1,7 @@
 //! Private boundary for stability-sensitive `delta_kernel` APIs.
 
 mod deletion_vector;
+mod versioned_engine;
 
 pub(crate) use deletion_vector::KernelDeletionVectorHandle;
 
@@ -19,7 +20,6 @@ use delta_kernel::{
         arrow_data::{ArrowEngineData, EngineDataArrowExt},
     },
     expressions::{ColumnName, Expression, ExpressionRef, Predicate, PredicateRef, Scalar},
-    path::ParsedLogPath,
     scan::ScanMetadata,
     scan::state::{ScanFile, transform_to_logical},
     scan::{Scan as DeltaKernelScan, StatsOptions},
@@ -36,6 +36,7 @@ use url::Url;
 
 use super::location::{file_resolution_url, object_store_path, with_object_store_path};
 use crate::{DeltaComparison, DeltaPredicate, DeltaScalar, DeltaStorageOptions};
+use versioned_engine::VersionedEngine;
 
 #[allow(dead_code)]
 pub(crate) const TABLE_FEATURES_READER_VERSION: i32 = TABLE_FEATURES_MIN_READER_VERSION;
@@ -146,7 +147,7 @@ impl KernelPhysicalToLogicalTransform {
         let physical_rows = batch.num_rows();
         let data: Box<dyn delta_kernel::EngineData> = Box::new(ArrowEngineData::new(batch));
         let batch = transform_to_logical(
-            engine_context.engine(),
+            engine_context.engine().as_ref(),
             data,
             &schemas.physical,
             schemas.logical.as_ref(),
@@ -199,13 +200,13 @@ impl KernelScan {
                     .map(|batch| Box::new(ArrowEngineData::new(batch)) as Box<dyn EngineData>)
                     .collect::<Vec<_>>();
                 collect_scan_files(self.scan.scan_metadata_from(
-                    engine_context.engine(),
+                    engine_context.engine().as_ref(),
                     snapshot_version,
                     data,
                     None,
                 )?)
             }
-            None => collect_scan_files(self.scan.scan_metadata(engine_context.engine())?),
+            None => collect_scan_files(self.scan.scan_metadata(engine_context.engine().as_ref())?),
         }
     }
 
@@ -213,7 +214,7 @@ impl KernelScan {
         &self,
         engine_context: &DeltaKernelEngineContext,
     ) -> delta_kernel::DeltaResult<Arc<[RecordBatch]>> {
-        materialize_scan_metadata(self.scan.scan_metadata(engine_context.engine())?)
+        materialize_scan_metadata(self.scan.scan_metadata(engine_context.engine().as_ref())?)
     }
 
     pub(crate) fn materialize_scan_metadata_from(
@@ -228,7 +229,7 @@ impl KernelScan {
             .map(|batch| Box::new(ArrowEngineData::new(batch)) as Box<dyn EngineData>)
             .collect::<Vec<_>>();
         materialize_scan_metadata(self.scan.scan_metadata_from(
-            engine_context.engine(),
+            engine_context.engine().as_ref(),
             existing_version,
             existing_data,
             None,
@@ -549,9 +550,9 @@ impl DeltaKernelEngineContext {
     }
 
     #[expect(clippy::expect_used, reason = "the engine is only taken during Drop")]
-    pub(crate) fn engine(&self) -> &(dyn Engine + Send + Sync) {
+    pub(crate) fn engine(&self) -> &Arc<dyn Engine + Send + Sync> {
         self.engine
-            .as_deref()
+            .as_ref()
             .expect("engine is only taken during drop")
     }
 
@@ -594,44 +595,28 @@ impl DeltaKernelEngineContext {
             self.file_resolution_url.clone(),
             &object_store_path(&self.file_resolution_url)?,
         )?;
-        let mut builder = Snapshot::builder_for(store_relative_table_url.clone());
-        if let Some(version) = version {
-            self.validate_snapshot_version(&store_relative_table_url, version)?;
-            builder = builder.at_version(version);
-        }
-        builder.build(self.engine()).map(KernelSnapshot)
-    }
-
-    fn validate_snapshot_version(
-        &self,
-        table_url: &Url,
-        version: u64,
-    ) -> delta_kernel::DeltaResult<()> {
-        // ponytail: Kernel 0.25 overflows at u64::MAX and searches missing versions
-        // in 1,000-version windows. Remove this preflight when upstream fixes both.
-        if version == u64::MAX {
-            return Err(delta_kernel::Error::generic(
-                "snapshot version exceeds the supported Kernel range",
-            ));
-        }
-        let prefix = table_url.join(&format!("_delta_log/{version:020}."))?;
-        for file in self.engine().storage_handler().list_from(&prefix)? {
-            let file = file?;
-            let Some(suffix) = file.location.path().strip_prefix(prefix.path()) else {
-                break;
-            };
-            if suffix.contains('/') {
-                continue;
+        let builder = Snapshot::builder_for(store_relative_table_url);
+        let snapshot = match version {
+            None => builder.build(self.engine().as_ref())?,
+            Some(version) => {
+                if version == u64::MAX {
+                    return Err(delta_kernel::Error::generic(
+                        "snapshot version exceeds the supported Kernel range",
+                    ));
+                }
+                // Load the latest snapshot within a bounded listing. Kernel's
+                // at_version searches backward across numeric gaps in the log.
+                let engine = VersionedEngine::new(Arc::clone(self.engine()), version);
+                let snapshot = builder.build(&engine)?;
+                if snapshot.version() != version {
+                    return Err(delta_kernel::Error::generic(
+                        "snapshot version is unavailable",
+                    ));
+                }
+                snapshot
             }
-            if let Some(path) = ParsedLogPath::try_from(file)?
-                && (path.is_commit() || path.is_checkpoint())
-            {
-                return Ok(());
-            }
-        }
-        Err(delta_kernel::Error::generic(
-            "snapshot version is unavailable",
-        ))
+        };
+        Ok(KernelSnapshot(snapshot))
     }
 
     pub(crate) fn refresh_snapshot(
@@ -639,7 +624,7 @@ impl DeltaKernelEngineContext {
         existing_snapshot: &KernelSnapshot,
     ) -> delta_kernel::DeltaResult<KernelSnapshot> {
         Snapshot::builder_from(Arc::clone(&existing_snapshot.0))
-            .build(self.engine())
+            .build(self.engine().as_ref())
             .map(KernelSnapshot)
     }
 

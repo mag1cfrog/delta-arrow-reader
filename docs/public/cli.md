@@ -58,6 +58,10 @@ Running `dar` without a subcommand exits with status 2.
 The parser accepts the full u64 range. The current Kernel cannot load version
 `18446744073709551615`; requesting it returns a snapshot error (status 1).
 
+Explicit versions use a forward listing of retained log entries up to the
+requested version. Kernel validates the commits and checkpoints in that listing.
+Discovery does not search numeric version gaps.
+
 ## Storage options file
 
 `--storage-options-file` accepts a local UTF-8 JSON file containing an object
@@ -144,7 +148,7 @@ errors. Use `--help` for usage.
 | `configuration` | `invalid_cli_argument` | Invalid command, argument, or option value |
 | `configuration` | `invalid_input_json` | Invalid JSON structure, encoding, duplicate key, or size |
 | `configuration` | `input_file_io` | Input file could not be opened or read |
-| `execution` | `runtime_initialization` | Tokio runtime could not be created |
+| `execution` | `runtime_initialization` | Runtime creation failed or reader execution panicked |
 | `execution` | `output_write` | stdout could not be written or flushed |
 
 Provider configuration rejected during table loading is a reader failure
@@ -155,9 +159,13 @@ leave stdout empty. Consumers must check the process status and discard output
 from any unsuccessful invocation, including partial output after a write
 failure. Status 3 is preserved even when stderr cannot be written.
 
-Each inspection runs in one process. The CLI starts its Tokio runtime with
-one async worker and ignores `TOKIO_WORKER_THREADS`, so malformed inherited
-values cannot cause a panic. Runtime shutdown does not wait for unfinished
-blocking work, including core engine cleanup. Linux signals keep their normal
-termination behavior: a killed process is unsuccessful and need not emit an
-error object.
+Each inspection runs in one process. The CLI drives asynchronous work on the
+calling thread and ignores `TOKIO_WORKER_THREADS`. The core uses background
+threads for blocking work. Runtime shutdown does not wait for unfinished
+blocking work, including core engine cleanup.
+
+An unrecoverable panic during reader execution, including failure to start a
+runtime thread, terminates the process with status 1 and a redacted
+`runtime_initialization` diagnostic. Panic payloads and backtraces are omitted.
+Linux signals keep their normal termination behavior: a killed process is
+unsuccessful and need not emit an error object.

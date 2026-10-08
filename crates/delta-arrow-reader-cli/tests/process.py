@@ -125,6 +125,18 @@ class ProcessTests(unittest.TestCase):
                 self.env["TOKIO_WORKER_THREADS"] = count
                 self.assert_inspection(self.invoke("inspect", table))
 
+    def test_thread_start_failures_are_redacted_and_do_not_hang(self):
+        table = self.metadata_table()
+        self.env.update(LD_PRELOAD=str(self.fault_library), RUST_BACKTRACE="full")
+        # Reject the core blocking thread, Kernel's background thread, and its
+        # blocking worker in turn. Later failures must not strand a waiting caller.
+        for limit in range(3):
+            with self.subTest(limit=limit):
+                self.env["DAR_TEST_THREAD_LIMIT"] = str(limit)
+                self.assert_error(self.invoke("inspect", table), 1, "execution", "runtime_initialization")
+        self.env["DAR_TEST_THREAD_LIMIT"] = "3"
+        self.assert_inspection(self.invoke("inspect", table))
+
     def test_local_validation_before_any_table_request(self):
         self.env.update(LD_PRELOAD=str(self.fault_library), DAR_TEST_REJECT_THREADS="1")
         with http.serve(functools.partial(RecordingStorageHandler, directory=self.cwd)) as server:
@@ -173,6 +185,14 @@ class ProcessTests(unittest.TestCase):
         (self.cwd / "-").write_text("{}", encoding="utf-8")
         self.assertEqual(self.assert_inspection(self.invoke("inspect", "--storage-options-file", "-", table)), expected)
 
+    def test_explicit_version_preserves_literal_percent_paths(self):
+        table = self.metadata_table().rename(self.cwd / "secret%name")
+        for location in [table, table.as_uri()]:
+            with self.subTest(location=location):
+                latest = self.assert_inspection(self.invoke("inspect", location))
+                historical = self.assert_inspection(self.invoke("inspect", "--table-version", "0", location))
+                self.assertEqual(historical, latest)
+
     def test_latest_historical_and_missing_data_files(self):
         for name, latest in [("partitioned", "0"), ("nested_mapping", "1"), ("deletion_vectors", "1")]:
             with self.subTest(name=name):
@@ -197,10 +217,13 @@ class ProcessTests(unittest.TestCase):
         self.assertEqual(field["metadata"]["comment"], "secret requested metadata")
         self.assertFalse(field["nullable"])
 
-    def test_version_preflight_ignores_unrelated_and_newer_log_files(self):
+    def test_historical_inspection_ignores_unrelated_and_newer_log_files(self):
         table = self.metadata_table()
         log = table / "_delta_log"
         (log / "00000000000000000001.json").write_text("secret invalid JSON\n", encoding="utf-8")
+        (log / "00000000000000000000.00000000000000000001.compacted.json").write_text(
+            "secret invalid compaction\n", encoding="utf-8"
+        )
         value = self.assert_inspection(self.invoke("inspect", "--table-version", "0", table))
         self.assertEqual(value["table_version"], "0")
         version = 1_000_000_000_000
@@ -210,6 +233,25 @@ class ProcessTests(unittest.TestCase):
         (nested / "00000000000000000000.json").write_text("{}", encoding="utf-8")
         self.assert_error(self.invoke("inspect", "--table-version", str(version), table),
                           1, "snapshot", "snapshot_load")
+
+    def test_sparse_logs_fail_without_searching_numeric_version_gaps(self):
+        table = self.metadata_table()
+        log = table / "_delta_log"
+        commit = (log / "00000000000000000000.json").read_bytes()
+        version = 1_000_000_000_000
+        for suffix, content in [
+            (".checkpoint.parquet", b""),
+            (".checkpoint.0000000001.0000000002.parquet", b"secret incomplete checkpoint"),
+            (".json", commit),
+        ]:
+            with self.subTest(suffix=suffix):
+                path = log / f"{version:020}{suffix}"
+                path.write_bytes(content)
+                try:
+                    self.assert_error(self.invoke("inspect", "--table-version", str(version), table),
+                                      1, "snapshot", "snapshot_load")
+                finally:
+                    path.unlink()
 
     def test_reader_errors_preserve_core_diagnostic_and_redact_secrets(self):
         table = self.metadata_table()

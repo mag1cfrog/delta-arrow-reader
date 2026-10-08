@@ -49,7 +49,7 @@ enum Error {
     InputJson,
     #[snafu(display("Could not read the input file."))]
     InputIo { source: io::Error },
-    #[snafu(display("Could not initialize the runtime."))]
+    #[snafu(display("The reader runtime failed."))]
     Runtime { source: io::Error },
     #[snafu(display("Could not write or flush stdout."))]
     Output { source: io::Error },
@@ -82,6 +82,11 @@ impl Error {
             Self::Runtime { .. } | Self::Reader { .. } => 1,
             Self::Output { .. } => 3,
         })
+    }
+
+    fn write_diagnostic(&self) {
+        let mut stderr = io::stderr().lock();
+        let _ = writeln!(stderr, "{}", self.diagnostic()).and_then(|()| stderr.flush());
     }
 }
 
@@ -137,10 +142,19 @@ fn run() -> Result<(), Error> {
                     DeltaSnapshotSelection::Version,
                 ))
                 .with_storage_options(storage_options);
-            let runtime = tokio::runtime::Builder::new_multi_thread()
-                // Inspection needs one async worker. Set it explicitly so an inherited
-                // TOKIO_WORKER_THREADS cannot make Tokio panic before returning an error.
-                .worker_threads(1)
+            // Kernel starts threads lazily and can panic without waking its caller.
+            // The CLI owns the process: fail immediately with a redacted diagnostic,
+            // including for worker panics, instead of unwinding into a blocking join.
+            std::panic::set_hook(Box::new(|_| {
+                Error::Runtime {
+                    source: io::Error::other("reader runtime panicked"),
+                }
+                .write_diagnostic();
+                std::process::exit(1);
+            }));
+            // Drive async work on the calling thread. A dedicated Tokio worker can
+            // occupy the last OS thread and leave blocking loads queued forever.
+            let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .context(RuntimeSnafu)?;
@@ -167,8 +181,7 @@ fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            let mut stderr = io::stderr().lock();
-            let _ = writeln!(stderr, "{}", error.diagnostic()).and_then(|()| stderr.flush());
+            error.write_diagnostic();
             error.exit_code()
         }
     }

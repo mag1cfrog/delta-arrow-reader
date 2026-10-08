@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -53,7 +54,10 @@ int open64(const char *path, int flags, ...) {
 
 int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
                    void *(*start)(void *), void *arg) {
+    static _Atomic unsigned attempts;
     if (getenv("DAR_TEST_REJECT_THREADS")) return EAGAIN;
+    const char *limit = getenv("DAR_TEST_THREAD_LIMIT");
+    if (limit && atomic_fetch_add(&attempts, 1) >= strtoul(limit, NULL, 10)) return EAGAIN;
     int (*real_create)(pthread_t *, const pthread_attr_t *, void *(*)(void *), void *) =
         dlsym(RTLD_NEXT, "pthread_create");
     return real_create(thread, attr, start, arg);
