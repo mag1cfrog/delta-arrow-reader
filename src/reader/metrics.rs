@@ -15,7 +15,7 @@ use super::options::ParquetReaderBackend;
 #[doc(hidden)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ParquetRangePlanningDiagnosticSnapshot {
-    /// Maximum physical range requests executed concurrently by one plan.
+    /// Largest per-plan concurrency allowance, starting at the ordinary range-read limit.
     pub max_concurrent_physical_range_requests: u64,
     /// Sum of physical request waves selected by visible plans.
     pub physical_range_request_waves_planned: u64,
@@ -70,9 +70,9 @@ pub struct DeltaScanMetricsSnapshot {
     pub parquet_data_file_exact_ranges_requested: Option<u64>,
     /// Bytes in those normalized exact Parquet ranges.
     pub parquet_data_file_exact_range_bytes_requested: Option<u64>,
-    /// Physical range requests selected by the automatic planner.
+    /// Physical requests selected by visible range plans, including partial-page reads.
     pub parquet_data_file_physical_range_requests_planned: Option<u64>,
-    /// Bytes covered by those automatically planned physical range requests.
+    /// Bytes covered by those planned physical range requests.
     pub parquet_data_file_physical_range_bytes_planned: Option<u64>,
     /// Automatic range plans selected without a usable transport estimate.
     pub parquet_data_file_cold_start_range_plans: Option<u64>,
@@ -134,6 +134,7 @@ struct DeltaScanMetricsInner {
     parquet_data_file_cost_based_merged_range_plans: AtomicU64,
     parquet_data_file_store_delegated_range_plans: AtomicU64,
     parquet_range_request_waves_planned: AtomicU64,
+    parquet_range_concurrency_limit: AtomicU64,
     parquet_range_successful_plan_time_micros: AtomicU64,
     parquet_data_file_range_get_operations: AtomicU64,
     parquet_data_file_full_get_operations: AtomicU64,
@@ -186,6 +187,9 @@ impl DeltaScanMetrics {
                 parquet_data_file_cost_based_merged_range_plans: AtomicU64::new(0),
                 parquet_data_file_store_delegated_range_plans: AtomicU64::new(0),
                 parquet_range_request_waves_planned: AtomicU64::new(0),
+                parquet_range_concurrency_limit: AtomicU64::new(usize_to_u64_saturating(
+                    MAX_CONCURRENT_PARQUET_RANGE_READS,
+                )),
                 parquet_range_successful_plan_time_micros: AtomicU64::new(0),
                 parquet_data_file_range_get_operations: AtomicU64::new(0),
                 parquet_data_file_full_get_operations: AtomicU64::new(0),
@@ -257,8 +261,8 @@ impl DeltaScanMetrics {
         &self,
     ) -> ParquetRangePlanningDiagnosticSnapshot {
         ParquetRangePlanningDiagnosticSnapshot {
-            max_concurrent_physical_range_requests: usize_to_u64_saturating(
-                MAX_CONCURRENT_PARQUET_RANGE_READS,
+            max_concurrent_physical_range_requests: load(
+                &self.inner.parquet_range_concurrency_limit,
             ),
             physical_range_request_waves_planned: load(
                 &self.inner.parquet_range_request_waves_planned,
@@ -352,6 +356,7 @@ impl DeltaScanMetrics {
         &self,
         request_count: usize,
         bytes: u128,
+        concurrency: usize,
     ) {
         saturating_fetch_add(
             &self.inner.parquet_data_file_physical_range_requests_planned,
@@ -363,8 +368,11 @@ impl DeltaScanMetrics {
         );
         saturating_fetch_add(
             &self.inner.parquet_range_request_waves_planned,
-            usize_to_u64_saturating(request_count.div_ceil(MAX_CONCURRENT_PARQUET_RANGE_READS)),
+            usize_to_u64_saturating(request_count.div_ceil(concurrency.max(1))),
         );
+        self.inner
+            .parquet_range_concurrency_limit
+            .fetch_max(usize_to_u64_saturating(concurrency), Ordering::Relaxed);
     }
 
     pub(crate) fn record_parquet_range_successful_plan_time(&self, elapsed: std::time::Duration) {

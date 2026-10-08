@@ -4,12 +4,17 @@ use std::{future::Future, ops::Range, time::Duration};
 
 use bytes::Bytes;
 use futures_util::{StreamExt, TryStreamExt, stream};
+use tokio::sync::Semaphore;
 
 use crate::reader::options::MAX_CONCURRENT_PARQUET_RANGE_READS;
 
 const MAX_RANGE_READ_REQUESTS: usize = 64;
 const MAX_BYTE_AMPLIFICATION: u128 = 4;
-const DECISION_MARGIN_PERCENT: u128 = 10;
+pub(super) const DECISION_MARGIN_PERCENT: u128 = 10;
+
+// A process-wide ceiling, not a concurrency target for each file or scan.
+pub(super) const MAX_SHARED_RANGE_READS: usize = 512;
+pub(super) static RANGE_READ_PERMITS: Semaphore = Semaphore::const_new(MAX_SHARED_RANGE_READS);
 
 /// Recent transport conditions used to compare physical range-read plans.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -225,22 +230,7 @@ fn candidate_range_plans(
         .min(MAX_RANGE_READ_REQUESTS / max_concurrent_reads);
     for target_waves in (1..=highest_target_wave).rev() {
         let target_count = target_waves * max_concurrent_reads;
-        let mut merge_gap = vec![false; exact_plan.len() - 1];
-        for (_, index) in gaps.iter().take(exact_plan.len() - target_count) {
-            merge_gap[*index] = true;
-        }
-
-        let mut plan = Vec::with_capacity(target_count);
-        let mut current_range = exact_plan[0].clone();
-        for (index, next_range) in exact_plan.iter().enumerate().skip(1) {
-            if merge_gap[index - 1] {
-                current_range.end = next_range.end;
-            } else {
-                plan.push(current_range);
-                current_range = next_range.clone();
-            }
-        }
-        plan.push(current_range);
+        let plan = merge_smallest_gaps(&exact_plan, &gaps, exact_plan.len() - target_count);
         if range_bytes(&plan) > max_planned_bytes {
             break;
         }
@@ -263,7 +253,7 @@ pub(super) fn request_waves(request_count: usize, max_concurrent_reads: usize) -
 }
 
 /// Scores a plan as transferred bytes plus one bandwidth-delay cost per request wave.
-fn plan_score(
+pub(super) fn plan_score(
     plan: &[Range<u64>],
     estimate: TransportEstimate,
     max_concurrent_reads: usize,
@@ -273,6 +263,101 @@ fn plan_score(
         (request_waves(plan.len(), max_concurrent_reads) as u128)
             .saturating_mul(bandwidth_delay_bytes),
     )
+}
+
+/// Scores pipelined partial reads in shared-bandwidth byte units.
+///
+/// Requests waiting for their first byte can overlap other responses. One
+/// request, one wave, or concurrency one still pays latency plus transfer time.
+pub(super) fn partial_plan_cost(
+    bytes: u128,
+    requests: usize,
+    estimate: TransportEstimate,
+    concurrency: usize,
+    request_overhead_bytes: u128,
+) -> u128 {
+    let latency = bandwidth_delay_bytes(estimate);
+    let waves = request_waves(requests, concurrency) as u128;
+    let latency_cost = latency.saturating_mul(waves);
+    // ponytail: approximate steady pipelining; unequal range sizes can reduce overlap.
+    let overlap = (bytes.saturating_mul(concurrency.saturating_sub(1) as u128)
+        / concurrency.max(1) as u128)
+        .min(latency_cost.saturating_sub(latency));
+    let transport_cost = bytes.saturating_add(latency_cost).saturating_sub(overlap);
+    // Request handling and transport run concurrently. Completion intervals
+    // already include small-response delivery, so adding the costs counts it twice.
+    let processing_cost = request_overhead_bytes
+        .saturating_mul(requests as u128)
+        .saturating_add(if requests == 0 { 0 } else { latency });
+    transport_cost.max(processing_cost)
+}
+
+/// Chooses a physical plan within a byte budget and concurrency limit.
+///
+/// Merging the cheapest gaps minimizes bytes at each request count. Score those
+/// counts, including observed per-request overhead, then build only the winner.
+pub(super) fn choose_bounded_range_plan(
+    requested_ranges: &[Range<u64>],
+    estimate: TransportEstimate,
+    concurrency: usize,
+    byte_budget: u128,
+    request_overhead_bytes: u128,
+) -> Option<Vec<Range<u64>>> {
+    let exact = merge_ranges(requested_ranges, 0);
+    let exact_bytes = range_bytes(&exact);
+    if exact_bytes > byte_budget || (concurrency == 0 && !exact.is_empty()) {
+        return None;
+    }
+    let mut gaps: Vec<_> = exact
+        .windows(2)
+        .enumerate()
+        .map(|(index, ranges)| (ranges[1].start - ranges[0].end, index))
+        .collect();
+    gaps.sort_unstable();
+    let mut bytes = exact_bytes;
+    let cost = |bytes, count| {
+        partial_plan_cost(bytes, count, estimate, concurrency, request_overhead_bytes)
+    };
+    let mut scores = vec![cost(bytes, exact.len())];
+    for (merged, (gap, _)) in gaps.iter().enumerate() {
+        bytes += u128::from(*gap);
+        if bytes > byte_budget {
+            break;
+        }
+        scores.push(cost(bytes, exact.len() - merged - 1));
+    }
+    let best = scores.iter().copied().min()?;
+    let competitive = best.saturating_add(best.saturating_mul(DECISION_MARGIN_PERCENT) / 100);
+    // Earlier candidates transfer fewer bytes, matching the ordinary planner's margin.
+    let merge_count = scores.iter().position(|score| *score <= competitive)?;
+    Some(merge_smallest_gaps(&exact, &gaps, merge_count))
+}
+
+/// Builds a plan by merging the first `merge_count` gaps in ascending size order.
+fn merge_smallest_gaps(
+    exact: &[Range<u64>],
+    sorted_gaps: &[(u64, usize)],
+    merge_count: usize,
+) -> Vec<Range<u64>> {
+    let Some(first) = exact.first() else {
+        return Vec::new();
+    };
+    let mut merge = vec![false; exact.len() - 1];
+    for (_, index) in sorted_gaps.iter().take(merge_count) {
+        merge[*index] = true;
+    }
+    let mut plan = Vec::with_capacity(exact.len() - merge_count);
+    let mut current = first.clone();
+    for (index, next) in exact.iter().enumerate().skip(1) {
+        if merge[index - 1] {
+            current.end = next.end;
+        } else {
+            plan.push(current);
+            current = next.clone();
+        }
+    }
+    plan.push(current);
+    plan
 }
 
 /// Returns the bytes transferable during one typical request-latency interval.
@@ -286,24 +371,29 @@ pub(super) fn bandwidth_delay_bytes(estimate: TransportEstimate) -> u128 {
 
 /// Executes an already chosen physical plan and returns one result for each requested range.
 ///
-/// Physical reads run with the same concurrency bound as the previous object-store
-/// helper. Results are sliced back into the caller's original order, including duplicate
+/// Physical reads run within the caller's concurrency limit. Results are sliced
+/// back into the caller's original order, including duplicate
 /// and overlapping requests.
 pub(super) async fn execute_range_plan<F, E, Fut>(
     requested_ranges: &[Range<u64>],
     physical_ranges: &[Range<u64>],
-    read: F,
+    concurrency: usize,
+    mut read: F,
 ) -> Result<Vec<Bytes>, E>
 where
     F: Send + FnMut(Range<u64>) -> Fut,
     E: Send,
     Fut: Future<Output = Result<Bytes, E>> + Send,
 {
-    let bytes: Vec<_> = stream::iter(physical_ranges.iter().cloned())
-        .map(read)
-        .buffered(MAX_CONCURRENT_PARQUET_RANGE_READS)
+    let mut bytes: Vec<_> = stream::iter(physical_ranges.iter().cloned().enumerate())
+        .map(|(index, range)| {
+            let result = read(range);
+            async move { result.await.map(|bytes| (index, bytes)) }
+        })
+        .buffer_unordered(concurrency.max(1))
         .try_collect()
         .await?;
+    bytes.sort_unstable_by_key(|(index, _)| *index);
 
     Ok(requested_ranges
         .iter()
@@ -311,7 +401,7 @@ where
             let physical_index =
                 physical_ranges.partition_point(|range| range.start <= requested_range.start) - 1;
             let physical_range = &physical_ranges[physical_index];
-            let physical_bytes = &bytes[physical_index];
+            let physical_bytes = &bytes[physical_index].1;
             let start = (requested_range.start - physical_range.start) as usize;
             let end = (requested_range.end - physical_range.start) as usize;
             physical_bytes.slice(start..end.min(physical_bytes.len()))
@@ -321,7 +411,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{convert::Infallible, time::Duration};
+    use std::{convert::Infallible, ops::Range, time::Duration};
 
     use bytes::Bytes;
 
@@ -426,6 +516,134 @@ mod tests {
     }
 
     #[test]
+    fn partial_cost_accounts_for_overlap_without_hiding_serial_latency() {
+        use super::partial_plan_cost;
+        let estimate = TransportEstimate {
+            request_latency: Duration::from_millis(100),
+            shared_throughput_bytes_per_second: 1_000,
+        };
+        assert_eq!(partial_plan_cost(0, 0, estimate, 4, 0), 0);
+        assert_eq!(partial_plan_cost(400, 1, estimate, 4, 0), 500);
+        assert_eq!(partial_plan_cost(400, 4, estimate, 4, 0), 500);
+        assert_eq!(partial_plan_cost(400, 8, estimate, 1, 0), 1_200);
+        assert_eq!(partial_plan_cost(400, 8, estimate, 4, 0), 500);
+        assert_eq!(partial_plan_cost(4, 4, estimate, 2, 0), 202);
+        assert_eq!(partial_plan_cost(4, 4, estimate, 2, 10), 202);
+        assert_eq!(partial_plan_cost(4, 4, estimate, 2, 100), 500);
+    }
+
+    #[test]
+    fn bounded_plans_trade_bytes_for_waves_with_the_concurrency_limit() {
+        use super::choose_bounded_range_plan;
+        let ranges = spaced_ranges(&[900; 10]);
+        let slow = TransportEstimate {
+            request_latency: Duration::from_millis(1),
+            shared_throughput_bytes_per_second: 1_000,
+        };
+        let fast = TransportEstimate {
+            shared_throughput_bytes_per_second: 100_000_000,
+            ..slow
+        };
+        let delayed = TransportEstimate {
+            request_latency: Duration::from_secs(100),
+            ..slow
+        };
+        assert_eq!(
+            choose_bounded_range_plan(&ranges, slow, 1, 10_100, 0),
+            Some(ranges.clone())
+        );
+        for estimate in [fast, delayed] {
+            assert_eq!(
+                choose_bounded_range_plan(&ranges, estimate, 1, 10_100, 0),
+                Some(std::iter::once(0..10_100).collect())
+            );
+            assert_eq!(
+                choose_bounded_range_plan(&ranges, estimate, 11, 10_100, 0),
+                Some(ranges.clone())
+            );
+            // The budget prohibits even one merge, regardless of latency.
+            assert_eq!(
+                choose_bounded_range_plan(&ranges, estimate, 1, 1_100, 0),
+                Some(ranges.clone())
+            );
+        }
+        assert!(choose_bounded_range_plan(&ranges, slow, 1, 1_099, 0).is_none());
+        assert!(choose_bounded_range_plan(&ranges, slow, 0, 10_100, 0).is_none());
+        assert_eq!(choose_bounded_range_plan(&[], slow, 0, 0, 0), Some(vec![]));
+        // Balance processing capacity against transfer time, including in one wave.
+        assert_eq!(
+            choose_bounded_range_plan(&ranges, slow, 11, 10_100, 2_000),
+            Some(vec![0..7_100, 8_000..8_100, 9_000..9_100, 10_000..10_100])
+        );
+    }
+
+    #[test]
+    fn bounded_planner_matches_exhaustive_small_plans() {
+        use super::{DECISION_MARGIN_PERCENT, choose_bounded_range_plan};
+        let requested = [200..210, 0..5, 13..23, 0..10, 80..90];
+        let exact = [0..10, 13..23, 80..90, 200..210];
+        for concurrency in 1..=5 {
+            for byte_budget in [39, 40, 43, 100, 210] {
+                let estimate = TransportEstimate {
+                    request_latency: Duration::from_millis(100),
+                    shared_throughput_bytes_per_second: 1_000,
+                };
+                // Enumerate every cut between ranges, independent of the greedy
+                // gap ordering used by the implementation.
+                let candidates: Vec<_> = (0..8)
+                    .map(|cuts| {
+                        let mut plan = Vec::new();
+                        let mut current = exact[0].clone();
+                        for (index, next) in exact.iter().enumerate().skip(1) {
+                            if cuts & (1 << (index - 1)) == 0 {
+                                current.end = next.end;
+                            } else {
+                                plan.push(current);
+                                current = next.clone();
+                            }
+                        }
+                        plan.push(current);
+                        plan
+                    })
+                    .filter(|plan| range_bytes(plan) <= byte_budget)
+                    .collect();
+                for overhead in [0, 2, 30, 500] {
+                    let actual = choose_bounded_range_plan(
+                        &requested,
+                        estimate,
+                        concurrency,
+                        byte_budget,
+                        overhead,
+                    );
+                    let score = |plan: &Vec<Range<u64>>| {
+                        super::partial_plan_cost(
+                            range_bytes(plan),
+                            plan.len(),
+                            estimate,
+                            concurrency,
+                            overhead,
+                        )
+                    };
+                    let Some(best) = candidates.iter().map(score).min() else {
+                        assert!(actual.is_none());
+                        continue;
+                    };
+                    let competitive = best + best * DECISION_MARGIN_PERCENT / 100;
+                    let expected = candidates
+                        .iter()
+                        .filter(|plan| score(plan) <= competitive)
+                        .min_by_key(|plan| (range_bytes(plan), plan.len()));
+                    assert_eq!(
+                        actual.as_ref(),
+                        expected,
+                        "concurrency={concurrency}, budget={byte_budget}, overhead={overhead}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn cold_plan_limits_requests_without_exceeding_byte_amplification() {
         let dense_ranges = spaced_ranges(&[1; 99]);
         assert_eq!(
@@ -503,7 +721,7 @@ mod tests {
         let data = Bytes::from_static(b"0123456789abcdef");
 
         let results =
-            execute_range_plan(&requested_ranges, &physical_ranges, |range| {
+            execute_range_plan(&requested_ranges, &physical_ranges, 10, |range| {
                 let data = data.clone();
                 async move {
                     Ok::<Bytes, Infallible>(data.slice(range.start as usize..range.end as usize))

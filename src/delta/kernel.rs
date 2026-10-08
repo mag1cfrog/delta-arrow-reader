@@ -7,7 +7,7 @@ pub(crate) use deletion_vector::KernelDeletionVectorHandle;
 use std::{collections::BTreeMap, sync::Arc};
 
 use arrow::{
-    array::{Array as _, BooleanArray},
+    array::{Array as _, BooleanArray, Int64Array, StringArray},
     datatypes::SchemaRef,
     error::ArrowError,
     record_batch::RecordBatch,
@@ -238,6 +238,38 @@ fn materialize_scan_metadata(
         }
     }
     Ok(batches.into())
+}
+
+/// Samples paths and sizes from reconciled metadata without parsing file statistics or DVs.
+pub(crate) fn sample_data_files(
+    batches: &[RecordBatch],
+    min_size: u64,
+    limit: usize,
+) -> Vec<(String, u64)> {
+    let mut files = Vec::new();
+    for batch in batches {
+        let paths = batch
+            .column_by_name("path")
+            .and_then(|column| column.as_any().downcast_ref::<StringArray>());
+        let sizes = batch
+            .column_by_name("size")
+            .and_then(|column| column.as_any().downcast_ref::<Int64Array>());
+        let (Some(paths), Some(sizes)) = (paths, sizes) else {
+            continue;
+        };
+        for (path, size) in paths.iter().zip(sizes.iter()) {
+            if files.len() == limit {
+                return files;
+            }
+            if let (Some(path), Some(size)) = (path, size.and_then(|n| u64::try_from(n).ok()))
+                && size >= min_size
+                && !files.iter().any(|(existing, _)| existing == path)
+            {
+                files.push((path.to_owned(), size));
+            }
+        }
+    }
+    files
 }
 
 fn collect_scan_files(
@@ -699,6 +731,48 @@ mod tests {
 
     use super::*;
     use crate::reader::predicate::evaluate_predicate;
+
+    #[test]
+    fn network_samples_use_only_usable_unique_paths_within_the_limit()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use arrow::array::ArrayRef;
+        let batch = RecordBatch::try_from_iter([
+            (
+                "path",
+                Arc::new(StringArray::from(vec![
+                    None,
+                    Some("negative"),
+                    Some("small"),
+                    Some("large"),
+                    Some("large"),
+                    Some("second"),
+                ])) as ArrayRef,
+            ),
+            (
+                "size",
+                Arc::new(Int64Array::from(vec![
+                    Some(100),
+                    Some(-1),
+                    Some(1),
+                    Some(100),
+                    Some(100),
+                    Some(100),
+                ])) as ArrayRef,
+            ),
+        ])?;
+        let batches = [batch.slice(0, 4), batch.slice(4, 2)];
+        assert_eq!(
+            sample_data_files(&batches, 10, 2),
+            vec![("large".into(), 100), ("second".into(), 100)]
+        );
+        assert_eq!(
+            sample_data_files(&batches, 10, 1),
+            vec![("large".into(), 100)]
+        );
+        assert!(sample_data_files(&batches, 10, 0).is_empty());
+        assert!(sample_data_files(&batches, 101, 2).is_empty());
+        Ok(())
+    }
 
     fn column(name: &str) -> Expression {
         Expression::Column(ColumnName::new([name]))

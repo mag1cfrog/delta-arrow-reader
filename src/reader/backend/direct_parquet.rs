@@ -17,6 +17,7 @@ mod int96_tests;
 use std::{
     ops::Range,
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
 use arrow::{
@@ -47,7 +48,9 @@ pub(crate) use self::metered_object_store::ParquetRangeReadEstimator;
 use self::{
     intra_page::{IntraPageReader, SelectedRows, SharedSelection},
     metadata_cache::CachedParquetMetadata,
-    metered_object_store::{MeteredParquetObjectStore, MultiRangeReadStrategy},
+    metered_object_store::{
+        MeteredParquetObjectStore, MultiRangeReadStrategy, WARMUP_FILE_LIMIT, WARMUP_READ_BYTES,
+    },
     nan_counts::NanCounts,
     row_group_pruning::pruned_row_groups,
     schema_alignment::{ParquetSchemaAlignment, build_schema_alignment},
@@ -56,7 +59,7 @@ use self::{
 const ORIGINAL_ROW_INDEX_COLUMN: &str = "__delta_arrow_reader_original_row_index";
 
 use crate::{
-    DeltaReaderError, DeltaScanExecutionOptions, DeltaScanMetrics,
+    DeltaReaderError, DeltaScanExecutionOptions, DeltaScanMetrics, ParquetReaderBackend,
     delta::kernel::{
         DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
         KernelScanSchemas,
@@ -64,6 +67,7 @@ use crate::{
     error::{CancelledSnafu, DataFileReadSnafu, PhysicalToLogicalTransformSnafu},
     reader::{
         deletion_vector::{DeletionVectorMasker, load_deletion_vector_masker},
+        metrics::DeltaScanMetricsConfig,
         planning::{DeltaScanFileTask, DeltaScanPlan},
         scheduling::{FileBatchStream, FileExecutor, FileReadPermit, ScanCancellation},
         transform::{
@@ -72,9 +76,71 @@ use crate::{
     },
 };
 
+pub(crate) async fn warmup_network(
+    snapshot: &crate::delta::snapshot::ArrowTableSnapshot,
+    options: DeltaScanExecutionOptions,
+    max_duration: Duration,
+) -> Option<Arc<ParquetRangeReadEstimator>> {
+    let context = snapshot.engine_context();
+    let strategy = MultiRangeReadStrategy::for_policy(
+        options.parquet_range_read_policy(),
+        context.table_url(),
+    );
+    if max_duration.is_zero()
+        || options.parquet_backend() != ParquetReaderBackend::Direct
+        || strategy != MultiRangeReadStrategy::ChooseAutomatically
+    {
+        return None;
+    }
+    let files: Vec<_> = crate::delta::kernel::sample_data_files(
+        snapshot.eager_scan_metadata()?,
+        WARMUP_READ_BYTES,
+        WARMUP_FILE_LIMIT,
+    )
+    .into_iter()
+    .filter_map(|(path, size)| {
+        resolve_data_file_path(context.file_resolution_url(), &path)
+            .ok()
+            .map(|path| (path, size))
+    })
+    .collect();
+    let estimator = Arc::new(ParquetRangeReadEstimator::for_network_warmup());
+    let metrics = DeltaScanMetrics::new(DeltaScanMetricsConfig {
+        snapshot_version: snapshot.version(),
+        parquet_backend: ParquetReaderBackend::Direct,
+        scan_partitions_planned: 0,
+        files_planned: files.len(),
+        add_actions_excluded_during_planning: None,
+        estimated_input_rows: None,
+        estimated_input_bytes: None,
+    });
+    let store = MeteredParquetObjectStore::new(context.object_store(), metrics.clone(), strategy)
+        .with_range_read_estimator(Arc::clone(&estimator));
+    let started = Instant::now();
+    let outcome = tokio::time::timeout(max_duration, store.warmup(&files)).await;
+    let status = match outcome {
+        Ok(Ok(true)) => "complete",
+        Ok(Ok(false)) => "insufficient_samples",
+        Ok(Err(_)) => "read_failed",
+        Err(_) => "timeout",
+    };
+    let counts = metrics.snapshot();
+    let estimate = store.transport_estimate();
+    tracing::debug!(target: "delta_arrow_reader::diagnostics::network_warmup",
+        status, elapsed_micros = started.elapsed().as_micros(),
+        requests = counts.parquet_data_file_range_get_operations,
+        bytes_received = counts.parquet_data_file_bytes_received,
+        request_latency_micros = estimate.map(|value| value.request_latency.as_micros()),
+        throughput_bytes_per_second = estimate.map(|value| value.shared_throughput_bytes_per_second),
+        request_overhead_bytes = store.request_overhead_bytes(),
+        "Network warmup completed");
+    // Incomplete calibration must not seed a partially measured network profile.
+    (status == "complete").then_some(estimator)
+}
+
 struct DirectParquetReader {
     engine_context: Arc<DeltaKernelEngineContext>,
-    store: Arc<dyn ObjectStore>,
+    store: Arc<MeteredParquetObjectStore>,
     execution_options: DeltaScanExecutionOptions,
     metrics: DeltaScanMetrics,
     metadata_cache: Option<Arc<ParquetMetadataCache>>,
@@ -84,6 +150,7 @@ struct ParquetFileObject {
     store: Arc<dyn ObjectStore>,
     path: Path,
     file_size: u64,
+    buffered: bool,
 }
 
 struct PhysicalParquetStream {
@@ -217,6 +284,7 @@ impl DirectParquetReader {
     ) -> Result<PhysicalParquetStream, DeltaReaderError> {
         let object = self.parquet_object_for_task(task).await?;
         let selection = (self.execution_options.experimental_intra_page_reads()
+            && !object.buffered
             && options.row_filter.is_some()
             && self.execution_options.parquet_range_read_policy()
                 == crate::reader::ParquetRangeReadPolicy::Automatic)
@@ -318,6 +386,8 @@ impl DirectParquetReader {
             Arc::clone(&metadata.parquet),
             selection,
             object.file_size,
+            Arc::clone(&self.store),
+            object.path.clone(),
         )
         .map_err(|error| data_file_error("parquet_read_setup_failed", error))?;
         Ok((
@@ -510,9 +580,10 @@ impl DirectParquetReader {
         })?;
 
         Ok(ParquetFileObject {
-            store: Arc::clone(&self.store),
+            store: self.store.clone(),
             path,
             file_size,
+            buffered: false,
         })
     }
 
@@ -552,6 +623,7 @@ impl DirectParquetReader {
                 reason: "parquet_file_buffer_initialization_failed",
             })?;
         object.store = store;
+        object.buffered = true;
         Ok(object)
     }
 }

@@ -1,0 +1,271 @@
+{
+  "status": "DAR-only fix validation; experimental option remains disabled by default",
+  "timed_sessions": 16,
+  "exactly_validated_query_exports": 16,
+  "sample_csv_sha256": "57498570567fcef4b804cf1788d935754dec1afb1c3fb90e6e2d52884c52760c",
+  "source_report_sha256": "69a62c828c983b007622bd8da1230b257db165eac26af468be0dd663bb999dbc",
+  "retained_artifact_directory": "/home/hanbo/repo/selective-read-intra-page-model-20261008",
+  "method": {
+    "scope": "Original TPC-H-derived SF10 scattered DV tables, snapshots and SQL. Published five-reader results unchanged.",
+    "sampling": "Three fresh-process automatic sessions per table/profile on v5; one retained ordinary session per table/profile on v3. Each session initializes one provider and runs two sequential queries.",
+    "comparison_limit": "These observations are not an alternating comparison on the same final executable. v3 to v5 changes affect partial-read planning and calibration only; the ordinary path is unchanged. A final paired campaign remains pending.",
+    "initialization": "Both modes load planning metadata. Automatic mode additionally profiles the network during initialization, with a five-second sampling limit. No prior query is needed for the first query to use that profile.",
+    "timing": {
+      "initialization_median": "Seconds spent initializing the table and provider. Automatic mode includes network profiling here, before the first query.",
+      "query_medians": "First and second query durations in seconds, respectively. Each excludes initialization. The first automatic query already uses the profile collected during initialization.",
+      "init_plus_first_median": "Median of initialization plus first-query duration, computed separately within each session before aggregation.",
+      "session_median": "Median elapsed session duration, covering initialization and both queries.",
+      "labels": "Report initialization, first query, initialization plus first query, and second query explicitly. Do not label query-only times as after warmup."
+    },
+    "io": "Per-query Parquet I/O is separated at each file's two 64 KiB footer requests in the retained HTTP trace. Profiling reads precede the first query. Session HTTP counters include all object classes and both queries.",
+    "resources": {
+      "logical_cpus": [
+        0,
+        1,
+        2,
+        3,
+        8,
+        9,
+        10,
+        11
+      ],
+      "physical_cores": 4,
+      "process_memory_bytes": 8589934592
+    },
+    "cache": "Reused OS/MinIO caches; exact validation before timing; fresh reader processes.",
+    "preparation": "Generation, compilation and reference hashing are outside timing. No preparation overlaps measurements.",
+    "correctness": "Both exported queries in every mode/table/profile match every value and null of the independent reference: 894 rows. Validation runs are separate from timing.",
+    "retries": "Not identifiable from repeated ranges; no claim of zero retries.",
+    "post_measurement_review": "The reviewed source additionally renames an estimator flag and rejects initialization profiles lacking three accepted small-request samples. These changes have regression coverage but are not represented by the measured v5 binary."
+  },
+  "networks": {
+    "primary": {
+      "jitter_ms": 20,
+      "latency_ms": 200,
+      "mbps": 150,
+      "seed": "0"
+    },
+    "low": {
+      "jitter_ms": 0,
+      "latency_ms": 1,
+      "mbps": 1000,
+      "seed": "0"
+    }
+  },
+  "network_proxy_source_sha256": {
+    "network.py": "9352d4685076568449bc37320a227278366c45acbb52a39ed972007db824544e",
+    "network_proxy.go": "5d0051d91e42000e341058e6ff11ba59c75731560524d5262ad0d84c46b36c79"
+  },
+  "fixture_verification": [
+    {
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "object_bytes": 70972418471,
+      "objects": 262,
+      "source_upload": "/home/hanbo/repo/selective-read-intra-page-full-20261007/upload-q2.json",
+      "source_upload_sha256": "e2d965a0b7601883a2ed9bb56c1a203bafadfaf55faad2c03d28b9a490dc727c",
+      "verification": "Every current object length and server FULL_OBJECT SHA256 match the retained upload receipt."
+    },
+    {
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "object_bytes": 32463889602,
+      "objects": 122,
+      "source_upload": "/home/hanbo/repo/selective-read-intra-page-full-20261007/upload-q4.json",
+      "source_upload_sha256": "b00eb912d2bebe8164390c5d371e738c10b03b9cb5a06258ee47a3ba622ff917",
+      "verification": "Every current object length and server FULL_OBJECT SHA256 match the retained upload receipt."
+    }
+  ],
+  "fixtures": {
+    "416": {
+      "case_id": "production.q2.scattered.dv",
+      "comparison_revision": 6,
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+      "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+      "snapshot_version": 1,
+      "output_rows": 894,
+      "oracle_sha256": "1e97d04bc787b5f807e7ad817cd2e339579c261759d1779538e0ad53d9cbfddc",
+      "workload_manifest_sha256": "d67e605e806e951219646c22bcc4ebe849b2dcdf16e1e737cff399bfc000f8e4",
+      "projected_columns": 69
+    },
+    "90": {
+      "case_id": "production.q4.scattered.dv",
+      "comparison_revision": 6,
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+      "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+      "snapshot_version": 1,
+      "output_rows": 894,
+      "oracle_sha256": "1e97d04bc787b5f807e7ad817cd2e339579c261759d1779538e0ad53d9cbfddc",
+      "workload_manifest_sha256": "d67e605e806e951219646c22bcc4ebe849b2dcdf16e1e737cff399bfc000f8e4",
+      "projected_columns": 71
+    }
+  },
+  "builds": {
+    "v3": {
+      "reader_git_commit": "321a312271d932c5f86b357851c4a43e9a55c87d",
+      "executable_sha256": "0ccc5d352ada53d274500144420574d5b091108d20d40a07987716147973c01b",
+      "lockfile_sha256": "3e33227b8d98d1fbb4840f013ce48ceb9ad19fad8f460e4a0152c1737e514893",
+      "rustflags": "-C target-cpu=x86-64",
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--locked",
+        "--manifest-path",
+        "benches/selective_read/runners/dar/Cargo.toml",
+        "-j6"
+      ],
+      "source_state": "Uncommitted candidate changes on reader_git_commit; identified by source and patch hashes.",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+      "build_record_sha256": "dbf3134a794c821b1f76180a920a8d0e063c55b3ee057d07922fb9466ec0a70f",
+      "source_sha256": {
+        "Cargo.toml": "8eb0f0fc1a500ce50d1d38847e3e8abe6b7a618bc8c3736d662b7f42c94cf8cb",
+        "Cargo.lock": "4c27d5f25bfde264679c422d76cebcb7f5052b58ffb833db41daaf76c323544b",
+        "src/delta/kernel.rs": "1d0ff87a5bba1438980533088d70eba7bdf7a5e8a5843ba67b8b020db0a399bb",
+        "src/reader.rs": "eb8df61c7b075e0383eba56772b16743051269f92e0c4d7b57eca98112d5a769",
+        "src/reader/backend/direct_parquet.rs": "3077782ffd6e8d50b060a41c42ca80c268d0b69e99e475c272bc78af2f93b4a9",
+        "src/reader/backend/direct_parquet/metered_object_store.rs": "0f1f0f171ebf4aebbc36a93d816a4eec10ebccb1d6e53b0af8a01fbbf04843c1",
+        "src/reader/backend/direct_parquet/range_planning.rs": "dace3425a63e6ab4b2340cd6d95d613db1911622d7d95e814ed7780604ff6ad7",
+        "src/reader/backend/direct_parquet/intra_page.rs": "3db53f88c6cbfbce341d883d567a4308c7ef4df929ad4a9adfe4f0f7c5c34889",
+        "src/reader/backend/direct_parquet/intra_page/page.rs": "ef9b3627581b2e262e5c6a49a17ff7372ca2479fce5f8222c8ec163815b855fd",
+        "src/reader/datafusion.rs": "29e4cdbda130b592ba486d34b95536e1b1db15a64e04178e08d14156ad9d65d6",
+        "src/reader/datafusion/execution.rs": "808a3a91cdf8e11b3983182e9bfd382b47d675d91f04f57ad0e7becbc85c0f4e",
+        "benches/selective_read/runners/dar/Cargo.toml": "331a4c78f2adffd2cfca074eaa0364e12c5631bb43d69f2cafb27f98de89e521",
+        "benches/selective_read/runners/dar/Cargo.lock": "3e33227b8d98d1fbb4840f013ce48ceb9ad19fad8f460e4a0152c1737e514893",
+        "benches/selective_read/runners/dar/src/main.rs": "2de727826a634f03a61334b1f1f2f27bbf26e76c90de6c65d1044e1fc9712cac"
+      },
+      "candidate_patch_sha256": "fe3f682df43371371acf9920e6ef92447f8bc519e9ae6561a7ea49a26ed7c83d"
+    },
+    "v5": {
+      "reader_git_commit": "321a312271d932c5f86b357851c4a43e9a55c87d",
+      "executable_sha256": "ab044c4b34782f3fa42423d1101731df3c69043b1b104fe62550fb38568fc312",
+      "lockfile_sha256": "3e33227b8d98d1fbb4840f013ce48ceb9ad19fad8f460e4a0152c1737e514893",
+      "rustflags": "-C target-cpu=x86-64",
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--locked",
+        "--manifest-path",
+        "benches/selective_read/runners/dar/Cargo.toml",
+        "-j6"
+      ],
+      "source_state": "Uncommitted candidate changes on reader_git_commit; identified by source and patch hashes.",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+      "build_record_sha256": "1ac3b73b0b94657557b17f13c31689303cefbc4df9485c78dce72e28062019c8",
+      "source_sha256": {
+        "Cargo.toml": "8eb0f0fc1a500ce50d1d38847e3e8abe6b7a618bc8c3736d662b7f42c94cf8cb",
+        "Cargo.lock": "4c27d5f25bfde264679c422d76cebcb7f5052b58ffb833db41daaf76c323544b",
+        "src/delta/kernel.rs": "1d0ff87a5bba1438980533088d70eba7bdf7a5e8a5843ba67b8b020db0a399bb",
+        "src/reader.rs": "eb8df61c7b075e0383eba56772b16743051269f92e0c4d7b57eca98112d5a769",
+        "src/reader/backend/direct_parquet.rs": "3077782ffd6e8d50b060a41c42ca80c268d0b69e99e475c272bc78af2f93b4a9",
+        "src/reader/backend/direct_parquet/metered_object_store.rs": "c78ba3070ef84c5ceb1b5b177d35cdd7107001ef3865c34df23ac6546526338d",
+        "src/reader/backend/direct_parquet/range_planning.rs": "dace3425a63e6ab4b2340cd6d95d613db1911622d7d95e814ed7780604ff6ad7",
+        "src/reader/backend/direct_parquet/intra_page.rs": "70c6cdd0b6928eb935ac1d701f1fe0a64b3c331236ef3c6314075431a6c045d6",
+        "src/reader/backend/direct_parquet/intra_page/page.rs": "5de63375a361b3bd3b5665e7321d0d3cc7a389d41bed1a95acf96a33441dbefe",
+        "src/reader/datafusion.rs": "29e4cdbda130b592ba486d34b95536e1b1db15a64e04178e08d14156ad9d65d6",
+        "src/reader/datafusion/execution.rs": "808a3a91cdf8e11b3983182e9bfd382b47d675d91f04f57ad0e7becbc85c0f4e",
+        "benches/selective_read/runners/dar/Cargo.toml": "331a4c78f2adffd2cfca074eaa0364e12c5631bb43d69f2cafb27f98de89e521",
+        "benches/selective_read/runners/dar/Cargo.lock": "3e33227b8d98d1fbb4840f013ce48ceb9ad19fad8f460e4a0152c1737e514893",
+        "benches/selective_read/runners/dar/src/main.rs": "2de727826a634f03a61334b1f1f2f27bbf26e76c90de6c65d1044e1fc9712cac"
+      },
+      "candidate_patch_sha256": "9c0ba1e7ef53c0febf9acb05559358a90fc5487609dc7553f3a11a717ce6cd87"
+    }
+  },
+  "experiments": [
+    {
+      "table_columns": 416,
+      "profile": "primary",
+      "mode": "off",
+      "build": "v3",
+      "samples": 1,
+      "artifact_directory": "416-v3-primary",
+      "experiment_sha256": "d777572bba145dcfc9020dea684dd8dd8b33b821471f9d0430e32ad7ad471440",
+      "harness_sha256": "97c83b7a7ad978d75e9b5216461d24984ec6a17afc3bc311b0e8f9cbe6185efd",
+      "correctness_sha256": "45685a3a847e18277600ff016a7b8294e345ce821f9a05bf877cca26b2476210"
+    },
+    {
+      "table_columns": 416,
+      "profile": "primary",
+      "mode": "auto",
+      "build": "v5",
+      "samples": 3,
+      "artifact_directory": "416-v5-primary",
+      "experiment_sha256": "c1268d80b72f0284083cd521cd0e13c855c4e016165b919eb558f3a051330c8b",
+      "harness_sha256": "97c83b7a7ad978d75e9b5216461d24984ec6a17afc3bc311b0e8f9cbe6185efd",
+      "correctness_sha256": "1c142d89eda90b16ddd01e18b04979c9bf1ebd7e6777e609b7bcce5c53eafc7b"
+    },
+    {
+      "table_columns": 416,
+      "profile": "low",
+      "mode": "off",
+      "build": "v3",
+      "samples": 1,
+      "artifact_directory": "416-v3-low",
+      "experiment_sha256": "81ae70a7ed816b520a3e6c67946ab781f1ed67c1ea75cce01c55f7a1ff43622d",
+      "harness_sha256": "97c83b7a7ad978d75e9b5216461d24984ec6a17afc3bc311b0e8f9cbe6185efd",
+      "correctness_sha256": "5f6b5b781a561ab89b844ea6c505a5cbf240b148b87d3595f5fb244b366fd6ba"
+    },
+    {
+      "table_columns": 416,
+      "profile": "low",
+      "mode": "auto",
+      "build": "v5",
+      "samples": 3,
+      "artifact_directory": "416-v5-low",
+      "experiment_sha256": "ee21d487542f2364331d5ff71f7745dbc2259d364cd4a577b3e9ed9440dbe3f6",
+      "harness_sha256": "97c83b7a7ad978d75e9b5216461d24984ec6a17afc3bc311b0e8f9cbe6185efd",
+      "correctness_sha256": "964b25ff4e411b0b1f8d8fea65cf1ff975cb827fa5ac782c74c81432e71c0fa8"
+    },
+    {
+      "table_columns": 90,
+      "profile": "primary",
+      "mode": "off",
+      "build": "v3",
+      "samples": 1,
+      "artifact_directory": "90-v3-primary",
+      "experiment_sha256": "ff4938253be1f0f9edeede59c967afcd6c64b2a615728ddeda7b3ed6e4718147",
+      "harness_sha256": "97c83b7a7ad978d75e9b5216461d24984ec6a17afc3bc311b0e8f9cbe6185efd",
+      "correctness_sha256": "754ddbbe220eeddb017274377fec03303e3c4104bc2fe4753df63d56386f3d32"
+    },
+    {
+      "table_columns": 90,
+      "profile": "primary",
+      "mode": "auto",
+      "build": "v5",
+      "samples": 3,
+      "artifact_directory": "90-v5-primary",
+      "experiment_sha256": "c4946cae6372051420a3355a62edb0fcd0c3febf80e0f141f88dcbb32b204eca",
+      "harness_sha256": "97c83b7a7ad978d75e9b5216461d24984ec6a17afc3bc311b0e8f9cbe6185efd",
+      "correctness_sha256": "1dc14c037bc49198469a571959326bf2ec10e263a834e66e4654104816a02710"
+    },
+    {
+      "table_columns": 90,
+      "profile": "low",
+      "mode": "off",
+      "build": "v3",
+      "samples": 1,
+      "artifact_directory": "90-v3-low",
+      "experiment_sha256": "05ca6f4f1d0a0db819a7ce548421f8a1db5112057b4a9ec3cdfbc703d44cf2d8",
+      "harness_sha256": "97c83b7a7ad978d75e9b5216461d24984ec6a17afc3bc311b0e8f9cbe6185efd",
+      "correctness_sha256": "c58f76e2410a953b56b1926b178fb97a49672dc7b288ceb64f9a798f1adf5d8f"
+    },
+    {
+      "table_columns": 90,
+      "profile": "low",
+      "mode": "auto",
+      "build": "v5",
+      "samples": 3,
+      "artifact_directory": "90-v5-low",
+      "experiment_sha256": "a451b7f9e75157c16f09a651a767cb9d77fa4a08329a83657f54acacf685b87d",
+      "harness_sha256": "97c83b7a7ad978d75e9b5216461d24984ec6a17afc3bc311b0e8f9cbe6185efd",
+      "correctness_sha256": "ba16fbd0e8b72ea77bdc8f6576e8878e42b02e14aeee713db7f52496d7768b0f"
+    }
+  ],
+  "remaining": [
+    "Alternating off/auto samples on the same final executable.",
+    "Simultaneous queries sharing the process-wide request budget.",
+    "Dense-selection, unsupported-format and broader network controls on this candidate.",
+    "Real S3 validation; the MinIO proxy is a simulation."
+  ]
+}
