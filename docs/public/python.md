@@ -79,6 +79,33 @@ A supplied value must be an integer from `1` through `2 * sys.maxsize + 1`.
 Booleans and other types raise `TypeError`, zero and negative values raise
 `ValueError`, and values above the maximum raise `OverflowError`.
 
+## Choose a Parquet reader
+
+`ScanExecutionOptions` is an immutable configuration object. Its
+`parquet_backend` defaults to `"direct"`, which reads Parquet files through the
+asynchronous reader. Use `"delta_kernel"` to delegate reads to Delta Kernel:
+
+```python
+from delta_arrow_reader import ScanExecutionOptions
+
+kernel_options = ScanExecutionOptions(parquet_backend="delta_kernel")
+configured = DeltaTable(location, execution_options=kernel_options)
+with configured.to_reader(columns=["id"], limit=10) as reader:
+    print(reader.read_all().num_rows)
+
+with configured.to_reader(execution_options=ScanExecutionOptions(), limit=10) as reader:
+    print(reader.read_all().num_rows)
+```
+
+The second reader uses the default `"direct"` backend. Both `scan()` and
+`to_reader()` accept `execution_options`. An override replaces the complete
+configuration for that scan. Omitting it or passing `None` uses the table's
+settings. Later scans and refreshed tables keep the table's configuration.
+
+Pass a `ScanExecutionOptions` object, not a dictionary. Other types raise
+`TypeError`. For `parquet_backend`, unsupported strings raise `ValueError` and
+non-string values raise `TypeError`.
+
 ## Use the Arrow stream interface and stop early
 
 `to_reader()` returns a `pyarrow.RecordBatchReader`. You can also construct one

@@ -1,5 +1,6 @@
 //! Python package entrypoint.
 
+mod options;
 mod runtime;
 mod stream;
 
@@ -16,6 +17,7 @@ use pyo3::{
     types::{PyBool, PyCapsule, PyDict, PyInt, PyList, PyMapping, PyTuple},
 };
 
+use crate::options::ScanExecutionOptions;
 use crate::runtime::Runtime;
 use crate::stream::RecordBatchStream;
 
@@ -66,6 +68,7 @@ fn export_schema(py: Python<'_>, schema: &Schema) -> PyResult<FFI_ArrowSchema> {
 /// storage_options accepts a mapping of string keys to string values.
 /// warmup="none" defers planning metadata to scans; "query_planning" prepares
 /// reusable planning metadata during loading without reading Parquet data.
+/// execution_options=None keeps the default scan execution settings.
 #[pyclass(module = "delta_arrow_reader", frozen)]
 struct DeltaTable {
     table: CoreDeltaTable,
@@ -76,13 +79,14 @@ struct DeltaTable {
 #[pymethods]
 impl DeltaTable {
     #[new]
-    #[pyo3(signature = (location, *, version=None, storage_options=None, warmup="none"))]
+    #[pyo3(signature = (location, *, version=None, storage_options=None, warmup="none", execution_options=None))]
     fn new(
         py: Python<'_>,
         location: &Bound<'_, PyAny>,
         version: Option<&Bound<'_, PyInt>>,
         storage_options: Option<&Bound<'_, PyMapping>>,
         warmup: &str,
+        execution_options: Option<PyRef<'_, ScanExecutionOptions>>,
     ) -> PyResult<Self> {
         let location: String = py
             .import("os")?
@@ -117,10 +121,13 @@ impl DeltaTable {
                 ));
             }
         };
-        let builder = DeltaTableBuilder::new(location)
+        let mut builder = DeltaTableBuilder::new(location)
             .with_snapshot_selection(selection)
             .with_storage_options(options)
             .with_warmup(warmup);
+        if let Some(options) = execution_options {
+            builder = builder.with_execution_options(options.options);
+        }
         let runtime = Arc::new(
             Runtime::new()
                 .map_err(|_| PyRuntimeError::new_err("failed to create the reader runtime"))?,
@@ -175,17 +182,23 @@ impl DeltaTable {
     /// that fits the platform's usize. Booleans are not accepted.
     /// target_partitions=None uses automatic partition planning. An override must
     /// be a positive integer that fits usize; booleans are not accepted.
+    /// execution_options=None inherits the table's settings. A supplied object
+    /// replaces the complete settings for this scan without changing the table.
     /// Planning reads Delta metadata; data-file reads start on the first pull.
     /// The stream retains its snapshot and runtime independently of this table.
-    #[pyo3(signature = (*, columns=None, limit=None, target_partitions=None))]
+    #[pyo3(signature = (*, columns=None, limit=None, target_partitions=None, execution_options=None))]
     fn scan(
         &self,
         py: Python<'_>,
         columns: Option<&Bound<'_, PyAny>>,
         limit: Option<&Bound<'_, PyInt>>,
         target_partitions: Option<&Bound<'_, PyInt>>,
+        execution_options: Option<PyRef<'_, ScanExecutionOptions>>,
     ) -> PyResult<RecordBatchStream> {
         let mut builder = self.table.scan();
+        if let Some(options) = execution_options {
+            builder = builder.with_execution_options(options.options);
+        }
         if let Some(columns) = columns {
             if !columns.is_instance_of::<PyList>() && !columns.is_instance_of::<PyTuple>() {
                 return Err(PyTypeError::new_err(
@@ -237,17 +250,21 @@ impl DeltaTable {
 
     /// Plan a scan and consume it as a pyarrow.RecordBatchReader.
     ///
-    /// columns, limit, and target_partitions accept the same selections as scan().
+    /// Accepts the same keyword arguments as scan().
     /// Use a with block to close the reader, including when stopping early.
-    #[pyo3(signature = (*, columns=None, limit=None, target_partitions=None))]
+    #[pyo3(signature = (*, columns=None, limit=None, target_partitions=None, execution_options=None))]
     fn to_reader<'py>(
         &self,
         py: Python<'py>,
         columns: Option<&Bound<'_, PyAny>>,
         limit: Option<&Bound<'_, PyInt>>,
         target_partitions: Option<&Bound<'_, PyInt>>,
+        execution_options: Option<PyRef<'_, ScanExecutionOptions>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let stream = Py::new(py, self.scan(py, columns, limit, target_partitions)?)?;
+        let stream = Py::new(
+            py,
+            self.scan(py, columns, limit, target_partitions, execution_options)?,
+        )?;
         py.import("pyarrow")?
             .getattr("RecordBatchReader")?
             .call_method1("from_stream", (stream,))
@@ -268,6 +285,7 @@ fn delta_arrow_reader(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("__version__", version)?;
     module.add_class::<DeltaTable>()?;
     module.add_class::<RecordBatchStream>()?;
+    module.add_class::<ScanExecutionOptions>()?;
     module.add(
         "DeltaReaderError",
         module.py().get_type::<DeltaReaderError>(),
@@ -279,6 +297,7 @@ fn delta_arrow_reader(module: &Bound<'_, PyModule>) -> PyResult<()> {
             "DeltaTable",
             "DeltaReaderError",
             "RecordBatchStream",
+            "ScanExecutionOptions",
         ],
     )
 }

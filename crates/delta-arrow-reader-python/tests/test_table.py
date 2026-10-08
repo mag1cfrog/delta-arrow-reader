@@ -17,7 +17,9 @@ import unittest
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from delta_arrow_reader import DeltaReaderError, DeltaTable, RecordBatchStream
+from delta_arrow_reader import (
+    DeltaReaderError, DeltaTable, RecordBatchStream, ScanExecutionOptions,
+)
 
 
 class TableTests(unittest.TestCase):
@@ -468,6 +470,81 @@ class TableTests(unittest.TestCase):
                         method(target_partitions=target)
                 with self.assertRaises(TypeError):
                     method(None, None, 1)
+
+    def test_scan_execution_options_are_immutable_and_validate_backends(self):
+        self.assertEqual(ScanExecutionOptions().parquet_backend, "direct")
+        for backend in ("direct", "delta_kernel"):
+            with self.subTest(backend=backend):
+                options = ScanExecutionOptions(parquet_backend=backend)
+                self.assertEqual(options.parquet_backend, backend)
+                with self.assertRaises(AttributeError):
+                    options.parquet_backend = "direct"
+                with self.assertRaises(AttributeError):
+                    del options.parquet_backend
+                with self.assertRaises(AttributeError):
+                    options.extra = True
+        for value in (None, True, 1, 0.0, b"direct", [], {}, object()):
+            with self.subTest(value=value), self.assertRaises(TypeError):
+                ScanExecutionOptions(parquet_backend=value)
+        for value in ("", "DIRECT", "delta-kernel", "secret-invalid"):
+            with self.subTest(value=value), self.assertRaises(ValueError) as caught:
+                ScanExecutionOptions(parquet_backend=value)
+            self.assertNotIn("secret", str(caught.exception))
+        with self.assertRaises(TypeError):
+            ScanExecutionOptions("direct")
+
+    def test_execution_options_require_a_scan_execution_options_object(self):
+        table = DeltaTable(self.location, execution_options=None)
+        for method in (partial(DeltaTable, self.location / "missing"),
+                       table.scan, table.to_reader):
+            for value in ({}, {"parquet_backend": "direct"}, "direct", True, 1, []):
+                with self.subTest(method=method, value=value), self.assertRaises(TypeError):
+                    method(execution_options=value)
+
+    def test_backend_overrides_preserve_table_defaults_and_refresh(self):
+        http = self.http_support()
+        action = self.write_parquet("rows.parquet", [1, 2, 3])
+        self.write_log(1, action)
+        size = action["add"]["size"]
+        # Observe the backend through its first metadata request: the direct
+        # reader prefetches this small file, while Kernel starts with its footer.
+        first_range = {
+            "direct": f"bytes=0-{size - 1}",
+            "delta_kernel": f"bytes={size - 8}-{size - 1}",
+        }
+        options = {
+            backend: ScanExecutionOptions(parquet_backend=backend)
+            for backend in first_range
+        }
+        with http.serve(partial(http.Storage, directory=str(self.location))) as server:
+            for backend in options:
+                original = DeltaTable(
+                    f"http://127.0.0.1:{server.server_port}/",
+                    storage_options={"allow_http": "true"},
+                    execution_options=options[backend],
+                )
+                other = "delta_kernel" if backend == "direct" else "direct"
+                for table in (original, original.refresh()):
+                    for method in ("scan", "to_reader"):
+                        for override, expected_backend in (
+                            ({}, backend),
+                            ({"execution_options": options[other]}, other),
+                            ({"execution_options": None}, backend),
+                            ({"execution_options": ScanExecutionOptions()}, "direct"),
+                            ({}, backend),
+                        ):
+                            with self.subTest(backend=backend, method=method, override=override):
+                                server.requests.clear()
+                                result = getattr(table, method)(
+                                    columns=["id"], limit=2, target_partitions=1, **override,
+                                )
+                                reader = (pa.RecordBatchReader.from_stream(result)
+                                          if method == "scan" else result)
+                                with reader:
+                                    self.assertEqual(reader.read_all().to_pydict(), {"id": [1, 2]})
+                                ranges = [r for path, r, _ in server.requests
+                                          if path.endswith(".parquet")]
+                                self.assertEqual(ranges[0], first_range[expected_backend])
 
     def test_projection_validation_is_shared_by_both_entrypoints(self):
         table = DeltaTable(self.location)
