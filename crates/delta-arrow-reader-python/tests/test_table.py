@@ -233,14 +233,7 @@ class TableTests(unittest.TestCase):
                     self.send_error(400, "secret-response-message")
                     return
                 pending.set()
-                self.connection.settimeout(10)
-                try:
-                    if self.rfile.read(1) == b"":
-                        disconnected.set()
-                except ConnectionError:
-                    disconnected.set()
-                except TimeoutError:
-                    self.send_error(400, "test read was not cancelled")
+                self.wait_for_disconnect(disconnected)
 
         with http.serve(partial(Storage, directory=str(self.location))) as server:
             table = DeltaTable(
@@ -285,14 +278,7 @@ class TableTests(unittest.TestCase):
                     groups.append(group)
                     if group == 3:
                         pending.set()
-                        self.connection.settimeout(10)
-                        try:
-                            if self.rfile.read(1) == b"":
-                                disconnected.set()
-                        except ConnectionError:
-                            disconnected.set()
-                        except TimeoutError:
-                            self.send_error(400, "test read was not cancelled")
+                        self.wait_for_disconnect(disconnected)
                         return
                     if group > 3:
                         unexpected.set()

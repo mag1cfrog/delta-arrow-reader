@@ -27,6 +27,17 @@ class Storage(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *_):
         pass
 
+    def wait_for_disconnect(self, disconnected):
+        """Signal a client disconnect; fail the held request if it times out."""
+        self.connection.settimeout(10)
+        try:
+            if self.rfile.read(1) == b"":
+                disconnected.set()
+        except ConnectionError:
+            disconnected.set()
+        except TimeoutError:
+            self.send_error(400, "test read was not cancelled")
+
     def send_head(self):
         path = Path(self.translate_path(self.path))
         if not path.is_file():

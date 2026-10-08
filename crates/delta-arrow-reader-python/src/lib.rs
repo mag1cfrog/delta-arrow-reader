@@ -67,7 +67,7 @@ fn export_schema(py: Python<'_>, schema: &Schema) -> PyResult<FFI_ArrowSchema> {
 struct DeltaTable {
     table: CoreDeltaTable,
     // Keep the executor alive for the snapshot's storage engine.
-    _runtime: Arc<Runtime>,
+    runtime: Arc<Runtime>,
 }
 
 #[pymethods]
@@ -114,10 +114,7 @@ impl DeltaTable {
         let table = runtime.wait(py, builder.load_table())?.map_err(|error| {
             reader_error(py, error.to_string(), error.phase().as_str(), error.code())
         })?;
-        Ok(Self {
-            table,
-            _runtime: runtime,
-        })
+        Ok(Self { table, runtime })
     }
 
     /// The loaded snapshot version.
@@ -174,14 +171,14 @@ impl DeltaTable {
             }
             builder = builder.with_limit(limit.extract::<usize>()?);
         }
-        let scan = self._runtime.wait(py, builder.build())?.map_err(|error| {
+        let scan = self.runtime.wait(py, builder.build())?.map_err(|error| {
             reader_error(py, error.to_string(), error.phase().as_str(), error.code())
         })?;
         // Validate before Arrow's C callback exports the schema.
         export_schema(py, scan.schema().as_ref())?;
         Ok(RecordBatchStream::new(
             scan.into_stream(),
-            Arc::clone(&self._runtime),
+            Arc::clone(&self.runtime),
         ))
     }
 

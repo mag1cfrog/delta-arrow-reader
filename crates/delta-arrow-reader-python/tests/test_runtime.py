@@ -108,14 +108,7 @@ def interrupt_reading():
             requests.append(self.path)
             # This Python thread can run only if the batch read releases the GIL.
             print("reading", flush=True)
-            self.connection.settimeout(10)
-            try:
-                if self.rfile.read(1) == b"":
-                    disconnected.set()
-            except ConnectionError:
-                disconnected.set()
-            except TimeoutError:
-                self.send_error(400, "test read was not cancelled")
+            self.wait_for_disconnect(disconnected)
 
     with http.serve(partial(Storage, directory=str(directory))) as server:
         table = DeltaTable(

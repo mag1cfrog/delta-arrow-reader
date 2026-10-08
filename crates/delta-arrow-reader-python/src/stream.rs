@@ -22,17 +22,17 @@ use crate::runtime::Runtime;
 /// the consumer owns cleanup; closing this object does not close the consumer.
 #[pyclass(module = "delta_arrow_reader", frozen)]
 pub(crate) struct RecordBatchStream {
-    reader: Mutex<Option<BatchReader>>,
+    reader: Mutex<Option<BlockingBatchReader>>,
 }
 
 impl RecordBatchStream {
     pub(crate) fn new(stream: DeltaBatchStream, runtime: Arc<Runtime>) -> Self {
         Self {
-            reader: Mutex::new(Some(BatchReader {
+            reader: Mutex::new(Some(BlockingBatchReader {
                 schema: stream.schema(),
                 stream: Some(stream),
                 runtime,
-                error: None,
+                terminal_error: None,
             })),
         }
     }
@@ -113,10 +113,10 @@ fn validate_requested_schema(requested: &Bound<'_, PyAny>, actual: &Schema) -> P
     let requested = Schema::try_from(ffi_schema)
         .map_err(|_| PyValueError::new_err("invalid requested schema"))?;
     let same_metadata = actual.metadata == requested.metadata;
-    if same_metadata && same_fields(&actual.fields, &requested.fields, false) {
+    if same_metadata && matches_requested_fields(&actual.fields, &requested.fields, false) {
         return Ok(());
     }
-    if same_metadata && same_fields(&actual.fields, &requested.fields, true) {
+    if same_metadata && matches_requested_fields(&actual.fields, &requested.fields, true) {
         return Err(PyNotImplementedError::new_err(
             "alternate Arrow representations are not supported",
         ));
@@ -127,42 +127,42 @@ fn validate_requested_schema(requested: &Bound<'_, PyAny>, actual: &Schema) -> P
 }
 
 // Alternate representations only select an error category; the exporter never casts.
-fn same_fields(actual: &Fields, requested: &Fields, allow_alternates: bool) -> bool {
+fn matches_requested_fields(actual: &Fields, requested: &Fields, allow_alternates: bool) -> bool {
     actual.len() == requested.len()
         && actual
             .iter()
             .zip(requested)
-            .all(|(a, b)| same_field(a, b, allow_alternates))
+            .all(|(a, b)| matches_requested_field(a, b, allow_alternates))
 }
 
-fn same_field(actual: &Field, requested: &Field, allow_alternates: bool) -> bool {
+fn matches_requested_field(actual: &Field, requested: &Field, allow_alternates: bool) -> bool {
     actual.name() == requested.name()
         && actual.is_nullable() == requested.is_nullable()
         && actual.metadata() == requested.metadata()
-        && same_type(actual.data_type(), requested.data_type(), allow_alternates)
+        && matches_requested_type(actual.data_type(), requested.data_type(), allow_alternates)
 }
 
-fn same_type(actual: &DataType, requested: &DataType, allow_alternates: bool) -> bool {
+fn matches_requested_type(actual: &DataType, requested: &DataType, allow_alternates: bool) -> bool {
     use DataType::*;
     if actual == requested {
         return true;
     }
     match (actual, requested) {
-        (Struct(a), Struct(b)) => same_fields(a, b, allow_alternates),
-        (List(a), List(b)) => same_field(a, b, allow_alternates),
+        (Struct(a), Struct(b)) => matches_requested_fields(a, b, allow_alternates),
+        (List(a), List(b)) => matches_requested_field(a, b, allow_alternates),
         (Map(a, a_sorted), Map(b, b_sorted)) => {
             // PyArrow normalizes the map wrapper name from "key_value" to "entries".
             // Compare the key/value fields, wrapper metadata, and nullability.
             a_sorted == b_sorted
                 && a.is_nullable() == b.is_nullable()
                 && a.metadata() == b.metadata()
-                && same_type(a.data_type(), b.data_type(), allow_alternates)
+                && matches_requested_type(a.data_type(), b.data_type(), allow_alternates)
         }
         _ if !allow_alternates => false,
-        (_, Dictionary(_, value)) => same_type(actual, value, true),
-        (_, RunEndEncoded(_, values)) => same_type(actual, values.data_type(), true),
+        (_, Dictionary(_, value)) => matches_requested_type(actual, value, true),
+        (_, RunEndEncoded(_, values)) => matches_requested_type(actual, values.data_type(), true),
         (List(a), LargeList(b) | ListView(b) | LargeListView(b) | FixedSizeList(b, _)) => {
-            same_field(a, b, true)
+            matches_requested_field(a, b, true)
         }
         (Timestamp(_, a_zone), Timestamp(_, b_zone)) => a_zone == b_zone,
         (Date32, Date64) => true,
@@ -182,18 +182,20 @@ fn same_type(actual: &DataType, requested: &DataType, allow_alternates: bool) ->
     }
 }
 
-struct BatchReader {
+/// Adapts an async Delta stream to Arrow's synchronous reader callbacks.
+struct BlockingBatchReader {
     schema: SchemaRef,
     stream: Option<DeltaBatchStream>,
     runtime: Arc<Runtime>,
-    error: Option<String>,
+    // Repeat failures so a failed scan never appears successfully exhausted.
+    terminal_error: Option<String>,
 }
 
-impl Iterator for BatchReader {
+impl Iterator for BlockingBatchReader {
     type Item = Result<RecordBatch, ArrowError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(message) = &self.error {
+        if let Some(message) = &self.terminal_error {
             return Some(Err(ArrowError::ExternalError(message.clone().into())));
         }
         let stream = self.stream.as_mut()?;
@@ -212,14 +214,14 @@ impl Iterator for BatchReader {
             }
             Err(message) => {
                 self.stream = None;
-                self.error = Some(message.clone());
+                self.terminal_error = Some(message.clone());
                 Some(Err(ArrowError::ExternalError(message.into())))
             }
         }
     }
 }
 
-impl RecordBatchReader for BatchReader {
+impl RecordBatchReader for BlockingBatchReader {
     fn schema(&self) -> SchemaRef {
         Arc::clone(&self.schema)
     }
