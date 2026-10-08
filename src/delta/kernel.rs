@@ -570,6 +570,13 @@ impl DeltaKernelEngineContext {
         &self,
         version: Option<u64>,
     ) -> delta_kernel::DeltaResult<KernelSnapshot> {
+        // ponytail: Kernel 0.25 overflows its exclusive version bound at u64::MAX.
+        // Remove this guard when upstream can load that version without overflowing.
+        if version == Some(u64::MAX) {
+            return Err(delta_kernel::Error::generic(
+                "snapshot version exceeds the supported Kernel range",
+            ));
+        }
         // Kernel's URL path must be relative to the already configured store.
         let store_relative_table_url = with_object_store_path(
             self.file_resolution_url.clone(),

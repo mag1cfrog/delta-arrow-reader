@@ -251,6 +251,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "21ca356ad6425cecb6eb7b28e4f659f1ee7880fbb1a16127de7dd62901efee9e"
 dependencies = [
  "bitflags",
+ "serde",
  "serde_core",
  "serde_json",
 ]
@@ -1261,6 +1262,18 @@ dependencies = [
  "tracing",
  "url",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "delta-arrow-reader-cli"
+version = "0.6.2"
+dependencies = [
+ "arrow",
+ "arrow-schema",
+ "delta-arrow-reader",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

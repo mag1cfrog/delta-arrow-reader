@@ -13,6 +13,7 @@
     "docs/public/**/*.md",
     "src/**",
     "crates/delta-arrow-reader-python/**",
+    "crates/delta-arrow-reader-cli/**",
     "tests/**",
     "benches/**"
   ],
