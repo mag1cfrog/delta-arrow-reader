@@ -677,7 +677,8 @@ fn field_headers_check_delta_and_explicit_id_boundaries() {
         for delta in 1..=15_u8 {
             let bytes = [(delta << 4) | 6];
             let mut last = prior;
-            let result = super::read_field_header(&mut bytes.as_slice(), &mut last);
+            let result =
+                super::super::compact_thrift::read_field_header(&mut bytes.as_slice(), &mut last);
             // Widened arithmetic is independent of the reader's i16 arithmetic.
             let expected = i32::from(prior) + i32::from(delta);
             if expected > i32::from(i16::MAX) {
@@ -694,7 +695,8 @@ fn field_headers_check_delta_and_explicit_id_boundaries() {
             .write_i64(id)
             .unwrap();
         let mut last = i16::MAX;
-        let result = super::read_field_header(&mut bytes.as_slice(), &mut last);
+        let result =
+            super::super::compact_thrift::read_field_header(&mut bytes.as_slice(), &mut last);
         if (-32768..=32767).contains(&id) {
             assert_eq!(result.unwrap(), TType::I64);
             assert_eq!(i64::from(last), id);

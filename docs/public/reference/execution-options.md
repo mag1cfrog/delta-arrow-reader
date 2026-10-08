@@ -17,6 +17,7 @@ them, see [scan planning](https://mag1cfrog.github.io/delta-arrow-reader/scan-pl
 | `prefetch_files_per_partition` | `2` | Future direct Parquet file streams prepared per partition. `0` is fully lazy. |
 | `parquet_metadata_size_hint_bytes` | `Some(65_536)` | Parquet footer bytes prefetched by the `Direct` backend. `None` disables the hint. |
 | `parquet_full_file_read_threshold_bytes` | `None` | Largest file the `Direct` backend may fetch once and buffer for local range reads. `None` disables full-file buffering. |
+| `experimental_intra_page_reads` | `false` | Allows partial reads of supported pages after a row predicate selects sparse output rows. Requires the `Direct` backend and the `Automatic` range-read policy. |
 
 The concurrency limits, output capacity, and enabled byte-size values must be
 greater than zero. Explicit concurrency limits and output capacity must also be
@@ -29,8 +30,34 @@ the Parquet reader safely requests more data. A hint at least as large as the
 file can fetch the whole object while loading metadata.
 
 The `DeltaKernel` backend uses the same concurrency and output limits. The
-`Direct` backend prefetch, metadata hint, and full-file threshold do not change
-its data-file reader.
+`Direct` backend prefetch, metadata hint, full-file threshold, and experimental
+partial-page option do not change its data-file reader.
+
+### Experimental partial-page reads
+
+Enable this option on a scan's execution settings:
+
+```rust
+use delta_arrow_reader::DeltaScanExecutionOptions;
+
+let options = DeltaScanExecutionOptions::new()
+    .with_experimental_intra_page_reads(true);
+```
+
+Pass `options` to the streaming scan's `with_execution_options`, or to
+DataFusion's `ScanOptions.execution_options`. Streaming does not require the
+DataFusion feature. Set the option to `false` to restore ordinary reads.
+
+This experiment supports flat nullable PLAIN INT64 data pages with offset
+indexes, using uncompressed data or Zstd raw blocks without checksums. Other
+layouts use ordinary reads. Explicit range-read policy overrides also retain
+their ordinary behavior.
+
+Fewer downloaded bytes can mean many more requests. The experiment allows up to
+512 concurrent experimental range reads across the process and spends at most
+16 MiB per fetch on probes and selected data. It does not yet select a plan from
+network measurements. Compare both elapsed time and request counts before
+enabling it for your workload.
 
 ## DataFusion scan options
 
