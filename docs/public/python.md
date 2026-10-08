@@ -106,6 +106,26 @@ Pass a `ScanExecutionOptions` object, not a dictionary. Other types raise
 `TypeError`. For `parquet_backend`, unsupported strings raise `ValueError` and
 non-string values raise `TypeError`.
 
+## Limit concurrent file reads per partition
+
+Set `max_concurrent_file_reads_per_partition` to limit how many files each scan
+partition can read at once. It applies to both Parquet backends and defaults to
+the Rust reader's value of `3`. This is an upper bound; actual concurrency may be
+lower.
+
+```python
+serial_reads = ScanExecutionOptions(max_concurrent_file_reads_per_partition=1)
+with table.to_reader(target_partitions=1, execution_options=serial_reads) as reader:
+    print(reader.read_all().num_rows)
+```
+
+This example uses one partition and reads one file at a time. The setting is a
+positive integer no greater than `sys.maxsize >> 2`, the core's concurrency
+capacity. `None`, booleans, and other non-integer values raise `TypeError`.
+Zero, negative values, and values above the core limit that still fit `usize`
+raise `ValueError`. Positive integers larger than `2 * sys.maxsize + 1` raise
+`OverflowError`.
+
 ## Use the Arrow stream interface and stop early
 
 `to_reader()` returns a `pyarrow.RecordBatchReader`. You can also construct one
