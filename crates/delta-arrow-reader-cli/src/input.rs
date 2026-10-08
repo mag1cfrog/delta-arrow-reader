@@ -5,21 +5,20 @@ use serde::{
     Deserialize, Deserializer,
     de::{DeserializeOwned, MapAccess, Visitor},
 };
+use snafu::{ResultExt, ensure};
 
-use crate::Error;
+use crate::{Error, InputIoSnafu, InputJsonSnafu};
 
 const MAX_JSON_BYTES: u64 = 1024 * 1024;
 
 pub(crate) fn read_json<T: DeserializeOwned>(path: &str) -> Result<T, Error> {
-    let file = File::open(path).map_err(|_| Error::InputIo)?;
+    let file = File::open(path).context(InputIoSnafu)?;
     let mut bytes = Vec::new();
     file.take(MAX_JSON_BYTES + 1)
         .read_to_end(&mut bytes)
-        .map_err(|_| Error::InputIo)?;
-    if bytes.len() as u64 > MAX_JSON_BYTES {
-        return Err(Error::InputJson);
-    }
-    serde_json::from_slice(&bytes).map_err(|_| Error::InputJson)
+        .context(InputIoSnafu)?;
+    ensure!(bytes.len() as u64 <= MAX_JSON_BYTES, InputJsonSnafu);
+    serde_json::from_slice(&bytes).map_err(|_| InputJsonSnafu.build())
 }
 
 pub(crate) struct StorageOptions(pub(crate) DeltaStorageOptions);

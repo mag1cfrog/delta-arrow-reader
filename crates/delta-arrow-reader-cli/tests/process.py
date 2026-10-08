@@ -91,16 +91,22 @@ class ProcessTests(unittest.TestCase):
     def test_static_help_and_version_outside_checkout(self):
         # Tokio would panic on this value if a runtime were started.
         self.env["TOKIO_WORKER_THREADS"] = "0"
-        for args in [("--help",), ("inspect", "--help"),
+        for args in [("--help",), ("-h",), ("inspect", "--help"), ("inspect", "-h"),
+                     ("help", "inspect"),
                      ("inspect", "--storage-options-file", "secret-missing", "--help")]:
             with self.subTest(args=args):
                 result = self.invoke(*args)
                 self.assertEqual(result.returncode, 0)
                 self.assertEqual(result.stderr, b"")
                 self.assertIn(b"Usage:", result.stdout)
-        result = self.invoke("--version")
-        self.assertEqual((result.returncode, result.stdout, result.stderr),
-                         (0, f"dar {VERSION}\n".encode(), b""))
+                self.assertIn(b"--help", result.stdout)
+                if "inspect" in args:
+                    self.assertIn(b"--table-version", result.stdout)
+                    self.assertIn(b"--storage-options-file", result.stdout)
+        for flag in ["--version", "-V"]:
+            result = self.invoke(flag)
+            self.assertEqual((result.returncode, result.stdout, result.stderr),
+                             (0, f"dar {VERSION}\n".encode(), b""))
 
     def test_local_validation_before_any_table_request(self):
         self.env["TOKIO_WORKER_THREADS"] = "0"

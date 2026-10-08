@@ -28,6 +28,9 @@ shares the workspace version, and `dar --version` prints `dar <version>` plus
 a newline. Help and version work outside the checkout without opening files,
 loading a table, starting a runtime, or contacting storage.
 
+`-h` is short for `--help`, and `-V` is short for `--version`. For inspection
+help, use `dar inspect --help` or `dar help inspect`.
+
 ## Inspect a snapshot
 
 ```sh

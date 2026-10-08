@@ -1,176 +1,96 @@
 mod input;
 
 use std::{
-    env,
-    ffi::OsString,
+    fmt,
     io::{self, Write},
     process::ExitCode,
 };
 
 use arrow_schema::Schema;
+use clap::{Parser, Subcommand, error::ErrorKind};
 use delta_arrow_reader::{DeltaReaderError, DeltaSnapshotSelection, DeltaTableBuilder};
 use serde_json::{Value, json};
+use snafu::{ResultExt, Snafu, ensure};
 
-const HELP: &str = "Read Delta Lake snapshot metadata.
+/// Read Delta Lake snapshot metadata.
+#[derive(Parser)]
+#[command(name = "dar", bin_name = "dar", version)]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
 
-Usage: dar <COMMAND>
-
-Commands:
-  inspect    Print the snapshot version and Arrow schema as JSON
-
-Options:
-  --help     Print help
-  --version  Print the version
-
-Run 'dar inspect --help' for inspection options.
-";
-
-const INSPECT_HELP: &str = "Print one Delta snapshot's version and full Arrow schema as JSON.
-
-Usage: dar inspect [--table-version N] [--storage-options-file PATH] [--] TABLE
-
-Arguments:
-  TABLE    UTF-8 local path or URL; relative paths use the working directory
-
-Options:
-  --table-version N            Unsigned decimal snapshot version; default: latest
-  --storage-options-file PATH   Local JSON object of string keys and string values
-                               At most 1 MiB; '-' is a filename, not stdin
-  --help                       Print help
-
-Use '--' before a table path beginning with '-'. Options are single-use.
-Only snapshot metadata is loaded; data files are not read.
-";
-
+#[derive(Subcommand)]
 enum Command {
-    Text(&'static str),
+    /// Print one Delta snapshot's version and full Arrow schema as JSON.
+    ///
+    /// Only snapshot metadata is loaded; data files are not read.
     Inspect {
+        /// UTF-8 local path or URL; relative paths use the working directory.
+        /// Use '--' before a table path beginning with '-'.
         table: String,
-        version: Option<u64>,
-        storage_file: Option<String>,
+        /// Unsigned decimal snapshot version; default: latest.
+        #[arg(long, value_name = "N", value_parser = parse_version)]
+        table_version: Option<u64>,
+        /// Local JSON object of string keys and string values.
+        /// At most 1 MiB; '-' is a filename, not stdin.
+        #[arg(long, value_name = "PATH")]
+        storage_options_file: Option<String>,
     },
 }
 
+#[derive(Snafu)]
 enum Error {
+    #[snafu(display("Invalid command-line arguments."))]
     Argument,
+    #[snafu(display(
+        "Invalid JSON input; expected a string map of at most 1 MiB with unique keys."
+    ))]
     InputJson,
-    InputIo,
-    Runtime,
-    Output,
-    Reader(DeltaReaderError),
+    #[snafu(display("Could not read the input file."))]
+    InputIo { source: io::Error },
+    #[snafu(display("Could not initialize the runtime."))]
+    Runtime { source: io::Error },
+    #[snafu(display("Could not write or flush stdout."))]
+    Output { source: io::Error },
+    #[snafu(display("{source}"))]
+    Reader { source: DeltaReaderError },
+}
+
+impl fmt::Debug for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, formatter)
+    }
 }
 
 impl Error {
     fn diagnostic(&self) -> Value {
-        let (phase, code, message) = match self {
-            Self::Argument => (
-                "configuration",
-                "invalid_cli_argument",
-                "Invalid command-line arguments.",
-            ),
-            Self::InputJson => (
-                "configuration",
-                "invalid_input_json",
-                "Invalid JSON input; expected a string map of at most 1 MiB with unique keys.",
-            ),
-            Self::InputIo => (
-                "configuration",
-                "input_file_io",
-                "Could not read the input file.",
-            ),
-            Self::Runtime => (
-                "execution",
-                "runtime_initialization",
-                "Could not initialize the runtime.",
-            ),
-            Self::Output => (
-                "execution",
-                "output_write",
-                "Could not write or flush stdout.",
-            ),
-            Self::Reader(error) => {
-                return json!({
-                    "phase": error.phase().as_str(),
-                    "code": error.code(),
-                    "message": error.to_string(),
-                });
-            }
+        let (phase, code) = match self {
+            Self::Argument => ("configuration", "invalid_cli_argument"),
+            Self::InputJson => ("configuration", "invalid_input_json"),
+            Self::InputIo { .. } => ("configuration", "input_file_io"),
+            Self::Runtime { .. } => ("execution", "runtime_initialization"),
+            Self::Output { .. } => ("execution", "output_write"),
+            Self::Reader { source } => (source.phase().as_str(), source.code()),
         };
-        json!({"phase": phase, "code": code, "message": message})
+        json!({"phase": phase, "code": code, "message": self.to_string()})
     }
 
     fn status(&self) -> ExitCode {
         ExitCode::from(match self {
-            Self::Argument | Self::InputJson | Self::InputIo => 2,
-            Self::Runtime | Self::Reader(_) => 1,
-            Self::Output => 3,
+            Self::Argument | Self::InputJson | Self::InputIo { .. } => 2,
+            Self::Runtime { .. } | Self::Reader { .. } => 1,
+            Self::Output { .. } => 3,
         })
     }
 }
 
-fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Command, Error> {
-    let args = args
-        .into_iter()
-        .map(|arg| arg.into_string().map_err(|_| Error::Argument))
-        .collect::<Result<Vec<_>, _>>()?;
-    match args.as_slice() {
-        [flag] if flag == "--help" => return Ok(Command::Text(HELP)),
-        [flag] if flag == "--version" => {
-            return Ok(Command::Text(concat!(
-                "dar ",
-                env!("CARGO_PKG_VERSION"),
-                "\n"
-            )));
-        }
-        [command, ..] if command == "inspect" => {}
-        _ => return Err(Error::Argument),
-    }
-
-    let mut args = args.into_iter().skip(1);
-    let mut table = None;
-    let mut version = None;
-    let mut storage_file = None;
-    let mut positional = false;
-    let mut help = false;
-    while let Some(arg) = args.next() {
-        if !positional {
-            match arg.as_str() {
-                "--" => {
-                    positional = true;
-                    continue;
-                }
-                "--help" => {
-                    help = true;
-                    continue;
-                }
-                "--table-version" if version.is_none() => {
-                    let value = args.next().ok_or(Error::Argument)?;
-                    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
-                        return Err(Error::Argument);
-                    }
-                    version = Some(value.parse().map_err(|_| Error::Argument)?);
-                    continue;
-                }
-                "--storage-options-file" if storage_file.is_none() => {
-                    storage_file = Some(args.next().ok_or(Error::Argument)?);
-                    continue;
-                }
-                value if value.starts_with('-') => return Err(Error::Argument),
-                _ => {}
-            }
-        }
-        if table.replace(arg).is_some() {
-            return Err(Error::Argument);
-        }
-    }
-    if help {
-        return Ok(Command::Text(INSPECT_HELP));
-    }
-    Ok(Command::Inspect {
-        table: table.ok_or(Error::Argument)?,
-        version,
-        storage_file,
-    })
+fn parse_version(value: &str) -> Result<u64, Error> {
+    ensure!(
+        !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()),
+        ArgumentSnafu
+    );
+    value.parse().map_err(|_| ArgumentSnafu.build())
 }
 
 fn inspection_json(version: u64, schema: &Schema) -> Vec<u8> {
@@ -188,26 +108,38 @@ fn inspection_json(version: u64, schema: &Schema) -> Vec<u8> {
 }
 
 fn run() -> Result<(), Error> {
-    let output = match parse(env::args_os().skip(1))? {
-        Command::Text(text) => text.as_bytes().to_vec(),
-        Command::Inspect {
-            table,
-            version,
-            storage_file,
-        } => {
-            let storage_options = match storage_file {
+    let output = match Cli::try_parse() {
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            error.to_string().into_bytes()
+        }
+        // Clap's other diagnostics may contain argument values. Emit our redacted error.
+        Err(_) => return ArgumentSnafu.fail(),
+        Ok(Cli {
+            command:
+                Command::Inspect {
+                    table,
+                    table_version,
+                    storage_options_file,
+                },
+        }) => {
+            let storage_options = match storage_options_file {
                 Some(path) => input::read_json::<input::StorageOptions>(&path)?.0,
                 None => Default::default(),
             };
             let builder = DeltaTableBuilder::new(table)
-                .with_snapshot_selection(version.map_or(
+                .with_snapshot_selection(table_version.map_or(
                     DeltaSnapshotSelection::Latest,
                     DeltaSnapshotSelection::Version,
                 ))
                 .with_storage_options(storage_options);
-            let runtime = tokio::runtime::Runtime::new().map_err(|_| Error::Runtime)?;
+            let runtime = tokio::runtime::Runtime::new().context(RuntimeSnafu)?;
             let result = runtime.block_on(async {
-                let table = builder.load_table().await.map_err(Error::Reader)?;
+                let table = builder.load_table().await.context(ReaderSnafu)?;
                 Ok(inspection_json(table.version(), table.schema().as_ref()))
             });
             // Blocking core work must not delay process shutdown after this command finishes.
@@ -219,7 +151,7 @@ fn run() -> Result<(), Error> {
     stdout
         .write_all(&output)
         .and_then(|()| stdout.flush())
-        .map_err(|_| Error::Output)
+        .context(OutputSnafu)
 }
 
 fn main() -> ExitCode {
@@ -299,9 +231,10 @@ mod tests {
     #[test]
     fn version_accepts_full_unsigned_range_and_storage_preserves_strings() {
         for text in ["0", "000", "18446744073709551615"] {
-            let command = parse(["inspect", "--table-version", text, "table"].map(OsString::from));
+            let cli =
+                Cli::try_parse_from(["dar", "inspect", "--table-version", text, "table"]).unwrap();
             assert!(
-                matches!(command, Ok(Command::Inspect {version: Some(version), ..}) if version == text.parse::<u64>().unwrap())
+                matches!(cli.command, Command::Inspect {table_version: Some(version), ..} if version == text.parse::<u64>().unwrap())
             );
         }
         let options: input::StorageOptions = serde_json::from_str(
@@ -311,5 +244,23 @@ mod tests {
         assert_eq!(options.0["AWS_ACCESS_KEY_ID"], " secret, value ");
         assert_eq!(options.0["MixedCase"], "unchanged");
         assert_eq!(options.0.len(), 2);
+    }
+
+    #[test]
+    fn snafu_retains_io_sources_without_exposing_them_in_diagnostics() {
+        use std::error::Error as _;
+
+        let error = Err::<(), _>(io::Error::other("secret input path"))
+            .context(InputIoSnafu)
+            .unwrap_err();
+        assert!(error.source().unwrap().is::<io::Error>());
+        assert_eq!(
+            error.diagnostic(),
+            json!({
+                "phase": "configuration", "code": "input_file_io",
+                "message": "Could not read the input file.",
+            })
+        );
+        assert_eq!(format!("{error:?}"), error.to_string());
     }
 }
