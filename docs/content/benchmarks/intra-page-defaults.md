@@ -103,7 +103,8 @@ Raw logs, requests, traces, exports and drivers are retained locally under
 
 Validation passed 625 Rust tests with eight ignored, 54 Python tests,
 all-target/all-feature workspace Clippy on Rust 1.94, formatting, rustdoc with
-warnings denied and the strict documentation build. These reader-only checks
+warnings denied and the strict documentation build. The CLI suite also passed,
+including 17 process checks; `inspect` explicitly skips warmup. These reader-only checks
 leave the published five-reader results and README chart unchanged.
 
 To skip profiling, use Rust `WarmupMode::None` or Python `warmup="none"`.
