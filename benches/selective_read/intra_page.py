@@ -48,7 +48,8 @@ def run(args, request, mode, purpose, repetition):
     env = storage.reader_environment(args.state)
     env.pop("RUST_LOG", None)
     env["DAR_INTRA_PAGE_READS"] = mode
-    env["DAR_NETWORK_WARMUP"] = "on" if args.network_warmup and mode == "auto" else "off"
+    env["DAR_NETWORK_WARMUP"] = ("none" if args.no_warmup else
+                                 "on" if args.network_warmup and mode == "auto" else "off")
     if purpose == "validation":
         env["RUST_LOG"] = ("delta_arrow_reader::diagnostics::intra_page=debug,"
                            "delta_arrow_reader::diagnostics::parquet_range_planning=debug,"
@@ -101,8 +102,11 @@ def main():
     parser.add_argument("--execution-mode", choices=("open", "reuse"), default="open")
     parser.add_argument("--concurrent-queries", type=int, choices=(2, 4),
                         help="Run this many queries together through one initialized provider (requires reuse)")
-    parser.add_argument("--network-warmup", action="store_true",
+    warmup = parser.add_mutually_exclusive_group()
+    warmup.add_argument("--network-warmup", action="store_true",
                         help="Initialize the auto mode's network profile before querying")
+    warmup.add_argument("--no-warmup", action="store_true",
+                        help="Skip both metadata and network warmup, including in reuse mode")
     parser.add_argument("--samples", type=int, default=3, choices=range(1, 6))
     args = parser.parse_args()
     if args.concurrent_queries is not None and args.execution_mode != "reuse":
@@ -133,6 +137,7 @@ def main():
         "reference": metadata, "network": profile,
         "harness_sha256": digest(Path(__file__)), "samples_per_mode": args.samples,
         "network_warmup": args.network_warmup,
+        "no_warmup": args.no_warmup,
         "concurrent_queries": args.concurrent_queries,
         "modes": {"off": "ordinary reader", "auto": "public opt-in with transport cost gate"},
         "session": (f"table open, then {args.concurrent_queries} concurrent queries sharing the provider"

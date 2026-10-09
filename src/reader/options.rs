@@ -137,8 +137,10 @@ impl DeltaScanExecutionOptions {
     /// Recent query traffic supplies latency and throughput estimates. Partial
     /// reads must beat the ordinary plan by more than ten percent, including
     /// probes and dependent request rounds. Missing evidence, dense selections,
-    /// or insufficient shared request capacity retain ordinary reads. No network
-    /// calibration requests are made. Passing `false` restores ordinary reads.
+    /// an unmeasured small-request cost, or insufficient shared request capacity
+    /// retain ordinary reads. Network warmup can supply the full profile before
+    /// querying; this flag itself sends no calibration requests. Passing `false`
+    /// restores ordinary reads.
     pub const fn with_experimental_intra_page_reads(mut self, enabled: bool) -> Self {
         self.experimental_intra_page_reads = enabled;
         self

@@ -291,8 +291,10 @@ impl DirectParquetReader {
             && !object.buffered
             && options.row_filter.is_some()
             && self.execution_options.parquet_range_read_policy()
-                == crate::reader::ParquetRangeReadPolicy::Automatic)
-            .then(|| Arc::new(Mutex::new(SelectedRows::default())));
+                == crate::reader::ParquetRangeReadPolicy::Automatic
+            // Without request-cost evidence, tracking row positions cannot enable partial reads.
+            && self.store.request_overhead_bytes().is_some())
+        .then(|| Arc::new(Mutex::new(SelectedRows::default())));
         let (builder, metadata) = self
             .create_stream_builder(
                 &object,

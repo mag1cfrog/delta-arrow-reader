@@ -64,13 +64,16 @@ Repeated samples use a median; broad jitter can still lower the estimated capaci
 Uncontended probes are charged at least their observed elapsed time. Partial
 reads must beat the ordinary plan by more than 10%. Missing transport evidence,
 selections covering at least half a row group or uncertain savings use ordinary
-reads. Probes also supply transport observations. Optional network
-warmup adds calibration requests during initialization. Before probing, the
+reads. The planner also requires a measured small-request cost: latency and
+bandwidth alone do not establish how quickly thousands of requests can complete.
+An unknown cost must not be treated as zero. Probes also supply transport
+observations. Optional network warmup adds calibration requests during
+initialization. Before probing, the
 planner includes known complete-read costs and estimates selected-value positions
 from page indexes. Large raw Zstd pages also require a dependent block-header
 probe, which is included before any I/O. With measured request overhead, this
-estimate can reject an expensive attempt without I/O. It is an approximation; actual nullable and
-compressed offsets still require probes.
+estimate can reject an expensive attempt without I/O. It is an approximation;
+actual nullable and compressed offsets still require probes.
 
 An initialized profile measures shared capacity. Both bandwidth and request
 concurrency use that scope when comparing plans. The profile accepts later
@@ -139,6 +142,14 @@ and total session time. The second query can use transport samples from the
 first. It must be reported separately from a fresh-process query. The HTTP
 counters and process resource usage cover the whole session.
 
+Add `--no-warmup` to skip both metadata and network warmup, including in `reuse`
+mode. This tests the lazy initialization used by `WarmupMode::None`. It cannot
+be combined with `--network-warmup`. Ordinary query traffic can supply latency
+and bandwidth estimates, but those alone do not enable partial-page reads.
+Currently, only explicit network warmup can establish the small-request cost;
+later partial reads can update it. Without that evidence, subsequent queries
+continue to use ordinary reads and skip partial-read row tracking.
+
 Add `--concurrent-queries 2` or `--concurrent-queries 4` with
 `--execution-mode reuse` to run the same query concurrently through one provider.
 The queries share its transport profile, worker threads, memory pool and request
@@ -169,6 +180,61 @@ logs, request traces and process CPU/memory observations. Peak HTTP concurrency
 comes from overlapping trace intervals. Repeated requests are counted, but are
 not labelled as retries because the proxy cannot distinguish SDK retries from
 separate reads of the same range.
+
+## Missing request-cost evidence
+
+The [samples](intra-page-profile-evidence-samples.csv) and
+[build records](intra-page-profile-evidence-results.json) test enabling the option
+without initialization warmup. Before the fix, ordinary queries supplied latency
+and bandwidth estimates, but an unknown small-request cost was treated as zero.
+That could select thousands of small reads on the second query and make it much
+slower. The fix requires a measured cost before attempting partial reads and
+avoids row tracking when that evidence is absent. A deterministic regression
+test fails on the original implementation and passes with the guard.
+
+At 1 ms and 1 Gbps, second-query times in seconds were:
+
+| Table columns | Before: off | Before: auto | Fixed: off | Fixed: auto |
+| --- | ---: | ---: | ---: | ---: |
+| 416 | 1.58 | 14.38 | 1.57 | 1.57 |
+| 90 | 3.27 | 18.92 | 3.29 | 3.28 |
+
+The initial screening has one pair per case. Fixed results are medians of three
+alternating pairs per case; the CSV keeps the builds and every sample separate.
+At 200 ms +/-20 ms and 150 Mbps, a further pair per table also retained ordinary
+reads: second-query times were 10.92 versus 10.93 seconds for 416 columns and
+22.58 versus 22.58 seconds for 90 columns. Both queries in every fixed no-warmup
+session retained identical ordinary Parquet byte and request counts.
+
+Explicit network profiling still enabled partial reads on the fixed build. One
+pair per table at 200 ms +/-20 ms and 150 Mbps gave these times in seconds:
+
+| Table columns | Off first query | Auto first query | Off initialization + first | Auto initialization + first |
+| --- | ---: | ---: | ---: | ---: |
+| 416 | 10.35 | 6.49 | 11.71 | 10.99 |
+| 90 | 22.30 | 10.25 | 23.00 | 14.12 |
+
+These are bounded checks that the existing gains survive the guard, not a new
+multi-reader comparison. Across both queries, Parquet traffic fell from 345.9 to
+194.1 MB for 416 columns and from 796.1 to 332.3 MB for 90 columns. Requests rose
+from 80 to 24,526 and from 108 to 41,164. These totals exclude the separate
+24 MiB / 3,084 initialization requests. Whole-process CPU time rose from 1.93 to
+5.46 seconds and from 3.68 to 8.78 seconds; the CSV also retains peak memory and
+HTTP concurrency.
+
+All 20 declared fixed-build sessions are retained, and all 24 separate validation
+exports matched every reference value and null across 894 rows. The preceding
+eight screening sessions and 16 passing validation exports are retained too.
+No compilers appeared in 118 fixed-build process polls or 75 screening polls.
+CPU affinity was not exclusive. Data generation and full-table hashing were
+unnecessary; trace analysis ran after timing finished.
+
+This fix does not enable the option or initialization profiling by default.
+Ordinary traffic alone still cannot activate partial reads. Eligible real-S3
+performance and the remaining controls below are still pending under
+[#422](https://github.com/mag1cfrog/delta-arrow-reader/issues/422); default
+promotion is tracked separately in
+[#423](https://github.com/mag1cfrog/delta-arrow-reader/issues/423).
 
 ## Concurrent-query measurements
 
