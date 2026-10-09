@@ -49,17 +49,20 @@ let table = DeltaTableBuilder::new("s3://bucket/table")
 
 The time limit covers network sampling after metadata loading. Sampling uses
 up to three active files of at least 4 MiB each, found in the retained metadata.
-It schedules 13.5 MiB across 396 range requests; store retries can add traffic.
+It schedules 24 MiB across 3,084 range requests; store retries can add traffic.
+Small requests run with replenished concurrency to measure sustained capacity.
+They do not replace the latency and bandwidth samples taken at lower concurrency.
 Timed-out, failed or insufficient samples are discarded without failing table
 loading. A zero duration skips sampling.
 
 Network warmup applies to the Direct backend's automatic range policy on
 built-in remote stores. Other settings retain metadata warmup only. The profile
 stays in memory and is shared by scans, table clones and refreshed snapshots.
-Uncontended reads keep updating it as conditions change. It can reject costly
-partial-page attempts before probing, but does not enable that experimental
-option or guarantee that every cost estimate is accurate. Include initialization
-in measurements to check whether warmup pays for your workload.
+Uncontended reads can update it when they meet the same sampling conditions.
+It can reject costly partial-page attempts before probing, but does not enable
+that experimental option or guarantee that every cost estimate is accurate.
+Include initialization in measurements to check whether warmup pays for your
+workload.
 
 ## Choose a partition target
 

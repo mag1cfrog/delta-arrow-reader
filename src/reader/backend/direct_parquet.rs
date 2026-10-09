@@ -117,7 +117,11 @@ pub(crate) async fn warmup_network(
     let store = MeteredParquetObjectStore::new(context.object_store(), metrics.clone(), strategy)
         .with_range_read_estimator(Arc::clone(&estimator));
     let started = Instant::now();
-    let outcome = tokio::time::timeout(max_duration, store.warmup(&files)).await;
+    let outcome = tokio::time::timeout(
+        max_duration,
+        store.warmup(&files, &range_planning::RANGE_READ_PERMITS),
+    )
+    .await;
     let status = match outcome {
         Ok(Ok(true)) => "complete",
         Ok(Ok(false)) => "insufficient_samples",
