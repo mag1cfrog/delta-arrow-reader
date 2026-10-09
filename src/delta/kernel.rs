@@ -53,7 +53,7 @@ pub(crate) fn parse_table_location(table_location: &str) -> delta_kernel::DeltaR
     try_parse_uri(table_location)
 }
 
-/// One parsed table location, object store, and Kernel engine.
+/// Shared table location, ordinary-read object store, and Kernel engine.
 pub(crate) struct DeltaKernelEngineContext {
     /// Original table URL returned by the public API.
     public_table_url: Url,
@@ -61,6 +61,7 @@ pub(crate) struct DeltaKernelEngineContext {
     /// the container when an Azure account URL takes it from storage options.
     file_resolution_url: Url,
     object_store: Arc<dyn ObjectStore>,
+    storage_options: DeltaStorageOptions,
     engine: Option<Arc<dyn Engine + Send + Sync>>,
 }
 
@@ -569,6 +570,7 @@ impl DeltaKernelEngineContext {
             public_table_url,
             file_resolution_url,
             object_store,
+            storage_options: storage_options.clone(),
             engine: Some(engine),
         })
     }
@@ -591,6 +593,18 @@ impl DeltaKernelEngineContext {
     #[allow(dead_code)]
     pub(crate) fn object_store(&self) -> Arc<dyn ObjectStore> {
         Arc::clone(&self.object_store)
+    }
+
+    /// High-concurrency reads must not leave speculative HTTP/1 connections
+    /// running after a request reuses a pooled connection instead.
+    pub(crate) fn unpooled_object_store(&self) -> delta_kernel::DeltaResult<Arc<dyn ObjectStore>> {
+        store_from_url_opts(
+            &self.public_table_url,
+            self.storage_options
+                .iter()
+                .map(|(key, value)| (key.as_str(), value.as_str()))
+                .chain(std::iter::once(("pool_max_idle_per_host", "0"))),
+        )
     }
 
     pub(crate) fn evaluate_predicate(

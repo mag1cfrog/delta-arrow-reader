@@ -5,6 +5,10 @@ and transport-aware planning from [#421](https://github.com/mag1cfrog/delta-arro
 The option is disabled by default. [#419](https://github.com/mag1cfrog/delta-arrow-reader/issues/419)
 tracks performance validation and the decision about defaults.
 
+The [public S3 connection experiment](intra-page-connections.md) reproduces the
+resource limit and measures the cost of disabling connection reuse. The candidate
+remains under review because it slows sustained small requests on real S3.
+
 ## Run the portable checks
 
 From the repository root:
