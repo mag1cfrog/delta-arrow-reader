@@ -1,6 +1,7 @@
 //! Private boundary for stability-sensitive `delta_kernel` APIs.
 
 mod deletion_vector;
+mod s3;
 mod versioned_engine;
 
 pub(crate) use deletion_vector::KernelDeletionVectorHandle;
@@ -30,7 +31,7 @@ use delta_kernel::{
 #[cfg(test)]
 pub(crate) use delta_kernel_default_engine::storage::insert_url_handler;
 use delta_kernel_default_engine::{DefaultEngineBuilder, storage::store_from_url_opts};
-use object_store::ObjectStore;
+use object_store::{ObjectStore, aws::AmazonS3Builder};
 use tokio::runtime::Handle;
 use url::Url;
 
@@ -61,7 +62,7 @@ pub(crate) struct DeltaKernelEngineContext {
     /// the container when an Azure account URL takes it from storage options.
     file_resolution_url: Url,
     object_store: Arc<dyn ObjectStore>,
-    storage_options: DeltaStorageOptions,
+    partial_read_builder: Option<AmazonS3Builder>,
     engine: Option<Arc<dyn Engine + Send + Sync>>,
 }
 
@@ -557,12 +558,21 @@ impl DeltaKernelEngineContext {
         public_table_url: Url,
         storage_options: &DeltaStorageOptions,
     ) -> delta_kernel::DeltaResult<Self> {
-        let object_store = store_from_url_opts(
-            &public_table_url,
-            storage_options
-                .iter()
-                .map(|(key, value)| (key.as_str(), value.as_str())),
-        )?;
+        let (object_store, partial_read_builder): (Arc<dyn ObjectStore>, _) =
+            if matches!(public_table_url.scheme(), "s3" | "s3a") {
+                let (store, partial) = s3::build(&public_table_url, storage_options)?;
+                (Arc::new(store), partial)
+            } else {
+                (
+                    store_from_url_opts(
+                        &public_table_url,
+                        storage_options
+                            .iter()
+                            .map(|(key, value)| (key.as_str(), value.as_str())),
+                    )?,
+                    None,
+                )
+            };
         let engine = Arc::new(DefaultEngineBuilder::new(Arc::clone(&object_store)).build());
         let file_resolution_url = file_resolution_url(public_table_url.clone(), storage_options)?;
 
@@ -570,7 +580,7 @@ impl DeltaKernelEngineContext {
             public_table_url,
             file_resolution_url,
             object_store,
-            storage_options: storage_options.clone(),
+            partial_read_builder,
             engine: Some(engine),
         })
     }
@@ -595,16 +605,17 @@ impl DeltaKernelEngineContext {
         Arc::clone(&self.object_store)
     }
 
-    /// High-concurrency reads must not leave speculative HTTP/1 connections
-    /// running after a request reuses a pooled connection instead.
-    pub(crate) fn unpooled_object_store(&self) -> delta_kernel::DeltaResult<Arc<dyn ObjectStore>> {
-        store_from_url_opts(
-            &self.public_table_url,
-            self.storage_options
-                .iter()
-                .map(|(key, value)| (key.as_str(), value.as_str()))
-                .chain(std::iter::once(("pool_max_idle_per_host", "0"))),
-        )
+    /// Only SDK-owned S3 clients with supported network settings use partial reads.
+    pub(crate) fn partial_read_store(&self) -> Option<Arc<dyn ObjectStore>> {
+        let store = self
+            .partial_read_builder
+            .as_ref()
+            .and_then(|builder| builder.clone().build().ok());
+        if store.is_none() {
+            tracing::debug!(target: "delta_arrow_reader::diagnostics::network_warmup",
+                "Partial-read transport unavailable; keeping ordinary reads");
+        }
+        store.map(|store| Arc::new(store) as Arc<dyn ObjectStore>)
     }
 
     pub(crate) fn evaluate_predicate(

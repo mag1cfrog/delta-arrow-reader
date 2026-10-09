@@ -109,7 +109,7 @@ pub(crate) async fn warmup_network(
     }
     let estimator = Arc::new(
         ParquetRangeReadEstimator::for_network_warmup()
-            .with_partial_range_store(context.unpooled_object_store().ok()?),
+            .with_partial_range_store(context.partial_read_store()?),
     );
     let metrics = DeltaScanMetrics::new(DeltaScanMetricsConfig {
         snapshot_version: snapshot.version(),
