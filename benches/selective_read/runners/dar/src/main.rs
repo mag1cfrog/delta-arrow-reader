@@ -13,6 +13,7 @@ const READER: &str = "delta-arrow-reader";
 
 fn warmup(reuse: bool) -> common::Result<WarmupMode> {
     match std::env::var("DAR_NETWORK_WARMUP").as_deref() {
+        Ok("none") => Ok(WarmupMode::None),
         Ok("on") => Ok(WarmupMode::Network {
             max_duration: std::time::Duration::from_secs(5),
         }),
@@ -21,7 +22,7 @@ fn warmup(reuse: bool) -> common::Result<WarmupMode> {
         } else {
             WarmupMode::None
         }),
-        _ => Err("DAR_NETWORK_WARMUP must be off or on".into()),
+        _ => Err("DAR_NETWORK_WARMUP must be none, off or on".into()),
     }
 }
 

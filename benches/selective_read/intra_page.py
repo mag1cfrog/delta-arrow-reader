@@ -48,7 +48,8 @@ def run(args, request, mode, purpose, repetition):
     env = storage.reader_environment(args.state)
     env.pop("RUST_LOG", None)
     env["DAR_INTRA_PAGE_READS"] = mode
-    env["DAR_NETWORK_WARMUP"] = "on" if args.network_warmup and mode == "auto" else "off"
+    env["DAR_NETWORK_WARMUP"] = ("none" if args.no_warmup else
+                                 "on" if args.network_warmup and mode == "auto" else "off")
     if purpose == "validation":
         env["RUST_LOG"] = ("delta_arrow_reader::diagnostics::intra_page=debug,"
                            "delta_arrow_reader::diagnostics::parquet_range_planning=debug,"
@@ -99,15 +100,25 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--local-table", type=Path)
     parser.add_argument("--execution-mode", choices=("open", "reuse"), default="open")
-    parser.add_argument("--network-warmup", action="store_true",
+    parser.add_argument("--concurrent-queries", type=int, choices=(2, 4),
+                        help="Run this many queries together through one initialized provider (requires reuse)")
+    warmup = parser.add_mutually_exclusive_group()
+    warmup.add_argument("--network-warmup", action="store_true",
                         help="Initialize the auto mode's network profile before querying")
+    warmup.add_argument("--no-warmup", action="store_true",
+                        help="Skip both metadata and network warmup, including in reuse mode")
     parser.add_argument("--samples", type=int, default=3, choices=range(1, 6))
     args = parser.parse_args()
+    if args.concurrent_queries is not None and args.execution_mode != "reuse":
+        parser.error("--concurrent-queries requires --execution-mode reuse")
     for name in ("binary", "request", "reference", "state", "output"):
         setattr(args, name, getattr(args, name).resolve())
     request = json.loads(args.request.read_text())
     assert request["comparison_revision"] == 6, "use the retained published campaign requests"
     request["execution_mode"] = args.execution_mode
+    request.pop("concurrent_queries", None)
+    if args.concurrent_queries is not None:
+        request["concurrent_queries"] = args.concurrent_queries
     metadata = json.loads((args.reference / "reference.json").read_text())
     assert comparison_identity(metadata) == comparison_identity(request)
     for field in ("fixture_manifest_sha256", "case_id", "snapshot_version"):
@@ -126,8 +137,12 @@ def main():
         "reference": metadata, "network": profile,
         "harness_sha256": digest(Path(__file__)), "samples_per_mode": args.samples,
         "network_warmup": args.network_warmup,
+        "no_warmup": args.no_warmup,
+        "concurrent_queries": args.concurrent_queries,
         "modes": {"off": "ordinary reader", "auto": "public opt-in with transport cost gate"},
-        "session": "one query including table open" if args.execution_mode == "open" else "table open, then two sequential queries sharing the provider",
+        "session": (f"table open, then {args.concurrent_queries} concurrent queries sharing the provider"
+                    if args.concurrent_queries else "one query including table open" if args.execution_mode == "open"
+                    else "table open, then two sequential queries sharing the provider"),
         "order": [list(("off", "auto") if n % 2 == 0 else ("auto", "off")) for n in range(args.samples)],
         "cache": "fresh processes; reused OS and MinIO caches; validation before timing",
         "cpu_affinity": storage.state(args.state)["cpus"]["reader"],

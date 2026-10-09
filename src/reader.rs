@@ -79,7 +79,7 @@ pub enum WarmupMode {
     /// Retains query-planning metadata and samples remote data-file reads.
     ///
     /// The time limit applies to network sampling, after metadata loading. Sampling is
-    /// best effort, uses at most three files, and schedules at most 13.5 MiB of payload.
+    /// best effort, uses at most three files, and schedules at most 24 MiB of payload.
     /// Only the Direct backend with an automatic range policy on a built-in remote
     /// store performs network sampling. Other settings keep metadata warmup only.
     Network {

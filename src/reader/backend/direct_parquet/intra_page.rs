@@ -318,76 +318,78 @@ impl IntraPageReader {
                 concurrency_limit = concurrency,
                 "Partial-page read decision");
         };
-        let overhead = self.store.request_overhead_bytes();
-        let mut request_overhead_bytes = overhead.unwrap_or(0);
-        if overhead.is_some() {
-            let Some(mut values) = estimated_value_ranges(pages, selected_rows) else {
-                return Ok(None);
-            };
-            values.extend_from_slice(&ordinary_ranges);
-            // Compare both plans in shared-capacity units. Splitting bandwidth
-            // per file while keeping all request slots would underprice small reads.
-            let concurrency = MAX_SHARED_RANGE_READS;
-            let Some(plan) = choose_bounded_range_plan(
-                &values,
-                estimate,
+        let Some(mut request_overhead_bytes) = self.store.request_overhead_bytes() else {
+            // Latency and bandwidth alone do not price thousands of small requests.
+            tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
+                eligible = true, fallback_reason = "insufficient_request_capacity_evidence",
+                "Partial-page read skipped");
+            return Ok(None);
+        };
+        let Some(mut values) = estimated_value_ranges(pages, selected_rows) else {
+            return Ok(None);
+        };
+        values.extend_from_slice(&ordinary_ranges);
+        // Compare both plans in shared-capacity units. Splitting bandwidth
+        // per file while keeping all request slots would underprice small reads.
+        let concurrency = MAX_SHARED_RANGE_READS;
+        let Some(plan) = choose_bounded_range_plan(
+            &values,
+            estimate,
+            concurrency,
+            byte_budget,
+            request_overhead_bytes,
+        ) else {
+            return Ok(None);
+        };
+        let prefixes: Vec<_> = pages
+            .iter()
+            .map(|page| {
+                page.range.start..(page.range.start + page::PAGE_PREFIX_BYTES).min(page.range.end)
+            })
+            .collect();
+        // In a supported raw Zstd frame this large, at least one block header
+        // lies beyond the prefix. It needs a dependent probe before values.
+        let block_probes = pages
+            .iter()
+            .filter(|page| {
+                matches!(page.compression, Compression::ZSTD(_))
+                    && page.range.end - page.range.start
+                        > page::PAGE_PREFIX_BYTES + page::MAX_ZSTD_BLOCK_BYTES as u64 + 3
+            })
+            .count();
+        let block_probe_bytes = block_probes as u128 * 3;
+        let cost = partial_plan_cost(
+            range_bytes(&plan),
+            plan.len(),
+            estimate,
+            concurrency,
+            request_overhead_bytes,
+        )
+        .saturating_add(partial_plan_cost(
+            range_bytes(&prefixes),
+            prefixes.len(),
+            estimate,
+            concurrency,
+            request_overhead_bytes,
+        ))
+        .saturating_add(partial_plan_cost(
+            block_probe_bytes,
+            block_probes,
+            estimate,
+            concurrency,
+            request_overhead_bytes,
+        ));
+        if !partial_read_has_clear_savings(cost, ordinary_cost) {
+            trace(
+                "preflight",
+                "profile_predicts_no_savings",
+                cost,
+                range_bytes(&plan) + range_bytes(&prefixes) + block_probe_bytes,
+                plan.len() + prefixes.len() + block_probes,
+                0,
                 concurrency,
-                byte_budget,
-                request_overhead_bytes,
-            ) else {
-                return Ok(None);
-            };
-            let prefixes: Vec<_> = pages
-                .iter()
-                .map(|page| {
-                    page.range.start
-                        ..(page.range.start + page::PAGE_PREFIX_BYTES).min(page.range.end)
-                })
-                .collect();
-            // In a supported raw Zstd frame this large, at least one block header
-            // lies beyond the prefix. It needs a dependent probe before values.
-            let block_probes = pages
-                .iter()
-                .filter(|page| {
-                    matches!(page.compression, Compression::ZSTD(_))
-                        && page.range.end - page.range.start
-                            > page::PAGE_PREFIX_BYTES + page::MAX_ZSTD_BLOCK_BYTES as u64 + 3
-                })
-                .count();
-            let block_probe_bytes = block_probes as u128 * 3;
-            let cost = partial_plan_cost(
-                range_bytes(&plan),
-                plan.len(),
-                estimate,
-                concurrency,
-                request_overhead_bytes,
-            )
-            .saturating_add(partial_plan_cost(
-                range_bytes(&prefixes),
-                prefixes.len(),
-                estimate,
-                concurrency,
-                request_overhead_bytes,
-            ))
-            .saturating_add(partial_plan_cost(
-                block_probe_bytes,
-                block_probes,
-                estimate,
-                concurrency,
-                request_overhead_bytes,
-            ));
-            if !partial_read_has_clear_savings(cost, ordinary_cost) {
-                trace(
-                    "preflight",
-                    "profile_predicts_no_savings",
-                    cost,
-                    range_bytes(&plan) + range_bytes(&prefixes) + block_probe_bytes,
-                    plan.len() + prefixes.len() + block_probes,
-                    0,
-                    concurrency,
-                );
-                return Ok(None);
-            }
+            );
+            return Ok(None);
         }
         let mut cache = RangeCache::default();
         let mut request_count = 0;
@@ -848,7 +850,8 @@ mod tests {
         );
         assert_eq!(
             metrics.snapshot().parquet_data_file_bytes_received,
-            Some(page::PAGE_PREFIX_BYTES)
+            Some(0),
+            "missing request capacity must not trigger speculative probes"
         );
         // With a measured profile, the required second block probe can be
         // predicted from page size before either probe is issued.
@@ -868,7 +871,7 @@ mod tests {
         );
         assert_eq!(
             metrics.snapshot().parquet_data_file_bytes_received,
-            Some(page::PAGE_PREFIX_BYTES),
+            Some(0),
             "known block probes must be charged before I/O"
         );
         let estimate = TransportEstimate {
@@ -1084,7 +1087,8 @@ mod tests {
                     (false, None, None),
                     (true, None, None),
                     (true, Some(economical), None),
-                    (true, Some(expensive), None),
+                    (true, Some(economical), Some(Duration::ZERO)),
+                    (true, Some(expensive), Some(Duration::ZERO)),
                     (true, Some(economical), Some(Duration::from_secs(1))),
                 ] {
                     let metrics = metrics();
@@ -1170,7 +1174,10 @@ mod tests {
                             &output, expected,
                             "{codec:?}, dense={dense}, estimate={estimate:?}"
                         );
-                        if !dense && estimate == Some(economical) && overhead.is_none() {
+                        if !dense
+                            && estimate == Some(economical)
+                            && overhead == Some(Duration::ZERO)
+                        {
                             assert!(
                                 received < *original_bytes,
                                 "partial reads were not selected: {received} >= {original_bytes}"
