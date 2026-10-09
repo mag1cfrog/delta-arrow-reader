@@ -49,12 +49,13 @@ pub(crate) struct MeteredParquetObjectStore {
 
 /// Recent transport measurements shared by Parquet readers in one store context.
 ///
-/// The estimator retains only transport samples and active-read counts. It does not retain
-/// object paths, credentials, table identifiers, or query text.
+/// Initialization also retains the transport used to measure partial-range costs,
+/// so later partial reads use the same connection policy as their calibration.
 #[derive(Default)]
 pub(crate) struct ParquetRangeReadEstimator {
     samples: Mutex<TransportSampleWindows>,
     require_isolated_reads: bool,
+    partial_range_store: Option<Arc<dyn ObjectStore>>,
 }
 
 struct ActiveRangeRead<'a> {
@@ -406,6 +407,17 @@ impl MeteredParquetObjectStore {
         physical_ranges: &[Range<u64>],
         budget: &Semaphore,
     ) -> Result<(Vec<Bytes>, Option<Duration>)> {
+        let store = Self {
+            inner: Arc::clone(
+                self.range_read_estimator
+                    .partial_range_store
+                    .as_ref()
+                    .unwrap_or(&self.inner),
+            ),
+            metrics: self.metrics.clone(),
+            multi_range_read_strategy: self.multi_range_read_strategy,
+            range_read_estimator: Arc::clone(&self.range_read_estimator),
+        };
         let concurrency = physical_ranges.len().min(MAX_SHARED_RANGE_READS);
         let exact_ranges = merge_ranges(requested_ranges, 0);
         self.metrics
@@ -418,7 +430,7 @@ impl MeteredParquetObjectStore {
             range_bytes(physical_ranges),
             concurrency,
         );
-        let (bytes, timing) = self
+        let (bytes, timing) = store
             .read_ranges_with_concurrency(
                 location,
                 physical_ranges,
@@ -525,6 +537,11 @@ fn request_completion_interval(
 }
 
 impl ParquetRangeReadEstimator {
+    pub(super) fn with_partial_range_store(mut self, store: Arc<dyn ObjectStore>) -> Self {
+        self.partial_range_store = Some(store);
+        self
+    }
+
     /// Initialization samples measure shared capacity before any file tasks are running.
     pub(super) fn for_network_warmup() -> Self {
         Self {
@@ -1703,12 +1720,19 @@ mod tests {
             .put(&path, Bytes::from_static(b"01234567").into())
             .await?;
         let gated = GatedObjectStore::new(inner, GateRequest::Range(1));
+        let ordinary = Arc::new(InMemory::new());
+        ordinary
+            .put(&path, Bytes::from_static(b"ordinary").into())
+            .await?;
         let metrics = direct_metrics();
         let store = MeteredParquetObjectStore::new(
-            gated.clone(),
+            ordinary,
             metrics.clone(),
             MultiRangeReadStrategy::ChooseAutomatically,
-        );
+        )
+        .with_range_read_estimator(Arc::new(
+            ParquetRangeReadEstimator::for_network_warmup().with_partial_range_store(gated.clone()),
+        ));
         let ranges = [0..1, 2..3, 4..5, 6..7];
         let budget = Semaphore::new(4);
         let other_reads = budget.try_acquire_many(3).expect("free capacity");
@@ -1748,6 +1772,17 @@ mod tests {
             metrics.snapshot().parquet_data_file_range_get_operations,
             Some(4)
         );
+        // Ordinary reads keep their pooled transport; partial reads keep the
+        // transport whose costs were measured, including after cancellation.
+        assert_eq!(
+            store.get_range(&path, 0..1).await?,
+            Bytes::from_static(b"o")
+        );
+        let ranges = std::iter::once(2..3).collect::<Vec<_>>();
+        let (bytes, _) = store
+            .read_partial_ranges(&path, &ranges, &ranges, &budget)
+            .await?;
+        assert_eq!(bytes, [Bytes::from_static(b"2")]);
         Ok(())
     }
 

@@ -216,7 +216,9 @@ def main():
         certificates(root)
         data = root / "data"
         data.mkdir()
+        (data / "pool-probe").write_bytes(b"ok")
         (root / "empty-certs").mkdir()
+        (root / "empty-ca.pem").touch()
         handler = functools.partial(Storage, directory=str(data))
         with contextlib.ExitStack() as stack:
             servers = []
@@ -242,6 +244,31 @@ def main():
                 DAR_TLS_ENDPOINT=f"https://localhost:{trusted.server_port}",
                 DAR_TLS_UNTRUSTED_ENDPOINT=f"https://localhost:{untrusted.server_port}",
             )
+            for empty_roots in (False, True):
+                print(f"Partial-read TLS checks, empty_roots={empty_roots}", flush=True)
+                subprocess.run(
+                    [
+                        "cargo",
+                        "test",
+                        "--locked",
+                        "--lib",
+                        *sys.argv[1:],
+                        "delta::kernel::s3::http_pool::tests::"
+                        "http_without_roots_preserves_https_verification",
+                        "--",
+                        "--exact",
+                        "--ignored",
+                        "--nocapture",
+                    ],
+                    env=env | {
+                        "DAR_TLS_EMPTY_ROOTS": str(empty_roots).lower(),
+                        "SSL_CERT_FILE": str(
+                            root / ("empty-ca.pem" if empty_roots else "trusted-ca.pem")
+                        ),
+                    },
+                    check=True,
+                    timeout=600,
+                )
             for proxied in (False, True):
                 if proxied:
                     address = f"http://127.0.0.1:{proxy.server_port}"

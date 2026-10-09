@@ -104,7 +104,13 @@ pub(crate) async fn warmup_network(
             .map(|path| (path, size))
     })
     .collect();
-    let estimator = Arc::new(ParquetRangeReadEstimator::for_network_warmup());
+    if files.is_empty() {
+        return None;
+    }
+    let estimator = Arc::new(
+        ParquetRangeReadEstimator::for_network_warmup()
+            .with_partial_range_store(context.partial_read_store()?),
+    );
     let metrics = DeltaScanMetrics::new(DeltaScanMetricsConfig {
         snapshot_version: snapshot.version(),
         parquet_backend: ParquetReaderBackend::Direct,
