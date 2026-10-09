@@ -1,4 +1,21 @@
-//! SDK-owned S3 stores. Other schemes keep Kernel's registered URL handlers.
+//! S3 stores for ordinary reads and partial-page reads.
+//!
+//! Reading small pieces of many Parquet pages can send thousands of requests.
+//! The SDK's usual HTTP pool may start a new connection while waiting for an
+//! existing one. Even if it reuses a connection, the new one can keep opening
+//! in the background. Limiting active requests alone therefore does not prevent
+//! these extra connections from exhausting file descriptors.
+//!
+//! Partial reads use a pool that also limits connection setup. We construct
+//! the stores here because Kernel's URL handlers return stores whose HTTP
+//! clients we cannot replace. Ordinary reads keep the SDK's usual client.
+//! Both stores use the SDK for signing and share one credential provider,
+//! including its cache and refresh logic.
+//!
+//! Small-request calibration and later partial reads use the same client, so
+//! the measured costs reflect how those reads will run. Unsupported network
+//! settings or failed calibration leave queries on ordinary reads. Other URL
+//! schemes continue through Kernel's registered handlers.
 
 mod http_pool;
 
