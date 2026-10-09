@@ -53,6 +53,7 @@ pub struct Request {
     fixture_manifest_sha256: String,
     profile: String,
     execution_mode: String,
+    concurrent_queries: Option<usize>,
     purpose: String,
     #[serde(default)]
     validation_diagnostics: bool,
@@ -69,7 +70,9 @@ impl Request {
         self.execution_mode == "reuse"
     }
     fn query_count(&self) -> usize {
-        if !self.reuse() {
+        if let Some(count) = self.concurrent_queries {
+            count
+        } else if !self.reuse() {
             1
         } else if self.comparison_revision >= 4 {
             2
@@ -99,6 +102,9 @@ impl Request {
                 self.purpose.as_str(),
                 "timing" | "validation" | "diagnostic" | "io"
             )
+            || self.concurrent_queries.is_some_and(|count| {
+                !matches!(count, 2 | 4) || !self.reuse() || self.comparison_revision != 6
+            })
             || !self.valid_comparison()
             || !is_hash(&self.fixture_manifest_sha256)
             || self.case_id.is_empty()
@@ -128,7 +134,7 @@ impl Request {
                     && self.workload_manifest_sha256.is_none()
                     && self.sampling_sha256.is_none()
             }
-            3 | 4 | 5 | 6 => {
+            3..=6 => {
                 self.protocol_sha256
                     == digest(if self.comparison_revision == 6 {
                         SPARK_MATRIX
@@ -362,6 +368,103 @@ fn storage_settings(request: &Request) -> Result<Value> {
         "credentials": "AWS environment; values omitted"}))
 }
 
+async fn execute_query(
+    request: &Request,
+    context: &SessionContext,
+    output: &Path,
+    record: &mut Value,
+    cleanup_start: &mut Option<Instant>,
+    index: usize,
+    start: Instant,
+) -> Result<u64> {
+    event(record, "query_start", Some(index));
+    let options = SQLOptions::new()
+        .with_allow_ddl(false)
+        .with_allow_dml(false)
+        .with_allow_statements(false);
+    let frame = context
+        .sql_with_options(&request.canonical_sql, options)
+        .await?;
+    let plan = frame.create_physical_plan().await?;
+    let mut stream = execute_stream(Arc::clone(&plan), context.task_ctx())?;
+    let result_path = output.join(format!("query-{index}.arrow"));
+    let mut writer = if request.purpose == "validation" {
+        Some(StreamWriter::try_new(
+            BufWriter::new(File::create_new(&result_path)?),
+            &stream.schema(),
+        )?)
+    } else {
+        None
+    };
+    let mut rows = 0_u64;
+    let mut batches = 0_u64;
+    let mut first = None;
+    while let Some(batch) = stream.next().await {
+        let batch = match batch {
+            Ok(batch) => batch,
+            Err(error) => {
+                record["partial_query"] = json!({"query_index": index, "output_rows": rows,
+                    "output_batches": batches,
+                    "elapsed_ns": if request.timed() { Some(nanos(start)) } else { None },
+                    "first_batch_ns": if request.timed() { first } else { None }});
+                *cleanup_start = Some(Instant::now());
+                return Err(error.into());
+            }
+        };
+        if batch.num_rows() > 0 && first.is_none() {
+            first = Some(nanos(start));
+        }
+        rows += batch.num_rows() as u64;
+        batches += 1;
+        if let Some(writer) = writer.as_mut() {
+            for offset in (0..batch.num_rows()).step_by(8192) {
+                writer.write(&batch.slice(offset, (batch.num_rows() - offset).min(8192)))?;
+            }
+        }
+        // Drop each batch before polling the next one; timed mode retains no output values.
+    }
+    let completion = nanos(start);
+    event(record, "stream_complete", Some(index));
+    checkpoint(
+        record,
+        "query_end",
+        Some(index),
+        json!({"query_index": index,
+        "output_rows": rows, "output_batches": batches,
+        "completion_ns": if request.timed() { Some(completion) } else { None },
+        "first_batch_ns": if request.timed() { first } else { None }}),
+    )?;
+    drop(stream);
+    let mut query = json!({"query_index": index, "output_rows": rows, "output_batches": batches,
+        "completion_ns": if request.timed() { Some(completion) } else { None },
+        "first_batch_ns": if request.timed() { first } else { None },
+        "first_batch_unavailable_reason": if !request.timed() { Some("untimed invocation") } else if rows == 0 { Some("empty result") } else { None },
+        "result": null, "identity": null, "physical_plan": null});
+    if let Some(mut writer) = writer {
+        writer.finish()?;
+        writer.into_inner()?.flush()?;
+        let mut exported = record["identity"].clone();
+        exported["result_sha256"] = json!(file_digest(&result_path)?);
+        let identity_name = format!("query-{index}.identity.json");
+        write_json(&output.join(&identity_name), &exported)?;
+        query["result"] = json!(format!("query-{index}.arrow"));
+        query["identity"] = json!(identity_name);
+    }
+    if request.purpose == "diagnostic" || request.validation_diagnostics {
+        let name = format!("query-{index}.plan.txt");
+        fs::write(
+            output.join(&name),
+            format!("{}", displayable(plan.as_ref()).indent(true)),
+        )?;
+        query["physical_plan"] = json!(name);
+    }
+    record["queries"]
+        .as_array_mut()
+        .ok_or("missing query records")?
+        .push(query);
+    Ok(completion)
+}
+
 async fn execute(
     request: &Request,
     context: SessionContext,
@@ -388,118 +491,101 @@ async fn execute(
         record["initialization_ns"] = json!(initialization);
     }
     let mut durations = Vec::new();
-    for index in 0..request.query_count() {
-        record["phase"] = json!("query");
-        if request.reuse() {
-            checkpoint(record, "query", Some(index), Value::Null)?;
+    record["phase"] = json!("query");
+    let last_completed = if request.concurrent_queries.is_some() {
+        checkpoint(record, "concurrent_queries", None, Value::Null)?;
+        let mut records = vec![record.clone(); request.query_count()];
+        for query_record in &mut records {
+            query_record["diagnostic_events"] = json!([]);
         }
-        let start = if request.reuse() {
-            Instant::now()
-        } else {
-            session_start
-        };
-        event(record, "query_start", Some(index));
-        let options = SQLOptions::new()
-            .with_allow_ddl(false)
-            .with_allow_dml(false)
-            .with_allow_statements(false);
-        let frame = context
-            .sql_with_options(&request.canonical_sql, options)
-            .await?;
-        let plan = frame.create_physical_plan().await?;
-        let mut stream = execute_stream(Arc::clone(&plan), context.task_ctx())?;
-        let result_path = output.join(format!("query-{index}.arrow"));
-        let mut writer = if request.purpose == "validation" {
-            Some(StreamWriter::try_new(
-                BufWriter::new(File::create_new(&result_path)?),
-                &stream.schema(),
-            )?)
-        } else {
-            None
-        };
-        let mut rows = 0_u64;
-        let mut batches = 0_u64;
-        let mut first = None;
-        while let Some(batch) = stream.next().await {
-            let batch = match batch {
-                Ok(batch) => batch,
-                Err(error) => {
-                    record["partial_query"] = json!({"query_index": index, "output_rows": rows,
-                        "output_batches": batches,
-                        "elapsed_ns": if request.timed() { Some(nanos(start)) } else { None },
-                        "first_batch_ns": if request.timed() { first } else { None }});
-                    *cleanup_start = Some(Instant::now());
-                    return Err(error.into());
+        // One provider and one common clock: planning and scheduler waiting count
+        // toward each query's latency. All futures are polled concurrently.
+        let start = Instant::now();
+        let results = futures_util::future::try_join_all(records.iter_mut().enumerate().map(
+            |(index, query_record)| {
+                let context = &context;
+                async move {
+                    execute_query(
+                        request,
+                        context,
+                        output,
+                        query_record,
+                        &mut None,
+                        index,
+                        start,
+                    )
+                    .await
                 }
-            };
-            if batch.num_rows() > 0 && first.is_none() {
-                first = Some(nanos(start));
+            },
+        ))
+        .await;
+        for mut query_record in records {
+            for field in ["queries", "diagnostic_events"] {
+                record[field]
+                    .as_array_mut()
+                    .ok_or("missing query records")?
+                    .append(
+                        query_record[field]
+                            .as_array_mut()
+                            .ok_or("missing query records")?,
+                    );
             }
-            rows += batch.num_rows() as u64;
-            batches += 1;
-            if let Some(writer) = writer.as_mut() {
-                for offset in (0..batch.num_rows()).step_by(8192) {
-                    writer.write(&batch.slice(offset, (batch.num_rows() - offset).min(8192)))?;
-                }
+            if !query_record["partial_query"].is_null() {
+                record["partial_query"] = query_record["partial_query"].take();
             }
-            // Drop each batch before polling the next one; timed mode retains no output values.
         }
-        let completion = nanos(start);
-        event(record, "stream_complete", Some(index));
-        if index + 1 == request.query_count() {
-            if request.timed() {
-                record["session_elapsed_ns"] = json!(nanos(session_start));
-            } else if matches!(request.purpose.as_str(), "diagnostic" | "io")
-                || request.validation_diagnostics
-            {
-                record["diagnostic_session_ns"] = json!(nanos(session_start));
-            }
-            *cleanup_start = Some(Instant::now());
-        }
-        checkpoint(
-            record,
-            "query_end",
-            Some(index),
-            json!({"query_index": index,
-            "output_rows": rows, "output_batches": batches,
-            "completion_ns": if request.timed() { Some(completion) } else { None },
-            "first_batch_ns": if request.timed() { first } else { None }}),
-        )?;
-        drop(stream);
-        durations.push(completion);
-        let mut query = json!({"query_index": index, "output_rows": rows, "output_batches": batches,
-            "completion_ns": if request.timed() { Some(completion) } else { None },
-            "first_batch_ns": if request.timed() { first } else { None },
-            "first_batch_unavailable_reason": if !request.timed() { Some("untimed invocation") } else if rows == 0 { Some("empty result") } else { None },
-            "result": null, "identity": null, "physical_plan": null});
-        if let Some(mut writer) = writer {
-            writer.finish()?;
-            writer.into_inner()?.flush()?;
-            let mut exported = record["identity"].clone();
-            exported["result_sha256"] = json!(file_digest(&result_path)?);
-            let identity_name = format!("query-{index}.identity.json");
-            write_json(&output.join(&identity_name), &exported)?;
-            query["result"] = json!(format!("query-{index}.arrow"));
-            query["identity"] = json!(identity_name);
-        }
-        if request.purpose == "diagnostic" || request.validation_diagnostics {
-            let name = format!("query-{index}.plan.txt");
-            fs::write(
-                output.join(&name),
-                format!("{}", displayable(plan.as_ref()).indent(true)),
-            )?;
-            query["physical_plan"] = json!(name);
-        }
-        record["queries"]
+        record["diagnostic_events"]
             .as_array_mut()
-            .ok_or("missing query records")?
-            .push(query);
+            .ok_or("missing diagnostic events")?
+            .sort_by_key(|event| event["time_ns"].as_u64());
+        durations = results?;
+        start + std::time::Duration::from_nanos(*durations.iter().max().ok_or("no queries")?)
+    } else {
+        let mut completed = session_start;
+        for index in 0..request.query_count() {
+            if request.reuse() {
+                checkpoint(record, "query", Some(index), Value::Null)?;
+            }
+            let start = if request.reuse() {
+                Instant::now()
+            } else {
+                session_start
+            };
+            let duration = execute_query(
+                request,
+                &context,
+                output,
+                record,
+                cleanup_start,
+                index,
+                start,
+            )
+            .await?;
+            durations.push(duration);
+            completed = start + std::time::Duration::from_nanos(duration);
+        }
+        completed
+    };
+    let elapsed = last_completed.duration_since(session_start).as_nanos() as u64;
+    if request.timed() {
+        record["session_elapsed_ns"] = json!(elapsed);
+    } else if matches!(request.purpose.as_str(), "diagnostic" | "io")
+        || request.validation_diagnostics
+    {
+        record["diagnostic_session_ns"] = json!(elapsed);
     }
+    *cleanup_start = Some(last_completed);
     if request.timed() {
         if request.reuse() {
             record["initialization_plus_query1_ns"] = json!(initialization + durations[0]);
-            record["initialization_plus_all_queries_ns"] =
-                json!(initialization + durations.iter().sum::<u64>());
+            record["initialization_plus_all_queries_ns"] = json!(
+                initialization
+                    + if request.concurrent_queries.is_some() {
+                        *durations.iter().max().ok_or("no queries")?
+                    } else {
+                        durations.iter().sum::<u64>()
+                    }
+            );
         } else {
             record["open_query_ns"] = json!(durations[0]);
         }
@@ -546,9 +632,12 @@ fn run(request_path: &Path, output: &Path) -> Result<bool> {
         .chain(context.runtime_env().config_entries())
         .map(|entry| (entry.key, entry.value))
         .collect::<BTreeMap<_, _>>();
-    let settings = json!({"datafusion": options, "provider": crate::provider_settings(&context, request.reuse())?,
+    let mut settings = json!({"datafusion": options, "provider": crate::provider_settings(&context, request.reuse())?,
         "resource_budget": request.resource_budget, "table_uri": request.table_uri,
         "execution_mode": request.execution_mode, "output_delivery": "streaming", "storage": storage_settings(&request)?});
+    if let Some(count) = request.concurrent_queries {
+        settings["concurrent_queries"] = json!(count);
+    }
     let input_identity = identity(
         &request,
         &file_digest(&build_path)?,
@@ -572,6 +661,9 @@ fn run(request_path: &Path, output: &Path) -> Result<bool> {
             "reason": "launcher must enforce and record the CPU affinity and process memory limit"}});
     if request.validation_diagnostics {
         record["validation_diagnostics"] = json!(true);
+    }
+    if let Some(count) = request.concurrent_queries {
+        record["concurrent_queries"] = json!(count);
     }
     let mut cleanup_start = None;
     match correctness(&request, &record["identity"]) {

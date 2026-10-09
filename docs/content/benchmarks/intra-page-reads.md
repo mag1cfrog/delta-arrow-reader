@@ -56,8 +56,9 @@ The planner reuses the latency/throughput estimator from ordinary range reads.
 It scores bytes and request waves against shared capacity, allowing payload
 delivery to overlap requests waiting for their first byte. Serial reads and
 single waves still pay both costs. Request capacity comes from completion
-intervals in the central half of an uncontended small-response wave. This captures
-client and server work without charging the common network latency per request.
+intervals in the central half of replenished small reads, spanning at least two
+waves. This captures sustained capacity instead of the completion burst caused
+by latency jitter in one wave.
 The model takes the larger of processing and transport costs because they overlap.
 Repeated samples use a median; broad jitter can still lower the estimated capacity.
 Uncontended probes are charged at least their observed elapsed time. Partial
@@ -138,12 +139,20 @@ and total session time. The second query can use transport samples from the
 first. It must be reported separately from a fresh-process query. The HTTP
 counters and process resource usage cover the whole session.
 
+Add `--concurrent-queries 2` or `--concurrent-queries 4` with
+`--execution-mode reuse` to run the same query concurrently through one provider.
+The queries share its transport profile, worker threads, memory pool and request
+budget. Each query's latency starts at the same instant, before planning. Report
+the group's duration as the longest query latency, and throughput as the query
+count divided by that duration. Report initialization separately and include it
+in the combined cost. Do not add concurrent query latencies together.
+
 Add `--network-warmup` to calibrate the automatic mode during table initialization,
 with a five-second sampling limit. When calibration succeeds, the first query
 uses the resulting profile. Both modes retain the same metadata warmup when
-using `--execution-mode reuse`. Network calibration schedules 13.5 MiB
-across 396 requests, using up to three active data files; store retries can add
-traffic. For `reuse` measurements, report initialization, the first query, and
+using `--execution-mode reuse`. Network calibration schedules 24 MiB
+across 3,084 requests, using up to three active data files; store retries can add
+traffic. For sequential `reuse` measurements, report initialization, the first query, and
 initialization plus the first query separately. Automatic-mode initialization
 includes metadata loading and network calibration. Query durations exclude
 initialization. Label the second query separately. Compute combined durations
@@ -161,11 +170,86 @@ comes from overlapping trace intervals. Repeated requests are counted, but are
 not labelled as retries because the proxy cannot distinguish SDK retries from
 separate reads of the same range.
 
-## Initialization profiling and cost-model measurements
+## Concurrent-query measurements
+
+The [samples](intra-page-concurrency-samples.csv) and
+[build records](intra-page-concurrency-results.json) use reader commit
+`7015f46743688c952dd3a08c0a5d0fa9940ab100`, with only the benchmark harness
+changed to run concurrent queries. All 28 declared timing sessions are retained.
+Before timing, all 40 separate query exports matched every reference value and
+null across the 894 returned rows.
+
+Each process initializes one provider, then runs two or four copies of the same
+query. The process keeps the existing budget of four physical cores, eight worker
+threads and 8 GiB memory. Automatic mode profiles the network during initialization.
+Both modes use fresh processes and reused OS/MinIO caches. No compiler activity
+appeared in 260 process polls; CPU affinity was not an exclusive reservation.
+
+At 200 ms +/-20 ms and 150 Mbps, three alternating pairs per configuration gave
+these medians in seconds. Group time ends when the last query completes.
+
+| Table columns | Concurrent queries | Off group | Auto group | Off initialization + group | Auto initialization + group |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 416 | 2 | 19.42 | 11.60 | 20.77 | 16.09 |
+| 90 | 2 | 43.70 | 19.28 | 44.40 | 23.11 |
+| 416 | 4 | 38.01 | 22.13 | 39.38 | 26.65 |
+| 90 | 4 | 86.41 | 37.30 | 87.11 | 41.16 |
+
+With four concurrent queries, median throughput rose from 0.105 to 0.181 queries/s
+for 416 columns, and from 0.046 to 0.107 queries/s for 90 columns. The CSV retains
+each query's latency, group duration, initialization and resource observations.
+
+The four-query groups transferred median Parquet totals of 697.5 to 384.1 MB
+for 416 columns and 1,604.5 to 659.7 MB for 90 columns. These decimal byte totals
+exclude initialization profiling. Query-group requests rose from 180 to 49,756
+and from 264 to 82,880, respectively. Whole-process CPU time rose from 3.84 to
+10.62 seconds and from 8.30 to 17.81 seconds. Automatic query-group Parquet HTTP
+concurrency peaked at 512; all-object HTTP concurrency reached 515, including
+metadata traffic outside those counters.
+
+Some ordinary large responses ended near the client's default 30-second timeout
+and continued with suffix-range requests. Every result still passed validation.
+The counters retain incomplete responses and subsequent requests, including all
+transmitted body bytes. Repeated ranges are not treated as an SDK retry count.
+
+At 1 ms and 1 Gbps, one pair per table with four concurrent queries retained
+identical ordinary Parquet byte and request counts in both modes. Group durations
+were 5.59 versus 5.59 seconds for 416 columns and 12.90 versus 12.89 seconds for
+90 columns. Profiling still added about 1.3 seconds: initialization plus the group
+was 5.88 versus 7.16 seconds, and 12.97 versus 14.24 seconds. These controls show
+the initialization cost even when the query strategy correctly stays unchanged.
+
+### Public S3 correctness controls
+
+Two public Delta tables were read anonymously from AWS S3 in `us-west-2`, without
+the MinIO proxy. The [records](intra-page-concurrency-results.json) retain pinned
+snapshots, SQL, source-file checksums, exported-result checksums and calibration
+diagnostics. Each mode initialized one provider and ran two sequential queries.
+All eight exports matched an independent PyArrow read of the selected partition.
+
+| Public table | Snapshot | Selected partition | Rows per query | Automatic initialization |
+| --- | ---: | --- | ---: | --- |
+| `s3://daft-public-data/nyc-taxi-dataset-2023-jan-deltalake` | 0 | `tpep_pickup_day = 26` | 1,724 | No files large enough to sample; zero calibration requests |
+| `s3://daft-public-datasets/red-pajamas/stackexchange-sample-deltalake-zorder` | 4 | `language = 'nl'` | 1 | Complete: 24 MiB / 3,084 calibration requests in 2.91 s |
+
+Both queries retained ordinary reads. The taxi files use Snappy dictionary pages
+without offset indexes; StackExchange has no INT64 payload columns. Both snapshots
+have no DV. These bounded checks cover real-S3 initialization and fallback, not
+partial-page performance. Query observations include exports and diagnostics and
+must not be used as benchmark timings. SDK retries, TLS connection reuse, client
+geographic location and billed costs were not measured.
+
+Eligible partial-page performance on real S3 and the remaining local, dense and
+no-DV performance controls remain under
+[#422](https://github.com/mag1cfrog/delta-arrow-reader/issues/422). The option stays
+disabled by default, and the published multi-reader results are unchanged.
+
+## Earlier initialization profiling measurements
 
 The [samples](intra-page-calibration-samples.csv) and
-[build records](intra-page-calibration-results.json) retain the latest fix-validation
-runs on the same two scattered DV tables. Automatic mode ran three fresh-process
+[build records](intra-page-calibration-results.json) retain measurements before
+the sustained-request calibration fix in [PR #441](https://github.com/mag1cfrog/delta-arrow-reader/pull/441).
+Automatic mode ran three fresh-process
 sessions per table and network. Each session initialized the table, including
 network profiling, then ran two queries. Both validation queries matched all
 894 reference rows, values and nulls.
@@ -203,8 +287,8 @@ and 3.33 versus 3.31 seconds for 90 columns. Profiling still added about
 2.06 versus 1.73 seconds, and 3.70 versus 3.37 seconds, respectively.
 
 These are DAR-only observations with reused OS/MinIO caches. The option remains
-disabled by default. A final paired campaign, simultaneous queries, broader
-network and format controls, and real S3 validation remain under
+disabled by default. Subsequent measurements and remaining network and format
+controls are tracked in
 [#422](https://github.com/mag1cfrog/delta-arrow-reader/issues/422).
 
 ## Earlier baseline network measurements
