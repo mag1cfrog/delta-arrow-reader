@@ -605,6 +605,11 @@ impl DeltaKernelEngineContext {
         Arc::clone(&self.object_store)
     }
 
+    /// Whether this store's configuration supports the partial-read transport.
+    pub(crate) fn supports_partial_reads(&self) -> bool {
+        self.partial_read_builder.is_some()
+    }
+
     /// Only SDK-owned S3 clients with supported network settings use partial reads.
     pub(crate) fn partial_read_store(&self) -> Option<Arc<dyn ObjectStore>> {
         let store = self

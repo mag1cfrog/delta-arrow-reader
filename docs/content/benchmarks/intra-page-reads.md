@@ -1,9 +1,11 @@
 # Experimental partial-page reads
 
-This records the opt-in reader from [#420](https://github.com/mag1cfrog/delta-arrow-reader/issues/420)
+This records the reader from [#420](https://github.com/mag1cfrog/delta-arrow-reader/issues/420)
 and transport-aware planning from [#421](https://github.com/mag1cfrog/delta-arrow-reader/issues/421).
-The option is disabled by default. [#419](https://github.com/mag1cfrog/delta-arrow-reader/issues/419)
-tracks performance validation and the decision about defaults.
+Conditional partial reads and supported S3 initialization profiling are now
+enabled by default. The [default validation](intra-page-defaults.md) records
+current measurements, initialization costs and remaining limits. Earlier
+measurements below describe the defaults in effect at the time.
 
 The [partial-read transport checks](intra-page-connections.md) cover bounded
 connection setup, connection reuse, and public S3 fallback. They also retain the
@@ -71,7 +73,7 @@ selections covering at least half a row group or uncertain savings use ordinary
 reads. The planner also requires a measured small-request cost: latency and
 bandwidth alone do not establish how quickly thousands of requests can complete.
 An unknown cost must not be treated as zero. Probes also supply transport
-observations. Optional network warmup adds calibration requests during
+observations. Network warmup adds calibration requests during
 initialization. Before probing, the
 planner includes known complete-read costs and estimates selected-value positions
 from page indexes. Large raw Zstd pages also require a dependent block-header
@@ -150,7 +152,7 @@ Add `--no-warmup` to skip both metadata and network warmup, including in `reuse`
 mode. This tests the lazy initialization used by `WarmupMode::None`. It cannot
 be combined with `--network-warmup`. Ordinary query traffic can supply latency
 and bandwidth estimates, but those alone do not enable partial-page reads.
-Currently, only explicit network warmup can establish the small-request cost;
+Network warmup, whether automatic or explicit, establishes the small-request cost;
 later partial reads can update it. Without that evidence, subsequent queries
 continue to use ordinary reads and skip partial-read row tracking.
 

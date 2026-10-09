@@ -1,9 +1,10 @@
 # Partial-read connection transport
 
-The current candidate reuses HTTP/1 connections for S3 partial reads while
+The transport from PR #442 reuses HTTP/1 connections for S3 partial reads while
 limiting concurrent connection setup to 64 across tables. It uses the released
-Hyper utility connection cache, without a fork. Partial reads remain opt-in.
-The current validation and the earlier, rejected unpooled approach are recorded
+Hyper utility connection cache, without a fork. That PR kept partial reads opt-in;
+the subsequent [default validation](intra-page-defaults.md) checks automatic use.
+The transport validation and the earlier, rejected unpooled approach are recorded
 separately below. These reader-only checks do not replace the published
 multi-reader benchmark.
 

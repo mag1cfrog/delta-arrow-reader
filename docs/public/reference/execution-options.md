@@ -35,38 +35,48 @@ partial-page option do not change its data-file reader.
 
 ### Experimental partial-page reads
 
-Enable this option on a scan's execution settings:
+Partial-page reads are enabled by default for eligible pages when the measured
+network profile predicts a benefit. To disable them:
 
 ```rust
 use delta_arrow_reader::DeltaScanExecutionOptions;
 
 let options = DeltaScanExecutionOptions::new()
-    .with_experimental_intra_page_reads(true);
+    .with_experimental_intra_page_reads(false);
 ```
 
-Pass `options` to the streaming scan's `with_execution_options`, or to
-DataFusion's `ScanOptions.execution_options`. Streaming does not require the
-DataFusion feature. Set the option to `false` to restore ordinary reads.
+Pass `options` to `DeltaTableBuilder::with_execution_options` to disable both
+partial reads and automatic initialization profiling. Explicit warmup settings
+still apply. For DataFusion, also set `ScanOptions.execution_options`, which
+controls the provider's scans. A per-scan override disables partial reads for
+that scan; it cannot undo initialization already performed. Streaming does not
+require DataFusion.
 
 This experiment supports flat nullable PLAIN INT64 data pages with offset
 indexes, using uncompressed data or Zstd raw blocks without checksums. Other
 layouts use ordinary reads. Explicit range-read policy overrides also retain
 their ordinary behavior.
 
-Fewer bytes can mean more requests. The reader uses latency and throughput
-observed during ordinary queries to compare partial reads with complete pages,
+Fewer bytes can mean more requests. The reader uses latency, throughput and
+small-request cost to compare partial reads with complete pages,
 including probes and dependent request rounds. Partial reads must save more than
 10% of the estimated cost. Missing evidence, dense selections or uncertain
-savings retain ordinary reads, so enabling the option may have
-no effect on a cold or local scan. Enabling this scan option adds no calibration
-requests. To sample remote storage before querying, separately select
-[`WarmupMode::Network`](../scan-planning.md#choose-a-warmup-mode) during table loading.
+savings retain ordinary reads. Automatic S3 table warmup supplies the initial
+profile; later uncontended reads can update it. Local scans use ordinary reads.
+Use [`WarmupMode::None`](../scan-planning.md#choose-a-warmup-mode) to skip profiling.
+Without a measured small-request cost, later queries also retain ordinary reads.
 
 Probes and selected data share the original page request's byte budget. Planned
 range requests share a process-wide ceiling of 512 concurrent reads. Each request
 waits for one slot and releases it when its response finishes, including retries.
-Ordinary plans retain their per-plan limit of 10. Compare elapsed
-time and request counts before enabling this experimental option for a workload.
+Ordinary plans retain their per-plan limit of 10. Fewer transferred bytes can
+increase request counts and CPU usage; the cost model does not guarantee a win
+on every network.
+
+S3 partial reads reuse connections through a separate HTTP pool with 64 shared
+connection-setup slots. Calibration uses the same client as partial reads.
+Unsupported network settings keep ordinary reads on the SDK client. See
+[network warmup](../scan-planning.md#choose-a-warmup-mode) for initialization costs.
 
 ## DataFusion scan options
 
