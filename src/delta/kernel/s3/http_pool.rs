@@ -5,7 +5,7 @@ use std::{
     future::Future,
     io,
     pin::Pin,
-    sync::{Arc, LazyLock, Mutex, OnceLock},
+    sync::{Arc, LazyLock, OnceLock},
     task::{Context, Poll},
     time::Duration,
 };
@@ -76,12 +76,26 @@ fn build_client(
     tcp.set_keepalive_retries(Some(3));
     #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
     tcp.set_tcp_user_timeout(Some(Duration::from_secs(30)));
-    let tls = hyper_rustls::HttpsConnectorBuilder::new()
+    let tls = match hyper_rustls::HttpsConnectorBuilder::new()
         // Reader dependencies also enable aws-lc. Avoid an ambiguous process default.
-        .with_provider_and_native_roots(rustls::crypto::ring::default_provider())?
-        .https_or_http()
-        .enable_http1()
-        .wrap_connector(tcp);
+        .with_provider_and_native_roots(rustls::crypto::ring::default_provider())
+    {
+        Ok(tls) => tls,
+        // Plain HTTP needs no CA bundle. An empty trust store still rejects
+        // HTTPS certificates; allowing HTTP must never disable TLS validation.
+        Err(_) if allow_http => hyper_rustls::HttpsConnectorBuilder::new().with_tls_config(
+            rustls::ClientConfig::builder_with_provider(Arc::new(
+                rustls::crypto::ring::default_provider(),
+            ))
+            .with_safe_default_protocol_versions()?
+            .with_root_certificates(rustls::RootCertStore::empty())
+            .with_no_client_auth(),
+        ),
+        Err(error) => return Err(error.into()),
+    }
+    .https_or_http()
+    .enable_http1()
+    .wrap_connector(tcp);
     let connector = service_fn(
         move |uri: Uri| -> BoxFuture<'static, Result<Connection, HttpError>> {
             let tls = tls.clone();
@@ -110,20 +124,18 @@ fn build_client(
         },
     );
     let connector = BoxCloneSyncService::new(connector);
-    let pool = Arc::new(Mutex::new(
+    let pool = Arc::new(
         cache::builder()
             .executor(TokioExecutor::new())
             .build(GlobalConcurrencyLimitLayer::with_semaphore(connections).layer(connector)),
-    ));
+    );
     let weak = Arc::downgrade(&pool);
     let cleanup = move || {
         let Some(pool) = weak.upgrade() else {
             return false;
         };
         let mut retained = 0;
-        let Ok(mut pool) = pool.lock() else {
-            return false;
-        };
+        let mut pool = pool.as_ref().clone();
         pool.retain(|connection| {
             let keep = !connection.sender.is_closed()
                 && connection.idle_since.elapsed() < Duration::from_secs(90)
@@ -173,10 +185,7 @@ fn build_client(
                 let deadline = Instant::now() + request_timeout;
                 let work = async move {
                     let mut connection = loop {
-                        let cache = pool
-                            .lock()
-                            .map_err(|_| unsupported("connection cache lock poisoned"))?
-                            .clone();
+                        let cache = pool.as_ref().clone();
                         let mut connection = cache.oneshot(origin.clone()).await?;
                         // A server may have closed an idle connection. Cache's Service
                         // implementation discards it after poll_ready reports the error.
@@ -661,6 +670,66 @@ mod tests {
         })
         .await
         .unwrap();
+    }
+
+    #[tokio::test]
+    async fn http_option_spellings_match_the_sdk() {
+        use crate::delta::kernel::s3::PartialReadConnector;
+        use object_store::client::{
+            ClientConfigKey, ClientOptions, HttpConnector, ReqwestConnector,
+        };
+
+        let server = server().await;
+        for value in [
+            "true", "TRUE", "1", "yes", "ON", "Y", "false", "FALSE", "0", "no", "OFF", "N",
+        ] {
+            let options = ClientOptions::new().with_config(ClientConfigKey::AllowHttp, value);
+            let ordinary = ReqwestConnector {}.connect(&options).unwrap();
+            let partial = PartialReadConnector.connect(&options).unwrap();
+            let expected = request(&ordinary, &server.origin, "/data").await;
+            let actual = request(&partial, &server.origin, "/data").await;
+            assert_eq!(actual.is_ok(), expected.is_ok(), "allow_http={value}");
+            for response in [expected, actual].into_iter().flatten() {
+                assert_eq!(&response.into_body().bytes().await.unwrap()[..], b"ok");
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "run with python3 tests/reader/https.py; requires isolated trust settings and local TLS servers"]
+    async fn http_without_roots_preserves_https_verification() {
+        let empty_roots = std::env::var("DAR_TLS_EMPTY_ROOTS").unwrap() == "true";
+        let server = server().await;
+        let http = super::client(true).unwrap();
+        healthy(&http, &server.origin).await;
+
+        if empty_roots {
+            assert!(super::client(false).is_err());
+        }
+        let trusted = std::env::var("DAR_TLS_ENDPOINT").unwrap();
+        for (endpoint, should_trust) in [
+            (trusted.clone(), !empty_roots),
+            (std::env::var("DAR_TLS_UNTRUSTED_ENDPOINT").unwrap(), false),
+            (trusted.replace("localhost", "127.0.0.1"), false),
+        ] {
+            // Each store accepts one origin. Use a fresh client for each server.
+            let client = super::client(true).unwrap();
+            let response = request(&client, &endpoint.parse().unwrap(), "/pool-probe").await;
+            if should_trust {
+                assert_eq!(
+                    &response.unwrap().into_body().bytes().await.unwrap()[..],
+                    b"ok"
+                );
+            } else {
+                let error = response.unwrap_err();
+                assert!(
+                    format!("{error:?}")
+                        .to_ascii_lowercase()
+                        .contains("certificate"),
+                    "expected certificate validation failure: {error:?}"
+                );
+            }
+        }
     }
 
     #[tokio::test]

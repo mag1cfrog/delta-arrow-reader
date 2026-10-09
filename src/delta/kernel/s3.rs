@@ -49,10 +49,15 @@ struct PartialReadConnector;
 
 impl HttpConnector for PartialReadConnector {
     fn connect(&self, options: &ClientOptions) -> object_store::Result<HttpClient> {
-        let allow_http = options
-            .get_config_value(&ClientConfigKey::AllowHttp)
-            .as_deref()
-            == Some("true");
+        // The ordinary SDK builder validates the value first. Preserve all of
+        // its accepted boolean spellings when selecting the partial transport.
+        let allow_http = matches!(
+            options
+                .get_config_value(&ClientConfigKey::AllowHttp)
+                .map(|value| value.to_ascii_lowercase())
+                .as_deref(),
+            Some("1" | "true" | "on" | "yes" | "y")
+        );
         http_pool::client(allow_http).map_err(|source| object_store::Error::Generic {
             store: "S3 partial reads",
             source,
