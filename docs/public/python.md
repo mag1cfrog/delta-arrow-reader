@@ -50,14 +50,15 @@ snapshot, even if refresh fails. If no new commits exist, the returned table has
 the same version. To select a specific version, use
 `DeltaTable(location, version=0)`.
 
-## Filter null values
+## Filter rows
 
-Both `scan()` and `to_reader()` accept `filters`. Use `"is"` with `None` to select
-null values, or `"is not"` with `None` to select non-null values:
+Both `scan()` and `to_reader()` accept `filters`. Use `==`, `!=`, `<`, `<=`, `>`,
+or `>=` to compare Boolean and signed integer columns. Use `"is"` with `None`
+to select null values, or `"is not"` with `None` to select non-null values:
 
 ```python
 with table.to_reader(
-    columns=["id"], filters=[("label", "is not", None)], limit=10,
+    columns=["id"], filters=[("id", ">=", 100), ("label", "is not", None)], limit=10,
 ) as reader:
     print(reader.read_all().to_pydict())
 ```
@@ -71,8 +72,14 @@ filtering. An empty inner AND group is true, so `[[]]` selects every row.
 Filters use top-level logical column names, including columns omitted from the
 output. They apply before `limit`, and deleted rows remain excluded. Malformed
 groups and non-string column names or operators raise `TypeError`. Unknown
-operators and null tests with a value other than `None` raise `ValueError`.
-Invalid column references raise a redacted `DeltaReaderError`.
+operators, comparisons with `None`, and null tests with a value other than
+`None` raise `ValueError`. Invalid column references raise a redacted
+`DeltaReaderError`.
+
+Comparison values must match the column type: `bool` for Boolean columns,
+and `int` for signed 8-, 16-, 32-, or 64-bit integer columns. Booleans are not
+accepted as integers. Wrong or unsupported value types raise `TypeError`;
+integers outside the column's range raise `OverflowError`.
 
 ## Prepare metadata for repeated scans
 

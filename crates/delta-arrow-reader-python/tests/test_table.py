@@ -8,6 +8,7 @@ import importlib.util
 import inspect
 from itertools import product
 import json
+import operator
 from pathlib import Path
 import subprocess
 import sys
@@ -392,7 +393,7 @@ class TableTests(unittest.TestCase):
                                 self.assertEqual(batch.num_columns, 0)
                                 self.assertGreater(batch.num_rows, 0)
 
-    def test_null_filter_groups_preserve_projection_limits_and_deletion_vectors(self):
+    def test_filter_groups_preserve_projection_limits_and_deletion_vectors(self):
         corpus = (Path(__file__).resolve().parents[3]
                   / "tests/reader/fixtures/external_writer/corpus")
         manifest = json.loads((corpus / "manifest.json").read_text(encoding="utf-8"))
@@ -412,6 +413,12 @@ class TableTests(unittest.TestCase):
                 ([[("value", "is", None), ("id", "is not", None)],
                   [("value", "is not", None)]], all_ids),
                 ([[("value", "is", None)], []], all_ids),
+                ([("value", "!=", 0)], [row["id"] for row in rows
+                                        if row["value"] is not None and row["value"] != 0]),
+                ([("id", ">=", 2), ("id", "<", 5)],
+                 [row["id"] for row in rows if 2 <= row["id"] < 5]),
+                ([[("value", "is", None)], [("id", "<=", 2)]],
+                 [row["id"] for row in rows if row["value"] is None or row["id"] <= 2]),
             )
             table = DeltaTable(directory / "table")
             for method, backend, columns, limit in product(
@@ -438,12 +445,82 @@ class TableTests(unittest.TestCase):
                             else:
                                 self.assertTrue(set(actual_ids) <= set(expected_ids))
 
+    def test_boolean_and_integer_filters_match_column_types(self):
+        class Integer(int):
+            def __index__(self):
+                raise AssertionError("filter integers must use their stored value")
+
+            __int__ = __index__
+
+        types = [("boolean", pa.bool_(), [False, True, None, False, True, None])]
+        for name, data_type in (
+            ("byte", pa.int8()), ("short", pa.int16()),
+            ("integer", pa.int32()), ("long", pa.int64()),
+        ):
+            maximum = 2 ** (data_type.bit_width - 1) - 1
+            types.append((name, data_type, [-maximum - 1, -1, 0, 1, maximum, None]))
+        self.metadata["schemaString"] = json.dumps({
+            "type": "struct", "fields": [
+                {"name": name, "type": name, "nullable": True, "metadata": {}}
+                for name, _, _ in types
+            ],
+        })
+        schema = pa.schema([pa.field(name, data_type) for name, data_type, _ in types])
+        path = self.location / "integers.parquet"
+        pq.write_table(pa.table({name: values for name, _, values in types}, schema=schema), path)
+        self.write_log(1, {"metaData": self.metadata}, {"add": {
+            "path": path.name, "partitionValues": {}, "size": path.stat().st_size,
+            "modificationTime": 0, "dataChange": True,
+        }})
+        table = DeltaTable(self.location)
+        comparisons = {
+            "==": operator.eq, "!=": operator.ne, "<": operator.lt,
+            "<=": operator.le, ">": operator.gt, ">=": operator.ge,
+        }
+        for name, _, values in types:
+            is_boolean = name == "boolean"
+            scalars = [False, True] if is_boolean else [values[0], Integer(-1), 0, values[-2]]
+            for method, backend, symbol, scalar in product(
+                ("scan", "to_reader"), ("direct", "delta_kernel"), comparisons, scalars,
+            ):
+                with self.subTest(column=name, method=method, backend=backend,
+                                  operator=symbol, scalar=scalar):
+                    result = getattr(table, method)(
+                        columns=[name], filters=[(name, symbol, scalar)],
+                        execution_options=ScanExecutionOptions(parquet_backend=backend),
+                    )
+                    reader = (pa.RecordBatchReader.from_stream(result)
+                              if method == "scan" else result)
+                    with reader:
+                        actual = reader.read_all().column(name).to_pylist()
+                    expected = [item for item in values
+                                if item is not None and comparisons[symbol](item, scalar)]
+                    self.assertCountEqual(actual, expected)
+
+            wrong_types = [0, 1, -1] if is_boolean else [True, False]
+            wrong_types += [1.0, "secret-value", b"secret-value", Decimal("1"), [], object()]
+            invalid = [(value, TypeError) for value in wrong_types]
+            if not is_boolean:
+                invalid += [(value, OverflowError) for value in (
+                    values[0] - 1, values[-2] + 1, -(2**100), 2**100,
+                    Integer(values[0] - 1), Integer(values[-2] + 1),
+                )]
+            for method in (table.scan, table.to_reader):
+                for value, error_type in invalid:
+                    with self.subTest(column=name, method=method.__name__, value=value):
+                        with self.assertRaises(error_type) as caught:
+                            method(filters=[(name, "==", value)])
+                        self.assertNotIn("secret", str(caught.exception))
+
     def test_filter_validation_is_shared_and_redacted_before_planning(self):
         class SecretValue:
             def __str__(self):
                 raise AssertionError("filter values must not be stringified")
 
             __repr__ = __str__
+            __index__ = __str__
+            __int__ = __str__
+            __bool__ = __str__
 
         table = DeltaTable(self.location)
         (self.log / f"{0:020}.json").unlink()
@@ -456,12 +533,14 @@ class TableTests(unittest.TestCase):
             [(1, "is", None)], [(b"id", "is", None)],
             [("id", 1, None)], [("id", b"is", None)],
             [[], [("id", "is")]],
+            [("id", "==", SecretValue())], [("id", "==", True)],
+            [[], [("id", "==", SecretValue())]],
         )
         invalid = (
             [("id", "secret-operator", None)], [("id", "IS", None)],
             [("id", "is", 1)], [("id", "is not", "secret-value")],
             [("id", "is", SecretValue())],
-        )
+        ) + tuple([("id", symbol, None)] for symbol in ("==", "!=", "<", "<=", ">", ">="))
         for method in (table.scan, table.to_reader):
             for cases, error_type in ((malformed, TypeError), (invalid, ValueError)):
                 for index, filters in enumerate(cases):

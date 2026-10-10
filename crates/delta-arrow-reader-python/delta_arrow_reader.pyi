@@ -7,7 +7,10 @@ import pyarrow
 
 __version__: str
 
-_Filter = tuple[str, Literal["is", "is not"], None]
+_Filter = (
+    tuple[str, Literal["is", "is not"], None]
+    | tuple[str, Literal["==", "!=", "<", "<=", ">", ">="], bool | int]
+)
 
 class DeltaReaderError(Exception):
     phase: str

@@ -179,9 +179,12 @@ impl DeltaTable {
     ///
     /// columns=None selects all columns. A list or tuple of names selects columns
     /// in that order; an empty list selects no columns while retaining row counts.
-    /// filters=None or [] disables filtering. A list of (column, operator, None)
-    /// tuples combines null tests with AND; a list of lists combines AND groups
-    /// with OR. Operators are "is" and "is not". An empty AND group is true.
+    /// filters=None or [] disables filtering. A list of (column, operator, value)
+    /// tuples combines conditions with AND; a list of lists combines AND groups
+    /// with OR. An empty AND group is true. "is" and "is not" require None.
+    /// Comparisons (==, !=, <, <=, >, >=) accept bool for Boolean columns and int
+    /// for signed integer columns. Integers must fit the column's bit width;
+    /// booleans cannot be used as integers. Comparisons with None are invalid.
     /// Filter columns need not appear in columns. Filters apply before limit.
     /// limit=None reads all rows. Otherwise, limit must be a nonnegative integer
     /// that fits the platform's usize. Booleans are not accepted.
