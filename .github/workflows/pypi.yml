@@ -1,0 +1,61 @@
+name: Python release
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected-version:
+        description: Exact package version to build, without the v prefix
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Validate release request
+    runs-on: ubuntu-latest
+    outputs:
+      source-ref: ${{ steps.request.outputs.source-ref }}
+      expected-version: ${{ steps.request.outputs.expected-version }}
+      publish-to: ${{ steps.request.outputs.publish-to }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Check event, commit, tag, and version
+        id: request
+        run: python .github/scripts/prepare_python_release.py
+
+  build:
+    name: Build and test wheels
+    needs: prepare
+    uses: ./.github/workflows/pypi-build.yml
+    with:
+      source-ref: ${{ needs.prepare.outputs.source-ref }}
+      expected-version: ${{ needs.prepare.outputs.expected-version }}
+
+  check:
+    name: Require validated wheels
+    needs: [prepare, build]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      PREPARE_RESULT: ${{ needs.prepare.result }}
+      BUILD_RESULT: ${{ needs.build.result }}
+      WHEELS_VALIDATED: ${{ needs.build.outputs.validated }}
+    steps:
+      - name: Check all build results
+        run: |
+          if [ "$PREPARE_RESULT" != "success" ] || \
+             [ "$BUILD_RESULT" != "success" ] || \
+             [ "$WHEELS_VALIDATED" != "true" ]; then
+            echo "Python release checks failed: prepare=$PREPARE_RESULT build=$BUILD_RESULT validated=$WHEELS_VALIDATED"
+            exit 1
+          fi
+          echo "All four platform wheels passed validation"

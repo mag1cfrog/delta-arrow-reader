@@ -156,6 +156,11 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: release-plz@0.3.171
+      - name: Check Python workflow definitions
+        if: matrix.task == 'Lints and Docs'
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: .github/workflows/ci.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml
       - name: Test Python release checks
         if: matrix.task == 'Lints and Docs'
         run: python3 -m unittest discover -s .github/tests -v
