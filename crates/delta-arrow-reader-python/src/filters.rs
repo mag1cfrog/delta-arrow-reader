@@ -2,11 +2,11 @@
 
 use arrow::{
     array::types::{Decimal128Type, DecimalType},
-    datatypes::DataType,
+    datatypes::{DataType, TimeUnit},
 };
 use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaScalar, DeltaTable};
 use pyo3::{
-    exceptions::{PyOverflowError, PyTypeError, PyValueError},
+    exceptions::{PyException, PyOverflowError, PyTypeError, PyValueError},
     prelude::*,
     types::{PyBool, PyBytes, PyFloat, PyInt, PyList, PyString, PyTuple},
 };
@@ -180,6 +180,34 @@ fn to_scalar(data_type: &DataType, value: &Bound<'_, PyAny>) -> PyResult<DeltaSc
                 .getattr("days")?
                 .extract()?;
             Ok(DeltaScalar::Date32(days))
+        }
+        DataType::Timestamp(TimeUnit::Microsecond, None) => {
+            let datetime = value.py().import("datetime")?.getattr("datetime")?;
+            if !value.get_type().is_subclass(&datetime)? {
+                return Err(PyTypeError::new_err(
+                    "timestamp filters require datetime.datetime",
+                ));
+            }
+            let epoch = datetime.call1((1970, 1, 1))?;
+            // Use the base method to preserve stored fields and validate awareness.
+            let duration = datetime
+                .call_method1("__sub__", (value, epoch))
+                .map_err(|error| {
+                    if error.is_instance_of::<PyException>(value.py()) {
+                        PyValueError::new_err(
+                            "timestamp filter requires a naive datetime with no UTC offset",
+                        )
+                    } else {
+                        error
+                    }
+                })?;
+            let days = duration.getattr("days")?.extract::<i64>()?;
+            let seconds = duration.getattr("seconds")?.extract::<i64>()?;
+            let microseconds = duration.getattr("microseconds")?.extract::<i64>()?;
+            Ok(DeltaScalar::TimestampMicrosecond {
+                value: days * 86_400_000_000 + seconds * 1_000_000 + microseconds,
+                timezone: None,
+            })
         }
         _ => Err(PyTypeError::new_err(
             "filter value type is not supported for this column",

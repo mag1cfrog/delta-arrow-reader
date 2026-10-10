@@ -1,7 +1,7 @@
 from collections import UserDict
 from concurrent.futures import ThreadPoolExecutor
 import ctypes
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone, tzinfo
 from decimal import Decimal, localcontext
 from functools import partial
 import gc
@@ -857,6 +857,111 @@ class TableTests(unittest.TestCase):
                 with self.subTest(method=method.__name__, index=index):
                     with self.assertRaises(error_type) as caught:
                         method(filters=[("day", "==", value)])
+                    self.assertIs(type(caught.exception), error_type)
+                    self.assertNotIn("secret", str(caught.exception))
+                    self.assertIsNone(caught.exception.__cause__)
+                    self.assertIsNone(caught.exception.__context__)
+
+    def test_naive_timestamp_filters_preserve_microseconds_and_validate_offsets(self):
+        class DateTimeWithOverrides(datetime):
+            def fail(self, *args):
+                raise AssertionError("filter datetimes must use their stored value")
+
+            __sub__ = timestamp = utcoffset = toordinal = __str__ = __repr__ = fail
+            year = microsecond = tzinfo = property(fail)
+
+        class NoOffset(tzinfo):
+            def utcoffset(self, value):
+                return None
+
+        class InvalidOffset(tzinfo):
+            def __init__(self, offset):
+                self.offset = offset
+
+            def utcoffset(self, value):
+                if isinstance(self.offset, BaseException):
+                    raise self.offset
+                return self.offset
+
+        class Coercible:
+            def timestamp(self):
+                raise AssertionError("filter values must not be coerced or stringified")
+
+            __str__ = __repr__ = timestamp
+
+            @property
+            def __class__(self):
+                raise AssertionError("type checks must use the actual class")
+
+        values = [
+            (datetime.min, -62_135_596_800_000_000),
+            (datetime(1969, 12, 31, 23, 59, 58, 999999), -1_000_001),
+            (datetime(1969, 12, 31, 23, 59, 59, 999999), -1),
+            (datetime(1970, 1, 1), 0),
+            (datetime(1970, 1, 1, microsecond=1), 1),
+            (datetime(2000, 2, 29, 12, 34, 56, 123456), 951_827_696_123_456),
+            (datetime.max, 253_402_300_799_999_999),
+        ]
+        fields = json.loads(self.metadata["schemaString"])["fields"]
+        fields.append({"name": "local_ts", "type": "timestamp_ntz", "nullable": True, "metadata": {}})
+        self.metadata["schemaString"] = json.dumps({"type": "struct", "fields": fields})
+        schema = pa.schema([
+            pa.field("id", pa.int64(), nullable=False), pa.field("local_ts", pa.timestamp("us")),
+        ])
+        path = self.location / "timestamps.parquet"
+        pq.write_table(pa.table({
+            "id": range(len(values) + 1), "local_ts": [micros for _, micros in values] + [None],
+        }, schema=schema), path)
+        self.write_log(1, {"protocol": {
+            "minReaderVersion": 3, "minWriterVersion": 7,
+            "readerFeatures": ["timestampNtz"], "writerFeatures": ["timestampNtz"],
+        }}, {"metaData": self.metadata}, {"add": {
+            "path": path.name, "partitionValues": {}, "size": path.stat().st_size,
+            "modificationTime": 0, "dataChange": True,
+        }})
+        table = DeltaTable(self.location)
+        comparisons = [
+            ("==", operator.eq), ("!=", operator.ne), ("<", operator.lt),
+            ("<=", operator.le), (">", operator.gt), (">=", operator.ge),
+        ]
+        cases = [
+            (symbol, scalar, [row for row, (_, stored) in enumerate(values) if compare(stored, micros)])
+            for (scalar, micros), (symbol, compare) in product(values, comparisons)
+        ] + [
+            ("==", DateTimeWithOverrides(2000, 2, 29, 12, 34, 56, 123456), [5]),
+            ("==", datetime(1970, 1, 1, tzinfo=NoOffset()), [3]),
+            ("==", datetime(1970, 1, 1, fold=1), [3]),
+        ]
+        for method, backend, (index, (symbol, scalar, expected_ids)) in product(
+            ("scan", "to_reader"), ("direct", "delta_kernel"), enumerate(cases),
+        ):
+            with self.subTest(method=method, backend=backend, index=index):
+                result = getattr(table, method)(
+                    columns=["id"], filters=[("local_ts", symbol, scalar)],
+                    execution_options=ScanExecutionOptions(parquet_backend=backend),
+                )
+                reader = pa.RecordBatchReader.from_stream(result) if method == "scan" else result
+                with reader:
+                    self.assertCountEqual(reader.read_all().column("id").to_pylist(), expected_ids)
+
+        for version in (0, 1):
+            (self.log / f"{version:020}.json").unlink()
+        invalid = [(value, TypeError) for value in (
+            True, 0, 0.0, "secret-timestamp", b"secret-timestamp", date(1970, 1, 1), Coercible(),
+        )] + [(value, ValueError) for value in (
+            None, datetime(1970, 1, 1, tzinfo=timezone.utc),
+            DateTimeWithOverrides(1970, 1, 1, tzinfo=timezone.utc),
+        )]
+        invalid += [(datetime(1970, 1, 1, tzinfo=InvalidOffset(offset)), ValueError) for offset in (
+            "secret-offset", timedelta(days=1), timedelta(days=-1),
+            ValueError("secret-offset"), RuntimeError("secret-offset"),
+        )]
+        invalid.append((datetime(1970, 1, 1, tzinfo=InvalidOffset(KeyboardInterrupt())), KeyboardInterrupt))
+        for method in (table.scan, table.to_reader):
+            for index, (value, error_type) in enumerate(invalid):
+                with self.subTest(method=method.__name__, index=index):
+                    with self.assertRaises(error_type) as caught:
+                        method(filters=[("local_ts", "==", value)])
                     self.assertIs(type(caught.exception), error_type)
                     self.assertNotIn("secret", str(caught.exception))
                     self.assertIsNone(caught.exception.__cause__)

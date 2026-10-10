@@ -1,5 +1,5 @@
 from collections.abc import Mapping
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from os import PathLike
 from types import TracebackType
@@ -13,7 +13,7 @@ _Filter = (
     tuple[str, Literal["is", "is not"], None]
     | tuple[
         str, Literal["==", "!=", "<", "<=", ">", ">="],
-        bool | int | float | str | bytes | Decimal | date,
+        bool | int | float | str | bytes | Decimal | date | datetime,
     ]
 )
 

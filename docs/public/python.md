@@ -54,8 +54,8 @@ the same version. To select a specific version, use
 
 Both `scan()` and `to_reader()` accept `filters`. Use `==`, `!=`, `<`, `<=`, `>`,
 or `>=` to compare Boolean, signed integer, floating-point, string, binary,
-decimal, and date columns. Use `"is"` with `None` to select null values, or
-`"is not"` with `None` to select non-null values:
+decimal, date, and `timestamp_ntz` columns. Use `"is"` with `None` to select null
+values, or `"is not"` with `None` to select non-null values:
 
 ```python
 with table.to_reader(
@@ -106,6 +106,12 @@ Date32 columns require `datetime.date` values. Dates are converted to signed
 days since `1970-01-01`, including dates before that day. `datetime.datetime`
 values, with or without a timezone, and other types raise `TypeError`. For
 example, use `date(1969, 12, 31)` after `from datetime import date`.
+
+Timestamp columns without a timezone (`timestamp_ntz`) require naive
+`datetime.datetime` values, for which `utcoffset()` is `None`. Values are
+converted to exact signed microseconds since `1970-01-01 00:00:00`, without
+using the process timezone or floating-point arithmetic. Aware values and
+invalid offsets raise `ValueError`; other value types raise `TypeError`.
 
 ## Prepare metadata for repeated scans
 
