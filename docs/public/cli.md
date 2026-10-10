@@ -82,7 +82,7 @@ before table loading, including for `--limit 0`.
 ```text
 dar scan [--table-version N] [--storage-options-file PATH]
          [--predicate-file PATH] [--column NAME ... | --no-columns]
-         [--limit N] [--] TABLE
+         [--execution-options-file PATH] [--target-partitions N] [--limit N] [--] TABLE
 ```
 
 Table paths, snapshot selection, and storage options follow the inspection
@@ -219,6 +219,83 @@ and value compatibility are validated by the core during scan planning.
 Failures there produce status 1 with `scan_planning/unsupported_predicate`
 and leave stdout empty.
 
+## Execution options
+
+`--target-partitions N` sets the execution partition target for one scan. It
+may appear once and accepts positive unsigned decimal digits fitting the
+executable's `usize` range. Zero, signs, whitespace, fractions, exponents, and
+overflow are rejected before table loading with status 2 and
+`configuration/invalid_cli_argument`. Leading zeros are accepted.
+
+Omit the flag to keep the core's
+[automatic partition selection](scan-planning.md#choose-a-partition-target).
+The built scan may have fewer partitions than requested, for example when
+there are fewer files. This flag does not change the table's partition columns.
+`inspect` rejects it.
+
+`dar scan --execution-options-file PATH` reads execution settings from a local
+UTF-8 JSON object. The option may appear once and is accepted only by `scan`.
+Omitting the file or supplying `{}` uses the native reader's defaults. Each
+invocation starts with fresh settings.
+
+```sh
+cat > execution.json <<'JSON'
+{
+  "parquet_backend": "direct",
+  "max_concurrent_file_reads_per_scan": 1,
+  "max_concurrent_file_reads_per_partition": 1,
+  "output_buffer_batches_per_partition": 1,
+  "prefetch_files_per_partition": 0,
+  "parquet_metadata_size_hint_bytes": null,
+  "parquet_full_file_read_threshold_bytes": 1048576
+}
+JSON
+dar scan --target-partitions 2 --execution-options-file execution.json \
+  --limit 100 /data/orders > sample.arrow
+```
+
+Only these fields are accepted. Omitted fields retain their current native
+defaults:
+
+| Field | Accepted value | Current default |
+| --- | --- | --- |
+| `parquet_backend` | `"direct"` or `"delta_kernel"` | `"direct"` |
+| `max_concurrent_file_reads_per_scan` | Positive capacity or null | null, deriving capacity from the partition target and per-partition limit |
+| `max_concurrent_file_reads_per_partition` | Positive capacity | `3` |
+| `output_buffer_batches_per_partition` | Positive capacity | `1` |
+| `prefetch_files_per_partition` | Nonnegative integer | `2` |
+| `parquet_metadata_size_hint_bytes` | Positive integer or null | `65536` |
+| `parquet_full_file_read_threshold_bytes` | Positive integer or null | null, disabling full-file buffering |
+
+Numeric values must be JSON integer tokens fitting the executable's `usize`
+range. Booleans, strings, negative values, fractions, and exponent forms such
+as `1e0` are rejected. The three capacity fields are also capped at
+`tokio::sync::Semaphore::MAX_PERMITS` (`2305843009213693951` on 64-bit builds).
+This capacity bound does not apply to byte sizes or prefetch counts.
+
+Explicit null is accepted only for the three nullable fields in the table.
+For `parquet_metadata_size_hint_bytes`, omission keeps the default hint while
+null disables it. Null on `max_concurrent_file_reads_per_scan` selects derived
+capacity; null on `parquet_full_file_read_threshold_bytes` disables full-file
+buffering. Zero is accepted only for `prefetch_files_per_partition`, where it
+disables preparation of future files.
+
+Both backends use the concurrency and output-buffer limits. Prefetch, metadata
+hints, and full-file buffering apply to the direct backend. See the
+[execution options reference](reference/execution-options.md) for their effects.
+Execution settings compose with predicates, projection, and row limits.
+
+File paths resolve against the working directory; `-` names a literal file.
+The limit is 1 MiB (1,048,576 bytes). Invalid UTF-8, duplicate or unknown keys,
+non-object roots, wrong types, and trailing non-whitespace content are rejected
+before table loading. These failures use status 2 with
+`configuration/invalid_input_json`; file access failures use
+`configuration/input_file_io`.
+
+The native setters validate positive values and capacity limits before table
+loading. Their failures also exit 2, preserving the core's redacted
+`configuration/invalid_configuration` diagnostic and leaving stdout empty.
+
 ## Storage options file
 
 `--storage-options-file` accepts a local UTF-8 JSON file containing an object
@@ -305,6 +382,7 @@ errors. Use `--help` for usage.
 | `configuration` | `invalid_cli_argument` | Invalid command, argument, or option value |
 | `configuration` | `invalid_input_json` | Invalid JSON structure, encoding, duplicate key, or size |
 | `configuration` | `input_file_io` | Input file could not be opened or read |
+| `configuration` | `invalid_configuration` | A native execution setting is outside its allowed range |
 | `execution` | `runtime_initialization` | Runtime creation failed or reader execution panicked |
 | `execution` | `output_write` | stdout could not be written or flushed |
 | `execution` | `arrow_ipc` | Arrow IPC encoding failed |

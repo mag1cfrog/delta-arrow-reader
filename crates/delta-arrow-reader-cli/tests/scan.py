@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import struct
 import subprocess
 import sys
 import tempfile
@@ -203,6 +204,122 @@ class ScanTests(unittest.TestCase):
             actual = pa.ipc.open_stream(stdout).read_all()
             self.assertEqual(actual.schema.names, ["value"])
             self.assertEqual(actual.to_pylist(), [{"value": 30}])
+
+    def test_execution_options_compose_with_filtered_scans(self):
+        predicate = self.cwd / "predicate.json"
+        predicate.write_text(json.dumps({
+            "op": "eq", "column": "id", "value": {"type": "int32", "value": "10"},
+        }), encoding="utf-8")
+        options = self.cwd / "execution-options.json"
+        for backend in ["direct", "delta_kernel", None]:
+            flags = []
+            if backend is not None:
+                options.write_text(json.dumps({
+                    "parquet_backend": backend, "max_concurrent_file_reads_per_scan": 1,
+                    "max_concurrent_file_reads_per_partition": 1, "output_buffer_batches_per_partition": 1,
+                    "prefetch_files_per_partition": 0, "parquet_metadata_size_hint_bytes": None,
+                    "parquet_full_file_read_threshold_bytes": 1048576,
+                }), encoding="utf-8")
+                flags = ["--execution-options-file", str(options), "--target-partitions", "2"]
+            with self.subTest(backend=backend), self.start_scan(
+                CORPUS / "partitioned/table", *flags, "--predicate-file", str(predicate),
+                "--column", "value", "--limit", "1",
+            ) as process:
+                stdout, stderr = process.communicate(timeout=15)
+                self.assertEqual((process.returncode, stderr), (0, b""))
+                self.assertTrue(stdout.endswith(IPC_END))
+                actual = pa.ipc.open_stream(stdout).read_all()
+                self.assertEqual(actual.schema.names, ["value"])
+                self.assertEqual(actual.schema.field("value").type, pa.int32())
+                self.assertEqual(actual.to_pylist(), [{"value": 30}])
+
+    def test_partition_targets_and_read_capacities_bound_file_requests(self):
+        class HeldDataStorage(ScanStorage):
+            def send_head(self):
+                if self.path.endswith(".parquet"):
+                    with self.server.data_arrivals:
+                        self.server.data_paths.add(self.path)
+                        self.server.data_arrivals.notify_all()
+                    self.server.release_data.wait(15)
+                return super().send_head()
+
+        table = self.repeated_table(count=4)
+        options = self.cwd / "execution-options.json"
+        usize_max = (1 << (8 * struct.calcsize("P"))) - 1
+        # With one read per partition and no prefetch, held files reveal the
+        # built partition count. start_scan pins the default to one CPU.
+        cases = [
+            ("default_target", None, 8, 1, 0, 1),
+            ("two_partitions", 2, 8, 1, 0, 2),
+            ("more_partitions_than_files", usize_max, 8, 1, 0, 4),
+            ("scan_capacity", 2, 1, 3, 2, 1),
+            ("partition_capacity", 1, 8, 1, 2, 1),
+        ]
+        expected = None
+        for backend in ["direct", "delta_kernel"]:
+            for name, target, scan_capacity, partition_capacity, prefetch, held_files in cases:
+                options.write_text(json.dumps({
+                    "parquet_backend": backend,
+                    "max_concurrent_file_reads_per_scan": scan_capacity,
+                    "max_concurrent_file_reads_per_partition": partition_capacity,
+                    "output_buffer_batches_per_partition": 1,
+                    "prefetch_files_per_partition": prefetch,
+                }), encoding="utf-8")
+                flags = [] if target is None else ["--target-partitions", str(target)]
+                with self.subTest(backend=backend, case=name), self.storage(
+                    table, handler=HeldDataStorage,
+                ) as server:
+                    server.data_arrivals = threading.Condition(server.lock)
+                    server.release_data = threading.Event()
+                    with self.start_scan(
+                        server.url, "--storage-options-file", str(self.options),
+                        "--execution-options-file", str(options), *flags,
+                    ) as process:
+                        try:
+                            with server.data_arrivals:
+                                self.assertTrue(server.data_arrivals.wait_for(
+                                    lambda: len(server.data_paths) >= held_files, timeout=5,
+                                ), f"expected {held_files} held files, got {server.data_paths}")
+                                self.assertFalse(server.data_arrivals.wait_for(
+                                    lambda: len(server.data_paths) > held_files, timeout=0.25,
+                                ), f"too many files: {server.data_paths}")
+                        finally:
+                            server.release_data.set()
+                        stdout, stderr = process.communicate(timeout=15)
+                        self.assertEqual((process.returncode, stderr), (0, b""))
+                        self.assertTrue(stdout.endswith(IPC_END))
+                        actual = pa.ipc.open_stream(stdout).read_all().sort_by("id")
+                        self.assertEqual(actual.num_rows, 4 * 120)
+                        if expected is None:
+                            expected = actual
+                        else:
+                            self.assertTrue(actual.equals(expected, check_metadata=True))
+
+    def test_narrow_execution_options_bound_reads_while_output_is_blocked(self):
+        table = self.repeated_table()
+        options = self.cwd / "execution-options.json"
+        for backend in ["direct", "delta_kernel"]:
+            options.write_text(json.dumps({
+                "parquet_backend": backend, "max_concurrent_file_reads_per_scan": 1,
+                "max_concurrent_file_reads_per_partition": 1, "output_buffer_batches_per_partition": 1,
+                "prefetch_files_per_partition": 0,
+            }), encoding="utf-8")
+            with self.subTest(backend=backend), self.storage(table) as server, self.start_scan(
+                server.url, "--storage-options-file", str(self.options),
+                "--execution-options-file", str(options), "--target-partitions", "1",
+            ) as process:
+                self.wait_for_blocked_output(process)
+                time.sleep(0.25)
+                with server.lock:
+                    self.assertGreater(len(server.data_paths), 0)
+                    # One file writing to stdout, one queued batch, one producer
+                    # waiting to send. Each fixture file contains one batch.
+                    self.assertLessEqual(len(server.data_paths), 3)
+                stdout, stderr = process.communicate(timeout=15)
+                self.assertEqual((process.returncode, stderr), (0, b""))
+                self.assertTrue(stdout.endswith(IPC_END))
+                self.assertEqual(pa.ipc.open_stream(stdout).read_all().num_rows, 32 * 120)
+                self.assertEqual(len(server.data_paths), 32)
 
     def test_float64_predicates_distinguish_adjacent_values(self):
         table = self.cwd / "float64-table"

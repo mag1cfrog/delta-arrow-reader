@@ -1,13 +1,10 @@
-use std::{fmt, marker::PhantomData, str::FromStr};
+use std::str::FromStr;
 
 use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaScalar};
-use serde::{
-    Deserialize, Deserializer,
-    de::{self, MapAccess, Visitor, value::MapAccessDeserializer},
-};
+use serde::{Deserialize, Deserializer, de};
 use snafu::ensure;
 
-use crate::{Error, InputJsonSnafu};
+use crate::{Error, InputJsonSnafu, input::JsonObject};
 
 const MAX_PREDICATE_NODES: usize = 1024;
 const MAX_PREDICATE_DEPTH: usize = 32;
@@ -15,29 +12,6 @@ const MAX_PREDICATE_DEPTH: usize = 32;
 #[derive(Deserialize)]
 #[serde(try_from = "JsonObject<PredicateNode>")]
 pub(crate) struct PredicateInput(pub(crate) DeltaPredicate);
-
-// Serde's tagged enums also accept arrays; require objects at every JSON node.
-struct JsonObject<T>(T);
-
-impl<'de, T: Deserialize<'de>> Deserialize<'de> for JsonObject<T> {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct ObjectVisitor<T>(PhantomData<T>);
-
-        impl<'de, T: Deserialize<'de>> Visitor<'de> for ObjectVisitor<T> {
-            type Value = JsonObject<T>;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str("a JSON object")
-            }
-
-            fn visit_map<M: MapAccess<'de>>(self, map: M) -> Result<Self::Value, M::Error> {
-                T::deserialize(MapAccessDeserializer::new(map)).map(JsonObject)
-            }
-        }
-
-        deserializer.deserialize_map(ObjectVisitor(PhantomData))
-    }
-}
 
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
