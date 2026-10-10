@@ -1432,7 +1432,6 @@ mod tests {
             kernel_source.matches("DefaultEngineBuilder::new").count(),
             1
         );
-        assert_eq!(kernel_source.matches("store_from_url_opts(").count(), 1);
         assert_eq!(kernel_source.matches("get_row_indexes(").count(), 0);
     }
 }

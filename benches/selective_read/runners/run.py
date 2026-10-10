@@ -100,6 +100,12 @@ def reader_roster(value):
 
 
 def query_count(value):
+    count = value.get("concurrent_queries")
+    if count is not None:
+        if (type(count) is not int or count not in (2, 4) or value["execution_mode"] != "reuse"
+                or value.get("comparison_revision") != 6):
+            raise ValueError("concurrent queries require revision 6, reuse mode and a count of 2 or 4")
+        return count
     if value["execution_mode"] == "open":
         return 1
     return 2 if value.get("comparison_revision", 2) >= 4 else 10

@@ -1833,6 +1833,16 @@ class TableTests(unittest.TestCase):
 
         self.write_log(1, self.write_parquet("first.parquet", [1, 2]))
         with http.serve(partial(Storage, directory=str(self.location))) as server:
+            for warmup in ("automatic", "none"):
+                lazy = DeltaTable(
+                    f"http://127.0.0.1:{server.server_port}/",
+                    storage_options={"allow_http": "true"},
+                    warmup=warmup,
+                )
+                server.requests.clear()
+                with lazy.scan():
+                    self.assertTrue(server.requests, "HTTP tables keep deferred planning")
+                self.assertFalse(data_requested.is_set())
             table = DeltaTable(
                 f"http://127.0.0.1:{server.server_port}/",
                 storage_options={"allow_http": "true"},
@@ -1861,6 +1871,7 @@ class TableTests(unittest.TestCase):
             self.assertTrue(data_requested.is_set())
 
     def test_warmup_validation(self):
+        self.assertEqual(inspect.signature(DeltaTable).parameters["warmup"].default, "automatic")
         for value in (None, True, 1, 0.0, b"none", [], {}, object()):
             with self.subTest(warmup=value), self.assertRaises(TypeError):
                 DeltaTable(self.location / "missing", warmup=value)

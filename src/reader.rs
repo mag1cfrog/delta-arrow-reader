@@ -53,7 +53,10 @@ use self::{
 use crate::{
     DeltaProtocol, DeltaReaderError,
     delta::{
-        kernel::{DeltaKernelPredicate, kernel_pruning_predicate, kernel_row_predicate},
+        kernel::{
+            DeltaKernelEngineContext, DeltaKernelPredicate, kernel_pruning_predicate,
+            kernel_row_predicate,
+        },
         protocol::validate_protocol,
         snapshot::{
             ArrowTableSnapshot, KernelTableSnapshot, load_delta_table_snapshot,
@@ -69,26 +72,54 @@ const QUERY_PLANNING_CACHE_SCAN_METADATA_SOURCE: &str = "query_planning_cache";
 
 /// Selects how much work table loading performs before returning.
 ///
-/// Each warmup level includes the work performed by the levels before it. The default performs no
-/// warmup and leaves reusable metadata work to individual queries.
+/// The default prepares supported S3 tables for repeated queries. Explicit modes select
+/// how much work to do before the first query.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum WarmupMode {
-    /// Performs no warmup.
+    /// Uses network warmup for supported S3 stores when partial-page reads are enabled.
+    ///
+    /// Network sampling has a five-second limit after metadata loading. Other stores,
+    /// the Delta Kernel backend, and explicit range policies perform no warmup.
     #[default]
+    Automatic,
+    /// Performs no warmup.
     None,
     /// Loads and retains the active-file metadata used during query planning.
     QueryPlanning,
     /// Retains query-planning metadata and samples remote data-file reads.
     ///
     /// The time limit applies to network sampling, after metadata loading. Sampling is
-    /// best effort, uses at most three files, and schedules at most 13.5 MiB of payload.
-    /// Only the Direct backend with an automatic range policy on a built-in remote
-    /// store performs network sampling. Other settings keep metadata warmup only.
+    /// best effort, uses at most three files, and schedules at most 24 MiB of payload.
+    /// Only the Direct backend with an automatic range policy and a supported S3
+    /// transport performs network sampling. Other settings keep metadata warmup only.
     Network {
         /// Maximum time spent sampling network reads. Zero skips sampling.
         max_duration: Duration,
     },
+}
+
+impl WarmupMode {
+    fn for_table(
+        self,
+        context: &DeltaKernelEngineContext,
+        options: DeltaScanExecutionOptions,
+    ) -> Self {
+        if self != Self::Automatic {
+            return self;
+        }
+        if options.experimental_intra_page_reads()
+            && options.parquet_backend() == ParquetReaderBackend::Direct
+            && options.parquet_range_read_policy() == ParquetRangeReadPolicy::Automatic
+            && context.supports_partial_reads()
+        {
+            Self::Network {
+                max_duration: Duration::from_secs(5),
+            }
+        } else {
+            Self::None
+        }
+    }
 }
 
 /// Configures and loads one immutable Delta table snapshot.
@@ -141,7 +172,7 @@ impl DeltaTableBuilder {
             storage_options: DeltaStorageOptions::new(),
             snapshot_selection: DeltaSnapshotSelection::Latest,
             execution_options: DeltaScanExecutionOptions::new(),
-            warmup: WarmupMode::None,
+            warmup: WarmupMode::Automatic,
         }
     }
 
@@ -171,14 +202,18 @@ impl DeltaTableBuilder {
 
     /// Selects work to finish during [`Self::load_table`] for reuse by later queries.
     ///
-    /// [`Self::load_snapshot`] does not build a table and rejects any setting other than
-    /// [`WarmupMode::None`].
+    /// Defaults to [`WarmupMode::Automatic`]. [`Self::load_snapshot`] does not warm up
+    /// a table and accepts only `Automatic` or [`WarmupMode::None`].
     pub const fn with_warmup(mut self, warmup: WarmupMode) -> Self {
         self.warmup = warmup;
         self
     }
 
     /// Loads the table through the caller-owned Tokio runtime.
+    ///
+    /// The default [`WarmupMode::Automatic`] prepares query-planning metadata and samples
+    /// the network for supported S3 stores. Other stores remain lazy. Select
+    /// [`WarmupMode::None`] to skip this preparation, including all network probes.
     ///
     /// With [`WarmupMode::None`], this method loads the snapshot and converts its schema. Protocol
     /// validation and scan metadata loading remain deferred until a scan is built. This allows an
@@ -200,14 +235,17 @@ impl DeltaTableBuilder {
             self.snapshot_selection,
         )
         .await?;
-        let snapshot = if self.warmup == WarmupMode::None {
+        let warmup = self
+            .warmup
+            .for_table(snapshot.engine_context(), self.execution_options);
+        let snapshot = if warmup == WarmupMode::None {
             snapshot
         } else {
             validate_protocol(snapshot.protocol())?;
             materialize_eager_scan_metadata(snapshot).await?
         };
         let mut table = DeltaTable::new(snapshot, self.execution_options);
-        if let WarmupMode::Network { max_duration } = self.warmup
+        if let WarmupMode::Network { max_duration } = warmup
             && let Some(estimator) = backend::direct_parquet::warmup_network(
                 table.snapshot.as_ref(),
                 self.execution_options,
@@ -222,16 +260,16 @@ impl DeltaTableBuilder {
 
     /// Loads a Delta Kernel snapshot without converting its logical Arrow schema.
     ///
-    /// Warmup settings apply to [`DeltaTable`] and are not supported by this method. Calling this
-    /// method after selecting any mode other than [`WarmupMode::None`] returns a configuration
-    /// error.
+    /// This method never performs warmup. The default [`WarmupMode::Automatic`] and
+    /// explicit [`WarmupMode::None`] are accepted; requesting metadata or network
+    /// warmup returns a configuration error.
     ///
     /// # Errors
     ///
     /// Returns an error if warmup was requested or if the table location, storage, or snapshot
     /// cannot be loaded.
     pub async fn load_snapshot(self) -> Result<DeltaTableSnapshot, DeltaReaderError> {
-        if self.warmup != WarmupMode::None {
+        if !matches!(self.warmup, WarmupMode::Automatic | WarmupMode::None) {
             return InvalidConfigurationSnafu {
                 reason: "snapshot_load_does_not_support_table_warmup",
             }
@@ -986,6 +1024,57 @@ mod tests {
 
     static TRACING_TEST_LOCK: Mutex<()> = Mutex::new(());
     static TRACING_TEST_GLOBAL_SUBSCRIBER: Once = Once::new();
+
+    #[tokio::test]
+    async fn automatic_warmup_respects_storage_and_explicit_options()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use super::{
+            DeltaKernelEngineContext, DeltaStorageOptions, DeltaTableBuilder,
+            ParquetRangeReadPolicy, WarmupMode,
+        };
+
+        let options = DeltaScanExecutionOptions::default();
+        let automatic = DeltaTableBuilder::new("s3://bucket/table").warmup;
+        assert_eq!(automatic, WarmupMode::default());
+        let network = WarmupMode::Network {
+            max_duration: Duration::from_secs(5),
+        };
+        for (location, extra, supported) in [
+            ("s3://bucket/table", None, true),
+            ("s3a://bucket/table", None, true),
+            ("s3://bucket/table", Some(("timeout", "17s")), false),
+            ("https://example.com/table/", None, false),
+        ] {
+            let mut storage = DeltaStorageOptions::from([
+                ("aws_region".into(), "us-west-2".into()),
+                ("aws_skip_signature".into(), "true".into()),
+            ]);
+            if let Some((key, value)) = extra {
+                storage.insert(key.into(), value.into());
+            }
+            let context = DeltaKernelEngineContext::try_new(url::Url::parse(location)?, &storage)?;
+            assert_eq!(
+                automatic.for_table(&context, options),
+                if supported { network } else { WarmupMode::None },
+                "{location}, {extra:?}",
+            );
+            for disabled in [
+                options.with_experimental_intra_page_reads(false),
+                options.with_parquet_backend(ParquetReaderBackend::DeltaKernel),
+                options.with_parquet_range_read_policy(ParquetRangeReadPolicy::ExactRanges),
+            ] {
+                assert_eq!(automatic.for_table(&context, disabled), WarmupMode::None);
+            }
+            for explicit in [WarmupMode::None, WarmupMode::QueryPlanning, network] {
+                assert_eq!(explicit.for_table(&context, options), explicit);
+                assert_eq!(
+                    explicit.for_table(&context, options.with_experimental_intra_page_reads(false)),
+                    explicit
+                );
+            }
+        }
+        Ok(())
+    }
 
     #[derive(Clone, Default)]
     struct EventFields(Arc<Mutex<Vec<BTreeMap<String, String>>>>);

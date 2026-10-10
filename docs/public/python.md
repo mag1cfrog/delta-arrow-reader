@@ -129,20 +129,27 @@ values. Custom timezones are supported: `utcoffset()` is called once and must
 return a standard `datetime.timedelta` instance or `None`. Offset subclasses
 raise `ValueError`.
 
-## Prepare metadata for repeated scans
+## Prepare a table for repeated scans
+
+The default, `warmup="automatic"`, prepares supported S3 tables and profiles
+their network before querying. It uses a five-second sampling limit after
+metadata loading and schedules at most 24 MiB across 3,084 requests, excluding
+store retries. Failed or incomplete network samples are discarded. Other stores
+remain lazy. See [network warmup](scan-planning.md#choose-a-warmup-mode).
 
 Use `warmup="query_planning"` to load and retain active-file metadata during table
 construction. Later scans reuse it, and refresh updates it for the new snapshot
-or reuses it when the version is unchanged. Warmup does not read Parquet data.
+or reuses it when the version is unchanged. This mode does not read Parquet data.
 
 ```python
 prepared = DeltaTable(location, warmup="query_planning")
 ```
 
-The default, `warmup="none"`, leaves this work to individual scans. With warmup
-enabled, unsupported table protocols fail during construction rather than at
-scan planning. Other strings raise `ValueError`; non-string values raise
-`TypeError`.
+Use `warmup="none"` to skip preparation and leave metadata work to individual
+scans. It also keeps partial-page reads inactive because no small-request cost
+is measured. With metadata warmup enabled, unsupported table protocols fail during
+construction rather than at scan planning. Other strings raise `ValueError`;
+non-string values raise `TypeError`.
 
 ## Set the scan partition target
 

@@ -5,6 +5,8 @@
     ".github/workflows/ci.yml",
     "Cargo.toml",
     "Cargo.lock",
+    "pyproject.toml",
+    "delta_arrow_reader.pyi",
     "clippy.toml",
     "LICENSE",
     "NOTICE",
@@ -13,6 +15,7 @@
     "docs/public/**/*.md",
     "src/**",
     "crates/delta-arrow-reader-python/**",
+    "crates/delta-arrow-reader-cli/**",
     "tests/**",
     "benches/**"
   ],

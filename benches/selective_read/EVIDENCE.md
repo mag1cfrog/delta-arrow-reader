@@ -1,5 +1,47 @@
 # Verify or repeat the selective-read benchmark
 
+## Default-policy update
+
+The current README chart uses DAR from merged commit `cd3064e`, with automatic
+warmup and partial-page reads set to their public defaults. It compares the
+first complete query after table initialization for all five readers. The
+update adds 40 DAR sessions and retains 160 competitor sessions from the
+original campaign. Initialization is reported separately.
+
+The original archive remains unchanged. Download the separate update from
+the same evidence release into a new directory:
+
+```sh
+gh release download selective-read-benchmarks-2026-10-07 \
+  --repo mag1cfrog/delta-arrow-reader \
+  --pattern 'selective-read-defaults-cd3064e.tar.gz*'
+sha256sum --check selective-read-defaults-cd3064e.tar.gz.sha256
+tar -xzf selective-read-defaults-cd3064e.tar.gz
+```
+
+Using the pinned oracle environment described below, replay the update:
+
+```sh
+../selective-read-audit-venv/bin/python -B \
+  selective-read-defaults-cd3064e/audit.py \
+  selective-read-defaults-cd3064e replayed-defaults
+```
+
+Its audit verifies the measured source hashes, rechecks all 16 exact query
+exports, and reproduces the current timing CSV, I/O CSV, and provenance JSON
+byte for byte. It needs no network access or full Delta tables. The archive
+retains the measurement driver, staging records, build command and lockfile,
+and the original fixture/reference identities.
+
+To measure this DAR revision yourself, build the DAR runner from `cd3064e`
+and set `DAR_INTRA_PAGE_READS=default DAR_NETWORK_WARMUP=default` when invoking
+it against the original fixtures. The runner otherwise retains its historical
+control settings. Keep the original resource budget and the network seed
+`q2-full-network-v1`. New runs have their own build and measurement identities;
+do not substitute them into either archived dataset.
+
+## Original campaign
+
 The [evidence release](https://github.com/mag1cfrog/delta-arrow-reader/releases/tag/selective-read-benchmarks-2026-10-07)
 contains the records behind the published 416-column and 90-column comparisons:
 eight cases, five readers, two execution profiles, and 400 timed invocations.

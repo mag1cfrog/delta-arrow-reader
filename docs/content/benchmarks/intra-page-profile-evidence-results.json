@@ -1,0 +1,1078 @@
+{
+  "status": "Missing request-cost evidence now retains ordinary reads; explicit profiling still enables eligible gains. Default enablement remains separate.",
+  "sample_csv_sha256": "dbbca329e452ebc2221efb7bc6dfec15caa3e20ac4aff20c6876dce24be804cf",
+  "timed_sessions": 28,
+  "exactly_validated_query_exports": 40,
+  "method": {
+    "scope": "Reader-only validation of the missing-evidence guard. Published multi-reader results are unchanged.",
+    "scheduling": "Fresh process and one provider per sample; two sequential queries. Validation precedes timing. Keep before_fix and fixed samples separate.",
+    "timing": "Initialization and each query are separate. Initialization plus first is computed per session before aggregation. CPU and peak RSS cover the whole process.",
+    "warmup": "No metadata or network warmup except profiled-primary, where Off uses QueryPlanning and Auto uses Network with a five-second limit.",
+    "io": "query_parquet_* includes Parquet body bytes/requests across both queries, including footer reads; it excludes calibration. Profiled Auto traces begin with exactly 12 x 1 MiB and 3,072 x 4 KiB requests, all complete before querying.",
+    "http": "Session HTTP counters include every body byte and request, including incomplete Delta-log responses. Timed Parquet responses all completed. Peak concurrency covers all object classes. HTTP headers and TLS overhead are not measured.",
+    "retries": "Repeated requests may be separate reads; SDK retry counts are not inferred.",
+    "resources": {
+      "logical_cpus": [
+        0,
+        1,
+        2,
+        3,
+        8,
+        9,
+        10,
+        11
+      ],
+      "physical_cores": 4,
+      "request_resource_budget": {
+        "batch_rows": 8192,
+        "datafusion_pool_bytes": 4294967296,
+        "logical_cpus": 8,
+        "max_blocking_threads": 64,
+        "process_memory_bytes": 8589934592,
+        "target_partitions": 8,
+        "worker_threads": 8
+      },
+      "process_memory_bytes": 8589934592
+    },
+    "cache": "fresh processes; reused OS and MinIO caches; validation before timing",
+    "build_overlay": "reader_git_commit is the base commit. The historical diagnostic_patch_sha256 field identifies the applied patch: benchmark-only no-warmup support before_fix; production missing-evidence guards and benchmark support in fixed.",
+    "preparation": "Reused retained fixtures and references. All object lengths and FULL_OBJECT SHA256 receipts verified before timing; no regeneration, upload, full-table rehash, compilation or trace analysis competed with timed queries."
+  },
+  "cause": "Small-request cost is absent but read_partial_pages uses overhead.unwrap_or(0). Diagnostic runs report request_overhead_bytes=0 while accepting many small reads on the second query.",
+  "campaigns": {
+    "before_fix": {
+      "retained_artifact_directory": "/home/hanbo/repo/selective-read-intra-page-passive-20261008",
+      "source_report_sha256": "d42394ce106ca84a2a34fe2984195e12a2157f225d8eed6e54b6a30f5396f4e4",
+      "plan_sha256": "02338f6930fc74e808ab314a54358176dc16f242f5e61ce20f57f62cb19ebcf8",
+      "build_record_sha256": "d5a046e864ec9710655a600ecee989fe39b0dc23a6561e941fe58d872ef09e9a",
+      "build": {
+        "reader_git_commit": "24041afc94556003757b65d699a3409e3f0c0127",
+        "harness_git_commit": "24041afc94556003757b65d699a3409e3f0c0127",
+        "diagnostic_patch_sha256": "68d6e689598d1cbc3fc999a99b717683a4a25b3f95b4dce4fc749130db65311a",
+        "executable_sha256": "5ec2a3160ac32debd2341113ab2ecee93f8cf9f98ef917542cac93622422ba04",
+        "lockfile_sha256": "3e33227b8d98d1fbb4840f013ce48ceb9ad19fad8f460e4a0152c1737e514893",
+        "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+        "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+        "rustflags": "-C target-cpu=x86-64",
+        "target": "x86_64-unknown-linux-gnu"
+      },
+      "profiles": [
+        {
+          "jitter_ms": 20,
+          "latency_ms": 200,
+          "mbps": 150,
+          "name": "primary",
+          "samples_per_mode": 1,
+          "seed": "0",
+          "sequential_queries": 2
+        },
+        {
+          "jitter_ms": 0,
+          "latency_ms": 1,
+          "mbps": 1000,
+          "name": "low",
+          "samples_per_mode": 1,
+          "seed": "0",
+          "sequential_queries": 2
+        }
+      ],
+      "order": [
+        [
+          "off",
+          "auto"
+        ],
+        [
+          "auto",
+          "off"
+        ],
+        [
+          "off",
+          "auto"
+        ]
+      ],
+      "scheduling": "One provider per process, WarmupMode::None in both modes, two sequential queries. Only ordinary query traffic can supply network observations.",
+      "timed_sessions": 8,
+      "exactly_validated_query_exports": 16,
+      "process_polls": 75,
+      "polls_with_compilers": 0,
+      "fixture_verification": {
+        "fixtures": [
+          {
+            "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+            "object_bytes": 70972418471,
+            "objects": 262,
+            "source_upload": "/home/hanbo/repo/selective-read-intra-page-full-20261007/upload-q2.json",
+            "source_upload_sha256": "e2d965a0b7601883a2ed9bb56c1a203bafadfaf55faad2c03d28b9a490dc727c",
+            "verification": "Every current object length and server FULL_OBJECT SHA256 match the retained upload receipt.",
+            "verified_ns": 1791507162634317156
+          },
+          {
+            "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+            "object_bytes": 32463889602,
+            "objects": 122,
+            "source_upload": "/home/hanbo/repo/selective-read-intra-page-full-20261007/upload-q4.json",
+            "source_upload_sha256": "b00eb912d2bebe8164390c5d371e738c10b03b9cb5a06258ee47a3ba622ff917",
+            "verification": "Every current object length and server FULL_OBJECT SHA256 match the retained upload receipt.",
+            "verified_ns": 1791507162731289172
+          }
+        ],
+        "server_sha256": "90aafedf9764586c5a4858cac2a3f206434888b3a0412914e851f043189c48f4"
+      },
+      "experiments": {
+        "416-primary": {
+          "experiment_sha256": "4724009383332faa70430d3ed3330288f27da4bbe2fab0fd7f641c8fe7b98f9a",
+          "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+          "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+          "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+          "snapshot_version": 1,
+          "correctness": {
+            "off": {
+              "sha256": "75d88f1be301579c8c8c9ebae7f7d33881cee35407674e9c4f033d275c64f4ed",
+              "query_exports": 2,
+              "rows_per_query": 894
+            },
+            "auto": {
+              "sha256": "34151443b6ffb1c6dce2a23e8a4ad9aa80293725f009c5161ae2525a2ce57abf",
+              "query_exports": 2,
+              "rows_per_query": 894
+            }
+          }
+        },
+        "90-primary": {
+          "experiment_sha256": "f6d465438ba962ed054d08bc80f0dca953b49da971500f4bcfcd2637fd3f608d",
+          "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+          "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+          "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+          "snapshot_version": 1,
+          "correctness": {
+            "off": {
+              "sha256": "26621b36f884b9bf96ad83d9fbfa7b67d07efb43de2c536e34b0c5bea99d28d1",
+              "query_exports": 2,
+              "rows_per_query": 894
+            },
+            "auto": {
+              "sha256": "a52d505ddbe266879deba4e50bd4f54a9cb2fe3b0afd63a1f2904957985ee4ab",
+              "query_exports": 2,
+              "rows_per_query": 894
+            }
+          }
+        },
+        "416-low": {
+          "experiment_sha256": "b6d5b834da8f68844deddb8a092f2c5be43670f64dcfb4f49d0131477ce0218f",
+          "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+          "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+          "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+          "snapshot_version": 1,
+          "correctness": {
+            "off": {
+              "sha256": "5767b4e7085a7f50ebfd5ad7a902def02cef5a2161a4af279365f9157a969ddc",
+              "query_exports": 2,
+              "rows_per_query": 894
+            },
+            "auto": {
+              "sha256": "aec3d0a091d17511b19372e1fb5cca2da51b071e9225ee66fa449c44b8a9d7cb",
+              "query_exports": 2,
+              "rows_per_query": 894
+            }
+          }
+        },
+        "90-low": {
+          "experiment_sha256": "a33aac36398b9b7a4ea697cad70d53c1b30e07562a23973c96367bf74a8e9d17",
+          "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+          "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+          "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+          "snapshot_version": 1,
+          "correctness": {
+            "off": {
+              "sha256": "c3696b39818ad0ee37a808bff83b64552a1d4abd9eb8a01ab7650572fcccbe05",
+              "query_exports": 2,
+              "rows_per_query": 894
+            },
+            "auto": {
+              "sha256": "e3c46398b7169a2f170860df77027dcf34856b004f730e6b82e801f487da58d5",
+              "query_exports": 2,
+              "rows_per_query": 894
+            }
+          }
+        }
+      },
+      "harness_source_sha256": {
+        "benches/selective_read/intra_page.py": "6e3290e22de81d8a690a5516109883dce85d8ed4f5631a9527e1508ed7b1a728",
+        "benches/selective_read/test_intra_page.py": "260847b30ea3957ab52a16301605e250254f26679c6715e80cdc5148a514c5d9"
+      },
+      "limitations": [
+        "One alternating off/auto pair per table/profile is a screening result, not final performance qualification.",
+        "Any material regression requires a separate repeat or root-cause investigation; all original samples remain retained.",
+        "Pinned benchmark resource and scan settings; only the partial-read/warmup default combination is under test.",
+        "CPU affinity is not an exclusive CPU reservation."
+      ]
+    },
+    "fixed": {
+      "retained_artifact_directory": "/home/hanbo/repo/selective-read-intra-page-passive-fixed-20261008",
+      "source_report_sha256": "2a2e61a5dfdf15a0bb7d843e0a5b61abafab187d149d8c669ed815973b108a50",
+      "plan_sha256": "709208fd6913d654c2b2be209844998eff6c1cbcbde79065f63b8b04e030e375",
+      "build_record_sha256": "98c36f05864d88a6572f6c90fb4f1c3dc9405d01ebf5a913cdc80b951770b60a",
+      "build": {
+        "reader_git_commit": "24041afc94556003757b65d699a3409e3f0c0127",
+        "harness_git_commit": "24041afc94556003757b65d699a3409e3f0c0127",
+        "diagnostic_patch_sha256": "81b572d2b46236ea583c4523a3829a58761ed0415281b6702326f7922bcab03e",
+        "executable_sha256": "34e37c46837b7cf5409e8762c769be2d97c0545d1f8f2905e5acf1b21fc62635",
+        "lockfile_sha256": "3e33227b8d98d1fbb4840f013ce48ceb9ad19fad8f460e4a0152c1737e514893",
+        "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+        "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+        "rustflags": "-C target-cpu=x86-64",
+        "target": "x86_64-unknown-linux-gnu"
+      },
+      "profiles": [
+        {
+          "jitter_ms": 0,
+          "latency_ms": 1,
+          "mbps": 1000,
+          "metadata_warmup": false,
+          "name": "low",
+          "network_warmup": false,
+          "samples_per_mode": 3,
+          "seed": "0",
+          "sequential_queries": 2
+        },
+        {
+          "jitter_ms": 20,
+          "latency_ms": 200,
+          "mbps": 150,
+          "metadata_warmup": false,
+          "name": "primary",
+          "network_warmup": false,
+          "samples_per_mode": 1,
+          "seed": "0",
+          "sequential_queries": 2
+        },
+        {
+          "jitter_ms": 20,
+          "latency_ms": 200,
+          "mbps": 150,
+          "metadata_warmup": true,
+          "name": "profiled-primary",
+          "network_warmup": true,
+          "samples_per_mode": 1,
+          "seed": "0",
+          "sequential_queries": 2
+        }
+      ],
+      "order": [
+        [
+          "off",
+          "auto"
+        ],
+        [
+          "auto",
+          "off"
+        ],
+        [
+          "off",
+          "auto"
+        ]
+      ],
+      "scheduling": "One provider per process and two sequential queries. Low and primary use WarmupMode::None in both modes. Profiled-primary uses QueryPlanning off and Network auto with a five-second calibration limit.",
+      "timed_sessions": 20,
+      "exactly_validated_query_exports": 24,
+      "process_polls": 118,
+      "polls_with_compilers": 0,
+      "fixture_verification": {
+        "fixtures": [
+          {
+            "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+            "object_bytes": 70972418471,
+            "objects": 262,
+            "source_upload": "/home/hanbo/repo/selective-read-intra-page-full-20261007/upload-q2.json",
+            "source_upload_sha256": "e2d965a0b7601883a2ed9bb56c1a203bafadfaf55faad2c03d28b9a490dc727c",
+            "verification": "Every current object length and server FULL_OBJECT SHA256 match the retained upload receipt.",
+            "verified_ns": 1791507886800573649
+          },
+          {
+            "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+            "object_bytes": 32463889602,
+            "objects": 122,
+            "source_upload": "/home/hanbo/repo/selective-read-intra-page-full-20261007/upload-q4.json",
+            "source_upload_sha256": "b00eb912d2bebe8164390c5d371e738c10b03b9cb5a06258ee47a3ba622ff917",
+            "verification": "Every current object length and server FULL_OBJECT SHA256 match the retained upload receipt.",
+            "verified_ns": 1791507886908996755
+          }
+        ],
+        "server_sha256": "da0f8a25402bc51a47a275f002946e6151aedfaa556509cd0d78c6e962e23f1e"
+      },
+      "experiments": {
+        "416-low": {
+          "experiment_sha256": "ab2c0c80216caed150af811ca881ae3a038b346d359b1a11a6be66192674fdfd",
+          "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+          "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+          "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+          "snapshot_version": 1,
+          "correctness": {
+            "off": {
+              "sha256": "baf780397e9e1a2f5575798a55faa36bf0808c6373f1dfa82ea56c01cf5e007c",
+              "query_exports": 2,
+              "rows_per_query": 894
+            },
+            "auto": {
+              "sha256": "9428d04301529101d94e23402469fffe7c6d7d1f3dd75a9e827ae820e41ace8e",
+              "query_exports": 2,
+              "rows_per_query": 894
+            }
+          }
+        },
+        "90-low": {
+          "experiment_sha256": "fda6608da868cd3fea5408f7fb419664be3ccfb9f3e89739047e0d9166b48040",
+          "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+          "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+          "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+          "snapshot_version": 1,
+          "correctness": {
+            "off": {
+              "sha256": "e9940b7b2730d661b29318c441a6b456c5b94d76cbe112690779ee2302a5aecb",
+              "query_exports": 2,
+              "rows_per_query": 894
+            },
+            "auto": {
+              "sha256": "e6bd6d5d00495291998324a56f15607e9d9f782ec524e313c54ab7d19f05ee51",
+              "query_exports": 2,
+              "rows_per_query": 894
+            }
+          }
+        },
+        "416-primary": {
+          "experiment_sha256": "5d0df0b63d2507d04215029f21087c9b32fa6eeefd1a6f526141e46b3913a273",
+          "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+          "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+          "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+          "snapshot_version": 1,
+          "correctness": {
+            "off": {
+              "sha256": "7a647ebe8bf06a16301b7923a3337b2125b32df416a793b30790a0c09721a5bf",
+              "query_exports": 2,
+              "rows_per_query": 894
+            },
+            "auto": {
+              "sha256": "b174eba57c5452adc051dad2921cc21f436bbe2c4aab8826df59c5e2dff8721e",
+              "query_exports": 2,
+              "rows_per_query": 894
+            }
+          }
+        },
+        "90-primary": {
+          "experiment_sha256": "c4dc81e022f3afed1eb7f3066d5619d93138b1f8f3cec566fd7a9ff95d15eb12",
+          "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+          "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+          "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+          "snapshot_version": 1,
+          "correctness": {
+            "off": {
+              "sha256": "33f0dc4d51df7f4af287c19962db6ba88ce0eacdbe7313b84ff3e869222d821d",
+              "query_exports": 2,
+              "rows_per_query": 894
+            },
+            "auto": {
+              "sha256": "5f4a1214406cd01f91529dd3175fe36cedbb213b39657c24ac27f62b83a6455c",
+              "query_exports": 2,
+              "rows_per_query": 894
+            }
+          }
+        },
+        "416-profiled-primary": {
+          "experiment_sha256": "1e8a96c3e757ccf817db1b721bc8a809dcb8f529f969ddf89d4600331ee18c69",
+          "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+          "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+          "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+          "snapshot_version": 1,
+          "correctness": {
+            "off": {
+              "sha256": "f4b2a4decf8849d43acdfef3b4d63d8a02b0f41b7f951ec989f068a82dade1d2",
+              "query_exports": 2,
+              "rows_per_query": 894
+            },
+            "auto": {
+              "sha256": "d9b11ead6d12fb816a72dd92fcceb1df3658da7f55d775c1c3bd0bc9c8ca0474",
+              "query_exports": 2,
+              "rows_per_query": 894
+            }
+          }
+        },
+        "90-profiled-primary": {
+          "experiment_sha256": "5221c186add877a5bbb0a52ad41e90d3743ca485cc90697395c2cc72bc295171",
+          "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+          "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+          "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+          "snapshot_version": 1,
+          "correctness": {
+            "off": {
+              "sha256": "6e4a7e849e6af8420c866ead2ed0cd511409725e8bf8229856ac81a6e74fc17b",
+              "query_exports": 2,
+              "rows_per_query": 894
+            },
+            "auto": {
+              "sha256": "4f491f69bc0a18f3ec595e955ad1b840183a4c5dcae55799a5f71712f2f3dc50",
+              "query_exports": 2,
+              "rows_per_query": 894
+            }
+          }
+        }
+      },
+      "harness_source_sha256": {
+        "benches/selective_read/intra_page.py": "6e3290e22de81d8a690a5516109883dce85d8ed4f5631a9527e1508ed7b1a728",
+        "benches/selective_read/test_intra_page.py": "260847b30ea3957ab52a16301605e250254f26679c6715e80cdc5148a514c5d9"
+      },
+      "limitations": [
+        "Low-latency regression controls have three alternating pairs per case; primary and explicitly profiled controls have one pair per case.",
+        "Pre-fix screening samples are retained in the preceding passive campaign. Do not pool them with fixed-build results.",
+        "Pinned benchmark resource and scan settings; only the partial-read/warmup default combination is under test.",
+        "CPU affinity is not an exclusive CPU reservation."
+      ]
+    }
+  },
+  "fixed_aggregates": {
+    "416-low": {
+      "off": {
+        "correctness_sha256": "baf780397e9e1a2f5575798a55faa36bf0808c6373f1dfa82ea56c01cf5e007c",
+        "aggregates": {
+          "initialization_seconds": {
+            "median": 0.138781236,
+            "min": 0.138204885,
+            "max": 0.140396006
+          },
+          "first_query_seconds": {
+            "median": 1.589173258,
+            "min": 1.583620643,
+            "max": 1.589337261
+          },
+          "initialization_plus_first_seconds": {
+            "median": 1.727542146,
+            "min": 1.722401879,
+            "max": 1.729569264
+          },
+          "second_query_seconds": {
+            "median": 1.574039918,
+            "min": 1.573688464,
+            "max": 1.605145436
+          },
+          "session_seconds": {
+            "median": 3.302249232,
+            "min": 3.297475547,
+            "max": 3.33544196
+          },
+          "query_parquet_bytes": {
+            "median": 345853372,
+            "min": 345853372,
+            "max": 345853372
+          },
+          "query_parquet_requests": {
+            "median": 80,
+            "min": 80,
+            "max": 80
+          },
+          "process_cpu_seconds": {
+            "median": 1.18116,
+            "min": 1.164843,
+            "max": 1.188413
+          },
+          "peak_rss_bytes": {
+            "median": 373166080,
+            "min": 369410048,
+            "max": 393568256
+          }
+        }
+      },
+      "auto": {
+        "correctness_sha256": "9428d04301529101d94e23402469fffe7c6d7d1f3dd75a9e827ae820e41ace8e",
+        "aggregates": {
+          "initialization_seconds": {
+            "median": 0.140327949,
+            "min": 0.138942665,
+            "max": 0.142434963
+          },
+          "first_query_seconds": {
+            "median": 1.589051882,
+            "min": 1.580480541,
+            "max": 1.59312133
+          },
+          "initialization_plus_first_seconds": {
+            "median": 1.7314868449999998,
+            "min": 1.719423206,
+            "max": 1.733449279
+          },
+          "second_query_seconds": {
+            "median": 1.572859233,
+            "min": 1.564754678,
+            "max": 1.580058482
+          },
+          "session_seconds": {
+            "median": 3.300247369,
+            "min": 3.296994833,
+            "max": 3.307445374
+          },
+          "query_parquet_bytes": {
+            "median": 345853372,
+            "min": 345853372,
+            "max": 345853372
+          },
+          "query_parquet_requests": {
+            "median": 80,
+            "min": 80,
+            "max": 80
+          },
+          "process_cpu_seconds": {
+            "median": 1.154584,
+            "min": 1.137935,
+            "max": 1.175873
+          },
+          "peak_rss_bytes": {
+            "median": 390164480,
+            "min": 356798464,
+            "max": 396435456
+          }
+        }
+      }
+    },
+    "90-low": {
+      "off": {
+        "correctness_sha256": "e9940b7b2730d661b29318c441a6b456c5b94d76cbe112690779ee2302a5aecb",
+        "aggregates": {
+          "initialization_seconds": {
+            "median": 0.035893893,
+            "min": 0.035453164,
+            "max": 0.036657471
+          },
+          "first_query_seconds": {
+            "median": 3.283188717,
+            "min": 3.281785079,
+            "max": 3.29073219
+          },
+          "initialization_plus_first_seconds": {
+            "median": 3.318641881,
+            "min": 3.317678972,
+            "max": 3.3273896609999998
+          },
+          "second_query_seconds": {
+            "median": 3.288760848,
+            "min": 3.281332508,
+            "max": 3.295382769
+          },
+          "session_seconds": {
+            "median": 6.614710394,
+            "min": 6.59955519,
+            "max": 6.616907765
+          },
+          "query_parquet_bytes": {
+            "median": 796068020,
+            "min": 796068020,
+            "max": 796068020
+          },
+          "query_parquet_requests": {
+            "median": 108,
+            "min": 108,
+            "max": 108
+          },
+          "process_cpu_seconds": {
+            "median": 2.207351,
+            "min": 2.125987,
+            "max": 2.308608
+          },
+          "peak_rss_bytes": {
+            "median": 604307456,
+            "min": 566562816,
+            "max": 625664000
+          }
+        }
+      },
+      "auto": {
+        "correctness_sha256": "e6bd6d5d00495291998324a56f15607e9d9f782ec524e313c54ab7d19f05ee51",
+        "aggregates": {
+          "initialization_seconds": {
+            "median": 0.037046203,
+            "min": 0.034015123,
+            "max": 0.03716827
+          },
+          "first_query_seconds": {
+            "median": 3.292799088,
+            "min": 3.291800297,
+            "max": 3.298667507
+          },
+          "initialization_plus_first_seconds": {
+            "median": 3.3298452910000003,
+            "min": 3.328968567,
+            "max": 3.3326826300000003
+          },
+          "second_query_seconds": {
+            "median": 3.280086145,
+            "min": 3.275495567,
+            "max": 3.280135733
+          },
+          "session_seconds": {
+            "median": 6.609726689,
+            "min": 6.605895859,
+            "max": 6.613332728
+          },
+          "query_parquet_bytes": {
+            "median": 796068020,
+            "min": 796068020,
+            "max": 796068020
+          },
+          "query_parquet_requests": {
+            "median": 108,
+            "min": 108,
+            "max": 108
+          },
+          "process_cpu_seconds": {
+            "median": 2.208185,
+            "min": 2.131492,
+            "max": 2.234595
+          },
+          "peak_rss_bytes": {
+            "median": 597401600,
+            "min": 570929152,
+            "max": 612503552
+          }
+        }
+      }
+    },
+    "416-primary": {
+      "off": {
+        "correctness_sha256": "7a647ebe8bf06a16301b7923a3337b2125b32df416a793b30790a0c09721a5bf",
+        "aggregates": {
+          "initialization_seconds": {
+            "median": 0.778883504,
+            "min": 0.778883504,
+            "max": 0.778883504
+          },
+          "first_query_seconds": {
+            "median": 10.933958168,
+            "min": 10.933958168,
+            "max": 10.933958168
+          },
+          "initialization_plus_first_seconds": {
+            "median": 11.712841672,
+            "min": 11.712841672,
+            "max": 11.712841672
+          },
+          "second_query_seconds": {
+            "median": 10.916719926,
+            "min": 10.916719926,
+            "max": 10.916719926
+          },
+          "session_seconds": {
+            "median": 22.630346126,
+            "min": 22.630346126,
+            "max": 22.630346126
+          },
+          "query_parquet_bytes": {
+            "median": 345853372,
+            "min": 345853372,
+            "max": 345853372
+          },
+          "query_parquet_requests": {
+            "median": 80,
+            "min": 80,
+            "max": 80
+          },
+          "process_cpu_seconds": {
+            "median": 1.955315,
+            "min": 1.955315,
+            "max": 1.955315
+          },
+          "peak_rss_bytes": {
+            "median": 349687808,
+            "min": 349687808,
+            "max": 349687808
+          }
+        }
+      },
+      "auto": {
+        "correctness_sha256": "b174eba57c5452adc051dad2921cc21f436bbe2c4aab8826df59c5e2dff8721e",
+        "aggregates": {
+          "initialization_seconds": {
+            "median": 0.784007122,
+            "min": 0.784007122,
+            "max": 0.784007122
+          },
+          "first_query_seconds": {
+            "median": 10.970458029,
+            "min": 10.970458029,
+            "max": 10.970458029
+          },
+          "initialization_plus_first_seconds": {
+            "median": 11.754465151,
+            "min": 11.754465151,
+            "max": 11.754465151
+          },
+          "second_query_seconds": {
+            "median": 10.932549485,
+            "min": 10.932549485,
+            "max": 10.932549485
+          },
+          "session_seconds": {
+            "median": 22.688149905,
+            "min": 22.688149905,
+            "max": 22.688149905
+          },
+          "query_parquet_bytes": {
+            "median": 345853372,
+            "min": 345853372,
+            "max": 345853372
+          },
+          "query_parquet_requests": {
+            "median": 80,
+            "min": 80,
+            "max": 80
+          },
+          "process_cpu_seconds": {
+            "median": 2.035421,
+            "min": 2.035421,
+            "max": 2.035421
+          },
+          "peak_rss_bytes": {
+            "median": 359301120,
+            "min": 359301120,
+            "max": 359301120
+          }
+        }
+      }
+    },
+    "90-primary": {
+      "off": {
+        "correctness_sha256": "33f0dc4d51df7f4af287c19962db6ba88ce0eacdbe7313b84ff3e869222d821d",
+        "aggregates": {
+          "initialization_seconds": {
+            "median": 0.451862884,
+            "min": 0.451862884,
+            "max": 0.451862884
+          },
+          "first_query_seconds": {
+            "median": 22.586401531,
+            "min": 22.586401531,
+            "max": 22.586401531
+          },
+          "initialization_plus_first_seconds": {
+            "median": 23.038264415,
+            "min": 23.038264415,
+            "max": 23.038264415
+          },
+          "second_query_seconds": {
+            "median": 22.576614264,
+            "min": 22.576614264,
+            "max": 22.576614264
+          },
+          "session_seconds": {
+            "median": 45.615566056,
+            "min": 45.615566056,
+            "max": 45.615566056
+          },
+          "query_parquet_bytes": {
+            "median": 796068020,
+            "min": 796068020,
+            "max": 796068020
+          },
+          "query_parquet_requests": {
+            "median": 108,
+            "min": 108,
+            "max": 108
+          },
+          "process_cpu_seconds": {
+            "median": 3.801532,
+            "min": 3.801532,
+            "max": 3.801532
+          },
+          "peak_rss_bytes": {
+            "median": 546586624,
+            "min": 546586624,
+            "max": 546586624
+          }
+        }
+      },
+      "auto": {
+        "correctness_sha256": "5f4a1214406cd01f91529dd3175fe36cedbb213b39657c24ac27f62b83a6455c",
+        "aggregates": {
+          "initialization_seconds": {
+            "median": 0.450919151,
+            "min": 0.450919151,
+            "max": 0.450919151
+          },
+          "first_query_seconds": {
+            "median": 22.589856137,
+            "min": 22.589856137,
+            "max": 22.589856137
+          },
+          "initialization_plus_first_seconds": {
+            "median": 23.040775288000003,
+            "min": 23.040775288000003,
+            "max": 23.040775288000003
+          },
+          "second_query_seconds": {
+            "median": 22.580174098,
+            "min": 22.580174098,
+            "max": 22.580174098
+          },
+          "session_seconds": {
+            "median": 45.621509226,
+            "min": 45.621509226,
+            "max": 45.621509226
+          },
+          "query_parquet_bytes": {
+            "median": 796068020,
+            "min": 796068020,
+            "max": 796068020
+          },
+          "query_parquet_requests": {
+            "median": 108,
+            "min": 108,
+            "max": 108
+          },
+          "process_cpu_seconds": {
+            "median": 4.002034,
+            "min": 4.002034,
+            "max": 4.002034
+          },
+          "peak_rss_bytes": {
+            "median": 567902208,
+            "min": 567902208,
+            "max": 567902208
+          }
+        }
+      }
+    },
+    "416-profiled-primary": {
+      "off": {
+        "correctness_sha256": "f4b2a4decf8849d43acdfef3b4d63d8a02b0f41b7f951ec989f068a82dade1d2",
+        "aggregates": {
+          "initialization_seconds": {
+            "median": 1.360428155,
+            "min": 1.360428155,
+            "max": 1.360428155
+          },
+          "first_query_seconds": {
+            "median": 10.34642521,
+            "min": 10.34642521,
+            "max": 10.34642521
+          },
+          "initialization_plus_first_seconds": {
+            "median": 11.706853364999999,
+            "min": 11.706853364999999,
+            "max": 11.706853364999999
+          },
+          "second_query_seconds": {
+            "median": 10.345440502,
+            "min": 10.345440502,
+            "max": 10.345440502
+          },
+          "session_seconds": {
+            "median": 22.053363023,
+            "min": 22.053363023,
+            "max": 22.053363023
+          },
+          "query_parquet_bytes": {
+            "median": 345853372,
+            "min": 345853372,
+            "max": 345853372
+          },
+          "query_parquet_requests": {
+            "median": 80,
+            "min": 80,
+            "max": 80
+          },
+          "process_cpu_seconds": {
+            "median": 1.932859,
+            "min": 1.932859,
+            "max": 1.932859
+          },
+          "peak_rss_bytes": {
+            "median": 358412288,
+            "min": 358412288,
+            "max": 358412288
+          }
+        }
+      },
+      "auto": {
+        "correctness_sha256": "d9b11ead6d12fb816a72dd92fcceb1df3658da7f55d775c1c3bd0bc9c8ca0474",
+        "aggregates": {
+          "initialization_seconds": {
+            "median": 4.493840942,
+            "min": 4.493840942,
+            "max": 4.493840942
+          },
+          "first_query_seconds": {
+            "median": 6.491774598,
+            "min": 6.491774598,
+            "max": 6.491774598
+          },
+          "initialization_plus_first_seconds": {
+            "median": 10.985615540000001,
+            "min": 10.985615540000001,
+            "max": 10.985615540000001
+          },
+          "second_query_seconds": {
+            "median": 6.470022103,
+            "min": 6.470022103,
+            "max": 6.470022103
+          },
+          "session_seconds": {
+            "median": 17.456445714,
+            "min": 17.456445714,
+            "max": 17.456445714
+          },
+          "query_parquet_bytes": {
+            "median": 194096722,
+            "min": 194096722,
+            "max": 194096722
+          },
+          "query_parquet_requests": {
+            "median": 24526,
+            "min": 24526,
+            "max": 24526
+          },
+          "process_cpu_seconds": {
+            "median": 5.459352,
+            "min": 5.459352,
+            "max": 5.459352
+          },
+          "peak_rss_bytes": {
+            "median": 359923712,
+            "min": 359923712,
+            "max": 359923712
+          }
+        }
+      }
+    },
+    "90-profiled-primary": {
+      "off": {
+        "correctness_sha256": "6e4a7e849e6af8420c866ead2ed0cd511409725e8bf8229856ac81a6e74fc17b",
+        "aggregates": {
+          "initialization_seconds": {
+            "median": 0.700204929,
+            "min": 0.700204929,
+            "max": 0.700204929
+          },
+          "first_query_seconds": {
+            "median": 22.301595912,
+            "min": 22.301595912,
+            "max": 22.301595912
+          },
+          "initialization_plus_first_seconds": {
+            "median": 23.001800841,
+            "min": 23.001800841,
+            "max": 23.001800841
+          },
+          "second_query_seconds": {
+            "median": 22.294071953,
+            "min": 22.294071953,
+            "max": 22.294071953
+          },
+          "session_seconds": {
+            "median": 45.296608459,
+            "min": 45.296608459,
+            "max": 45.296608459
+          },
+          "query_parquet_bytes": {
+            "median": 796068020,
+            "min": 796068020,
+            "max": 796068020
+          },
+          "query_parquet_requests": {
+            "median": 108,
+            "min": 108,
+            "max": 108
+          },
+          "process_cpu_seconds": {
+            "median": 3.680227,
+            "min": 3.680227,
+            "max": 3.680227
+          },
+          "peak_rss_bytes": {
+            "median": 584683520,
+            "min": 584683520,
+            "max": 584683520
+          }
+        }
+      },
+      "auto": {
+        "correctness_sha256": "4f491f69bc0a18f3ec595e955ad1b840183a4c5dcae55799a5f71712f2f3dc50",
+        "aggregates": {
+          "initialization_seconds": {
+            "median": 3.865227419,
+            "min": 3.865227419,
+            "max": 3.865227419
+          },
+          "first_query_seconds": {
+            "median": 10.253775639,
+            "min": 10.253775639,
+            "max": 10.253775639
+          },
+          "initialization_plus_first_seconds": {
+            "median": 14.119003058,
+            "min": 14.119003058,
+            "max": 14.119003058
+          },
+          "second_query_seconds": {
+            "median": 10.244438797,
+            "min": 10.244438797,
+            "max": 10.244438797
+          },
+          "session_seconds": {
+            "median": 24.364015481,
+            "min": 24.364015481,
+            "max": 24.364015481
+          },
+          "query_parquet_bytes": {
+            "median": 332315616,
+            "min": 332315616,
+            "max": 332315616
+          },
+          "query_parquet_requests": {
+            "median": 41164,
+            "min": 41164,
+            "max": 41164
+          },
+          "process_cpu_seconds": {
+            "median": 8.777139,
+            "min": 8.777139,
+            "max": 8.777139
+          },
+          "peak_rss_bytes": {
+            "median": 489869312,
+            "min": 489869312,
+            "max": 489869312
+          }
+        }
+      }
+    }
+  },
+  "verification": {
+    "regression_before_fix": {
+      "status": "Updated cost-selection regression test fails on the original reader implementation",
+      "log_sha256": "73789535570350f17c8edabcaf448cc3d75e4187492e3ffd28b5885862ce460a"
+    },
+    "checks": {
+      "unit-final.log": {
+        "result": "444 library tests passed",
+        "sha256": "02760b34e496cea52d01b5a5bf7bc31544da0d9cc3e30fbf532d956c16c72263"
+      },
+      "integration-final.log": {
+        "result": "7 intra-page public integration tests passed",
+        "sha256": "73a2bc19668209436a7ea56fd120093debafd335a332d72f299ac53830a21287"
+      },
+      "clippy-final.log": {
+        "result": "All-target/all-feature Clippy passed; existing Rust 1.98 chunks_exact_to_as_chunks allowance retained",
+        "sha256": "f2f05102f44877b44a8910229dcedcf9b2a5403e467e93202df1783967742dda"
+      },
+      "reader-check-final.log": {
+        "result": "6 public reader cases, 28 invocations passed",
+        "sha256": "8603fa57dc295ec315544a4826f5e5601fbb6d62662e606d998e1050d4b08ee6"
+      }
+    },
+    "analysis_sha256": "8a6b1c3a83df4997ad43b2cac7cd71c80d1e9aac44283bb366ebd01176cc9e69",
+    "recorded_source_files_matching_measured_build": 83
+  },
+  "limitations": [
+    "Before-fix screening has one pair per table/profile. Fixed low-latency controls have three alternating pairs; fixed primary and profiled-primary checks have one pair each.",
+    "Both queries return 894 rows from each original scattered + DV fixture. No broader workload or competing-reader performance claim.",
+    "Ordinary traffic does not seed small-request cost. Without explicit network warmup, these guards retain ordinary reads on later queries too.",
+    "CPU affinity is not exclusive. No compilers appeared in 75 before-fix or 118 fixed process polls.",
+    "Eligible real-S3 partial-read performance and broader local, dense and no-DV timing controls remain pending. The library option is still disabled by default."
+  ]
+}

@@ -67,7 +67,8 @@ fn export_schema(py: Python<'_>, schema: &Schema) -> PyResult<FFI_ArrowSchema> {
 /// With version=None, load the latest snapshot. Otherwise, version must be an
 /// integer from 0 to 2**64 - 1. Booleans are not accepted.
 /// storage_options accepts a mapping of string keys to string values.
-/// warmup="none" defers planning metadata to scans; "query_planning" prepares
+/// warmup="automatic" prepares supported S3 tables and profiles their network.
+/// "none" defers planning metadata to scans; "query_planning" prepares
 /// reusable planning metadata during loading without reading Parquet data.
 /// execution_options=None keeps the default scan execution settings.
 #[pyclass(module = "delta_arrow_reader", frozen)]
@@ -80,7 +81,7 @@ struct DeltaTable {
 #[pymethods]
 impl DeltaTable {
     #[new]
-    #[pyo3(signature = (location, *, version=None, storage_options=None, warmup="none", execution_options=None))]
+    #[pyo3(signature = (location, *, version=None, storage_options=None, warmup="automatic", execution_options=None))]
     fn new(
         py: Python<'_>,
         location: &Bound<'_, PyAny>,
@@ -114,11 +115,12 @@ impl DeltaTable {
             None => DeltaStorageOptions::new(),
         };
         let warmup = match warmup {
+            "automatic" => WarmupMode::Automatic,
             "none" => WarmupMode::None,
             "query_planning" => WarmupMode::QueryPlanning,
             _ => {
                 return Err(PyValueError::new_err(
-                    "warmup must be 'none' or 'query_planning'",
+                    "warmup must be 'automatic', 'none' or 'query_planning'",
                 ));
             }
         };

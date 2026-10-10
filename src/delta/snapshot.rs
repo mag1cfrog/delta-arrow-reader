@@ -1352,21 +1352,23 @@ mod tests {
     fn snapshot_failures_are_redacted_and_preserve_the_kernel_source()
     -> Result<(), Box<dyn std::error::Error>> {
         let table = DeltaLogTable::new("missing-version")?;
-        let result = load_delta_table_snapshot_blocking(
-            &table.0.to_string_lossy(),
-            &DeltaStorageOptions::new(),
-            DeltaSnapshotSelection::Version(2),
-        );
-        let error = match result {
-            Ok(_) => panic!("missing version should fail"),
-            Err(error) => error,
-        };
+        for version in [2, 1_000_000_000_000, u64::MAX - 1, u64::MAX] {
+            let result = load_delta_table_snapshot_blocking(
+                &table.0.to_string_lossy(),
+                &DeltaStorageOptions::new(),
+                DeltaSnapshotSelection::Version(version),
+            );
+            let error = match result {
+                Ok(_) => panic!("missing version should fail"),
+                Err(error) => error,
+            };
 
-        assert!(matches!(error, DeltaReaderError::SnapshotLoad { .. }));
-        assert_eq!(error.phase(), DeltaReaderPhase::Snapshot);
-        assert_eq!(error.code(), "snapshot_load");
-        assert!(!error.to_string().contains(&table.0.to_string_lossy()[..]));
-        assert!(is_kernel_error(error.source().expect("Kernel source")));
+            assert!(matches!(error, DeltaReaderError::SnapshotLoad { .. }));
+            assert_eq!(error.phase(), DeltaReaderPhase::Snapshot);
+            assert_eq!(error.code(), "snapshot_load");
+            assert!(!error.to_string().contains(&table.0.to_string_lossy()[..]));
+            assert!(is_kernel_error(error.source().expect("Kernel source")));
+        }
         Ok(())
     }
 

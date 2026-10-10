@@ -104,7 +104,13 @@ pub(crate) async fn warmup_network(
             .map(|path| (path, size))
     })
     .collect();
-    let estimator = Arc::new(ParquetRangeReadEstimator::for_network_warmup());
+    if files.is_empty() {
+        return None;
+    }
+    let estimator = Arc::new(
+        ParquetRangeReadEstimator::for_network_warmup()
+            .with_partial_range_store(context.partial_read_store()?),
+    );
     let metrics = DeltaScanMetrics::new(DeltaScanMetricsConfig {
         snapshot_version: snapshot.version(),
         parquet_backend: ParquetReaderBackend::Direct,
@@ -117,7 +123,11 @@ pub(crate) async fn warmup_network(
     let store = MeteredParquetObjectStore::new(context.object_store(), metrics.clone(), strategy)
         .with_range_read_estimator(Arc::clone(&estimator));
     let started = Instant::now();
-    let outcome = tokio::time::timeout(max_duration, store.warmup(&files)).await;
+    let outcome = tokio::time::timeout(
+        max_duration,
+        store.warmup(&files, &range_planning::RANGE_READ_PERMITS),
+    )
+    .await;
     let status = match outcome {
         Ok(Ok(true)) => "complete",
         Ok(Ok(false)) => "insufficient_samples",
@@ -287,8 +297,10 @@ impl DirectParquetReader {
             && !object.buffered
             && options.row_filter.is_some()
             && self.execution_options.parquet_range_read_policy()
-                == crate::reader::ParquetRangeReadPolicy::Automatic)
-            .then(|| Arc::new(Mutex::new(SelectedRows::default())));
+                == crate::reader::ParquetRangeReadPolicy::Automatic
+            // Without request-cost evidence, tracking row positions cannot enable partial reads.
+            && self.store.request_overhead_bytes().is_some())
+        .then(|| Arc::new(Mutex::new(SelectedRows::default())));
         let (builder, metadata) = self
             .create_stream_builder(
                 &object,
