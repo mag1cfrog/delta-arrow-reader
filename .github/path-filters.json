@@ -3,6 +3,7 @@
     ".cargo/**",
     ".github/path-filters.json",
     ".github/workflows/ci.yml",
+    ".github/workflows/pypi-build.yml",
     "Cargo.toml",
     "Cargo.lock",
     "pyproject.toml",
