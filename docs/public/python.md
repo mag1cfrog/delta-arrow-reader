@@ -50,6 +50,85 @@ snapshot, even if refresh fails. If no new commits exist, the returned table has
 the same version. To select a specific version, use
 `DeltaTable(location, version=0)`.
 
+## Filter rows
+
+Both `scan()` and `to_reader()` accept `filters`. Use `==`, `!=`, `<`, `<=`, `>`,
+or `>=` to compare Boolean, signed integer, floating-point, string, binary,
+decimal, date, and timestamp columns. Use `"is"` with `None` to select null
+values, or `"is not"` with `None` to select non-null values:
+
+```python
+with table.to_reader(
+    columns=["id"], filters=[("id", ">=", 100), ("region", "==", "east")], limit=10,
+) as reader:
+    print(reader.read_all().to_pydict())
+```
+
+A list of `(column, operator, value)` tuples combines conditions with AND.
+A list of lists combines AND groups with OR. For example,
+`[[("label", "is", None)], [("region", "is", None)]]` selects rows where either
+column is null. Omitting `filters`, passing `None`, or passing `[]` disables
+filtering. An empty inner AND group is true, so `[[]]` selects every row.
+
+Filters use top-level logical column names, including columns omitted from the
+output. They apply before `limit`, and deleted rows remain excluded. Malformed
+groups and non-string column names or operators raise `TypeError`. Unknown
+operators, comparisons with `None`, and null tests with a value other than
+`None` raise `ValueError`. Invalid column references raise a redacted
+`DeltaReaderError`.
+
+Comparison values must match the column type: `bool` for Boolean columns,
+and `int` for signed 8-, 16-, 32-, or 64-bit integer columns. Booleans are not
+accepted as integers. Wrong or unsupported value types raise `TypeError`;
+integers outside the column's range raise `OverflowError`.
+
+Float32 and Float64 columns require Python `float` values. Integers, booleans,
+and other types raise `TypeError`. NaN, infinity, and values that become infinite
+when converted to Float32 raise `ValueError`. Float32 rounds to 32-bit precision,
+including underflow to signed zero. Comparisons use native Arrow ordering, which
+distinguishes `-0.0` from `0.0` and orders `-0.0` first.
+
+Utf8 and LargeUtf8 columns require `str`; Binary, LargeBinary, and FixedSizeBinary
+columns require `bytes`. Empty values and embedded NULs are supported. Strings
+that cannot be encoded as UTF-8 and fixed-size binary values with the wrong
+length raise `ValueError`. Other types, including `bytearray` and `memoryview`,
+raise `TypeError`. Values are copied before scan planning.
+
+Decimal128 columns require finite `decimal.Decimal` values. Conversion is exact
+and independent of the decimal context; it does not round. For a `decimal(5,2)`
+column, `Decimal("1.2300")` is accepted as `1.23`, while `Decimal("1.234")` and
+`Decimal("1000")` raise `ValueError` for scale and precision violations. NaN and
+infinity also raise `ValueError`. An unscaled integer outside the signed 128-bit
+range raises `OverflowError`. Integers, floats, strings, and other value types
+raise `TypeError`.
+
+Date32 columns require `datetime.date` values. Dates are converted to signed
+days since `1970-01-01`, including dates before that day. `datetime.datetime`
+values, with or without a timezone, and other types raise `TypeError`. For
+example, use `date(1969, 12, 31)` after `from datetime import date`.
+
+Timestamp columns without a timezone (`timestamp_ntz`) require naive
+`datetime.datetime` values, for which `utcoffset()` is `None`. Values are
+converted to exact signed microseconds since `1970-01-01 00:00:00`, without
+using the process timezone or floating-point arithmetic. Aware values and
+invalid offsets raise `ValueError`; other value types raise `TypeError`.
+
+Timestamp columns with a timezone (`timestamp`) require aware
+`datetime.datetime` values. Conversion uses the value's UTC offset, including
+`fold` for repeated local times, and preserves exact microseconds. Different
+offsets can represent the same instant. The filter keeps the column's timezone
+metadata. Naive values and invalid offsets raise `ValueError`; other value
+types raise `TypeError`. For example, use
+`datetime(2024, 1, 1, tzinfo=timezone.utc)` after
+`from datetime import datetime, timezone`.
+
+Timestamp values must be instances of the standard library's `datetime.datetime`
+class itself. Subclass instances, including `pandas.Timestamp` values and
+`pandas.NaT`, raise `TypeError` because they can carry extra precision or special
+values. Custom timezones are supported: `utcoffset()` is called once and must
+return a standard `datetime.timedelta` instance or `None`. Offset subclasses
+raise `ValueError`.
+
 ## Prepare a table for repeated scans
 
 The default, `warmup="automatic"`, prepares supported S3 tables and profiles

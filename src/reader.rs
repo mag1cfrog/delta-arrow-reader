@@ -31,7 +31,10 @@ use std::{
     time::Duration,
 };
 
-use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};
+use arrow::{
+    datatypes::{DataType, SchemaRef},
+    record_batch::RecordBatch,
+};
 use futures_util::Stream;
 use snafu::ResultExt;
 
@@ -40,7 +43,7 @@ use self::{
     planning::{
         DeltaScanPartitionTargetOptions, DeltaScanPlan, build_physical_row_predicate, plan_scan,
     },
-    predicate::{evaluate_predicate, referenced_columns, validate_predicate},
+    predicate::{column_data_type, evaluate_predicate, referenced_columns, validate_predicate},
     scheduling::{
         DeltaScanScheduler, FileAdmissionDecision, FileAdmissionPolicy, FileBatchStream,
         FileExecutor, OrderedPartitionStream,
@@ -385,6 +388,18 @@ impl DeltaTable {
     /// Returns a shared handle to the logical Arrow schema.
     pub fn schema(&self) -> SchemaRef {
         self.snapshot.schema()
+    }
+
+    /// Returns a predicate column's logical Arrow type from the loaded schema.
+    ///
+    /// The column must be an unqualified, top-level logical name. This lookup
+    /// uses the same column validation as scan predicates and performs no I/O.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for empty, dotted, missing, or ambiguous column names.
+    pub fn predicate_column_type(&self, column: &str) -> Result<DataType, DeltaReaderError> {
+        column_data_type(self.schema().as_ref(), column).cloned()
     }
 
     /// Returns the loaded Delta protocol metadata.
