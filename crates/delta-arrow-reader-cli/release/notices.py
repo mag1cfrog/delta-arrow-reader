@@ -135,11 +135,11 @@ def render_notices(report, rust_docs, extra_notices):
     return "".join(sections)
 
 
-def generate_notices(architecture):
+def generate_notices(architecture, *, rust_toolchain=None):
     manifest = tomllib.loads((REPOSITORY / "Cargo.toml").read_text())
-    rust_version = manifest["package"]["rust-version"]
-    environment = build_environment(architecture, rust_version)
-    command = ["rustup", "run", rust_version]
+    rust_toolchain = rust_toolchain or manifest["package"]["rust-version"]
+    environment = build_environment(architecture, rust_toolchain)
+    command = ["rustup", "run", rust_toolchain]
     version = subprocess.check_output(
         [*command, "cargo", "about", "--version"], text=True, env=environment
     ).strip()

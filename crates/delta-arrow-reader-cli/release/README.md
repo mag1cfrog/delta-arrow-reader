@@ -1,7 +1,59 @@
 # CLI release tools
 
-The scripts in this directory build, inspect, and package CLI binaries for issue
-#433. They require Python 3.11 or newer and use only the standard library.
+These tools build and validate the Linux CLI archives. The build and packaging
+helpers require Python 3.11 or newer and use the standard library. Runtime
+acceptance tests also use PyArrow.
+
+## Run the CI build
+
+`.github/workflows/cli-build.yml` runs on native amd64 and arm64 runners. Both
+platforms build and execute the archive's binary in the pinned Debian 12 image.
+The workflow has read-only repository permissions and uploads Actions artifacts.
+It does not publish releases or container images.
+
+Call it from another workflow in this repository:
+
+```yaml
+jobs:
+  cli:
+    uses: ./.github/workflows/cli-build.yml
+    with:
+      source-ref: ${{ github.sha }}
+```
+
+`source-ref` must be a full lowercase commit SHA. The checkout must match it
+exactly and contain these tools. The optional `expected-version` input requires
+an exact workspace version, without `v`. A missing commit, a version mismatch,
+or an unsupported historical checkout fails the build; there is no fallback to
+`main`. The prepare job resolves the workspace's Rust version once, then both
+platform jobs install and use that exact patch release.
+
+For a manual run, select **Build CLI binaries** in Actions and supply the same
+inputs. The successful job summary links the complete artifact set. PR CI calls
+this workflow too. The required `CI` job checks its result and `validated` output;
+a failed, skipped, or cancelled architecture cannot pass.
+
+The reusable workflow returns:
+
+| Output | Meaning |
+| --- | --- |
+| `validated` | `true` only after both platforms pass and the complete set is uploaded |
+| `source-commit`, `version`, `rust-toolchain` | Resolved source SHA, workspace version, and exact Rust release |
+| `artifact-id`, `artifact-name`, `artifact-url` | The complete set's immutable Actions ID, run-specific name, and download page |
+
+Consumers must depend on the successful job and require `validated == 'true'`.
+Within the same workflow run, download that exact artifact with
+[`actions/download-artifact@v6`](https://github.com/actions/download-artifact/tree/v6),
+using either `artifact-ids` or `name` from the outputs. Downloads across runs also
+require `run-id` and `github-token`. Check out the returned source commit and run
+`artifacts.py verify` with the expected version, source SHA, and Rust release
+from the workflow outputs. Intermediate artifacts ending in `-amd64` or `-arm64`
+are inputs to assembly, not complete sets for downstream consumers.
+
+Actions retention settings apply. Missing, expired, incomplete, or mismatched
+artifacts must stop downstream work. Rerun this builder for the explicit source
+commit to obtain a new validated set and reference. Container and release jobs
+must consume its existing archive bytes without rebuilding or repacking them.
 
 ## Build on Debian 12
 
@@ -81,13 +133,58 @@ the observed ELF metadata as JSON. A successful version check still requires
 the scan, process lifecycle, and HTTPS acceptance tests before release.
 
 The existing CLI test harnesses accept an executable path. With the test
-prerequisites installed (`build-essential`, Python, and the PyArrow version used
-by CLI CI), run them against that same binary:
+prerequisites installed (`build-essential`, OpenSSL, Python, and the PyArrow
+version used by CLI CI), run them against that same binary:
 
 ```sh
 python3 crates/delta-arrow-reader-cli/tests/process.py /path/to/dar "$version"
 python3 crates/delta-arrow-reader-cli/tests/scan.py /path/to/dar
 ```
+
+## Build and test a complete platform archive locally
+
+After installing the build prerequisites and cargo-about described here, run
+`build_archive.py` from the clean source checkout inside the pinned build
+container. This compiles the CLI, checks its identity and ELF metadata, collects
+notices, and packages the validated binary:
+
+```sh
+rustup toolchain install "$rust_toolchain" --profile minimal
+python3 crates/delta-arrow-reader-cli/release/build_archive.py \
+  --source-commit "$source_commit" --architecture amd64 \
+  --expected-version "$version" --expected-rust-toolchain "$rust_toolchain" \
+  --target-dir target/cli-build --output target/cli-inputs/amd64
+```
+
+Set these variables to the full source SHA, workspace version, and installed
+exact Rust release, such as `1.94.1`. Use the same values for both architectures.
+The output directory must not exist. Before execution, extract the validated
+platform archive to a new directory outside the checkout:
+
+```sh
+python3 crates/delta-arrow-reader-cli/release/artifacts.py extract target/cli-inputs/amd64 \
+  --destination /tmp/dar-amd64-check --architecture amd64 \
+  --version "$version" --source-commit "$source_commit" --rust-toolchain "$rust_toolchain"
+```
+
+Start a fresh pinned Debian container on the matching architecture. Use read-only
+mounts for the source checkout at `/checks`, `target/cli-inputs/amd64` at
+`/artifacts`, and `/tmp/dar-amd64-check` at `/package`. Pass `CLI_ARCHITECTURE=amd64`,
+`CLI_SOURCE_COMMIT`, `CLI_VERSION`, and `CLI_RUST_TOOLCHAIN` with those values,
+plus `PYTHONDONTWRITEBYTECODE=1`, and run:
+
+```sh
+bash /checks/crates/delta-arrow-reader-cli/release/validate-runtime.sh
+```
+
+The script records runtime package versions and checks version, inspection, and
+scan output before adding test tools. It then installs the test prerequisites,
+verifies the extracted executable's hash and ABI, and runs `process.py` and
+`scan.py`. Those tests cover external-writer fixtures, filtering and execution
+options, pipes, partial failures, signals, redaction, and trusted/untrusted HTTPS
+certificates. The archive and executable hashes are checked again afterward.
+CI uses these same commands for both architectures; see the workflow for the
+complete container invocations.
 
 ## Generate dependency notices
 

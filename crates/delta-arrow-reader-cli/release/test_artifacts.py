@@ -124,6 +124,25 @@ class ArtifactTests(unittest.TestCase):
                 path.read_bytes(), (self.inputs / "amd64" / path.name).read_bytes()
             )
 
+    def test_extract_checks_identity_preserves_bytes_and_never_overwrites(self):
+        for architecture in artifacts.RUST_TARGETS:
+            destination = self.root / f"extracted-{architecture}"
+            source = self.inputs / architecture
+            wrong_identity = dict(self.identity, source_commit="b" * 40)
+            with self.assertRaises(ValueError):
+                artifacts.extract(source, destination, wrong_identity, architecture)
+            self.assertFalse(destination.exists())
+            artifacts.extract(source, destination, self.identity, architecture)
+            artifacts.check_files(destination, artifacts.MEMBER_MODES)
+            self.assertEqual(
+                (destination / "dar").read_bytes(),
+                (self.root / f"dar-{architecture}").read_bytes(),
+            )
+            for name, mode in artifacts.MEMBER_MODES.items():
+                self.assertEqual((destination / name).stat().st_mode & 0o7777, mode)
+            with self.assertRaises(FileExistsError):
+                artifacts.extract(source, destination, self.identity, architecture)
+
     def test_outputs_are_never_overwritten(self):
         self.assemble()
         existing = (self.output / artifacts.MANIFEST).read_bytes()

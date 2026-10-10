@@ -21,7 +21,7 @@ BASELINE_FLAGS = {
 }
 
 
-def build_environment(architecture, declared_rust_version):
+def build_environment(architecture, rust_toolchain):
     # Caller flags and compiler overrides must not raise the CPU baseline.
     keep = {
         "PATH",
@@ -39,7 +39,7 @@ def build_environment(architecture, declared_rust_version):
     cpu, cflags = BASELINE_FLAGS[architecture]
     environment.update(
         LC_ALL="C",
-        RUSTUP_TOOLCHAIN=declared_rust_version,
+        RUSTUP_TOOLCHAIN=rust_toolchain,
         RUSTFLAGS=f"-Ctarget-cpu={cpu}",
         CFLAGS=cflags,
         CXXFLAGS=cflags,
@@ -60,15 +60,16 @@ def check_source(source_commit):
         raise ValueError("the source checkout must have no modified or untracked files")
 
 
-def build(source_commit, architecture, target_dir):
+def build(source_commit, architecture, target_dir, *, rust_toolchain=None):
     check_environment(architecture)
     check_source(source_commit)
     manifest = tomllib.loads(Path("Cargo.toml").read_text())
     version = manifest["workspace"]["package"]["version"]
     declared_rust_version = manifest["package"]["rust-version"]
-    environment = build_environment(architecture, declared_rust_version)
+    rust_toolchain = rust_toolchain or declared_rust_version
+    environment = build_environment(architecture, rust_toolchain)
     compiler_output = subprocess.check_output(
-        ["rustup", "run", declared_rust_version, "rustc", "--version", "--verbose"],
+        ["rustup", "run", rust_toolchain, "rustc", "--version", "--verbose"],
         text=True,
         env=environment,
     )
@@ -95,7 +96,7 @@ def build(source_commit, architecture, target_dir):
         [
             "rustup",
             "run",
-            declared_rust_version,
+            rust_toolchain,
             "cargo",
             "build",
             "--release",

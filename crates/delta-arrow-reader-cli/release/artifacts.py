@@ -224,6 +224,23 @@ def package(
     write_manifest(directory, identity, [target])
 
 
+def extract(directory, destination, identity, architecture):
+    check_files(directory, [archive_name(identity["version"], architecture), MANIFEST])
+    [target] = check_manifest(directory, identity, [architecture])
+    destination.mkdir(parents=True, exist_ok=False)
+    with tarfile.open(directory / target["archive"], "r:gz") as archive:
+        for name, mode in MEMBER_MODES.items():
+            path = destination / name
+            with archive.extractfile(name) as source, path.open("xb") as output:
+                shutil.copyfileobj(source, output)
+            path.chmod(mode)
+    if (
+        file_sha256(destination / "dar") != target["dar_sha256"]
+        or file_sha256(directory / target["archive"]) != target["archive_sha256"]
+    ):
+        raise ValueError("archive or binary changed during extraction")
+
+
 def checksum_text(directory, identity):
     names = [archive_name(identity["version"], arch) for arch in RUST_TARGETS]
     return "".join(
@@ -274,6 +291,7 @@ def main():
             "package",
             "Package one already validated binary and its declared build metadata",
         ),
+        ("extract", "Validate and extract one platform artifact into a new directory"),
         ("assemble", "Combine both platform artifacts without repacking the archives"),
         ("verify", "Check the complete artifact format, declared identity, and hashes"),
     ):
@@ -293,6 +311,11 @@ def main():
             )
         elif command == "assemble":
             subparser.add_argument("--inputs", type=Path, required=True)
+        elif command == "extract":
+            subparser.add_argument(
+                "--architecture", choices=RUST_TARGETS, required=True
+            )
+            subparser.add_argument("--destination", type=Path, required=True)
     args = parser.parse_args()
     try:
         identity = build_identity(args.version, args.source_commit, args.rust_toolchain)
@@ -307,6 +330,8 @@ def main():
             )
         elif args.command == "assemble":
             assemble(args.inputs, args.directory, identity)
+        elif args.command == "extract":
+            extract(args.directory, args.destination, identity, args.architecture)
         else:
             verify(args.directory, identity)
     except (OSError, ValueError, tarfile.TarError, EOFError, zlib.error) as error:

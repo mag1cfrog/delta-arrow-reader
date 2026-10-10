@@ -7,9 +7,65 @@ from pathlib import Path
 from unittest import mock
 
 import build
+import build_archive
+from artifacts import RUST_TARGETS, build_identity, file_sha256
 
 
 class BuildTests(unittest.TestCase):
+    def test_archive_rejects_unexpected_build_identity_before_packaging(self):
+        identity = build_identity("1.2.3", "a" * 40, "1.94.1")
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "artifacts"
+            for field, value in (
+                ("version", "1.2.4"),
+                ("source_commit", "b" * 40),
+                ("rust_toolchain", "1.94.2"),
+            ):
+                with (
+                    self.subTest(field=field),
+                    mock.patch(
+                        "build_archive.build",
+                        return_value=dict(identity, **{field: value}),
+                    ),
+                    mock.patch("build_archive.generate_notices") as notices,
+                    self.assertRaisesRegex(ValueError, "differs"),
+                ):
+                    build_archive.build_archive(
+                        identity, "amd64", Path(temporary), output
+                    )
+                notices.assert_not_called()
+                self.assertFalse(output.exists())
+
+    def test_archive_rejects_binary_replacement_after_build_validation(self):
+        identity = build_identity("1.2.3", "a" * 40, "1.94.1")
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary)
+            binary = target / RUST_TARGETS["amd64"] / "release/dar"
+            binary.parent.mkdir(parents=True)
+            binary.write_bytes(b"validated binary")
+            metadata = dict(
+                identity,
+                dar_sha256=file_sha256(binary),
+                runtime_dependencies=["libc.so.6"],
+            )
+
+            def replace_binary(_architecture, *, rust_toolchain):
+                self.assertEqual(rust_toolchain, identity["rust_toolchain"])
+                binary.write_bytes(b"replacement binary")
+                return "Dependency license and copyright.\n"
+
+            with (
+                mock.patch("build_archive.build", return_value=metadata),
+                mock.patch("build_archive.check_source"),
+                mock.patch(
+                    "build_archive.generate_notices", side_effect=replace_binary
+                ),
+                self.assertRaisesRegex(ValueError, "differs from the validated build"),
+            ):
+                build_archive.build_archive(
+                    identity, "amd64", target, target / "artifacts"
+                )
+
     def test_build_flags_cannot_inherit_host_cpu_or_compiler_overrides(self):
         overrides = {
             "PATH": "/bin",
