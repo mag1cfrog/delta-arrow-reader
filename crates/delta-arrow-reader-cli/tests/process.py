@@ -127,7 +127,7 @@ class ProcessTests(unittest.TestCase):
                     self.assertIn(b"--storage-options-file", result.stdout)
                 if "scan" in args:
                     for flag in [b"--column", b"--no-columns", b"--limit", b"--predicate-file",
-                                 b"--execution-options-file"]:
+                                 b"--execution-options-file", b"--target-partitions"]:
                         self.assertIn(flag, result.stdout)
         for flag in ["--version", "-V"]:
             result = self.invoke(flag)
@@ -162,6 +162,7 @@ class ProcessTests(unittest.TestCase):
                      ("inspect", "--storage-options-file"),
                      ("inspect", "--predicate-file", "secret-missing", table),
                      ("inspect", "--execution-options-file", "secret-missing", table),
+                     ("inspect", "--target-partitions", "1", table),
                      ("inspect", "--table-version", "0", "--table-version", "1", table),
                      ("inspect", "--storage-options-file", "secret-missing", "--storage-options-file", "secret-missing", table),
                      ("inspect", b"secret-\xff"), ("inspect", "--", table, "extra")]
@@ -189,6 +190,8 @@ class ProcessTests(unittest.TestCase):
         with http.serve(functools.partial(RecordingStorageHandler, directory=self.cwd)) as server:
             table = f"http://127.0.0.1:{server.server_port}/secret-table"
             cases = [(), (table, "secret-extra"), ("--column",), ("--limit",),
+                     ("--target-partitions",), ("--target-partitions", b"secret-\xff", table),
+                     ("--target-partitions", "1", "--target-partitions", "2", table),
                      ("--predicate-file",), ("--predicate-file", b"secret-\xff", table),
                      ("--predicate-file", "secret-missing", "--predicate-file", "secret-missing", table),
                      ("--no-columns", "--column", "secret", table),
@@ -201,6 +204,9 @@ class ProcessTests(unittest.TestCase):
             for limit in ["", "-1", "+1", " 1", "1 ", "1\n", "1.0", "1e2", "0x1",
                           "18446744073709551616", "secret", "\u0661"]:
                 cases.append(("--limit", limit, table))
+                cases.append(("--target-partitions", limit, table))
+            for target in ["0", "000", "-0", "+0"]:
+                cases.append(("--target-partitions", target, table))
             for args in cases:
                 with self.subTest(args=args):
                     self.assert_error(self.invoke("scan", *args), 2, "configuration", "invalid_cli_argument")

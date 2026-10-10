@@ -82,7 +82,7 @@ before table loading, including for `--limit 0`.
 ```text
 dar scan [--table-version N] [--storage-options-file PATH]
          [--predicate-file PATH] [--column NAME ... | --no-columns]
-         [--execution-options-file PATH] [--limit N] [--] TABLE
+         [--execution-options-file PATH] [--target-partitions N] [--limit N] [--] TABLE
 ```
 
 Table paths, snapshot selection, and storage options follow the inspection
@@ -221,6 +221,18 @@ and leave stdout empty.
 
 ## Execution options
 
+`--target-partitions N` sets the execution partition target for one scan. It
+may appear once and accepts positive unsigned decimal digits fitting the
+executable's `usize` range. Zero, signs, whitespace, fractions, exponents, and
+overflow are rejected before table loading with status 2 and
+`configuration/invalid_cli_argument`. Leading zeros are accepted.
+
+Omit the flag to keep the core's
+[automatic partition selection](scan-planning.md#choose-a-partition-target).
+The built scan may have fewer partitions than requested, for example when
+there are fewer files. This flag does not change the table's partition columns.
+`inspect` rejects it.
+
 `dar scan --execution-options-file PATH` reads execution settings from a local
 UTF-8 JSON object. The option may appear once and is accepted only by `scan`.
 Omitting the file or supplying `{}` uses the native reader's defaults. Each
@@ -238,7 +250,8 @@ cat > execution.json <<'JSON'
   "parquet_full_file_read_threshold_bytes": 1048576
 }
 JSON
-dar scan --execution-options-file execution.json --limit 100 /data/orders > sample.arrow
+dar scan --target-partitions 2 --execution-options-file execution.json \
+  --limit 100 /data/orders > sample.arrow
 ```
 
 Only these fields are accepted. Omitted fields retain their current native
