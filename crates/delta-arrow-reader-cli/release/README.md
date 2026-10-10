@@ -1,12 +1,93 @@
-# CLI artifact tools
+# CLI release tools
 
-`artifacts.py` packages CLI binaries and checks the artifact format for issue
-#433. It requires Python 3.11 or newer and uses only the standard library.
+The scripts in this directory build, inspect, and package CLI binaries for issue
+#433. They require Python 3.11 or newer and use only the standard library.
 
-This layer checks file contents, declared build information, and hashes. It does
-not build or execute `dar`, inspect ELF dependencies, or establish Debian 12
-compatibility. The native build steps must supply and validate those inputs
-before an artifact set can be released.
+## Build on Debian 12
+
+`build.py` builds one architecture from an explicit, clean source commit. Use the
+Debian 12 image pinned by digest in `build.py`, on the matching architecture. The
+script checks the OS, glibc version, and Rust compiler host before compiling. It
+reads the workspace version and Rust toolchain from `Cargo.toml`, uses the locked
+release build, and supplies baseline CPU flags for Rust and C/C++ dependencies.
+Compiler flags and wrapper environment variables supplied by the caller are
+excluded from the build environment.
+
+For a local amd64 build, use a normal Git clone with the requested commit checked
+out and no modified or untracked files. A Git worktree also needs its shared Git
+directory mounted inside the container. This example uses rootless Podman:
+
+```sh
+cli_source_commit=FULL_SOURCE_COMMIT
+cli_image=$(python3 -c 'import sys; sys.path.insert(0, "crates/delta-arrow-reader-cli/release"); from build import DEBIAN_IMAGE; print(DEBIAN_IMAGE)')
+podman run --rm -it --platform linux/amd64 \
+  --volume "$PWD:/source:z" --workdir /source \
+  --env CLI_SOURCE_COMMIT="$cli_source_commit" "$cli_image" bash
+```
+
+Inside the container, install the build prerequisites and the workspace's Rust
+toolchain using [rustup](https://rust-lang.github.io/rustup/installation/index.html):
+
+```sh
+set -eu
+apt-get update
+apt-get install -y --no-install-recommends \
+  build-essential binutils ca-certificates curl git pkg-config python3
+cli_rust_toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["rust-version"])')
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh
+sh /tmp/rustup-init.sh -y --profile minimal --default-toolchain "$cli_rust_toolchain"
+. "$HOME/.cargo/env"
+python3 crates/delta-arrow-reader-cli/release/build.py \
+  --source-commit "$CLI_SOURCE_COMMIT" --architecture amd64
+```
+
+For arm64, use `--platform linux/arm64` and `--architecture arm64`, with a native
+ARM64 runner or configured emulation. Cross-compilation alone does not satisfy
+the execution check.
+
+The executable is `target/cli-build/<rust-target>/release/dar`. The adjacent
+`target/cli-build/<rust-target>/build-info.json` records the source commit, exact
+Rust release, binary hash, ELF interpreter, required shared libraries, highest
+GLIBC symbol version, and required runtime packages. `--target-dir` selects a
+different Cargo build directory; keep it outside the checkout or under an
+ignored path. Keep compiler caches out of uploaded artifacts.
+
+The ELF check rejects an unexpected architecture or loader, RPATH/RUNPATH,
+unsupported dynamic libraries, GLIBC requirements above 2.36, and x86 ISA notes
+that require more than the baseline CPU. It then runs `dar --version` and checks
+the binary hash before and after execution.
+
+## Check the runtime independently
+
+Use a fresh container from the same pinned image, with only `dar`, test inputs,
+and the runtime packages `ca-certificates`, `libc6`, and `libgcc-s1`. Run version,
+inspection, and scan checks there before installing test instrumentation. The
+binary is dynamically linked to glibc and libgcc; this does not support Alpine
+or a `scratch` image.
+
+For an explicit ELF and version check, install `binutils` and `python3` in the
+test container and mount the source checkout read-only at `/checks`. Keep `dar`
+outside that checkout and pass the version and hash from the earlier validated
+build:
+
+```sh
+python3 /checks/crates/delta-arrow-reader-cli/release/check_binary.py /path/to/dar \
+  --architecture amd64 \
+  --expected-version "$version" --expected-sha256 "$dar_sha256"
+```
+
+This command requires Debian 12 and the matching CPU architecture. It reports
+the observed ELF metadata as JSON. A successful version check still requires
+the scan, process lifecycle, and HTTPS acceptance tests before release.
+
+The existing CLI test harnesses accept an executable path. With the test
+prerequisites installed (`build-essential`, Python, and the PyArrow version used
+by CLI CI), run them against that same binary:
+
+```sh
+python3 crates/delta-arrow-reader-cli/tests/process.py /path/to/dar "$version"
+python3 crates/delta-arrow-reader-cli/tests/scan.py /path/to/dar
+```
 
 ## Package one architecture
 
@@ -68,12 +149,13 @@ from the requested build, rather than reading it from the downloaded manifest.
 Keep the complete set unchanged when passing it to downstream jobs. A failed
 command may leave an incomplete destination; use a new directory for the retry.
 
-## Test the packaging layer
+## Test the build and packaging helpers
 
 ```sh
 python3 -m unittest discover -s crates/delta-arrow-reader-cli/release -v
 ```
 
-The tests use synthetic binary bytes and exercise packaging and rejection paths.
-They also check `SHA256SUMS` with the system `sha256sum` command. They do not test
-the executables' runtime behavior.
+The unit tests require Git, a C compiler, `objcopy`, `readelf`, and `sha256sum`.
+They use synthetic archive payloads and a small compiled ELF fixture to exercise
+packaging, source checks, ABI validation, and rejection paths. They do not build
+the Rust CLI or replace its runtime acceptance tests.

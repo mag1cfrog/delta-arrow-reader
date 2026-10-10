@@ -19,6 +19,7 @@ RUST_TARGETS = {
 }
 MEMBER_MODES = {"dar": 0o755, "LICENSE": 0o644, "NOTICE": 0o644}
 MANIFEST = "cli-artifacts.json"
+MIN_GLIBC = "2.36"
 
 
 def build_identity(version, source_commit, rust_toolchain):
@@ -154,7 +155,7 @@ def describe_archive(directory, identity, architecture, dependencies):
         "architecture": architecture,
         "rust_target": RUST_TARGETS[architecture],
         "libc": "glibc",
-        "min_glibc": "2.36",
+        "min_glibc": MIN_GLIBC,
         "runtime_dependencies": dependencies,
         "archive": filename,
         "archive_sha256": file_sha256(path),
