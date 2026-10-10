@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+## [0.7.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.2...v0.7.0) - 2026-10-10
+
+### Added
+
+- *(cli)* expose scan execution and resource controls ([#456](https://github.com/mag1cfrog/delta-arrow-reader/pull/456))
+- *(cli)* add typed JSON predicates to scans ([#454](https://github.com/mag1cfrog/delta-arrow-reader/pull/454))
+- *(python)* add native filters with schema-aware scalar conversion ([#448](https://github.com/mag1cfrog/delta-arrow-reader/pull/448))
+- *(cli)* stream projected Delta scans through Arrow IPC ([#447](https://github.com/mag1cfrog/delta-arrow-reader/pull/447))
+- enable automatic partial-page reads by default ([#444](https://github.com/mag1cfrog/delta-arrow-reader/pull/444))
+- *(cli)* add dar snapshot inspection ([#437](https://github.com/mag1cfrog/delta-arrow-reader/pull/437))
+- add Python snapshot refresh and scan controls ([#439](https://github.com/mag1cfrog/delta-arrow-reader/pull/439))
+- profile remote reads during table initialization ([#438](https://github.com/mag1cfrog/delta-arrow-reader/pull/438))
+- stream Delta tables into PyArrow readers ([#424](https://github.com/mag1cfrog/delta-arrow-reader/pull/424))
+- make Python loading interruptible and runtime shutdown safe ([#427](https://github.com/mag1cfrog/delta-arrow-reader/pull/427))
+- add Python snapshot loading and schema inspection ([#426](https://github.com/mag1cfrog/delta-arrow-reader/pull/426))
+- add opt-in partial-page reads ([#425](https://github.com/mag1cfrog/delta-arrow-reader/pull/425))
+
+### Documentation
+
+- simplify README benchmark chart ([#446](https://github.com/mag1cfrog/delta-arrow-reader/pull/446))
+- install the published crate in README ([#415](https://github.com/mag1cfrog/delta-arrow-reader/pull/415))
+
+### Fixed
+
+- bound S3 partial-read connection setup ([#442](https://github.com/mag1cfrog/delta-arrow-reader/pull/442))
+- require measured request cost for partial reads ([#443](https://github.com/mag1cfrog/delta-arrow-reader/pull/443))
+- calibrate partial-page reads with sustained requests ([#441](https://github.com/mag1cfrog/delta-arrow-reader/pull/441))
+
+### Performance
+
+- choose partial-page reads by transport cost ([#436](https://github.com/mag1cfrog/delta-arrow-reader/pull/436))
+
 ## [0.6.2](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.1...v0.6.2) - 2026-10-07
 
 ### Added
