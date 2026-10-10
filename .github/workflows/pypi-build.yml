@@ -17,14 +17,42 @@ permissions:
 
 jobs:
   build:
-    name: Linux x86_64
-    runs-on: ubuntu-latest
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            manylinux: '2_28'
+            interpreter: python3.10
+            platform-tag: manylinux_2_28_x86_64
+            wheel-dir: dist
+            venv-python: bin/python
+            test-args: ''
+            artifact: delta-arrow-reader-linux-x86_64-wheel
+          - name: Windows x86_64
+            os: windows-2022
+            target: x86_64-pc-windows-msvc
+            manylinux: 'off'
+            interpreter: python
+            platform-tag: win_amd64
+            wheel-dir: unrepaired-dist
+            venv-python: Scripts/python.exe
+            test-args: '-k installed'
+            artifact: delta-arrow-reader-windows-x86_64-wheel
     env:
       SOURCE_REF: ${{ inputs.source-ref }}
       EXPECTED_VERSION: ${{ inputs.expected-version }}
       CARGO_INCREMENTAL: "0"
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_GHA_RW_MODE: READ_ONLY
+      RUSTC_WRAPPER: ${{ matrix.os == 'windows-2022' && 'sccache' || '' }}
 
     steps:
       - uses: actions/checkout@v5
@@ -55,47 +83,60 @@ jobs:
       - name: Cache Cargo registry
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: ${{ runner.os == 'Windows' && 'core-ci-targets' || 'core-ci' }}
+          cache-targets: ${{ runner.os == 'Windows' }}
           save-if: false
       - name: Prepare Cargo cache mounts
+        if: runner.os == 'Linux'
         id: cargo-cache
         run: |
           cargo_cache="${CARGO_HOME:-$HOME/.cargo}"
           mkdir -p "$cargo_cache/registry" "$cargo_cache/git"
           echo "path=$cargo_cache" >> "$GITHUB_OUTPUT"
-      - name: Build and repair wheel
+      - name: Set up sccache
+        if: runner.os == 'Windows'
+        uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Build wheel
         uses: PyO3/maturin-action@v1
         with:
           command: build
           maturin-version: v1.14.1
           rust-toolchain: ${{ steps.versions.outputs.rust-version }}
-          target: x86_64-unknown-linux-gnu
-          manylinux: '2_28'
-          sccache: true
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          sccache: ${{ runner.os == 'Linux' }}
           docker-options: >-
             --volume "${{ steps.cargo-cache.outputs.path }}/registry:/root/.cargo/registry"
             --volume "${{ steps.cargo-cache.outputs.path }}/git:/root/.cargo/git"
           before-script-linux: dnf install -y openssl-devel
           args: >-
-            --locked --release --out dist --target-dir target
+            --locked --release --out ${{ matrix.wheel-dir }} --target-dir target
             --manifest-path crates/delta-arrow-reader-python/Cargo.toml
-            --compatibility pypi --auditwheel repair --interpreter python3.10
-      - name: Inspect wheel and native dependencies
+            --compatibility pypi --auditwheel repair --interpreter ${{ matrix.interpreter }}
+      - name: Inspect and repair Windows DLL dependencies
+        if: runner.os == 'Windows'
+        run: |
+          python -m pip install --only-binary=:all: delvewheel
+          python -m delvewheel show unrepaired-dist/*.whl
+          python -m delvewheel repair --wheel-dir dist unrepaired-dist/*.whl
+      - name: Inspect wheel metadata
         run: |
           git diff --exit-code -- Cargo.lock
           python crates/delta-arrow-reader-python/tests/check_wheel.py dist/*.whl \
-            --expected-version "$EXPECTED_VERSION" --platform-tag manylinux_2_28_x86_64
+            --expected-version "$EXPECTED_VERSION" --platform-tag '${{ matrix.platform-tag }}'
+      - name: Inspect Linux native dependencies
+        if: runner.os == 'Linux'
+        run: |
           python -m pip install --only-binary=:all: auditwheel
           auditwheel show dist/*.whl
       - name: Test installed wheel on Python 3.10 and PyArrow 18.0.0
         working-directory: ${{ runner.temp }}
         run: |
           python -m venv python310
-          python310/bin/python -m pip install --only-binary=:all: \
+          python310/${{ matrix.venv-python }} -m pip install --only-binary=:all: \
             "$GITHUB_WORKSPACE"/dist/*.whl 'pyarrow==18.0.0'
-          python310/bin/python -I -m unittest discover \
-            -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests"
+          python310/${{ matrix.venv-python }} -I -m unittest discover \
+            -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" ${{ matrix.test-args }}
       - uses: actions/setup-python@v6
         with:
           python-version: '3.14'
@@ -103,12 +144,13 @@ jobs:
         working-directory: ${{ runner.temp }}
         run: |
           python -m venv python314
-          python314/bin/python -m pip install --only-binary=:all: "$GITHUB_WORKSPACE"/dist/*.whl
-          python314/bin/python -I -m unittest discover \
-            -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests"
+          python314/${{ matrix.venv-python }} -m pip install --only-binary=:all: \
+            "$GITHUB_WORKSPACE"/dist/*.whl
+          python314/${{ matrix.venv-python }} -I -m unittest discover \
+            -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" ${{ matrix.test-args }}
       - name: Upload validated wheel
         uses: actions/upload-artifact@v6
         with:
-          name: delta-arrow-reader-linux-x86_64-wheel
+          name: ${{ matrix.artifact }}
           path: dist/*.whl
           if-no-files-found: error
