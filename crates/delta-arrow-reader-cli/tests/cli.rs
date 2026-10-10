@@ -1,3 +1,5 @@
+mod predicates;
+
 use std::{
     fs::{self, File},
     io::{self, Cursor, Read},
