@@ -107,6 +107,26 @@ for `KeyboardInterrupt` during loading or planning, a terminal PyArrow exception
 during a batch read, and clean process exit. The HTTP handlers also verify that
 another Python thread can run during these waits.
 
+## Build Python wheels in CI
+
+Pull request CI calls `.github/workflows/pypi-build.yml` for changes covered by
+the code filter. The reusable workflow currently builds the Linux x86_64 wheel
+in a manylinux_2_28 container. Callers supply two required inputs:
+
+- `source-ref`: the full commit SHA to check out and build.
+- `expected-version`: the exact workspace package version, without a tag prefix.
+
+The build fails if the checked-out commit or package version differs from these
+inputs. It uses the repository's Rust version and lockfile, repairs the wheel
+with Maturin, and checks its metadata and native dependencies. The same wheel
+runs the full Python suite outside the checkout on Python 3.10 with PyArrow
+18.0.0 and Python 3.14 with the current compatible PyArrow release.
+
+After both suites pass, the job uploads `delta-arrow-reader-linux-x86_64-wheel`
+to the workflow run's artifacts. Download it from the Actions run page or with
+`gh run download RUN_ID -n delta-arrow-reader-linux-x86_64-wheel`.
+The workflow produces build artifacts only; package publishing is separate.
+
 ## Work on the documentation
 
 The Markdown files in `docs/public/` are the source for the documentation

@@ -23,6 +23,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
       selective_read: ${{ steps.filter.outputs.selective_read }}
+      package_version: ${{ steps.package-version.outputs.version }}
 
     steps:
       - uses: actions/checkout@v5
@@ -33,6 +34,13 @@ jobs:
         uses: dorny/paths-filter@v4
         with:
           filters: .github/path-filters.json
+      - name: Read Python package version
+        id: package-version
+        if: steps.filter.outputs.code == 'true'
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
   feature-tests:
     name: Feature Tests / ${{ matrix.name }}
@@ -204,6 +212,15 @@ jobs:
           "$RUNNER_TEMP/python-venv/bin/python" -m pip install --only-binary=:all: "$RUNNER_TEMP"/python-wheels/*.whl
           "$RUNNER_TEMP/python-venv/bin/python" -I -m unittest discover -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests"
 
+  python-wheels:
+    name: Python Wheels
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    uses: ./.github/workflows/pypi-build.yml
+    with:
+      source-ref: ${{ github.sha }}
+      expected-version: ${{ needs.changes.outputs.package_version }}
+
   cli:
     name: CLI
     needs: changes
@@ -304,7 +321,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [changes, feature-tests, platform-tests, checks, python-package, cli, selective-read-fixtures]
+    needs: [changes, feature-tests, platform-tests, checks, python-package, python-wheels, cli, selective-read-fixtures]
     if: always()
     runs-on: ubuntu-latest
 
@@ -338,6 +355,11 @@ jobs:
 
           if [ "${{ needs.python-package.result }}" != "success" ]; then
             echo "Python Package did not pass: ${{ needs.python-package.result }}"
+            exit 1
+          fi
+
+          if [ "${{ needs.python-wheels.result }}" != "success" ]; then
+            echo "Python Wheels did not pass: ${{ needs.python-wheels.result }}"
             exit 1
           fi
 
