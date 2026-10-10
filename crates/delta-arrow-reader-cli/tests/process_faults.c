@@ -1,4 +1,4 @@
-// Linux process-test faults: reject thread creation or hold a log prefetch open.
+// Linux process-test faults: reject thread creation or hold a file prefetch open.
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <fcntl.h>
@@ -13,15 +13,15 @@
 static int open_with_delay(const char *path, int flags, mode_t mode, const char *symbol) {
     int (*real_open)(const char *, int, ...) = dlsym(RTLD_NEXT, symbol);
     const char *blocked = getenv("DAR_TEST_BLOCKED_OPEN");
-    const char *latest = getenv("DAR_TEST_LATEST_LOG");
+    const char *waiting = getenv("DAR_TEST_WAITING_OPEN");
     const char *started = getenv("DAR_TEST_OPEN_STARTED");
-    if (blocked && latest && started && (flags & O_ACCMODE) == O_RDONLY) {
+    if (blocked && waiting && started && (flags & O_ACCMODE) == O_RDONLY) {
         if (strcmp(path, blocked) == 0) {
             int marker = real_open(started, O_WRONLY | O_CREAT, 0600);
             if (marker >= 0) close(marker);
             sleep(30); // Longer than the process test's 15-second deadline.
-        } else if (strcmp(path, latest) == 0) {
-            // Ensure the unused prefetch is in flight before returning metadata.
+        } else if (strcmp(path, waiting) == 0) {
+            // Ensure the unused prefetch is in flight before this open completes.
             for (int i = 0; i < 30000 && access(started, F_OK) != 0; ++i) {
                 usleep(1000);
             }

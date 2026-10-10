@@ -16,6 +16,27 @@ RUSTDOCFLAGS="-D warnings" cargo doc --locked --all-features --no-deps
 cargo package --locked
 ```
 
+## Test the CLI
+
+Run the CLI checks from the repository root on Linux, with Python 3.12 or
+newer and a C compiler available:
+
+```console
+cargo build --locked -p delta-arrow-reader-cli
+cargo test --locked -p delta-arrow-reader-cli
+cargo clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings
+python3 -m venv target/cli-test-venv
+. target/cli-test-venv/bin/activate
+python -m pip install --only-binary=:all: 'pyarrow==25.0.1'
+python crates/delta-arrow-reader-cli/tests/scan.py target/debug/dar
+```
+
+The Cargo tests compare IPC schemas and rows with the Rust core and check
+argument validation and process errors. The PyArrow suite independently reads
+the output and exercises backpressure, partial results, broken pipes, signals,
+and shutdown with pending blocking reads. It uses checked-in fixtures, a local
+HTTP server, and Linux process controls; no cloud credentials are needed.
+
 ## Build the Python package locally
 
 For source installation and a table reading example, see the
