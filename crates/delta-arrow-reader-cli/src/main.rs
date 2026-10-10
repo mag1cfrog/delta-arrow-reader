@@ -1,4 +1,5 @@
 mod input;
+mod predicate;
 
 use std::{
     fmt,
@@ -45,6 +46,9 @@ enum Command {
         /// Maximum output rows as unsigned decimal digits; zero is valid.
         #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<usize>)]
         limit: Option<usize>,
+        /// Local typed JSON predicate; at most 1 MiB. '-' is a filename, not stdin.
+        #[arg(long, value_name = "PATH")]
+        predicate_file: Option<String>,
     },
 }
 
@@ -66,9 +70,7 @@ struct TableArgs {
 enum Error {
     #[snafu(display("Invalid command-line arguments."))]
     Argument,
-    #[snafu(display(
-        "Invalid JSON input; expected a string map of at most 1 MiB with unique keys."
-    ))]
+    #[snafu(display("Invalid JSON input."))]
     InputJson,
     #[snafu(display("Could not read the input file."))]
     InputIo { source: io::Error },
@@ -172,6 +174,13 @@ fn run() -> Result<(), Error> {
         Some(path) => input::read_json_file::<input::StorageOptionsInput>(path)?.0,
         None => Default::default(),
     };
+    let predicate = match &command {
+        Command::Scan {
+            predicate_file: Some(path),
+            ..
+        } => Some(input::read_json_file::<predicate::PredicateInput>(path)?.0),
+        _ => None,
+    };
     // Inspect needs only metadata. Scan planning happens explicitly below.
     let builder = DeltaTableBuilder::new(&table_args.table)
         .with_warmup(WarmupMode::None)
@@ -215,6 +224,9 @@ fn run() -> Result<(), Error> {
                 }
                 if let Some(limit) = limit {
                     builder = builder.with_limit(limit);
+                }
+                if let Some(predicate) = predicate {
+                    builder = builder.with_predicate(predicate);
                 }
                 write_arrow_stream(builder.build().await.context(ReaderSnafu)?).await
             }

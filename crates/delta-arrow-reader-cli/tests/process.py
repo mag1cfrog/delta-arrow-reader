@@ -101,6 +101,11 @@ class ProcessTests(unittest.TestCase):
         path.write_bytes(content)
         return path
 
+    def predicate_file(self, content):
+        path = self.cwd / "secret predicate, file.json"
+        path.write_bytes(content)
+        return path
+
     def test_static_help_and_version_outside_checkout(self):
         # Any attempted runtime worker creation fails, even with an explicit count.
         self.env.update(LD_PRELOAD=str(self.fault_library), DAR_TEST_REJECT_THREADS="1")
@@ -108,7 +113,8 @@ class ProcessTests(unittest.TestCase):
                      ("help", "inspect"),
                      ("inspect", "--storage-options-file", "secret-missing", "--help"),
                      ("scan", "--help"), ("scan", "-h"), ("help", "scan"),
-                     ("scan", "--storage-options-file", "secret-missing", "--help")]:
+                     ("scan", "--storage-options-file", "secret-missing", "--help"),
+                     ("scan", "--predicate-file", "secret-missing", "--help")]:
             with self.subTest(args=args):
                 result = self.invoke(*args)
                 self.assertEqual(result.returncode, 0)
@@ -119,7 +125,7 @@ class ProcessTests(unittest.TestCase):
                     self.assertIn(b"--table-version", result.stdout)
                     self.assertIn(b"--storage-options-file", result.stdout)
                 if "scan" in args:
-                    for flag in [b"--column", b"--no-columns", b"--limit"]:
+                    for flag in [b"--column", b"--no-columns", b"--limit", b"--predicate-file"]:
                         self.assertIn(flag, result.stdout)
         for flag in ["--version", "-V"]:
             result = self.invoke(flag)
@@ -152,6 +158,7 @@ class ProcessTests(unittest.TestCase):
             cases = [(), ("secret-command",), ("inspect",), ("inspect", table, "secret-extra"),
                      ("inspect", "--secret-option", table), ("inspect", "--table-version"),
                      ("inspect", "--storage-options-file"),
+                     ("inspect", "--predicate-file", "secret-missing", table),
                      ("inspect", "--table-version", "0", "--table-version", "1", table),
                      ("inspect", "--storage-options-file", "secret-missing", "--storage-options-file", "secret-missing", table),
                      ("inspect", b"secret-\xff"), ("inspect", "--", table, "extra")]
@@ -179,6 +186,8 @@ class ProcessTests(unittest.TestCase):
         with http.serve(functools.partial(RecordingStorageHandler, directory=self.cwd)) as server:
             table = f"http://127.0.0.1:{server.server_port}/secret-table"
             cases = [(), (table, "secret-extra"), ("--column",), ("--limit",),
+                     ("--predicate-file",), ("--predicate-file", b"secret-\xff", table),
+                     ("--predicate-file", "secret-missing", "--predicate-file", "secret-missing", table),
                      ("--no-columns", "--column", "secret", table),
                      ("--no-columns", "--no-columns", table),
                      ("--limit", "0", "--limit", "1", table),
@@ -205,6 +214,57 @@ class ProcessTests(unittest.TestCase):
                 os.close(master)
                 os.close(slave)
             self.assertEqual(server.requests, [])
+
+    def test_predicate_validation_before_any_table_request(self):
+        self.env.update(LD_PRELOAD=str(self.fault_library), DAR_TEST_REJECT_THREADS="1")
+        constant = b'{"op":"constant","value":true}'
+        too_deep = b'{"op":"not","arg":' * 32 + constant + b'}' * 32
+        too_wide = b'{"op":"and","args":[' + b','.join([constant] * 1024) + b']}'
+        with http.serve(functools.partial(RecordingStorageHandler, directory=self.cwd)) as server:
+            table = f"http://127.0.0.1:{server.server_port}/secret-table"
+            for content in [b"", b"\xff", b"{}", b"null", b"[]", constant + b"{}",
+                            b'{"op":"constant","value":true,"value":false}',
+                            b'{"op":"is_null","column":"secret-column","secret-extra":0}',
+                            b'{"op":"eq","column":"secret-column","value":{"type":"int64","value":"secret-value"}}',
+                            b'{"op":"eq","column":"secret-column","value":["utf8","secret-value"]}',
+                            too_deep, too_wide, constant + b" " * (LIMIT + 1 - len(constant))]:
+                with self.subTest(content=content[:100], size=len(content)):
+                    diagnostic = self.assert_error(
+                        self.invoke("scan", "--predicate-file", self.predicate_file(content), table),
+                        2, "configuration", "invalid_input_json",
+                    )
+                    self.assertEqual(diagnostic["message"], "Invalid JSON input.")
+            for path in [self.cwd / "secret-missing", self.cwd, "-", "/dev/zero"]:
+                with self.subTest(path=path):
+                    code = "invalid_input_json" if path == "/dev/zero" else "input_file_io"
+                    self.assert_error(self.invoke("scan", "--predicate-file", path, table),
+                                      2, "configuration", code)
+            self.assertEqual(server.requests, [])
+
+    def test_predicate_file_size_boundary_and_literal_dash(self):
+        table = CORPUS / "partitioned/table"
+        constant = b'{"op":"constant","value":true}'
+        for content in [constant, constant + b" " * (LIMIT - len(constant))]:
+            result = self.invoke("scan", "--predicate-file", self.predicate_file(content),
+                                 "--limit", "0", table)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stderr, b"")
+            self.assertTrue(result.stdout.endswith(b"\xff\xff\xff\xff\0\0\0\0"))
+        (self.cwd / "-").write_bytes(constant)
+        result = self.invoke("scan", "--predicate-file", "-", "--limit", "0", table)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_native_predicate_validation_leaves_stdout_empty(self):
+        table = CORPUS / "partitioned/table"
+        for predicate in [
+            *({"op": "is_null", "column": name} for name in ["", "secret-missing", "profile.city"]),
+            {"op": "eq", "column": "id", "value": {"type": "utf8", "value": "secret-literal"}},
+            {"op": "eq", "column": "id", "value": {"type": "decimal128", "value": "1", "precision": 0, "scale": 0}},
+        ]:
+            with self.subTest(predicate=predicate):
+                path = self.predicate_file(json.dumps(predicate).encode())
+                self.assert_error(self.invoke("scan", "--predicate-file", path, table),
+                                  1, "scan_planning", "unsupported_predicate")
 
     def test_scan_planning_errors_leave_stdout_empty(self):
         table = CORPUS / "partitioned/table"

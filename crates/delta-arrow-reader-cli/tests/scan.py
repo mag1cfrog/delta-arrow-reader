@@ -190,6 +190,20 @@ class ScanTests(unittest.TestCase):
                                 self.assertTrue(actual.sort_by("id").equals(
                                     projected.sort_by("id"), check_metadata=False))
 
+    def test_predicate_filters_a_column_omitted_from_output(self):
+        predicate = self.cwd / "predicate.json"
+        predicate.write_text(json.dumps({
+            "op": "eq", "column": "id", "value": {"type": "int32", "value": "10"},
+        }), encoding="utf-8")
+        with self.start_scan(CORPUS / "partitioned/table", "--predicate-file", str(predicate),
+                             "--column", "value") as process:
+            stdout, stderr = process.communicate(timeout=15)
+            self.assertEqual((process.returncode, stderr), (0, b""))
+            self.assertTrue(stdout.endswith(IPC_END))
+            actual = pa.ipc.open_stream(stdout).read_all()
+            self.assertEqual(actual.schema.names, ["value"])
+            self.assertEqual(actual.to_pylist(), [{"value": 30}])
+
     def test_empty_table_retains_schema(self):
         table = self.repeated_table(count=0)
         for flags, names in [((), ["id", "value", "label", "region"]), (("--no-columns",), [])]:
