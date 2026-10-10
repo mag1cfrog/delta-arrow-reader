@@ -33,13 +33,32 @@
         "src/reader/options.rs": "a5346f7ed2b8ec654b8e0eee341f0ce3f6bc46aa52ed7b4b728ce862f2b67ed0"
       },
       "record_sha256": "44022f9a050c200727995e5d90195898d8d4a02cd09a7d7fac8b79147b97b444"
+    },
+    "candidate-review-fixed": {
+      "reader_git_commit": "5a1059781180fa2a5324217de5413c4e178d7749",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+      "rustflags": "-C target-cpu=x86-64",
+      "target": "x86_64-unknown-linux-gnu",
+      "executable_sha256": "e3948ad85c5e98713cabb698c63eb2328618e255b4573b350fe5405473b4166c",
+      "lockfile_sha256": "d53855cfdce00c9e8ecee9acec60daa8e4c4f745a6deadc7ff65e6e2aebca5c2",
+      "cargo_tree_sha256": "ed9c6df6903919a8dad0ddd2cb129d04f14042a6baacd2d5765eb4d50a43d559",
+      "diagnostic_patch_sha256": "f6b56c226155c5b67a2e40c027a896002dd391b573d82416808ab9106dc05143",
+      "source_sha256": {
+        "benches/selective_read/runners/dar/src/bin/numeric-pages.rs": "78d1442d098aeb646a5e27a86fc31cc31aa9c3a2c9a753fe18f91ab5568a2851",
+        "src/reader/backend/direct_parquet/intra_page.rs": "57ea56816df355f1a87945df3f5a143285bd2877da9a0515b83304e6500c7c58",
+        "src/reader/backend/direct_parquet/intra_page/page.rs": "4320d98df714338a08ac12a25e6675a2181c5f2df6f9a90b073a124c39cca9ea",
+        "src/reader/options.rs": "a5346f7ed2b8ec654b8e0eee341f0ce3f6bc46aa52ed7b4b728ce862f2b67ed0"
+      },
+      "source_verified_commit": "046c65757972d4417cf64299ac3b90dbcb1fb116",
+      "record_sha256": "373a0cf58e890a967177c4918a1176f6f1e3b241509ee08a8f90b11c0728a64a"
     }
   },
   "numeric_binaries": {
     "baseline-numeric-final": "745bec542bd097d77c50b21ffa360a02f95c0103e5f721a0e0b2f37e5234a69e",
-    "candidate-required-guard": "b51b6833fec4dfa0c52709735d9a8a61a9065a3630f8ae5b02f2bf5e93dc35a5"
+    "candidate-required-guard": "b51b6833fec4dfa0c52709735d9a8a61a9065a3630f8ae5b02f2bf5e93dc35a5",
+    "candidate-review-fixed": "7223266f3c3352e38113821cbefd0e95c18aab2abc99b5c4954d19404968a126"
   },
-  "samples_sha256": "514e16b19c5f8eff279f5d593ef907211c07dc55f30e9e619ab2216cd75f6dcd",
+  "samples_sha256": "5a175b0680a5b8906f3a8797315ef67082197df2b61e27f6920aafe59da432c0",
   "cases": [
     {
       "case": "q2-grouped",
@@ -297,7 +316,7 @@
     }
   ],
   "resource_scope": "CPU and peak RSS cover the entire process; query timings exclude initialization, result validation and tracing.",
-  "source_note": "Candidate source hashes identify the uncommitted implementation measured for review. Original README snapshots and references are unchanged.",
+  "source_note": "Initial candidates were built before committing; source hashes identify their code. The reviewed build was verified against commit 046c657. All earlier samples and original README fixtures remain unchanged.",
   "retained_attempts": [
     "numeric-int32",
     "numeric-int64",
@@ -395,5 +414,312 @@
     "samples": "q2-grouped-aa, baseline-a and baseline-b in the CSV; both use the same baseline binary",
     "pairs": 5
   },
-  "remaining_timing_difference": "Final five-pair 416-column grouped first-query median is +2.8%; second-query median is +1.5%. Both queries use identical Parquet ranges and bytes in diagnostic runs, and whole-process CPU medians differ by 0.4%. A declared five-pair A/A control with the same baseline executable produced medians 2.030641893 and 1.962352176 seconds (a 3.4% difference without a code change). Combined with matching diagnostic reads and nearly unchanged CPU usage, no repeatable material regression was identified. These measurements cannot resolve a few-percent effect reliably; no speedup is claimed for retained README cases, and the 5% investigation trigger is not an allowed slowdown budget."
+  "remaining_timing_difference": "Final five-pair 416-column grouped first-query median is +2.8%; second-query median is +1.5%. Both queries use identical Parquet ranges and bytes in diagnostic runs, and whole-process CPU medians differ by 0.4%. A declared five-pair A/A control with the same baseline executable produced medians 2.030641893 and 1.962352176 seconds (a 3.4% difference without a code change). Combined with matching diagnostic reads and nearly unchanged CPU usage, no repeatable material regression was identified. These measurements cannot resolve a few-percent effect reliably; no speedup is claimed for retained README cases, and the 5% investigation trigger is not an allowed slowdown budget.",
+  "review_followup": {
+    "reviewed_commit": "046c65757972d4417cf64299ac3b90dbcb1fb116",
+    "plan_sha256": "ab1b596ba8f96f89ce9a0191953d21b498fe7c1a3402746703ec2367b1c3e9d0",
+    "readme_comparison": "pre-series 7b10a50 versus reviewed 046c657",
+    "readme_cases": {
+      "416-grouped": {
+        "pairs": 5,
+        "experiment_sha256": "9676102140b24c27d397735e7af5f0cde089509d906dea4c513e496d84483060",
+        "medians": {
+          "baseline": 2.041396838,
+          "candidate": 2.024398343
+        },
+        "diagnostics": {
+          "scope": "Separate validation runs; requests assigned by start time within each query.",
+          "builds": {
+            "baseline": [
+              {
+                "parquet_requests": 986,
+                "parquet_bytes": 8205923,
+                "incomplete_parquet_bodies": 0,
+                "requests_ending_after_query": 0
+              },
+              {
+                "parquet_requests": 986,
+                "parquet_bytes": 8205923,
+                "incomplete_parquet_bodies": 0,
+                "requests_ending_after_query": 0
+              }
+            ],
+            "candidate": [
+              {
+                "parquet_requests": 995,
+                "parquet_bytes": 5606178,
+                "incomplete_parquet_bodies": 0,
+                "requests_ending_after_query": 0
+              },
+              {
+                "parquet_requests": 995,
+                "parquet_bytes": 5606178,
+                "incomplete_parquet_bodies": 0,
+                "requests_ending_after_query": 0
+              }
+            ]
+          },
+          "same_parquet_request_multiset": [
+            false,
+            false
+          ]
+        }
+      },
+      "416-spread": {
+        "pairs": 3,
+        "experiment_sha256": "0770774ea835bf3f6102006b35f1a09d134a2df8af2ac42ea01726845b31886a",
+        "medians": {
+          "baseline": 6.484879287,
+          "candidate": 6.457773872
+        },
+        "diagnostics": {
+          "scope": "Separate validation runs; requests assigned by start time within each query.",
+          "builds": {
+            "baseline": [
+              {
+                "parquet_requests": 11962,
+                "parquet_bytes": 98602017,
+                "incomplete_parquet_bodies": 0,
+                "requests_ending_after_query": 0
+              },
+              {
+                "parquet_requests": 11962,
+                "parquet_bytes": 98602017,
+                "incomplete_parquet_bodies": 0,
+                "requests_ending_after_query": 0
+              }
+            ],
+            "candidate": [
+              {
+                "parquet_requests": 12357,
+                "parquet_bytes": 96453338,
+                "incomplete_parquet_bodies": 0,
+                "requests_ending_after_query": 0
+              },
+              {
+                "parquet_requests": 12357,
+                "parquet_bytes": 96453338,
+                "incomplete_parquet_bodies": 0,
+                "requests_ending_after_query": 0
+              }
+            ]
+          },
+          "same_parquet_request_multiset": [
+            false,
+            false
+          ]
+        }
+      },
+      "90-grouped": {
+        "pairs": 5,
+        "experiment_sha256": "95f87a6a0789ea4b2ba5056f783f16ab0ffadbffcf72e522e279147386fa449e",
+        "medians": {
+          "baseline": 2.14220346,
+          "candidate": 2.152459251
+        },
+        "diagnostics": {
+          "scope": "Separate validation runs; requests assigned by start time within each query.",
+          "builds": {
+            "baseline": [
+              {
+                "parquet_requests": 1206,
+                "parquet_bytes": 6034700,
+                "incomplete_parquet_bodies": 0,
+                "requests_ending_after_query": 0
+              },
+              {
+                "parquet_requests": 1206,
+                "parquet_bytes": 6034700,
+                "incomplete_parquet_bodies": 0,
+                "requests_ending_after_query": 0
+              }
+            ],
+            "candidate": [
+              {
+                "parquet_requests": 1209,
+                "parquet_bytes": 5366427,
+                "incomplete_parquet_bodies": 0,
+                "requests_ending_after_query": 0
+              },
+              {
+                "parquet_requests": 1209,
+                "parquet_bytes": 5366427,
+                "incomplete_parquet_bodies": 0,
+                "requests_ending_after_query": 0
+              }
+            ]
+          },
+          "same_parquet_request_multiset": [
+            false,
+            false
+          ]
+        }
+      },
+      "90-spread": {
+        "pairs": 5,
+        "experiment_sha256": "839a91e061d3ae94adb59c97286eda6cb7c207ca7e3468f349116ab83e84603b",
+        "medians": {
+          "baseline": 10.225808243,
+          "candidate": 10.279870678
+        },
+        "diagnostics": {
+          "scope": "Separate validation runs; requests assigned by start time within each query.",
+          "builds": {
+            "baseline": [
+              {
+                "parquet_requests": 19951,
+                "parquet_bytes": 172116463,
+                "incomplete_parquet_bodies": 0,
+                "requests_ending_after_query": 0
+              },
+              {
+                "parquet_requests": 19951,
+                "parquet_bytes": 172116463,
+                "incomplete_parquet_bodies": 0,
+                "requests_ending_after_query": 0
+              }
+            ],
+            "candidate": [
+              {
+                "parquet_requests": 21296,
+                "parquet_bytes": 159613431,
+                "incomplete_parquet_bodies": 0,
+                "requests_ending_after_query": 0
+              },
+              {
+                "parquet_requests": 21296,
+                "parquet_bytes": 159613431,
+                "incomplete_parquet_bodies": 0,
+                "requests_ending_after_query": 0
+              }
+            ]
+          },
+          "same_parquet_request_multiset": [
+            false,
+            false
+          ]
+        },
+        "additional_pairs_experiment_sha256": "3a443605e39e80653427934b7d037eed3af2a46f2a762a0b6b3f414bdc4163eb",
+        "range_seconds": {
+          "baseline": [
+            10.209262011,
+            10.333224085
+          ],
+          "candidate": [
+            10.189862308,
+            22.339547966
+          ]
+        }
+      }
+    },
+    "fix_comparison": "5a10597 before review fixes versus reviewed 046c657",
+    "fix_cases": {
+      "int32": {
+        "pairs": 3,
+        "experiment_sha256": [
+          "d6443144b6ed87a44c8ab0fc1e21772cddc058ba13a68862911d380a77f4f563"
+        ],
+        "medians": {
+          "baseline": 1.493834276,
+          "candidate": 1.505742445
+        }
+      },
+      "int64": {
+        "pairs": 5,
+        "experiment_sha256": [
+          "b796a1c6ff9d0bd2036e001e954454d994486fb1a380bf4b45f4d7ea31394db2",
+          "532a7949ddacd648b0ca9b05fcf8afefa020c69aa1cdd892d3d8868e466222cf"
+        ],
+        "medians": {
+          "baseline": 1.549150543,
+          "candidate": 1.548769404
+        }
+      },
+      "float": {
+        "pairs": 3,
+        "experiment_sha256": [
+          "772fb54fd5aeea97996ad901a6927d7664a0176f3e1472b28a645263a4bbf6f4"
+        ],
+        "medians": {
+          "baseline": 1.544308217,
+          "candidate": 1.538890052
+        }
+      },
+      "double": {
+        "pairs": 5,
+        "experiment_sha256": [
+          "97347204697be729fb64f47b95ecdfb211107f1568013134ebe8f16e866de8fe",
+          "b01a4f895505d6de8ecb0cc9cec7b21b92acdcb430de07f727043a81a7c9204e"
+        ],
+        "medians": {
+          "baseline": 1.545738474,
+          "candidate": 1.536949444
+        }
+      },
+      "large-null-bitmap": {
+        "pairs": 3,
+        "experiment_sha256": [
+          "300b18cd8931a7846bf2e9205c70ae3f3d978a15dc134c7b0274c32820ad2c04"
+        ],
+        "medians": {
+          "baseline": 4.131852649,
+          "candidate": 4.166854822
+        }
+      }
+    },
+    "warmup_anomaly": {
+      "original_sample": "review-046c657-readme/90-spread/runs/candidate-timing-0/sample.json",
+      "plan_sha256": "b82f74b025d55889777f669e0f8076db33f5d9a6649c274d6a36adbce4919dc0",
+      "comparison_sha256": "86c3eb877dba1359bfade13717537633bef85edaa898195a6c23e17602d9ff80",
+      "missing_profile_controls": {
+        "baseline": [
+          {
+            "diagnostic_seconds": 22.350250902,
+            "parquet_requests": 54,
+            "parquet_bytes": 398034010,
+            "incomplete_parquet_bodies": 0
+          },
+          {
+            "diagnostic_seconds": 22.303561803,
+            "parquet_requests": 54,
+            "parquet_bytes": 398034010,
+            "incomplete_parquet_bodies": 0
+          }
+        ],
+        "candidate": [
+          {
+            "diagnostic_seconds": 22.321455706,
+            "parquet_requests": 54,
+            "parquet_bytes": 398034010,
+            "incomplete_parquet_bodies": 0
+          },
+          {
+            "diagnostic_seconds": 22.338345322,
+            "parquet_requests": 54,
+            "parquet_bytes": 398034010,
+            "incomplete_parquet_bodies": 0
+          }
+        ],
+        "same_parquet_request_multiset": [
+          true,
+          true
+        ],
+        "interpretation": "Both builds use identical ordinary Parquet reads without a network profile. This matches the slow timed sample, but its original warmup status was not logged; a timeout remains an inference."
+      },
+      "additional_pair_initialization_logs": {
+        "review-046c657-readme/90-spread-extra/candidate-timing-3/stderr.log": [
+          "2026-10-10T22:49:47.039191Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed status=\"complete\" elapsed_micros=3082288 requests=3084 bytes_received=25165824 request_latency_micros=214317 throughput_bytes_per_second=18678346 request_overhead_bytes=7761"
+        ],
+        "review-046c657-readme/90-spread-extra/baseline-timing-3/stderr.log": [
+          "2026-10-10T22:50:11.591370Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed status=\"complete\" elapsed_micros=3013726 requests=3084 bytes_received=25165824 request_latency_micros=217218 throughput_bytes_per_second=18720971 request_overhead_bytes=7485"
+        ],
+        "review-046c657-readme/90-spread-extra/baseline-timing-4/stderr.log": [
+          "2026-10-10T22:50:35.978071Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed status=\"complete\" elapsed_micros=3019756 requests=3084 bytes_received=25165824 request_latency_micros=215085 throughput_bytes_per_second=18714047 request_overhead_bytes=7404"
+        ],
+        "review-046c657-readme/90-spread-extra/candidate-timing-4/stderr.log": [
+          "2026-10-10T22:51:00.636178Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed status=\"complete\" elapsed_micros=3035732 requests=3084 bytes_received=25165824 request_latency_micros=214281 throughput_bytes_per_second=18696063 request_overhead_bytes=7812"
+        ]
+      }
+    }
+  }
 }

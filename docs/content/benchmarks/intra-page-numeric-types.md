@@ -5,6 +5,9 @@ PLAIN INT32, INT64, FLOAT and DOUBLE pages, including required columns, to the
 existing partial-read path. These measurements compare DAR before and after the
 change. They use the first fully consumed query after table initialization.
 
+The initial comparison below measures the type extension before the review fixes.
+The [review follow-up](#review-follow-up) checks the reviewed commit `046c657`.
+
 The [samples](intra-page-numeric-types-samples.csv) retain initialization, first
 and second query times, requests, bytes, CPU and peak RSS for each run. The
 [build and fixture identities](intra-page-numeric-types-results.json) identify
@@ -98,6 +101,50 @@ Two avoidable costs found during development were fixed before this comparison:
   frame. Rejecting it from metadata avoids useless probes of compressed columns
   in the retained 416-column grouped query.
 
+## Review follow-up
+
+Commit `046c657` preserves profitable reads of long RLE null runs and cleans up
+benchmark reader processes on exit. All four original README cases were rerun
+against the same pre-series base, with default partial reads and network profiling.
+Source hashes verify that the measured executable matches this commit.
+
+| Case | Base query, seconds | Reviewed query, seconds | Time change |
+| --- | ---: | ---: | ---: |
+| 416 columns, grouped matches | 2.041 | 2.024 | -0.8% |
+| 416 columns, spread-out matches | 6.485 | 6.458 | -0.4% |
+| 90 columns, grouped matches | 2.142 | 2.152 | +0.5% |
+| 90 columns, spread-out matches | 10.226 | 10.280 | +0.5% |
+
+The grouped cases used five pairs, declared before sampling. The 416-column
+spread-out case used three. The 90-column spread-out case started with three
+pairs, then added two to investigate a slow sample. All five remain in the CSV.
+Both builds passed exact-result validation for every case.
+
+One reviewed 90-column spread-out sample initialized in 5.766 seconds and took
+22.340 and 22.316 seconds for its two queries. The other four first queries took
+10.190 to 10.300 seconds. This is consistent with initialization's five-second
+network calibration timing out and leaving ordinary reads. The original timed
+run did not log calibration status, so timeout is an inference. The calibration
+code is unchanged from the base.
+
+Separate controls without a network profile reproduced 22.3-second queries in
+both builds, with identical Parquet requests and 398,034,010 bytes per query.
+These controls do not enter the timing medians. The two extra default-policy
+pairs logged only initialization; all four calibrations completed. Query tracing
+remained disabled. The slow original sample has not been removed or replaced.
+
+Whole-process CPU medians were similar. Peak RSS medians for the 416-column
+spread-out case rose from 372.3 to 406.4 MiB, and for the 90-column case from
+486.1 to 511.7 MiB. Sample ranges overlap; these runs do not establish unchanged
+memory usage. Per-run resources and separate I/O diagnostics remain available.
+
+Five focused comparisons against the reader before the review fixes cover all
+four numeric types and the large-null-bitmap control. First-query medians changed
+by -0.6% to +0.9%, without a consistent slowdown. Those samples use `review-fix-`
+case names; the README reruns use `reviewed-`. The JSON records both comparisons'
+build identities and diagnostics. All 124 initial samples and 74 follow-up timing
+samples are retained. Temporary MinIO copies and services were removed after testing.
+
 ## Method and limits
 
 The base is `7b10a504230a7bb683b0478e4f92b2d9612b67f8`, preserved before this series.
@@ -117,5 +164,5 @@ whole session; numeric-case counters cover the first query's Parquet reads.
 These are manual regression checks on one machine and a controlled HTTP proxy.
 They do not establish performance on every object store. The numeric tests also
 compare floating-point bits, including NaN payloads and signed zero. The full
-library and reader suite passed 579 tests, with six pre-existing ignores; strict
-Clippy and the four focused Python tests passed. No benchmark CI job was added.
+library and reader suite passed 580 tests, with six pre-existing ignores; strict
+Clippy and the five focused Python tests passed. No benchmark CI job was added.
