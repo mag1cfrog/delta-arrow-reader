@@ -1,6 +1,7 @@
 import itertools
 import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -65,6 +66,39 @@ class PythonWorkflowTests(unittest.TestCase):
                     "skip-existing": "false",
                 })
 
+    def test_upload_reuses_artifacts_and_only_sends_missing_files(self):
+        for target in ("testpypi", "pypi"):
+            with self.subTest(target=target):
+                upload = self.jobs[f"publish-{target}"]
+                self.assertEqual(upload["concurrency"], {
+                    "group": f"python-{target}-" + "${{ needs.prepare.outputs.expected-version }}",
+                    "cancel-in-progress": "false",
+                })
+                self.assertEqual(upload["env"], {
+                    "EXPECTED_VERSION": "${{ needs.prepare.outputs.expected-version }}",
+                })
+                steps = upload["steps"]
+                self.assertEqual(steps[0]["with"], {
+                    "ref": "${{ needs.prepare.outputs.source-ref }}",
+                    "persist-credentials": "false",
+                })
+                download = next(
+                    step for step in steps
+                    if step.get("uses", "").startswith("actions/download-artifact@")
+                )
+                self.assertEqual(download["with"], {
+                    "pattern": "delta-arrow-reader-*-wheel",
+                    "path": "wheel-artifacts",
+                })
+                stage = steps[-2]
+                self.assertEqual(stage["id"], "stage")
+                self.assertEqual(shlex.split(stage["run"].replace("\\\n", "")), [
+                    "python", ".github/scripts/prepare_python_upload.py", "wheel-artifacts",
+                    "--expected-version", "$EXPECTED_VERSION", "--index", target,
+                    "--destination", "dist",
+                ])
+                self.assertEqual(steps[-1]["if"], "steps.stage.outputs.has-files == 'true'")
+
     def test_upload_waits_for_successful_artifact_validation(self):
         check = self.jobs["check"]
         self.assertEqual(set(check["needs"]), {"prepare", "build"})
@@ -92,11 +126,14 @@ class PythonWorkflowTests(unittest.TestCase):
                 self.assertEqual(result.returncode == 0, expected, result.stdout)
 
     def test_incomplete_artifacts_cannot_reach_upload_directory(self):
-        checker = Path("crates/delta-arrow-reader-python/tests/check_wheel.py")
         with tempfile.TemporaryDirectory(prefix="python-upload-test-") as temporary:
             directory = Path(temporary)
-            (directory / checker.parent).mkdir(parents=True)
-            shutil.copyfile(WORKFLOW.parents[2] / checker, directory / checker)
+            for source in (
+                Path("crates/delta-arrow-reader-python/tests/check_wheel.py"),
+                Path(".github/scripts/prepare_python_upload.py"),
+            ):
+                (directory / source.parent).mkdir(parents=True)
+                shutil.copyfile(WORKFLOW.parents[2] / source, directory / source)
             (directory / "wheel-artifacts").mkdir()
             for target in ("testpypi", "pypi"):
                 with self.subTest(target=target):
@@ -105,11 +142,15 @@ class PythonWorkflowTests(unittest.TestCase):
                     result = subprocess.run(
                         ["bash", "-e", "-o", "pipefail", "-c", stage["run"]],
                         cwd=directory, capture_output=True, text=True,
-                        env={**os.environ, "EXPECTED_VERSION": "1.2.3"},
+                        env={
+                            **os.environ, "EXPECTED_VERSION": "1.2.3",
+                            "GITHUB_OUTPUT": str(directory / "outputs"),
+                        },
                     )
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn("expected artifacts", result.stderr)
                     self.assertFalse((directory / "dist").exists())
+                    self.assertFalse((directory / "outputs").exists())
 
 
 if __name__ == "__main__":

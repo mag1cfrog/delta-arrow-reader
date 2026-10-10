@@ -83,6 +83,9 @@ jobs:
     environment:
       name: testpypi-release
       url: https://test.pypi.org/project/delta-arrow-reader/
+    concurrency:
+      group: python-testpypi-${{ needs.prepare.outputs.expected-version }}
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
@@ -100,14 +103,13 @@ jobs:
         with:
           pattern: delta-arrow-reader-*-wheel
           path: wheel-artifacts
-      - name: Recheck and stage validated wheels
+      - name: Verify published files and stage missing wheels
         id: stage
         run: |
-          python crates/delta-arrow-reader-python/tests/check_wheel.py wheel-artifacts \
-            --artifact-set --expected-version "$EXPECTED_VERSION"
-          mkdir dist
-          cp wheel-artifacts/*/*.whl dist/
+          python .github/scripts/prepare_python_upload.py wheel-artifacts \
+            --expected-version "$EXPECTED_VERSION" --index testpypi --destination dist
       - name: Upload to TestPyPI
+        if: steps.stage.outputs.has-files == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
@@ -126,6 +128,9 @@ jobs:
     environment:
       name: pypi-release
       url: https://pypi.org/project/delta-arrow-reader/
+    concurrency:
+      group: python-pypi-${{ needs.prepare.outputs.expected-version }}
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
@@ -143,14 +148,13 @@ jobs:
         with:
           pattern: delta-arrow-reader-*-wheel
           path: wheel-artifacts
-      - name: Recheck and stage validated wheels
+      - name: Verify published files and stage missing wheels
         id: stage
         run: |
-          python crates/delta-arrow-reader-python/tests/check_wheel.py wheel-artifacts \
-            --artifact-set --expected-version "$EXPECTED_VERSION"
-          mkdir dist
-          cp wheel-artifacts/*/*.whl dist/
+          python .github/scripts/prepare_python_upload.py wheel-artifacts \
+            --expected-version "$EXPECTED_VERSION" --index pypi --destination dist
       - name: Upload to PyPI
+        if: steps.stage.outputs.has-files == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://upload.pypi.org/legacy/
