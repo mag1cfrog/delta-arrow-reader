@@ -155,7 +155,9 @@ python crates/delta-arrow-reader-python/tests/check_wheel.py wheel-artifacts \
   --artifact-set --expected-version 0.6.2
 ```
 
-The workflow produces build artifacts only; package publishing is separate.
+The workflow produces build artifacts only. For publisher setup, TestPyPI
+rehearsal, stable releases, and upload recovery, see
+[Publish Python wheels](python-releases.md).
 
 ## Work on the documentation
 
