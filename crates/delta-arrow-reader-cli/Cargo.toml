@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.94"
 license-file = "../../LICENSE"
 repository = "https://github.com/mag1cfrog/delta-arrow-reader"
-description = "Command-line inspection of Delta Lake tables"
+description = "Command-line reading of Delta Lake tables"
 publish = false
 
 [[bin]]
@@ -13,6 +13,7 @@ name = "dar"
 path = "src/main.rs"
 
 [dependencies]
+arrow = "58.3.0"
 arrow-schema = { version = "58.3.0", features = ["serde"] }
 clap = { version = "4", default-features = false, features = ["derive", "std", "help", "usage"] }
 delta-arrow-reader = { path = "../.." }
@@ -20,6 +21,3 @@ serde = "1"
 serde_json = "1"
 snafu = "0.9"
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
-
-[dev-dependencies]
-arrow = "58.3.0"

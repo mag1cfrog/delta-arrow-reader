@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import select
 import shutil
 import signal
 import subprocess
@@ -104,16 +105,21 @@ class ProcessTests(unittest.TestCase):
         self.env.update(LD_PRELOAD=str(self.fault_library), DAR_TEST_REJECT_THREADS="1")
         for args in [("--help",), ("-h",), ("inspect", "--help"), ("inspect", "-h"),
                      ("help", "inspect"),
-                     ("inspect", "--storage-options-file", "secret-missing", "--help")]:
+                     ("inspect", "--storage-options-file", "secret-missing", "--help"),
+                     ("scan", "--help"), ("scan", "-h"), ("help", "scan"),
+                     ("scan", "--storage-options-file", "secret-missing", "--help")]:
             with self.subTest(args=args):
                 result = self.invoke(*args)
                 self.assertEqual(result.returncode, 0)
                 self.assertEqual(result.stderr, b"")
                 self.assertIn(b"Usage:", result.stdout)
                 self.assertIn(b"--help", result.stdout)
-                if "inspect" in args:
+                if "inspect" in args or "scan" in args:
                     self.assertIn(b"--table-version", result.stdout)
                     self.assertIn(b"--storage-options-file", result.stdout)
+                if "scan" in args:
+                    for flag in [b"--column", b"--no-columns", b"--limit"]:
+                        self.assertIn(flag, result.stdout)
         for flag in ["--version", "-V"]:
             result = self.invoke(flag)
             self.assertEqual((result.returncode, result.stdout, result.stderr),
@@ -166,6 +172,47 @@ class ProcessTests(unittest.TestCase):
                 self.assert_error(self.invoke("inspect", "--storage-options-file", path, table),
                            2, "configuration", "input_file_io")
             self.assertEqual(server.requests, [])
+
+    def test_scan_validation_before_any_table_request(self):
+        self.env.update(LD_PRELOAD=str(self.fault_library), DAR_TEST_REJECT_THREADS="1")
+        with http.serve(functools.partial(RecordingStorageHandler, directory=self.cwd)) as server:
+            table = f"http://127.0.0.1:{server.server_port}/secret-table"
+            cases = [(), (table, "secret-extra"), ("--column",), ("--limit",),
+                     ("--no-columns", "--column", "secret", table),
+                     ("--no-columns", "--no-columns", table),
+                     ("--limit", "0", "--limit", "1", table),
+                     ("--column", b"secret-\xff", table),
+                     ("--column", "id", "value", table),
+                     ("--table-version", "0", "--table-version", "1", table),
+                     (b"secret-\xff",)]
+            for limit in ["", "-1", "+1", " 1", "1 ", "1\n", "1.0", "1e2", "0x1",
+                          "18446744073709551616", "secret", "\u0661"]:
+                cases.append(("--limit", limit, table))
+            for args in cases:
+                with self.subTest(args=args):
+                    self.assert_error(self.invoke("scan", *args), 2, "configuration", "invalid_cli_argument")
+            self.assert_error(self.invoke("scan", "--storage-options-file", self.options(b"secret"), table),
+                              2, "configuration", "invalid_input_json")
+            master, slave = os.openpty()
+            try:
+                result = subprocess.run([DAR, "scan", table], cwd=self.cwd, env=self.env,
+                                        stdout=slave, stderr=subprocess.PIPE, timeout=15)
+                self.assertEqual(select.select([master], [], [], 0)[0], [], "binary output reached a terminal")
+                result.stdout = b""
+                self.assert_error(result, 2, "configuration", "invalid_cli_argument")
+            finally:
+                os.close(master)
+                os.close(slave)
+            self.assertEqual(server.requests, [])
+
+    def test_scan_planning_errors_leave_stdout_empty(self):
+        table = CORPUS / "partitioned/table"
+        for columns in [("secret-missing",), ("id", "id"), ("id,value",), ("profile.city",)]:
+            with self.subTest(columns=columns):
+                args = ["scan", table]
+                for column in columns:
+                    args.extend(["--column", column])
+                self.assert_error(self.invoke(*args), 1, "scan_planning", "invalid_projection")
 
     def test_json_size_limit_stops_reading_and_counts_bytes(self):
         table = self.metadata_table()
@@ -340,20 +387,23 @@ class ProcessTests(unittest.TestCase):
                                 for path, *_ in server.requests), server.requests)
 
     def test_stdout_failures_including_broken_pipe(self):
-        table = self.metadata_table()
-        for args in [("--help",), ("--version",), ("inspect", table)]:
+        table = self.metadata_table([{
+            "name": "id", "type": "integer", "nullable": True, "metadata": {},
+        }])
+        for args in [("--help",), ("--version",), ("inspect", table), ("scan", table)]:
             with open("/dev/full", "wb") as sink:
                 result = subprocess.run([DAR, *args], cwd=self.cwd, env=self.env, stdout=sink,
                                         stderr=subprocess.PIPE, timeout=15)
             result.stdout = b""
             self.assert_error(result, 3, "execution", "output_write")
-        read_fd, write_fd = os.pipe()
-        os.close(read_fd)
-        with os.fdopen(write_fd, "wb") as sink:
-            result = subprocess.run([DAR, "inspect", table], cwd=self.cwd, env=self.env, stdout=sink,
-                                    stderr=subprocess.PIPE, timeout=15)
-        result.stdout = b""
-        self.assert_error(result, 3, "execution", "output_write")
+        for command in ["inspect", "scan"]:
+            read_fd, write_fd = os.pipe()
+            os.close(read_fd)
+            with os.fdopen(write_fd, "wb") as sink:
+                result = subprocess.run([DAR, command, table], cwd=self.cwd, env=self.env, stdout=sink,
+                                        stderr=subprocess.PIPE, timeout=15)
+            result.stdout = b""
+            self.assert_error(result, 3, "execution", "output_write")
         with open("/dev/full", "wb") as sink:
             result = subprocess.run([DAR, "--version"], stdout=sink, stderr=sink, timeout=15)
         self.assertEqual(result.returncode, 3)

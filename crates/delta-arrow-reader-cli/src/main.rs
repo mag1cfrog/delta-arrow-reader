@@ -2,17 +2,21 @@ mod input;
 
 use std::{
     fmt,
-    io::{self, Write},
+    io::{self, IsTerminal, Write},
     process::ExitCode,
+    str::FromStr,
 };
 
-use arrow_schema::Schema;
-use clap::{Parser, Subcommand, error::ErrorKind};
-use delta_arrow_reader::{DeltaReaderError, DeltaSnapshotSelection, DeltaTableBuilder, WarmupMode};
+use arrow::ipc::writer::StreamWriter;
+use arrow_schema::{ArrowError, Schema};
+use clap::{Args, Parser, Subcommand, error::ErrorKind};
+use delta_arrow_reader::{
+    DeltaReaderError, DeltaScan, DeltaSnapshotSelection, DeltaTableBuilder, WarmupMode,
+};
 use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu, ensure};
 
-/// Read Delta Lake snapshot metadata.
+/// Read Delta Lake snapshots as JSON metadata or Arrow IPC streams.
 #[derive(Parser)]
 #[command(name = "dar", bin_name = "dar", version)]
 struct Cli {
@@ -25,18 +29,37 @@ enum Command {
     /// Print one Delta snapshot's version and full Arrow schema as JSON.
     ///
     /// Only snapshot metadata is loaded; data files are not read.
-    Inspect {
-        /// UTF-8 local path or URL; relative paths use the working directory.
-        /// Use '--' before a table path beginning with '-'.
-        table: String,
-        /// Unsigned decimal snapshot version; default: latest.
-        #[arg(long, value_name = "N", value_parser = parse_table_version)]
-        table_version: Option<u64>,
-        /// Local JSON object of string keys and string values.
-        /// At most 1 MiB; '-' is a filename, not stdin.
-        #[arg(long, value_name = "PATH")]
-        storage_options_file: Option<String>,
+    Inspect(TableArgs),
+    /// Stream a Delta snapshot's rows as Arrow IPC to stdout.
+    ///
+    /// Redirect stdout to a file or pipe; terminal output is rejected.
+    Scan {
+        #[command(flatten)]
+        table: TableArgs,
+        /// Logical column name; repeat to select columns in argument order.
+        #[arg(long = "column", value_name = "NAME")]
+        columns: Vec<String>,
+        /// Read zero columns while preserving row counts.
+        #[arg(long, conflicts_with = "columns")]
+        no_columns: bool,
+        /// Maximum output rows as unsigned decimal digits; zero is valid.
+        #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<usize>)]
+        limit: Option<usize>,
     },
+}
+
+#[derive(Args)]
+struct TableArgs {
+    /// UTF-8 local path or URL; relative paths use the working directory.
+    /// Use '--' before a table path beginning with '-'.
+    table: String,
+    /// Unsigned decimal snapshot version; default: latest.
+    #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<u64>)]
+    table_version: Option<u64>,
+    /// Local JSON object of string keys and string values.
+    /// At most 1 MiB; '-' is a filename, not stdin.
+    #[arg(long, value_name = "PATH")]
+    storage_options_file: Option<String>,
 }
 
 #[derive(Snafu)]
@@ -53,8 +76,19 @@ enum Error {
     Runtime { source: io::Error },
     #[snafu(display("Could not write or flush stdout."))]
     Output { source: io::Error },
+    #[snafu(display("Could not encode the Arrow IPC stream."))]
+    ArrowIpc { source: ArrowError },
     #[snafu(display("{source}"))]
     Reader { source: DeltaReaderError },
+}
+
+impl From<ArrowError> for Error {
+    fn from(source: ArrowError) -> Self {
+        match source {
+            ArrowError::IoError(_, source) => Self::Output { source },
+            source => Self::ArrowIpc { source },
+        }
+    }
 }
 
 impl fmt::Debug for Error {
@@ -71,6 +105,7 @@ impl Error {
             Self::InputIo { .. } => ("configuration", "input_file_io"),
             Self::Runtime { .. } => ("execution", "runtime_initialization"),
             Self::Output { .. } => ("execution", "output_write"),
+            Self::ArrowIpc { .. } => ("execution", "arrow_ipc"),
             Self::Reader { source } => (source.phase().as_str(), source.code()),
         };
         json!({"phase": phase, "code": code, "message": self.to_string()})
@@ -79,7 +114,7 @@ impl Error {
     fn exit_code(&self) -> ExitCode {
         ExitCode::from(match self {
             Self::Argument | Self::InputJson | Self::InputIo { .. } => 2,
-            Self::Runtime { .. } | Self::Reader { .. } => 1,
+            Self::Runtime { .. } | Self::Reader { .. } | Self::ArrowIpc { .. } => 1,
             Self::Output { .. } => 3,
         })
     }
@@ -90,7 +125,7 @@ impl Error {
     }
 }
 
-fn parse_table_version(value: &str) -> Result<u64, Error> {
+fn parse_unsigned_decimal<T: FromStr>(value: &str) -> Result<T, Error> {
     ensure!(
         !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()),
         ArgumentSnafu
@@ -113,70 +148,104 @@ fn encode_inspection_json(version: u64, schema: &Schema) -> Vec<u8> {
 }
 
 fn run() -> Result<(), Error> {
-    let output = match Cli::try_parse() {
+    let command = match Cli::try_parse() {
         Err(error)
             if matches!(
                 error.kind(),
                 ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
             ) =>
         {
-            error.to_string().into_bytes()
+            return write_stdout(error.to_string().as_bytes());
         }
         // Clap's other diagnostics may contain argument values. Emit our redacted error.
         Err(_) => return ArgumentSnafu.fail(),
-        Ok(Cli {
-            command:
-                Command::Inspect {
-                    table,
-                    table_version,
-                    storage_options_file,
-                },
-        }) => {
-            let storage_options = match storage_options_file {
-                Some(path) => input::read_json_file::<input::StorageOptionsInput>(&path)?.0,
-                None => Default::default(),
-            };
-            // Inspection needs only version and schema, even for unscannable tables.
-            let builder = DeltaTableBuilder::new(table)
-                .with_warmup(WarmupMode::None)
-                .with_snapshot_selection(table_version.map_or(
-                    DeltaSnapshotSelection::Latest,
-                    DeltaSnapshotSelection::Version,
-                ))
-                .with_storage_options(storage_options);
-            // Kernel starts threads lazily and can panic without waking its caller.
-            // The CLI owns the process: fail immediately with a redacted diagnostic,
-            // including for worker panics, instead of unwinding into a blocking join.
-            std::panic::set_hook(Box::new(|_| {
-                Error::Runtime {
-                    source: io::Error::other("reader runtime panicked"),
-                }
-                .write_diagnostic();
-                std::process::exit(1);
-            }));
-            // Drive async work on the calling thread. A dedicated Tokio worker can
-            // occupy the last OS thread and leave blocking loads queued forever.
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .context(RuntimeSnafu)?;
-            let result = runtime.block_on(async {
-                let table = builder.load_table().await.context(ReaderSnafu)?;
-                Ok(encode_inspection_json(
-                    table.version(),
-                    table.schema().as_ref(),
-                ))
-            });
-            // Blocking core work must not delay process shutdown after this command finishes.
-            runtime.shutdown_background();
-            result?
-        }
+        Ok(cli) => cli.command,
     };
+
+    if matches!(command, Command::Scan { .. }) {
+        ensure!(!io::stdout().is_terminal(), ArgumentSnafu);
+    }
+    let table_args = match &command {
+        Command::Inspect(table) | Command::Scan { table, .. } => table,
+    };
+    let storage_options = match &table_args.storage_options_file {
+        Some(path) => input::read_json_file::<input::StorageOptionsInput>(path)?.0,
+        None => Default::default(),
+    };
+    // Inspect needs only metadata. Scan planning happens explicitly below.
+    let builder = DeltaTableBuilder::new(&table_args.table)
+        .with_warmup(WarmupMode::None)
+        .with_snapshot_selection(table_args.table_version.map_or(
+            DeltaSnapshotSelection::Latest,
+            DeltaSnapshotSelection::Version,
+        ))
+        .with_storage_options(storage_options);
+    // Kernel starts threads lazily and can panic without waking its caller.
+    // The CLI owns the process: fail immediately with a redacted diagnostic,
+    // including for worker panics, instead of unwinding into a blocking join.
+    std::panic::set_hook(Box::new(|_| {
+        Error::Runtime {
+            source: io::Error::other("reader runtime panicked"),
+        }
+        .write_diagnostic();
+        std::process::exit(1);
+    }));
+    // Drive async work on the calling thread. A dedicated Tokio worker can
+    // occupy the last OS thread and leave blocking loads queued forever.
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context(RuntimeSnafu)?;
+    let result = runtime.block_on(async {
+        let table = builder.load_table().await.context(ReaderSnafu)?;
+        match command {
+            Command::Inspect(_) => write_stdout(&encode_inspection_json(
+                table.version(),
+                table.schema().as_ref(),
+            )),
+            Command::Scan {
+                columns,
+                no_columns,
+                limit,
+                ..
+            } => {
+                let mut builder = table.scan();
+                if no_columns || !columns.is_empty() {
+                    builder = builder.with_projection(columns);
+                }
+                if let Some(limit) = limit {
+                    builder = builder.with_limit(limit);
+                }
+                write_arrow_stream(builder.build().await.context(ReaderSnafu)?).await
+            }
+        }
+    });
+    // Blocking core work must not delay process shutdown after this command finishes.
+    runtime.shutdown_background();
+    result
+}
+
+fn write_stdout(output: &[u8]) -> Result<(), Error> {
     let mut stdout = io::stdout().lock();
     stdout
-        .write_all(&output)
+        .write_all(output)
         .and_then(|()| stdout.flush())
         .context(OutputSnafu)
+}
+
+async fn write_arrow_stream(scan: DeltaScan) -> Result<(), Error> {
+    let mut writer = StreamWriter::try_new(io::stdout().lock(), scan.schema().as_ref())?;
+    // Stdout can buffer bytes. Flush the schema and each batch before polling
+    // again, so consumers see progress and output errors stop further reads.
+    writer.flush()?;
+    let mut stream = scan.into_stream();
+    while let Some(batch) = stream.next_batch().await.context(ReaderSnafu)? {
+        writer.write(&batch)?;
+        writer.flush()?;
+    }
+    // finish writes the end marker and flushes. Error paths must never call it.
+    writer.finish()?;
+    Ok(())
 }
 
 fn main() -> ExitCode {
@@ -258,8 +327,50 @@ mod tests {
             let cli =
                 Cli::try_parse_from(["dar", "inspect", "--table-version", text, "table"]).unwrap();
             assert!(
-                matches!(cli.command, Command::Inspect {table_version: Some(version), ..} if version == text.parse::<u64>().unwrap())
+                matches!(cli.command, Command::Inspect(TableArgs {table_version: Some(version), ..}) if version == text.parse::<u64>().unwrap())
             );
+        }
+    }
+
+    #[test]
+    fn scan_arguments_preserve_column_names_and_full_limit_range() {
+        for limit in ["0".to_owned(), "0001".to_owned(), usize::MAX.to_string()] {
+            let cli = Cli::try_parse_from([
+                "dar", "scan", "--column", "a,b", "--column", "a.b", "--column", "a,b", "--column",
+                "", "--limit", &limit, "table",
+            ])
+            .unwrap();
+            let Command::Scan {
+                columns,
+                no_columns,
+                limit: parsed_limit,
+                ..
+            } = cli.command
+            else {
+                panic!("expected scan command");
+            };
+            assert_eq!(columns, ["a,b", "a.b", "a,b", ""]);
+            assert!(!no_columns);
+            assert_eq!(parsed_limit, Some(limit.parse::<usize>().unwrap()));
+        }
+    }
+
+    #[test]
+    fn ipc_errors_distinguish_output_failures_and_redact_sources() {
+        use std::error::Error as _;
+
+        let output = Error::from(ArrowError::from(io::Error::other("secret output path")));
+        assert_eq!(output.exit_code(), ExitCode::from(3));
+        assert_eq!(output.diagnostic()["code"], "output_write");
+        assert!(output.source().unwrap().is::<io::Error>());
+        let encoding = Error::from(ArrowError::IpcError("secret schema".into()));
+        assert_eq!(encoding.exit_code(), ExitCode::from(1));
+        assert_eq!(encoding.diagnostic()["code"], "arrow_ipc");
+        assert!(encoding.source().unwrap().is::<ArrowError>());
+        for error in [output, encoding] {
+            assert_eq!(error.diagnostic()["phase"], "execution");
+            assert!(!error.diagnostic().to_string().contains("secret"));
+            assert_eq!(format!("{error:?}"), error.to_string());
         }
     }
 
