@@ -59,6 +59,22 @@ The isolated Python check imports the installed wheel without adding the current
 directory to its import path. Default Cargo commands still select the core crate;
 use `cargo check -p delta-arrow-reader-python` to check the binding crate directly.
 
+For a small installed-wheel smoke check, run the following from a directory
+outside the checkout, using the environment where the wheel is installed.
+Replace the test directory with its absolute path:
+
+```console
+python -I -m unittest discover \
+  -s /absolute/path/to/delta-arrow-reader/crates/delta-arrow-reader-python/tests \
+  -k installed
+```
+
+This selects the package metadata check and a local Arrow stream read.
+The stream check covers both Python entrypoints and both Parquet backends,
+selects columns and filters rows, and closes the reader before consuming all results.
+It uses the checked-in Spark fixture and checks batch values after closing the
+reader. These checks also run in the full Python suite.
+
 Python packaging configuration and the type stub live at the repository root.
 Use `maturin sdist --out target/python-sdist` to package Git-tracked workspace
 files with their matching lockfile. Track new source files before packaging.
