@@ -53,7 +53,7 @@ the same version. To select a specific version, use
 ## Filter rows
 
 Both `scan()` and `to_reader()` accept `filters`. Use `==`, `!=`, `<`, `<=`, `>`,
-or `>=` to compare Boolean, signed integer, floating-point, string, and binary
+or `>=` to compare Boolean, signed integer, floating-point, string, binary, and decimal
 columns. Use `"is"` with `None` to select null values, or `"is not"` with `None`
 to select non-null values:
 
@@ -93,6 +93,14 @@ columns require `bytes`. Empty values and embedded NULs are supported. Strings
 that cannot be encoded as UTF-8 and fixed-size binary values with the wrong
 length raise `ValueError`. Other types, including `bytearray` and `memoryview`,
 raise `TypeError`. Values are copied before scan planning.
+
+Decimal128 columns require finite `decimal.Decimal` values. Conversion is exact
+and independent of the decimal context; it does not round. For a `decimal(5,2)`
+column, `Decimal("1.2300")` is accepted as `1.23`, while `Decimal("1.234")` and
+`Decimal("1000")` raise `ValueError` for scale and precision violations. NaN and
+infinity also raise `ValueError`. An unscaled integer outside the signed 128-bit
+range raises `OverflowError`. Integers, floats, strings, and other value types
+raise `TypeError`.
 
 ## Prepare metadata for repeated scans
 

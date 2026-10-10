@@ -1,6 +1,9 @@
 //! Convert Python filter groups to native predicates before scan planning.
 
-use arrow::datatypes::DataType;
+use arrow::{
+    array::types::{Decimal128Type, DecimalType},
+    datatypes::DataType,
+};
 use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaScalar, DeltaTable};
 use pyo3::{
     exceptions::{PyOverflowError, PyTypeError, PyValueError},
@@ -158,22 +161,113 @@ fn to_scalar(data_type: &DataType, value: &Bound<'_, PyAny>) -> PyResult<DeltaSc
                 value: bytes.to_vec(),
             })
         }
+        DataType::Decimal128(precision, scale) => to_decimal(value, *precision, *scale),
         _ => Err(PyTypeError::new_err(
             "filter value type is not supported for this column",
         )),
     }
     .map_err(|error| {
         if error.is_instance_of::<PyOverflowError>(value.py()) {
-            PyOverflowError::new_err("filter integer is out of range for the column type")
+            PyOverflowError::new_err("filter value is out of range for the column type")
         } else {
             error
         }
     })
 }
 
+fn to_decimal(value: &Bound<'_, PyAny>, precision: u8, scale: i8) -> PyResult<DeltaScalar> {
+    let decimal = value.py().import("decimal")?.getattr("Decimal")?;
+    if !value.get_type().is_subclass(&decimal)? {
+        return Err(PyTypeError::new_err(
+            "decimal filters require decimal.Decimal",
+        ));
+    }
+    // Read the stored value without subclass overrides or decimal-context arithmetic.
+    let parts = decimal.call_method1("as_tuple", (value,))?;
+    let sign = parts.get_item(0)?.extract::<u8>()?;
+    let mut digits = parts.get_item(1)?.extract::<Vec<u8>>()?;
+    let exponent = parts
+        .get_item(2)?
+        .extract::<i64>()
+        .map_err(|_| PyValueError::new_err("filter decimal must be finite"))?;
+    let overflow =
+        || PyOverflowError::new_err("filter decimal does not fit a signed 128-bit integer");
+    let mut shift = exponent
+        .checked_add(i64::from(scale))
+        .ok_or_else(overflow)?;
+    // Remove trailing zeros before building an i128 coefficient, so an exact
+    // value with many redundant decimal places does not overflow prematurely.
+    while digits.last() == Some(&0) {
+        digits.pop();
+        shift = shift.checked_add(1).ok_or_else(overflow)?;
+    }
+    let unscaled = if digits.is_empty() {
+        0
+    } else {
+        if shift < 0 {
+            return Err(PyValueError::new_err(
+                "filter decimal is not exact at the column scale",
+            ));
+        }
+        let multiplier = u32::try_from(shift)
+            .ok()
+            .and_then(|shift| 10_i128.checked_pow(shift))
+            .ok_or_else(overflow)?;
+        let coefficient = digits.into_iter().try_fold(0_i128, |coefficient, digit| {
+            let digit = i128::from(digit);
+            let digit = if sign == 0 { digit } else { -digit };
+            coefficient
+                .checked_mul(10)
+                .and_then(|coefficient| coefficient.checked_add(digit))
+                .ok_or_else(overflow)
+        })?;
+        coefficient.checked_mul(multiplier).ok_or_else(overflow)?
+    };
+    Decimal128Type::validate_decimal_precision(unscaled, precision, scale)
+        .map_err(|_| PyValueError::new_err("filter decimal exceeds the column precision"))?;
+    Ok(DeltaScalar::Decimal128 {
+        value: unscaled,
+        precision,
+        scale,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn converts_decimals_with_negative_scales() -> PyResult<()> {
+        Python::initialize();
+        Python::attach(|py| {
+            let decimal = py.import("decimal")?.getattr("Decimal")?;
+            // Delta schemas cannot express negative scales; the native type can.
+            for (text, precision, scale, unscaled) in [
+                ("12300", 5, -2, 123),
+                ("-12300.0000", 5, -2, -123),
+                ("9999900", 5, -2, 99999),
+                ("-0E-999999999999999999", 5, -2, 0),
+                ("1E128", 1, -128, 1),
+            ] {
+                let value = decimal.call1((text,))?;
+                assert_eq!(
+                    to_scalar(&DataType::Decimal128(precision, scale), &value)?,
+                    DeltaScalar::Decimal128 {
+                        value: unscaled,
+                        precision,
+                        scale
+                    },
+                );
+            }
+            for text in ["12301", "-12300.01", "10000000"] {
+                let value = decimal.call1((text,))?;
+                let error = to_scalar(&DataType::Decimal128(5, -2), &value)
+                    .expect_err("inexact or oversized decimal must fail");
+                assert!(error.is_instance_of::<PyValueError>(py));
+            }
+            Ok(())
+        })
+    }
 
     #[test]
     fn converts_large_and_fixed_width_scalars() -> PyResult<()> {

@@ -1,7 +1,7 @@
 from collections import UserDict
 from concurrent.futures import ThreadPoolExecutor
 import ctypes
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from functools import partial
 import gc
 import importlib.util
@@ -673,6 +673,116 @@ class TableTests(unittest.TestCase):
                         self.assertNotIn("secret", str(caught.exception))
                         self.assertIsNone(caught.exception.__cause__)
                         self.assertIsNone(caught.exception.__context__)
+
+    def test_decimal_filters_are_exact_and_independent_of_context(self):
+        class DecimalWithOverrides(Decimal):
+            def as_tuple(self):
+                raise AssertionError("filter decimals must use their stored value")
+
+            __str__ = as_tuple
+            __repr__ = as_tuple
+            __int__ = as_tuple
+            __float__ = as_tuple
+            is_finite = as_tuple
+
+        class Coercible:
+            def __str__(self):
+                raise AssertionError("filter values must not be coerced or stringified")
+
+            __repr__ = __str__
+            as_tuple = __str__
+
+            @property
+            def __class__(self):
+                raise AssertionError("type checks must use the actual class")
+
+        types = (
+            ("amount", 5, 2, ["-999.99", "0", "1.23", "999.99", None]),
+            ("whole", 5, 0, ["-99999", "0", "123", "99999", None]),
+            ("wide", 38, 0, ["-" + "9" * 38, "0", "123", "9" * 38, None]),
+            ("fraction", 38, 38, ["-0." + "9" * 38, "0", "1E-38", "0." + "9" * 38, None]),
+        )
+        fields = json.loads(self.metadata["schemaString"])["fields"]
+        fields += [{"name": name, "type": f"decimal({precision},{scale})",
+                    "nullable": True, "metadata": {}} for name, precision, scale, _ in types]
+        self.metadata["schemaString"] = json.dumps({"type": "struct", "fields": fields})
+        schema = pa.schema([pa.field("id", pa.int64(), nullable=False)] + [
+            pa.field(name, pa.decimal128(precision, scale)) for name, precision, scale, _ in types
+        ])
+        values = {name: [Decimal(item) if item is not None else None for item in items]
+                  for name, _, _, items in types}
+        path = self.location / "decimals.parquet"
+        pq.write_table(pa.table({"id": range(5), **values}, schema=schema), path)
+        self.write_log(1, {"metaData": self.metadata}, {"add": {
+            "path": path.name, "partitionValues": {}, "size": path.stat().st_size,
+            "modificationTime": 0, "dataChange": True,
+        }})
+        table = DeltaTable(self.location)
+        with localcontext() as context:
+            context.prec = 1
+            context.Emin, context.Emax = -2, 2
+            for signal in context.traps:
+                context.traps[signal] = True
+            context.clear_flags()
+            for name, _, _, items in types:
+                cases = [("==", Decimal(item), [row]) for row, item in enumerate(items[:-1])]
+                cases += [("==", Decimal(value), [1]) for value in (
+                    "-0E-999999999999999999", "0E+999999999999999999",
+                )]
+                if name == "amount":
+                    cases += [
+                        ("==", Decimal("1.23" + "0" * 200), [2]),
+                        ("==", DecimalWithOverrides("1.2300"), [2]),
+                        (">=", Decimal("1.2300"), [2, 3]),
+                    ]
+                if name == "whole":
+                    cases.append(("==", Decimal("1.2300E2"), [2]))
+                if name == "wide":
+                    cases.append(("==", Decimal("9" * 38 + "0" * 200 + "E-200"), [3]))
+                for method, backend, (index, (symbol, scalar, expected_ids)) in product(
+                    ("scan", "to_reader"), ("direct", "delta_kernel"), enumerate(cases),
+                ):
+                    with self.subTest(column=name, method=method, backend=backend, index=index):
+                        result = getattr(table, method)(
+                            columns=["id"], filters=[(name, symbol, scalar)],
+                            execution_options=ScanExecutionOptions(parquet_backend=backend),
+                        )
+                        reader = (pa.RecordBatchReader.from_stream(result)
+                                  if method == "scan" else result)
+                        with reader:
+                            self.assertCountEqual(reader.read_all().column("id").to_pylist(), expected_ids)
+
+            for version in (0, 1):
+                (self.log / f"{version:020}.json").unlink()
+            precision_or_scale_errors = {
+                "amount": [Decimal("1000"), Decimal("-1000"), Decimal("1.234")],
+                "whole": [Decimal("100000"), Decimal("1.1")],
+                "wide": [Decimal("1E38"), Decimal(2**127 - 1), Decimal(-(2**127))],
+                "fraction": [Decimal("1"), Decimal("1E-39")],
+            }
+            for name, _, _, _ in types:
+                invalid = [(value, TypeError) for value in (
+                    True, 1, 1.23, "secret", b"secret", Coercible(),
+                )]
+                invalid += [(value, ValueError) for value in (
+                    None, Decimal("NaN123"), Decimal("-sNaN456"), Decimal("Infinity"),
+                    Decimal("-Infinity"), Decimal("1E-999999999999999999"),
+                    *precision_or_scale_errors[name],
+                )]
+                invalid += [(value, OverflowError) for value in (
+                    Decimal("1E999999999999999999"), Decimal("-1E999999999999999999"),
+                    Decimal(2**127), Decimal(-(2**127) - 1), Decimal("9" * 200),
+                )]
+                for method in (table.scan, table.to_reader):
+                    for index, (value, error_type) in enumerate(invalid):
+                        with self.subTest(column=name, method=method.__name__, index=index):
+                            with self.assertRaises(error_type) as caught:
+                                method(filters=[(name, "==", value)])
+                            self.assertIs(type(caught.exception), error_type)
+                            self.assertNotIn("secret", str(caught.exception))
+                            self.assertIsNone(caught.exception.__cause__)
+                            self.assertIsNone(caught.exception.__context__)
+            self.assertFalse(any(context.flags.values()))
 
     def test_filter_validation_is_shared_and_redacted_before_planning(self):
         class SecretValue:
