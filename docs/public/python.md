@@ -122,6 +122,13 @@ types raise `TypeError`. For example, use
 `datetime(2024, 1, 1, tzinfo=timezone.utc)` after
 `from datetime import datetime, timezone`.
 
+Timestamp values must be instances of the standard library's `datetime.datetime`
+class itself. Subclass instances, including `pandas.Timestamp` values and
+`pandas.NaT`, raise `TypeError` because they can carry extra precision or special
+values. Custom timezones are supported: `utcoffset()` is called once and must
+return a standard `datetime.timedelta` instance or `None`. Offset subclasses
+raise `ValueError`.
+
 ## Prepare metadata for repeated scans
 
 Use `warmup="query_planning"` to load and retain active-file metadata during table

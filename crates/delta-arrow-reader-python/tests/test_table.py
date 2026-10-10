@@ -865,7 +865,7 @@ class TableTests(unittest.TestCase):
     def test_naive_timestamp_filters_preserve_microseconds_and_validate_offsets(self):
         class DateTimeWithOverrides(datetime):
             def fail(self, *args):
-                raise AssertionError("filter datetimes must use their stored value")
+                raise AssertionError("timestamp subclasses must be rejected without reading values")
 
             __sub__ = timestamp = utcoffset = toordinal = __str__ = __repr__ = fail
             year = microsecond = tzinfo = property(fail)
@@ -928,7 +928,6 @@ class TableTests(unittest.TestCase):
             (symbol, scalar, [row for row, (_, stored) in enumerate(values) if compare(stored, micros)])
             for (scalar, micros), (symbol, compare) in product(values, comparisons)
         ] + [
-            ("==", DateTimeWithOverrides(2000, 2, 29, 12, 34, 56, 123456), [5]),
             ("==", datetime(1970, 1, 1, tzinfo=NoOffset()), [3]),
             ("==", datetime(1970, 1, 1, fold=1), [3]),
         ]
@@ -948,9 +947,10 @@ class TableTests(unittest.TestCase):
             (self.log / f"{version:020}.json").unlink()
         invalid = [(value, TypeError) for value in (
             True, 0, 0.0, "secret-timestamp", b"secret-timestamp", date(1970, 1, 1), Coercible(),
+            DateTimeWithOverrides(1970, 1, 1),
+            DateTimeWithOverrides(1970, 1, 1, tzinfo=timezone.utc),
         )] + [(value, ValueError) for value in (
             None, datetime(1970, 1, 1, tzinfo=timezone.utc),
-            DateTimeWithOverrides(1970, 1, 1, tzinfo=timezone.utc),
         )]
         invalid += [(datetime(1970, 1, 1, tzinfo=InvalidOffset(offset)), ValueError) for offset in (
             "secret-offset", timedelta(days=1), timedelta(days=-1),
@@ -969,13 +969,25 @@ class TableTests(unittest.TestCase):
 
     def test_aware_timestamp_filters_preserve_instants_offsets_and_fold(self):
         class FoldOffset(tzinfo):
+            def __init__(self):
+                self.calls = 0
+
             def utcoffset(self, value):
+                self.calls += 1
                 # Keep the repeated-hour case independent of installed timezone data.
                 return timedelta(hours=-5 if value.fold else -4)
 
+        class OffsetWithNanoseconds(timedelta):
+            nanoseconds = 1
+
+            def __str__(self):
+                raise AssertionError("invalid offsets must not be stringified")
+
+            __repr__ = __str__
+
         class DateTimeWithOverrides(datetime):
             def fail(self, *args):
-                raise AssertionError("filter datetimes must use their stored value")
+                raise AssertionError("timestamp subclasses must be rejected without reading values")
 
             __sub__ = timestamp = utcoffset = toordinal = __str__ = __repr__ = fail
             year = microsecond = tzinfo = property(fail)
@@ -1022,12 +1034,13 @@ class TableTests(unittest.TestCase):
             ("==", datetime(1969, 12, 31, 17, tzinfo=timezone(timedelta(hours=-7))), [3]),
             ("==", datetime(1970, 1, 1, 0, 0, 30, 1,
                             tzinfo=timezone(timedelta(seconds=30, microseconds=1))), [3]),
-            ("==", DateTimeWithOverrides(1970, 1, 1, tzinfo=timezone.utc), [3]),
         ]
         for method, backend, (index, (symbol, scalar, expected_ids)) in product(
             ("scan", "to_reader"), ("direct", "delta_kernel"), enumerate(cases),
         ):
             with self.subTest(method=method, backend=backend, index=index):
+                if isinstance(scalar.tzinfo, FoldOffset):
+                    scalar.tzinfo.calls = 0
                 result = getattr(table, method)(
                     columns=["id"], filters=[("event_ts", symbol, scalar)],
                     execution_options=ScanExecutionOptions(parquet_backend=backend),
@@ -1035,16 +1048,21 @@ class TableTests(unittest.TestCase):
                 reader = pa.RecordBatchReader.from_stream(result) if method == "scan" else result
                 with reader:
                     self.assertCountEqual(reader.read_all().column("id").to_pylist(), expected_ids)
+                if isinstance(scalar.tzinfo, FoldOffset):
+                    self.assertEqual(scalar.tzinfo.calls, 1)
 
         for version in (0, 1):
             (self.log / f"{version:020}.json").unlink()
         invalid = [(value, TypeError) for value in (
             True, 0, 0.0, "secret-timestamp", b"secret-timestamp", date(1970, 1, 1),
+            DateTimeWithOverrides(1970, 1, 1),
+            DateTimeWithOverrides(1970, 1, 1, tzinfo=timezone.utc),
         )] + [(value, ValueError) for value in (
-            None, datetime(1970, 1, 1), DateTimeWithOverrides(1970, 1, 1),
+            None, datetime(1970, 1, 1),
         )]
         invalid += [(datetime(1970, 1, 1, tzinfo=InvalidOffset(offset)), ValueError) for offset in (
             None, "secret-offset", timedelta(days=1), timedelta(days=-1),
+            OffsetWithNanoseconds(),
             ValueError("secret-offset"), RuntimeError("secret-offset"),
         )]
         invalid.append((datetime(1970, 1, 1, tzinfo=InvalidOffset(KeyboardInterrupt())), KeyboardInterrupt))

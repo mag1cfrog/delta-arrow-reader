@@ -195,6 +195,8 @@ impl DeltaTable {
     /// Microsecond timestamps require naive datetime.datetime values for columns
     /// without a timezone, and aware values for columns with a timezone. Conversion
     /// preserves microsecond precision and does not use the process timezone.
+    /// Timestamp values must be exact datetime.datetime instances, not subclasses.
+    /// UTC offsets must be exact datetime.timedelta instances or None.
     /// Filter columns need not appear in columns. Filters apply before limit.
     /// limit=None reads all rows. Otherwise, limit must be a nonnegative integer
     /// that fits the platform's usize. Booleans are not accepted.

@@ -8,7 +8,7 @@ use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaScalar, DeltaTabl
 use pyo3::{
     exceptions::{PyException, PyOverflowError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyBool, PyBytes, PyFloat, PyInt, PyList, PyString, PyTuple},
+    types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple},
 };
 
 use crate::reader_error;
@@ -184,31 +184,45 @@ fn to_scalar(data_type: &DataType, value: &Bound<'_, PyAny>) -> PyResult<DeltaSc
         DataType::Timestamp(TimeUnit::Microsecond, timezone) => {
             let datetime_module = value.py().import("datetime")?;
             let datetime = datetime_module.getattr("datetime")?;
-            if !value.get_type().is_subclass(&datetime)? {
+            // Subclasses can carry finer precision or sentinels outside datetime's fields.
+            if !value.get_type().is(&datetime) {
                 return Err(PyTypeError::new_err(
-                    "timestamp filters require datetime.datetime",
+                    "timestamp filters require datetime.datetime, excluding subclasses",
                 ));
             }
-            let epoch = if timezone.is_some() {
-                let utc = datetime_module.getattr("timezone")?.getattr("utc")?;
-                datetime.call1((1970, 1, 1, 0, 0, 0, 0, utc))?
-            } else {
-                datetime.call1((1970, 1, 1))?
+            let invalid_offset = || {
+                PyValueError::new_err(if timezone.is_some() {
+                    "timestamp filter requires an aware datetime with a valid UTC offset"
+                } else {
+                    "timestamp filter requires a naive datetime with no UTC offset"
+                })
             };
-            // Use the base method to preserve stored fields and validate awareness.
-            let duration = datetime
-                .call_method1("__sub__", (value, epoch))
-                .map_err(|error| {
-                    if error.is_instance_of::<PyException>(value.py()) {
-                        PyValueError::new_err(if timezone.is_some() {
-                            "timestamp filter requires an aware datetime with a valid UTC offset"
-                        } else {
-                            "timestamp filter requires a naive datetime with no UTC offset"
-                        })
-                    } else {
-                        error
-                    }
-                })?;
+            let offset = value.call_method0("utcoffset").map_err(|error| {
+                if error.is_instance_of::<PyException>(value.py()) {
+                    invalid_offset()
+                } else {
+                    error
+                }
+            })?;
+            if offset.is_none() != timezone.is_none() {
+                return Err(invalid_offset());
+            }
+            if !offset.is_none() && !offset.get_type().is(&datetime_module.getattr("timedelta")?) {
+                return Err(PyValueError::new_err(
+                    "filter UTC offset must be datetime.timedelta, excluding subclasses",
+                ));
+            }
+            // Remove tzinfo so subtraction cannot call the offset callback again.
+            let replace_kwargs = PyDict::new(value.py());
+            replace_kwargs.set_item("tzinfo", value.py().None())?;
+            let naive = value.call_method("replace", (), Some(&replace_kwargs))?;
+            let epoch = datetime.call1((1970, 1, 1))?;
+            let duration = naive.sub(epoch)?;
+            let duration = if offset.is_none() {
+                duration
+            } else {
+                duration.sub(offset)?
+            };
             let days = duration.getattr("days")?.extract::<i64>()?;
             let seconds = duration.getattr("seconds")?.extract::<i64>()?;
             let microseconds = duration.getattr("microseconds")?.extract::<i64>()?;
