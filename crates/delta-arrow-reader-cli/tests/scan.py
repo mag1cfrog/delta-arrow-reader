@@ -17,6 +17,7 @@ import time
 import unittest
 
 import pyarrow as pa
+import pyarrow.parquet as pq
 
 DAR = Path(sys.argv.pop(1)).resolve()
 ROOT = Path(__file__).resolve().parents[3]
@@ -244,35 +245,52 @@ class ScanTests(unittest.TestCase):
 
         class DelayedBodyStorage(ScanStorage):
             def copyfile(self, source, output):
-                if self.path == "/part-001.parquet":
+                if self.path == "/part-003.parquet":
                     headers_sent.set()
                     release_body.wait(15)
-                elif self.path == "/part-000.parquet":
+                elif (self.path == "/part-002.parquet"
+                      and self.headers.get("Range", "").startswith("bytes=4-")):
                     headers_sent.wait(15)
                     # Let the client begin reading the pending response body.
                     time.sleep(0.1)
                 with contextlib.suppress(BrokenPipeError, ConnectionResetError):
                     super().copyfile(source, output)
-                    if self.path == "/part-001.parquet":
+                    if self.path == "/part-003.parquet":
                         body_sent.set()
 
-        table = self.repeated_table()
+        table = self.repeated_table(count=8)
+        # Exceed the footer read size so data reads overlap with later file setup.
+        original = pq.ParquetFile(table / "part-000.parquet").read()
+        labels = pa.array([f"{row:04}-" + "x" * 4096 for row in range(original.num_rows)])
+        expanded = original.set_column(original.schema.get_field_index("label"), "label", labels)
+        pq.write_table(expanded, table / "part-000.parquet", compression=None, use_dictionary=False)
+        content = (table / "part-000.parquet").read_bytes()
+        log = table / "_delta_log/00000000000000000000.json"
+        actions = [json.loads(line) for line in log.read_text().splitlines()]
+        for action in actions:
+            if "add" in action:
+                (table / action["add"]["path"]).write_bytes(content)
+                action["add"]["size"] = len(content)
+                action["add"].pop("stats", None)
+        log.write_text("".join(json.dumps(action) + "\n" for action in actions), encoding="utf-8")
         self.options.write_text('{"allow_http":"true","timeout":"5s"}', encoding="utf-8")
         with self.storage(table, handler=DelayedBodyStorage) as server, self.start_scan(
             server.url, "--storage-options-file", str(self.options),
         ) as process:
             try:
                 self.wait_for_blocked_output(process)
-                self.assertTrue(headers_sent.is_set())
+                self.assertTrue(headers_sent.wait(3), "prefetch response did not start")
+                # Let the current file fill the core's output buffer before releasing setup.
+                time.sleep(0.5)
                 release_body.set()
                 self.assertTrue(body_sent.wait(1), "server did not finish the pending response")
                 # Hold stdout past the request timeout, after the server has responded.
                 time.sleep(6)
                 with server.lock:
-                    self.assertLess(len(server.data_paths), 32, "all files read while stdout blocked")
+                    self.assertLess(len(server.data_paths), 8, "all files read while stdout blocked")
                 stdout, stderr = process.communicate(timeout=15)
                 self.assertEqual((process.returncode, stderr), (0, b""))
-                self.assertEqual(pa.ipc.open_stream(stdout).read_all().num_rows, 32 * 120)
+                self.assertEqual(pa.ipc.open_stream(stdout).read_all().num_rows, 8 * 120)
                 self.assertTrue(stdout.endswith(IPC_END))
             finally:
                 release_body.set()
