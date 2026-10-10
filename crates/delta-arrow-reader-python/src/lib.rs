@@ -191,6 +191,7 @@ impl DeltaTable {
     /// require bytes; fixed-size binary values must match the column's width.
     /// Decimal128 columns require finite decimal.Decimal values exactly fitting
     /// the column's precision and scale, independent of the decimal context.
+    /// Date32 columns require datetime.date values; datetime.datetime is rejected.
     /// Filter columns need not appear in columns. Filters apply before limit.
     /// limit=None reads all rows. Otherwise, limit must be a nonnegative integer
     /// that fits the platform's usize. Booleans are not accepted.

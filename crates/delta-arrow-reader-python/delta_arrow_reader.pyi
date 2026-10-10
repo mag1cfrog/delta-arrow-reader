@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from datetime import date
 from decimal import Decimal
 from os import PathLike
 from types import TracebackType
@@ -10,7 +11,10 @@ __version__: str
 
 _Filter = (
     tuple[str, Literal["is", "is not"], None]
-    | tuple[str, Literal["==", "!=", "<", "<=", ">", ">="], bool | int | float | str | bytes | Decimal]
+    | tuple[
+        str, Literal["==", "!=", "<", "<=", ">", ">="],
+        bool | int | float | str | bytes | Decimal | date,
+    ]
 )
 
 class DeltaReaderError(Exception):

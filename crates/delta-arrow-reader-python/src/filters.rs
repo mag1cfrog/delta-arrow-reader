@@ -162,6 +162,25 @@ fn to_scalar(data_type: &DataType, value: &Bound<'_, PyAny>) -> PyResult<DeltaSc
             })
         }
         DataType::Decimal128(precision, scale) => to_decimal(value, *precision, *scale),
+        DataType::Date32 => {
+            let datetime = value.py().import("datetime")?;
+            let date = datetime.getattr("date")?;
+            let value_type = value.get_type();
+            if !value_type.is_subclass(&date)?
+                || value_type.is_subclass(&datetime.getattr("datetime")?)?
+            {
+                return Err(PyTypeError::new_err(
+                    "date filters require datetime.date, excluding datetime.datetime",
+                ));
+            }
+            let epoch = date.call1((1970, 1, 1))?;
+            // Use the base method so subclasses cannot change the stored date.
+            let days = date
+                .call_method1("__sub__", (value, epoch))?
+                .getattr("days")?
+                .extract()?;
+            Ok(DeltaScalar::Date32(days))
+        }
         _ => Err(PyTypeError::new_err(
             "filter value type is not supported for this column",
         )),

@@ -1,6 +1,7 @@
 from collections import UserDict
 from concurrent.futures import ThreadPoolExecutor
 import ctypes
+from datetime import date, datetime, timezone
 from decimal import Decimal, localcontext
 from functools import partial
 import gc
@@ -783,6 +784,83 @@ class TableTests(unittest.TestCase):
                             self.assertIsNone(caught.exception.__cause__)
                             self.assertIsNone(caught.exception.__context__)
             self.assertFalse(any(context.flags.values()))
+
+    def test_date_filters_preserve_calendar_dates_and_reject_datetimes(self):
+        class DateWithOverrides(date):
+            def toordinal(self):
+                raise AssertionError("filter dates must use their stored value")
+
+            __str__ = toordinal
+            __repr__ = toordinal
+
+            def __sub__(self, other):
+                raise AssertionError("filter dates must use their stored value")
+
+            @property
+            def year(self):
+                raise AssertionError("filter dates must use their stored value")
+
+        class DateTimeSubclass(datetime):
+            pass
+
+        class Coercible:
+            def toordinal(self):
+                raise AssertionError("filter values must not be coerced or stringified")
+
+            __str__ = toordinal
+            __repr__ = toordinal
+
+            @property
+            def __class__(self):
+                raise AssertionError("type checks must use the actual class")
+
+        values = [date.min, date(1900, 3, 1), date(1969, 12, 31), date(1970, 1, 1),
+                  date(2000, 2, 29), date.max, None]
+        fields = json.loads(self.metadata["schemaString"])["fields"]
+        fields.append({"name": "day", "type": "date", "nullable": True, "metadata": {}})
+        self.metadata["schemaString"] = json.dumps({"type": "struct", "fields": fields})
+        schema = pa.schema([pa.field("id", pa.int64(), nullable=False), pa.field("day", pa.date32())])
+        path = self.location / "dates.parquet"
+        pq.write_table(pa.table({"id": range(len(values)), "day": values}, schema=schema), path)
+        self.write_log(1, {"metaData": self.metadata}, {"add": {
+            "path": path.name, "partitionValues": {}, "size": path.stat().st_size,
+            "modificationTime": 0, "dataChange": True,
+        }})
+        table = DeltaTable(self.location)
+        cases = [("==", value, [row]) for row, value in enumerate(values[:-1])]
+        cases += [
+            ("==", DateWithOverrides(2000, 2, 29), [4]),
+            ("<", date(1970, 1, 1), [0, 1, 2]),
+            (">=", date(2000, 2, 29), [4, 5]),
+        ]
+        for method, backend, (index, (symbol, scalar, expected_ids)) in product(
+            ("scan", "to_reader"), ("direct", "delta_kernel"), enumerate(cases),
+        ):
+            with self.subTest(method=method, backend=backend, index=index):
+                result = getattr(table, method)(
+                    columns=["id"], filters=[("day", symbol, scalar)],
+                    execution_options=ScanExecutionOptions(parquet_backend=backend),
+                )
+                reader = pa.RecordBatchReader.from_stream(result) if method == "scan" else result
+                with reader:
+                    self.assertCountEqual(reader.read_all().column("id").to_pylist(), expected_ids)
+
+        for version in (0, 1):
+            (self.log / f"{version:020}.json").unlink()
+        invalid = [(value, TypeError) for value in (
+            True, 0, 0.0, "secret-date", b"secret-date", Coercible(),
+            datetime(1970, 1, 1), datetime(1970, 1, 1, tzinfo=timezone.utc),
+            DateTimeSubclass(1970, 1, 1),
+        )] + [(None, ValueError)]
+        for method in (table.scan, table.to_reader):
+            for index, (value, error_type) in enumerate(invalid):
+                with self.subTest(method=method.__name__, index=index):
+                    with self.assertRaises(error_type) as caught:
+                        method(filters=[("day", "==", value)])
+                    self.assertIs(type(caught.exception), error_type)
+                    self.assertNotIn("secret", str(caught.exception))
+                    self.assertIsNone(caught.exception.__cause__)
+                    self.assertIsNone(caught.exception.__context__)
 
     def test_filter_validation_is_shared_and_redacted_before_planning(self):
         class SecretValue:

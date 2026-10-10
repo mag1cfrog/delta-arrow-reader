@@ -53,9 +53,9 @@ the same version. To select a specific version, use
 ## Filter rows
 
 Both `scan()` and `to_reader()` accept `filters`. Use `==`, `!=`, `<`, `<=`, `>`,
-or `>=` to compare Boolean, signed integer, floating-point, string, binary, and decimal
-columns. Use `"is"` with `None` to select null values, or `"is not"` with `None`
-to select non-null values:
+or `>=` to compare Boolean, signed integer, floating-point, string, binary,
+decimal, and date columns. Use `"is"` with `None` to select null values, or
+`"is not"` with `None` to select non-null values:
 
 ```python
 with table.to_reader(
@@ -101,6 +101,11 @@ column, `Decimal("1.2300")` is accepted as `1.23`, while `Decimal("1.234")` and
 infinity also raise `ValueError`. An unscaled integer outside the signed 128-bit
 range raises `OverflowError`. Integers, floats, strings, and other value types
 raise `TypeError`.
+
+Date32 columns require `datetime.date` values. Dates are converted to signed
+days since `1970-01-01`, including dates before that day. `datetime.datetime`
+values, with or without a timezone, and other types raise `TypeError`. For
+example, use `date(1969, 12, 31)` after `from datetime import date`.
 
 ## Prepare metadata for repeated scans
 
