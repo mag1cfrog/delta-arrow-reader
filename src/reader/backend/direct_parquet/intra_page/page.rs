@@ -17,6 +17,8 @@ pub(super) struct Page {
     pub(super) range: Range<u64>,
     pub(super) first_file_row: u64,
     pub(super) row_count: usize,
+    // Upper bound from the row group's null count; this page may contain fewer values.
+    pub(super) max_value_count: usize,
     pub(super) compression: Compression,
     pub(super) value_width: usize,
     // The file's definition level controls its layout, even if the target schema differs.

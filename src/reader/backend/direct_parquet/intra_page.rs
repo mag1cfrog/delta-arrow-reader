@@ -191,6 +191,12 @@ impl IntraPageReader {
             {
                 continue;
             }
+            let group_row_count = group_rows.end - group_rows.start;
+            let non_null_rows = chunk
+                .statistics()
+                .and_then(|stats| stats.null_count_opt())
+                .and_then(|nulls| group_row_count.checked_sub(nulls))
+                .unwrap_or(group_row_count);
             let locations = &offset_indexes.get(column)?.page_locations;
             for (i, location) in locations.iter().enumerate() {
                 let offset = u64::try_from(location.offset).ok()?;
@@ -227,6 +233,7 @@ impl IntraPageReader {
                     range,
                     first_file_row: group_rows.start + first_row,
                     row_count: row_count as usize,
+                    max_value_count: row_count.min(non_null_rows) as usize,
                     compression: chunk.compression(),
                     value_width,
                     nullable: descriptor.max_def_level() == 1,
@@ -361,9 +368,8 @@ impl IntraPageReader {
                 page.range.start..(page.range.start + page::PAGE_PREFIX_BYTES).min(page.range.end)
             })
             .collect();
-        // Large raw Zstd frames need a dependent block-header probe. Uncompressed
-        // nullable pages can also need another round when bit-packed null levels
-        // outgrow the prefix; omitting it can cause a costly probe-then-fallback.
+        // Charge another structural read only when metadata proves it cannot fit
+        // in the prefix. A large nullable page can still have a tiny RLE stream.
         let mut extra_probe_bytes = 0;
         let mut extra_probes = 0;
         for page in pages {
@@ -374,11 +380,13 @@ impl IntraPageReader {
                 {
                     3
                 }
-                Compression::UNCOMPRESSED
-                    if page.nullable
-                        && page.row_count.div_ceil(8) as u64 >= page::PAGE_PREFIX_BYTES =>
-                {
-                    page.row_count.div_ceil(8) as u128
+                Compression::UNCOMPRESSED if page.nullable => {
+                    let structure_bytes = (page.range.end - page.range.start)
+                        .saturating_sub((page.max_value_count * page.value_width) as u64);
+                    if structure_bytes <= page::PAGE_PREFIX_BYTES {
+                        continue;
+                    }
+                    u128::from(structure_bytes)
                 }
                 _ => continue,
             };
@@ -703,6 +711,7 @@ mod tests {
             range: 0..bytes.len() as u64,
             first_file_row: 0,
             row_count: expected.len(),
+            max_value_count: expected.len(),
             value_width: 8,
             nullable: true,
             compression: Compression::UNCOMPRESSED,
@@ -753,6 +762,7 @@ mod tests {
                 range: 0..bytes.len() as u64,
                 first_file_row: 0,
                 row_count: 2_000,
+                max_value_count: 2_000,
                 value_width: 8,
                 nullable: true,
                 compression: Compression::ZSTD(Default::default()),
@@ -793,6 +803,7 @@ mod tests {
             range: 0..full.len() as u64,
             first_file_row: 50,
             row_count: 20_000,
+            max_value_count: 20_000,
             value_width: 8,
             nullable: true,
             compression: Compression::ZSTD(Default::default()),
@@ -1011,6 +1022,7 @@ mod tests {
                 range: 0..bytes.len() as u64,
                 first_file_row: 0,
                 row_count: 1,
+                max_value_count: 1,
                 value_width: 8,
                 nullable: true,
                 compression: Compression::UNCOMPRESSED,
@@ -1033,6 +1045,7 @@ mod tests {
             range: 0..bytes.len() as u64,
             first_file_row: 0,
             row_count: 1,
+            max_value_count: 1,
             value_width: 8,
             nullable: true,
             compression: Compression::ZSTD(Default::default()),
@@ -1069,6 +1082,7 @@ mod tests {
                         range: 0..bytes.len() as u64,
                         first_file_row: 10,
                         row_count: 3,
+                        max_value_count: 3,
                         value_width,
                         nullable,
                         compression: Compression::UNCOMPRESSED,
@@ -1184,6 +1198,112 @@ mod tests {
                 // Required values cannot fit in these small pages as raw blocks.
                 // Nullable pages still need inspection to discover their value count.
                 assert_eq!(reader.candidate_pages(&ranges).is_some(), nullable);
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn intra_page_nullable_rle_pages_keep_profitable_reads() -> TestResult {
+        use super::super::{metered_object_store::MultiRangeReadStrategy, tests::metrics};
+        use arrow::{
+            datatypes::{DataType, Field, Schema},
+            record_batch::RecordBatch,
+        };
+        use object_store::{ObjectStoreExt, memory::InMemory};
+        use parquet::{
+            arrow::ArrowWriter,
+            file::{
+                metadata::{PageIndexPolicy, ParquetMetaDataReader},
+                properties::{EnabledStatistics, WriterProperties},
+            },
+        };
+
+        let page_rows = 1_000_000;
+        for page_count in [1, 2] {
+            for null_rows in [0, 200_000] {
+                for statistics in [EnabledStatistics::Page, EnabledStatistics::None] {
+                    let rows = page_rows * page_count;
+                    let schema = Arc::new(Schema::new(vec![Field::new(
+                        "value",
+                        DataType::Int64,
+                        true,
+                    )]));
+                    let batch = RecordBatch::try_new(
+                        schema.clone(),
+                        vec![Arc::new(Int64Array::from_iter(
+                            (0..rows).map(|i| (i % page_rows >= null_rows).then_some(i as i64)),
+                        ))],
+                    )?;
+                    let properties = WriterProperties::builder()
+                        .set_compression(Compression::UNCOMPRESSED)
+                        .set_dictionary_enabled(false)
+                        .set_statistics_enabled(statistics)
+                        .set_offset_index_disabled(false)
+                        .set_max_row_group_row_count(Some(rows))
+                        .set_data_page_row_count_limit(page_rows)
+                        .set_data_page_size_limit(page::MAX_PAGE_BYTES)
+                        .set_write_batch_size(page_rows)
+                        .build();
+                    let mut writer = ArrowWriter::try_new(Vec::new(), schema, Some(properties))?;
+                    writer.write(&batch)?;
+                    let bytes = Bytes::from(writer.into_inner()?);
+                    let metadata = Arc::new(
+                        ParquetMetaDataReader::new()
+                            .with_offset_index_policy(PageIndexPolicy::Required)
+                            .parse_and_finish(&bytes)?,
+                    );
+                    let locations = &metadata.offset_index().unwrap()[0][0].page_locations;
+                    assert_eq!(locations.len(), page_count);
+                    let location = locations.last().unwrap();
+                    let range = location.offset as u64
+                        ..(location.offset + i64::from(location.compressed_page_size)) as u64;
+                    assert!(range.end - range.start <= page::MAX_PAGE_BYTES as u64);
+                    let memory = Arc::new(InMemory::new());
+                    let path = Path::from("nullable-rle.parquet");
+                    memory.put(&path, bytes.clone().into()).await?;
+                    let metrics = metrics();
+                    let store = Arc::new(MeteredParquetObjectStore::new(
+                        memory,
+                        metrics.clone(),
+                        MultiRangeReadStrategy::ChooseAutomatically,
+                    ));
+                    store.seed_transport_estimate(TransportEstimate {
+                        request_latency: Duration::from_millis(200),
+                        shared_throughput_bytes_per_second: 18_750_000,
+                    });
+                    store.seed_request_overhead(Duration::from_millis(1));
+                    let selection = Arc::new(Mutex::new(SelectedRows {
+                        current_group: Some(0),
+                        rows: vec![(rows - 1) as u64],
+                        predicate_columns: Some(ProjectionMask::roots(
+                            metadata.file_metadata().schema_descr(),
+                            [],
+                        )),
+                        ..Default::default()
+                    }));
+                    let inner = ParquetObjectReader::new(store.clone(), path.clone())
+                        .with_file_size(bytes.len() as u64);
+                    let mut reader = IntraPageReader::new(
+                        inner,
+                        metadata,
+                        Some(selection),
+                        bytes.len() as u64,
+                        store,
+                        path,
+                    )?;
+                    let out = reader.read_ranges(vec![range]).await?;
+                    assert_eq!(
+                        &out[0][out[0].len() - 8..],
+                        &(rows as i64 - 1).to_le_bytes()
+                    );
+                    // A long RLE run fits in the prefix, with or without null statistics.
+                    assert_eq!(
+                        metrics.snapshot().parquet_data_file_bytes_received,
+                        Some(4_104),
+                        "{page_count} pages, {null_rows} nulls per page, {statistics:?}"
+                    );
+                }
             }
         }
         Ok(())

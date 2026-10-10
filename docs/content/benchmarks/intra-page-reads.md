@@ -68,9 +68,11 @@ single waves still pay both costs. Request capacity comes from completion
 intervals in the central half of replenished small reads, spanning at least two
 waves. This captures sustained capacity instead of the completion burst caused
 by latency jitter in one wave.
-Large uncompressed nullable pages may need another request to read null
-information beyond the header prefix. The initial estimate budgets for that
-round, so it can reject an unprofitable plan before sending probes.
+For uncompressed nullable pages, the page size and available null counts can
+prove that null information extends beyond the header prefix. The initial
+estimate then budgets for another request. Row count alone does not establish
+this: even a million-row page can encode its null levels as a short RLE run.
+When metadata cannot settle this, bounded probes inspect the actual layout.
 
 The model takes the larger of processing and transport costs because they overlap.
 Repeated samples use a median; broad jitter can still lower the estimated capacity.

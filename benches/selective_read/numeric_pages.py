@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import random
+import signal
 import statistics
 import subprocess
 
@@ -79,6 +80,21 @@ def check(actual, expected):
         assert left.equals(right), "values differ (floats compared by bits)"
 
 
+def run_reader(command, *, env=None, stdout=None, stderr=None, timeout=180):
+    process = subprocess.Popen(command, env=env, stdout=stdout, stderr=stderr, start_new_session=True)
+    try:
+        code = process.wait(timeout=timeout)
+        if code:
+            raise subprocess.CalledProcessError(code, command)
+    finally:
+        # Killing only the launcher leaves its timed reader using shared resources.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait(timeout=10)
+
+
 def measure(args):
     os.sched_setaffinity(0, storage.state(args.state)["cpus"]["observer"])
     manifest = json.loads((args.fixture / "manifest.json").read_text())
@@ -117,7 +133,7 @@ def measure(args):
                 command = storage.reader_prefix(args.state) + ["/usr/bin/time", "-f", "%U %S %M", "-o", str(slot / "resources.txt"),
                     str(getattr(args, name)), args.table, args.type, args.selection, str(slot / "reader")]
                 with (slot / "stdout.json").open("x") as stdout, (slot / "stderr.log").open("x") as stderr:
-                    subprocess.run(command, env=current_env, stdout=stdout, stderr=stderr, timeout=180, check=True)
+                    run_reader(command, env=current_env, stdout=stdout, stderr=stderr)
                 capture = network.finish(args.state, slot)
                 record = json.loads((slot / "reader/record.json").read_text())
                 assert record["settings"]["warmup"] == "Automatic"
