@@ -90,7 +90,15 @@ class PythonReleaseTests(unittest.TestCase):
             self.release_event, event_name="release", ref="refs/tags/v1.2.3",
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(values["publish-to"], "pypi")
+        self.assertEqual(values, {
+            "source-ref": self.sha, "expected-version": "1.2.3", "publish-to": "pypi",
+        })
+
+    def test_published_release_requires_matching_tag_ref(self):
+        for ref in ("refs/heads/main", "refs/tags/other-v1.2.3", "refs/tags/v1.2.4"):
+            with self.subTest(ref=ref):
+                result, _ = self.check(self.release_event, event_name="release", ref=ref)
+                self.assertNotEqual(result.returncode, 0)
 
     def test_rejects_unsupported_release_events(self):
         for change in (

@@ -1,6 +1,8 @@
 name: Python release
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       publish-to:
@@ -11,6 +13,7 @@ on:
         options:
           - none
           - testpypi
+          - pypi
       expected-version:
         description: Exact package version to build, without the v prefix
         required: true
@@ -108,5 +111,48 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/
+          skip-existing: false
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [prepare, check]
+    if: >-
+      github.repository == 'mag1cfrog/delta-arrow-reader' &&
+      (github.event_name == 'workflow_dispatch' || github.event_name == 'release') &&
+      needs.prepare.outputs.publish-to == 'pypi' &&
+      needs.check.result == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-release
+      url: https://pypi.org/project/delta-arrow-reader/
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EXPECTED_VERSION: ${{ needs.prepare.outputs.expected-version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.source-ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: delta-arrow-reader-*-wheel
+          path: wheel-artifacts
+      - name: Recheck and stage validated wheels
+        id: stage
+        run: |
+          python crates/delta-arrow-reader-python/tests/check_wheel.py wheel-artifacts \
+            --artifact-set --expected-version "$EXPECTED_VERSION"
+          mkdir dist
+          cp wheel-artifacts/*/*.whl dist/
+      - name: Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://upload.pypi.org/legacy/
           packages-dir: dist/
           skip-existing: false
