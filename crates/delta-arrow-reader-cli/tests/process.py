@@ -255,16 +255,71 @@ class ProcessTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_native_predicate_validation_leaves_stdout_empty(self):
-        table = CORPUS / "partitioned/table"
-        for predicate in [
-            *({"op": "is_null", "column": name} for name in ["", "secret-missing", "profile.city"]),
-            {"op": "eq", "column": "id", "value": {"type": "utf8", "value": "secret-literal"}},
-            {"op": "eq", "column": "id", "value": {"type": "decimal128", "value": "1", "precision": 0, "scale": 0}},
+        table = self.metadata_table([
+            {"name": name, "type": kind, "nullable": True, "metadata": {}}
+            for name, kind in [("id", "integer"), ("amount", "decimal(12,2)"),
+                               ("created_at", "timestamp"), ("label", "string"),
+                               ("data", "binary"), ("day", "date")]
+        ])
+        for column, scalar in [
+            ("id", {"type": "int32", "value": "1"}),
+            ("amount", {"type": "decimal128", "value": "12345", "precision": 12, "scale": 2}),
+            ("created_at", {"type": "timestamp_us", "value": "-1", "timezone": "UTC"}),
+            ("label", {"type": "utf8", "value": "secret-literal"}),
+            ("data", {"type": "binary", "value": [0, 255]}),
+            ("day", {"type": "date32", "value": "-1"}),
         ]:
-            with self.subTest(predicate=predicate):
+            with self.subTest(valid_column=column):
+                predicate = {"op": "eq", "column": column, "value": scalar}
                 path = self.predicate_file(json.dumps(predicate).encode())
-                self.assert_error(self.invoke("scan", "--predicate-file", path, table),
-                                  1, "scan_planning", "unsupported_predicate")
+                result = self.invoke("scan", "--predicate-file", path, table)
+                self.assertEqual((result.returncode, result.stderr), (0, b""))
+
+        cases = [
+            ({"op": "is_null", "column": ""}, "invalid_column_reference"),
+            ({"op": "is_null", "column": "profile.secret"}, "invalid_column_reference"),
+            ({"op": "is_null", "column": "secret-missing"}, "column_not_found"),
+        ]
+        for column, scalar in [
+            ("id", {"type": "utf8", "value": "secret-literal"}),
+            ("id", {"type": "int64", "value": "1"}),
+            ("amount", {"type": "decimal128", "value": "1", "precision": 11, "scale": 2}),
+            ("amount", {"type": "decimal128", "value": "1", "precision": 12, "scale": 3}),
+            ("created_at", {"type": "timestamp_us", "value": "-1", "timezone": None}),
+            ("created_at", {"type": "timestamp_us", "value": "-1", "timezone": "Etc/UTC"}),
+            ("label", {"type": "large_utf8", "value": "secret-literal"}),
+            ("data", {"type": "large_binary", "value": [0, 255]}),
+            ("data", {"type": "fixed_size_binary", "value": [0, 255], "size": 2}),
+            ("day", {"type": "int32", "value": "-1"}),
+        ]:
+            cases.append(({"op": "eq", "column": column, "value": scalar}, "scalar_type_mismatch"))
+        for value, precision, scale in [("1", 0, 0), ("1", 39, 2), ("1", 12, 13),
+                                        ("1000000000000", 12, 2), ("1", 255, -128)]:
+            cases.append(({
+                "op": "eq", "column": "amount",
+                "value": {"type": "decimal128", "value": value, "precision": precision, "scale": scale},
+            }, "invalid_decimal"))
+        for op, constant in [("and", False), ("or", True)]:
+            cases.append(({"op": op, "args": [
+                {"op": "constant", "value": constant}, {"op": "is_null", "column": "secret-missing"},
+            ]}, "column_not_found"))
+        for predicate, reason in cases:
+            for flags in [(), ("--limit", "0")]:
+                with self.subTest(predicate=predicate, flags=flags):
+                    path = self.predicate_file(json.dumps(predicate).encode())
+                    diagnostic = self.assert_error(
+                        self.invoke("scan", "--predicate-file", path, *flags, table),
+                        1, "scan_planning", "unsupported_predicate",
+                    )
+                    self.assertTrue(diagnostic["message"].endswith(f"reason={reason}"), diagnostic)
+
+    def test_duplicate_table_columns_fail_during_snapshot_loading(self):
+        # Kernel rejects duplicate schema names before predicate planning can run.
+        field = {"name": "secret-id", "type": "integer", "nullable": True, "metadata": {}}
+        table = self.metadata_table([field, field])
+        path = self.predicate_file(b'{"op":"is_null","column":"secret-id"}')
+        self.assert_error(self.invoke("scan", "--predicate-file", path, table),
+                          1, "snapshot", "snapshot_load")
 
     def test_scan_planning_errors_leave_stdout_empty(self):
         table = CORPUS / "partitioned/table"
