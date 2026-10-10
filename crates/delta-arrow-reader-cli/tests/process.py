@@ -2,6 +2,7 @@
 
 import functools
 import importlib.util
+from itertools import product
 import json
 import os
 from pathlib import Path
@@ -409,8 +410,8 @@ class ProcessTests(unittest.TestCase):
         self.assertEqual(result.returncode, 3)
 
     def test_signals_stop_blocked_loading_without_child_processes(self):
-        for signum in [signal.SIGINT, signal.SIGTERM, signal.SIGKILL]:
-            with self.subTest(signal=signum):
+        for command, signum in product(["inspect", "scan"], [signal.SIGINT, signal.SIGTERM, signal.SIGKILL]):
+            with self.subTest(command=command, signal=signum):
                 started, disconnected = threading.Event(), threading.Event()
 
                 class BlockingStorageHandler(RecordingStorageHandler):
@@ -422,7 +423,7 @@ class ProcessTests(unittest.TestCase):
                         self.send_head()
 
                 with http.serve(functools.partial(BlockingStorageHandler, directory=self.cwd)) as server:
-                    args = [DAR, "inspect", "--storage-options-file", self.options(b'{"allow_http":"true"}'),
+                    args = [DAR, command, "--storage-options-file", self.options(b'{"allow_http":"true"}'),
                             f"http://127.0.0.1:{server.server_port}/"]
                     with subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=self.env) as process:
                         try:
@@ -455,7 +456,7 @@ class ProcessTests(unittest.TestCase):
                 started = self.cwd / "open-started"
                 started.unlink(missing_ok=True)
                 self.env.update(LD_PRELOAD=str(self.fault_library), DAR_TEST_BLOCKED_OPEN=str(old),
-                                DAR_TEST_LATEST_LOG=str(latest), DAR_TEST_OPEN_STARTED=str(started))
+                                DAR_TEST_WAITING_OPEN=str(latest), DAR_TEST_OPEN_STARTED=str(started))
                 result = self.invoke("inspect", table)
                 self.assertTrue(started.exists(), "unused blocking prefetch never started")
                 if invalid_schema:
