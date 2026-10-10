@@ -56,7 +56,7 @@ class DeltaTable:
         *,
         version: int | None = None,
         storage_options: Mapping[str, str] | None = None,
-        warmup: Literal["none", "query_planning"] = "none",
+        warmup: Literal["automatic", "none", "query_planning"] = "automatic",
         execution_options: ScanExecutionOptions | None = None,
     ) -> None: ...
     def refresh(self) -> DeltaTable: ...

@@ -8,7 +8,7 @@ use std::{
 
 use arrow_schema::Schema;
 use clap::{Parser, Subcommand, error::ErrorKind};
-use delta_arrow_reader::{DeltaReaderError, DeltaSnapshotSelection, DeltaTableBuilder};
+use delta_arrow_reader::{DeltaReaderError, DeltaSnapshotSelection, DeltaTableBuilder, WarmupMode};
 use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu, ensure};
 
@@ -136,7 +136,9 @@ fn run() -> Result<(), Error> {
                 Some(path) => input::read_json_file::<input::StorageOptionsInput>(&path)?.0,
                 None => Default::default(),
             };
+            // Inspection needs only version and schema, even for unscannable tables.
             let builder = DeltaTableBuilder::new(table)
+                .with_warmup(WarmupMode::None)
                 .with_snapshot_selection(table_version.map_or(
                     DeltaSnapshotSelection::Latest,
                     DeltaSnapshotSelection::Version,

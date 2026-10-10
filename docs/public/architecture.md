@@ -24,7 +24,11 @@ unchanged.
 
 For a table in remote storage, the read path has three distinct I/O phases.
 The warmup mode controls whether Delta scan metadata is prepared during table
-initialization or during each query:
+initialization or during each query.
+
+The default `Automatic` mode prepares supported S3 tables and also performs
+bounded network sampling. Other stores remain lazy. The table below separates
+metadata preparation from the additional [network profiling](scan-planning.md#choose-a-warmup-mode).
 
 | Phase | No warmup | Query planning |
 | --- | --- | --- |

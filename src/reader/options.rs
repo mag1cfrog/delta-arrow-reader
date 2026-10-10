@@ -78,7 +78,7 @@ impl DeltaScanExecutionOptions {
             parquet_metadata_size_hint_bytes: Some(DEFAULT_PARQUET_METADATA_SIZE_HINT_BYTES),
             parquet_full_file_read_threshold_bytes: None,
             parquet_range_read_policy: ParquetRangeReadPolicy::Automatic,
-            experimental_intra_page_reads: false,
+            experimental_intra_page_reads: true,
         }
     }
 
@@ -128,7 +128,7 @@ impl DeltaScanExecutionOptions {
 
     /// Enables experimental partial reads of flat nullable PLAIN INT64 pages.
     ///
-    /// Disabled by default. The direct reader uses predicate-derived row numbers to
+    /// Enabled by default. The direct reader uses predicate-derived row numbers to
     /// read selected values from uncompressed pages or Zstd raw blocks without
     /// checksums. Unsupported layouts and bounded-work limits use ordinary reads.
     /// Explicit range-read policies other than `Automatic` disable this optimization.
@@ -138,9 +138,10 @@ impl DeltaScanExecutionOptions {
     /// reads must beat the ordinary plan by more than ten percent, including
     /// probes and dependent request rounds. Missing evidence, dense selections,
     /// an unmeasured small-request cost, or insufficient shared request capacity
-    /// retain ordinary reads. Network warmup can supply the full profile before
-    /// querying; this flag itself sends no calibration requests. Passing `false`
-    /// restores ordinary reads.
+    /// retain ordinary reads. Automatic table warmup supplies the full profile for
+    /// supported S3 stores. This scan option itself sends no calibration requests.
+    /// Passing `false` restores ordinary reads and skips automatic table warmup when
+    /// supplied to the table builder. Explicit warmup settings remain in effect.
     pub const fn with_experimental_intra_page_reads(mut self, enabled: bool) -> Self {
         self.experimental_intra_page_reads = enabled;
         self
@@ -301,7 +302,7 @@ mod tests {
     };
 
     #[test]
-    fn public_defaults_match_the_frozen_baseline() {
+    fn public_defaults_enable_conditional_partial_reads() {
         let options = DeltaScanExecutionOptions::new();
 
         assert_eq!(
@@ -314,7 +315,7 @@ mod tests {
         );
         assert_eq!(DeltaScanExecutionOptions::default(), options);
         assert_eq!(options.parquet_backend(), ParquetReaderBackend::Direct);
-        assert!(!options.experimental_intra_page_reads());
+        assert!(options.experimental_intra_page_reads());
         assert_eq!(options.max_concurrent_file_reads_per_scan(), None);
         assert_eq!(options.max_concurrent_file_reads_per_partition(), 3);
         assert_eq!(options.output_buffer_batches_per_partition(), 1);
@@ -332,7 +333,7 @@ mod tests {
     fn builders_set_every_public_option() -> Result<(), Box<dyn std::error::Error>> {
         let options = DeltaScanExecutionOptions::new()
             .with_parquet_backend(ParquetReaderBackend::DeltaKernel)
-            .with_experimental_intra_page_reads(true)
+            .with_experimental_intra_page_reads(false)
             .with_max_concurrent_file_reads_per_scan(Some(8))?
             .with_max_concurrent_file_reads_per_partition(4)?
             .with_output_buffer_batches_per_partition(2)?
@@ -341,7 +342,7 @@ mod tests {
             .with_parquet_full_file_read_threshold_bytes(Some(1024))?;
 
         assert_eq!(options.parquet_backend(), ParquetReaderBackend::DeltaKernel);
-        assert!(options.experimental_intra_page_reads());
+        assert!(!options.experimental_intra_page_reads());
         assert_eq!(options.max_concurrent_file_reads_per_scan(), Some(8));
         assert_eq!(options.max_concurrent_file_reads_per_partition(), 4);
         assert_eq!(options.output_buffer_batches_per_partition(), 2);
