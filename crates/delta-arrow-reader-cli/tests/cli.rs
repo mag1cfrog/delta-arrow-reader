@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File},
-    io::{self, Read},
+    io::{self, Cursor, Read},
     path::Path,
     process::{Command, Output, Stdio},
     thread,
@@ -8,9 +8,12 @@ use std::{
 };
 
 use arrow::{
+    compute::{concat_batches, sort_to_indices, take_record_batch},
     datatypes::{DataType, Fields, Schema},
-    ipc::reader::FileReader,
+    ipc::reader::{FileReader, StreamReader},
+    record_batch::RecordBatch,
 };
+use delta_arrow_reader::{DeltaSnapshotSelection, DeltaTableBuilder, TryStreamExt, WarmupMode};
 use serde_json::Value;
 
 #[test]
@@ -60,6 +63,104 @@ fn external_writer_schemas_round_trip() -> Result<(), Box<dyn std::error::Error>
         assert_eq!(schema.metadata(), expected.metadata());
     }
     Ok(())
+}
+
+#[test]
+fn scans_match_core_for_projection_limits_and_versions() -> Result<(), Box<dyn std::error::Error>> {
+    let corpus = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/reader/fixtures/external_writer/corpus");
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    let result = runtime.block_on(async {
+        for name in ["partitioned", "nested_mapping", "deletion_vectors"] {
+            let path = corpus.join(name).join("table");
+            for version in [None, Some(0)] {
+                let table = DeltaTableBuilder::new(path.to_str().unwrap())
+                    .with_warmup(WarmupMode::None)
+                    .with_snapshot_selection(version.map_or(
+                        DeltaSnapshotSelection::Latest,
+                        DeltaSnapshotSelection::Version,
+                    ))
+                    .load_table()
+                    .await?;
+                let projections: [Option<&[&str]>; 3] = [None, Some(&["value", "id"]), Some(&[])];
+                for columns in projections {
+                    let mut builder = table.scan();
+                    if let Some(columns) = columns {
+                        builder = builder.with_projection(columns.iter().copied());
+                    }
+                    let scan = builder.build().await?;
+                    let schema = scan.schema();
+                    let batches = scan.into_stream().try_collect::<Vec<_>>().await?;
+                    let expected = concat_batches(&schema, &batches)?;
+                    for limit in [None, Some(0), Some(1), Some(1_000)] {
+                        let context = format!(
+                            "{name} version={version:?} columns={columns:?} limit={limit:?}"
+                        );
+                        let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
+                        command.arg("scan").arg(&path);
+                        if let Some(version) = version {
+                            command.args(["--table-version", &version.to_string()]);
+                        }
+                        if let Some(columns) = columns {
+                            if columns.is_empty() {
+                                command.arg("--no-columns");
+                            }
+                            for column in columns {
+                                command.args(["--column", column]);
+                            }
+                        }
+                        if let Some(limit) = limit {
+                            command.args(["--limit", &limit.to_string()]);
+                        }
+                        let output = run_with_timeout(&mut command)?;
+                        assert!(
+                            output.status.success(),
+                            "{context}: {}",
+                            String::from_utf8_lossy(&output.stderr)
+                        );
+                        assert!(output.stderr.is_empty(), "{context}");
+                        assert!(
+                            output.stdout.ends_with(&[255, 255, 255, 255, 0, 0, 0, 0]),
+                            "missing IPC end marker: {context}"
+                        );
+                        let reader = StreamReader::try_new(Cursor::new(output.stdout), None)?;
+                        assert_eq!(reader.schema(), schema, "{context}");
+                        let actual =
+                            concat_batches(&schema, &reader.collect::<Result<Vec<_>, _>>()?)?;
+                        assert_eq!(
+                            actual.num_rows(),
+                            expected.num_rows().min(limit.unwrap_or(usize::MAX)),
+                            "{context}"
+                        );
+                        if actual.num_columns() == 0 || actual.num_rows() == 0 {
+                            continue;
+                        }
+                        // The core does not promise row order. A one-row limit must
+                        // return a row from the full scan; otherwise compare all rows.
+                        if limit == Some(1) {
+                            assert!(
+                                (0..expected.num_rows())
+                                    .any(|row| actual == expected.slice(row, 1)),
+                                "{context}"
+                            );
+                        } else {
+                            assert_eq!(sort_by_id(&actual)?, sort_by_id(&expected)?, "{context}");
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    });
+    runtime.shutdown_background();
+    result
+}
+
+fn sort_by_id(batch: &RecordBatch) -> Result<RecordBatch, arrow::error::ArrowError> {
+    let indices = sort_to_indices(batch.column_by_name("id").unwrap(), None, None)?;
+    take_record_batch(batch, &indices)
 }
 
 fn run_with_timeout(command: &mut Command) -> io::Result<Output> {
