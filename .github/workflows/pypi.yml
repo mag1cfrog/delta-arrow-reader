@@ -3,6 +3,14 @@ name: Python release
 on:
   workflow_dispatch:
     inputs:
+      publish-to:
+        description: Package index, or none to build and validate only
+        required: true
+        type: choice
+        default: none
+        options:
+          - none
+          - testpypi
       expected-version:
         description: Exact package version to build, without the v prefix
         required: true
@@ -59,3 +67,46 @@ jobs:
             exit 1
           fi
           echo "All four platform wheels passed validation"
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: [prepare, check]
+    if: >-
+      github.repository == 'mag1cfrog/delta-arrow-reader' &&
+      github.event_name == 'workflow_dispatch' &&
+      needs.prepare.outputs.publish-to == 'testpypi' &&
+      needs.check.result == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi-release
+      url: https://test.pypi.org/project/delta-arrow-reader/
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EXPECTED_VERSION: ${{ needs.prepare.outputs.expected-version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.source-ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: delta-arrow-reader-*-wheel
+          path: wheel-artifacts
+      - name: Recheck and stage validated wheels
+        id: stage
+        run: |
+          python crates/delta-arrow-reader-python/tests/check_wheel.py wheel-artifacts \
+            --artifact-set --expected-version "$EXPECTED_VERSION"
+          mkdir dist
+          cp wheel-artifacts/*/*.whl dist/
+      - name: Upload to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/
+          skip-existing: false

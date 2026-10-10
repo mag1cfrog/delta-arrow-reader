@@ -163,7 +163,10 @@ jobs:
           args: .github/workflows/ci.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml
       - name: Test Python release checks
         if: matrix.task == 'Lints and Docs'
-        run: python3 -m unittest discover -s .github/tests -v
+        run: |
+          python3 -m venv "$RUNNER_TEMP/python-release-tests"
+          "$RUNNER_TEMP/python-release-tests/bin/python" -m pip install --only-binary=:all: 'PyYAML==6.0.3'
+          "$RUNNER_TEMP/python-release-tests/bin/python" -m unittest discover -s .github/tests -v
       - if: matrix.task == 'Lints and Docs'
         run: python3 -m unittest discover -s benches -p test_scan_scheduling.py
       - if: matrix.task == 'Lints and Docs'
