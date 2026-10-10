@@ -204,6 +204,34 @@ class ScanTests(unittest.TestCase):
             self.assertEqual(actual.schema.names, ["value"])
             self.assertEqual(actual.to_pylist(), [{"value": 30}])
 
+    def test_execution_options_compose_with_filtered_scans(self):
+        predicate = self.cwd / "predicate.json"
+        predicate.write_text(json.dumps({
+            "op": "eq", "column": "id", "value": {"type": "int32", "value": "10"},
+        }), encoding="utf-8")
+        options = self.cwd / "execution-options.json"
+        for backend in ["direct", "delta_kernel", None]:
+            flags = []
+            if backend is not None:
+                options.write_text(json.dumps({
+                    "parquet_backend": backend, "max_concurrent_file_reads_per_scan": 1,
+                    "max_concurrent_file_reads_per_partition": 1, "output_buffer_batches_per_partition": 1,
+                    "prefetch_files_per_partition": 0, "parquet_metadata_size_hint_bytes": None,
+                    "parquet_full_file_read_threshold_bytes": 1048576,
+                }), encoding="utf-8")
+                flags = ["--execution-options-file", str(options)]
+            with self.subTest(backend=backend), self.start_scan(
+                CORPUS / "partitioned/table", *flags, "--predicate-file", str(predicate),
+                "--column", "value", "--limit", "1",
+            ) as process:
+                stdout, stderr = process.communicate(timeout=15)
+                self.assertEqual((process.returncode, stderr), (0, b""))
+                self.assertTrue(stdout.endswith(IPC_END))
+                actual = pa.ipc.open_stream(stdout).read_all()
+                self.assertEqual(actual.schema.names, ["value"])
+                self.assertEqual(actual.schema.field("value").type, pa.int32())
+                self.assertEqual(actual.to_pylist(), [{"value": 30}])
+
     def test_float64_predicates_distinguish_adjacent_values(self):
         table = self.cwd / "float64-table"
         log = table / "_delta_log"

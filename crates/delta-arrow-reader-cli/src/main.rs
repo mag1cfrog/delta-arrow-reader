@@ -1,3 +1,4 @@
+mod execution_options;
 mod input;
 mod predicate;
 
@@ -49,6 +50,9 @@ enum Command {
         /// Local typed JSON predicate; at most 1 MiB. '-' is a filename, not stdin.
         #[arg(long, value_name = "PATH")]
         predicate_file: Option<String>,
+        /// Local JSON execution options; at most 1 MiB. '-' is a filename, not stdin.
+        #[arg(long, value_name = "PATH")]
+        execution_options_file: Option<String>,
     },
 }
 
@@ -82,6 +86,8 @@ enum Error {
     ArrowIpc { source: ArrowError },
     #[snafu(display("{source}"))]
     Reader { source: DeltaReaderError },
+    #[snafu(display("{source}"))]
+    Configuration { source: DeltaReaderError },
 }
 
 impl From<ArrowError> for Error {
@@ -108,14 +114,19 @@ impl Error {
             Self::Runtime { .. } => ("execution", "runtime_initialization"),
             Self::Output { .. } => ("execution", "output_write"),
             Self::ArrowIpc { .. } => ("execution", "arrow_ipc"),
-            Self::Reader { source } => (source.phase().as_str(), source.code()),
+            Self::Reader { source } | Self::Configuration { source } => {
+                (source.phase().as_str(), source.code())
+            }
         };
         json!({"phase": phase, "code": code, "message": self.to_string()})
     }
 
     fn exit_code(&self) -> ExitCode {
         ExitCode::from(match self {
-            Self::Argument | Self::InputJson | Self::InputIo { .. } => 2,
+            Self::Argument
+            | Self::InputJson
+            | Self::InputIo { .. }
+            | Self::Configuration { .. } => 2,
             Self::Runtime { .. } | Self::Reader { .. } | Self::ArrowIpc { .. } => 1,
             Self::Output { .. } => 3,
         })
@@ -181,6 +192,23 @@ fn run() -> Result<(), Error> {
         } => Some(input::read_json_file::<predicate::PredicateInput>(path)?.0),
         _ => None,
     };
+    let execution_options = match &command {
+        Command::Scan {
+            execution_options_file: Some(path),
+            ..
+        } => {
+            let options = input::read_json_file::<
+                input::JsonObject<execution_options::ExecutionOptionsInput>,
+            >(path)?
+            .0;
+            Some(
+                options
+                    .into_execution_options()
+                    .context(ConfigurationSnafu)?,
+            )
+        }
+        _ => None,
+    };
     // Inspect needs only metadata. Scan planning happens explicitly below.
     let builder = DeltaTableBuilder::new(&table_args.table)
         .with_warmup(WarmupMode::None)
@@ -227,6 +255,9 @@ fn run() -> Result<(), Error> {
                 }
                 if let Some(predicate) = predicate {
                     builder = builder.with_predicate(predicate);
+                }
+                if let Some(execution_options) = execution_options {
+                    builder = builder.with_execution_options(execution_options);
                 }
                 write_arrow_stream(builder.build().await.context(ReaderSnafu)?).await
             }
