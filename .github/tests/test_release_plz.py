@@ -31,6 +31,24 @@ class ReleasePlanningTests(unittest.TestCase):
         self.assertFalse(tomllib.loads(manifest.read_text())["package"]["publish"])
 
     def test_python_only_change_updates_shared_release(self):
+        self.assert_python_change_updates_shared_release(
+            "crates/python/src/lib.rs",
+            "pub fn python() {}\npub fn python_only_feature() {}\n",
+        )
+
+    def test_python_metadata_only_change_updates_shared_release(self):
+        self.assert_python_change_updates_shared_release(
+            "pyproject.toml",
+            '[project]\nname = "delta-arrow-reader"\nrequires-python = ">=3.11"\n',
+        )
+
+    def test_python_stubs_only_change_updates_shared_release(self):
+        self.assert_python_change_updates_shared_release(
+            "delta_arrow_reader.pyi",
+            "def read() -> int: ...\ndef version() -> str: ...\n",
+        )
+
+    def assert_python_change_updates_shared_release(self, changed_path, contents):
         with tempfile.TemporaryDirectory(prefix="python-release-test-") as temporary:
             project = Path(temporary) / "project"
             project.mkdir()
@@ -50,7 +68,8 @@ class ReleasePlanningTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stdout)
                 return result.stdout
 
-            (project / "Cargo.toml").write_text('''\
+            root_manifest = tomllib.loads((ROOT / "Cargo.toml").read_text())
+            (project / "Cargo.toml").write_text(f'''\
 [workspace]
 members = ["crates/python", "crates/cli"]
 default-members = ["."]
@@ -66,9 +85,14 @@ edition = "2024"
 description = "Release configuration fixture"
 license = "Apache-2.0"
 repository = "https://github.com/mag1cfrog/delta-arrow-reader"
+exclude = {json.dumps(root_manifest["package"]["exclude"])}
 ''')
             (project / "src").mkdir()
             (project / "src/lib.rs").write_text("pub fn read() {}\n")
+            (project / "pyproject.toml").write_text(
+                '[project]\nname = "delta-arrow-reader"\nrequires-python = ">=3.10"\n'
+            )
+            (project / "delta_arrow_reader.pyi").write_text("def read() -> int: ...\n")
             for name, source, code in (
                 ("python", "lib.rs", "pub fn python() {}\n"),
                 ("cli", "main.rs", "fn main() {}\n"),
@@ -96,13 +120,12 @@ delta-arrow-reader = {{ version = "0.6.2", path = "../.." }}
             run("git", "tag", "v0.6.2")
             run("git", "clone", "--quiet", "--no-hardlinks", ".", "../published")
 
-            python_source = project / "crates/python/src/lib.rs"
-            python_source.write_text("pub fn python() {}\npub fn python_only_feature() {}\n")
-            run("git", "add", "crates/python/src/lib.rs")
-            run("git", "commit", "-m", "feat(python): add Python-only feature")
+            (project / changed_path).write_text(contents)
+            run("git", "add", changed_path)
+            run("git", "commit", "-m", "fix(python): update Python-only package input")
             self.assertEqual(
                 run("git", "diff", "--name-only", "v0.6.2", "HEAD").splitlines(),
-                ["crates/python/src/lib.rs"],
+                [changed_path],
             )
             # The local baseline avoids contacting a registry or publishing anything.
             run(
@@ -118,7 +141,7 @@ delta-arrow-reader = {{ version = "0.6.2", path = "../.." }}
                     self.assertEqual(package["version"], "0.6.3")
             changelog = project / "CHANGELOG.md"
             self.assertEqual(list(project.rglob("CHANGELOG.md")), [changelog])
-            self.assertIn("add Python-only feature", changelog.read_text())
+            self.assertIn("update Python-only package input", changelog.read_text())
             self.assertIn("/compare/v0.6.2...v0.6.3", changelog.read_text())
 
 
