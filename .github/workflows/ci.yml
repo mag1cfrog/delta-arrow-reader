@@ -154,6 +154,8 @@ jobs:
       - if: matrix.task == 'Lints and Docs'
         run: python3 -m unittest discover -s benches -p test_scan_scheduling.py
       - if: matrix.task == 'Lints and Docs'
+        run: python3 -m unittest discover -s crates/delta-arrow-reader-cli/release
+      - if: matrix.task == 'Lints and Docs'
         run: cargo fmt --all -- --check
       - if: matrix.task == 'Lints and Docs'
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
