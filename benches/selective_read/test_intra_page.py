@@ -3,14 +3,42 @@
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
-from intra_page import network_metrics
+from intra_page import network_metrics, run
 from run import query_count
 from supervise import Progress
 
 
 class NetworkMetricsTest(unittest.TestCase):
+    def test_two_builds_use_defaults_and_report_first_query(self):
+        record = {"status": "success", "settings": {"provider": {
+            "warmup": "Automatic", "scan_options": "experimental_intra_page_reads: true"}},
+            "queries": [{"completion_ns": n * 10**9, "output_rows": 3} for n in (7, 4)],
+            "initialization_ns": 2 * 10**9, "session_elapsed_ns": 13 * 10**9,
+            "supervision": {"process_cpu_ns": 9, "peak_rss_bytes": 100}}
+        with tempfile.TemporaryDirectory() as directory:
+            args = SimpleNamespace(output=Path(directory), binary=Path("candidate"),
+                baseline_binary=Path("baseline"), state=Path("state"), reference=Path("reference"),
+                local_table=None)
+            with patch("intra_page.storage.reader_environment", return_value={}), \
+                 patch("intra_page.storage.reader_prefix", return_value=[]), \
+                 patch("intra_page.network.control") as control, \
+                 patch("intra_page.network.finish", return_value={"requests": 10}), \
+                 patch("intra_page.invoke", return_value=record) as invoke, \
+                 patch("intra_page.save"), patch("builtins.print"):
+                for mode in ("baseline", "candidate"):
+                    sample = run(args, {"execution_mode": "reuse"}, mode, "timing", 0)
+                    self.assertEqual(invoke.call_args.args[0], Path(mode))
+                    self.assertEqual(invoke.call_args.kwargs["env"], {
+                        "DAR_INTRA_PAGE_READS": "default", "DAR_NETWORK_WARMUP": "default"})
+                    self.assertEqual(sample["seconds"], 7)
+                    self.assertEqual(sample["initialization_seconds"], 2)
+                    self.assertEqual(sample["query_seconds"], [7, 4])
+                    control.assert_called_with(args.state, reset=True, traced=False)
+
     def test_concurrent_completion_keeps_one_deadline(self):
         payload = {"execution_mode": "reuse", "comparison_revision": 6,
                    "purpose": "timing", "concurrent_queries": 4}

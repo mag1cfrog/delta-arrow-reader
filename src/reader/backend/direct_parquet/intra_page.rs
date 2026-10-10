@@ -174,10 +174,14 @@ impl IntraPageReader {
         let mut pages = Vec::new();
         for (column, chunk) in row_group.columns().iter().enumerate() {
             let descriptor = chunk.column_descr();
+            let value_width = match descriptor.physical_type() {
+                Type::INT32 | Type::FLOAT => 4,
+                Type::INT64 | Type::DOUBLE => 8,
+                _ => continue,
+            };
             if predicate_columns.leaf_included(column)
-                || descriptor.physical_type() != Type::INT64
                 || descriptor.path().parts().len() != 1
-                || descriptor.max_def_level() != 1
+                || !matches!(descriptor.max_def_level(), 0 | 1)
                 || descriptor.max_rep_level() != 0
                 || chunk.dictionary_page_offset().is_some()
                 || !matches!(
@@ -211,11 +215,21 @@ impl IntraPageReader {
                 {
                     return None;
                 }
+                // A raw Zstd frame cannot be smaller than its required PLAIN values.
+                // These pages need the ordinary decoder, so do not probe them.
+                if matches!(chunk.compression(), Compression::ZSTD(_))
+                    && descriptor.max_def_level() == 0
+                    && length < row_count * value_width as u64
+                {
+                    continue;
+                }
                 pages.push(Page {
                     range,
                     first_file_row: group_rows.start + first_row,
                     row_count: row_count as usize,
                     compression: chunk.compression(),
+                    value_width,
+                    nullable: descriptor.max_def_level() == 1,
                 });
                 if pages.len() > MAX_PAGES {
                     return None;
@@ -347,17 +361,30 @@ impl IntraPageReader {
                 page.range.start..(page.range.start + page::PAGE_PREFIX_BYTES).min(page.range.end)
             })
             .collect();
-        // In a supported raw Zstd frame this large, at least one block header
-        // lies beyond the prefix. It needs a dependent probe before values.
-        let block_probes = pages
-            .iter()
-            .filter(|page| {
-                matches!(page.compression, Compression::ZSTD(_))
-                    && page.range.end - page.range.start
-                        > page::PAGE_PREFIX_BYTES + page::MAX_ZSTD_BLOCK_BYTES as u64 + 3
-            })
-            .count();
-        let block_probe_bytes = block_probes as u128 * 3;
+        // Large raw Zstd frames need a dependent block-header probe. Uncompressed
+        // nullable pages can also need another round when bit-packed null levels
+        // outgrow the prefix; omitting it can cause a costly probe-then-fallback.
+        let mut extra_probe_bytes = 0;
+        let mut extra_probes = 0;
+        for page in pages {
+            let size = match page.compression {
+                Compression::ZSTD(_)
+                    if page.range.end - page.range.start
+                        > page::PAGE_PREFIX_BYTES + page::MAX_ZSTD_BLOCK_BYTES as u64 + 3 =>
+                {
+                    3
+                }
+                Compression::UNCOMPRESSED
+                    if page.nullable
+                        && page.row_count.div_ceil(8) as u64 >= page::PAGE_PREFIX_BYTES =>
+                {
+                    page.row_count.div_ceil(8) as u128
+                }
+                _ => continue,
+            };
+            extra_probe_bytes += size;
+            extra_probes += 1;
+        }
         let cost = partial_plan_cost(
             range_bytes(&plan),
             plan.len(),
@@ -373,8 +400,8 @@ impl IntraPageReader {
             request_overhead_bytes,
         ))
         .saturating_add(partial_plan_cost(
-            block_probe_bytes,
-            block_probes,
+            extra_probe_bytes,
+            extra_probes,
             estimate,
             concurrency,
             request_overhead_bytes,
@@ -384,8 +411,8 @@ impl IntraPageReader {
                 "preflight",
                 "profile_predicts_no_savings",
                 cost,
-                range_bytes(&plan) + range_bytes(&prefixes) + block_probe_bytes,
-                plan.len() + prefixes.len() + block_probes,
+                range_bytes(&plan) + range_bytes(&prefixes) + extra_probe_bytes,
+                plan.len() + prefixes.len() + extra_probes,
                 0,
                 concurrency,
             );
@@ -565,7 +592,12 @@ fn estimated_value_ranges(pages: &[Page], selected_rows: &[u64]) -> Option<Vec<R
                 * u128::from(page.range.end - page.range.start)
                 / page.row_count as u128;
             let start = page.range.start + u64::try_from(offset).ok()?;
-            ranges.push(start..start.saturating_add(8).min(page.range.end));
+            ranges.push(
+                start
+                    ..start
+                        .saturating_add(page.value_width as u64)
+                        .min(page.range.end),
+            );
             if ranges.len() > MAX_REQUESTS {
                 return None;
             }
@@ -671,6 +703,8 @@ mod tests {
             range: 0..bytes.len() as u64,
             first_file_row: 0,
             row_count: expected.len(),
+            value_width: 8,
+            nullable: true,
             compression: Compression::UNCOMPRESSED,
         };
         let (desc, reader) = standard_page_reader(bytes.clone(), page.row_count, page.compression)?;
@@ -719,6 +753,8 @@ mod tests {
                 range: 0..bytes.len() as u64,
                 first_file_row: 0,
                 row_count: 2_000,
+                value_width: 8,
+                nullable: true,
                 compression: Compression::ZSTD(Default::default()),
             };
             assert_eq!(
@@ -757,6 +793,8 @@ mod tests {
             range: 0..full.len() as u64,
             first_file_row: 50,
             row_count: 20_000,
+            value_width: 8,
+            nullable: true,
             compression: Compression::ZSTD(Default::default()),
         };
         let mut cache = RangeCache {
@@ -973,6 +1011,8 @@ mod tests {
                 range: 0..bytes.len() as u64,
                 first_file_row: 0,
                 row_count: 1,
+                value_width: 8,
+                nullable: true,
                 compression: Compression::UNCOMPRESSED,
             };
             assert!(matches!(
@@ -993,6 +1033,8 @@ mod tests {
             range: 0..bytes.len() as u64,
             first_file_row: 0,
             row_count: 1,
+            value_width: 8,
+            nullable: true,
             compression: Compression::ZSTD(Default::default()),
         };
         assert!(matches!(
@@ -1008,6 +1050,176 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn intra_page_numeric_lengths_and_row_boundaries() -> TestResult {
+        for value_width in [4, 8] {
+            for nullable in [false, true] {
+                // Three present values, optionally preceded by one RLE level run.
+                let mut body = if nullable {
+                    vec![2, 0, 0, 0, 6, 1]
+                } else {
+                    vec![]
+                };
+                body.extend(vec![17; 3 * value_width]);
+                for size in [body.len() - 1, body.len(), body.len() + 1] {
+                    let mut body = body.clone();
+                    body.resize(size, 17);
+                    let bytes = encode_page(&body, size, 3, None)?;
+                    let page = Page {
+                        range: 0..bytes.len() as u64,
+                        first_file_row: 10,
+                        row_count: 3,
+                        value_width,
+                        nullable,
+                        compression: Compression::UNCOMPRESSED,
+                    };
+                    let cache = RangeCache {
+                        entries: vec![(page.range.clone(), bytes)],
+                    };
+                    let result = selected_value_ranges(&cache, &page, &[9, 12, 13]);
+                    if size == 3 * value_width + if nullable { 6 } else { 0 } {
+                        assert_eq!(
+                            result.unwrap(),
+                            vec![page.range.end - value_width as u64..page.range.end]
+                        );
+                        assert!(
+                            selected_value_ranges(&cache, &page, &[])
+                                .unwrap()
+                                .is_empty()
+                        );
+                        for invalid_page in [
+                            Page {
+                                value_width: usize::MAX,
+                                range: page.range.clone(),
+                                ..page
+                            },
+                            Page {
+                                first_file_row: u64::MAX,
+                                ..page
+                            },
+                        ] {
+                            assert!(matches!(
+                                selected_value_ranges(&cache, &invalid_page, &[10]),
+                                Err(ProbeError::Invalid(_))
+                            ));
+                        }
+                    } else {
+                        assert!(matches!(result, Err(ProbeError::Invalid(_))));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn intra_page_required_compressed_pages_skip_probes() -> TestResult {
+        use super::super::{metered_object_store::MultiRangeReadStrategy, tests::metrics};
+        use arrow::{
+            array::{ArrayRef, Int32Array},
+            datatypes::{Field, Schema},
+            record_batch::RecordBatch,
+        };
+        use object_store::memory::InMemory;
+        use parquet::{
+            arrow::ArrowWriter,
+            file::{
+                metadata::{PageIndexPolicy, ParquetMetaDataReader},
+                properties::WriterProperties,
+            },
+        };
+
+        for values in [
+            Arc::new(Int32Array::from_iter_values(0..16_384)) as ArrayRef,
+            Arc::new(Int64Array::from_iter_values(0..16_384)),
+        ] {
+            for nullable in [false, true] {
+                let schema = Arc::new(Schema::new(vec![Field::new(
+                    "value",
+                    values.data_type().clone(),
+                    nullable,
+                )]));
+                let batch = RecordBatch::try_new(schema.clone(), vec![values.clone()])?;
+                let properties = WriterProperties::builder()
+                    .set_dictionary_enabled(false)
+                    .set_compression(Compression::ZSTD(Default::default()))
+                    .build();
+                let mut writer = ArrowWriter::try_new(Vec::new(), schema, Some(properties))?;
+                writer.write(&batch)?;
+                let bytes = Bytes::from(writer.into_inner()?);
+                let metadata = Arc::new(
+                    ParquetMetaDataReader::new()
+                        .with_offset_index_policy(PageIndexPolicy::Required)
+                        .parse_and_finish(&bytes)?,
+                );
+                let locations = &metadata.offset_index().unwrap()[0][0].page_locations;
+                assert_eq!(locations.len(), 1);
+                let page = &locations[0];
+                let ranges = vec![
+                    page.offset as u64..(page.offset + i64::from(page.compressed_page_size)) as u64,
+                ];
+                let store = Arc::new(MeteredParquetObjectStore::new(
+                    Arc::new(InMemory::new()),
+                    metrics(),
+                    MultiRangeReadStrategy::ChooseAutomatically,
+                ));
+                let path = Path::from("compressed.parquet");
+                let selection = Arc::new(Mutex::new(SelectedRows {
+                    current_group: Some(0),
+                    rows: vec![1],
+                    predicate_columns: Some(ProjectionMask::roots(
+                        metadata.file_metadata().schema_descr(),
+                        [],
+                    )),
+                    ..Default::default()
+                }));
+                let reader = IntraPageReader::new(
+                    ParquetObjectReader::new(store.clone(), path.clone()),
+                    metadata,
+                    Some(selection),
+                    bytes.len() as u64,
+                    store,
+                    path,
+                )?;
+                // Required values cannot fit in these small pages as raw blocks.
+                // Nullable pages still need inspection to discover their value count.
+                assert_eq!(reader.candidate_pages(&ranges).is_some(), nullable);
+            }
+        }
+        Ok(())
+    }
+
+    fn assert_same_bits(
+        actual: &arrow::record_batch::RecordBatch,
+        expected: &arrow::record_batch::RecordBatch,
+    ) {
+        use arrow::array::{Float32Array, Float64Array};
+        assert_eq!(actual.schema(), expected.schema());
+        assert_eq!(actual.num_rows(), expected.num_rows());
+        for (actual, expected) in actual.columns().iter().zip(expected.columns()) {
+            // Arrow's numeric equality does not distinguish signed zero or NaN payloads.
+            if let Some(actual) = actual.as_any().downcast_ref::<Float32Array>() {
+                let expected = expected.as_any().downcast_ref::<Float32Array>().unwrap();
+                assert!(
+                    actual
+                        .iter()
+                        .map(|v| v.map(f32::to_bits))
+                        .eq(expected.iter().map(|v| v.map(f32::to_bits)))
+                );
+            } else if let Some(actual) = actual.as_any().downcast_ref::<Float64Array>() {
+                let expected = expected.as_any().downcast_ref::<Float64Array>().unwrap();
+                assert!(
+                    actual
+                        .iter()
+                        .map(|v| v.map(f64::to_bits))
+                        .eq(expected.iter().map(|v| v.map(f64::to_bits)))
+                );
+            } else {
+                assert_eq!(actual.to_data(), expected.to_data());
+            }
+        }
+    }
+
     #[tokio::test]
     async fn intra_page_cost_selection_preserves_values_and_rejects_unprofitable_reads()
     -> TestResult {
@@ -1015,7 +1227,11 @@ mod tests {
             arrow_reader_options, metered_object_store::MultiRangeReadStrategy, tests::metrics,
         };
         use arrow::{
-            array::ArrayRef,
+            array::{
+                ArrayRef, Date32Array, Decimal128Array, Float32Array, Float64Array, Int32Array,
+                TimestampMicrosecondArray, make_array, new_null_array,
+            },
+            buffer::NullBuffer,
             compute::concat_batches,
             datatypes::{DataType, Field, Schema},
             record_batch::RecordBatch,
@@ -1035,161 +1251,237 @@ mod tests {
         // Multiple row groups, nullable random payloads, all-null pages, and a
         // predicate column excluded from reconstruction exercise the real decoder.
         let rows = 65_539;
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Int64, false),
-            Field::new("payload", DataType::Int64, true),
-            Field::new("empty", DataType::Int64, true),
-        ]));
         let mut random = 19_u64;
-        let payload = Int64Array::from_iter((0..rows).map(|_| {
-            random ^= random << 13;
-            random ^= random >> 7;
-            random ^= random << 17;
-            (random & 1 == 0).then_some(random as i64)
-        }));
-        let batch = RecordBatch::try_new(
-            schema.clone(),
-            vec![
-                Arc::new(Int64Array::from_iter_values(0..rows as i64)) as ArrayRef,
-                Arc::new(payload),
-                Arc::new(Int64Array::from(vec![None; rows])),
-            ],
-        )?;
-        let economical = TransportEstimate {
-            request_latency: Duration::from_millis(1),
-            shared_throughput_bytes_per_second: 1_000_000,
-        };
-        let expensive = TransportEstimate {
-            request_latency: Duration::from_secs(1),
-            ..economical
-        };
-        for codec in [
-            Compression::UNCOMPRESSED,
-            Compression::ZSTD(Default::default()),
+        let bits: Vec<_> = (0..rows)
+            .map(|_| {
+                random ^= random << 13;
+                random ^= random >> 7;
+                random ^= random << 17;
+                random
+            })
+            .collect();
+        // Include NaN payloads, infinities and signed zero. Compare their bits below.
+        let f32_special = [
+            0x7fc00001, 0x7fa00002, 0x7f800000, 0xff800000, 0x80000000, 0,
+        ];
+        let f64_special = [
+            0x7ff8000000000001,
+            0x7ff0000000000002,
+            0x7ff0000000000000,
+            0xfff0000000000000,
+            0x8000000000000000,
+            0,
+        ];
+        let mut floats: Vec<_> = bits.iter().map(|v| f32::from_bits(*v as u32)).collect();
+        let mut doubles: Vec<_> = bits.iter().map(|v| f64::from_bits(*v)).collect();
+        for (i, value) in f32_special.into_iter().enumerate() {
+            floats[i * 8_191] = f32::from_bits(value);
+        }
+        for (i, value) in f64_special.into_iter().enumerate() {
+            doubles[i * 8_191] = f64::from_bits(value);
+        }
+        for payload in [
+            Arc::new(Int32Array::from_iter_values(bits.iter().map(|v| *v as i32))) as ArrayRef,
+            Arc::new(Int64Array::from_iter_values(bits.iter().map(|v| *v as i64))),
+            Arc::new(Float32Array::from(floats)),
+            Arc::new(Float64Array::from(doubles)),
+            Arc::new(Date32Array::from_iter_values(
+                bits.iter().map(|v| (*v % 100_000) as i32),
+            )),
+            Arc::new(TimestampMicrosecondArray::from_iter_values(
+                bits.iter().map(|v| (*v % 1_000_000_000_000_000) as i64),
+            )),
+            Arc::new(
+                Decimal128Array::from_iter_values(
+                    bits.iter().map(|v| (*v % 1_000_000_000) as i128),
+                )
+                .with_precision_and_scale(9, 2)?,
+            ),
+            Arc::new(
+                Decimal128Array::from_iter_values(
+                    bits.iter()
+                        .map(|v| (*v % 1_000_000_000_000_000_000) as i128),
+                )
+                .with_precision_and_scale(18, 2)?,
+            ),
         ] {
-            let properties = WriterProperties::builder()
-                .set_compression(codec)
-                .set_dictionary_enabled(false)
-                .set_statistics_enabled(EnabledStatistics::Page)
-                .set_max_row_group_row_count(Some(16_384))
-                .set_data_page_row_count_limit(16_384)
-                .set_write_batch_size(1_024)
-                .build();
-            let mut writer = ArrowWriter::try_new(Vec::new(), schema.clone(), Some(properties))?;
-            writer.write(&batch)?;
-            let bytes = Bytes::from(writer.into_inner()?);
-            let memory = Arc::new(InMemory::new());
-            let path = Path::from("data.parquet");
-            memory.put(&path, bytes.clone().into()).await?;
-            for dense in [false, true] {
-                let mut baseline = None;
-                for (enabled, estimate, overhead) in [
-                    (false, None, None),
-                    (true, None, None),
-                    (true, Some(economical), None),
-                    (true, Some(economical), Some(Duration::ZERO)),
-                    (true, Some(expensive), Some(Duration::ZERO)),
-                    (true, Some(economical), Some(Duration::from_secs(1))),
-                ] {
-                    let metrics = metrics();
-                    let store = Arc::new(MeteredParquetObjectStore::new(
-                        memory.clone(),
-                        metrics.clone(),
-                        MultiRangeReadStrategy::ChooseAutomatically,
-                    ));
-                    if let Some(estimate) = estimate {
-                        store.seed_transport_estimate(estimate);
-                    }
-                    if let Some(overhead) = overhead {
-                        store.seed_request_overhead(overhead);
-                    }
-                    let mut inner = ParquetObjectReader::new(store.clone(), path.clone())
-                        .with_file_size(bytes.len() as u64);
-                    let metadata = ArrowReaderMetadata::load_async(
-                        &mut inner,
-                        arrow_reader_options(true, true)?,
+            let dtype = payload.data_type().clone();
+            let schema = Arc::new(Schema::new(vec![
+                Field::new("id", DataType::Int64, false),
+                Field::new("nullable", dtype.clone(), true),
+                Field::new("required", dtype.clone(), false),
+                Field::new("empty", dtype.clone(), true),
+            ]));
+            let nullable = make_array(
+                payload
+                    .to_data()
+                    .into_builder()
+                    .nulls(Some(NullBuffer::from(
+                        bits.iter().map(|v| v & 1 == 0).collect::<Vec<_>>(),
+                    )))
+                    .build()?,
+            );
+            let batch = RecordBatch::try_new(
+                schema.clone(),
+                vec![
+                    Arc::new(Int64Array::from_iter_values(0..rows as i64)),
+                    nullable,
+                    payload,
+                    new_null_array(&dtype, rows),
+                ],
+            )?;
+            let economical = TransportEstimate {
+                request_latency: Duration::from_millis(1),
+                shared_throughput_bytes_per_second: 1_000_000,
+            };
+            let expensive = TransportEstimate {
+                request_latency: Duration::from_secs(1),
+                ..economical
+            };
+            let long_levels = TransportEstimate {
+                request_latency: Duration::from_millis(400),
+                ..economical
+            };
+            for (codec, group_rows) in [
+                (Compression::UNCOMPRESSED, 16_384),
+                (Compression::ZSTD(Default::default()), 16_384),
+                (Compression::UNCOMPRESSED, 65_536),
+            ] {
+                // Logical values have constrained ranges that Zstd compresses; the
+                // primitive cases above cover raw Zstd blocks for both widths.
+                if codec != Compression::UNCOMPRESSED
+                    && !matches!(
+                        dtype,
+                        DataType::Int32 | DataType::Int64 | DataType::Float32 | DataType::Float64
                     )
-                    .await?;
-                    let projection = ProjectionMask::roots(
-                        metadata.metadata().file_metadata().schema_descr(),
-                        [0],
-                    );
-                    let selection = enabled.then(|| {
-                        Arc::new(Mutex::new(SelectedRows {
-                            predicate_columns: Some(projection.clone()),
-                            ..Default::default()
-                        }))
-                    });
-                    let reader = IntraPageReader::new(
-                        inner,
-                        metadata.metadata().clone(),
-                        selection.clone(),
-                        bytes.len() as u64,
-                        store.clone(),
-                        path.clone(),
-                    )?;
-                    let predicate = ArrowPredicateFn::new(projection, move |batch| {
-                        // Keep evidence deterministic at the decision point;
-                        // in-memory fixture timings are not network measurements.
+                {
+                    continue;
+                }
+                let properties = WriterProperties::builder()
+                    .set_compression(codec)
+                    .set_dictionary_enabled(false)
+                    .set_statistics_enabled(EnabledStatistics::Page)
+                    .set_max_row_group_row_count(Some(group_rows))
+                    .set_data_page_row_count_limit(group_rows)
+                    .set_write_batch_size(1_024)
+                    .build();
+                let mut writer =
+                    ArrowWriter::try_new(Vec::new(), schema.clone(), Some(properties))?;
+                writer.write(&batch)?;
+                let bytes = Bytes::from(writer.into_inner()?);
+                let memory = Arc::new(InMemory::new());
+                let path = Path::from("data.parquet");
+                memory.put(&path, bytes.clone().into()).await?;
+                for dense in [false, true] {
+                    let mut baseline = None;
+                    for (enabled, estimate, overhead) in [
+                        (false, None, None),
+                        (true, None, None),
+                        (true, Some(economical), None),
+                        (true, Some(economical), Some(Duration::ZERO)),
+                        (true, Some(expensive), Some(Duration::ZERO)),
+                        // A nullable 65K-row page needs a second structural read.
+                        // Reject before probing when that round removes the gain.
+                        (true, Some(long_levels), Some(Duration::ZERO)),
+                        (true, Some(economical), Some(Duration::from_secs(1))),
+                    ] {
+                        let metrics = metrics();
+                        let store = Arc::new(MeteredParquetObjectStore::new(
+                            memory.clone(),
+                            metrics.clone(),
+                            MultiRangeReadStrategy::ChooseAutomatically,
+                        ));
                         if let Some(estimate) = estimate {
                             store.seed_transport_estimate(estimate);
                         }
-                        let ids = batch
-                            .column(0)
-                            .as_any()
-                            .downcast_ref::<Int64Array>()
-                            .expect("id");
-                        let mask = BooleanArray::from_iter(
-                            ids.values()
-                                .iter()
-                                .map(|id| Some(if dense { id % 2 == 0 } else { id % 8_191 == 0 })),
+                        if let Some(overhead) = overhead {
+                            store.seed_request_overhead(overhead);
+                        }
+                        let mut inner = ParquetObjectReader::new(store.clone(), path.clone())
+                            .with_file_size(bytes.len() as u64);
+                        let metadata = ArrowReaderMetadata::load_async(
+                            &mut inner,
+                            arrow_reader_options(true, true)?,
+                        )
+                        .await?;
+                        let projection = ProjectionMask::roots(
+                            metadata.metadata().file_metadata().schema_descr(),
+                            [0],
                         );
-                        if let Some(selection) = &selection {
-                            let row_numbers = batch
-                                .columns()
-                                .last()
-                                .expect("virtual column")
+                        let selection = enabled.then(|| {
+                            Arc::new(Mutex::new(SelectedRows {
+                                predicate_columns: Some(projection.clone()),
+                                ..Default::default()
+                            }))
+                        });
+                        let reader = IntraPageReader::new(
+                            inner,
+                            metadata.metadata().clone(),
+                            selection.clone(),
+                            bytes.len() as u64,
+                            store.clone(),
+                            path.clone(),
+                        )?;
+                        let predicate = ArrowPredicateFn::new(projection, move |batch| {
+                            // Keep evidence deterministic at the decision point;
+                            // in-memory fixture timings are not network measurements.
+                            if let Some(estimate) = estimate {
+                                store.seed_transport_estimate(estimate);
+                            }
+                            let ids = batch
+                                .column(0)
                                 .as_any()
                                 .downcast_ref::<Int64Array>()
-                                .expect("row numbers");
-                            selection
-                                .lock()
-                                .unwrap()
-                                .record_matches(row_numbers, &mask)?;
-                        }
-                        Ok(mask)
-                    });
-                    let builder =
-                        ParquetRecordBatchStreamBuilder::new_with_metadata(reader, metadata)
-                            .with_row_filter(RowFilter::new(vec![Box::new(predicate)]));
-                    let output_schema = builder.schema().clone();
-                    let batches = builder.build()?.try_collect::<Vec<_>>().await?;
-                    let output = concat_batches(&output_schema, &batches)?;
-                    let received = metrics
-                        .snapshot()
-                        .parquet_data_file_bytes_received
-                        .ok_or("missing byte metrics")?;
-                    if let Some((expected, original_bytes)) = &baseline {
-                        assert_eq!(
-                            &output, expected,
-                            "{codec:?}, dense={dense}, estimate={estimate:?}"
-                        );
-                        if !dense
-                            && estimate == Some(economical)
-                            && overhead == Some(Duration::ZERO)
-                        {
-                            assert!(
-                                received < *original_bytes,
-                                "partial reads were not selected: {received} >= {original_bytes}"
-                            );
+                                .expect("id");
+                            let mask =
+                                BooleanArray::from_iter(ids.values().iter().map(|id| {
+                                    Some(if dense { id % 2 == 0 } else { id % 8_191 == 0 })
+                                }));
+                            if let Some(selection) = &selection {
+                                let row_numbers = batch
+                                    .columns()
+                                    .last()
+                                    .expect("virtual column")
+                                    .as_any()
+                                    .downcast_ref::<Int64Array>()
+                                    .expect("row numbers");
+                                selection
+                                    .lock()
+                                    .unwrap()
+                                    .record_matches(row_numbers, &mask)?;
+                            }
+                            Ok(mask)
+                        });
+                        let builder =
+                            ParquetRecordBatchStreamBuilder::new_with_metadata(reader, metadata)
+                                .with_row_filter(RowFilter::new(vec![Box::new(predicate)]));
+                        let output_schema = builder.schema().clone();
+                        let batches = builder.build()?.try_collect::<Vec<_>>().await?;
+                        let output = concat_batches(&output_schema, &batches)?;
+                        let received = metrics
+                            .snapshot()
+                            .parquet_data_file_bytes_received
+                            .ok_or("missing byte metrics")?;
+                        if let Some((expected, original_bytes)) = &baseline {
+                            assert_same_bits(&output, expected);
+
+                            if !dense
+                                && estimate == Some(economical)
+                                && overhead == Some(Duration::ZERO)
+                            {
+                                assert!(
+                                    received * 4 < *original_bytes * 3,
+                                    "partial reads must save payload bytes for {dtype:?}, {codec:?}: {received} vs {original_bytes}"
+                                );
+                            } else {
+                                assert_eq!(
+                                    received, *original_bytes,
+                                    "ordinary path should avoid speculative I/O"
+                                );
+                            }
                         } else {
-                            assert_eq!(
-                                received, *original_bytes,
-                                "ordinary path should avoid speculative I/O"
-                            );
+                            baseline = Some((output, received));
                         }
-                    } else {
-                        baseline = Some((output, received));
                     }
                 }
             }

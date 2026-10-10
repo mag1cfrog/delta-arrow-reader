@@ -1,0 +1,399 @@
+{
+  "issue": 450,
+  "baseline_commit": "7b10a504230a7bb683b0478e4f92b2d9612b67f8",
+  "artifact_root": "/home/hanbo/repo/selective-read-types-450",
+  "builds": {
+    "baseline": {
+      "reader_git_commit": "7b10a504230a7bb683b0478e4f92b2d9612b67f8",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+      "rustflags": "-C target-cpu=x86-64",
+      "target": "x86_64-unknown-linux-gnu",
+      "executable_sha256": "3ceaa43fb421ebb850eabf4a6b6dfd036cd2b8810b8ea03be500ed068d0dcfc2",
+      "lockfile_sha256": "d53855cfdce00c9e8ecee9acec60daa8e4c4f745a6deadc7ff65e6e2aebca5c2",
+      "cargo_tree_sha256": "ed9c6df6903919a8dad0ddd2cb129d04f14042a6baacd2d5765eb4d50a43d559",
+      "source_sha256": {
+        "src/reader/backend/direct_parquet/intra_page.rs": "b0b49b51d76359ad6668e4b2eb30db0b6142ff86bc3982920dc18eae9962078a",
+        "src/reader/backend/direct_parquet/intra_page/page.rs": "5de63375a361b3bd3b5665e7321d0d3cc7a389d41bed1a95acf96a33441dbefe",
+        "src/reader/options.rs": "01b615a37e79734233508b0fd45f4ba181591af741f5a9e81fc4a2bd27acef6b"
+      },
+      "record_sha256": "97c5429eb5bd53356e30c1b85b6bf1f4989db0e975dff7c91e0257b8d33b88fd"
+    },
+    "candidate-required-guard": {
+      "reader_git_commit": "7b10a504230a7bb683b0478e4f92b2d9612b67f8",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+      "rustflags": "-C target-cpu=x86-64",
+      "target": "x86_64-unknown-linux-gnu",
+      "executable_sha256": "08c93c91c979dee110d74eda0f79070496674c121a51530c2696db0e9ce02c74",
+      "lockfile_sha256": "d53855cfdce00c9e8ecee9acec60daa8e4c4f745a6deadc7ff65e6e2aebca5c2",
+      "cargo_tree_sha256": "ed9c6df6903919a8dad0ddd2cb129d04f14042a6baacd2d5765eb4d50a43d559",
+      "source_sha256": {
+        "benches/selective_read/runners/dar/src/bin/numeric-pages.rs": "78d1442d098aeb646a5e27a86fc31cc31aa9c3a2c9a753fe18f91ab5568a2851",
+        "src/reader/backend/direct_parquet/intra_page.rs": "834eab9522f9efb9acb14c7a2634f42baa01a6b0a222588c653a1c691d7258a5",
+        "src/reader/backend/direct_parquet/intra_page/page.rs": "a2135cd4be4390a81b5a593de0c484f71cb594ca75b3bf77c33356b37566597f",
+        "src/reader/options.rs": "a5346f7ed2b8ec654b8e0eee341f0ce3f6bc46aa52ed7b4b728ce862f2b67ed0"
+      },
+      "record_sha256": "44022f9a050c200727995e5d90195898d8d4a02cd09a7d7fac8b79147b97b444"
+    }
+  },
+  "numeric_binaries": {
+    "baseline-numeric-final": "745bec542bd097d77c50b21ffa360a02f95c0103e5f721a0e0b2f37e5234a69e",
+    "candidate-required-guard": "b51b6833fec4dfa0c52709735d9a8a61a9065a3630f8ae5b02f2bf5e93dc35a5"
+  },
+  "samples_sha256": "514e16b19c5f8eff279f5d593ef907211c07dc55f30e9e619ab2216cd75f6dcd",
+  "cases": [
+    {
+      "case": "q2-grouped",
+      "experiment_sha256": "c73ad19885eed2517c7c662b55d9f22b8dd3883edf6f1df4e64337dfbf69ca1b",
+      "additional_pairs": {
+        "experiment_sha256": "0edb04ab7b4618028e8d63dd67a021a28848e884d9668dff516d43a47462db87",
+        "reason": "First-query medians are close, but second-query times vary in roughly one-latency steps. Investigate both grouped layouts with two more alternating pairs; keep the initial three pairs."
+      },
+      "fixture_sha256": "fcc353f6a5ab5d9d85d2e46a969391b7a9102fb899ac2415a136a6226dafdba9",
+      "workload_sha256": "d67e605e806e951219646c22bcc4ebe849b2dcdf16e1e737cff399bfc000f8e4",
+      "source_request_sha256": "17abf1806ad7d5c19d6fb134a37b2f379466abfd3b82422d52653dc5e826a0fc",
+      "reference_validation": "both builds passed before timing",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      }
+    },
+    {
+      "case": "q2-scattered",
+      "experiment_sha256": "3a8b61625fab0ef2867ea4ec9224926b32bb45a5349c2fd89db9e3181613a877",
+      "additional_pairs": null,
+      "fixture_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "workload_sha256": "d67e605e806e951219646c22bcc4ebe849b2dcdf16e1e737cff399bfc000f8e4",
+      "source_request_sha256": "ef5f4b30c1fbf0a62c8c7f034744e30b0f6cd3faa8c07d2ac5bb233f9f703afe",
+      "reference_validation": "both builds passed before timing",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      }
+    },
+    {
+      "case": "q4-grouped",
+      "experiment_sha256": "f16342fefdf4c6895ab814d6d769b76c16992d82844f30ee9d883630187e6815",
+      "additional_pairs": {
+        "experiment_sha256": "b77ce036b55e94ec8e2ba8a87e2d4e11d5b4408ad5e5226eec0bebbc3514e7ab",
+        "reason": "First-query medians are close, but second-query times vary in roughly one-latency steps. Investigate both grouped layouts with two more alternating pairs; keep the initial three pairs."
+      },
+      "fixture_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "workload_sha256": "d67e605e806e951219646c22bcc4ebe849b2dcdf16e1e737cff399bfc000f8e4",
+      "source_request_sha256": "786014a77a89a04d79212f11306d25aa2d9879dc46dea1d1cf18b70ac9b9c568",
+      "reference_validation": "both builds passed before timing",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      }
+    },
+    {
+      "case": "q4-scattered",
+      "experiment_sha256": "08fe55086824391da4ace23743af89ad3722cd00fe99858cfd5ef1023c5b52f8",
+      "additional_pairs": null,
+      "fixture_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "workload_sha256": "d67e605e806e951219646c22bcc4ebe849b2dcdf16e1e737cff399bfc000f8e4",
+      "source_request_sha256": "37e9ff8518b6235cdbc064b23a4b0f787a508ea06d32322ff710902918ffd025",
+      "reference_validation": "both builds passed before timing",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      }
+    },
+    {
+      "case": "numeric-primary-int32",
+      "experiment_sha256": "3561337ef422b5b86fa1c365d85855b5fb85631fa98211a1773a5d8c9513e1c6",
+      "additional_pairs": null,
+      "fixture_sha256": "7942c68e26a800b5a59b6c2347d9f90bad29a2f5804be27974e8ddd99fd540a9",
+      "workload_sha256": null,
+      "source_request_sha256": null,
+      "reference_validation": "both builds passed before timing",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      }
+    },
+    {
+      "case": "numeric-primary-int64",
+      "experiment_sha256": "90ed6cfd40be25834f6de20e53c017ecad3ff520d46173c4f9ffc147283efe4d",
+      "additional_pairs": null,
+      "fixture_sha256": "7942c68e26a800b5a59b6c2347d9f90bad29a2f5804be27974e8ddd99fd540a9",
+      "workload_sha256": null,
+      "source_request_sha256": null,
+      "reference_validation": "both builds passed before timing",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      }
+    },
+    {
+      "case": "numeric-primary-float",
+      "experiment_sha256": "d586c002ccdf5babe866f86869c571f5afad5cd0a237007048ad3f6905a44975",
+      "additional_pairs": null,
+      "fixture_sha256": "7942c68e26a800b5a59b6c2347d9f90bad29a2f5804be27974e8ddd99fd540a9",
+      "workload_sha256": null,
+      "source_request_sha256": null,
+      "reference_validation": "both builds passed before timing",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      }
+    },
+    {
+      "case": "numeric-primary-double",
+      "experiment_sha256": "e8f2775a42bd673ac7439a0fb3a4a12fe0c27ddd14a030ced40f4ea73691fa1d",
+      "additional_pairs": null,
+      "fixture_sha256": "7942c68e26a800b5a59b6c2347d9f90bad29a2f5804be27974e8ddd99fd540a9",
+      "workload_sha256": null,
+      "source_request_sha256": null,
+      "reference_validation": "both builds passed before timing",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      }
+    },
+    {
+      "case": "numeric-dense-int32",
+      "experiment_sha256": "b6c93814a47377d22723fe6f1d50a5ecee2aa26bdbea470314a4d6bfcec903c2",
+      "additional_pairs": null,
+      "fixture_sha256": "7942c68e26a800b5a59b6c2347d9f90bad29a2f5804be27974e8ddd99fd540a9",
+      "workload_sha256": null,
+      "source_request_sha256": null,
+      "reference_validation": "both builds passed before timing",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      }
+    },
+    {
+      "case": "numeric-dense-int64",
+      "experiment_sha256": "d39e01c9293931781b49df50441e8caab9d0150ee8675ebf7d7b4132ca68a59c",
+      "additional_pairs": null,
+      "fixture_sha256": "7942c68e26a800b5a59b6c2347d9f90bad29a2f5804be27974e8ddd99fd540a9",
+      "workload_sha256": null,
+      "source_request_sha256": null,
+      "reference_validation": "both builds passed before timing",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      }
+    },
+    {
+      "case": "numeric-unsupported-int32",
+      "experiment_sha256": "c03ba98454e75544afd6c760572af54706e8165cd7abcd4be9371849e4e05fa6",
+      "additional_pairs": null,
+      "fixture_sha256": "171aee3d0a6c18d9b340de5ae9b02b96a9d57f1fc02c511d3e0b6fac090663c0",
+      "workload_sha256": null,
+      "source_request_sha256": null,
+      "reference_validation": "both builds passed before timing",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      }
+    },
+    {
+      "case": "numeric-unsupported-int64",
+      "experiment_sha256": "86c6faa45cdd7430721c96eb4673c33a9a019f94924d731e1d31a5367b232641",
+      "additional_pairs": null,
+      "fixture_sha256": "171aee3d0a6c18d9b340de5ae9b02b96a9d57f1fc02c511d3e0b6fac090663c0",
+      "workload_sha256": null,
+      "source_request_sha256": null,
+      "reference_validation": "both builds passed before timing",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      }
+    },
+    {
+      "case": "numeric-local-int32",
+      "experiment_sha256": "20140e40c4583a95cb6d1f921baea830078f4d8f616aaf3d158bb355a82206e9",
+      "additional_pairs": null,
+      "fixture_sha256": "7942c68e26a800b5a59b6c2347d9f90bad29a2f5804be27974e8ddd99fd540a9",
+      "workload_sha256": null,
+      "source_request_sha256": null,
+      "reference_validation": "both builds passed before timing",
+      "network": null
+    },
+    {
+      "case": "numeric-local-int64",
+      "experiment_sha256": "0b28c20a5cea0e4cb0d80afc5b731ed50d6972a5223c9e0765b59f2dea6bf552",
+      "additional_pairs": {
+        "experiment_sha256": "2faa95154076de3809e9e9fe93bc4cf82d3941ef8a4ad00ffc5c149809c89e8f",
+        "reason": "Final local INT64 second-query median +8.1%, about 1.5 ms; first query is faster. Both queries have identical I/O and local path bypasses partial-read tracking. Retain three pairs and add two alternating pairs to distinguish local timing variance."
+      },
+      "fixture_sha256": "7942c68e26a800b5a59b6c2347d9f90bad29a2f5804be27974e8ddd99fd540a9",
+      "workload_sha256": null,
+      "source_request_sha256": null,
+      "reference_validation": "both builds passed before timing",
+      "network": null
+    },
+    {
+      "case": "numeric-fast-int32",
+      "experiment_sha256": "bda57ee9f100ca9f3ea6e24836878521a76cd988afd4d76c5fd151eaed48fe8e",
+      "additional_pairs": null,
+      "fixture_sha256": "7942c68e26a800b5a59b6c2347d9f90bad29a2f5804be27974e8ddd99fd540a9",
+      "workload_sha256": null,
+      "source_request_sha256": null,
+      "reference_validation": "both builds passed before timing",
+      "network": {
+        "jitter_ms": 1,
+        "latency_ms": 2,
+        "mbps": 2000,
+        "seed": "0"
+      }
+    },
+    {
+      "case": "numeric-fast-int64",
+      "experiment_sha256": "4c43ec3fadf70b9d0ed9ff1855285d689d50f2324bd34e3df8893f71bc7463fa",
+      "additional_pairs": null,
+      "fixture_sha256": "7942c68e26a800b5a59b6c2347d9f90bad29a2f5804be27974e8ddd99fd540a9",
+      "workload_sha256": null,
+      "source_request_sha256": null,
+      "reference_validation": "both builds passed before timing",
+      "network": {
+        "jitter_ms": 1,
+        "latency_ms": 2,
+        "mbps": 2000,
+        "seed": "0"
+      }
+    },
+    {
+      "case": "numeric-probe-regression",
+      "experiment_sha256": "79fcf1e8e98fededc6af0ede98f97011054ae1be9eef8a78e4530414d5a01ebe",
+      "additional_pairs": null,
+      "fixture_sha256": "965adcbd65e1783f0ae6986f10d538406d99a487bd2c117dd86ef52eff11758b",
+      "workload_sha256": null,
+      "source_request_sha256": null,
+      "reference_validation": "both builds passed before timing",
+      "network": {
+        "jitter_ms": 20,
+        "latency_ms": 200,
+        "mbps": 150,
+        "seed": "0"
+      }
+    }
+  ],
+  "resource_scope": "CPU and peak RSS cover the entire process; query timings exclude initialization, result validation and tracing.",
+  "source_note": "Candidate source hashes identify the uncommitted implementation measured for review. Original README snapshots and references are unchanged.",
+  "retained_attempts": [
+    "numeric-int32",
+    "numeric-int64",
+    "numeric-float",
+    "numeric-double",
+    "numeric-large-int32",
+    "numeric-large-int64",
+    "numeric-large-float",
+    "numeric-large-double",
+    "q4-grouped",
+    "q4-scattered",
+    "numeric-local-extra"
+  ],
+  "regression_note": "The 131K-row nullable-page pilot regressed by about 11%; preflight omitted a dependent null-level read. The final probe-regression control verifies the fix. A later 416-column grouped comparison was 2.7% slower; traces also exposed useless probes of required compressed INT64 pages. The final candidate excludes pages that cannot hold required PLAIN values as raw Zstd blocks. All earlier samples and the local two-pair investigation remain available separately.",
+  "grouped_diagnostics": {
+    "q2-grouped": {
+      "diagnostic_scope": "Separate validation processes; trace timings are not used as benchmark samples.",
+      "same_parquet_request_multiset": [
+        true,
+        true
+      ],
+      "builds": {
+        "baseline": [
+          {
+            "validation_seconds": 2.020679255,
+            "parquet_requests": 995,
+            "parquet_bytes": 5606178,
+            "dv_requests": 7
+          },
+          {
+            "validation_seconds": 2.069545168,
+            "parquet_requests": 995,
+            "parquet_bytes": 5606178,
+            "dv_requests": 6
+          }
+        ],
+        "candidate": [
+          {
+            "validation_seconds": 2.003458691,
+            "parquet_requests": 995,
+            "parquet_bytes": 5606178,
+            "dv_requests": 7
+          },
+          {
+            "validation_seconds": 2.028049272,
+            "parquet_requests": 995,
+            "parquet_bytes": 5606178,
+            "dv_requests": 7
+          }
+        ]
+      }
+    },
+    "q4-grouped": {
+      "diagnostic_scope": "Separate validation processes; trace timings are not used as benchmark samples.",
+      "same_parquet_request_multiset": [
+        true,
+        true
+      ],
+      "builds": {
+        "baseline": [
+          {
+            "validation_seconds": 2.250872275,
+            "parquet_requests": 1206,
+            "parquet_bytes": 6034700,
+            "dv_requests": 7
+          },
+          {
+            "validation_seconds": 2.173499072,
+            "parquet_requests": 1206,
+            "parquet_bytes": 6034700,
+            "dv_requests": 7
+          }
+        ],
+        "candidate": [
+          {
+            "validation_seconds": 2.157928362,
+            "parquet_requests": 1206,
+            "parquet_bytes": 6034700,
+            "dv_requests": 8
+          },
+          {
+            "validation_seconds": 2.145074383,
+            "parquet_requests": 1206,
+            "parquet_bytes": 6034700,
+            "dv_requests": 7
+          }
+        ]
+      }
+    }
+  },
+  "aa_control": {
+    "purpose": "Measure label/order and default-profile variability with the same pinned baseline executable on both sides. The final A/B median was +2.8% despite identical diagnostic Parquet ranges and +0.4% whole-process CPU. This is a declared A/A diagnostic, not extra A/B samples or a replacement for them.",
+    "binary_sha256": "3ceaa43fb421ebb850eabf4a6b6dfd036cd2b8810b8ea03be500ed068d0dcfc2",
+    "experiment_sha256": "b683b21075a8ec326a9c2d2340bceb53e5fd71bab8fc5be616c99dc03a47b83a",
+    "samples": "q2-grouped-aa, baseline-a and baseline-b in the CSV; both use the same baseline binary",
+    "pairs": 5
+  },
+  "remaining_timing_difference": "Final five-pair 416-column grouped first-query median is +2.8%; second-query median is +1.5%. Both queries use identical Parquet ranges and bytes in diagnostic runs, and whole-process CPU medians differ by 0.4%. A declared five-pair A/A control with the same baseline executable produced medians 2.030641893 and 1.962352176 seconds (a 3.4% difference without a code change). Combined with matching diagnostic reads and nearly unchanged CPU usage, no repeatable material regression was identified. These measurements cannot resolve a few-percent effect reliably; no speedup is claimed for retained README cases, and the 5% investigation trigger is not an allowed slowdown budget."
+}

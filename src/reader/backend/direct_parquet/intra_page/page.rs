@@ -18,6 +18,9 @@ pub(super) struct Page {
     pub(super) first_file_row: u64,
     pub(super) row_count: usize,
     pub(super) compression: Compression,
+    pub(super) value_width: usize,
+    // The file's definition level controls its layout, even if the target schema differs.
+    pub(super) nullable: bool,
 }
 
 #[derive(Debug)]
@@ -77,18 +80,26 @@ pub(super) fn selected_value_ranges(
     page: &Page,
     selected_rows: &[u64],
 ) -> Result<Vec<Range<u64>>, ProbeError> {
-    let prefix =
-        cache.read(page.range.start..(page.range.start + PAGE_PREFIX_BYTES).min(page.range.end))?;
+    let prefix_end = page
+        .range
+        .start
+        .saturating_add(PAGE_PREFIX_BYTES)
+        .min(page.range.end);
+    let prefix = cache.read(page.range.start..prefix_end)?;
     let PageHeader {
         header_len,
         compressed_size,
         uncompressed_size,
         row_count,
     } = parse_page_header(&prefix)?;
-    if row_count != page.row_count || uncompressed_size < 4 {
-        return Err(Invalid("page row count or size"));
+    if row_count != page.row_count {
+        return Err(Invalid("page row count"));
     }
-    let body = page.range.start + header_len as u64;
+    let body = page
+        .range
+        .start
+        .checked_add(header_len as u64)
+        .ok_or(Invalid("page offset overflow"))?;
     if body.checked_add(compressed_size as u64) != Some(page.range.end) {
         return Err(Invalid("page boundary mismatch"));
     }
@@ -105,36 +116,58 @@ pub(super) fn selected_value_ranges(
         Compression::ZSTD(_) => parse_zstd_blocks(cache, body..page.range.end, uncompressed_size)?,
         _ => return Err(Unsupported),
     };
-    let length = read_page_bytes(cache, &blocks, 0..4)?;
-    let levels_len = u32::from_le_bytes([length[0], length[1], length[2], length[3]]) as usize;
-    if levels_len > uncompressed_size - 4 {
-        return Err(Invalid("definition levels size"));
-    }
-    let levels = read_page_bytes(cache, &blocks, 4..4 + levels_len)?;
-    let valid = decode_definition_levels(&levels, page.row_count)?;
-    let value_start = 4 + levels_len;
+    let (valid, value_start) = if page.nullable {
+        if uncompressed_size < 4 {
+            return Err(Invalid("definition levels size"));
+        }
+        let length = read_page_bytes(cache, &blocks, 0..4)?;
+        let levels_len = u32::from_le_bytes([length[0], length[1], length[2], length[3]]) as usize;
+        if levels_len > uncompressed_size - 4 {
+            return Err(Invalid("definition levels size"));
+        }
+        let levels = read_page_bytes(cache, &blocks, 4..4 + levels_len)?;
+        (
+            decode_definition_levels(&levels, page.row_count)?,
+            4 + levels_len,
+        )
+    } else {
+        // Required columns omit both the definition levels and their length prefix.
+        (vec![true; page.row_count], 0)
+    };
+    // Check the largest possible value area once so the row loop cannot overflow.
+    page.row_count
+        .checked_mul(page.value_width)
+        .and_then(|bytes| value_start.checked_add(bytes))
+        .ok_or(Invalid("PLAIN value size overflow"))?;
     let mut value_end = value_start;
     let value_offsets: Vec<_> = valid
         .iter()
         .map(|is_valid| {
             let offset = value_end;
-            value_end += usize::from(*is_valid) * 8;
+            value_end += usize::from(*is_valid) * page.value_width;
             offset
         })
         .collect();
     if value_end != uncompressed_size {
         return Err(Invalid("PLAIN value count"));
     }
+    let end_row = page
+        .first_file_row
+        .checked_add(page.row_count as u64)
+        .ok_or(Invalid("page row offset overflow"))?;
     let mut ranges = Vec::new();
     for row in selected_rows
         .iter()
         .copied()
-        .filter(|r| page.first_file_row <= *r && *r < page.first_file_row + page.row_count as u64)
+        .filter(|r| page.first_file_row <= *r && *r < end_row)
     {
         let row = (row - page.first_file_row) as usize;
         if valid[row] {
             let offset = value_offsets[row];
-            ranges.extend(map_to_file_ranges(&blocks, offset..offset + 8)?);
+            ranges.extend(map_to_file_ranges(
+                &blocks,
+                offset..offset + page.value_width,
+            )?);
         }
     }
     Ok(ranges)

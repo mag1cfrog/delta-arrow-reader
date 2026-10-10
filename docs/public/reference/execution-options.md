@@ -52,10 +52,11 @@ controls the provider's scans. A per-scan override disables partial reads for
 that scan; it cannot undo initialization already performed. Streaming does not
 require DataFusion.
 
-This experiment supports flat nullable PLAIN INT64 data pages with offset
-indexes, using uncompressed data or Zstd raw blocks without checksums. Other
-layouts use ordinary reads. Explicit range-read policy overrides also retain
-their ordinary behavior.
+Supported pages are flat PLAIN V1 pages with offset indexes and physical types
+INT32, INT64, FLOAT or DOUBLE. Nullable and required columns are supported,
+including their existing date, timestamp, decimal and type-widening conversions.
+Data must be uncompressed or held in Zstd raw blocks without checksums. Other
+layouts and explicit range-read policy overrides use ordinary reads.
 
 Fewer bytes can mean more requests. The reader uses latency, throughput and
 small-request cost to compare partial reads with complete pages,
