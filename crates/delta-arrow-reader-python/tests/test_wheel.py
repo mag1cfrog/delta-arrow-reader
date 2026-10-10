@@ -36,8 +36,8 @@ class WheelTests(unittest.TestCase):
         for platform_tag in (
             "manylinux_2_28_x86_64",
             "win_amd64",
-            "macosx_11_0_arm64",
-            "macosx_10_12_x86_64",
+            "macosx_12_0_arm64",
+            "macosx_12_0_x86_64",
         ):
             with self.subTest(platform_tag=platform_tag):
                 path = self.directory / (

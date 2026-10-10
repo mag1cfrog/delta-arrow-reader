@@ -110,19 +110,19 @@ another Python thread can run during these waits.
 ## Build Python wheels in CI
 
 Pull request CI calls `.github/workflows/pypi-build.yml` for changes covered by
-the code filter. The reusable workflow currently builds Linux and Windows
-x86_64 wheels. Callers supply two required inputs:
+the code filter. The reusable workflow builds Linux x86_64, Windows x86_64,
+macOS arm64, and macOS x86_64 wheels. Callers supply two required inputs:
 
 - `source-ref`: the full commit SHA to check out and build.
 - `expected-version`: the exact workspace package version, without a tag prefix.
 
 The build fails if the checked-out commit or package version differs from these
 inputs. It uses the repository's Rust version and lockfile, repairs the wheel
-with Maturin on Linux or delvewheel on Windows, and checks its metadata and
-native dependencies. Each wheel is installed outside the checkout on Python
-3.10 with PyArrow 18.0.0 and Python 3.14 with the current compatible PyArrow
-release. Linux runs the full Python suite; Windows runs the installed-package
-and Arrow stream smoke checks described above.
+with Maturin on Linux, delvewheel on Windows, or delocate on macOS, and checks
+its metadata and native dependencies. Each wheel is installed outside the
+checkout on Python 3.10 with PyArrow 18.0.0 and Python 3.14 with the current
+compatible PyArrow release. Linux runs the full Python suite; Windows and macOS
+run the installed-package and Arrow stream smoke checks described above.
 
 Each platform job uploads its artifact after both Python checks pass:
 
@@ -130,6 +130,13 @@ Each platform job uploads its artifact after both Python checks pass:
 | --- | --- |
 | Linux x86_64, manylinux_2_28 | `delta-arrow-reader-linux-x86_64-wheel` |
 | Windows x86_64, Windows Server 2022 | `delta-arrow-reader-windows-x86_64-wheel` |
+| macOS arm64, `macos-latest` runner | `delta-arrow-reader-macos-arm64-wheel` |
+| macOS x86_64, `macos-15-intel` runner | `delta-arrow-reader-macos-x86_64-wheel` |
+
+Both macOS wheels target macOS 12.0, matching the PyArrow 18.0.0 wheels.
+Delocate checks that bundled libraries support the required architecture and
+deployment target. Runtime checks run on the runners listed above, not on
+macOS 12.0 itself.
 
 Download artifacts from the Actions run page or with
 `gh run download RUN_ID -n delta-arrow-reader-linux-x86_64-wheel`.
