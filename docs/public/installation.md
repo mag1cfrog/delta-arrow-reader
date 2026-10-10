@@ -1,6 +1,6 @@
 # Installation
 
-Delta Arrow Reader requires Rust 1.94 or newer. The dependencies you need
+The Rust crate requires Rust 1.94 or newer. The dependencies you need
 depend on whether you plan to use the streaming API or DataFusion.
 
 ## Streaming reader
@@ -72,6 +72,46 @@ clients' existing interfaces.
 The Python package loads Delta snapshots, exposes their versions and Arrow
 schemas, and streams rows through PyArrow. The package is not published on PyPI yet.
 
+### Install a CI wheel
+
+The wheel builder targets these systems:
+
+| System target | Wheel platform tag |
+| --- | --- |
+| Linux x86_64, glibc 2.28 or newer | `manylinux_2_28_x86_64` |
+| Windows x86_64 | `win_amd64` |
+| macOS arm64, macOS 12.0 or newer | `macosx_12_0_arm64` |
+| macOS x86_64, macOS 12.0 or newer | `macosx_12_0_x86_64` |
+
+Each platform has one `cp310-abi3` wheel. A successful build tests that same
+wheel on CPython 3.10 with PyArrow 18.0.0 and CPython 3.14 with the current
+compatible PyArrow release. Intermediate Python versions are not separately
+tested. Free-threaded CPython, PyPy, and other platform targets are not covered.
+
+Linux runs the full Python test suite. Windows and macOS run the installed
+package and Arrow stream smoke checks. Windows checks run on Windows Server
+2022. The macOS deployment target is 12.0, but runtime checks use newer macOS
+runners. Your Python and PyArrow distributions must also support your OS.
+
+Choose a run where all Python wheel jobs passed, including
+`Validate wheel artifact set`. Download the artifact for your platform and
+extract its `.whl` file. The
+[wheel build instructions](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/contributing.md#build-python-wheels-in-ci)
+list the artifact names, download commands, and CI runners.
+
+In an activated virtual environment, replace `/path/to/wheel.whl` with the
+full path to the extracted wheel, keeping its original filename:
+
+```console
+python -m pip install --only-binary=:all: "/path/to/wheel.whl"
+python -I -c "import delta_arrow_reader; print(delta_arrow_reader.__version__)"
+```
+
+This installs the wheel and a compatible PyArrow wheel without compiling from
+source. Rust and native build tools are not needed for wheel installation.
+
+### Build from source
+
 Use Python 3.10 or newer and Rust 1.94 or newer to install from source. From the
 repository root, run these commands on Linux or macOS:
 
@@ -84,6 +124,8 @@ python -m pip install .
 Installation also installs PyArrow 18 or newer. The
 [Python quickstart](https://mag1cfrog.github.io/delta-arrow-reader/python/)
 uses a sample table included in the repository.
+
+### Read a table
 
 To read your own table, replace `/path/to/delta-table` with its local path:
 

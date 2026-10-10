@@ -1,9 +1,9 @@
-use std::{fmt, fs::File, io::Read};
+use std::{fmt, fs::File, io::Read, marker::PhantomData};
 
 use delta_arrow_reader::DeltaStorageOptions;
 use serde::{
     Deserialize, Deserializer,
-    de::{DeserializeOwned, MapAccess, Visitor},
+    de::{DeserializeOwned, MapAccess, Visitor, value::MapAccessDeserializer},
 };
 use snafu::{ResultExt, ensure};
 
@@ -19,6 +19,29 @@ pub(crate) fn read_json_file<T: DeserializeOwned>(path: &str) -> Result<T, Error
         .context(InputIoSnafu)?;
     ensure!(bytes.len() as u64 <= MAX_JSON_BYTES, InputJsonSnafu);
     serde_json::from_slice(&bytes).map_err(|_| InputJsonSnafu.build())
+}
+
+// Serde also accepts arrays for structs and tagged enums; require objects.
+pub(crate) struct JsonObject<T>(pub(crate) T);
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for JsonObject<T> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct ObjectVisitor<T>(PhantomData<T>);
+
+        impl<'de, T: Deserialize<'de>> Visitor<'de> for ObjectVisitor<T> {
+            type Value = JsonObject<T>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a JSON object")
+            }
+
+            fn visit_map<M: MapAccess<'de>>(self, map: M) -> Result<Self::Value, M::Error> {
+                T::deserialize(MapAccessDeserializer::new(map)).map(JsonObject)
+            }
+        }
+
+        deserializer.deserialize_map(ObjectVisitor(PhantomData))
+    }
 }
 
 pub(crate) struct StorageOptionsInput(pub(crate) DeltaStorageOptions);

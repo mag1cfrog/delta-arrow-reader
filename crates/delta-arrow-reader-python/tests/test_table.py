@@ -74,6 +74,36 @@ class TableTests(unittest.TestCase):
         spec.loader.exec_module(http)
         return http
 
+    def test_installed_wheel_stream_smoke(self):
+        fixture = (Path(__file__).resolve().parents[3]
+                   / "tests/reader/fixtures/external_writer/corpus/partitioned")
+        with pa.ipc.open_file(fixture / "expected.arrow") as source:
+            rows = source.read_all().to_pylist()
+        expected = {row["id"]: row["label"] for row in rows
+                    if row["id"] >= 100 and row["value"] is not None}
+        table = DeltaTable(fixture / "table")
+        self.assertEqual(table.version, 0)
+        for method, backend in product(("scan", "to_reader"), ("direct", "delta_kernel")):
+            with self.subTest(method=method, backend=backend):
+                result = getattr(table, method)(
+                    columns=["label", "id"],
+                    filters=[("id", ">=", 100), ("value", "is not", None)],
+                    target_partitions=1,
+                    execution_options=ScanExecutionOptions(parquet_backend=backend),
+                )
+                reader = pa.RecordBatchReader.from_stream(result) if method == "scan" else result
+                try:
+                    batch = next(batch for batch in reader if batch.num_rows)
+                finally:
+                    reader.close()
+                self.assertEqual(batch.schema.names, ["label", "id"])
+                self.assertLess(batch.num_rows, len(expected), "smoke must close before exhaustion")
+                actual = batch.to_pylist()
+                self.assertEqual(len({row["id"] for row in actual}), batch.num_rows)
+                for row in actual:
+                    self.assertIn(row["id"], expected)
+                    self.assertEqual(row["label"], expected[row["id"]])
+
     def test_reader_and_batches_outlive_table(self):
         self.write_log(
             1, self.write_parquet("first.parquet", [1, 2]),
