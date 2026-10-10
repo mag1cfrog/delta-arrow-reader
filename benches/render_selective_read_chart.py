@@ -7,15 +7,15 @@ import math
 from pathlib import Path
 import statistics
 
-from render_selective_s3_chart import README_THEMES, x_position
+from render_selective_s3_chart import README_THEMES
 
 
 ROOT = Path(__file__).resolve().parents[1]
-READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "spark")
-LABELS = ("Delta Arrow Reader", "delta-rs", "DuckDB", "Polars", "Spark (single machine)")
+READERS = ("delta-arrow-reader", "duckdb", "spark", "polars", "delta-rs")
+LABELS = ("Delta Arrow Reader", "DuckDB", "Spark (single machine)", "Polars", "delta-rs")
 LAYOUTS = ("q2.localized", "q2.scattered", "q4.localized", "q4.scattered")
 TABLE_COLUMNS = {"q2": 416, "q4": 90}
-TIME_TICKS = (1, 2, 5, 10, 20, 50, 100, 200)
+MAX_SECONDS = {"q2": 80, "q4": 200}
 
 
 def load_medians():
@@ -48,53 +48,41 @@ def load_medians():
 
 def render(theme_name, values):
     theme = README_THEMES[theme_name]
-    plot_left, plot_width = 240, 700
-    domain = (TIME_TICKS[0], TIME_TICKS[-1])
-    colors = (theme["engines"]["delta_arrow_reader"],) + {
-        "light": ("#e1e5ea", "#b9c0c8", "#96a1af", "#738091"),
-        "dark": ("#53606e", "#697786", "#83909e", "#a5afba"),
-    }[theme_name]
-    parts = [f'''<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-labelledby="title description">
+    plot_width = 340
+    accent = {"light": "#075985", "dark": "#7dd3fc"}[theme_name]
+    other_bar = {"light": "#d0d7de", "dark": "#53606e"}[theme_name]
+    parts = [f'''<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="584" viewBox="0 0 1200 584" role="img" aria-labelledby="title description">
 <title id="title">Faster Delta Lake reads</title>
-<desc id="description">Five readers query 416-column and 90-column Delta tables with about 60 million rows derived from TPC-H lineitem at SF10. All four cases use deletion vectors to mark deleted rows. Matching rows are grouped together or spread out within row groups. Each group follows legend order. Dots show median seconds for the first complete query after table initialization over five independent runs. Lower is faster. All cases share a logarithmic time axis from 1 to 200 seconds, so equal time ratios span equal distances. Labels give seconds and, for other readers, their time divided by Delta Arrow Reader's time in the same case. Startup and table initialization are excluded. The full report also includes initialization costs and four cases without deletion vectors.</desc>
+<desc id="description">Five readers query 416-column and 90-column Delta tables with about 60 million rows derived from TPC-H lineitem at SF10. All four cases use deletion vectors to mark deleted rows. Matching rows are grouped together in the top panels and spread out within row groups in the bottom panels. Reader names on the left apply to both columns. Blue bars show Delta Arrow Reader; gray bars show the other readers. Bars show median seconds for the first complete query after table initialization over five independent runs. Linear scales start at zero; shorter bars are faster. The 416-column panels span 0 to 80 seconds, and the 90-column panels span 0 to 200 seconds, as labeled in the column headings. Compare bar lengths within the same column. Startup and table initialization are excluded. The full report also includes initialization costs and four cases without deletion vectors.</desc>
 <style>text{{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}}</style>
-<defs><linearGradient id="page" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="{theme['background']}"/><stop offset="1" stop-color="{theme['background_end']}"/></linearGradient></defs>
-<rect width="1200" height="700" fill="url(#page)"/>
-<text x="44" y="32" fill="{theme['muted']}" font-size="12" font-weight="700" letter-spacing="2">TPC-H-DERIVED DATA | ABOUT 60 MILLION ROWS PER TABLE</text>
-<text x="44" y="70" fill="{theme['text']}" font-size="32" font-weight="700">Faster Delta Lake reads</text>
-<text x="44" y="99" fill="{theme['muted']}" font-size="16">First query after initialization. Median of 5 runs; log scale; lower is faster.</text>
-<text x="1156" y="99" text-anchor="end" fill="{theme['muted']}" font-size="13">Labels: seconds / time vs. Delta Arrow Reader</text>''']
-    for x, label, color in zip((44, 300, 465, 625, 780), LABELS, colors, strict=True):
-        parts.append(f'''<rect x="{x}" y="121" width="10" height="10" rx="3" fill="{color}"/>
-<text x="{x + 18}" y="131" fill="{theme['text']}" font-size="14">{label}</text>''')
-
-    parts.append(f'<text x="44" y="159" fill="{theme["muted"]}" font-size="13">Table / matching rows</text>')
-    for tick in TIME_TICKS:
-        x = x_position(tick, plot_left, plot_width, domain)
-        parts.append(f'''<line x1="{x}" y1="170" x2="{x}" y2="650" stroke="{theme['grid']}" stroke-dasharray="3 6"/>
-<text x="{x}" y="159" text-anchor="middle" fill="{theme['muted']}" font-size="13">{tick} s</text>''')
-    for row, layout in enumerate(LAYOUTS):
-        case = f"production.{layout}.dv"
-        top = 184 + row * 120
-        query, arrangement = layout.split(".")
-        matches = "Matches grouped together" if arrangement == "localized" else "Matches spread out"
-        case_label = f"{TABLE_COLUMNS[query]}-column table, {matches.lower()}, with deletion vectors"
-        baseline = values[case, READERS[0]]
-        if row:
-            parts.append(f'<line x1="44" y1="{top - 15}" x2="1156" y2="{top - 15}" stroke="{theme["grid"]}" stroke-dasharray="4 7"/>')
-        parts.append(f'''<text x="44" y="{top + 39}" fill="{theme['text']}" font-size="18" font-weight="500">{TABLE_COLUMNS[query]} columns</text>
-<text x="44" y="{top + 61}" fill="{theme['muted']}" font-size="13">{matches}</text>''')
-        for index, (reader, label, color) in enumerate(zip(READERS, LABELS, colors, strict=True)):
-            value = values[case, reader]
-            assert domain[0] <= value <= domain[1], (case, reader, value)
-            x = x_position(value, plot_left, plot_width, domain)
-            y = top + index * 20 + 7
-            label_color = theme["text"] if index == 0 else theme["muted"]
-            annotation = f"{value:.2f} s" + (f" / {value / baseline:.2f}x" if index else "")
-            parts.append(f'''<line x1="{plot_left}" y1="{y}" x2="{x:.2f}" y2="{y}" stroke="{color}" stroke-width="2"/>
-<circle cx="{x:.2f}" cy="{y}" r="6" fill="{color}"><title>{case_label}: {label}, {value:.3f} s, {value / baseline:.2f} times Delta Arrow Reader's time</title></circle>
-<text x="{x + 12:.2f}" y="{y + 4}" fill="{label_color}" font-size="13">{annotation}</text>''')
-    parts.append(f'''<text x="44" y="680" fill="{theme['muted']}" font-size="13">Four cases with deletion vectors. Includes query planning and all results; startup and table initialization excluded.</text>
+<rect width="1200" height="584" fill="{theme['background']}"/>
+<text x="44" y="50" fill="{theme['text']}" font-size="30" font-weight="700">Faster Delta Lake reads</text>
+<text x="44" y="80" fill="{theme['muted']}" font-size="16">Query time in seconds. Shorter is faster.</text>''']
+    for column, query in enumerate(TABLE_COLUMNS):
+        plot_left = 260 + column * 510
+        max_seconds = MAX_SECONDS[query]
+        parts.append(f'''<text x="{plot_left}" y="124" fill="{theme["text"]}" font-size="22" font-weight="600">{TABLE_COLUMNS[query]} columns</text>
+<text x="{plot_left + plot_width}" y="124" text-anchor="end" fill="{theme['muted']}" font-size="13">Scale: 0-{max_seconds} s</text>''')
+        for row, arrangement in enumerate(("localized", "scattered")):
+            case = f"production.{query}.{arrangement}.dv"
+            top = 190 + row * 214
+            matches = "Matches grouped" if arrangement == "localized" else "Matches spread out"
+            case_label = f"{TABLE_COLUMNS[query]}-column table, {matches.lower()}, with deletion vectors"
+            if column == 0:
+                parts.append(f'<text x="44" y="{top - 36}" fill="{theme["text"]}" font-size="18" font-weight="500">{matches}</text>')
+            for index, (reader, label) in enumerate(zip(READERS, LABELS, strict=True)):
+                value = values[case, reader]
+                assert 0 < value <= max_seconds, (case, reader, value)
+                width = plot_width * value / max_seconds
+                y = top + index * 28
+                color = theme["engines"]["delta_arrow_reader"] if index == 0 else other_bar
+                label_color = accent if index == 0 else theme["muted"]
+                weight = 600 if index == 0 else 400
+                if column == 0:
+                    parts.append(f'<text x="44" y="{y + 5}" fill="{label_color}" font-size="16" font-weight="{weight}">{label}</text>')
+                parts.append(f'''<rect x="{plot_left}" y="{y - 7}" width="{width:.2f}" height="14" rx="2" fill="{color}"><title>{case_label}: {label}, {value:.3f} s</title></rect>
+<text x="{plot_left + width + 10:.2f}" y="{y + 5}" fill="{label_color}" font-size="15" font-weight="{weight}">{value:.2f} s</text>''')
+    parts.append(f'''<text x="44" y="560" fill="{theme['muted']}" font-size="13">TPC-H-derived data, about 60M rows per table, with deletion vectors. Median of 5 first queries; startup and table initialization excluded.</text>
 </svg>''')
     return "\n".join(parts) + "\n"
 
