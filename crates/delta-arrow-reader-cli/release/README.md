@@ -89,6 +89,42 @@ python3 crates/delta-arrow-reader-cli/tests/process.py /path/to/dar "$version"
 python3 crates/delta-arrow-reader-cli/tests/scan.py /path/to/dar
 ```
 
+## Generate dependency notices
+
+Use the same checkout and installed Rust toolchain as the binary build. Install
+the pinned [cargo-about](https://embarkstudios.github.io/cargo-about/) version,
+then collect notices for the architecture being packaged:
+
+```sh
+cargo install --locked --version 0.9.2 --features cli cargo-about
+dependency_notices=target/cli-dependency-notices-amd64.txt
+python3 crates/delta-arrow-reader-cli/release/notices.py \
+  --architecture amd64 --output "$dependency_notices"
+```
+
+The output file must not exist. The generator uses the CLI's default features,
+the committed lockfile, and the selected Rust target. `about.toml` lists accepted
+license identifiers. Build dependencies are included; dependencies used only
+by tests are excluded. Unknown licenses or incomplete reports fail generation.
+
+The output contains cargo-about's license texts and the resolved dependencies'
+original license, copyright, and NOTICE files, including nested files. This
+retains attribution that a generic license template can omit. It also includes
+the installed Rust toolchain's standard-library copyright document and license
+files, since Cargo does not list the standard library as a dependency. The Rust
+copyright document keeps its original HTML.
+
+Some published crates omit files that are present in their source repository.
+`extra-notices.toml` records those files by crate version, source commit, URL,
+and SHA-256. Downloads require HTTPS, must match the crate's recorded source
+commit, and must pass the checksum check. A dependency upgrade that invalidates
+an entry fails until its upstream files and checksums have been reviewed and
+updated. Network failures also fail generation.
+
+Repeat with `--architecture arm64` and a separate output file when packaging
+that target. The generated file is input to the archive's `NOTICE`; it is not
+an additional public artifact.
+
 ## Package one architecture
 
 Run the tool from the source checkout used to build the binary. Supply its
@@ -108,11 +144,10 @@ list with every `DT_NEEDED` library reported by that binary's ELF inspection,
 using one `--runtime-dependency` argument per library. These are shared library
 names, not Debian package names. The tool sorts the names and rejects duplicates.
 
-The dependency notices file must contain the license and copyright text needed
-to redistribute the executable's dependencies. The tool appends it to the
-repository's `NOTICE` and includes the repository's `LICENSE` unchanged. It checks
-that the supplied notice text is nonempty; it cannot determine whether that text
-covers every dependency.
+Use the dependency notices file generated for this build. The packager appends
+it to the repository's `NOTICE` and includes the repository's `LICENSE` unchanged.
+The packager checks only that the supplied text is nonempty; collection and
+dependency coverage checks belong to `notices.py`.
 
 Repeat for `arm64`, using that architecture's validated binary and dependencies.
 Each platform directory contains one archive and a `cli-artifacts.json` with
@@ -156,6 +191,7 @@ python3 -m unittest discover -s crates/delta-arrow-reader-cli/release -v
 ```
 
 The unit tests require Git, a C compiler, `objcopy`, `readelf`, and `sha256sum`.
-They use synthetic archive payloads and a small compiled ELF fixture to exercise
-packaging, source checks, ABI validation, and rejection paths. They do not build
-the Rust CLI or replace its runtime acceptance tests.
+They use synthetic archive payloads, license fixtures, and a small compiled ELF
+fixture to exercise packaging, notice collection, source checks, ABI validation,
+and rejection paths. Notice tests mock downloads and do not require cargo-about.
+They do not build the Rust CLI or replace its runtime acceptance tests.
