@@ -53,8 +53,8 @@ the same version. To select a specific version, use
 ## Filter rows
 
 Both `scan()` and `to_reader()` accept `filters`. Use `==`, `!=`, `<`, `<=`, `>`,
-or `>=` to compare Boolean and signed integer columns. Use `"is"` with `None`
-to select null values, or `"is not"` with `None` to select non-null values:
+or `>=` to compare Boolean, signed integer, and floating-point columns. Use `"is"`
+with `None` to select null values, or `"is not"` with `None` to select non-null values:
 
 ```python
 with table.to_reader(
@@ -80,6 +80,12 @@ Comparison values must match the column type: `bool` for Boolean columns,
 and `int` for signed 8-, 16-, 32-, or 64-bit integer columns. Booleans are not
 accepted as integers. Wrong or unsupported value types raise `TypeError`;
 integers outside the column's range raise `OverflowError`.
+
+Float32 and Float64 columns require Python `float` values. Integers, booleans,
+and other types raise `TypeError`. NaN, infinity, and values that become infinite
+when converted to Float32 raise `ValueError`. Float32 rounds to 32-bit precision,
+including underflow to signed zero. Comparisons use native Arrow ordering, which
+distinguishes `-0.0` from `0.0` and orders `-0.0` first.
 
 ## Prepare metadata for repeated scans
 

@@ -5,7 +5,7 @@ use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaScalar, DeltaTabl
 use pyo3::{
     exceptions::{PyOverflowError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyBool, PyInt, PyList, PyTuple},
+    types::{PyBool, PyFloat, PyInt, PyList, PyTuple},
 };
 
 use crate::reader_error;
@@ -113,6 +113,21 @@ fn to_scalar(data_type: &DataType, value: &Bound<'_, PyAny>) -> PyResult<DeltaSc
         DataType::Int16 if is_integer => value.extract().map(DeltaScalar::Int16),
         DataType::Int32 if is_integer => value.extract().map(DeltaScalar::Int32),
         DataType::Int64 if is_integer => value.extract().map(DeltaScalar::Int64),
+        DataType::Float32 | DataType::Float64 if value.is_instance_of::<PyFloat>() => {
+            let number = value.extract::<f64>()?;
+            if !number.is_finite() {
+                return Err(PyValueError::new_err("filter float must be finite"));
+            }
+            if data_type == &DataType::Float32 {
+                let number = number as f32;
+                if !number.is_finite() {
+                    return Err(PyValueError::new_err("filter float overflows Float32"));
+                }
+                Ok(DeltaScalar::Float32(number))
+            } else {
+                Ok(DeltaScalar::Float64(number))
+            }
+        }
         _ => Err(PyTypeError::new_err(
             "filter value type is not supported for this column",
         )),

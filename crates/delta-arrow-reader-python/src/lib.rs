@@ -185,6 +185,8 @@ impl DeltaTable {
     /// Comparisons (==, !=, <, <=, >, >=) accept bool for Boolean columns and int
     /// for signed integer columns. Integers must fit the column's bit width;
     /// booleans cannot be used as integers. Comparisons with None are invalid.
+    /// Float columns require finite float values. Float32 rounds to its precision
+    /// and rejects overflow. Native Arrow comparisons distinguish -0.0 from 0.0.
     /// Filter columns need not appear in columns. Filters apply before limit.
     /// limit=None reads all rows. Otherwise, limit must be a nonnegative integer
     /// that fits the platform's usize. Booleans are not accepted.

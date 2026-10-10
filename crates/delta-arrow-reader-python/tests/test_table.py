@@ -8,6 +8,7 @@ import importlib.util
 import inspect
 from itertools import product
 import json
+import math
 import operator
 from pathlib import Path
 import subprocess
@@ -508,6 +509,83 @@ class TableTests(unittest.TestCase):
             for method in (table.scan, table.to_reader):
                 for value, error_type in invalid:
                     with self.subTest(column=name, method=method.__name__, value=value):
+                        with self.assertRaises(error_type) as caught:
+                            method(filters=[(name, "==", value)])
+                        self.assertNotIn("secret", str(caught.exception))
+
+    def test_float_filters_convert_values_and_reject_invalid_inputs_before_planning(self):
+        class FloatWithOverride(float):
+            def __float__(self):
+                raise AssertionError("filter floats must use their stored value")
+
+        class Coercible:
+            def __float__(self):
+                raise AssertionError("filter values must not be coerced or stringified")
+
+            __str__ = __float__
+            __repr__ = __float__
+
+        types = (
+            ("float", pa.float32(), float.fromhex("0x1.fffffep+127"), 2.0**-149),
+            ("double", pa.float64(), sys.float_info.max, 2.0**-1074),
+        )
+        fields = json.loads(self.metadata["schemaString"])["fields"]
+        fields += [{"name": name, "type": name, "nullable": True, "metadata": {}}
+                   for name, _, _, _ in types]
+        self.metadata["schemaString"] = json.dumps({"type": "struct", "fields": fields})
+        schema = pa.schema([pa.field("id", pa.int64(), nullable=False)]
+                           + [pa.field(name, data_type) for name, data_type, _, _ in types])
+        values = {name: [-maximum, maximum, -1.5, 1.5, -0.0, 0.0, 0.1, minimum, None]
+                  for name, _, maximum, minimum in types}
+        path = self.location / "floats.parquet"
+        pq.write_table(pa.table({"id": range(9), **values}, schema=schema), path)
+        self.write_log(1, {"metaData": self.metadata}, {"add": {
+            "path": path.name, "partitionValues": {}, "size": path.stat().st_size,
+            "modificationTime": 0, "dataChange": True,
+        }})
+        table = DeltaTable(self.location)
+        for name, _, maximum, minimum in types:
+            cases = [
+                (-maximum, [0]), (maximum, [1]), (FloatWithOverride(-1.5), [2]),
+                (1.5, [3]), (-0.0, [4]), (0.0, [5]), (0.1, [6]), (minimum, [7]),
+            ]
+            if name == "float":
+                cases += [
+                    (-math.nextafter(maximum, math.inf), [0]),
+                    (math.nextafter(maximum, math.inf), [1]),
+                    (-minimum / 2, [4]), (minimum / 2, [5]),
+                ]
+            for method, backend, (scalar, expected_ids) in product(
+                ("scan", "to_reader"), ("direct", "delta_kernel"), cases,
+            ):
+                with self.subTest(column=name, method=method, backend=backend, scalar=scalar):
+                    result = getattr(table, method)(
+                        columns=["id"], filters=[(name, "==", scalar)],
+                        execution_options=ScanExecutionOptions(parquet_backend=backend),
+                    )
+                    reader = (pa.RecordBatchReader.from_stream(result)
+                              if method == "scan" else result)
+                    with reader:
+                        self.assertCountEqual(reader.read_all().column("id").to_pylist(), expected_ids)
+
+        for version in (0, 1):
+            (self.log / f"{version:020}.json").unlink()
+        for name, _, _, _ in types:
+            invalid = [(value, TypeError) for value in (
+                True, False, 0, 1, 2**100, "secret-value", b"secret-value",
+                Decimal("0.1"), Coercible(),
+            )]
+            invalid += [(value, ValueError) for value in (
+                None, math.nan, math.inf, -math.inf, FloatWithOverride(math.nan),
+            )]
+            if name == "float":
+                invalid += [(value, ValueError) for value in (
+                    2.0**128, -(2.0**128), sys.float_info.max, -sys.float_info.max,
+                    2.0**128 - 2.0**103, -(2.0**128 - 2.0**103),
+                )]
+            for method in (table.scan, table.to_reader):
+                for index, (value, error_type) in enumerate(invalid):
+                    with self.subTest(column=name, method=method.__name__, index=index):
                         with self.assertRaises(error_type) as caught:
                             method(filters=[(name, "==", value)])
                         self.assertNotIn("secret", str(caught.exception))
