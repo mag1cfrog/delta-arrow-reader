@@ -1169,9 +1169,8 @@ mod tests {
                 let locations = &metadata.offset_index().unwrap()[0][0].page_locations;
                 assert_eq!(locations.len(), 1);
                 let page = &locations[0];
-                let ranges = vec![
-                    page.offset as u64..(page.offset + i64::from(page.compressed_page_size)) as u64,
-                ];
+                let range =
+                    page.offset as u64..(page.offset + i64::from(page.compressed_page_size)) as u64;
                 let store = Arc::new(MeteredParquetObjectStore::new(
                     Arc::new(InMemory::new()),
                     metrics(),
@@ -1197,7 +1196,12 @@ mod tests {
                 )?;
                 // Required values cannot fit in these small pages as raw blocks.
                 // Nullable pages still need inspection to discover their value count.
-                assert_eq!(reader.candidate_pages(&ranges).is_some(), nullable);
+                assert_eq!(
+                    reader
+                        .candidate_pages(std::slice::from_ref(&range))
+                        .is_some(),
+                    nullable
+                );
             }
         }
         Ok(())
