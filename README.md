@@ -24,9 +24,9 @@ using TPC-H-derived tables with about 60 million rows each. Results compare medi
 times for the first complete query after table initialization, excluding startup.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/33abc2cefe35a408c76a4e9e7828a5a1914608cc/docs/public/assets/selective-read-readme-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/33abc2cefe35a408c76a4e9e7828a5a1914608cc/docs/public/assets/selective-read-readme-light.svg">
-  <img alt="Five readers query Delta Lake tables with about 60 million rows derived from TPC-H. The four cases use deletion vectors, with matching rows grouped together or spread out in 416-column and 90-column tables. Bars show median seconds for the first complete query after initialization, excluding startup and table initialization. Linear axes start at zero; shorter is faster. The 416-column panels span 0-80 seconds; the 90-column panels span 0-200 seconds." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/33abc2cefe35a408c76a4e9e7828a5a1914608cc/docs/public/assets/selective-read-readme-light.svg" width="1000">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/852250d4dd9edd82f8295f75673e17b9a002b068/docs/public/assets/selective-read-readme-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/852250d4dd9edd82f8295f75673e17b9a002b068/docs/public/assets/selective-read-readme-light.svg">
+  <img alt="Five readers query Delta Lake tables with about 60 million rows derived from TPC-H. The four cases use deletion vectors, with matching rows grouped together or spread out in 416-column and 90-column tables. Bars show median seconds for the first complete query after initialization, excluding startup and table initialization. Linear scales start at zero; shorter is faster. The 416-column panels span 0-80 seconds; the 90-column panels span 0-200 seconds." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/852250d4dd9edd82f8295f75673e17b9a002b068/docs/public/assets/selective-read-readme-light.svg" width="1000">
 </picture>
 
 <sub>Showing four cases using deletion vectors to mark deleted rows. <a href="https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/selective-read-results/">Full results</a> include all eight cases, with and without deletion vectors.</sub>
