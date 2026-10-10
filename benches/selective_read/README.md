@@ -65,8 +65,9 @@ deletion-vector state as names in current explanations.
 ## Maintain the report charts
 
 The README charts use the four deletion-vector cases from
-`selective-read-current-timings.csv`. Bar lengths show median query time on
-linear axes starting at zero: 0-80 seconds for 416 columns and 0-200 for 90 columns.
+`selective-read-current-timings.csv`. All five readers are shown, with bar lengths
+proportional to median query time. The two columns use separate linear scales
+starting at zero: 0-80 seconds for 416 columns and 0-200 for 90 columns.
 Regenerate them with `python -B benches/render_selective_read_chart.py`, or
 add `--check` to verify the checked-in SVGs. Update the README's pinned image URLs
 when publishing changed chart assets.
