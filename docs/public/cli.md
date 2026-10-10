@@ -210,10 +210,12 @@ leave stdout empty. Consumers must check the process status and discard output
 from any unsuccessful invocation, including partial output after a write
 failure. Status 3 is preserved even when stderr cannot be written.
 
-Each command runs in one process. The CLI drives asynchronous work on the
-calling thread and ignores `TOKIO_WORKER_THREADS`. The core uses background
-threads for blocking work. Runtime shutdown does not wait for unfinished
-blocking work, including core engine cleanup.
+Each command runs in one process. The CLI drives its asynchronous runtime on
+the main thread and ignores `TOKIO_WORKER_THREADS`. Scans use a separate output
+thread so a blocked stdout pipe does not stall network reads. The output thread
+finishes writing and flushing each batch before requesting another. The core
+uses background threads for blocking work. Runtime shutdown does not wait for
+unfinished blocking work, including core engine cleanup.
 
 An unrecoverable panic during reader execution, including failure to start a
 runtime thread, terminates the process with status 1 and a redacted

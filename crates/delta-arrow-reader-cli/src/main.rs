@@ -234,18 +234,33 @@ fn write_stdout(output: &[u8]) -> Result<(), Error> {
 }
 
 async fn write_arrow_stream(scan: DeltaScan) -> Result<(), Error> {
-    let mut writer = StreamWriter::try_new(io::stdout().lock(), scan.schema().as_ref())?;
-    // Stdout can buffer bytes. Flush the schema and each batch before polling
-    // again, so consumers see progress and output errors stop further reads.
-    writer.flush()?;
-    let mut stream = scan.into_stream();
-    while let Some(batch) = stream.next_batch().await.context(ReaderSnafu)? {
-        writer.write(&batch)?;
-        writer.flush()?;
-    }
-    // finish writes the end marker and flushes. Error paths must never call it.
-    writer.finish()?;
-    Ok(())
+    let (result_sender, result_receiver) = tokio::sync::oneshot::channel();
+    let runtime = tokio::runtime::Handle::current();
+    // A blocked stdout must leave the runtime and its blocking pool free to read files.
+    std::thread::Builder::new()
+        .name("dar-stdout".into())
+        .spawn(move || {
+            let result = runtime.block_on(async {
+                let mut writer =
+                    StreamWriter::try_new(io::stdout().lock(), scan.schema().as_ref())?;
+                // Flush before polling so output failures stop further reads.
+                writer.flush()?;
+                let mut stream = scan.into_stream();
+                while let Some(batch) = stream.next_batch().await.context(ReaderSnafu)? {
+                    writer.write(&batch)?;
+                    writer.flush()?;
+                }
+                // finish writes the end marker and flushes; never call it after an error.
+                writer.finish()?;
+                Ok(())
+            });
+            let _ = result_sender.send(result);
+        })
+        .context(RuntimeSnafu)?;
+    result_receiver
+        .await
+        .map_err(io::Error::other)
+        .context(RuntimeSnafu)?
 }
 
 fn main() -> ExitCode {

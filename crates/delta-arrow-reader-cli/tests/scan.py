@@ -85,8 +85,8 @@ class ScanTests(unittest.TestCase):
         return table
 
     @contextlib.contextmanager
-    def storage(self, table, *, fail_after=None, block_data=False):
-        with http.serve(functools.partial(ScanStorage, directory=table)) as server:
+    def storage(self, table, *, fail_after=None, block_data=False, handler=ScanStorage):
+        with http.serve(functools.partial(handler, directory=table)) as server:
             server.lock = threading.Lock()
             server.data_paths = set()
             server.fail_after = fail_after
@@ -134,9 +134,13 @@ class ScanTests(unittest.TestCase):
     def wait_for_blocked_output(self, process):
         deadline = time.monotonic() + 15
         while process.poll() is None and time.monotonic() < deadline:
-            state = Path(f"/proc/{process.pid}/wchan").read_text().strip()
-            if "pipe" in state and "writ" in state:
-                return
+            for wait_channel in Path(f"/proc/{process.pid}/task").glob("*/wchan"):
+                try:
+                    state = wait_channel.read_text().strip()
+                except FileNotFoundError:
+                    continue
+                if "pipe" in state and "writ" in state:
+                    return
             time.sleep(0.01)
         self.fail(f"child never blocked writing stdout (status={process.poll()})")
 
@@ -196,6 +200,24 @@ class ScanTests(unittest.TestCase):
                 self.assertEqual(actual.num_rows, 0)
                 self.assertTrue(stdout.endswith(IPC_END))
 
+    def test_scan_thread_start_failures_do_not_hang(self):
+        table = self.repeated_table()
+        self.env.update(LD_PRELOAD=str(self.fault_library), RUST_BACKTRACE="full")
+        statuses = set()
+        # Exercise failures during loading, planning, and starting the output thread.
+        for limit in range(8):
+            with self.subTest(thread_limit=limit):
+                self.env["DAR_TEST_THREAD_LIMIT"] = str(limit)
+                with self.start_scan(table) as process:
+                    stdout, stderr = process.communicate(timeout=15)
+                    statuses.add(process.returncode)
+                    if process.returncode == 1:
+                        self.assert_diagnostic(stderr, "execution", "runtime_initialization")
+                    else:
+                        self.assertEqual((process.returncode, stderr), (0, b""))
+                        self.assertEqual(pa.ipc.open_stream(stdout).read_all().num_rows, 32 * 120)
+        self.assertEqual(statuses, {0, 1})
+
     def test_blocked_output_bounds_reads_and_resumes_incrementally(self):
         table = self.repeated_table()
         with self.storage(table) as server, self.start_scan(
@@ -214,6 +236,46 @@ class ScanTests(unittest.TestCase):
             self.assertEqual(process.wait(timeout=15), 0)
             self.assertEqual(process.stderr.read(), b"")
             self.assertEqual(len(server.data_paths), 32)
+
+    def test_slow_consumer_does_not_timeout_pending_reads(self):
+        headers_sent = threading.Event()
+        release_body = threading.Event()
+        body_sent = threading.Event()
+
+        class DelayedBodyStorage(ScanStorage):
+            def copyfile(self, source, output):
+                if self.path == "/part-001.parquet":
+                    headers_sent.set()
+                    release_body.wait(15)
+                elif self.path == "/part-000.parquet":
+                    headers_sent.wait(15)
+                    # Let the client begin reading the pending response body.
+                    time.sleep(0.1)
+                with contextlib.suppress(BrokenPipeError, ConnectionResetError):
+                    super().copyfile(source, output)
+                    if self.path == "/part-001.parquet":
+                        body_sent.set()
+
+        table = self.repeated_table()
+        self.options.write_text('{"allow_http":"true","timeout":"5s"}', encoding="utf-8")
+        with self.storage(table, handler=DelayedBodyStorage) as server, self.start_scan(
+            server.url, "--storage-options-file", str(self.options),
+        ) as process:
+            try:
+                self.wait_for_blocked_output(process)
+                self.assertTrue(headers_sent.is_set())
+                release_body.set()
+                self.assertTrue(body_sent.wait(1), "server did not finish the pending response")
+                # Hold stdout past the request timeout, after the server has responded.
+                time.sleep(6)
+                with server.lock:
+                    self.assertLess(len(server.data_paths), 32, "all files read while stdout blocked")
+                stdout, stderr = process.communicate(timeout=15)
+                self.assertEqual((process.returncode, stderr), (0, b""))
+                self.assertEqual(pa.ipc.open_stream(stdout).read_all().num_rows, 32 * 120)
+                self.assertTrue(stdout.endswith(IPC_END))
+            finally:
+                release_body.set()
 
     def test_later_read_failure_leaves_decodable_but_unsuccessful_output(self):
         table = self.repeated_table()
