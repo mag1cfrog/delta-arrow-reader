@@ -59,6 +59,20 @@ The isolated Python check imports the installed wheel without adding the current
 directory to its import path. Default Cargo commands still select the core crate;
 use `cargo check -p delta-arrow-reader-python` to check the binding crate directly.
 
+To check a wheel's filename and metadata before installation, pass its expected
+version and platform tag explicitly:
+
+```console
+python crates/delta-arrow-reader-python/tests/check_wheel.py \
+  /path/to/delta_arrow_reader-0.6.2-cp310-abi3-manylinux_2_28_x86_64.whl \
+  --expected-version 0.6.2 --platform-tag manylinux_2_28_x86_64
+```
+
+Use the version and platform tag required by your build. The check compares the
+filename with the wheel's `METADATA` and `WHEEL` records, including the expected
+package name, version, and `cp310-abi3` tag. The installed-package check below
+covers the native module, type files, licenses, and dependencies.
+
 For a small installed-wheel smoke check, run the following from a directory
 outside the checkout, using the environment where the wheel is installed.
 Replace the test directory with its absolute path:
