@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from zipfile import ZipFile
 
-from check_wheel import check_wheel
+from check_wheel import ARTIFACT_PLATFORM_TAGS, check_wheel, check_wheel_set
 
 
 class WheelTests(unittest.TestCase):
@@ -106,6 +106,68 @@ class WheelTests(unittest.TestCase):
                     self.write_wheel(self.path, files)
                 with self.assertRaisesRegex(ValueError, "expected exactly one"):
                     check_wheel(self.path, "1.2.3", self.platform_tag)
+
+    def write_artifact_set(self):
+        paths = []
+        for artifact, platform_tag in ARTIFACT_PLATFORM_TAGS.items():
+            directory = self.directory / artifact
+            directory.mkdir()
+            path = directory / f"delta_arrow_reader-1.2.3-cp310-abi3-{platform_tag}.whl"
+            files = dict(self.files)
+            files[self.wheel_path] = files[self.wheel_path].replace(
+                self.platform_tag, platform_tag
+            )
+            self.write_wheel(path, files.items())
+            paths.append(path)
+        return paths
+
+    def test_accepts_complete_artifact_set(self):
+        self.write_artifact_set()
+        check_wheel_set(self.directory, "1.2.3")
+
+    def test_rejects_missing_platform_artifact(self):
+        for path in self.write_artifact_set():
+            with self.subTest(artifact=path.parent.name):
+                contents = path.read_bytes()
+                path.unlink()
+                path.parent.rmdir()
+                with self.assertRaisesRegex(ValueError, "expected artifacts"):
+                    check_wheel_set(self.directory, "1.2.3")
+                path.parent.mkdir()
+                path.write_bytes(contents)
+
+    def test_rejects_unexpected_platform_artifact(self):
+        self.write_artifact_set()
+        (self.directory / "unexpected-artifact").mkdir()
+        with self.assertRaisesRegex(ValueError, "expected artifacts"):
+            check_wheel_set(self.directory, "1.2.3")
+
+    def test_rejects_empty_or_extra_artifact_contents(self):
+        path = self.write_artifact_set()[0]
+        contents = path.read_bytes()
+        path.unlink()
+        with self.assertRaisesRegex(ValueError, "expected one wheel"):
+            check_wheel_set(self.directory, "1.2.3")
+        path.write_bytes(contents)
+        path.with_name("extra.whl").touch()
+        with self.assertRaisesRegex(ValueError, "expected one wheel"):
+            check_wheel_set(self.directory, "1.2.3")
+
+    def test_rejects_wheel_in_wrong_artifact(self):
+        paths = self.write_artifact_set()
+        paths[0].rename(paths[0].with_name(paths[1].name))
+        with self.assertRaisesRegex(ValueError, "expected wheel"):
+            check_wheel_set(self.directory, "1.2.3")
+
+    def test_rejects_wrong_artifact_version_or_metadata(self):
+        path = self.write_artifact_set()[0]
+        with self.assertRaisesRegex(ValueError, "expected wheel"):
+            check_wheel_set(self.directory, "1.2.4")
+        files = dict(self.files)
+        files[self.metadata_path] = files[self.metadata_path].replace("1.2.3", "1.2.4")
+        self.write_wheel(path, files.items())
+        with self.assertRaisesRegex(ValueError, "METADATA: expected one Version"):
+            check_wheel_set(self.directory, "1.2.3")
 
 
 if __name__ == "__main__":

@@ -138,8 +138,23 @@ Delocate checks that bundled libraries support the required architecture and
 deployment target. Runtime checks run on the runners listed above, not on
 macOS 12.0 itself.
 
-Download artifacts from the Actions run page or with
-`gh run download RUN_ID -n delta-arrow-reader-linux-x86_64-wheel`.
+The `Validate wheel artifact set` job requires all platform builds to pass,
+then downloads the four artifacts from the same workflow run. It rejects
+missing or unexpected artifacts, requires exactly one wheel per artifact,
+and checks each wheel's version and tags again. Only then does the reusable
+workflow return `validated: 'true'`. Callers must require both a successful
+workflow result and this output before treating the artifacts as a complete
+validated set. A failed run may still contain individual platform artifacts.
+
+Download artifacts from the Actions run page. To download and check the full
+set locally, use the expected package version for that run:
+
+```console
+gh run download RUN_ID --pattern 'delta-arrow-reader-*-wheel' --dir wheel-artifacts
+python crates/delta-arrow-reader-python/tests/check_wheel.py wheel-artifacts \
+  --artifact-set --expected-version 0.6.2
+```
+
 The workflow produces build artifacts only; package publishing is separate.
 
 ## Work on the documentation

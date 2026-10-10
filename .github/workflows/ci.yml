@@ -363,6 +363,11 @@ jobs:
             exit 1
           fi
 
+          if [ "${{ needs.python-wheels.outputs.validated }}" != "true" ]; then
+            echo "Python wheel artifact set was not validated"
+            exit 1
+          fi
+
           if [ "${{ needs.cli.result }}" != "success" ]; then
             echo "CLI did not pass: ${{ needs.cli.result }}"
             exit 1
