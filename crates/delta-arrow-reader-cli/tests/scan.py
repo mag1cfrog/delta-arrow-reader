@@ -190,6 +190,68 @@ class ScanTests(unittest.TestCase):
                                 self.assertTrue(actual.sort_by("id").equals(
                                     projected.sort_by("id"), check_metadata=False))
 
+    def test_predicate_filters_a_column_omitted_from_output(self):
+        predicate = self.cwd / "predicate.json"
+        predicate.write_text(json.dumps({
+            "op": "eq", "column": "id", "value": {"type": "int32", "value": "10"},
+        }), encoding="utf-8")
+        with self.start_scan(CORPUS / "partitioned/table", "--predicate-file", str(predicate),
+                             "--column", "value") as process:
+            stdout, stderr = process.communicate(timeout=15)
+            self.assertEqual((process.returncode, stderr), (0, b""))
+            self.assertTrue(stdout.endswith(IPC_END))
+            actual = pa.ipc.open_stream(stdout).read_all()
+            self.assertEqual(actual.schema.names, ["value"])
+            self.assertEqual(actual.to_pylist(), [{"value": 30}])
+
+    def test_float64_predicates_distinguish_adjacent_values(self):
+        table = self.cwd / "float64-table"
+        log = table / "_delta_log"
+        log.mkdir(parents=True)
+        # The JSON parser previously rounded the first value to the second.
+        data = pa.table({
+            "id": pa.array([1, 2], pa.int32()),
+            "value": pa.array([1.9651349465042103, 1.9651349465042105], pa.float64()),
+        })
+        pq.write_table(data, table / "part.parquet")
+        fields = [{"name": name, "type": kind, "nullable": True, "metadata": {}}
+                  for name, kind in [("id", "integer"), ("value", "double")]]
+        actions = [
+            {"protocol": {"minReaderVersion": 1, "minWriterVersion": 2}},
+            {"metaData": {
+                "id": "float64-predicates", "format": {"provider": "parquet", "options": {}},
+                "schemaString": json.dumps({"type": "struct", "fields": fields}),
+                "partitionColumns": [], "configuration": {},
+            }},
+            {"add": {
+                "path": "part.parquet", "partitionValues": {},
+                "size": (table / "part.parquet").stat().st_size,
+                "modificationTime": 0, "dataChange": True,
+            }},
+        ]
+        (log / "00000000000000000000.json").write_text(
+            "".join(json.dumps(action) + "\n" for action in actions), encoding="utf-8",
+        )
+        predicate = self.cwd / "predicate.json"
+        rows = data.to_pylist()
+        for op, expected_ids in [
+            ("eq", [1]), ("ne", [2]), ("lt", []),
+            ("le", [1]), ("gt", [2]), ("ge", [1, 2]),
+        ]:
+            predicate.write_text(json.dumps({
+                "op": op, "column": "value",
+                "value": {"type": "float64", "value": 1.9651349465042103},
+            }), encoding="utf-8")
+            with self.subTest(op=op), self.start_scan(
+                table, "--predicate-file", str(predicate),
+            ) as process:
+                stdout, stderr = process.communicate(timeout=15)
+                self.assertEqual((process.returncode, stderr), (0, b""))
+                self.assertTrue(stdout.endswith(IPC_END))
+                actual = pa.ipc.open_stream(stdout).read_all()
+                self.assertEqual(actual.sort_by("id").to_pylist(),
+                                 [rows[row_id - 1] for row_id in expected_ids])
+
     def test_empty_table_retains_schema(self):
         table = self.repeated_table(count=0)
         for flags, names in [((), ["id", "value", "label", "region"]), (("--no-columns",), [])]:
