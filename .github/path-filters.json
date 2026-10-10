@@ -2,6 +2,7 @@
   "code": [
     ".cargo/**",
     ".github/path-filters.json",
+    ".github/scripts/**",
     ".github/tests/**",
     ".github/workflows/ci.yml",
     ".github/workflows/pypi-build.yml",
