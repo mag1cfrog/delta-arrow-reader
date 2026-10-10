@@ -151,6 +151,14 @@ jobs:
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Install release-plz for release planning checks
+        if: matrix.task == 'Lints and Docs'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: release-plz@0.3.171
+      - name: Test Python-only release planning
+        if: matrix.task == 'Lints and Docs'
+        run: python3 -m unittest discover -s .github/tests -v
       - if: matrix.task == 'Lints and Docs'
         run: python3 -m unittest discover -s benches -p test_scan_scheduling.py
       - if: matrix.task == 'Lints and Docs'
