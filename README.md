@@ -21,12 +21,12 @@ Delta Arrow Reader is a fast, memory-efficient Delta Lake reader.
 **Faster than delta-rs, DuckDB, Polars, and single-machine Spark** in all eight
 of our [filtered-read benchmarks](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/selective-read-results/),
 using TPC-H-derived tables with about 60 million rows each. Results compare median
-query times.
+times for the first complete query after table initialization, excluding startup.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/9c0fba18aa6ed8c6739e5dc0b74a1a081db1c241/docs/content/assets/selective-read-readme-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/9c0fba18aa6ed8c6739e5dc0b74a1a081db1c241/docs/content/assets/selective-read-readme-light.svg">
-  <img alt="Five readers query Delta Lake tables with about 60 million rows derived from TPC-H. The four cases use deletion vectors to mark deleted rows, with matching rows grouped together or spread out in 416-column and 90-column tables. Dots show median seconds on a logarithmic axis; lower is faster. Labels also show each reader's time relative to Delta Arrow Reader." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/9c0fba18aa6ed8c6739e5dc0b74a1a081db1c241/docs/content/assets/selective-read-readme-light.svg" width="1000">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/2af50424628d857c2dbb73bbde2d5b330c0c6324/docs/public/assets/selective-read-readme-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/2af50424628d857c2dbb73bbde2d5b330c0c6324/docs/public/assets/selective-read-readme-light.svg">
+  <img alt="Five readers query Delta Lake tables with about 60 million rows derived from TPC-H. The four cases use deletion vectors, with matching rows grouped together or spread out in 416-column and 90-column tables. Dots show median seconds for the first complete query after initialization, excluding startup and table initialization. Lower is faster; the axis is logarithmic." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/2af50424628d857c2dbb73bbde2d5b330c0c6324/docs/public/assets/selective-read-readme-light.svg" width="1000">
 </picture>
 
 <sub>Showing four cases using deletion vectors to mark deleted rows. <a href="https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/selective-read-results/">Full results</a> include all eight cases, with and without deletion vectors.</sub>
