@@ -187,6 +187,8 @@ impl DeltaTable {
     /// booleans cannot be used as integers. Comparisons with None are invalid.
     /// Float columns require finite float values. Float32 rounds to its precision
     /// and rejects overflow. Native Arrow comparisons distinguish -0.0 from 0.0.
+    /// String columns require str values encodable as UTF-8. Binary columns
+    /// require bytes; fixed-size binary values must match the column's width.
     /// Filter columns need not appear in columns. Filters apply before limit.
     /// limit=None reads all rows. Otherwise, limit must be a nonnegative integer
     /// that fits the platform's usize. Booleans are not accepted.

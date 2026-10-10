@@ -9,7 +9,7 @@ __version__: str
 
 _Filter = (
     tuple[str, Literal["is", "is not"], None]
-    | tuple[str, Literal["==", "!=", "<", "<=", ">", ">="], bool | int | float]
+    | tuple[str, Literal["==", "!=", "<", "<=", ">", ">="], bool | int | float | str | bytes]
 )
 
 class DeltaReaderError(Exception):

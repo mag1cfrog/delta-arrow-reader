@@ -53,12 +53,13 @@ the same version. To select a specific version, use
 ## Filter rows
 
 Both `scan()` and `to_reader()` accept `filters`. Use `==`, `!=`, `<`, `<=`, `>`,
-or `>=` to compare Boolean, signed integer, and floating-point columns. Use `"is"`
-with `None` to select null values, or `"is not"` with `None` to select non-null values:
+or `>=` to compare Boolean, signed integer, floating-point, string, and binary
+columns. Use `"is"` with `None` to select null values, or `"is not"` with `None`
+to select non-null values:
 
 ```python
 with table.to_reader(
-    columns=["id"], filters=[("id", ">=", 100), ("label", "is not", None)], limit=10,
+    columns=["id"], filters=[("id", ">=", 100), ("region", "==", "east")], limit=10,
 ) as reader:
     print(reader.read_all().to_pydict())
 ```
@@ -86,6 +87,12 @@ and other types raise `TypeError`. NaN, infinity, and values that become infinit
 when converted to Float32 raise `ValueError`. Float32 rounds to 32-bit precision,
 including underflow to signed zero. Comparisons use native Arrow ordering, which
 distinguishes `-0.0` from `0.0` and orders `-0.0` first.
+
+Utf8 and LargeUtf8 columns require `str`; Binary, LargeBinary, and FixedSizeBinary
+columns require `bytes`. Empty values and embedded NULs are supported. Strings
+that cannot be encoded as UTF-8 and fixed-size binary values with the wrong
+length raise `ValueError`. Other types, including `bytearray` and `memoryview`,
+raise `TypeError`. Values are copied before scan planning.
 
 ## Prepare metadata for repeated scans
 

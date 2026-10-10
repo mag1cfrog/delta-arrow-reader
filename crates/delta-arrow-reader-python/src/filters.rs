@@ -5,7 +5,7 @@ use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaScalar, DeltaTabl
 use pyo3::{
     exceptions::{PyOverflowError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyBool, PyFloat, PyInt, PyList, PyTuple},
+    types::{PyBool, PyBytes, PyFloat, PyInt, PyList, PyString, PyTuple},
 };
 
 use crate::reader_error;
@@ -128,6 +128,36 @@ fn to_scalar(data_type: &DataType, value: &Bound<'_, PyAny>) -> PyResult<DeltaSc
                 Ok(DeltaScalar::Float64(number))
             }
         }
+        DataType::Utf8 | DataType::LargeUtf8 if value.is_instance_of::<PyString>() => {
+            let text = value
+                .extract::<String>()
+                .map_err(|_| PyValueError::new_err("filter string must be valid UTF-8"))?;
+            Ok(if data_type == &DataType::Utf8 {
+                DeltaScalar::Utf8(text)
+            } else {
+                DeltaScalar::LargeUtf8(text)
+            })
+        }
+        DataType::Binary | DataType::LargeBinary if value.is_instance_of::<PyBytes>() => {
+            let bytes = value.cast::<PyBytes>()?.as_bytes().to_vec();
+            Ok(if data_type == &DataType::Binary {
+                DeltaScalar::Binary(bytes)
+            } else {
+                DeltaScalar::LargeBinary(bytes)
+            })
+        }
+        DataType::FixedSizeBinary(size) if value.is_instance_of::<PyBytes>() => {
+            let bytes = value.cast::<PyBytes>()?.as_bytes();
+            if *size <= 0 || usize::try_from(*size).ok() != Some(bytes.len()) {
+                return Err(PyValueError::new_err(
+                    "filter bytes must match the column's fixed size",
+                ));
+            }
+            Ok(DeltaScalar::FixedSizeBinary {
+                size: *size,
+                value: bytes.to_vec(),
+            })
+        }
         _ => Err(PyTypeError::new_err(
             "filter value type is not supported for this column",
         )),
@@ -139,4 +169,48 @@ fn to_scalar(data_type: &DataType, value: &Bound<'_, PyAny>) -> PyResult<DeltaSc
             error
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn converts_large_and_fixed_width_scalars() -> PyResult<()> {
+        Python::initialize();
+        Python::attach(|py| {
+            // Delta schemas expose Utf8/Binary; test the other native variants here.
+            let text = PyString::new(py, "a\0\u{1f642}");
+            assert_eq!(
+                to_scalar(&DataType::LargeUtf8, text.as_any())?,
+                DeltaScalar::LargeUtf8("a\0\u{1f642}".into()),
+            );
+            let bytes = PyBytes::new(py, b"\0\xff");
+            assert_eq!(
+                to_scalar(&DataType::LargeBinary, bytes.as_any())?,
+                DeltaScalar::LargeBinary(b"\0\xff".to_vec()),
+            );
+            assert_eq!(
+                to_scalar(&DataType::FixedSizeBinary(2), bytes.as_any())?,
+                DeltaScalar::FixedSizeBinary {
+                    size: 2,
+                    value: b"\0\xff".to_vec(),
+                },
+            );
+            for size in [-1, 0, 1, 3] {
+                let error = to_scalar(&DataType::FixedSizeBinary(size), bytes.as_any())
+                    .expect_err("invalid fixed width must fail");
+                assert!(error.is_instance_of::<PyValueError>(py));
+            }
+            for (data_type, value) in [
+                (DataType::LargeUtf8, bytes.as_any()),
+                (DataType::LargeBinary, text.as_any()),
+                (DataType::FixedSizeBinary(2), text.as_any()),
+            ] {
+                let error = to_scalar(&data_type, value).expect_err("wrong type must fail");
+                assert!(error.is_instance_of::<PyTypeError>(py));
+            }
+            Ok(())
+        })
+    }
 }

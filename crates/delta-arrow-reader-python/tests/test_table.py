@@ -590,6 +590,90 @@ class TableTests(unittest.TestCase):
                             method(filters=[(name, "==", value)])
                         self.assertNotIn("secret", str(caught.exception))
 
+    def test_string_and_binary_filters_preserve_literal_values(self):
+        class StringWithOverrides(str):
+            def __str__(self):
+                raise AssertionError("filter strings must use their stored value")
+
+            __repr__ = __str__
+            encode = __str__
+
+        class BytesWithOverrides(bytes):
+            def __bytes__(self):
+                raise AssertionError("filter bytes must use their stored value")
+
+            __repr__ = __bytes__
+            __iter__ = __bytes__
+            __len__ = __bytes__
+
+        class Coercible:
+            def __str__(self):
+                raise AssertionError("filter values must not be coerced or stringified")
+
+            __repr__ = __str__
+            __bytes__ = __str__
+
+        types = (
+            ("string", pa.string(), ["", "a\0b", "caf\u00e9", "cafe\u0301", "\U0001f642", None]),
+            ("binary", pa.binary(), [b"", b"a\0b", b"\xff", b"\0", b"\xc3\xa9", None]),
+        )
+        fields = json.loads(self.metadata["schemaString"])["fields"]
+        fields += [{"name": name, "type": name, "nullable": True, "metadata": {}}
+                   for name, _, _ in types]
+        self.metadata["schemaString"] = json.dumps({"type": "struct", "fields": fields})
+        schema = pa.schema([pa.field("id", pa.int64(), nullable=False)]
+                           + [pa.field(name, data_type) for name, data_type, _ in types])
+        values = {name: items for name, _, items in types}
+        path = self.location / "strings-and-bytes.parquet"
+        pq.write_table(pa.table({"id": range(6), **values}, schema=schema), path)
+        self.write_log(1, {"metaData": self.metadata}, {"add": {
+            "path": path.name, "partitionValues": {}, "size": path.stat().st_size,
+            "modificationTime": 0, "dataChange": True,
+        }})
+        table = DeltaTable(self.location)
+        for name, _, items in types:
+            subclass_value = (StringWithOverrides("a\0b") if name == "string"
+                              else BytesWithOverrides(b"a\0b"))
+            scalars = items[:-1] + [subclass_value]
+            for method, backend, (symbol, compare), (index, scalar) in product(
+                ("scan", "to_reader"), ("direct", "delta_kernel"),
+                (("==", operator.eq), ("<", operator.lt)), enumerate(scalars),
+            ):
+                with self.subTest(column=name, method=method, backend=backend,
+                                  operator=symbol, index=index):
+                    result = getattr(table, method)(
+                        columns=["id"], filters=[(name, symbol, scalar)],
+                        execution_options=ScanExecutionOptions(parquet_backend=backend),
+                    )
+                    reader = (pa.RecordBatchReader.from_stream(result)
+                              if method == "scan" else result)
+                    expected_ids = [row for row, item in enumerate(items)
+                                    if item is not None and compare(item, scalar)]
+                    with reader:
+                        self.assertCountEqual(reader.read_all().column("id").to_pylist(), expected_ids)
+
+        for version in (0, 1):
+            (self.log / f"{version:020}.json").unlink()
+        for name, _, _ in types:
+            invalid = [(value, TypeError) for value in (
+                True, 1, 1.0, bytearray(b"secret"), memoryview(b"secret"), [1, 2],
+                Coercible(), b"secret" if name == "string" else "secret",
+            )]
+            invalid.append((None, ValueError))
+            if name == "string":
+                invalid += [(value, ValueError) for value in (
+                    "\ud800secret", "secret\udfff", StringWithOverrides("\ud800secret"),
+                )]
+            for method in (table.scan, table.to_reader):
+                for index, (value, error_type) in enumerate(invalid):
+                    with self.subTest(column=name, method=method.__name__, index=index):
+                        with self.assertRaises(error_type) as caught:
+                            method(filters=[(name, "==", value)])
+                        self.assertIs(type(caught.exception), error_type)
+                        self.assertNotIn("secret", str(caught.exception))
+                        self.assertIsNone(caught.exception.__cause__)
+                        self.assertIsNone(caught.exception.__context__)
+
     def test_filter_validation_is_shared_and_redacted_before_planning(self):
         class SecretValue:
             def __str__(self):
