@@ -181,22 +181,30 @@ fn to_scalar(data_type: &DataType, value: &Bound<'_, PyAny>) -> PyResult<DeltaSc
                 .extract()?;
             Ok(DeltaScalar::Date32(days))
         }
-        DataType::Timestamp(TimeUnit::Microsecond, None) => {
-            let datetime = value.py().import("datetime")?.getattr("datetime")?;
+        DataType::Timestamp(TimeUnit::Microsecond, timezone) => {
+            let datetime_module = value.py().import("datetime")?;
+            let datetime = datetime_module.getattr("datetime")?;
             if !value.get_type().is_subclass(&datetime)? {
                 return Err(PyTypeError::new_err(
                     "timestamp filters require datetime.datetime",
                 ));
             }
-            let epoch = datetime.call1((1970, 1, 1))?;
+            let epoch = if timezone.is_some() {
+                let utc = datetime_module.getattr("timezone")?.getattr("utc")?;
+                datetime.call1((1970, 1, 1, 0, 0, 0, 0, utc))?
+            } else {
+                datetime.call1((1970, 1, 1))?
+            };
             // Use the base method to preserve stored fields and validate awareness.
             let duration = datetime
                 .call_method1("__sub__", (value, epoch))
                 .map_err(|error| {
                     if error.is_instance_of::<PyException>(value.py()) {
-                        PyValueError::new_err(
-                            "timestamp filter requires a naive datetime with no UTC offset",
-                        )
+                        PyValueError::new_err(if timezone.is_some() {
+                            "timestamp filter requires an aware datetime with a valid UTC offset"
+                        } else {
+                            "timestamp filter requires a naive datetime with no UTC offset"
+                        })
                     } else {
                         error
                     }
@@ -206,7 +214,7 @@ fn to_scalar(data_type: &DataType, value: &Bound<'_, PyAny>) -> PyResult<DeltaSc
             let microseconds = duration.getattr("microseconds")?.extract::<i64>()?;
             Ok(DeltaScalar::TimestampMicrosecond {
                 value: days * 86_400_000_000 + seconds * 1_000_000 + microseconds,
-                timezone: None,
+                timezone: timezone.as_ref().map(ToString::to_string),
             })
         }
         _ => Err(PyTypeError::new_err(
@@ -282,6 +290,32 @@ fn to_decimal(value: &Bound<'_, PyAny>, precision: u8, scale: i8) -> PyResult<De
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn timestamp_conversion_preserves_field_timezone() -> PyResult<()> {
+        Python::initialize();
+        Python::attach(|py| {
+            let datetime = py.import("datetime")?;
+            let offset = datetime.getattr("timedelta")?.call1((0, 3600))?;
+            let timezone = datetime.getattr("timezone")?.call1((offset,))?;
+            let value = datetime
+                .getattr("datetime")?
+                .call1((1970, 1, 1, 1, 0, 0, 0, timezone))?;
+            // Delta schemas use UTC; exercise other native field metadata here.
+            let field_timezone = "America/New_York";
+            assert_eq!(
+                to_scalar(
+                    &DataType::Timestamp(TimeUnit::Microsecond, Some(field_timezone.into())),
+                    &value,
+                )?,
+                DeltaScalar::TimestampMicrosecond {
+                    value: 0,
+                    timezone: Some(field_timezone.into()),
+                },
+            );
+            Ok(())
+        })
+    }
 
     #[test]
     fn converts_decimals_with_negative_scales() -> PyResult<()> {

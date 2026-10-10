@@ -967,6 +967,97 @@ class TableTests(unittest.TestCase):
                     self.assertIsNone(caught.exception.__cause__)
                     self.assertIsNone(caught.exception.__context__)
 
+    def test_aware_timestamp_filters_preserve_instants_offsets_and_fold(self):
+        class FoldOffset(tzinfo):
+            def utcoffset(self, value):
+                # Keep the repeated-hour case independent of installed timezone data.
+                return timedelta(hours=-5 if value.fold else -4)
+
+        class DateTimeWithOverrides(datetime):
+            def fail(self, *args):
+                raise AssertionError("filter datetimes must use their stored value")
+
+            __sub__ = timestamp = utcoffset = toordinal = __str__ = __repr__ = fail
+            year = microsecond = tzinfo = property(fail)
+
+        class InvalidOffset(tzinfo):
+            def __init__(self, offset):
+                self.offset = offset
+
+            def utcoffset(self, value):
+                if isinstance(self.offset, BaseException):
+                    raise self.offset
+                return self.offset
+
+        values = [
+            (datetime.min.replace(tzinfo=timezone(timedelta(microseconds=1))), -62_135_596_800_000_001),
+            (datetime.min.replace(tzinfo=timezone.utc), -62_135_596_800_000_000),
+            (datetime(1969, 12, 31, 23, 59, 59, 999999, tzinfo=timezone.utc), -1),
+            (datetime(1970, 1, 1, tzinfo=timezone.utc), 0),
+            (datetime(2000, 2, 29, 12, 34, 56, 123456, tzinfo=timezone.utc), 951_827_696_123_456),
+            (datetime(2021, 11, 7, 1, 30, tzinfo=FoldOffset(), fold=0), 1_636_263_000_000_000),
+            (datetime(2021, 11, 7, 1, 30, tzinfo=FoldOffset(), fold=1), 1_636_266_600_000_000),
+            (datetime.max.replace(tzinfo=timezone.utc), 253_402_300_799_999_999),
+            (datetime.max.replace(tzinfo=timezone(timedelta(microseconds=-1))), 253_402_300_800_000_000),
+        ]
+        fields = json.loads(self.metadata["schemaString"])["fields"]
+        fields.append({"name": "event_ts", "type": "timestamp", "nullable": True, "metadata": {}})
+        self.metadata["schemaString"] = json.dumps({"type": "struct", "fields": fields})
+        schema = pa.schema([
+            pa.field("id", pa.int64(), nullable=False), pa.field("event_ts", pa.timestamp("us", tz="UTC")),
+        ])
+        path = self.location / "timestamps.parquet"
+        pq.write_table(pa.table({
+            "id": range(len(values) + 1), "event_ts": [micros for _, micros in values] + [None],
+        }, schema=schema), path)
+        self.write_log(1, {"metaData": self.metadata}, {"add": {
+            "path": path.name, "partitionValues": {}, "size": path.stat().st_size,
+            "modificationTime": 0, "dataChange": True,
+        }})
+        table = DeltaTable(self.location)
+        cases = [("==", scalar, [row]) for row, (scalar, _) in enumerate(values)] + [
+            ("<", datetime(1970, 1, 1, tzinfo=timezone.utc), [0, 1, 2]),
+            (">=", datetime(2021, 11, 7, 1, 30, tzinfo=FoldOffset(), fold=1), [6, 7, 8]),
+            ("==", datetime(1970, 1, 1, 5, 30, tzinfo=timezone(timedelta(hours=5, minutes=30))), [3]),
+            ("==", datetime(1969, 12, 31, 17, tzinfo=timezone(timedelta(hours=-7))), [3]),
+            ("==", datetime(1970, 1, 1, 0, 0, 30, 1,
+                            tzinfo=timezone(timedelta(seconds=30, microseconds=1))), [3]),
+            ("==", DateTimeWithOverrides(1970, 1, 1, tzinfo=timezone.utc), [3]),
+        ]
+        for method, backend, (index, (symbol, scalar, expected_ids)) in product(
+            ("scan", "to_reader"), ("direct", "delta_kernel"), enumerate(cases),
+        ):
+            with self.subTest(method=method, backend=backend, index=index):
+                result = getattr(table, method)(
+                    columns=["id"], filters=[("event_ts", symbol, scalar)],
+                    execution_options=ScanExecutionOptions(parquet_backend=backend),
+                )
+                reader = pa.RecordBatchReader.from_stream(result) if method == "scan" else result
+                with reader:
+                    self.assertCountEqual(reader.read_all().column("id").to_pylist(), expected_ids)
+
+        for version in (0, 1):
+            (self.log / f"{version:020}.json").unlink()
+        invalid = [(value, TypeError) for value in (
+            True, 0, 0.0, "secret-timestamp", b"secret-timestamp", date(1970, 1, 1),
+        )] + [(value, ValueError) for value in (
+            None, datetime(1970, 1, 1), DateTimeWithOverrides(1970, 1, 1),
+        )]
+        invalid += [(datetime(1970, 1, 1, tzinfo=InvalidOffset(offset)), ValueError) for offset in (
+            None, "secret-offset", timedelta(days=1), timedelta(days=-1),
+            ValueError("secret-offset"), RuntimeError("secret-offset"),
+        )]
+        invalid.append((datetime(1970, 1, 1, tzinfo=InvalidOffset(KeyboardInterrupt())), KeyboardInterrupt))
+        for method in (table.scan, table.to_reader):
+            for index, (value, error_type) in enumerate(invalid):
+                with self.subTest(method=method.__name__, index=index):
+                    with self.assertRaises(error_type) as caught:
+                        method(filters=[("event_ts", "==", value)])
+                    self.assertIs(type(caught.exception), error_type)
+                    self.assertNotIn("secret", str(caught.exception))
+                    self.assertIsNone(caught.exception.__cause__)
+                    self.assertIsNone(caught.exception.__context__)
+
     def test_filter_validation_is_shared_and_redacted_before_planning(self):
         class SecretValue:
             def __str__(self):

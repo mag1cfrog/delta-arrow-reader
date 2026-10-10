@@ -54,7 +54,7 @@ the same version. To select a specific version, use
 
 Both `scan()` and `to_reader()` accept `filters`. Use `==`, `!=`, `<`, `<=`, `>`,
 or `>=` to compare Boolean, signed integer, floating-point, string, binary,
-decimal, date, and `timestamp_ntz` columns. Use `"is"` with `None` to select null
+decimal, date, and timestamp columns. Use `"is"` with `None` to select null
 values, or `"is not"` with `None` to select non-null values:
 
 ```python
@@ -112,6 +112,15 @@ Timestamp columns without a timezone (`timestamp_ntz`) require naive
 converted to exact signed microseconds since `1970-01-01 00:00:00`, without
 using the process timezone or floating-point arithmetic. Aware values and
 invalid offsets raise `ValueError`; other value types raise `TypeError`.
+
+Timestamp columns with a timezone (`timestamp`) require aware
+`datetime.datetime` values. Conversion uses the value's UTC offset, including
+`fold` for repeated local times, and preserves exact microseconds. Different
+offsets can represent the same instant. The filter keeps the column's timezone
+metadata. Naive values and invalid offsets raise `ValueError`; other value
+types raise `TypeError`. For example, use
+`datetime(2024, 1, 1, tzinfo=timezone.utc)` after
+`from datetime import datetime, timezone`.
 
 ## Prepare metadata for repeated scans
 
