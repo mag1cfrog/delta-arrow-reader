@@ -225,6 +225,28 @@ fn maps_every_scalar_without_losing_integer_precision() {
 }
 
 #[test]
+fn preserves_float64_bits() {
+    for expected in [
+        1.9651349465042103,
+        -1.9651349465042103,
+        2.3318716180463287e-130,
+        -7.386266683291869e223,
+        f64::MAX,
+        f64::MIN,
+        f64::MIN_POSITIVE,
+        f64::from_bits(1),
+        0.0,
+        -0.0,
+    ] {
+        let actual = parse_scalar(json!({"type": "float64", "value": expected}));
+        let DeltaScalar::Float64(actual) = actual else {
+            panic!("expected Float64, got {actual:?}");
+        };
+        assert_eq!(actual.to_bits(), expected.to_bits(), "{expected:?}");
+    }
+}
+
+#[test]
 fn rejects_wrong_shapes_unknown_fields_and_duplicate_keys() {
     for text in [
         "",
