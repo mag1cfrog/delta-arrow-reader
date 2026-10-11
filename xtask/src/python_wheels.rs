@@ -1,4 +1,8 @@
-use std::{fs, io::Read, path::Path};
+use std::{
+    fs,
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 use flate2::read::DeflateDecoder;
 use rawzip::{CompressionMethod, ZipArchive};
@@ -116,7 +120,7 @@ fn check_headers(name: &str, contents: &str, expected: &[(&str, &str)]) -> Resul
     Ok(())
 }
 
-pub fn check_wheel_set(directory: &Path, version: &str) -> Result<()> {
+pub fn check_wheel_set(directory: &Path, version: &str) -> Result<Vec<PathBuf>> {
     let mut artifacts = fs::read_dir(directory)?
         .map(|entry| entry.map(|entry| entry.file_name()))
         .collect::<std::io::Result<Vec<_>>>()?;
@@ -129,6 +133,7 @@ pub fn check_wheel_set(directory: &Path, version: &str) -> Result<()> {
     if artifacts != expected {
         return Err(format!("expected artifacts {expected:?}, got {artifacts:?}").into());
     }
+    let mut wheels = Vec::new();
     for (artifact, platform) in ARTIFACT_PLATFORM_TAGS {
         let paths = fs::read_dir(directory.join(artifact))?
             .map(|entry| entry.map(|entry| entry.path()))
@@ -141,6 +146,7 @@ pub fn check_wheel_set(directory: &Path, version: &str) -> Result<()> {
             .into());
         }
         check_wheel(&paths[0], version, platform)?;
+        wheels.extend(paths);
     }
-    Ok(())
+    Ok(wheels)
 }

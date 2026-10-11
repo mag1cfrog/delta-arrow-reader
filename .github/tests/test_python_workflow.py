@@ -92,7 +92,7 @@ class PythonWorkflowTests(unittest.TestCase):
                 stage = steps[-2]
                 self.assertEqual(stage["id"], "stage")
                 self.assertEqual(shlex.split(stage["run"].replace("\\\n", "")), [
-                    "python", ".github/scripts/prepare_python_upload.py", "wheel-artifacts",
+                    "cargo", "xtask", "prepare-python-upload", "wheel-artifacts",
                     "--expected-version", "$EXPECTED_VERSION", "--index", target,
                     "--destination", "dist",
                 ])
@@ -133,8 +133,9 @@ class PythonWorkflowTests(unittest.TestCase):
                     steps = self.jobs[f"publish-{target}"]["steps"]
                     stage = next(step for step in steps if step.get("id") == "stage")
                     script = stage["run"].replace(
-                        ".github/scripts/prepare_python_upload.py",
-                        shlex.quote(str(WORKFLOW.parents[2] / ".github/scripts/prepare_python_upload.py")),
+                        "cargo xtask",
+                        "cargo run --quiet --locked --manifest-path "
+                        + shlex.quote(str(WORKFLOW.parents[2] / "xtask/Cargo.toml")) + " --",
                     )
                     result = subprocess.run(
                         ["bash", "-e", "-o", "pipefail", "-c", script],

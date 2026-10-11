@@ -9,6 +9,7 @@ use std::{
 use serde::Deserialize;
 
 mod python_release;
+mod python_upload;
 mod python_wheels;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -148,14 +149,19 @@ fn main() -> Result<()> {
             directory,
             "--expected-version",
             version,
-        ] => python_wheels::check_wheel_set(Path::new(directory), version),
+        ] => python_wheels::check_wheel_set(Path::new(directory), version).map(|_| ()),
+        ["prepare-python-upload", artifacts, "--expected-version", version, "--index", index,
+         "--destination", destination] => python_upload::prepare_upload(
+            Path::new(artifacts), version, index, Path::new(destination),
+        ),
         _ => Err(concat!(
             "usage: cargo xtask <task>\n",
             "  check-cache-writes\n",
             "  prune-ci-caches\n",
             "  prepare-python-release\n",
             "  check-python-wheel <path> --expected-version <version> --platform-tag <tag>\n",
-            "  check-python-wheels <directory> --expected-version <version>",
+            "  check-python-wheels <directory> --expected-version <version>\n",
+            "  prepare-python-upload <artifacts> --expected-version <version> --index <pypi|testpypi> --destination <directory>",
         )
         .into()),
     }

@@ -102,9 +102,6 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.source-ref }}
           persist-credentials: false
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
       - name: Read Rust version
         id: rust-version
         run: |
@@ -121,7 +118,7 @@ jobs:
       - name: Verify published files and stage missing wheels
         id: stage
         run: |
-          python .github/scripts/prepare_python_upload.py wheel-artifacts \
+          cargo xtask prepare-python-upload wheel-artifacts \
             --expected-version "$EXPECTED_VERSION" --index testpypi --destination dist
       - name: Upload to TestPyPI
         if: steps.stage.outputs.has-files == 'true'
@@ -156,9 +153,6 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.source-ref }}
           persist-credentials: false
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
       - name: Read Rust version
         id: rust-version
         run: |
@@ -175,7 +169,7 @@ jobs:
       - name: Verify published files and stage missing wheels
         id: stage
         run: |
-          python .github/scripts/prepare_python_upload.py wheel-artifacts \
+          cargo xtask prepare-python-upload wheel-artifacts \
             --expected-version "$EXPECTED_VERSION" --index pypi --destination dist
       - name: Upload to PyPI
         if: steps.stage.outputs.has-files == 'true'
