@@ -74,7 +74,7 @@ Linux amd64 and arm64 releases use the workspace version. Heavy binary,
 distribution, image, and Go checks run on the release PR after approval.
 Publication reuses those exact archives and OCI images in GitHub Releases and
 GHCR. See the [release runbook](cli-release.md) for recovery and first-release
-evidence, and [installation](../public/installation.md#cli-binaries-and-container-images)
+evidence, and [installation](../../crates/delta-arrow-reader-core/docs/public/installation.md#cli-binaries-and-container-images)
 for supported runtimes and version/digest pins. The first actual public release
 remains part of the parent issue's release checklist.
 

@@ -80,7 +80,7 @@ impl Fixture {
             ("environments/release-checks".into(), json!({"id": 90, "name": "release-checks"})),
             (APPROVALS.into(), json!([{"state": "approved", "user": {"login": "maintainer"}, "environments": [{"id": 90, "name": "release-checks"}]}])),
         ]), raw: BTreeMap::from([
-            (MANIFEST.into(), b"[package]\nrust-version = '1.94.1'\n[workspace.package]\nversion = '1.2.3'\n[workspace.metadata.cli-release]\ncargo-about-version = '0.8.2'\n".to_vec()),
+            (MANIFEST.into(), b"[workspace.package]\nrust-version = '1.94.1'\nversion = '1.2.3'\n[workspace.metadata.cli-release]\ncargo-about-version = '0.8.2'\n".to_vec()),
             (CLI_MANIFEST.into(), b"[package]\nname = 'delta-arrow-reader-cli'\n".to_vec()),
         ]), record: json!({
             "schema_version": 1, "repository": REPOSITORY, "pull_request": 42, "pull_request_head_sha": "c".repeat(40),

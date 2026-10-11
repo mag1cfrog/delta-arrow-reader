@@ -52,20 +52,25 @@ impl ReleasePlanningWorkspace {
         let directory = env::temp_dir().join(format!("release-plz-{name}-{}", std::process::id()));
         fs::create_dir(&directory)?;
         let workspace = Self { directory };
-        let root_manifest: toml::Value = toml::from_str(include_str!("../../Cargo.toml"))?;
-        let exclude = serde_json::to_string(&root_manifest["package"]["exclude"])?;
+        let core_manifest: toml::Value = toml::from_str(include_str!(
+            "../../crates/delta-arrow-reader-core/Cargo.toml"
+        ))?;
+        let exclude = serde_json::to_string(&core_manifest["package"]["exclude"])?;
         workspace.write(
             "Cargo.toml",
-            &format!(
-                r#"[workspace]
-members = ["xtask"]
-default-members = ["."]
+            r#"[workspace]
+members = ["crates/delta-arrow-reader-core", "xtask"]
+default-members = ["crates/delta-arrow-reader-core"]
 resolver = "3"
 
 [workspace.package]
 version = "0.6.2"
-
-[package]
+"#,
+        )?;
+        workspace.write(
+            "crates/delta-arrow-reader-core/Cargo.toml",
+            &format!(
+                r#"[package]
 name = "delta-arrow-reader"
 version.workspace = true
 edition = "2024"
@@ -76,7 +81,10 @@ exclude = {exclude}
 "#
             ),
         )?;
-        workspace.write("src/lib.rs", "pub fn read() {}\n")?;
+        workspace.write(
+            "crates/delta-arrow-reader-core/src/lib.rs",
+            "pub fn read() {}\n",
+        )?;
         if python_at_baseline {
             workspace.add_python()?;
         }
@@ -120,15 +128,18 @@ exclude = {exclude}
         self.write(
             "Cargo.toml",
             &manifest.replace(
-                "members = [\"xtask\"]",
-                "members = [\"crates/delta-arrow-reader-python\", \"crates/delta-arrow-reader-cli\", \"xtask\"]",
+                "members = [\"crates/delta-arrow-reader-core\", \"xtask\"]",
+                "members = [\"crates/delta-arrow-reader-core\", \"crates/delta-arrow-reader-python\", \"crates/delta-arrow-reader-cli\", \"xtask\"]",
             ),
         )?;
         self.write(
-            "pyproject.toml",
+            "crates/delta-arrow-reader-python/pyproject.toml",
             "[project]\nname = \"delta-arrow-reader\"\nrequires-python = \">=3.10\"\n",
         )?;
-        self.write("delta_arrow_reader.pyi", "def read() -> int: ...\n")?;
+        self.write(
+            "crates/delta-arrow-reader-python/delta_arrow_reader.pyi",
+            "def read() -> int: ...\n",
+        )?;
         for (name, source, code) in [
             ("python", "lib.rs", "pub fn python() {}\n"),
             ("cli", "main.rs", "fn main() {}\n"),
@@ -147,7 +158,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
-delta-arrow-reader = {{ version = "0.6.2", path = "../.." }}
+delta-arrow-reader = {{ version = "0.6.2", path = "../delta-arrow-reader-core" }}
 "#
                 ),
             )?;
@@ -286,7 +297,7 @@ fn python_only_change_updates_the_shared_release() -> Result<()> {
 #[ignore = "requires release-plz 0.3.171 on PATH"]
 fn python_metadata_only_change_updates_the_shared_release() -> Result<()> {
     ReleasePlanningWorkspace::new("metadata", true)?.assert_shared_release_update(
-        "pyproject.toml",
+        "crates/delta-arrow-reader-python/pyproject.toml",
         "[project]\nname = \"delta-arrow-reader\"\nrequires-python = \">=3.11\"\n",
     )
 }
@@ -295,7 +306,7 @@ fn python_metadata_only_change_updates_the_shared_release() -> Result<()> {
 #[ignore = "requires release-plz 0.3.171 on PATH"]
 fn python_stubs_only_change_updates_the_shared_release() -> Result<()> {
     ReleasePlanningWorkspace::new("stubs", true)?.assert_shared_release_update(
-        "delta_arrow_reader.pyi",
+        "crates/delta-arrow-reader-python/delta_arrow_reader.pyi",
         "def read() -> int: ...\ndef version() -> str: ...\n",
     )
 }
@@ -363,7 +374,10 @@ fn invalid_baselines_stop_before_writing_a_config() -> Result<()> {
 #[ignore = "requires release-plz 0.3.171 on PATH"]
 fn first_python_release_and_subsequent_binding_changes_use_the_shared_version() -> Result<()> {
     let workspace = ReleasePlanningWorkspace::new("initial-python-release", false)?;
-    workspace.write("src/lib.rs", "pub fn read() {}\npub fn core_fix() {}\n")?;
+    workspace.write(
+        "crates/delta-arrow-reader-core/src/lib.rs",
+        "pub fn read() {}\npub fn core_fix() {}\n",
+    )?;
     workspace.run("git", &["add", "."])?;
     workspace.run("git", &["commit", "-m", "fix: improve the core reader"])?;
     workspace.update()?;
@@ -385,7 +399,7 @@ fn first_python_release_and_subsequent_binding_changes_use_the_shared_version() 
 
     workspace.run("git", &["switch", "main"])?;
     workspace.write(
-        "src/lib.rs",
+        "crates/delta-arrow-reader-core/src/lib.rs",
         "pub fn read() {}\npub fn core_fix() {}\npub fn follow_up_fix() {}\n",
     )?;
     workspace.run("git", &["add", "."])?;

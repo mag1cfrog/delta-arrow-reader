@@ -43,6 +43,28 @@ fn selects_artifact_metadata_across_different_merge_shas_without_the_temporary_c
 }
 
 #[test]
+fn accepts_historical_manifests_and_requires_a_workspace_version() -> Result<()> {
+    let mut fixture = Fixture::new()?;
+    fixture.raw.insert(
+        MANIFEST.into(),
+        b"[package]\nrust-version = '1.94.1'\n[workspace.package]\nversion = '1.2.3'\n".to_vec(),
+    );
+    let selected = fixture.selected(fixture.command(true)?.output()?)?;
+    assert_eq!(selected["release"]["version"], "1.2.3");
+    fs::remove_file(fixture.directory.path().join("selection.json"))?;
+    for manifest in ["", "[workspace.package]\nversion = 123\n"] {
+        fixture
+            .raw
+            .insert(MANIFEST.into(), manifest.as_bytes().to_vec());
+        fixture.rejected(
+            fixture.command(true)?.output()?,
+            "workspace.package.version",
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
 fn rejects_unpublished_or_unrelated_releases_and_untrusted_prs() -> Result<()> {
     let mut fixture = Fixture::new()?;
     let valid = fixture.responses.clone();
@@ -126,7 +148,7 @@ fn rejects_unpublished_or_unrelated_releases_and_untrusted_prs() -> Result<()> {
         fixture.rejected(fixture.command(true)?.output()?, message)?;
     }
     fixture.responses = valid;
-    fixture.raw.insert(MANIFEST.into(), b"[package]\nrust-version='1.94.1'\n[workspace.package]\nversion='1.2.4'\n[workspace.metadata.cli-release]\ncargo-about-version='0.8.2'\n".to_vec());
+    fixture.raw.insert(MANIFEST.into(), b"[workspace.package]\nrust-version='1.94.1'\nversion='1.2.4'\n[workspace.metadata.cli-release]\ncargo-about-version='0.8.2'\n".to_vec());
     fixture.rejected(fixture.command(true)?.output()?, "workspace version differ")?;
     Ok(())
 }

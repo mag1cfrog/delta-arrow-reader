@@ -21,7 +21,7 @@ use serde_json::Value;
 #[test]
 fn external_writer_schemas_round_trip() -> Result<(), Box<dyn std::error::Error>> {
     let corpus = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/reader/fixtures/external_writer/corpus");
+        .join("../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus");
     for (name, version) in [
         ("partitioned", "0"),
         ("nested_mapping", "1"),
@@ -70,7 +70,7 @@ fn external_writer_schemas_round_trip() -> Result<(), Box<dyn std::error::Error>
 #[test]
 fn scans_match_core_for_projection_limits_and_versions() -> Result<(), Box<dyn std::error::Error>> {
     let corpus = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/reader/fixtures/external_writer/corpus");
+        .join("../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus");
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;

@@ -20,7 +20,7 @@ esac
 mkdir /tmp/cli-runtime-checks
 cd /tmp/cli-runtime-checks
 test "$(/package/dar --version)" = "dar $CLI_VERSION"
-cli_fixture=/checks/tests/reader/fixtures/external_writer/corpus/partitioned/table
+cli_fixture=/checks/crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned/table
 /package/dar inspect "$cli_fixture" >inspect.json 2>inspect.stderr
 test ! -s inspect.stderr
 /package/dar scan --column id --limit 2 "$cli_fixture" >scan.arrow 2>scan.stderr

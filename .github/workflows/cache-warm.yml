@@ -18,9 +18,9 @@ on:
       - "crates/*/Cargo.toml"
       - "crates/delta-arrow-reader-python/**"
       - "crates/delta-arrow-reader-cli/**"
-      - "pyproject.toml"
-      - "src/**"
-      - "tests/**"
+      - "crates/delta-arrow-reader-core/src/**"
+      - "crates/delta-arrow-reader-core/tests/**"
+      - "crates/delta-arrow-reader-core/benches/**"
       - "benches/**"
 
 permissions:

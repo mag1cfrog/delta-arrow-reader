@@ -50,7 +50,7 @@ def main():
         "provenance": "Original synthetic data written and read by Apache Spark / Delta Lake; no reader fixture helper is used.",
         "license": "Apache-2.0 (same as this repository)",
         "generator": "../generate.py",
-        "generation_command": "JAVA_HOME=/path/to/java-21 SPARK_LOCAL_IP=127.0.0.1 uv run --python 3.13.12 --script tests/reader/fixtures/external_writer/generate.py NEW_OUTPUT_DIRECTORY",
+        "generation_command": "JAVA_HOME=/path/to/java-21 SPARK_LOCAL_IP=127.0.0.1 uv run --python 3.13.12 --script crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/generate.py NEW_OUTPUT_DIRECTORY",
         "tools": {
             name: importlib.metadata.version(name)
             for name in ["pyspark", "delta-spark", "pyarrow", "pandas"]

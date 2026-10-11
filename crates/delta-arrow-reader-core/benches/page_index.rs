@@ -22,7 +22,7 @@ use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 use serde_json::json;
 
-#[path = "selective_read/src/control_rows.rs"]
+#[path = "../../../benches/selective_read/src/control_rows.rs"]
 mod control_rows;
 use control_rows::{payload_name, payload_value, schema as benchmark_schema};
 

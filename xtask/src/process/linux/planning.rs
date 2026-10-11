@@ -176,7 +176,7 @@ impl ProcessFixture<'_> {
     pub(super) fn check_projection_planning(&self) -> Result<()> {
         let table = self
             .repository
-            .join("tests/reader/fixtures/external_writer/corpus/partitioned/table");
+            .join("crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned/table");
         for columns in [
             vec!["secret-missing"],
             vec!["id", "id"],

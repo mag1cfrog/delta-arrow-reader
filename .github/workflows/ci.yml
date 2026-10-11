@@ -86,7 +86,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
       - run: cargo test --locked ${{ matrix.features }}
       - name: Verify HTTPS certificates and proxies
-        run: python3 tests/reader/https.py ${{ matrix.features }}
+        run: python3 crates/delta-arrow-reader-core/tests/reader/https.py ${{ matrix.features }}
 
   platform-tests:
     name: Platform Tests / ${{ matrix.name }}
@@ -259,7 +259,7 @@ jobs:
           python -m venv "$RUNNER_TEMP/python-tests"
           source "$RUNNER_TEMP/python-tests/bin/activate"
           python -m pip install 'maturin==1.14.1' 'pyarrow==18.0.0'
-          maturin develop --locked
+          maturin develop --locked --manifest-path crates/delta-arrow-reader-python/Cargo.toml
           python -I -m unittest discover -s crates/delta-arrow-reader-python/tests
 
   cli-checks:

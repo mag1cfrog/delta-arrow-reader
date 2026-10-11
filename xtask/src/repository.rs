@@ -19,14 +19,7 @@ pub(crate) fn read_toml<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T
 
 #[derive(Deserialize)]
 pub(crate) struct WorkspaceManifest {
-    pub(crate) package: RootPackage,
     pub(crate) workspace: Workspace,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct RootPackage {
-    #[serde(rename = "rust-version")]
-    pub(crate) rust_version: String,
 }
 
 #[derive(Deserialize)]
@@ -38,6 +31,8 @@ pub(crate) struct Workspace {
 #[derive(Deserialize)]
 pub(crate) struct WorkspacePackage {
     pub(crate) version: String,
+    #[serde(rename = "rust-version")]
+    pub(crate) rust_version: String,
 }
 
 #[derive(Deserialize)]

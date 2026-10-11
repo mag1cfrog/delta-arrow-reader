@@ -17,6 +17,9 @@ Issues = "https://github.com/mag1cfrog/delta-arrow-reader/issues"
 
 [tool.maturin]
 bindings = "pyo3"
-manifest-path = "crates/delta-arrow-reader-python/Cargo.toml"
-# Preserve the complete workspace and its matching Cargo.lock in source archives.
-sdist-generator = "git"
+manifest-path = "Cargo.toml"
+# Keep auto-detected package files beside the sdist's root pyproject.toml.
+include = [
+    { path = "delta_arrow_reader.pyi", format = "sdist" },
+    { path = "NOTICE", format = "sdist" },
+]

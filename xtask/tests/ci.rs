@@ -61,19 +61,22 @@ fn filter_matches(filters: &Value, name: &str, path: &str) -> Result<bool> {
 fn python_filter_excludes_unrelated_sources_and_tools() -> Result<()> {
     let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
     for (path, expected) in [
-        ("src/reader/scan.rs", true),
+        ("crates/delta-arrow-reader-core/src/reader/scan.rs", true),
         ("Cargo.lock", true),
         ("Cargo.toml", true),
         ("crates/delta-arrow-reader-cli/Cargo.toml", true),
         ("crates/delta-arrow-reader-python/src/lib.rs", true),
         ("crates/delta-arrow-reader-python/tests/test_table.py", true),
-        ("tests/reader/https.py", true),
+        ("crates/delta-arrow-reader-core/tests/reader/https.py", true),
         (
-            "tests/reader/fixtures/external_writer/corpus/table/data.parquet",
+            "crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/table/data.parquet",
             true,
         ),
-        ("pyproject.toml", true),
-        ("delta_arrow_reader.pyi", true),
+        ("crates/delta-arrow-reader-python/pyproject.toml", true),
+        (
+            "crates/delta-arrow-reader-python/delta_arrow_reader.pyi",
+            true,
+        ),
         ("README.md", true),
         ("LICENSE", true),
         (".cargo/config.toml", true),
@@ -96,7 +99,10 @@ fn python_filter_excludes_unrelated_sources_and_tools() -> Result<()> {
         ("crates/delta-arrow-reader-cli/src/main.rs", false),
         ("crates/delta-arrow-reader-cli/tests/scan.py", false),
         ("benches/selective_read/src/main.rs", false),
-        ("tests/reader/direct.rs", false),
+        (
+            "crates/delta-arrow-reader-core/tests/reader/direct.rs",
+            false,
+        ),
         ("docs/content/contributing.md", false),
     ] {
         assert_eq!(
@@ -121,8 +127,8 @@ fn python_sources_skip_core_checks_without_losing_formatting() -> Result<()> {
     }
     for path in [
         "crates/delta-arrow-reader-python/Cargo.toml",
-        "pyproject.toml",
-        "delta_arrow_reader.pyi",
+        "crates/delta-arrow-reader-python/pyproject.toml",
+        "crates/delta-arrow-reader-python/delta_arrow_reader.pyi",
     ] {
         for name in ["code", "python"] {
             assert!(filter_matches(&filters, name, path)?, "{name}: {path}");
@@ -173,8 +179,8 @@ fn cli_sources_run_separate_required_checks() -> Result<()> {
         ".github/workflows/ci.yml",
         ".github/workflows/cache-warm.yml",
         "clippy.toml",
-        "src/reader/options.rs",
-        "tests/reader/fixtures/external_writer/corpus/table/data.parquet",
+        "crates/delta-arrow-reader-core/src/reader/options.rs",
+        "crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/table/data.parquet",
     ] {
         for name in ["code", "cli"] {
             assert!(filter_matches(&filters, name, path)?, "{name}: {path}");
@@ -184,9 +190,9 @@ fn cli_sources_run_separate_required_checks() -> Result<()> {
         "crates/delta-arrow-reader-python/src/lib.rs",
         "crates/delta-arrow-reader-python/tests/test_table.py",
         "xtask/src/main.rs",
-        "benches/page_index.rs",
+        "crates/delta-arrow-reader-core/benches/page_index.rs",
         "benches/selective_read/src/main.rs",
-        "tests/reader/direct.rs",
+        "crates/delta-arrow-reader-core/tests/reader/direct.rs",
         ".github/workflows/cli-build.yml",
     ] {
         assert!(!filter_matches(&filters, "cli", path)?, "{path}");
@@ -285,7 +291,10 @@ fn tooling_changes_run_separate_required_checks() -> Result<()> {
         ("clippy.toml", true),
         ("LICENSE", true),
         ("NOTICE", true),
-        ("src/reader/options.rs", false),
+        (
+            "crates/delta-arrow-reader-core/src/reader/options.rs",
+            false,
+        ),
         ("crates/delta-arrow-reader-python/src/lib.rs", false),
         ("crates/delta-arrow-reader-cli/src/main.rs", false),
         ("benches/selective_read/src/fixtures.rs", false),
@@ -331,7 +340,10 @@ fn benchmark_checks_exclude_unrelated_ci_changes() -> Result<()> {
         ("benches/selective_read/Cargo.lock", true),
         ("benches/selective_read/src/fixtures.rs", true),
         ("benches/selective_read/oracle.py", true),
-        ("src/reader/options.rs", false),
+        (
+            "crates/delta-arrow-reader-core/src/reader/options.rs",
+            false,
+        ),
         ("xtask/src/main.rs", false),
     ] {
         assert_eq!(
@@ -392,14 +404,17 @@ fn benchmark_checks_exclude_unrelated_ci_changes() -> Result<()> {
 #[test]
 fn core_filter_preserves_benchmark_targets_and_shared_inputs() -> Result<()> {
     let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
-    let manifest: toml::Value = toml::from_str(include_str!("../../Cargo.toml"))?;
+    let manifest: toml::Value = toml::from_str(include_str!(
+        "../../crates/delta-arrow-reader-core/Cargo.toml"
+    ))?;
     for target in manifest["bench"].as_array().unwrap() {
         let path = target["path"].as_str().unwrap();
-        assert!(filter_matches(&filters, "code", path)?, "{path}");
+        let path = format!("crates/delta-arrow-reader-core/{path}");
+        assert!(filter_matches(&filters, "code", &path)?, "{path}");
     }
     for path in [
-        "benches/range_planning/controlled_http.rs",
-        "benches/range_planning/plan_diagnostics.rs",
+        "crates/delta-arrow-reader-core/benches/range_planning/controlled_http.rs",
+        "crates/delta-arrow-reader-core/benches/range_planning/plan_diagnostics.rs",
         "benches/selective_read/src/control_rows.rs",
         "benches/scan_scheduling.py",
         "benches/test_scan_scheduling.py",
@@ -440,9 +455,9 @@ fn standalone_docs_skip_rust_checks() -> Result<()> {
     for path in [
         "docs/content/contributing.md",
         "docs/content/benchmarks/intra-page-reads.md",
-        "docs/public/python.md",
-        "docs/public/cli.md",
-        "docs/public/benchmarks/selective-read-results.md",
+        "crates/delta-arrow-reader-core/docs/public/python.md",
+        "crates/delta-arrow-reader-core/docs/public/cli.md",
+        "crates/delta-arrow-reader-core/docs/public/benchmarks/selective-read-results.md",
     ] {
         for name in ["code", "python", "cli", "tooling", "selective_read"] {
             assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
@@ -464,8 +479,7 @@ fn embedded_docs_trigger_their_rust_checks() -> Result<()> {
     let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
     let include = regex::Regex::new(r#"include_str!\("([^"]+\.md)"\)"#)?;
     for (source, filter) in [
-        ("src/lib.rs", "code"),
-        ("src/guides.rs", "code"),
+        ("crates/delta-arrow-reader-core/src/guides.rs", "code"),
         ("benches/selective_read/src/main.rs", "selective_read"),
         ("benches/selective_read/src/production.rs", "selective_read"),
         ("benches/selective_read/src/large.rs", "selective_read"),

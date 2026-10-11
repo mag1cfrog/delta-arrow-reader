@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Linux HTTPS regression: python3 tests/reader/https.py [--features datafusion].
+"""Linux HTTPS regression: python3 crates/delta-arrow-reader-core/tests/reader/https.py [--features datafusion].
 
 Uses Python's stdlib and the openssl CLI to create temporary test certificates.
 Trust and proxy overrides affect only the test subprocess, never the system store.

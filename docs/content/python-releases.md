@@ -8,7 +8,7 @@ authorization. Merging the publishing workflow does not complete that checklist.
 The commands use a Linux or macOS shell and an authenticated GitHub CLI. Replace
 `X.Y.Z` with the exact stable version in the selected commit's root `Cargo.toml`.
 For supported installation targets, see the
-[Python installation guide](../public/installation.md#python).
+[Python installation guide](../../crates/delta-arrow-reader-core/docs/public/installation.md#python).
 
 ## Configure the publishers
 

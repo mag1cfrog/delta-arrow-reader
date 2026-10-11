@@ -35,9 +35,8 @@ impl Fixture {
         fs::write(
             repository.join("Cargo.toml"),
             r#"
-[package]
-rust-version = "1.94.1"
 [workspace.package]
+rust-version = "1.94.1"
 version = "1.2.3"
 [workspace.metadata.cli-release]
 cargo-about-version = "0.8.2"
