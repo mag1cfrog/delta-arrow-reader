@@ -70,7 +70,7 @@ fn create_table(
     columns.push(Arc::new(Int64Array::from_iter_values(
         (0..ROWS as i64).map(|id| i64::from(MATCHES.contains(&id))),
     )));
-    // Required physical INT32 is read through a nullable Delta long field below.
+    // Required INT32 and fixed-length decimal fields have nullable Delta targets below.
     let typed: Vec<(&str, ArrayRef)> = vec![
         (
             "narrow",
@@ -101,6 +101,24 @@ fn create_table(
             ),
         ),
         (
+            "decimal9bytes",
+            Arc::new(
+                Decimal128Array::from_iter((0..ROWS).map(|i| {
+                    (i % 3 != 0).then_some((i as i128 - ROWS as i128 / 2) * 1_000_000_000_000)
+                }))
+                .with_precision_and_scale(20, 4)?,
+            ),
+        ),
+        (
+            "decimal16bytes",
+            Arc::new(
+                Decimal128Array::from_iter_values(
+                    (0..ROWS).map(|i| (i as i128 - ROWS as i128 / 2) * 10_i128.pow(30)),
+                )
+                .with_precision_and_scale(38, 10)?,
+            ),
+        ),
+        (
             "float",
             Arc::new(Float32Array::from_iter_values(
                 (0..ROWS).map(|i| i as f32 / 2.0),
@@ -114,7 +132,11 @@ fn create_table(
         ),
     ];
     for (name, column) in typed {
-        fields.push(Field::new(name, column.data_type().clone(), false));
+        fields.push(Field::new(
+            name,
+            column.data_type().clone(),
+            column.null_count() > 0,
+        ));
         columns.push(column);
     }
     let schema = Arc::new(Schema::new(fields));
@@ -132,11 +154,15 @@ fn create_table(
                 DataType::Timestamp(_, _) => "timestamp".to_owned(),
                 DataType::Float32 => "float".to_owned(),
                 DataType::Float64 => "double".to_owned(),
+                // Widen precision and scale while the file still stores nine-byte values.
+                DataType::Decimal128(_, _) if f.name() == "decimal9bytes" => "decimal(24,6)".to_owned(),
                 DataType::Decimal128(p, s) => format!("decimal({p},{s})"),
                 other => return Err(format!("unexpected fixture type: {other:?}").into()),
             };
             Ok(json!({
-                "name": f.name(), "type": dtype, "nullable": f.is_nullable() || f.name() == "narrow", "metadata": {}
+                "name": f.name(), "type": dtype,
+                "nullable": f.is_nullable() || matches!(f.name().as_str(), "narrow" | "decimal16bytes"),
+                "metadata": {}
             }))
         })
         .collect::<TestResult<_>>()?;
@@ -327,6 +353,42 @@ async fn intra_page_public_scan_without_transport_evidence_matches_baseline() ->
             assert_eq!(narrow.data_type(), &DataType::Int64);
             assert!(actual.schema().field_with_name("narrow")?.is_nullable());
             assert_eq!(narrow.to_data(), actual.column(0).to_data());
+            let ids = actual
+                .column(0)
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap();
+            let decimal9 = actual.column_by_name("decimal9bytes").unwrap();
+            let decimal16 = actual.column_by_name("decimal16bytes").unwrap();
+            assert_eq!(decimal9.data_type(), &DataType::Decimal128(24, 6));
+            assert_eq!(decimal16.data_type(), &DataType::Decimal128(38, 10));
+            assert!(
+                actual
+                    .schema()
+                    .field_with_name("decimal16bytes")?
+                    .is_nullable()
+            );
+            let expected9 = Decimal128Array::from_iter(ids.values().iter().map(|id| {
+                (id % 3 != 0).then_some((*id as i128 - ROWS as i128 / 2) * 100_000_000_000_000)
+            }))
+            .with_precision_and_scale(24, 6)?;
+            let expected16 = Decimal128Array::from_iter_values(
+                ids.values()
+                    .iter()
+                    .map(|id| (*id as i128 - ROWS as i128 / 2) * 10_i128.pow(30)),
+            )
+            .with_precision_and_scale(38, 10)?;
+            assert_eq!(
+                decimal9.as_any().downcast_ref::<Decimal128Array>().unwrap(),
+                &expected9
+            );
+            assert_eq!(
+                decimal16
+                    .as_any()
+                    .downcast_ref::<Decimal128Array>()
+                    .unwrap(),
+                &expected16
+            );
             // Local reads supply no remote transport evidence. The default must
             // retain ordinary I/O until the cost model has usable observations.
             assert!(
@@ -367,6 +429,53 @@ async fn intra_page_public_scan_without_transport_evidence_matches_baseline() ->
             let (actual, _) = scan(&root, DeltaScanExecutionOptions::default(), compound).await?;
             assert_eq!(actual, expected);
             assert!(actual.num_rows() > 0 && actual.num_rows() < MATCHES.len());
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn intra_page_does_not_add_fixed_binary_to_delta_binary_conversion() -> TestResult {
+    use arrow::array::FixedSizeBinaryArray;
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("id", DataType::Int64, false),
+        Field::new("value", DataType::FixedSizeBinary(9), false),
+    ]));
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(Int64Array::from_iter_values(0..16_384)),
+            Arc::new(FixedSizeBinaryArray::try_from_iter(
+                (0..16_384).map(|_| [7_u8; 9]),
+            )?),
+        ],
+    )?;
+    let mut writer = ArrowWriter::try_new(Vec::new(), schema, Some(fixture_properties().build()))?;
+    writer.write(&batch)?;
+    let metadata = json!({"metaData": {"id":"fixed-binary", "format":{"provider":"parquet","options":{}},
+        "schemaString":json!({"type":"struct","fields":[
+            {"name":"id","type":"long","nullable":false,"metadata":{}},
+            {"name":"value","type":"binary","nullable":false,"metadata":{}}
+        ]}).to_string(),"partitionColumns":[],"configuration":{}}});
+    let root = RealParquetDeltaTable::new_with_raw_parquet(
+        "fixed-binary",
+        &writer.into_inner()?,
+        batch.num_rows(),
+        &json!({"protocol":{"minReaderVersion":1,"minWriterVersion":2}}),
+        &metadata,
+    )?;
+    let mut baseline = None;
+    for options in [ordinary_options(), DeltaScanExecutionOptions::default()] {
+        let error = scan(&root, options, id_filter(&[1, 8_191]))
+            .await
+            .err()
+            .ok_or("unsupported fixed binary conversion succeeded")?
+            .to_string();
+        assert!(error.contains("parquet_schema_match_failed"), "{error}");
+        if let Some(expected) = &baseline {
+            assert_eq!(&error, expected);
+        } else {
+            baseline = Some(error);
         }
     }
     Ok(())
