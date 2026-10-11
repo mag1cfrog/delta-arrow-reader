@@ -17,6 +17,7 @@ on:
       - "clippy.toml"
       - "crates/*/Cargo.toml"
       - "crates/delta-arrow-reader-python/**"
+      - "crates/delta-arrow-reader-cli/**"
       - "pyproject.toml"
       - "src/**"
       - "tests/**"
@@ -105,9 +106,11 @@ jobs:
           cargo test --locked --no-run
           if [ "$RUNNER_OS" = "Linux" ]; then
             cargo test --locked -p delta-arrow-reader-python --no-run
+            cargo test --locked -p delta-arrow-reader-cli --no-run
             cargo test --locked --package xtask --bin xtask --no-run
             cargo clippy --locked --all-targets --all-features -- -D warnings
             cargo clippy --locked -p delta-arrow-reader-python --all-targets -- -D warnings
+            cargo clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings
             cargo clippy --locked --package xtask --all-targets -- -D warnings
             RUSTDOCFLAGS="-D warnings" cargo doc --locked --all-features --no-deps
           fi

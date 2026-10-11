@@ -149,6 +149,103 @@ fn python_sources_skip_core_checks_without_losing_formatting() -> Result<()> {
 }
 
 #[test]
+fn cli_sources_run_separate_required_checks() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
+    for path in [
+        "crates/delta-arrow-reader-cli/src/main.rs",
+        "crates/delta-arrow-reader-cli/src/predicate/tests.rs",
+        "crates/delta-arrow-reader-cli/tests/cli.rs",
+        "crates/delta-arrow-reader-cli/tests/predicates/mod.rs",
+    ] {
+        assert!(filter_matches(&filters, "cli", path)?, "{path}");
+        for name in ["code", "python", "tooling", "selective_read"] {
+            assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
+        }
+    }
+    for path in [
+        "Cargo.toml",
+        "Cargo.lock",
+        "xtask/Cargo.toml",
+        "crates/delta-arrow-reader-cli/Cargo.toml",
+        "crates/delta-arrow-reader-python/Cargo.toml",
+        ".cargo/config.toml",
+        ".github/path-filters.json",
+        ".github/workflows/ci.yml",
+        ".github/workflows/cache-warm.yml",
+        "clippy.toml",
+        "src/reader/options.rs",
+        "tests/reader/fixtures/external_writer/corpus/table/data.parquet",
+    ] {
+        for name in ["code", "cli"] {
+            assert!(filter_matches(&filters, name, path)?, "{name}: {path}");
+        }
+    }
+    for path in [
+        "crates/delta-arrow-reader-python/src/lib.rs",
+        "crates/delta-arrow-reader-python/tests/test_table.py",
+        "xtask/src/main.rs",
+        "benches/page_index.rs",
+        "benches/selective_read/src/main.rs",
+        "tests/reader/direct.rs",
+        ".github/workflows/cli-build.yml",
+    ] {
+        assert!(!filter_matches(&filters, "cli", path)?, "{path}");
+    }
+
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    let jobs = &ci["jobs"];
+    assert_eq!(
+        jobs["changes"]["outputs"]["cli"],
+        "${{ steps.filter.outputs.cli }}"
+    );
+    assert_eq!(jobs["cli-checks"]["needs"], "changes");
+    assert_eq!(
+        jobs["cli-checks"]["if"],
+        "needs.changes.outputs.cli == 'true'"
+    );
+    assert!(
+        jobs["ci"]["needs"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("cli-checks"))
+    );
+    let steps = jobs["cli-checks"]["steps"].as_array().unwrap();
+    let toolchain = steps
+        .iter()
+        .find(|step| step["uses"] == "dtolnay/rust-toolchain@stable")
+        .unwrap();
+    for component in ["clippy", "rustfmt"] {
+        assert!(
+            toolchain["with"]["components"]
+                .as_str()
+                .unwrap()
+                .split(',')
+                .any(|installed| installed.trim() == component)
+        );
+    }
+    for command in [
+        "cargo fmt --package delta-arrow-reader-cli -- --check",
+        "cargo clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings",
+        "cargo test --locked -p delta-arrow-reader-cli",
+    ] {
+        assert!(
+            steps
+                .iter()
+                .any(|step| step["run"] == command && step["if"].is_null())
+        );
+    }
+    let warmer: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
+    assert!(
+        warmer["on"]["push"]["paths"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("crates/delta-arrow-reader-cli/**"))
+    );
+    Ok(())
+}
+
+#[test]
 fn tooling_changes_run_separate_required_checks() -> Result<()> {
     let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
     for path in [
@@ -343,7 +440,7 @@ fn standalone_docs_skip_rust_checks() -> Result<()> {
         "docs/public/cli.md",
         "docs/public/benchmarks/selective-read-results.md",
     ] {
-        for name in ["code", "python", "tooling", "selective_read"] {
+        for name in ["code", "python", "cli", "tooling", "selective_read"] {
             assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
         }
     }
@@ -425,6 +522,29 @@ fn summary_requires_python_only_when_requested() -> Result<()> {
                     output.status.success(),
                     expected,
                     "code={code}, python={python}, package={package}: {output:?}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn summary_requires_cli_independently_of_core_checks() -> Result<()> {
+    for code in ["true", "false"] {
+        for cli in ["true", "false"] {
+            for result in ["success", "failure", "skipped", "cancelled", ""] {
+                let output = check_ci_results(&[
+                    ("changes.outputs.code", code),
+                    ("changes.outputs.python", "false"),
+                    ("changes.outputs.cli", cli),
+                    ("changes.outputs.release_pr", "false"),
+                    ("cli-checks.result", result),
+                ])?;
+                assert_eq!(
+                    output.status.success(),
+                    cli != "true" || result == "success",
+                    "code={code}, cli={cli}, result={result}: {output:?}"
                 );
             }
         }
@@ -843,7 +963,7 @@ fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<(
     assert_eq!(retry["if"], "steps.cache-writes.outcome == 'failure'");
 
     let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
-    for job in ["checks", "tooling-checks", "python-package"] {
+    for job in ["checks", "tooling-checks", "python-package", "cli-checks"] {
         let commands = ci["jobs"][job]["steps"]
             .as_array()
             .unwrap()
@@ -868,9 +988,11 @@ fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<(
         if runner == "Linux" {
             commands.extend([
                 "test --locked -p delta-arrow-reader-python --no-run",
+                "test --locked -p delta-arrow-reader-cli --no-run",
                 "test --locked --package xtask --bin xtask --no-run",
                 "clippy --locked --all-targets --all-features -- -D warnings",
                 "clippy --locked -p delta-arrow-reader-python --all-targets -- -D warnings",
+                "clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings",
                 "clippy --locked --package xtask --all-targets -- -D warnings",
                 "doc --locked --all-features --no-deps",
             ]);

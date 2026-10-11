@@ -29,7 +29,7 @@
     "docs/public/reference/metrics.md",
     "src/**",
     "crates/delta-arrow-reader-python/Cargo.toml",
-    "crates/delta-arrow-reader-cli/**",
+    "crates/delta-arrow-reader-cli/Cargo.toml",
     "tests/**",
     "benches/incremental_refresh.rs",
     "benches/page_index.rs",
@@ -89,6 +89,20 @@
     "src/**",
     "crates/delta-arrow-reader-python/**",
     "tests/reader/https.py",
+    "tests/reader/fixtures/**"
+  ],
+  "cli": [
+    ".cargo/**",
+    ".github/path-filters.json",
+    ".github/workflows/ci.yml",
+    ".github/workflows/cache-warm.yml",
+    "Cargo.toml",
+    "Cargo.lock",
+    "xtask/Cargo.toml",
+    "crates/*/Cargo.toml",
+    "clippy.toml",
+    "src/**",
+    "crates/delta-arrow-reader-cli/**",
     "tests/reader/fixtures/**"
   ],
   "selective_read": [
