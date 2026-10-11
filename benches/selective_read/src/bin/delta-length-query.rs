@@ -44,15 +44,7 @@ use url::Url;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-async fn query(
-    snapshot: Arc<Snapshot>,
-    engine: &dyn Engine,
-    io: Arc<Io>,
-    mode: &str,
-    selection: &str,
-    views: bool,
-    validate: bool,
-) -> Result<(Vec<RecordBatch>, usize, SchemaRef)> {
+fn scan_files(snapshot: &Arc<Snapshot>, engine: &dyn Engine) -> Result<Vec<ScanFile>> {
     let mut files = Vec::new();
     for metadata in snapshot
         .clone()
@@ -66,6 +58,19 @@ async fn query(
     if files.is_empty() || files.len() > 8 {
         return Err("experiment requires 1-8 fixture files".into());
     }
+    Ok(files)
+}
+
+async fn query(
+    snapshot: Arc<Snapshot>,
+    engine: &dyn Engine,
+    io: Arc<Io>,
+    mode: &str,
+    selection: &str,
+    views: bool,
+    validate: bool,
+) -> Result<(Vec<RecordBatch>, usize, SchemaRef)> {
+    let files = scan_files(&snapshot, engine)?;
     let mut output = Vec::new();
     let mut output_rows = 0;
     let mut output_schema = None;
@@ -189,11 +194,14 @@ fn main() -> Result<()> {
         || !matches!(args[4].as_str(), "arrays" | "views")
         || !matches!(args[5].as_str(), "validate" | "timing")
     {
-        return Err("TABLE_URI ordinary|experimental grouped|scattered|dense arrays|views validate|timing [COST_PROFILE_JSON] NEW_OUTPUT_DIRECTORY".into());
+        return Err("TABLE_URI ordinary|experimental grouped|scattered|dense arrays|views validate|timing [auto|COST_PROFILE_JSON] NEW_OUTPUT_DIRECTORY".into());
     }
-    let profile = (args.len() == 8).then(|| fs::read(&args[6])).transpose()?;
-    let profile = profile.as_deref().map(serde_json::from_slice).transpose()?;
-    let cost_model = profile.as_ref().map(CostModel::new).transpose()?;
+    let automatic = args.len() == 8 && args[6] == "auto";
+    let profile = (args.len() == 8 && !automatic)
+        .then(|| fs::read(&args[6]))
+        .transpose()?;
+    let mut profile = profile.as_deref().map(serde_json::from_slice).transpose()?;
+    let mut cost_model = profile.as_ref().map(CostModel::new).transpose()?;
     // The shared resource-limit launcher expects the output directory last.
     let output = Path::new(args.last().unwrap());
     fs::create_dir(output)?;
@@ -218,10 +226,28 @@ fn main() -> Result<()> {
         .worker_threads(8)
         .enable_all()
         .build()?;
+    if automatic {
+        if url.scheme() != "s3" {
+            return Err("automatic calibration requires s3://".into());
+        }
+        let files = scan_files(&snapshot, &engine)?
+            .into_iter()
+            .map(|file| {
+                Ok((
+                    ObjectPath::from_url_path(snapshot.table_root().join(&file.path)?.path())?,
+                    file.size.try_into()?,
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let (measured, record) =
+            runtime.block_on(delta_length_reader::calibrate(store.as_ref(), &files));
+        cost_model = measured;
+        profile = Some(record);
+    }
     let initialization = started.elapsed().as_secs_f64();
     fs::write(
         output.join("initialized.json"),
-        serde_json::to_vec(&json!({"seconds":initialization}))?,
+        serde_json::to_vec(&json!({"seconds":initialization,"cost_profile":profile}))?,
     )?;
     // The supervisor records initialization I/O, then resets the proxy before releasing this gate.
     std::io::stdin().read_exact(&mut [0])?;

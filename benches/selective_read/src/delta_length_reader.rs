@@ -37,6 +37,10 @@ use range_planning::{
 const CONCURRENCY: usize = 32;
 const PREFIX_BYTES: u64 = 8192;
 
+#[path = "delta_length_profile.rs"]
+mod profile;
+pub use profile::calibrate;
+
 #[derive(Clone, Copy)]
 pub struct CostModel {
     transport: TransportEstimate,

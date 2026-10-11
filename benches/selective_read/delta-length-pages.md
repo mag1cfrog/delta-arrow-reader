@@ -158,8 +158,9 @@ reads the predicate column, applies the DV, and fully consumes the selected
 payload. This measures the experimental transport against ordinary Parquet
 reads, not the production Delta Arrow Reader planner or a competing engine.
 
-Initialization ends when the snapshot and runtime are ready. The supervisor
-captures initialization I/O, resets proxy counters, and releases the query.
+Initialization includes loading the snapshot, creating the runtime and measuring
+the network profile. The supervisor captures initialization I/O, resets proxy
+counters, and releases the query.
 Query time includes scan planning, Parquet metadata, predicate/DV reads, length
 discovery, payload I/O and decoding. IPC export and result comparison are outside
 that timer. `process_resources` contains whole-process user CPU seconds, system
@@ -201,7 +202,7 @@ sufficient evidence.
 The current driver includes the production `range_planning.rs` source and uses
 its cost and bounded range-planning helpers. Production source stays unchanged.
 The experiment keeps its existing 32-request limit; it does not adopt the
-production reader's complete scheduling or automatic network calibration.
+production reader's complete scheduling or calibration implementation.
 
 Before fetching page prefixes, the driver limits discovery to 10% of the
 modeled cost of reading the requested batch normally. This includes ordinary
@@ -218,21 +219,41 @@ value sizes are known; it is not a 10% wall-time guarantee or an acceptable
 regression budget. The experiment still investigates regressions under the
 criteria above.
 
-`delta_length_network.py run` saves `cost-profile.json` and supplies it to both
-modes. This controlled experiment uses the proxy's bandwidth cap and its maximum
-configured latency including jitter. Request-processing cost is explicitly zero,
-an optimistic assumption. The slow proxy is checked with the existing network
-calibration helper; the fast bandwidth cap is not a measurement of achievable
-client throughput. Actual query time, CPU, memory and I/O remain measured.
-These inputs test transport-based decisions, not the accuracy of automatic
-profiling. Production integration still needs a calibrated request-processing
-estimate and must validate these decisions with the actual reader.
+`delta_length_network.py run` now passes `auto` to both modes. Each process
+measures transport during initialization using the same client and concurrency
+limit as its query. Three plans each fetch four concurrent 1 MiB ranges. Payload
+intervals that overlap count once; a throughput sample needs at least 10 ms of
+delivery time. Three further plans each replenish 64 small, 4 KiB reads across
+32 slots. The central half of completion times estimates sustained request
+capacity without treating one jittered burst as a steady rate. The model uses
+the median latency, throughput and request interval from these plans.
 
-For direct invocations, the optional cost-profile JSON goes immediately before
-the output directory. Without a profile, experimental mode uses ordinary reads.
-The query record includes the profile and counts pages rejected before probing
-and additional probes stopped by the budget. Source and profile hashes are saved
-with each experiment.
+Calibration has a ten-second deadline. A complete run requests 12.75 MiB in
+204 ranges, excluding Delta metadata and retries. Missing samples, failed reads
+or timeout leave the profile unavailable and experimental queries use ordinary
+reads. Both modes perform the same calibration; its time, samples and I/O are
+recorded separately from the first query. A fast link can fail the minimum
+delivery-duration requirement, in which case the driver does not guess its
+bandwidth. Proxy settings describe the test environment but do not enter the
+query cost model.
+
+These measurement rules follow the production estimator, but run at the
+prototype's 32-request limit on its existing SDK client. Production uses a
+different partial-read transport and a larger shared concurrency limit. #453
+must reuse production calibration and validate its actual scheduling; the
+prototype's measured profile cannot simply be carried across.
+
+For direct invocations, optional `auto` or a cost-profile JSON path goes
+immediately before the output directory. `auto` requires S3. Manual profiles
+retain the integer `latency_ms`, `mbps` and `request_overhead_bytes` fields for
+controlled checks. Without a profile, experimental mode uses ordinary reads.
+The query record includes the supplied or measured profile and counts pages
+rejected before probing and additional probes stopped by the budget. Source
+hashes and all per-process measurements are saved with each experiment.
+
+The earlier campaigns below supplied the proxy's bandwidth cap, maximum latency
+including jitter and zero request-processing cost. Their observations remain
+separate from the measured-profile follow-up.
 
 ## Uncompressed observations, 2026-10-11
 
@@ -537,12 +558,73 @@ behavior and exact values in both array formats. Both attempts are retained.
 Verified duplicate IPC outputs were removed after comparison; samples, traces,
 resource records, fixtures and independent oracles remain available.
 
+## Measured-profile follow-up, 2026-10-11
+
+The driver now measures latency, throughput and request capacity on its own
+client during initialization. Cost thresholds, fixtures and query timing
+boundaries are unchanged. The six-case matrix passed 24 full-result checks and
+completed 36 timing runs. All 40 slow-profile initializations completed
+calibration. Measured latency was 206-210 ms, throughput 18.68-18.75 MB/s, and
+request cost 119,657-123,449 byte-equivalent units. That last figure prices
+request capacity; it is not additional downloaded data.
+
+| Profile and case | Ordinary seconds | Experimental seconds |
+| --- | ---: | ---: |
+| Slow, long scattered | 30.095 | 5.316 |
+| Slow, long grouped | 29.799 | 4.539 |
+| Slow, selected-long scattered | 5.270 | 5.269 |
+| Slow, selected-long-batch scattered | 17.353 | 17.368 |
+| Fast, long scattered | 0.731 | 0.718 |
+| Fast, selected-long-batch scattered | 0.566 | 0.564 |
+
+Both slow long-value cases retained gains beyond within-mode spread in every
+pair. Their query bytes and requests are unchanged from the cached-prefix
+follow-up. Both slow selected-long cases now reject discovery before I/O.
+The larger case rejects all 128 candidate pages and uses exactly the ordinary
+157 requests and 258,201,068 bytes, instead of 285 requests. Its paired extra
+time was 12-17 ms against a 16 ms within-mode range. This removes the previous
+repeatable 0.65-second discovery penalty; it does not establish zero overhead.
+The smaller case retains the ordinary 49 requests and 33,858,108 bytes.
+
+Four untimed local controls isolate the changed decision. With latency fixed
+at 207 ms and bandwidth at 149 Mbit/s, changing only request cost from zero to
+122,367 byte-equivalent units changes the larger skewed case from 128 probes
+and fallbacks to zero probes. The positive long-value case still reads 105 pages
+partially under both profiles. All four results match the independent input
+oracle. No layout or selectivity threshold was changed to obtain this result.
+
+The fast results do not establish a gain. Nine of 20 initializations lacked
+three transfers with at least 10 ms of delivery time and returned no profile.
+All five experimental long-value runs used ordinary reads, with the same
+122 requests and 499,461,298 bytes as their controls. The larger skewed case
+used 157 requests when calibration was incomplete, but 285 in its two runs
+with complete profiles. Those two runs still probed and fell back; measured
+calibration does not eliminate unsuccessful discovery under every condition.
+Both fast timing comparisons stayed within the observed spread. Their medians
+mix available and unavailable profiles and are not speedup claims.
+
+Slow calibration took 2.555-2.576 seconds; total initialization took
+3.361-3.416 seconds. Fast initialization took 0.062-0.202 seconds. These costs
+are reported separately from the first fully consumed query. For slow
+scattered/grouped long values, ordinary/experimental process CPU medians were
+1.64/0.50 and 2.02/0.50 seconds. Peak RSS remained below 151 MiB. The larger
+slow skewed case used 1.08/1.35 CPU seconds and peaked at 196.8/198.1 MiB.
+These process resource counts include calibration, so they cannot isolate
+query-only CPU overhead.
+
+All 24 query-binary unit tests and Clippy passed, including measurement checks
+for overlapping transfers, sustained request capacity and unavailable profiles.
+Samples, initialization captures, query traces and source hashes are retained;
+verified duplicate IPC outputs were removed after comparison. Production
+source and the published README benchmarks remain unchanged.
+
 ## Remaining work for #452
 
 Use the uncompressed layout as the first integration candidate and retain the
-Zstd diagnostics as fallback evidence. The current cost experiment uses known
-proxy settings and optimistic request-processing cost; automatic-profile
-validation and the final preflight/fallback recommendation remain incomplete.
-Use the measured limits and losing cases to update #453 before recommending
-integration. No new production type support or default is enabled by this
-experiment.
+Zstd diagnostics as fallback evidence. The prototype now validates decisions
+with measured transport costs, but production integration must repeat the
+positive and losing controls with its own calibration, client and shared
+request limits. In particular, the slow skewed case's rejection at concurrency
+32 is not a promise about production's larger request allowance. Use these
+limits and observations to finish the #453 preflight/fallback handoff before
+closing #452. No new production type support or default is enabled here.
