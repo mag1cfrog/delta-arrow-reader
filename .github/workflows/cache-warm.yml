@@ -1,14 +1,21 @@
 name: Warm CI caches
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
       - ".github/workflows/cache-warm.yml"
       - ".github/workflows/ci.yml"
+      - ".github/workflows/pypi-build.yml"
+      - ".github/path-filters.json"
+      - "xtask/**"
       - ".cargo/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "crates/*/Cargo.toml"
+      - "crates/delta-arrow-reader-python/**"
+      - "pyproject.toml"
       - "src/**"
       - "tests/**"
       - "benches/**"
@@ -21,12 +28,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Find caches to warm
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.python == 'true' }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v4
+        if: github.event_name == 'push'
+        id: filter
+        with:
+          base: ${{ github.event.before }}
+          filters: .github/path-filters.json
+      - name: Read package version
+        id: version
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
   core:
     name: Warm core test caches / ${{ matrix.name }}
+    needs: changes
     runs-on: ${{ matrix.os }}
     env:
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_GHA_RW_MODE: READ_WRITE
+      SCCACHE_LOG: sccache::server=debug
+      SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
       RUSTC_WRAPPER: sccache
     strategy:
       fail-fast: false
@@ -68,14 +100,40 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: "3.10"
       - name: Warm all-features test cache
         run: cargo test --locked --all-features --no-run
       - name: Warm default test cache
         run: cargo test --locked --no-run
+      - name: Warm Python runtime test cache
+        if: runner.os == 'Linux'
+        run: cargo test --locked -p delta-arrow-reader-python --no-run
       - name: Check sccache writes
-        continue-on-error: true
-        shell: bash
-        run: >-
-          sccache --show-stats --stats-format json |
-          python -c 'import json, sys; errors = json.load(sys.stdin)["stats"]["cache_write_errors"]; sys.exit(f"sccache reported {errors} cache write errors") if errors else None'
+        run: cargo xtask check-cache-writes
+        env:
+          RUSTC_WRAPPER: ""
+
+  prune:
+    name: Retain two Windows target caches
+    needs: core
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo xtask prune-ci-caches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+
+  wheels:
+    name: Warm Python wheel caches
+    needs: [changes, prune]
+    if: needs.changes.outputs.python == 'true'
+    uses: ./.github/workflows/pypi-build.yml
+    with:
+      source-ref: ${{ github.sha }}
+      expected-version: ${{ needs.changes.outputs.version }}
+      cache-only: true

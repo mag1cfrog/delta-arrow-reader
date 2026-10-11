@@ -11,6 +11,10 @@ on:
         description: Exact workspace package version, without a tag prefix
         required: true
         type: string
+      cache-only:
+        description: Warm main's build caches without uploading wheel artifacts
+        type: boolean
+        default: false
     outputs:
       validated:
         description: 'true only after all four platform artifacts pass validation'
@@ -75,9 +79,12 @@ jobs:
     env:
       SOURCE_REF: ${{ inputs.source-ref }}
       EXPECTED_VERSION: ${{ inputs.expected-version }}
+      CACHE_ONLY: ${{ inputs.cache-only }}
       CARGO_INCREMENTAL: "0"
       SCCACHE_GHA_ENABLED: "true"
-      SCCACHE_GHA_RW_MODE: READ_ONLY
+      SCCACHE_GHA_RW_MODE: ${{ inputs.cache-only && 'READ_WRITE' || 'READ_ONLY' }}
+      SCCACHE_LOG: ${{ inputs.cache-only && 'sccache::server=debug' || '' }}
+      SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
       RUSTC_WRAPPER: ${{ matrix.manylinux == 'off' && 'sccache' || '' }}
       MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos-deployment-target }}
 
@@ -88,6 +95,16 @@ jobs:
       - name: Check build inputs and read Rust version
         id: versions
         run: |
+          if [ "$CACHE_ONLY" = "true" ]; then
+            if [ "$GITHUB_REF" != "refs/heads/main" ] || [ "$SOURCE_REF" != "$GITHUB_SHA" ]; then
+              echo "Cache warming must build the triggering main commit"
+              exit 1
+            fi
+            case "$GITHUB_EVENT_NAME" in
+              push|workflow_dispatch) ;;
+              *) echo "Cache warming requires a main push or manual run"; exit 1 ;;
+            esac
+          fi
           source_sha="$(git rev-parse HEAD)"
           if [ "$source_sha" != "$SOURCE_REF" ]; then
             echo "Expected source commit $SOURCE_REF, checked out $source_sha"
@@ -107,12 +124,17 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.10'
+      - name: Stabilize Windows compiler outputs
+        if: runner.os == 'Windows'
+        run: |
+          echo "CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_DEBUG=0" >> "$GITHUB_ENV"
+          echo "RUSTFLAGS=-C link-arg=/Brepro --remap-path-prefix=${GITHUB_WORKSPACE}=." >> "$GITHUB_ENV"
       - name: Cache Cargo registry
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ${{ runner.os == 'Windows' && 'core-ci-targets' || 'core-ci' }}
-          cache-targets: ${{ runner.os == 'Windows' }}
-          save-if: false
+          shared-key: python-wheels
+          cache-targets: false
+          save-if: ${{ inputs.cache-only }}
       - name: Prepare Cargo cache mounts
         if: runner.os == 'Linux'
         id: cargo-cache
@@ -123,23 +145,47 @@ jobs:
       - name: Set up sccache
         if: runner.os != 'Linux'
         uses: mozilla-actions/sccache-action@v0.0.10
+        with:
+          version: v0.18.0
+      - name: Prepare Linux source from sdist
+        if: runner.os == 'Linux'
+        run: |
+          python -m pip install 'maturin==1.14.1'
+          maturin sdist --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out "$RUNNER_TEMP/python-sdist"
+          mkdir .python-sdist-source
+          tar -xzf "$RUNNER_TEMP"/python-sdist/*.tar.gz -C .python-sdist-source --strip-components=1
+          cmp Cargo.lock .python-sdist-source/Cargo.lock
       - name: Build wheel
         uses: PyO3/maturin-action@v1
         with:
+          working-directory: ${{ runner.os == 'Linux' && '.python-sdist-source' || '.' }}
           command: build
           maturin-version: v1.14.1
           rust-toolchain: ${{ steps.versions.outputs.rust-version }}
           target: ${{ matrix.target }}
+          container: ${{ runner.os == 'Linux' && 'quay.io/pypa/manylinux_2_28_x86_64@sha256:4131ddd7acb9c6c966af02fe7e71edc51e078c2d41f475966697676430bfa2ae' || '' }}
           manylinux: ${{ matrix.manylinux }}
           sccache: ${{ runner.os == 'Linux' }}
           docker-options: >-
             --volume "${{ steps.cargo-cache.outputs.path }}/registry:/root/.cargo/registry"
             --volume "${{ steps.cargo-cache.outputs.path }}/git:/root/.cargo/git"
-          before-script-linux: dnf install -y openssl-devel
+          before-script-linux: |
+            dnf install -y openssl-devel
+            printf 'sccache==0.16.0\n' > /tmp/sccache-constraints.txt
+            export UV_CONSTRAINT=/tmp/sccache-constraints.txt
+            export SCCACHE_ERROR_LOG=/tmp/sccache.log
+            if [ "$SCCACHE_GHA_RW_MODE" = "READ_WRITE" ]; then
+              trap 'RUSTC_WRAPPER= cargo run --locked --manifest-path "$GITHUB_WORKSPACE/xtask/Cargo.toml" -- check-cache-writes' EXIT
+            fi
           args: >-
-            --locked --release --out ${{ matrix.wheel-dir }} --target-dir target
+            --locked --release --out ${{ runner.os == 'Linux' && '../dist' || matrix.wheel-dir }} --target-dir target
             --manifest-path crates/delta-arrow-reader-python/Cargo.toml
             --compatibility pypi --auditwheel repair --interpreter ${{ matrix.interpreter }}
+      - name: Check wheel cache writes
+        if: inputs.cache-only && runner.os != 'Linux'
+        run: cargo xtask check-cache-writes
+        env:
+          RUSTC_WRAPPER: ""
       - name: Inspect and repair Windows DLL dependencies
         if: runner.os == 'Windows'
         run: |
@@ -161,6 +207,7 @@ jobs:
       - name: Inspect Linux native dependencies
         if: runner.os == 'Linux'
         run: |
+          cmp Cargo.lock .python-sdist-source/Cargo.lock
           python -m pip install --only-binary=:all: auditwheel
           auditwheel show dist/*.whl
       - name: Test installed wheel on Python 3.10 and PyArrow 18.0.0
@@ -183,6 +230,7 @@ jobs:
           python314/${{ matrix.venv-python }} -I -m unittest discover \
             -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" ${{ matrix.test-args }}
       - name: Upload validated wheel
+        if: ${{ !inputs.cache-only }}
         uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact }}
@@ -192,7 +240,7 @@ jobs:
   validate:
     name: Validate wheel artifact set
     needs: build
-    if: always()
+    if: ${{ always() && !inputs.cache-only }}
     runs-on: ubuntu-latest
     outputs:
       validated: ${{ steps.verify.outputs.validated }}
