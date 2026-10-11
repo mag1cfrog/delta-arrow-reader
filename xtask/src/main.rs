@@ -57,6 +57,8 @@ enum Task {
     },
     /// Check sccache write failures against its error log.
     CheckCacheWrites,
+    /// Summarize sccache read failures without printing request details.
+    ReportCacheReads,
     /// Keep the two most recently used Windows core CI caches.
     PruneCiCaches,
     /// Prepare release-plz configuration for the current shared release baseline.
@@ -168,6 +170,7 @@ fn run_task(task: Task) -> Result<()> {
     match task {
         Task::Cli { command } => command.run().map_err(Into::into),
         Task::CheckCacheWrites => check_cache_writes(),
+        Task::ReportCacheReads => report_cache_reads(),
         Task::PruneCiCaches => prune_ci_caches(),
         Task::PrepareReleasePrConfig { destination } => release_plz::prepare_config(&destination),
         Task::CheckPythonReleaseRequest => python_release::validate_release_request(),
@@ -311,6 +314,28 @@ fn check_cache_writes() -> Result<()> {
             Err(error) => return Err(error.into()),
         };
     check_writes(&stats.stats, &String::from_utf8_lossy(&log))
+}
+
+fn report_cache_reads() -> Result<()> {
+    let log = fs::read(env::var_os("SCCACHE_ERROR_LOG").ok_or("SCCACHE_ERROR_LOG is required")?)?;
+    let mut failures = 0;
+    let mut rate_limits = 0;
+    // shortcut: sccache 0.18 counts these failures as misses; update this parser if its log format changes.
+    for line in String::from_utf8_lossy(&log).lines() {
+        let Some((_, error)) = line.split_once("sccache::cache::cache] Got unexpected error: ")
+        else {
+            continue;
+        };
+        failures += 1;
+        if error.split_whitespace().next() == Some("RateLimited") {
+            rate_limits += 1;
+        }
+    }
+    println!(
+        "Remote cache read failures recorded: {failures}\n  RateLimited: {rate_limits}\n  Other: {}",
+        failures - rate_limits
+    );
+    Ok(())
 }
 
 fn stale_caches(pages: Vec<CachePage>) -> Vec<Cache> {

@@ -1006,6 +1006,49 @@ fn cache_retry_cleans_the_correct_target_and_restarts_native_sccache() -> Result
 }
 
 #[test]
+fn cache_read_report_counts_backend_failures_without_exposing_request_details() -> Result<()> {
+    let directory = test_dir("cache-reads");
+    let log = directory.join("sccache.log");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
+    command.arg("report-cache-reads");
+    assert!(
+        !command
+            .env_remove("SCCACHE_ERROR_LOG")
+            .output()?
+            .status
+            .success()
+    );
+    command.env("SCCACHE_ERROR_LOG", &log);
+    assert!(!command.output()?.status.success());
+
+    fs::write(&log, "")?;
+    let output = command.output()?;
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout)?,
+        "Remote cache read failures recorded: 0\n  RateLimited: 0\n  Other: 0\n"
+    );
+
+    fs::write(
+        &log,
+        b"[2026-10-11T20:00:00Z WARN  sccache::cache::cache] Got unexpected error: RateLimited (temporary) at read, context: { uri: https://example.invalid/cache?sig=secret, status: 429 }\r\n\
+          [2026-10-11T20:00:01Z WARN  sccache::cache::cache] Got unexpected error: Unexpected (temporary) at read, context: { status: 500 } => RateLimited\n\
+          [2026-10-11T20:00:02Z WARN  sccache::cache::cache] Got unexpected error: PermissionDenied (persistent) at read => \xff\n\
+          [2026-10-11T20:00:03Z DEBUG sccache::server] Error executing cache write: RateLimited\n\
+          [2026-10-11T20:00:04Z WARN  other] Got unexpected error: RateLimited\n",
+    )?;
+    let output = command.output()?;
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stdout)?,
+        "Remote cache read failures recorded: 3\n  RateLimited: 1\n  Other: 2\n"
+    );
+    fs::remove_dir_all(directory)?;
+    Ok(())
+}
+
+#[test]
 fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<()> {
     let directory = test_dir("core-warm");
     let cargo = directory.join("cargo");

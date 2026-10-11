@@ -180,6 +180,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.tooling == 'true'
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_LOG: sccache::cache::cache=warn
+      SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
 
     steps:
       - uses: actions/checkout@v5
@@ -220,6 +223,11 @@ jobs:
           cargo test --locked --package xtask \
             --test ci --test cli_workflow --test cli_images_workflow --test cli_validation_workflow --test cli_release_selection --test images --test python_release --test python_upload --test python_wheels \
             --test python_wheel_reuse --test python_workflow --test release_plz -- --include-ignored
+      - name: Report cache read failures
+        continue-on-error: true
+        run: cargo xtask report-cache-reads
+        env:
+          RUSTC_WRAPPER: ""
       - run: git diff --check
 
   python-package:
