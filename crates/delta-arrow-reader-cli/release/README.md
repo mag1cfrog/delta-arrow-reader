@@ -442,6 +442,47 @@ its declared libraries. Alpine and `scratch` are unsupported.
 This command builds a local image. It does not export OCI artifacts or publish
 to GHCR.
 
+## Check a local image at runtime
+
+Run the image on its matching Linux architecture. The host needs Docker, Rust
+for xtask, and OpenSSL for temporary test certificates. Docker must run on the
+same host as xtask: the tests bind local fixture directories and use host
+networking to reach a local HTTP/TLS fixture server.
+
+```sh
+cli_image_id="$(docker image inspect --format '{{.Id}}' dar:local-amd64)"
+cargo xtask cli test-image "$cli_image_id" \
+  --architecture amd64 --expected-version "$version" --repository .
+```
+
+Use the same image ID for the OCI export below and for the Go consumer build.
+The test command also accepts a local tag, resolves it once to an immutable
+image ID, and checks its platform before running it. It does not pull images.
+
+Every container uses a read-only root filesystem and read-only fixture mounts.
+Checks cover the default user and working directory, help/version, inspection,
+redacted errors, and Arrow IPC results against the Spark corpus. The binary and
+image suites share the projection, limit, typed predicate, execution-options,
+nested mapping, and deletion-vector assertions.
+
+The TLS checks require the image's default CA bundle, reject a locally generated
+CA by default, accept it through `SSL_CERT_FILE`/`SSL_CERT_DIR`, and reject a
+certificate issued by another CA. Certificates and options are generated at
+runtime; no external storage or credentials are required. The suite also closes
+the CLI's output pipe inside the container to avoid Docker buffering hiding a
+write failure. Only this pipe fixture gets a small writable `/tmp` tmpfs.
+
+Signal checks hold a table request open, verify that `dar` is PID 1, and send
+SIGINT and SIGTERM. Both inspection and scan must exit promptly with status 130
+and 143, without output, and close their network connection. PID 1 installs
+termination handlers because Linux otherwise ignores its default termination
+signals. Normal CLI subprocesses retain their existing signal behavior.
+
+Checks have deadlines and remove their test containers on failure. Fixture
+mount paths must be UTF-8 and cannot contain commas. This command tests runtime
+behavior; `cli images` separately verifies artifact identity and packaging.
+The Go consumer and release workflow integration are separate checks.
+
 ## Export and verify image artifacts
 
 Use `cli images` to prepare container artifacts for later publication. In addition
@@ -450,12 +491,13 @@ Unix host. `export` also needs Docker and a local image from `build-image`.
 On Debian or Ubuntu, install the container tools with
 `sudo apt-get install skopeo umoci`.
 
-Export each architecture on its build host. For example, after the amd64 build:
+Export each architecture on its build host, using the image ID tested above.
+For example, after the amd64 build and runtime checks:
 
 ```sh
 cargo xtask cli images export target/cli-image-platforms/amd64 \
   --binary-artifacts target/cli-artifacts \
-  --architecture amd64 --image dar:local-amd64 \
+  --architecture amd64 --image "$cli_image_id" \
   --version "$version" --source-commit "$source_commit" --rust-toolchain "$rust_toolchain"
 ```
 

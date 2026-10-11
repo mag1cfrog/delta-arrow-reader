@@ -1,6 +1,8 @@
 mod execution_options;
 mod input;
 mod predicate;
+#[cfg(target_os = "linux")]
+mod signals;
 
 use std::{
     fmt,
@@ -165,6 +167,9 @@ fn encode_inspection_json(version: u64, schema: &Schema) -> Vec<u8> {
 }
 
 fn run() -> Result<(), Error> {
+    #[cfg(target_os = "linux")]
+    signals::install_container_signal_handlers().context(RuntimeSnafu)?;
+
     let command = match Cli::try_parse() {
         Err(error)
             if matches!(

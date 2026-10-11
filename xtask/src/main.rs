@@ -8,6 +8,7 @@ mod error;
 mod http_fixture;
 mod image;
 mod image_artifacts;
+mod image_runtime;
 mod notices;
 mod platform;
 mod process;
@@ -111,6 +112,8 @@ enum CliTask {
     CheckBinary(binary::CheckBinaryArgs),
     /// Run runtime acceptance tests against an extracted CLI archive.
     TestArchive(acceptance::TestArchiveArgs),
+    /// Check a local container's read-only execution, TLS, IPC, and process lifecycle.
+    TestImage(image_runtime::TestImageArgs),
     /// Check CLI arguments, inspection, output failures, and process lifecycle on Linux.
     TestProcess(process::TestProcessArgs),
     /// Check Arrow IPC output and scan process lifecycle on Linux.
@@ -187,6 +190,7 @@ impl CliTask {
             Self::BuildImage(args) => args.run(),
             Self::CheckBinary(args) => args.run(),
             Self::TestArchive(args) => args.run(),
+            Self::TestImage(args) => args.run(),
             Self::TestProcess(args) => args.run(),
             Self::TestScan(args) => args.run(),
             Self::Notices(args) => notices::run(args),

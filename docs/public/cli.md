@@ -74,6 +74,10 @@ Supply storage credentials and configuration at runtime. Keep HTTPS certificate
 verification enabled and provide a readable custom trust bundle when required
 by your storage endpoint. See [HTTPS configuration](installation.md#https-and-build-prerequisites).
 
+When `dar` is the container's PID 1, SIGINT and SIGTERM stop it with exit status
+130 and 143, respectively. The CLI does not flush buffered output or finish an
+IPC stream after either signal. Treat that result as an interrupted scan.
+
 A Go service can invoke the binary with `exec.CommandContext` and decode stdout
 with the official Arrow Go streaming IPC reader. Pass each CLI argument
 separately, drain stderr separately, and require both successful IPC decoding and
@@ -485,7 +489,7 @@ unfinished blocking work, including core engine cleanup.
 An unrecoverable panic during reader execution, including failure to start a
 runtime thread, terminates the process with status 1 and a redacted
 `runtime_initialization` diagnostic. Panic payloads and backtraces are omitted.
-Linux signals keep their normal termination behavior: a killed process is
-unsuccessful and need not emit an error object. This applies while loading,
+Outside PID 1, Linux signals keep their normal termination behavior: a killed
+process is unsuccessful and need not emit an error object. This applies while loading,
 waiting for a batch, or writing to a blocked pipe. A parent that cancels the
 child must also wait for it to exit and reap it.

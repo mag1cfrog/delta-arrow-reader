@@ -1337,6 +1337,7 @@ dependencies = [
  "arrow-schema",
  "clap",
  "delta-arrow-reader",
+ "libc",
  "serde",
  "serde_json",
  "snafu",
