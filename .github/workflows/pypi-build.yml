@@ -166,7 +166,8 @@ jobs:
           command: build
           maturin-version: v1.14.1
           rust-toolchain: ${{ steps.versions.outputs.rust-version }}
-          target: ${{ matrix.target }}
+          # Native Windows builds need RUSTFLAGS on host build scripts and proc macros too.
+          target: ${{ runner.os != 'Windows' && matrix.target || '' }}
           container: ${{ runner.os == 'Linux' && 'quay.io/pypa/manylinux_2_28_x86_64@sha256:4131ddd7acb9c6c966af02fe7e71edc51e078c2d41f475966697676430bfa2ae' || '' }}
           manylinux: ${{ matrix.manylinux }}
           sccache: ${{ runner.os == 'Linux' }}
