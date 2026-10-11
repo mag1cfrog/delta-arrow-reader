@@ -8,6 +8,48 @@ scan protocol can still be inspected if its snapshot and schema can be loaded.
 `dar scan` reads one snapshot and writes its rows as an Arrow IPC stream. Use
 it with redirected stdout or a subprocess pipe.
 
+## Use a Linux binary
+
+The **Build CLI binaries** workflow produces validated archives for these
+platforms:
+
+| Platform | Rust target | Minimum runtime |
+| --- | --- | --- |
+| Linux amd64 | `x86_64-unknown-linux-gnu` | glibc 2.36, baseline x86-64 CPU |
+| Linux arm64 | `aarch64-unknown-linux-gnu` | glibc 2.36, baseline ARMv8-A CPU |
+
+Both targets are built and tested on Debian 12. They use glibc and libgcc shared
+libraries. On Debian, install `libc6`, `libgcc-s1`, and `ca-certificates`; the
+certificate bundle is needed for HTTPS storage. The archives do not support
+Alpine Linux's musl runtime or a `scratch` container. Other platforms can build
+from source.
+
+Download the complete `dar-cli-<source-sha>-<run-id>-<attempt>` artifact from a
+successful Actions run in the repository. These are CI artifacts; this workflow
+does not publish GitHub Releases. The download contains both architecture
+archives, `cli-artifacts.json`, and `SHA256SUMS`. The manifest records the source
+commit, version, exact Rust release, shared libraries, and archive/binary hashes.
+
+Extract the Actions download into an empty directory and check all its files:
+
+```sh
+sha256sum --check SHA256SUMS
+```
+
+After all checks pass, choose the archive matching your CPU. For amd64, replace
+`X.Y.Z` with the version in the manifest and use a new destination directory:
+
+```sh
+mkdir dar-cli
+tar -xzf dar-vX.Y.Z-linux-amd64-gnu.tar.gz -C dar-cli
+./dar-cli/dar --version
+export PATH="$PWD/dar-cli:$PATH"
+```
+
+For arm64, use `dar-vX.Y.Z-linux-arm64-gnu.tar.gz`. Keep `LICENSE` and `NOTICE`
+alongside `dar`, including when distributing the binary with a service. The
+executable works outside a source checkout and does not require Python or Rust.
+
 ## Build from source
 
 Install the [Rust build prerequisites](installation.md#https-and-build-prerequisites),

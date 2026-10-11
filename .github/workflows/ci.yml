@@ -34,7 +34,7 @@ jobs:
         uses: dorny/paths-filter@v4
         with:
           filters: .github/path-filters.json
-      - name: Read Python package version
+      - name: Read workspace package version
         id: package-version
         if: steps.filter.outputs.code == 'true'
         run: |
@@ -154,6 +154,8 @@ jobs:
       - if: matrix.task == 'Lints and Docs'
         run: python3 -m unittest discover -s benches -p test_scan_scheduling.py
       - if: matrix.task == 'Lints and Docs'
+        run: python3 -m unittest discover -s crates/delta-arrow-reader-cli/release
+      - if: matrix.task == 'Lints and Docs'
         run: cargo fmt --all -- --check
       - if: matrix.task == 'Lints and Docs'
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
@@ -258,6 +260,15 @@ jobs:
           python -m pip install --only-binary=:all: 'pyarrow==25.0.1'
           python crates/delta-arrow-reader-cli/tests/scan.py target/debug/dar
 
+  cli-binaries:
+    name: CLI Binaries
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    uses: ./.github/workflows/cli-build.yml
+    with:
+      source-ref: ${{ github.sha }}
+      expected-version: ${{ needs.changes.outputs.package_version }}
+
   selective-read-fixtures:
     name: Public Fixture Smoke
     needs: changes
@@ -321,7 +332,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [changes, feature-tests, platform-tests, checks, python-package, python-wheels, cli, selective-read-fixtures]
+    needs: [changes, feature-tests, platform-tests, checks, python-package, python-wheels, cli, cli-binaries, selective-read-fixtures]
     if: always()
     runs-on: ubuntu-latest
 
@@ -370,6 +381,12 @@ jobs:
 
           if [ "${{ needs.cli.result }}" != "success" ]; then
             echo "CLI did not pass: ${{ needs.cli.result }}"
+            exit 1
+          fi
+
+          if [ "${{ needs.cli-binaries.result }}" != "success" ] || \
+             [ "${{ needs.cli-binaries.outputs.validated }}" != "true" ]; then
+            echo "CLI binary artifact set did not pass validation"
             exit 1
           fi
 

@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import ssl
 import struct
 import subprocess
 import sys
@@ -190,6 +191,43 @@ class ScanTests(unittest.TestCase):
                             else:
                                 self.assertTrue(actual.sort_by("id").equals(
                                     projected.sort_by("id"), check_metadata=False))
+
+    def test_https_trust_for_inspection_and_scan(self):
+        (self.cwd / "extensions").write_text(
+            "basicConstraints=critical,CA:FALSE\n"
+            "keyUsage=critical,digitalSignature,keyEncipherment\n"
+            "extendedKeyUsage=serverAuth\nsubjectAltName=DNS:localhost\n"
+        )
+        http.certificates(self.cwd)
+        (self.cwd / "empty-certs").mkdir()
+        self.env.update(SSL_CERT_FILE=str(self.cwd / "trusted-ca.pem"),
+                        SSL_CERT_DIR=str(self.cwd / "empty-certs"))
+        with pa.ipc.open_file(CORPUS / "partitioned/expected.arrow") as reader:
+            expected = reader.read_all().select(["id"]).sort_by("id")
+        handler = functools.partial(http.Storage, directory=CORPUS / "partitioned/table")
+        for name in ("trusted", "untrusted"):
+            tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            tls.load_cert_chain(self.cwd / f"{name}.pem", self.cwd / f"{name}.key")
+            with http.serve(handler, tls) as server:
+                location = f"https://localhost:{server.server_port}/"
+                for command, flags in [("inspect", []), ("scan", ["--column", "id"])]:
+                    with self.subTest(certificate=name, command=command):
+                        result = subprocess.run(
+                            [DAR, command, *flags, location], cwd=self.cwd, env=self.env,
+                            capture_output=True, timeout=15,
+                        )
+                        if name == "untrusted":
+                            self.assertEqual((result.returncode, result.stdout), (1, b""))
+                            self.assert_diagnostic(result.stderr, "snapshot", "snapshot_load")
+                            self.assertEqual(server.requests, [])
+                            continue
+                        self.assertEqual((result.returncode, result.stderr), (0, b""))
+                        if command == "inspect":
+                            self.assertEqual(json.loads(result.stdout)["table_version"], "0")
+                        else:
+                            self.assertTrue(result.stdout.endswith(IPC_END))
+                            actual = pa.ipc.open_stream(result.stdout).read_all().sort_by("id")
+                            self.assertTrue(actual.equals(expected, check_metadata=False))
 
     def test_predicate_filters_a_column_omitted_from_output(self):
         predicate = self.cwd / "predicate.json"
