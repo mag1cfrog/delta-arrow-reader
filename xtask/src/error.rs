@@ -27,6 +27,12 @@ pub(crate) enum Error {
         path: PathBuf,
         source: arrow_schema::ArrowError,
     },
+    #[cfg(target_os = "linux")]
+    #[snafu(display("Could not process Parquet fixture {}: {source}", path.display()))]
+    Parquet {
+        path: PathBuf,
+        source: parquet::errors::ParquetError,
+    },
     #[snafu(display("Invalid TOML in {}: {source}", path.display()))]
     Toml {
         path: PathBuf,

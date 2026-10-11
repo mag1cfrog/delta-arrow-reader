@@ -26,5 +26,6 @@ url = "2"
 http-body-util = "0.1"
 hyper = { version = "1", features = ["http1", "server"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
-rustix = { version = "1", features = ["event", "process", "pty"] }
+parquet = { version = "58.3.0", default-features = false, features = ["arrow"] }
+rustix = { version = "1", features = ["event", "process", "pty", "thread"] }
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "time"] }

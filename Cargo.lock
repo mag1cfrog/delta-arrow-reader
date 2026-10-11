@@ -4069,6 +4069,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "parquet",
  "regex",
  "rustix",
  "serde",

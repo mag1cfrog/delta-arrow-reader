@@ -163,7 +163,9 @@ runs this command separately from `cargo test -p delta-arrow-reader-cli`.
 
 `test-scan` also requires Linux. Rust checks IPC output against Spark fixtures,
 including column projection, row limits, nested schemas, deletion vectors,
-filtering, execution options, and empty tables. The command then runs the remaining
+filtering, execution options, and empty tables. Rust also checks predicates on
+adjacent Float64 values and scan thread creation failures. The thread checks
+compile a C fault library with `cc`. The command then runs the remaining
 `scan.py` groups using `python3` from `PATH`. Those groups still need PyArrow,
 OpenSSL, and a C compiler.
 

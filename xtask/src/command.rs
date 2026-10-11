@@ -42,6 +42,51 @@ pub(crate) fn output_with_timeout(command: &mut Command, timeout: Duration) -> R
     })
 }
 
+#[cfg(target_os = "linux")]
+pub(crate) fn output_on_single_cpu(command: &mut Command, timeout: Duration) -> Result<Output> {
+    use rustix::thread::{CpuSet, sched_getaffinity, sched_setaffinity};
+
+    use crate::error::{InvalidInputSnafu, IoSnafu};
+
+    // A temporary thread lets the child inherit affinity without changing the caller's mask.
+    thread::scope(|scope| {
+        let worker = thread::Builder::new()
+            .spawn_scoped(scope, || {
+                let allowed =
+                    sched_getaffinity(None)
+                        .map_err(io::Error::from)
+                        .context(IoSnafu {
+                            operation: "read the test worker's CPU affinity",
+                        })?;
+                let cpu = (0..CpuSet::MAX_CPU)
+                    .find(|cpu| allowed.is_set(*cpu))
+                    .ok_or_else(|| {
+                        InvalidInputSnafu {
+                            message: "no CPU is available to the test worker",
+                        }
+                        .build()
+                    })?;
+                let mut selected = CpuSet::new();
+                selected.set(cpu);
+                sched_setaffinity(None, &selected)
+                    .map_err(io::Error::from)
+                    .context(IoSnafu {
+                        operation: "pin the test worker to one CPU",
+                    })?;
+                output_with_timeout(command, timeout)
+            })
+            .context(IoSnafu {
+                operation: "start the single-CPU test worker",
+            })?;
+        worker.join().map_err(|_| {
+            InvalidInputSnafu {
+                message: "single-CPU test worker panicked",
+            }
+            .build()
+        })?
+    })
+}
+
 /// Capture stderr while sending stdout to the supplied destination; Output.stdout is empty.
 #[cfg(target_os = "linux")]
 pub(crate) fn output_with_redirected_stdout(

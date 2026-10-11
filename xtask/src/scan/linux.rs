@@ -1,31 +1,42 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Command, Output, Stdio},
     sync::Arc,
     time::Duration,
 };
 
 use arrow_array::{Int32Array, RecordBatch};
 use arrow_schema::{DataType, Field, Schema};
-use serde_json::{Value, json};
+use serde_json::json;
 use snafu::{ResultExt, ensure};
 
 use super::ipc::IpcTable;
 use crate::{
-    command::output_with_timeout,
-    error::{ArrowSnafu, FileSnafu, InvalidInputSnafu, JsonSnafu, Result},
+    command::{output_on_single_cpu, output_with_timeout},
+    error::{ArrowSnafu, FileSnafu, InvalidInputSnafu, Result},
+    process::{check_diagnostic, compile_fault_library},
 };
+
+mod fixtures;
+
+use fixtures::{FLOAT64_VALUES, create_float64_table, create_repeated_table};
 
 struct ScanFixture<'a> {
     binary: &'a Path,
     corpus: PathBuf,
+    fault_library: &'a Path,
     directory: tempfile::TempDir,
 }
 
 type ScanCheck<'a> = fn(&ScanFixture<'a>) -> Result<()>;
 
 pub(super) fn run(binary: &Path, repository: &Path) -> Result<()> {
+    let temporary = tempfile::tempdir().context(FileSnafu {
+        path: std::env::temp_dir(),
+    })?;
+    let fault_library = temporary.path().join("process_faults.so");
+    compile_fault_library(repository, &fault_library)?;
     let checks: &[(&str, ScanCheck<'_>)] = &[
         (
             "IPC matches Spark fixtures",
@@ -40,6 +51,14 @@ pub(super) fn run(binary: &Path, repository: &Path) -> Result<()> {
             ScanFixture::check_execution_options,
         ),
         ("empty table retains schema", ScanFixture::check_empty_table),
+        (
+            "Float64 predicates distinguish adjacent values",
+            ScanFixture::check_float64_predicates,
+        ),
+        (
+            "scan thread creation failures do not hang",
+            ScanFixture::check_thread_start_failures,
+        ),
     ];
     for (name, check) in checks {
         eprintln!("Scan check: {name}");
@@ -52,6 +71,7 @@ pub(super) fn run(binary: &Path, repository: &Path) -> Result<()> {
         check(&ScanFixture {
             binary,
             corpus: repository.join("tests/reader/fixtures/external_writer/corpus"),
+            fault_library: &fault_library,
             directory,
         })?;
     }
@@ -74,12 +94,15 @@ impl ScanFixture<'_> {
 
     fn scan(&self, command: &mut Command) -> Result<IpcTable> {
         let output = output_with_timeout(command, Duration::from_secs(15))?;
+        self.check_successful_scan(&output)
+    }
+
+    fn check_successful_scan(&self, output: &Output) -> Result<IpcTable> {
         ensure!(
             output.status.success() && output.stderr.is_empty(),
             InvalidInputSnafu {
                 message: format!(
-                    "scan {:?} failed: {}; stderr={}",
-                    command.get_args().collect::<Vec<_>>(),
+                    "scan failed: {}; stderr={}",
                     output.status,
                     String::from_utf8_lossy(&output.stderr)
                 )
@@ -170,25 +193,8 @@ impl ScanFixture<'_> {
     }
 
     fn check_empty_table(&self) -> Result<()> {
-        let source = self
-            .corpus
-            .join("partitioned/table/_delta_log/00000000000000000000.json");
-        let actions = fs::read_to_string(&source).context(FileSnafu { path: &source })?;
-        let mut metadata = String::new();
-        for line in actions.lines() {
-            let action: Value = serde_json::from_str(line).context(JsonSnafu {
-                subject: "fixture log action",
-            })?;
-            if action.get("protocol").is_some() || action.get("metaData").is_some() {
-                metadata.push_str(line);
-                metadata.push('\n');
-            }
-        }
         let table = self.directory.path().join("empty-table");
-        let log = table.join("_delta_log");
-        fs::create_dir_all(&log).context(FileSnafu { path: &log })?;
-        let log = log.join("00000000000000000000.json");
-        fs::write(&log, metadata).context(FileSnafu { path: &log })?;
+        create_repeated_table(&self.corpus.join("partitioned/table"), &table, 0)?;
         let expected_path = self.corpus.join("partitioned/expected.arrow");
         let mut expected = IpcTable::read_file(&expected_path)?;
         expected.batches.clear();
@@ -197,6 +203,80 @@ impl ScanFixture<'_> {
         let expected = expected.project(&[], &expected_path)?;
         self.scan(self.command().arg("--no-columns").arg(&table))?
             .check_matches(&expected, None)
+    }
+
+    fn check_float64_predicates(&self) -> Result<()> {
+        let table = self.directory.path().join("float64-table");
+        let data = create_float64_table(&table)?;
+        let predicate = self.directory.path().join("predicate.json");
+        for (op, rows) in [
+            ("eq", 0..1),
+            ("ne", 1..2),
+            ("lt", 0..0),
+            ("le", 0..1),
+            ("gt", 1..2),
+            ("ge", 0..2),
+        ] {
+            eprintln!("  comparison={op}");
+            // The CLI's JSON parser previously rounded the first value to the second.
+            let input = json!({
+                "op": op, "column": "value", "value": {"type": "float64", "value": FLOAT64_VALUES[0]},
+            });
+            fs::write(&predicate, input.to_string()).context(FileSnafu { path: &predicate })?;
+            let actual = self.scan(
+                self.command()
+                    .arg(&table)
+                    .arg("--predicate-file")
+                    .arg(&predicate),
+            )?;
+            let expected = IpcTable {
+                schema: data.schema(),
+                batches: vec![data.slice(rows.start, rows.len())],
+            };
+            actual.check_matches(&expected, None)?;
+        }
+        Ok(())
+    }
+
+    fn check_thread_start_failures(&self) -> Result<()> {
+        let table = self.directory.path().join("repeated-table");
+        create_repeated_table(&self.corpus.join("partitioned/table"), &table, 32)?;
+        let mut saw_success = false;
+        let mut saw_failure = false;
+        for limit in 0..8 {
+            eprintln!("  thread_limit={limit}");
+            let output = output_on_single_cpu(
+                self.command()
+                    .arg(&table)
+                    .env("LD_PRELOAD", self.fault_library)
+                    .env("RUST_BACKTRACE", "full")
+                    .env("DAR_TEST_THREAD_LIMIT", limit.to_string()),
+                Duration::from_secs(15),
+            )?;
+            if output.status.code() == Some(1) {
+                check_diagnostic(&output.stderr, "execution", "runtime_initialization")?;
+                saw_failure = true;
+            } else {
+                let actual = self.check_successful_scan(&output)?;
+                ensure!(
+                    actual.row_count() == 32 * 120,
+                    InvalidInputSnafu {
+                        message: format!(
+                            "expected 3840 scan rows after thread creation succeeded, got {}",
+                            actual.row_count()
+                        ),
+                    }
+                );
+                saw_success = true;
+            }
+        }
+        ensure!(
+            saw_success && saw_failure,
+            InvalidInputSnafu {
+                message: "thread creation fault checks must exercise both successful and failed scans",
+            }
+        );
+        Ok(())
     }
 }
 

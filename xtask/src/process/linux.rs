@@ -37,16 +37,7 @@ pub(super) fn run(binary: &Path, version: &str, repository: &Path) -> Result<()>
         path: std::env::temp_dir(),
     })?;
     let fault_library = temporary.path().join("process_faults.so");
-    run_with_timeout(
-        Command::new("cc")
-            .args(["-shared", "-fPIC"])
-            .arg(repository.join("crates/delta-arrow-reader-cli/tests/process_faults.c"))
-            .arg("-o")
-            .arg(&fault_library)
-            .arg("-ldl")
-            .stdin(Stdio::null()),
-        Duration::from_secs(30),
-    )?;
+    compile_fault_library(repository, &fault_library)?;
     let checks: &[(&str, ProcessCheck<'_>)] = &[
         (
             "static help and version",
@@ -645,24 +636,47 @@ fn run_cli(command: &mut Command) -> Result<Output> {
     output_with_timeout(command, Duration::from_secs(15))
 }
 
+pub(crate) fn compile_fault_library(repository: &Path, destination: &Path) -> Result<()> {
+    run_with_timeout(
+        Command::new("cc")
+            .args(["-shared", "-fPIC"])
+            .arg(repository.join("crates/delta-arrow-reader-cli/tests/process_faults.c"))
+            .arg("-o")
+            .arg(destination)
+            .arg("-ldl")
+            .stdin(Stdio::null()),
+        Duration::from_secs(30),
+    )
+}
+
 fn check_error(output: &Output, status: i32, phase: &str, code: &str) -> Result<Value> {
     ensure!(
-        output.status.code() == Some(status)
-            && output.stdout.is_empty()
-            && output.stderr.ends_with(b"\n")
-            && output.stderr.iter().filter(|byte| **byte == b'\n').count() == 1
-            && !output
-                .stderr
-                .windows(b"secret".len())
-                .any(|window| window == b"secret"),
+        output.status.code() == Some(status) && output.stdout.is_empty(),
         InvalidInputSnafu {
             message: format!(
-                "expected exit {status} with one redacted diagnostic: {}",
+                "expected exit {status} with empty stdout: {}",
                 describe_output(output)
             )
         }
     );
-    let value: Value = serde_json::from_slice(&output.stderr).context(JsonSnafu {
+    check_diagnostic(&output.stderr, phase, code)
+}
+
+pub(crate) fn check_diagnostic(stderr: &[u8], phase: &str, code: &str) -> Result<Value> {
+    ensure!(
+        stderr.ends_with(b"\n")
+            && stderr.iter().filter(|byte| **byte == b'\n').count() == 1
+            && !stderr
+                .windows(b"secret".len())
+                .any(|window| window == b"secret"),
+        InvalidInputSnafu {
+            message: format!(
+                "expected one redacted diagnostic: {:?}",
+                String::from_utf8_lossy(stderr)
+            )
+        }
+    );
+    let value: Value = serde_json::from_slice(stderr).context(JsonSnafu {
         subject: "CLI diagnostic",
     })?;
     ensure!(

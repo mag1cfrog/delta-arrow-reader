@@ -3,6 +3,52 @@
 use super::*;
 
 #[test]
+#[cfg(target_os = "linux")]
+fn single_cpu_child_preserves_caller_affinity_on_success_and_failure()
+-> std::result::Result<(), Box<dyn std::error::Error>> {
+    use rustix::thread::{CpuSet, sched_getaffinity};
+
+    let original = sched_getaffinity(None)?;
+    let selected = (0..CpuSet::MAX_CPU)
+        .find(|cpu| original.is_set(*cpu))
+        .unwrap();
+    let output = output_on_single_cpu(
+        Command::new("cat").arg("/proc/self/status"),
+        Duration::from_secs(5),
+    )?;
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    let stdout = String::from_utf8(output.stdout)?;
+    let cpus = stdout
+        .lines()
+        .find_map(|line| line.strip_prefix("Cpus_allowed_list:"))
+        .unwrap();
+    assert_eq!(cpus.trim().parse::<usize>()?, selected);
+    assert_eq!(sched_getaffinity(None)?, original);
+
+    let temporary = tempfile::tempdir()?;
+    let missing = output_on_single_cpu(
+        &mut Command::new(temporary.path().join("missing")),
+        Duration::from_secs(5),
+    );
+    assert!(
+        matches!(missing, Err(crate::error::Error::CommandStart { source, .. })
+        if source.kind() == io::ErrorKind::NotFound)
+    );
+    assert_eq!(sched_getaffinity(None)?, original);
+
+    let start = Instant::now();
+    let timeout = output_on_single_cpu(Command::new("sleep").arg("30"), Duration::from_millis(50));
+    assert!(
+        matches!(timeout, Err(crate::error::Error::CommandStart { source, .. })
+        if source.kind() == io::ErrorKind::TimedOut)
+    );
+    assert!(start.elapsed() < Duration::from_secs(5));
+    assert_eq!(sched_getaffinity(None)?, original);
+    Ok(())
+}
+
+#[test]
 fn streamed_commands_require_a_successful_exit() -> Result<()> {
     run_with_timeout(
         Command::new("sh").args(["-c", "exit 0"]),
