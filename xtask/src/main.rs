@@ -11,6 +11,7 @@ use serde::Deserialize;
 mod python_release;
 mod python_upload;
 mod python_wheels;
+mod release_plz;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -135,6 +136,9 @@ fn main() -> Result<()> {
     match args.as_slice() {
         ["check-cache-writes"] => check_cache_writes(),
         ["prune-ci-caches"] => prune_ci_caches(),
+        ["prepare-release-pr-config", destination] => {
+            release_plz::prepare_config(Path::new(destination))
+        }
         ["check-python-release-request"] => python_release::validate_release_request(),
         [
             "check-python-wheel",
@@ -169,6 +173,7 @@ fn main() -> Result<()> {
             "usage: cargo xtask <task>\n",
             "  check-cache-writes\n",
             "  prune-ci-caches\n",
+            "  prepare-release-pr-config <destination>\n",
             "  check-python-release-request\n",
             "  check-python-wheel <path> --expected-version <version> --platform-tag <tag>\n",
             "  check-python-artifacts <directory> --expected-version <version>\n",
