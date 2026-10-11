@@ -214,7 +214,7 @@ fn requires_exactly_one_valid_wheel_from_each_platform() -> Result<()> {
         check(&directory, "1.2.3", None, Err("expected artifacts"))?;
         fs::rename(fixture.directory.join("removed"), artifact)?;
     }
-    let extra = directory.join("unexpected-artifact");
+    let extra = directory.join("delta-arrow-reader-macos-x86_64-wheel");
     fs::create_dir(&extra)?;
     check(&directory, "1.2.3", None, Err("expected artifacts"))?;
     fs::remove_dir(extra)?;

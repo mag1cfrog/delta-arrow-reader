@@ -11,11 +11,10 @@ use rawzip::{CompressionMethod, ZipArchiveWriter, path::EntryPath};
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
-pub const PLATFORMS: [(&str, &str); 4] = [
+pub const PLATFORMS: [(&str, &str); 3] = [
     ("linux-x86_64", "manylinux_2_28_x86_64"),
     ("windows-x86_64", "win_amd64"),
     ("macos-arm64", "macosx_12_0_arm64"),
-    ("macos-x86_64", "macosx_12_0_x86_64"),
 ];
 
 pub struct WheelFixture {

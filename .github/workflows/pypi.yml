@@ -75,7 +75,7 @@ jobs:
             echo "Python release checks failed: prepare=$PREPARE_RESULT build=$BUILD_RESULT validated=$WHEELS_VALIDATED"
             exit 1
           fi
-          echo "All four platform wheels passed validation"
+          echo "All supported platform wheels passed validation"
 
   publish-testpypi:
     name: Publish to TestPyPI

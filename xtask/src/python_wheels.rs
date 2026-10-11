@@ -9,17 +9,13 @@ use rawzip::{CompressionMethod, ZipArchive};
 
 use crate::Result;
 
-const ARTIFACT_PLATFORM_TAGS: [(&str, &str); 4] = [
+const ARTIFACT_PLATFORM_TAGS: [(&str, &str); 3] = [
     (
         "delta-arrow-reader-linux-x86_64-wheel",
         "manylinux_2_28_x86_64",
     ),
     ("delta-arrow-reader-windows-x86_64-wheel", "win_amd64"),
     ("delta-arrow-reader-macos-arm64-wheel", "macosx_12_0_arm64"),
-    (
-        "delta-arrow-reader-macos-x86_64-wheel",
-        "macosx_12_0_x86_64",
-    ),
 ];
 
 pub fn check_wheel_metadata(path: &Path, version: &str, platform_tag: &str) -> Result<()> {

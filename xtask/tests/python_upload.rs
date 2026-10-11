@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 mod support;
-use support::{Result, WheelFixture};
+use support::{PLATFORMS, Result, WheelFixture};
 
 const EXISTING_OUTPUT: &str = "existing=kept\n";
 
@@ -128,7 +128,7 @@ printf '%s\n%s' "$CURL_BODY" "$CURL_STATUS"
 #[test]
 fn stages_exactly_the_missing_wheels_for_every_published_subset() -> Result<()> {
     for index in ["pypi", "testpypi"] {
-        for published_mask in 0..16 {
+        for published_mask in 0..(1 << PLATFORMS.len()) {
             let upload = UploadFixture::new(&format!("upload-{index}-{published_mask}"))?;
             let mut release = upload.index_response(published_mask)?;
             release["info"]["name"] = json!("Delta._-Arrow.Reader");
@@ -180,8 +180,8 @@ fn missing_release_queries_the_selected_index_and_stages_all_wheels() -> Result<
 #[test]
 fn changed_or_unexpected_published_files_stop_before_staging() -> Result<()> {
     let upload = UploadFixture::new("upload-changed")?;
-    for index in 0..4 {
-        let mut release = upload.index_response(15)?;
+    for index in 0..upload.wheel_paths.len() {
+        let mut release = upload.index_response((1 << upload.wheel_paths.len()) - 1)?;
         release["urls"][index]["digests"]["sha256"] = json!("0".repeat(64));
         upload.assert_rejected(
             upload

@@ -63,7 +63,7 @@ gh run watch RUN_ID --repo mag1cfrog/delta-arrow-reader --exit-status
 ```
 
 Replace `RUN_ID` with the dispatched run's ID. The default mode, `none`, builds
-and validates all four wheels without running either upload job. Require
+and validates all three wheels without running either upload job. Require
 `Require validated wheels` to pass; individual platform artifacts can exist even
 when the complete build failed. The
 [wheel build guide](contributing.md#build-python-wheels-in-ci) describes the
@@ -151,7 +151,7 @@ Record the PyPI version URL and results in #101 before closing its checklist.
 
 Open the original `Python release` run. Confirm that preparation, all platform
 builds, and `Require validated wheels` succeeded and that only the selected
-upload job failed. Keep its four original artifacts available. Correct any
+upload job failed. Keep its three original artifacts available. Correct any
 publisher/environment mismatch or wait for an index outage to end, then use
 **Re-run failed jobs** on that run:
 
@@ -166,7 +166,7 @@ upload. GitHub keeps the original commit and ref for a rerun and
 [allows reruns for up to 30 days](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs).
 The artifacts must still exist and be unexpired.
 
-The upload job validates all four wheels again and compares the index's
+The upload job validates all three wheels again and compares the index's
 published filenames and SHA256 hashes with those artifacts. It stages only
 missing files; if every file already matches, the job succeeds without another
 upload. It rejects unexpected or yanked files, hash mismatches, malformed index
