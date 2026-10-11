@@ -494,6 +494,24 @@ fn ordinary_ci_only_adds_small_image_workflow_checks() {
             .unwrap()
             .contains("--test cli_images_workflow")
     );
+    let script = named_step(checks, "Test CI workflows, Python, and cache tasks")["run"]
+        .as_str()
+        .unwrap()
+        .replace("\\\n", " ");
+    let planning: Vec<_> = script
+        .lines()
+        .filter(|line| line.contains("--test cli_release_plan"))
+        .collect();
+    assert_eq!(planning.len(), 1);
+    assert!(!planning[0].contains("ignored"));
+    let images = images_workflow();
+    assert_eq!(
+        named_step(
+            &images["jobs"]["validate"],
+            "Test release planning with real OCI tools"
+        )["run"],
+        "cargo test --locked --package xtask --test cli_release_plan -- --ignored"
+    );
     for (name, job) in ci["jobs"].as_object().unwrap() {
         if name != "release-cli-images" {
             assert_ne!(job["uses"], "./.github/workflows/cli-images.yml");

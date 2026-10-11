@@ -23,7 +23,7 @@ const IMAGE_JOB: &str = "Release CLI images and Go consumer / Validate complete 
 const RECORD_JOB: &str = "Record validated CLI artifacts";
 
 #[derive(Serialize)]
-pub(super) struct ValidationArtifacts {
+pub(crate) struct ValidationArtifacts {
     pub validation_record: ValidationRecord,
     pub record_artifact: Artifact,
     pub binary_artifact: Artifact,

@@ -282,6 +282,8 @@ jobs:
       - uses: mozilla-actions/sccache-action@v0.0.10
       - name: Install OCI verification tools
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends skopeo umoci
+      - name: Test release planning with real OCI tools
+        run: cargo test --locked --package xtask --test cli_release_plan -- --ignored
       - name: Assemble the original OCI archives and verify both identities
         run: |
           cargo xtask cli images assemble "$RUNNER_TEMP/cli-images" \

@@ -110,7 +110,9 @@ and `validated=true`. Native amd64 and arm64 jobs each build a CLI image, run it
 runtime acceptance, build and run the Go example, compare the copied executable
 and notices, and export/reimport the tested image as OCI. A final job verifies
 both platform artifacts, copies their archive bytes into a complete set, and
-uploads it. Feature PRs do not run these jobs, regardless of changed paths.
+uploads it. That final job also tests release planning with small OCI fixtures
+using real `skopeo` and `umoci`. Feature PRs run the fast planning tests with tool
+substitutes; they do not run these image jobs, regardless of changed paths.
 
 The reusable workflow accepts these inputs:
 
@@ -262,9 +264,67 @@ an ambiguity. The output path must be new.
 The report contains the release ID, tag, commit, tree, and version; the original
 validation record; and GitHub metadata for the three selected artifacts,
 including their ZIP SHA256 values. It is a provenance report, not an upload plan
-or publication authorization. Full binary/OCI download and integrity checks,
-publication planning, and upload remain part of #435. A publisher must perform
-those checks and recheck current release/artifact state before writing.
+or publication authorization. Use `plan-release` below to download and verify the
+retained files. A publisher must recheck current release/artifact state before
+writing.
+
+## Prepare a read-only release plan
+
+`cargo xtask cli plan-release` repeats the provenance checks above, downloads the
+selected binary and OCI sets by immutable artifact ID, and verifies their full
+contents. Run it on Linux with authenticated `gh`, `skopeo`, and `umoci` on `PATH`.
+It needs only read access to GitHub. It does not access GHCR, upload release
+assets, build images, or execute the downloaded CLI.
+
+```sh
+cargo xtask cli plan-release target/cli-release-plan --tag vX.Y.Z
+```
+
+The output directory must be new and its parent must already exist. To select
+one validation record when more than one is eligible, provide both recovery IDs:
+
+```sh
+cargo xtask cli plan-release target/cli-release-plan --tag vX.Y.Z \
+  --run-id VALIDATION_RUN_ID --record-artifact-id RECORD_ARTIFACT_ID
+```
+
+Before writing a completed plan, the command checks:
+
+- Both ZIP downloads against GitHub's SHA256 and size, and their exact file
+  inventories. Unsafe paths, duplicate entries, and non-regular files fail.
+- Each manifest's SHA256 against the approved validation record. The binary
+  archives, notices, checksums, and both manifests must match the recorded
+  version and tested source commit, with the same Rust toolchain.
+- Each OCI archive's hash, platform manifest digest, configuration, and labels.
+  `skopeo` copies each image to a temporary local OCI layout while preserving its
+  digest. `umoci` unpacks it without running it. Its `dar`, `LICENSE`, and `NOTICE`
+  bytes and permissions must match the binary archive.
+- The release ID and tag commit again after verification.
+
+Downloads and verification use temporary directories. A failed check leaves no
+output directory. The command moves verified files into the new destination and
+writes `release-plan.json` last; a failed move may leave an incomplete directory,
+but never a completed plan. Existing output is never replaced.
+
+The completed directory contains:
+
+| Path | Contents |
+| --- | --- |
+| `binaries/` | The four original files: both GNU archives, `cli-artifacts.json`, and `SHA256SUMS` |
+| `images/` | Both original OCI archives and `cli-images.json` |
+| `image-index.json` | The OCI index bytes referencing the verified amd64 and arm64 platform digests |
+| `release-plan.json` | Schema-1 provenance, local paths, hashes, sizes, and intended publication destinations |
+
+The plan lists exactly four GitHub release assets and the versioned image
+`ghcr.io/mag1cfrog/delta-arrow-reader:vX.Y.Z`. Each platform also has its versioned
+`vX.Y.Z-linux-amd64` or `vX.Y.Z-linux-arm64` destination. There are no mutable
+`latest`, major, or minor aliases. The index's SHA256 covers its exact local bytes;
+the binary archives, OCI archives, and existing manifests are retained unchanged.
+
+This command prepares expected publication bytes and destinations. It does not
+inspect existing public assets or tags. Upload, conflict detection, retries, and
+the automatic release workflow remain part of #435. Local plan JSON alone does
+not authorize publication.
 
 ## Build on Debian 12
 

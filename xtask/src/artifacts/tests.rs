@@ -57,7 +57,7 @@ impl Fixture {
     fn archive(&self) -> PathBuf {
         self.inputs
             .join("amd64")
-            .join(archive_name(&self.identity, Architecture::Amd64))
+            .join(archive_name(&self.identity.version, Architecture::Amd64))
     }
 
     fn describe(&self) -> Result<ArtifactTarget> {
@@ -99,7 +99,7 @@ fn complete_set_preserves_bytes_and_matches_checksums() -> TestResult {
         assert_eq!(target.runtime_dependencies, fixture.dependencies);
         assert_eq!(
             target.archive,
-            archive_name(&fixture.identity, target.architecture)
+            archive_name(&fixture.identity.version, target.architecture)
         );
         let path = fixture.output.join(&target.archive);
         assert_eq!(

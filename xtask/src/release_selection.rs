@@ -1,4 +1,4 @@
-mod github;
+pub(crate) mod github;
 mod provenance;
 
 use std::{env, num::NonZeroU64, path::PathBuf};
@@ -24,6 +24,12 @@ use provenance::ValidationArtifacts;
 pub(crate) struct SelectReleaseArtifactsArgs {
     /// New JSON report of the release identity, validation record, and artifact metadata.
     output: PathBuf,
+    #[command(flatten)]
+    selection: ReleaseSelectionArgs,
+}
+
+#[derive(Args)]
+pub(crate) struct ReleaseSelectionArgs {
     /// Existing published stable release tag, such as v1.2.3.
     #[arg(long)]
     tag: String,
@@ -36,21 +42,21 @@ pub(crate) struct SelectReleaseArtifactsArgs {
 }
 
 #[derive(Serialize)]
-struct ReleaseIdentity {
-    id: NonZeroU64,
-    tag: String,
-    commit: String,
-    tree: String,
-    version: String,
+pub(crate) struct ReleaseIdentity {
+    pub(crate) id: NonZeroU64,
+    pub(crate) tag: String,
+    pub(crate) commit: String,
+    pub(crate) tree: String,
+    pub(crate) version: String,
 }
 
 #[derive(Serialize)]
-struct SelectedArtifacts {
+pub(crate) struct SelectedArtifacts {
     schema_version: u32,
     repository: &'static str,
-    release: ReleaseIdentity,
+    pub(crate) release: ReleaseIdentity,
     #[serde(flatten)]
-    artifacts: ValidationArtifacts,
+    pub(crate) artifacts: ValidationArtifacts,
 }
 
 impl SelectReleaseArtifactsArgs {
@@ -64,21 +70,8 @@ impl SelectReleaseArtifactsArgs {
                 message: "release selection output already exists"
             }
         );
-        ensure!(
-            env::var_os("GITHUB_REPOSITORY").is_none_or(|name| name == REPOSITORY),
-            InvalidInputSnafu {
-                message: "CLI release selection requires the upstream repository"
-            }
-        );
-        let selected = self.select()?;
-        // A tag or release can change while the API reads and artifact download are in progress.
-        let release = stable_release(&self.tag)?;
-        ensure!(
-            release.id == selected.release.id && tag_commit(&self.tag)? == selected.release.commit,
-            InvalidInputSnafu {
-                message: "release or tag changed during artifact selection"
-            }
-        );
+        let selected = self.selection.select()?;
+        selected.release.ensure_unchanged()?;
         let mut bytes = serde_json::to_vec_pretty(&selected).context(JsonSnafu {
             subject: "CLI release selection",
         })?;
@@ -86,15 +79,23 @@ impl SelectReleaseArtifactsArgs {
         write_new_file(&self.output, &bytes)?;
         println!(
             "Selected CLI validation: release {}, PR #{}, run {}, record artifact {}",
-            self.tag,
+            selected.release.tag,
             selected.artifacts.validation_record.pull_request,
             selected.artifacts.validation_record.run_id,
             selected.artifacts.record_artifact.id
         );
         Ok(())
     }
+}
 
-    fn select(&self) -> Result<SelectedArtifacts> {
+impl ReleaseSelectionArgs {
+    pub(crate) fn select(&self) -> Result<SelectedArtifacts> {
+        ensure!(
+            env::var_os("GITHUB_REPOSITORY").is_none_or(|name| name == REPOSITORY),
+            InvalidInputSnafu {
+                message: "CLI release selection requires the upstream repository"
+            }
+        );
         let release = resolve_release(&self.tag)?;
         let repository: Repository = github::get("")?;
         ensure!(
@@ -237,6 +238,19 @@ impl SelectReleaseArtifactsArgs {
             release,
             artifacts: candidates.pop().unwrap(),
         })
+    }
+}
+
+impl ReleaseIdentity {
+    pub(crate) fn ensure_unchanged(&self) -> Result<()> {
+        let release = stable_release(&self.tag)?;
+        ensure!(
+            release.id == self.id && tag_commit(&self.tag)? == self.commit,
+            InvalidInputSnafu {
+                message: "release or tag changed during artifact selection"
+            }
+        );
+        Ok(())
     }
 }
 

@@ -8,10 +8,10 @@ use std::{
 use flate2::read::DeflateDecoder;
 use rawzip::{CompressionMethod, ZipArchive};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use sha2::{Digest, Sha256};
 use snafu::{ResultExt, ensure};
 
 use crate::{
+    artifacts::file_sha256,
     command::command_output,
     error::{
         ArtifactZipSnafu, CommandFailedSnafu, CommandStartSnafu, FileSnafu, InvalidInputSnafu,
@@ -132,7 +132,7 @@ pub(super) struct ArtifactPage {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
-pub(super) struct Artifact {
+pub(crate) struct Artifact {
     pub id: NonZeroU64,
     pub name: String,
     pub size_in_bytes: u64,
@@ -142,7 +142,7 @@ pub(super) struct Artifact {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
-pub(super) struct ArtifactRun {
+pub(crate) struct ArtifactRun {
     pub id: NonZeroU64,
     pub repository_id: NonZeroU64,
     pub head_repository_id: NonZeroU64,
@@ -186,16 +186,9 @@ pub(super) fn is_sha256(value: &str) -> bool {
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
-pub(super) fn download_record(artifact: &Artifact) -> Result<ValidationRecord> {
-    const MAX_RECORD_BYTES: u64 = 64 * 1024;
-    ensure!(
-        artifact.size_in_bytes <= MAX_RECORD_BYTES,
-        InvalidInputSnafu {
-            message: "CLI validation record artifact exceeds 64 KiB",
-        }
-    );
+pub(crate) fn download_artifact(artifact: &Artifact) -> Result<tempfile::NamedTempFile> {
     let file = tempfile::NamedTempFile::new().context(IoSnafu {
-        operation: "create record download file",
+        operation: "create Actions artifact download file",
     })?;
     let status = request(&format!("actions/artifacts/{}/zip", artifact.id))
         .stdout(file.reopen().context(FileSnafu { path: file.path() })?)
@@ -216,16 +209,34 @@ pub(super) fn download_record(artifact: &Artifact) -> Result<ValidationRecord> {
             .len()
             == artifact.size_in_bytes,
         InvalidInputSnafu {
-            message: "validation record download size differs from GitHub metadata"
+            message: format!(
+                "artifact {} download size differs from GitHub metadata",
+                artifact.id
+            )
         }
     );
-    let bytes = fs::read(file.path()).context(FileSnafu { path: file.path() })?;
     ensure!(
-        format!("sha256:{:x}", Sha256::digest(&bytes)) == artifact.digest,
+        format!("sha256:{}", file_sha256(file.path())?) == artifact.digest,
         InvalidInputSnafu {
-            message: "validation record download SHA256 differs from GitHub metadata"
+            message: format!(
+                "artifact {} download SHA256 differs from GitHub metadata",
+                artifact.id
+            )
         }
     );
+    Ok(file)
+}
+
+pub(super) fn download_record(artifact: &Artifact) -> Result<ValidationRecord> {
+    const MAX_RECORD_BYTES: u64 = 64 * 1024;
+    ensure!(
+        artifact.size_in_bytes <= MAX_RECORD_BYTES,
+        InvalidInputSnafu {
+            message: "CLI validation record artifact exceeds 64 KiB",
+        }
+    );
+    let file = download_artifact(artifact)?;
+    let bytes = fs::read(file.path()).context(FileSnafu { path: file.path() })?;
     let archive = ZipArchive::from_slice(bytes).context(ArtifactZipSnafu)?;
     ensure!(
         archive.entries_hint() == 1,

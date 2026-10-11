@@ -16,6 +16,7 @@ mod python_release;
 mod python_upload;
 mod python_wheel_reuse;
 mod python_wheels;
+mod release_plan;
 mod release_plz;
 mod release_selection;
 mod repository;
@@ -120,6 +121,8 @@ enum CliTask {
     RecordValidation(validation_record::RecordValidationArgs),
     /// Select release PR artifacts using GitHub provenance, without publishing.
     SelectReleaseArtifacts(release_selection::SelectReleaseArtifactsArgs),
+    /// Download and verify release artifacts and write a local publication plan.
+    PlanRelease(release_plan::PlanReleaseArgs),
     /// Check CLI arguments, inspection, output failures, and process lifecycle on Linux.
     TestProcess(process::TestProcessArgs),
     /// Check Arrow IPC output and scan process lifecycle on Linux.
@@ -199,6 +202,7 @@ impl CliTask {
             Self::TestImage(args) => args.run(),
             Self::RecordValidation(args) => args.run(),
             Self::SelectReleaseArtifacts(args) => args.run(),
+            Self::PlanRelease(args) => args.run(),
             Self::TestProcess(args) => args.run(),
             Self::TestScan(args) => args.run(),
             Self::Notices(args) => notices::run(args),
