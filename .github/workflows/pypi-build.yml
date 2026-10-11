@@ -174,7 +174,8 @@ jobs:
             --volume "${{ steps.cargo-cache.outputs.path }}/registry:/root/.cargo/registry"
             --volume "${{ steps.cargo-cache.outputs.path }}/git:/root/.cargo/git"
           before-script-linux: |
-            dnf install -y openssl-devel
+            # OpenSSL's build dependencies are all in BaseOS; skip unrelated mirrors.
+            dnf install -y --repo=baseos openssl-devel
             printf 'sccache==0.16.0\n' > /tmp/sccache-constraints.txt
             export UV_CONSTRAINT=/tmp/sccache-constraints.txt
             export SCCACHE_ERROR_LOG=/tmp/sccache.log
