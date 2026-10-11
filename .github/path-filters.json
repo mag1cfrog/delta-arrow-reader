@@ -2,9 +2,7 @@
   "code": [
     ".cargo/**",
     ".github/path-filters.json",
-    ".github/scripts/prune_ci_caches.py",
-    ".github/scripts/check_sccache_writes.py",
-    ".github/tests/test_ci.py",
+    "xtask/**",
     ".github/workflows/cache-warm.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/cli-build.yml",
@@ -28,8 +26,7 @@
   "python": [
     ".cargo/**",
     ".github/path-filters.json",
-    ".github/scripts/check_sccache_writes.py",
-    ".github/tests/test_ci.py",
+    "xtask/**",
     ".github/workflows/ci.yml",
     ".github/workflows/cache-warm.yml",
     ".github/workflows/pypi-build.yml",

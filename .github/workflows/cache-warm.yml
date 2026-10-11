@@ -9,9 +9,7 @@ on:
       - ".github/workflows/ci.yml"
       - ".github/workflows/pypi-build.yml"
       - ".github/path-filters.json"
-      - ".github/scripts/prune_ci_caches.py"
-      - ".github/scripts/check_sccache_writes.py"
-      - ".github/tests/test_ci.py"
+      - "xtask/**"
       - ".cargo/**"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -111,7 +109,9 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo test --locked -p delta-arrow-reader-python --no-run
       - name: Check sccache writes
-        run: python .github/scripts/check_sccache_writes.py
+        run: cargo xtask check-cache-writes
+        env:
+          RUSTC_WRAPPER: ""
 
   prune:
     name: Retain two Windows target caches
@@ -122,7 +122,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v5
-      - run: python3 .github/scripts/prune_ci_caches.py
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo xtask prune-ci-caches
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

@@ -142,6 +142,13 @@ directories.
 Cache write errors fail the warmer, except when another build has already
 uploaded the same immutable cache entry.
 
+The cache helpers are Rust commands in the independent `xtask` crate:
+`cargo xtask check-cache-writes` and `cargo xtask prune-ci-caches`.
+CI checks their types and tests with
+`cargo test --locked --manifest-path xtask/Cargo.toml`, without compiling the
+reader's dependencies. Cache pruning requires `gh`, `GH_TOKEN`, and `GH_REPO`;
+the pruning job alone has `actions: write` permission.
+
 To populate caches after a toolchain or workflow change, run `Warm CI caches`
 manually on main. The first build for new compiler inputs can still be cold.
 

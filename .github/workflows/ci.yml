@@ -160,9 +160,9 @@ jobs:
       - name: Test CI routing and cache maintenance
         if: matrix.task == 'Lints and Docs'
         run: |
-          python3 -m venv "$RUNNER_TEMP/ci-tests"
-          "$RUNNER_TEMP/ci-tests/bin/python" -m pip install --only-binary=:all: 'PyYAML==6.0.3'
-          "$RUNNER_TEMP/ci-tests/bin/python" -m unittest discover -s .github/tests -p test_ci.py -v
+          cargo fmt --manifest-path xtask/Cargo.toml -- --check
+          cargo clippy --locked --manifest-path xtask/Cargo.toml --all-targets -- -D warnings
+          cargo test --locked --manifest-path xtask/Cargo.toml
       - if: matrix.task == 'Lints and Docs'
         run: python3 -m unittest discover -s benches -p test_scan_scheduling.py
       - if: matrix.task == 'Lints and Docs'

@@ -175,7 +175,7 @@ jobs:
             export UV_CONSTRAINT=/tmp/sccache-constraints.txt
             export SCCACHE_ERROR_LOG=/tmp/sccache.log
             if [ "$SCCACHE_GHA_RW_MODE" = "READ_WRITE" ]; then
-              trap 'python3 "$GITHUB_WORKSPACE/.github/scripts/check_sccache_writes.py"' EXIT
+              trap 'RUSTC_WRAPPER= cargo run --locked --manifest-path "$GITHUB_WORKSPACE/xtask/Cargo.toml" -- check-cache-writes' EXIT
             fi
           args: >-
             --locked --release --out ${{ runner.os == 'Linux' && '../dist' || matrix.wheel-dir }} --target-dir target
@@ -183,7 +183,9 @@ jobs:
             --compatibility pypi --auditwheel repair --interpreter ${{ matrix.interpreter }}
       - name: Check wheel cache writes
         if: inputs.cache-only && runner.os != 'Linux'
-        run: python .github/scripts/check_sccache_writes.py
+        run: cargo xtask check-cache-writes
+        env:
+          RUSTC_WRAPPER: ""
       - name: Inspect and repair Windows DLL dependencies
         if: runner.os == 'Windows'
         run: |
