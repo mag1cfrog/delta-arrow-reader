@@ -108,46 +108,58 @@ fn summary_requires_python_only_when_requested() -> Result<()> {
     for code in ["true", "false"] {
         for python in ["true", "false"] {
             for package in ["success", "failure", "skipped", "cancelled"] {
-                for wheels in ["success", "failure", "skipped", "cancelled"] {
-                    for validated in ["true", "false", ""] {
-                        let values = [
-                            ("changes.outputs.code", code),
-                            ("changes.outputs.python", python),
-                            ("changes.outputs.selective_read", "false"),
-                            ("python-package.result", package),
-                            ("python-wheels.result", wheels),
-                            ("python-wheels.outputs.validated", validated),
-                            ("cli-binaries.outputs.validated", "true"),
-                        ];
-                        let mut rest = script.as_str();
-                        let mut rendered = String::new();
-                        while let Some((before, after)) = rest.split_once("${{ needs.") {
-                            let (key, after) = after.split_once(" }}").unwrap();
-                            rendered.push_str(before);
-                            rendered.push_str(
-                                values
-                                    .iter()
-                                    .find(|(name, _)| *name == key)
-                                    .map_or("success", |(_, value)| *value),
-                            );
-                            rest = after;
-                        }
-                        rendered.push_str(rest);
-                        let output = Command::new("bash")
-                            .args(["-e", "-c", &rendered])
-                            .output()?;
-                        let expected = python != "true"
-                            || package == "success" && wheels == "success" && validated == "true";
-                        assert_eq!(
-                            output.status.success(),
-                            expected,
-                            "code={code}, python={python}, package={package}, wheels={wheels}, validated={validated}: {output:?}"
-                        );
-                    }
+                let values = [
+                    ("changes.outputs.code", code),
+                    ("changes.outputs.python", python),
+                    ("changes.outputs.selective_read", "false"),
+                    ("python-package.result", package),
+                    ("cli-binaries.outputs.validated", "true"),
+                ];
+                let mut rest = script.as_str();
+                let mut rendered = String::new();
+                while let Some((before, after)) = rest.split_once("${{ needs.") {
+                    let (key, after) = after.split_once(" }}").unwrap();
+                    rendered.push_str(before);
+                    rendered.push_str(
+                        values
+                            .iter()
+                            .find(|(name, _)| *name == key)
+                            .map_or("success", |(_, value)| *value),
+                    );
+                    rest = after;
                 }
+                rendered.push_str(rest);
+                let output = Command::new("bash")
+                    .args(["-e", "-c", &rendered])
+                    .output()?;
+                let expected = python != "true" || package == "success";
+                assert_eq!(
+                    output.status.success(),
+                    expected,
+                    "code={code}, python={python}, package={package}: {output:?}"
+                );
             }
         }
     }
+    Ok(())
+}
+
+#[test]
+fn development_workflows_do_not_automatically_build_release_wheels() -> Result<()> {
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    assert!(
+        ci["jobs"]
+            .as_object()
+            .unwrap()
+            .values()
+            .all(|job| job["uses"] != "./.github/workflows/pypi-build.yml")
+    );
+    let warmer: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
+    assert_eq!(
+        warmer["jobs"]["wheels"]["if"],
+        "github.event_name == 'workflow_dispatch'"
+    );
     Ok(())
 }
 

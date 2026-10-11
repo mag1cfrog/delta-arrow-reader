@@ -28,21 +28,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  changes:
-    name: Find caches to warm
+  prepare:
+    name: Prepare cache warming
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
-      python: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.python == 'true' }}
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v5
-      - uses: dorny/paths-filter@v4
-        if: github.event_name == 'push'
-        id: filter
-        with:
-          base: ${{ github.event.before }}
-          filters: .github/path-filters.json
       - name: Read package version
         id: version
         run: |
@@ -52,7 +45,7 @@ jobs:
 
   core:
     name: Warm core test caches / ${{ matrix.name }}
-    needs: changes
+    needs: prepare
     runs-on: ${{ matrix.os }}
     env:
       SCCACHE_GHA_ENABLED: "true"
@@ -152,10 +145,10 @@ jobs:
 
   wheels:
     name: Warm Python wheel caches
-    needs: [changes, prune]
-    if: needs.changes.outputs.python == 'true'
+    needs: [prepare, prune]
+    if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/pypi-build.yml
     with:
       source-ref: ${{ github.sha }}
-      expected-version: ${{ needs.changes.outputs.version }}
+      expected-version: ${{ needs.prepare.outputs.version }}
       cache-only: true
