@@ -6,11 +6,15 @@ mod command;
 mod error;
 #[cfg(target_os = "linux")]
 mod http_fixture;
+mod image;
+mod image_artifacts;
+mod image_runtime;
 mod notices;
 mod platform;
 mod process;
 mod python_release;
 mod python_upload;
+mod python_wheel_reuse;
 mod python_wheels;
 mod release_plz;
 mod repository;
@@ -52,6 +56,22 @@ enum Task {
     PrepareReleasePrConfig { destination: PathBuf },
     /// Validate a Python release event against the checked-out commit.
     CheckPythonReleaseRequest,
+    /// Retrieve validated wheels from the merged release PR.
+    ReusePythonWheels {
+        destination: PathBuf,
+        #[arg(long)]
+        expected_version: String,
+    },
+    /// Download and verify a release PR wheel artifact by ID and SHA256.
+    DownloadPythonWheels {
+        destination: PathBuf,
+        #[arg(long)]
+        expected_version: String,
+        #[arg(long)]
+        artifact_id: u64,
+        #[arg(long)]
+        sha256: String,
+    },
     /// Validate one Python wheel's filename and metadata.
     CheckPythonWheel {
         path: PathBuf,
@@ -86,10 +106,14 @@ enum CliTask {
     Build(build::BuildArgs),
     /// Build, check, collect notices, and package one CLI architecture.
     BuildArchive(build::BuildArchiveArgs),
+    /// Build a local container image from the complete validated binary artifact set.
+    BuildImage(image::BuildImageArgs),
     /// Inspect and execute a binary on a compatible Linux runtime.
     CheckBinary(binary::CheckBinaryArgs),
     /// Run runtime acceptance tests against an extracted CLI archive.
     TestArchive(acceptance::TestArchiveArgs),
+    /// Check a local container's read-only execution, TLS, IPC, and process lifecycle.
+    TestImage(image_runtime::TestImageArgs),
     /// Check CLI arguments, inspection, output failures, and process lifecycle on Linux.
     TestProcess(process::TestProcessArgs),
     /// Check Arrow IPC output and scan process lifecycle on Linux.
@@ -100,6 +124,11 @@ enum CliTask {
     Artifacts {
         #[command(subcommand)]
         command: artifacts::ArtifactTask,
+    },
+    /// Export, assemble, or verify CLI images for publication without rebuilding.
+    Images {
+        #[command(subcommand)]
+        command: image_artifacts::ImageArtifactTask,
     },
 }
 
@@ -117,6 +146,21 @@ fn run_task(task: Task) -> Result<()> {
         Task::PruneCiCaches => prune_ci_caches(),
         Task::PrepareReleasePrConfig { destination } => release_plz::prepare_config(&destination),
         Task::CheckPythonReleaseRequest => python_release::validate_release_request(),
+        Task::ReusePythonWheels {
+            destination,
+            expected_version,
+        } => python_wheel_reuse::reuse_release_wheels(&destination, &expected_version),
+        Task::DownloadPythonWheels {
+            destination,
+            expected_version,
+            artifact_id,
+            sha256,
+        } => python_wheel_reuse::download_wheel_artifact(
+            &destination,
+            &expected_version,
+            artifact_id,
+            &sha256,
+        ),
         Task::CheckPythonWheel {
             path,
             expected_version,
@@ -143,12 +187,15 @@ impl CliTask {
             Self::Prepare(args) => args.run(),
             Self::Build(args) => args.run(),
             Self::BuildArchive(args) => args.run(),
+            Self::BuildImage(args) => args.run(),
             Self::CheckBinary(args) => args.run(),
             Self::TestArchive(args) => args.run(),
+            Self::TestImage(args) => args.run(),
             Self::TestProcess(args) => args.run(),
             Self::TestScan(args) => args.run(),
             Self::Notices(args) => notices::run(args),
             Self::Artifacts { command } => command.run(),
+            Self::Images { command } => command.run(),
         }
     }
 }

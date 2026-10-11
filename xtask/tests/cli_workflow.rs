@@ -50,10 +50,10 @@ fn release_cli_build_waits_for_approval_and_blocks_the_ci_summary() {
         .unwrap();
     assert!(version["if"].is_null());
 
-    let approval = &jobs["release-cli-approval"];
-    assert_eq!(approval["environment"], "cli-release-checks");
+    let approval = &jobs["release-approval"];
+    assert_eq!(approval["environment"], "release-checks");
     assert_eq!(approval["needs"], "changes");
-    for name in ["release-cli-approval", "release-cli"] {
+    for name in ["release-approval", "release-cli"] {
         assert_eq!(
             jobs[name]["if"],
             "needs.changes.outputs.release_pr == 'true'"
@@ -68,7 +68,7 @@ fn release_cli_build_waits_for_approval_and_blocks_the_ci_summary() {
     assert_eq!(jobs["ci"]["if"], "always()");
     let build = &jobs["release-cli"];
     assert_eq!(build["uses"], "./.github/workflows/cli-build.yml");
-    assert_eq!(build["needs"], json!(["changes", "release-cli-approval"]));
+    assert_eq!(build["needs"], json!(["changes", "release-approval"]));
     assert_eq!(
         build["with"],
         json!({
@@ -103,9 +103,11 @@ fn ci_requires_approved_and_validated_cli_artifacts_only_for_release_prs()
                         let values = [
                             ("changes.outputs.code", code),
                             ("changes.outputs.python", "false"),
+                            ("changes.outputs.cli", "false"),
+                            ("changes.outputs.tooling", "false"),
                             ("changes.outputs.selective_read", "false"),
                             ("changes.outputs.release_pr", release_pr),
-                            ("release-cli-approval.result", approval),
+                            ("release-approval.result", approval),
                             ("release-cli.result", build),
                             ("release-cli.outputs.validated", validated),
                         ];
@@ -119,6 +121,19 @@ fn ci_requires_approved_and_validated_cli_artifacts_only_for_release_prs()
                                 Some((_, value)) => value,
                                 None if key.ends_with(".result") => "success",
                                 None if key.ends_with(".outputs.validated") => "true",
+                                None if key.ends_with(".outputs.source-commit") => {
+                                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                                }
+                                None if key.ends_with(".outputs.version") => "1.2.3",
+                                None if matches!(
+                                    key,
+                                    "release-cli-images.outputs.artifact-id"
+                                        | "release-cli-images.outputs.artifact-name"
+                                        | "release-cli-images.outputs.artifact-url"
+                                ) =>
+                                {
+                                    "present"
+                                }
                                 None => panic!("missing CI test input: {key}"),
                             });
                             rest = after;

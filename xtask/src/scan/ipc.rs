@@ -1,4 +1,4 @@
-use std::{fs::File, io::Cursor, path::Path, sync::Arc};
+use std::{fs::File, io::Cursor, path::Path, process::Output, sync::Arc};
 
 use arrow_array::{Array, ArrayRef, RecordBatch, StructArray};
 use arrow_ipc::reader::{FileReader, StreamReader};
@@ -9,9 +9,23 @@ use crate::error::{ArrowSnafu, FileSnafu, InvalidInputSnafu, Result};
 
 pub(super) const IPC_END_MARKER: [u8; 8] = [255, 255, 255, 255, 0, 0, 0, 0];
 
-pub(super) struct IpcTable {
+pub(crate) struct IpcTable {
     pub schema: SchemaRef,
     pub batches: Vec<RecordBatch>,
+}
+
+pub(crate) fn check_scan_output(output: &Output) -> Result<IpcTable> {
+    ensure!(
+        output.status.success() && output.stderr.is_empty(),
+        InvalidInputSnafu {
+            message: format!(
+                "scan failed: {}; stderr={}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            )
+        }
+    );
+    IpcTable::read_stream(&output.stdout, Path::new("scan stdout"))
 }
 
 impl IpcTable {

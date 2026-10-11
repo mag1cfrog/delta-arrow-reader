@@ -15,7 +15,7 @@ on:
           - testpypi
           - pypi
       expected-version:
-        description: Exact package version to build, without the v prefix
+        description: Exact package version, without the v prefix
         required: true
         type: string
 
@@ -24,12 +24,18 @@ permissions:
 
 jobs:
   prepare:
-    name: Validate release request
+    name: Validate release request and prepare wheels
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
     outputs:
       source-ref: ${{ steps.request.outputs.source-ref }}
       expected-version: ${{ steps.request.outputs.expected-version }}
       publish-to: ${{ steps.request.outputs.publish-to }}
+      artifact-id: ${{ steps.wheels.outputs.artifact-id }}
+      artifact-sha256: ${{ steps.wheels.outputs.artifact-sha256 }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -48,10 +54,18 @@ jobs:
       - name: Check event, commit, tag, and version
         id: request
         run: cargo xtask check-python-release-request
+      - name: Retrieve validated release PR wheels
+        if: steps.request.outputs.publish-to == 'pypi'
+        id: wheels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_VERSION: ${{ steps.request.outputs.expected-version }}
+        run: cargo xtask reuse-python-wheels wheel-artifacts --expected-version "$EXPECTED_VERSION"
 
   build:
     name: Build and test wheels
     needs: prepare
+    if: needs.prepare.outputs.publish-to != 'pypi'
     uses: ./.github/workflows/pypi-build.yml
     with:
       source-ref: ${{ needs.prepare.outputs.source-ref }}
@@ -66,21 +80,38 @@ jobs:
       PREPARE_RESULT: ${{ needs.prepare.result }}
       BUILD_RESULT: ${{ needs.build.result }}
       WHEELS_VALIDATED: ${{ needs.build.outputs.validated }}
+      PUBLISH_TO: ${{ needs.prepare.outputs.publish-to }}
+      ARTIFACT_ID: ${{ needs.prepare.outputs.artifact-id }}
+      ARTIFACT_SHA256: ${{ needs.prepare.outputs.artifact-sha256 }}
     steps:
-      - name: Check all build results
+      - name: Check wheel source results
         run: |
-          if [ "$PREPARE_RESULT" != "success" ] || \
-             [ "$BUILD_RESULT" != "success" ] || \
-             [ "$WHEELS_VALIDATED" != "true" ]; then
-            echo "Python release checks failed: prepare=$PREPARE_RESULT build=$BUILD_RESULT validated=$WHEELS_VALIDATED"
+          if [ "$PREPARE_RESULT" != "success" ]; then
+            echo "Python release preparation failed: $PREPARE_RESULT"
             exit 1
           fi
+          case "$PUBLISH_TO" in
+            pypi)
+              if [ "$BUILD_RESULT" != "skipped" ] || [ -z "$ARTIFACT_ID" ] || [ -z "$ARTIFACT_SHA256" ]; then
+                echo "PyPI requires the validated release PR artifact"
+                exit 1
+              fi
+              ;;
+            none|testpypi)
+              if [ "$BUILD_RESULT" != "success" ] || [ "$WHEELS_VALIDATED" != "true" ]; then
+                echo "Python wheel checks failed: build=$BUILD_RESULT validated=$WHEELS_VALIDATED"
+                exit 1
+              fi
+              ;;
+            *) echo "Unsupported publication target: $PUBLISH_TO"; exit 1 ;;
+          esac
           echo "All supported platform wheels passed validation"
 
   publish-testpypi:
     name: Publish to TestPyPI
     needs: [prepare, check]
     if: >-
+      !cancelled() &&
       github.repository == 'mag1cfrog/delta-arrow-reader' &&
       github.event_name == 'workflow_dispatch' &&
       needs.prepare.outputs.publish-to == 'testpypi' &&
@@ -132,6 +163,7 @@ jobs:
     name: Publish to PyPI
     needs: [prepare, check]
     if: >-
+      !cancelled() &&
       github.repository == 'mag1cfrog/delta-arrow-reader' &&
       (github.event_name == 'workflow_dispatch' || github.event_name == 'release') &&
       needs.prepare.outputs.publish-to == 'pypi' &&
@@ -145,9 +177,12 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: read
+      actions: read
       id-token: write
     env:
       EXPECTED_VERSION: ${{ needs.prepare.outputs.expected-version }}
+      ARTIFACT_ID: ${{ needs.prepare.outputs.artifact-id }}
+      ARTIFACT_SHA256: ${{ needs.prepare.outputs.artifact-sha256 }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -162,10 +197,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
-      - uses: actions/download-artifact@v6
-        with:
-          pattern: delta-arrow-reader-*-wheel
-          path: wheel-artifacts
+      - name: Download verified release PR wheels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cargo xtask download-python-wheels wheel-artifacts \
+            --expected-version "$EXPECTED_VERSION" \
+            --artifact-id "$ARTIFACT_ID" --sha256 "$ARTIFACT_SHA256"
       - name: Verify published files and stage missing wheels
         id: stage
         run: |

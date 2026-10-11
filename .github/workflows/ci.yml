@@ -22,7 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      tooling: ${{ steps.filter.outputs.tooling }}
       python: ${{ steps.filter.outputs.python }}
+      cli: ${{ steps.filter.outputs.cli }}
       selective_read: ${{ steps.filter.outputs.selective_read }}
       package_version: ${{ steps.package-version.outputs.version }}
       release_pr: >-
@@ -157,24 +159,6 @@ jobs:
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
-      - name: Install release-plz for release planning checks
-        if: matrix.task == 'Lints and Docs'
-        uses: taiki-e/install-action@v2
-        with:
-          tool: release-plz@0.3.171
-      - name: Check CI workflows
-        if: matrix.task == 'Lints and Docs'
-        uses: docker://rhysd/actionlint:1.7.12
-        with:
-          args: .github/workflows/ci.yml .github/workflows/cli-build.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml
-      - name: Test CI workflows, Python, and cache tasks
-        if: matrix.task == 'Lints and Docs'
-        run: |
-          cargo clippy --locked --package xtask --all-targets -- -D warnings
-          cargo test --locked --package xtask --bin xtask cache_tests::
-          cargo test --locked --package xtask \
-            --test ci --test cli_workflow --test python_release --test python_upload --test python_wheels \
-            --test python_workflow --test release_plz -- --include-ignored
       - if: matrix.task == 'Lints and Docs'
         run: python3 -m unittest discover -s benches -p test_scan_scheduling.py
       - if: matrix.task == 'Lints and Docs'
@@ -187,6 +171,50 @@ jobs:
         run: git diff --check
       - if: matrix.task == 'Package'
         run: cargo package --locked
+
+  tooling-checks:
+    name: CI Tools
+    needs: changes
+    if: needs.changes.outputs.tooling == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - name: Read Rust version
+        id: rust-version
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
+          components: clippy, rustfmt
+      - name: Cache Cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci
+          cache-targets: false
+          save-if: false
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Install release-plz for release planning checks
+        uses: taiki-e/install-action@v2
+        with:
+          tool: release-plz@0.3.171
+      - name: Check CI workflows
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: .github/workflows/ci.yml .github/workflows/cli-build.yml .github/workflows/cli-images.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml .github/workflows/benchmark-fixtures.yml
+      - run: cargo fmt --package xtask -- --check
+      - name: Test CI workflows, Python, and cache tasks
+        run: |
+          cargo clippy --locked --package xtask --all-targets -- -D warnings
+          cargo test --locked --package xtask --bin xtask cache_tests::
+          cargo test --locked --package xtask \
+            --test ci --test cli_workflow --test cli_images_workflow --test images --test python_release --test python_upload --test python_wheels \
+            --test python_wheel_reuse --test python_workflow --test release_plz -- --include-ignored
+      - run: git diff --check
 
   python-package:
     name: Python Package
@@ -208,7 +236,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
-          components: clippy
+          components: clippy, rustfmt
+      - run: cargo fmt --package delta-arrow-reader-python -- --check
       - name: Cache Cargo registry
         uses: Swatinem/rust-cache@v2
         with:
@@ -229,88 +258,90 @@ jobs:
           maturin develop --locked
           python -I -m unittest discover -s crates/delta-arrow-reader-python/tests
 
-  release-cli-approval:
-    name: Approve release CLI checks
+  cli-checks:
+    name: CLI Source
+    needs: changes
+    if: needs.changes.outputs.cli == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - name: Read Rust version
+        id: rust-version
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
+          components: clippy, rustfmt
+      - run: cargo fmt --package delta-arrow-reader-cli -- --check
+      - name: Cache Cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci
+          cache-targets: false
+          save-if: false
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+      - run: cargo clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings
+      - run: cargo test --locked -p delta-arrow-reader-cli
+
+  release-approval:
+    name: Approve release checks
     needs: changes
     if: needs.changes.outputs.release_pr == 'true'
     runs-on: ubuntu-latest
-    environment: cli-release-checks
+    environment: release-checks
     steps:
-      - run: echo "CLI release checks approved for this PR revision"
+      - run: echo "Release checks approved for this PR revision"
+
+  release-wheels:
+    name: Release Python Wheels
+    needs: [changes, release-approval]
+    if: needs.changes.outputs.release_pr == 'true'
+    uses: ./.github/workflows/pypi-build.yml
+    with:
+      source-ref: ${{ github.sha }}
+      expected-version: ${{ needs.changes.outputs.package_version }}
 
   release-cli:
     name: Release CLI binaries
-    needs: [changes, release-cli-approval]
+    needs: [changes, release-approval]
     if: needs.changes.outputs.release_pr == 'true'
     uses: ./.github/workflows/cli-build.yml
     with:
       source-ref: ${{ github.sha }}
       expected-version: ${{ needs.changes.outputs.package_version }}
 
+  release-cli-images:
+    name: Release CLI images and Go consumer
+    needs: [changes, release-approval, release-cli]
+    if: >-
+      needs.changes.outputs.release_pr == 'true' &&
+      needs.release-approval.result == 'success' &&
+      needs.release-cli.result == 'success' &&
+      needs.release-cli.outputs.validated == 'true'
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/cli-images.yml
+    with:
+      binary-artifact-id: ${{ needs.release-cli.outputs.artifact-id }}
+      source-ref: ${{ needs.release-cli.outputs.source-commit }}
+      expected-version: ${{ needs.release-cli.outputs.version }}
+      rust-toolchain: ${{ needs.release-cli.outputs.rust-toolchain }}
+
   selective-read-fixtures:
     name: Public Fixture Smoke
     needs: changes
     if: needs.changes.outputs.selective_read == 'true'
-    runs-on: ubuntu-latest
-    env:
-      CARGO_TARGET_DIR: ${{ github.workspace }}/target/selective-read
-      RUSTFLAGS: -C target-cpu=x86-64
-      PYTHONDONTWRITEBYTECODE: '1'
-    defaults:
-      run:
-        working-directory: benches/selective_read
-
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: '1.98.1'
-          components: clippy, rustfmt
-      - name: Cache Cargo registry
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: benches/selective_read -> ../../target/selective-read
-          shared-key: selective-read-fixtures
-          cache-targets: false
-          save-if: false
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.10
-      - run: cargo fmt -- --check
-      - run: cargo clippy --release --locked --all-targets -j8 -- -D warnings
-      - run: cargo test --release --locked -j8
-      - name: Check fixture generator limits and executable replacement
-        run: |
-          cargo build --release --locked -j8
-          python3 - <<'PY'
-          import hashlib, json, os, shutil, subprocess
-          from pathlib import Path
-
-          probe = Path(os.environ["RUNNER_TEMP"]) / "fixture-cli"
-          shutil.copyfile(Path(os.environ["CARGO_TARGET_DIR"]) / "release/selective-read-fixtures", probe)
-          probe.chmod(0o755)
-          with probe.open("rb") as source:
-              expected_hash = hashlib.file_digest(source, "sha256").hexdigest()
-          output = probe.with_name("selective-read-smoke")
-          process = subprocess.Popen([str(probe), "--profile", "smoke", "--sort-memory-mib", "16", "--output", str(output)])
-          probe.unlink()  # Simulate a rebuild removing the running executable's old pathname.
-          assert process.wait() == 0
-          manifest = json.loads((output / "manifest.json").read_text())
-          assert manifest["status"] == "complete"
-          assert manifest["generator"]["executable_sha256"] == expected_hash
-          PY
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.14.6'
-      - name: Validate independent oracle and public query results
-        env:
-          SELECTIVE_READ_FIXTURES: ${{ runner.temp }}/selective-read-smoke
-        run: |
-          python -m pip install --require-hashes -r oracle-requirements.txt
-          python -m unittest -v test_oracle
+    uses: ./.github/workflows/benchmark-fixtures.yml
 
   ci:
     name: CI
-    needs: [changes, feature-tests, platform-tests, checks, python-package, release-cli-approval, release-cli, selective-read-fixtures]
+    needs: [changes, feature-tests, platform-tests, checks, tooling-checks, python-package, cli-checks, release-approval, release-wheels, release-cli, release-cli-images, selective-read-fixtures]
     if: always()
     runs-on: ubuntu-latest
 
@@ -322,6 +353,12 @@ jobs:
             exit 1
           fi
 
+          if [ "${{ needs.changes.outputs.tooling }}" = "true" ] && \
+             [ "${{ needs.tooling-checks.result }}" != "success" ]; then
+            echo "CI Tools did not pass: ${{ needs.tooling-checks.result }}"
+            exit 1
+          fi
+
           if [ "${{ needs.changes.outputs.python }}" = "true" ]; then
             if [ "${{ needs.python-package.result }}" != "success" ]; then
               echo "Python Package did not pass: ${{ needs.python-package.result }}"
@@ -329,13 +366,45 @@ jobs:
             fi
           fi
 
+          if [ "${{ needs.changes.outputs.cli }}" = "true" ] && \
+             [ "${{ needs.cli-checks.result }}" != "success" ]; then
+            echo "CLI Source did not pass: ${{ needs.cli-checks.result }}"
+            exit 1
+          fi
+
           if [ "${{ needs.changes.outputs.release_pr }}" = "true" ]; then
-            if [ "${{ needs.release-cli-approval.result }}" != "success" ] || \
-               [ "${{ needs.release-cli.result }}" != "success" ] || \
-               [ "${{ needs.release-cli.outputs.validated }}" != "true" ]; then
-              echo "Release CLI approval or artifact validation did not pass"
+            if [ "${{ needs.release-approval.result }}" != "success" ]; then
+              echo "Release approval did not pass"
               exit 1
             fi
+            if [ "${{ needs.release-cli.result }}" != "success" ] || \
+               [ "${{ needs.release-cli.outputs.validated }}" != "true" ]; then
+              echo "Release CLI artifact validation did not pass"
+              exit 1
+            fi
+            if [ "${{ needs.release-cli-images.result }}" != "success" ] || \
+               [ "${{ needs.release-cli-images.outputs.validated }}" != "true" ] || \
+               [ -z "${{ needs.release-cli-images.outputs.artifact-id }}" ] || \
+               [ -z "${{ needs.release-cli-images.outputs.artifact-name }}" ] || \
+               [ -z "${{ needs.release-cli-images.outputs.artifact-url }}" ] || \
+               [ -z "${{ needs.release-cli-images.outputs.source-commit }}" ] || \
+               [ "${{ needs.release-cli-images.outputs.source-commit }}" != "${{ needs.release-cli.outputs.source-commit }}" ] || \
+               [ -z "${{ needs.release-cli-images.outputs.version }}" ] || \
+               [ "${{ needs.release-cli-images.outputs.version }}" != "${{ needs.release-cli.outputs.version }}" ]; then
+              echo "Release CLI image validation or artifact handoff did not pass"
+              exit 1
+            fi
+            if [ "${{ needs.release-wheels.result }}" != "success" ] || \
+               [ "${{ needs.release-wheels.outputs.validated }}" != "true" ]; then
+              echo "Release wheel artifact validation did not pass"
+              exit 1
+            fi
+          fi
+
+          if [ "${{ needs.changes.outputs.selective_read }}" = "true" ] && \
+             [ "${{ needs.selective-read-fixtures.result }}" != "success" ]; then
+            echo "Public Fixture Smoke did not pass: ${{ needs.selective-read-fixtures.result }}"
+            exit 1
           fi
 
           if [ "${{ needs.changes.outputs.code }}" != "true" ]; then
@@ -355,11 +424,5 @@ jobs:
 
           if [ "${{ needs.checks.result }}" != "success" ]; then
             echo "Checks did not pass: ${{ needs.checks.result }}"
-            exit 1
-          fi
-
-          if [ "${{ needs.changes.outputs.selective_read }}" = "true" ] && \
-             [ "${{ needs.selective-read-fixtures.result }}" != "success" ]; then
-            echo "Public Fixture Smoke did not pass: ${{ needs.selective-read-fixtures.result }}"
             exit 1
           fi
