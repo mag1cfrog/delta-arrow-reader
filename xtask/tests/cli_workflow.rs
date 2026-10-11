@@ -50,10 +50,10 @@ fn release_cli_build_waits_for_approval_and_blocks_the_ci_summary() {
         .unwrap();
     assert!(version["if"].is_null());
 
-    let approval = &jobs["release-cli-approval"];
-    assert_eq!(approval["environment"], "cli-release-checks");
+    let approval = &jobs["release-approval"];
+    assert_eq!(approval["environment"], "release-checks");
     assert_eq!(approval["needs"], "changes");
-    for name in ["release-cli-approval", "release-cli"] {
+    for name in ["release-approval", "release-cli"] {
         assert_eq!(
             jobs[name]["if"],
             "needs.changes.outputs.release_pr == 'true'"
@@ -68,7 +68,7 @@ fn release_cli_build_waits_for_approval_and_blocks_the_ci_summary() {
     assert_eq!(jobs["ci"]["if"], "always()");
     let build = &jobs["release-cli"];
     assert_eq!(build["uses"], "./.github/workflows/cli-build.yml");
-    assert_eq!(build["needs"], json!(["changes", "release-cli-approval"]));
+    assert_eq!(build["needs"], json!(["changes", "release-approval"]));
     assert_eq!(
         build["with"],
         json!({
@@ -105,7 +105,7 @@ fn ci_requires_approved_and_validated_cli_artifacts_only_for_release_prs()
                             ("changes.outputs.python", "false"),
                             ("changes.outputs.selective_read", "false"),
                             ("changes.outputs.release_pr", release_pr),
-                            ("release-cli-approval.result", approval),
+                            ("release-approval.result", approval),
                             ("release-cli.result", build),
                             ("release-cli.outputs.validated", validated),
                         ];
