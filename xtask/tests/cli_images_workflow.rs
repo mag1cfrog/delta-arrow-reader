@@ -388,6 +388,8 @@ fn required_ci_rejects_missing_or_failed_image_handoffs_only_on_release_prs() ->
             let valid = BTreeMap::from([
                 ("changes.outputs.code", code),
                 ("changes.outputs.python", "false"),
+                ("changes.outputs.cli", "false"),
+                ("changes.outputs.tooling", "false"),
                 ("changes.outputs.selective_read", "false"),
                 ("changes.outputs.release_pr", release),
                 ("changes.outputs.pr_head_sha", "pr-head"),
@@ -476,28 +478,35 @@ fn required_ci_rejects_missing_or_failed_image_handoffs_only_on_release_prs() ->
 fn ordinary_ci_only_adds_small_image_workflow_checks() {
     let filters: Value =
         serde_json::from_str(include_str!("../../.github/path-filters.json")).unwrap();
-    for path in [".github/workflows/cli-images.yml", "examples/go-cli/**"] {
-        assert!(filters["code"].as_array().unwrap().contains(&json!(path)));
+    for path in [
+        ".github/workflows/cli-images.yml",
+        "crates/delta-arrow-reader-cli/Dockerfile",
+        "examples/go-cli/**",
+    ] {
+        assert!(
+            filters["tooling"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(path))
+        );
+        assert!(!filters["code"].as_array().unwrap().contains(&json!(path)));
         assert!(!filters["python"].as_array().unwrap().contains(&json!(path)));
     }
     let ci = ci_workflow();
-    let checks = &ci["jobs"]["checks"];
+    let checks = &ci["jobs"]["tooling-checks"];
     assert!(
         named_step(checks, "Check CI workflows")["with"]["args"]
             .as_str()
             .unwrap()
             .contains(".github/workflows/cli-images.yml")
     );
-    assert!(
-        named_step(checks, "Test CI workflows, Python, and cache tasks")["run"]
-            .as_str()
-            .unwrap()
-            .contains("--test cli_images_workflow")
-    );
     let script = named_step(checks, "Test CI workflows, Python, and cache tasks")["run"]
         .as_str()
         .unwrap()
         .replace("\\\n", " ");
+    for target in ["--test cli_images_workflow", "--test images"] {
+        assert!(script.contains(target), "missing image check: {target}");
+    }
     let planning: Vec<_> = script
         .lines()
         .filter(|line| line.contains("--test cli_release_plan"))

@@ -42,8 +42,8 @@ use super::{
     },
 };
 use crate::{
-    DeltaComparison, DeltaPredicate, DeltaScalar, DeltaTable, DeltaTableBuilder,
-    delta::kernel::kernel_pruning_predicate,
+    DeltaComparison, DeltaPredicate, DeltaScalar, DeltaScanExecutionOptions, DeltaTable,
+    DeltaTableBuilder, delta::kernel::kernel_pruning_predicate,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -243,7 +243,12 @@ impl Fixture {
                 format!("{}\n", metadata_action(target, false, Some(source))),
             )?;
         }
+        // Buffer these tiny fixtures to avoid repeated filesystem reads during each scan.
         let table = DeltaTableBuilder::new(root.path().to_string_lossy())
+            .with_execution_options(
+                DeltaScanExecutionOptions::new()
+                    .with_parquet_full_file_read_threshold_bytes(Some(self.bytes.len()))?,
+            )
             .load_table()
             .await?;
         Ok((root, table))
@@ -629,6 +634,7 @@ async fn floating_statistics_public_streaming_matches_unfiltered_arrow() -> Test
             .collect::<Vec<_>>()
             .join("\n")
     );
+    assert_eq!(checked, 3_024, "streaming predicate coverage");
     eprintln!("floating statistics: {checked} public streaming scans");
     Ok(())
 }
@@ -698,6 +704,10 @@ async fn floating_statistics_public_datafusion_matches_arrow_with_both_view_sett
                 let provider = Arc::new(DeltaTableProvider::try_new(
                     table.clone(),
                     ScanOptions {
+                        execution_options: DeltaScanExecutionOptions::new()
+                            .with_parquet_full_file_read_threshold_bytes(Some(
+                                fixture.bytes.len(),
+                            ))?,
                         use_arrow_view_types,
                         ..Default::default()
                     },
@@ -732,6 +742,7 @@ async fn floating_statistics_public_datafusion_matches_arrow_with_both_view_sett
             .collect::<Vec<_>>()
             .join("\n")
     );
+    assert_eq!(checked, 6_048, "DataFusion predicate coverage");
     eprintln!("floating statistics: {checked} public DataFusion scans");
     Ok(())
 }

@@ -7,14 +7,17 @@ on:
     paths:
       - ".github/workflows/cache-warm.yml"
       - ".github/workflows/ci.yml"
+      - ".github/workflows/benchmark-fixtures.yml"
       - ".github/workflows/pypi-build.yml"
       - ".github/path-filters.json"
       - "xtask/**"
       - ".cargo/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "clippy.toml"
       - "crates/*/Cargo.toml"
       - "crates/delta-arrow-reader-python/**"
+      - "crates/delta-arrow-reader-cli/**"
       - "pyproject.toml"
       - "src/**"
       - "tests/**"
@@ -44,7 +47,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
   core:
-    name: Warm core test caches / ${{ matrix.name }}
+    name: Warm core CI caches / ${{ matrix.name }}
     needs: prepare
     runs-on: ${{ matrix.os }}
     env:
@@ -80,6 +83,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
+          components: ${{ runner.os == 'Linux' && 'clippy' || '' }}
       - name: Cache Cargo registry
         uses: Swatinem/rust-cache@v2
         with:
@@ -95,13 +99,20 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.10"
-      - name: Warm test caches
+      - name: Warm core caches
         shell: bash
-        run: &warm-test-caches |
+        run: &warm-core-caches |
           cargo test --locked --all-features --no-run
           cargo test --locked --no-run
           if [ "$RUNNER_OS" = "Linux" ]; then
             cargo test --locked -p delta-arrow-reader-python --no-run
+            cargo test --locked -p delta-arrow-reader-cli --no-run
+            cargo test --locked --package xtask --bin xtask --no-run
+            cargo clippy --locked --all-targets --all-features -- -D warnings
+            cargo clippy --locked -p delta-arrow-reader-python --all-targets -- -D warnings
+            cargo clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings
+            cargo clippy --locked --package xtask --all-targets -- -D warnings
+            RUSTDOCFLAGS="-D warnings" cargo doc --locked --all-features --no-deps
           fi
       - name: Check sccache writes
         id: cache-writes
@@ -118,10 +129,10 @@ jobs:
           sccache --stop-server
           cargo clean --target-dir target
           sleep 60
-      - name: Retry test cache writes
+      - name: Retry core cache writes
         if: steps.cache-writes.outcome == 'failure'
         shell: bash
-        run: *warm-test-caches
+        run: *warm-core-caches
       - name: Check retried core cache writes
         if: steps.cache-writes.outcome == 'failure'
         run: cargo xtask check-cache-writes
@@ -143,9 +154,70 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
 
+  selective-read-fixtures:
+    name: Warm benchmark fixture caches
+    needs: core
+    runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_GHA_RW_MODE: READ_WRITE
+      SCCACHE_LOG: sccache::server=debug
+      SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
+      RUSTC_WRAPPER: sccache
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/selective-read
+      RUSTFLAGS: -C target-cpu=x86-64
+    defaults:
+      run:
+        working-directory: benches/selective_read
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+          components: clippy
+      - name: Cache Cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: benches/selective_read -> ../../target/selective-read
+          shared-key: selective-read-fixtures
+          cache-targets: false
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Warm benchmark caches
+        run: &warm-benchmark-caches |
+          cargo clippy --release --locked --all-targets -j8 -- -D warnings
+          cargo test --release --locked -j8 --no-run
+      - name: Check benchmark cache writes
+        id: cache-writes
+        continue-on-error: true
+        working-directory: .
+        run: cargo xtask check-cache-writes
+        env:
+          RUSTC_WRAPPER: ""
+          CARGO_TARGET_DIR: ${{ runner.temp }}/benchmark-cache-check
+      - name: Prepare benchmark cache write retry
+        if: steps.cache-writes.outcome == 'failure'
+        env:
+          RUSTC_WRAPPER: ""
+        run: |
+          sccache --stop-server
+          cargo clean --target-dir "$CARGO_TARGET_DIR"
+          sleep 60
+      - name: Retry benchmark cache writes
+        if: steps.cache-writes.outcome == 'failure'
+        run: *warm-benchmark-caches
+      - name: Check retried benchmark cache writes
+        if: steps.cache-writes.outcome == 'failure'
+        working-directory: .
+        run: cargo xtask check-cache-writes
+        env:
+          RUSTC_WRAPPER: ""
+          CARGO_TARGET_DIR: ${{ runner.temp }}/benchmark-cache-check
+
   wheels:
     name: Warm Python wheel caches
-    needs: [prepare, prune]
+    needs: [prepare, prune, selective-read-fixtures]
     if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/pypi-build.yml
     with:
