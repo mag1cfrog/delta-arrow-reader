@@ -1182,6 +1182,50 @@ mod tests {
             "a permanent failure must not retry on every query"
         );
 
+        let cancelled = GatedObjectStore::new(Arc::new(memory.clone()), GateRequest::Range(1));
+        let cancelled_budget: &'static tokio::sync::Semaphore = Box::leak(Box::new(
+            tokio::sync::Semaphore::new(super::range_planning::MAX_SHARED_RANGE_READS),
+        ));
+        let cancelled_state = Arc::new(ParquetRangeReadState::default());
+        cancelled_state
+            .defer_network_warmup(NetworkWarmupPlan {
+                object_store: cancelled.clone(),
+                partial_read_store: cancelled.clone(),
+                files: vec![(Path::from("data.parquet"), size as u64)],
+                snapshot_version: 1,
+                max_duration: Duration::from_secs(2),
+                range_read_budget: cancelled_budget,
+            })
+            .await;
+        let recovery = tokio::spawn({
+            let state = Arc::clone(&cancelled_state);
+            async move {
+                state
+                    .recover_network_warmup(DeltaScanExecutionOptions::default())
+                    .await;
+            }
+        });
+        tokio::time::timeout(Duration::from_secs(5), cancelled.wait_started()).await?;
+        recovery.abort();
+        let cancellation = recovery
+            .await
+            .expect_err("aborted recovery unexpectedly completed");
+        assert!(cancellation.is_cancelled());
+        assert!(cancelled.was_cancelled());
+        assert_eq!(
+            cancelled_budget.available_permits(),
+            super::range_planning::MAX_SHARED_RANGE_READS
+        );
+        let requests_after_cancellation = cancelled.range_calls.load(Ordering::Acquire);
+        cancelled_state
+            .recover_network_warmup(DeltaScanExecutionOptions::default())
+            .await;
+        assert_eq!(
+            cancelled.range_calls.load(Ordering::Acquire),
+            requests_after_cancellation,
+            "a cancelled recovery must not retry on the next query"
+        );
+
         let store = MeteredParquetObjectStore::new(
             Arc::new(memory),
             metrics(),

@@ -406,6 +406,7 @@ impl ParquetRangeReadState {
             && self
                 .recovery
                 .try_lock()
+                // A locked state may be publishing another query's recovered estimator.
                 .map_or(true, |pending| pending.is_some())
     }
 
