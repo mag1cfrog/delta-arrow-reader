@@ -1,16 +1,21 @@
 """Check the extracted archive bytes and run the existing CLI acceptance tests."""
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
 
 import pyarrow as pa
-from build import REPOSITORY, build_identity
-from check_binary import RUST_TARGETS, check_binary, file_sha256, require_regular_file
 
+REPOSITORY = Path(__file__).resolve().parents[3]
 MEMBER_MODES = {"dar": 0o755, "LICENSE": 0o644, "NOTICE": 0o644}
+
+
+def file_sha256(path):
+    with path.open("rb") as source:
+        return hashlib.file_digest(source, "sha256").hexdigest()
 
 
 def verify_platform(xtask, directory, identity, architecture):
@@ -40,13 +45,17 @@ def run_acceptance(directory, extracted, smoke_output, identity, architecture, x
     if extracted.resolve().is_relative_to(REPOSITORY):
         raise ValueError("the archive must be extracted outside the source checkout")
     for name, mode in MEMBER_MODES.items():
-        require_regular_file(extracted / name)
+        member = extracted / name
+        if member.is_symlink() or not member.is_file():
+            raise ValueError(f"expected a regular file: {member}")
         if (extracted / name).stat().st_mode & 0o7777 != mode:
             raise ValueError(f"unexpected extracted permissions: {name}")
     binary = (extracted / "dar").resolve()
-    metadata = check_binary(
-        binary, architecture, identity["version"], target["dar_sha256"]
-    )
+    metadata = json.loads(subprocess.check_output(
+        [str(xtask), "cli", "check-binary", str(binary),
+         "--architecture", architecture, "--expected-version", identity["version"],
+         "--expected-sha256", target["dar_sha256"]], text=True,
+    ))
     if metadata["runtime_dependencies"] != target["runtime_dependencies"]:
         raise ValueError(
             "manifest runtime dependencies differ from the executed binary"
@@ -94,12 +103,16 @@ def main():
     parser.add_argument("--extracted", type=Path, required=True)
     parser.add_argument("--smoke-output", type=Path, required=True)
     parser.add_argument("--xtask", type=Path, required=True)
-    parser.add_argument("--architecture", choices=RUST_TARGETS, required=True)
+    parser.add_argument("--architecture", choices=("amd64", "arm64"), required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--rust-toolchain", required=True)
     args = parser.parse_args()
-    identity = build_identity(args.version, args.source_commit, args.rust_toolchain)
+    identity = {
+        "version": args.version,
+        "source_commit": args.source_commit,
+        "rust_toolchain": args.rust_toolchain,
+    }
     run_acceptance(
         args.directory, args.extracted, args.smoke_output, identity, args.architecture,
         args.xtask,

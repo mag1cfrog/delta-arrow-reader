@@ -255,37 +255,3 @@ fn does_not_overwrite_an_existing_output() -> TestResult {
     assert_eq!(fs::read_to_string(path)?, "Previously validated notices\n");
     Ok(())
 }
-
-#[test]
-fn child_commands_use_build_toolchain_and_baseline_flags() {
-    for key in [
-        "RUSTFLAGS",
-        "CARGO_ENCODED_RUSTFLAGS",
-        "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS",
-        "CFLAGS_aarch64_unknown_linux_gnu",
-        "RUSTC",
-        "RUSTC_WRAPPER",
-        "CARGO_PROFILE_RELEASE_OPT_LEVEL",
-        "CARGO_BUILD_TARGET",
-        "RUSTUP_TOOLCHAIN",
-        "GITHUB_TOKEN",
-    ] {
-        assert!(!keep_build_variable(OsStr::new(key)), "must discard {key}");
-    }
-    for (architecture, cpu) in [
-        (Architecture::Amd64, "x86-64"),
-        (Architecture::Arm64, "generic"),
-    ] {
-        let command = rustup_command("1.94.1", architecture, Path::new("."));
-        let environment: BTreeMap<_, _> = command.get_envs().collect();
-        assert_eq!(
-            environment[OsStr::new("RUSTUP_TOOLCHAIN")],
-            Some(OsStr::new("1.94.1"))
-        );
-        assert_eq!(
-            environment[OsStr::new("RUSTFLAGS")],
-            Some(OsStr::new(&format!("-Ctarget-cpu={cpu}")))
-        );
-        assert_eq!(command.get_args().collect::<Vec<_>>(), ["run", "1.94.1"]);
-    }
-}

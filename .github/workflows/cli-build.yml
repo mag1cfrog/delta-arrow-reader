@@ -62,69 +62,34 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
-      source-commit: ${{ steps.source.outputs.source-commit }}
-      version: ${{ steps.source.outputs.version }}
-      rust-toolchain: ${{ steps.compiler.outputs.rust-toolchain }}
-      image: ${{ steps.source.outputs.image }}
-      about-version: ${{ steps.source.outputs.about-version }}
+      source-commit: ${{ steps.prepare.outputs.source-commit }}
+      version: ${{ steps.prepare.outputs.version }}
+      rust-toolchain: ${{ steps.prepare.outputs.rust-toolchain }}
+      image: ${{ steps.prepare.outputs.image }}
+      about-version: ${{ steps.prepare.outputs.about-version }}
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.source-ref }}
           persist-credentials: false
-      - name: Validate source SHA and workspace version
-        id: source
+      - name: Read Rust version
+        id: rust-version
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
+      - name: Validate source and resolve exact build identity
+        id: prepare
         env:
           SOURCE_REF: ${{ inputs.source-ref }}
           EXPECTED_VERSION: ${{ inputs.expected-version }}
-          PYTHONPATH: crates/delta-arrow-reader-cli/release
         run: |
-          python3 - <<'PY'
-          import os, re, tomllib
-          from build import DEBIAN_IMAGE, check_source
-
-          source = os.environ['SOURCE_REF']
-          check_source(source)
-          with open('Cargo.toml', 'rb') as manifest:
-              config = tomllib.load(manifest)
-          version = config['workspace']['package']['version']
-          rust = config['package']['rust-version']
-          about_version = config['workspace']['metadata']['cli-release']['cargo-about-version']
-          if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
-              raise ValueError('expected a stable workspace version')
-          if not re.fullmatch(r'[0-9]+\.[0-9]+(?:\.[0-9]+)?', rust):
-              raise ValueError('expected a numeric Rust toolchain version')
-          expected = os.environ['EXPECTED_VERSION']
-          if expected and version != expected:
-              raise ValueError(f'expected workspace version {expected!r}, got {version!r}')
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              for key, value in {'source-commit': source, 'version': version,
-                                 'rust-version': rust, 'image': DEBIAN_IMAGE,
-                                 'about-version': about_version}.items():
-                  print(f'{key}={value}', file=output)
-          PY
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ steps.source.outputs.rust-version }}
-      - name: Resolve exact Rust release
-        id: compiler
-        env:
-          SOURCE_REF: ${{ steps.source.outputs.source-commit }}
-          VERSION: ${{ steps.source.outputs.version }}
-          RUST_VERSION: ${{ steps.source.outputs.rust-version }}
-          PYTHONPATH: crates/delta-arrow-reader-cli/release
-        run: |
-          python3 - <<'PY'
-          import os, subprocess
-          from build import build_identity
-
-          compiler = subprocess.check_output(
-              ['rustup', 'run', os.environ['RUST_VERSION'], 'rustc', '-vV'], text=True)
-          fields = dict(line.split(': ', 1) for line in compiler.splitlines() if ': ' in line)
-          identity = build_identity(os.environ['VERSION'], os.environ['SOURCE_REF'], fields['release'])
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              print(f"rust-toolchain={identity['rust_toolchain']}", file=output)
-          PY
+          cargo xtask cli prepare --source-commit "$SOURCE_REF" \
+            --expected-version "$EXPECTED_VERSION" \
+            | jq -r 'to_entries[] | "\(.key)=\(.value)"' >> "$GITHUB_OUTPUT"
 
   build:
     name: Linux ${{ matrix.architecture }}
@@ -173,14 +138,18 @@ jobs:
             "$CLI_IMAGE" bash -euo pipefail -c '
               apt-get update
               apt-get install -y --no-install-recommends \
-                build-essential binutils ca-certificates curl git pkg-config python3
+                build-essential binutils ca-certificates curl git pkg-config
               git config --global --add safe.directory /source
               rustup run "$CLI_RUST_TOOLCHAIN" cargo install --locked --features cli \
                 --version "$CLI_ABOUT_VERSION" cargo-about
               export PATH="/cargo/bin:$PATH"
-              python3 crates/delta-arrow-reader-cli/release/build_archive.py \
+              rustup run "$CLI_RUST_TOOLCHAIN" cargo test --locked --package xtask \
+                --target-dir /build/target native_build_preserves_metadata_and_rejects_source_changes \
+                -- --ignored
+              rustup run "$CLI_RUST_TOOLCHAIN" cargo run --locked --package xtask \
+                --target-dir /build/target -- cli build-archive \
                 --source-commit "$CLI_SOURCE_COMMIT" --architecture "$CLI_ARCHITECTURE" \
-                --expected-version "$CLI_VERSION" --expected-rust-toolchain "$CLI_RUST_TOOLCHAIN" \
+                --version "$CLI_VERSION" --rust-toolchain "$CLI_RUST_TOOLCHAIN" \
                 --target-dir /build/target --output /build/artifacts
             '
       - name: Validate and extract the archive outside the checkout

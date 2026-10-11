@@ -1,10 +1,9 @@
 # CLI release tools
 
-These tools build and validate the Linux CLI archives. Archive operations and
-dependency notice collection run through `cargo xtask`, a Cargo alias for the
-repository's private Rust maintenance crate. The binary build helpers require
-Python 3.11 or newer and use the standard library. Runtime acceptance tests also
-use PyArrow.
+These tools build and validate the Linux CLI archives. Builds, ELF checks,
+archive operations, and dependency notice collection run through `cargo xtask`,
+a Cargo alias for the repository's private Rust maintenance crate. Runtime
+acceptance tests use Python 3.11 or newer and PyArrow.
 
 ## Run the CI build
 
@@ -59,24 +58,35 @@ must consume its existing archive bytes without rebuilding or repacking them.
 
 ## Build on Debian 12
 
-`build.py` builds one architecture from an explicit, clean source commit. Use the
-Debian 12 image pinned by digest in `build.py`, on the matching architecture. The
-script checks the OS, glibc version, and Rust compiler host before compiling. It
-reads the workspace version and Rust toolchain from `Cargo.toml`, uses the locked
+`cargo xtask cli build` builds one architecture from an explicit, clean source
+commit. Use the Debian 12 image returned by `cargo xtask cli prepare`, on the
+matching architecture. The builder checks the OS, glibc version, and Rust compiler
+host before compiling. It reads the workspace version and Rust toolchain from
+`Cargo.toml`, uses the locked
 release build, and supplies baseline CPU flags for Rust and C/C++ dependencies.
 Compiler flags and wrapper environment variables supplied by the caller are
 excluded from the build environment.
 
+`prepare` requires the workspace's declared Rust toolchain to be installed. It
+returns the source SHA, workspace version, exact installed Rust release, pinned
+Debian image, and cargo-about version as JSON. Add `--expected-version X.Y.Z` to
+require a specific workspace version. `build`, `build-archive`, and `check-binary`
+also write their validated metadata as JSON; progress messages go to stderr.
+
 For a local amd64 build, use a normal Git clone with the requested commit checked
-out and no modified or untracked files. A Git worktree also needs its shared Git
-directory mounted inside the container. This example uses rootless Podman:
+out and no modified or untracked files. Install the workspace's Rust toolchain
+and `jq` on the host. A Git worktree also needs its shared Git directory mounted
+inside the container. This example uses rootless Podman:
 
 ```sh
 cli_source_commit=FULL_SOURCE_COMMIT
-cli_image=$(python3 -c 'import sys; sys.path.insert(0, "crates/delta-arrow-reader-cli/release"); from build import DEBIAN_IMAGE; print(DEBIAN_IMAGE)')
+cli_build_info=$(cargo xtask cli prepare --source-commit "$cli_source_commit")
+cli_image=$(printf '%s\n' "$cli_build_info" | jq -r '.image')
+cli_rust_toolchain=$(printf '%s\n' "$cli_build_info" | jq -r '.["rust-toolchain"]')
 podman run --rm -it --platform linux/amd64 \
   --volume "$PWD:/source:z" --workdir /source \
-  --env CLI_SOURCE_COMMIT="$cli_source_commit" "$cli_image" bash
+  --env CLI_SOURCE_COMMIT="$cli_source_commit" \
+  --env CLI_RUST_TOOLCHAIN="$cli_rust_toolchain" "$cli_image" bash
 ```
 
 Inside the container, install the build prerequisites and the workspace's Rust
@@ -86,13 +96,12 @@ toolchain using [rustup](https://rust-lang.github.io/rustup/installation/index.h
 set -eu
 apt-get update
 apt-get install -y --no-install-recommends \
-  build-essential binutils ca-certificates curl git pkg-config python3
-cli_rust_toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["rust-version"])')
+  build-essential binutils ca-certificates curl git pkg-config
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh
-sh /tmp/rustup-init.sh -y --profile minimal --default-toolchain "$cli_rust_toolchain"
+sh /tmp/rustup-init.sh -y --profile minimal --default-toolchain "$CLI_RUST_TOOLCHAIN"
 . "$HOME/.cargo/env"
-python3 crates/delta-arrow-reader-cli/release/build.py \
-  --source-commit "$CLI_SOURCE_COMMIT" --architecture amd64
+cargo xtask cli build --source-commit "$CLI_SOURCE_COMMIT" \
+  --architecture amd64 --rust-toolchain "$CLI_RUST_TOOLCHAIN"
 ```
 
 For arm64, use `--platform linux/arm64` and `--architecture arm64`, with a native
@@ -119,13 +128,12 @@ inspection, and scan checks there before installing test instrumentation. The
 binary is dynamically linked to glibc and libgcc; this does not support Alpine
 or a `scratch` image.
 
-For an explicit ELF and version check, install `binutils` and `python3` in the
-test container and mount the source checkout read-only at `/checks`. Keep `dar`
-outside that checkout and pass the version and hash from the earlier validated
-build:
+For an explicit ELF and version check, install `binutils` in the test container
+and mount the Debian-built xtask executable read-only at `/tools/xtask`.
+Pass the version and hash from the earlier validated build:
 
 ```sh
-python3 /checks/crates/delta-arrow-reader-cli/release/check_binary.py /path/to/dar \
+/tools/xtask cli check-binary /path/to/dar \
   --architecture amd64 \
   --expected-version "$version" --expected-sha256 "$dar_sha256"
 ```
@@ -146,20 +154,21 @@ python3 crates/delta-arrow-reader-cli/tests/scan.py /path/to/dar
 ## Build and test a complete platform archive locally
 
 After installing the build prerequisites and cargo-about described here, run
-`build_archive.py` from the clean source checkout inside the pinned build
-container. This compiles the CLI, checks its identity and ELF metadata, collects
+`cargo xtask cli build-archive` from the clean source checkout inside the pinned
+build container. This compiles the CLI, checks its identity and ELF metadata, collects
 notices, and packages the validated binary:
 
 ```sh
 rustup toolchain install "$rust_toolchain" --profile minimal
-python3 crates/delta-arrow-reader-cli/release/build_archive.py \
+cargo run --locked --package xtask --target-dir target/cli-build -- cli build-archive \
   --source-commit "$source_commit" --architecture amd64 \
-  --expected-version "$version" --expected-rust-toolchain "$rust_toolchain" \
+  --version "$version" --rust-toolchain "$rust_toolchain" \
   --target-dir target/cli-build --output target/cli-inputs/amd64
 ```
 
 Set these variables to the full source SHA, workspace version, and installed
 exact Rust release, such as `1.94.1`. Use the same values for both architectures.
+The command places xtask itself and the CLI build under `target/cli-build`.
 The output directory must not exist. Before execution, extract the validated
 platform archive to a new directory outside the checkout:
 
@@ -306,7 +315,6 @@ installing the resolved Rust toolchain.
 ## Test the build and packaging helpers
 
 ```sh
-python3 -m unittest discover -s crates/delta-arrow-reader-cli/release -v
 cargo test --locked --package xtask
 cargo clippy --locked --package xtask --all-targets -- -D warnings
 ```
@@ -314,6 +322,18 @@ cargo clippy --locked --package xtask --all-targets -- -D warnings
 The unit tests require Git, a C compiler, `objcopy`, `readelf`, and `sha256sum`.
 They use synthetic archive payloads, license fixtures, and a small compiled ELF
 fixture to exercise packaging, notice collection, source checks, ABI validation,
-and rejection paths. The Rust notice tests use supplied download responses and
-do not require cargo-about or network access.
-They do not build the Rust CLI or replace its runtime acceptance tests.
+and rejection paths. Notice tests use supplied download responses and do not
+require cargo-about or network access.
+
+The native build test compiles a small Rust fixture inside Debian 12. It checks
+the generated metadata and failure paths, including source changes during the
+build and binary replacement before packaging. Run it with the exact Rust release
+installed through rustup:
+
+```sh
+cargo test --locked --package xtask \
+  native_build_preserves_metadata_and_rejects_source_changes -- --ignored
+```
+
+The CLI build workflow runs this test on both architectures. These helper tests
+do not build the full Rust CLI or replace its runtime acceptance tests.

@@ -13,6 +13,8 @@ use snafu::{ResultExt, ensure};
 use tar::{Archive, Builder, Header};
 
 use crate::{
+    binary::MIN_GLIBC,
+    build::BuildIdentity,
     error::{FileSnafu, InvalidInputSnafu, JsonSnafu, Result},
     platform::Architecture,
 };
@@ -73,32 +75,19 @@ pub(crate) struct ArtifactInput {
     identity: BuildIdentity,
 }
 
-#[derive(Args)]
-struct BuildIdentity {
-    /// Stable workspace version, without the v prefix.
-    #[arg(long)]
-    version: String,
-    /// Full lowercase source commit SHA.
-    #[arg(long)]
-    source_commit: String,
-    /// Exact numeric Rust release used for the binary build.
-    #[arg(long)]
-    rust_toolchain: String,
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct ArtifactManifest {
+pub(crate) struct ArtifactManifest {
     schema_version: u32,
     version: String,
     source_commit: String,
     rust_toolchain: String,
-    targets: Vec<ArtifactTarget>,
+    pub(crate) targets: Vec<ArtifactTarget>,
 }
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct ArtifactTarget {
+pub(crate) struct ArtifactTarget {
     os: String,
     architecture: Architecture,
     rust_target: String,
@@ -107,7 +96,7 @@ struct ArtifactTarget {
     runtime_dependencies: Vec<String>,
     archive: String,
     archive_sha256: String,
-    dar_sha256: String,
+    pub(crate) dar_sha256: String,
 }
 
 impl ArtifactTask {
@@ -171,46 +160,6 @@ impl ArtifactTask {
 }
 
 impl BuildIdentity {
-    fn validate(&self) -> Result<()> {
-        let numeric_version = |version: &str, allow_leading_zero: bool| {
-            version.split('.').count() == 3
-                && version.split('.').all(|part| {
-                    !part.is_empty()
-                        && part.bytes().all(|byte| byte.is_ascii_digit())
-                        && (allow_leading_zero || part == "0" || !part.starts_with('0'))
-                })
-        };
-        for (name, value, valid) in [
-            (
-                "version",
-                &self.version,
-                numeric_version(&self.version, false),
-            ),
-            (
-                "source commit",
-                &self.source_commit,
-                self.source_commit.len() == 40
-                    && self
-                        .source_commit
-                        .bytes()
-                        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
-            ),
-            (
-                "Rust toolchain",
-                &self.rust_toolchain,
-                numeric_version(&self.rust_toolchain, true),
-            ),
-        ] {
-            ensure!(
-                valid,
-                InvalidInputSnafu {
-                    message: format!("invalid {name}: {value:?}")
-                }
-            );
-        }
-        Ok(())
-    }
-
     fn manifest(&self, targets: Vec<ArtifactTarget>) -> ArtifactManifest {
         ArtifactManifest {
             schema_version: 1,
@@ -243,11 +192,11 @@ fn reader_sha256(mut reader: impl Read) -> io::Result<String> {
     Ok(format!("{hash:x}", hash = hash.finalize()))
 }
 
-fn file_sha256(path: &Path) -> Result<String> {
+pub(crate) fn file_sha256(path: &Path) -> Result<String> {
     reader_sha256(File::open(path).context(FileSnafu { path })?).context(FileSnafu { path })
 }
 
-fn require_regular_file(path: &Path) -> Result<()> {
+pub(crate) fn require_regular_file(path: &Path) -> Result<()> {
     ensure!(
         fs::symlink_metadata(path)
             .context(FileSnafu { path })?
@@ -320,7 +269,7 @@ fn write_manifest(directory: &Path, manifest: &ArtifactManifest) -> Result<()> {
     write_new_file(&directory.join(MANIFEST), &contents)
 }
 
-fn check_runtime_dependencies(dependencies: &[String]) -> Result<()> {
+pub(crate) fn check_runtime_dependencies(dependencies: &[String]) -> Result<()> {
     ensure!(
         !dependencies.is_empty()
             && dependencies.windows(2).all(|pair| pair[0] < pair[1])
@@ -501,7 +450,7 @@ fn describe_archive(
         architecture,
         rust_target: architecture.rust_target().into(),
         libc: "glibc".into(),
-        min_glibc: "2.36".into(),
+        min_glibc: MIN_GLIBC.into(),
         runtime_dependencies: dependencies.to_vec(),
         archive: filename,
         archive_sha256: file_sha256(&path)?,
@@ -551,7 +500,7 @@ fn check_manifest(
     Ok(manifest)
 }
 
-fn package(
+pub(crate) fn package(
     binary: &Path,
     dependency_notices: &Path,
     directory: &Path,

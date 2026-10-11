@@ -28,6 +28,8 @@ pub(crate) enum Error {
         subject: String,
         source: FromUtf8Error,
     },
+    #[snafu(display("Invalid ELF inspection pattern: {source}"))]
+    Pattern { source: regex::Error },
     #[snafu(display("{message}"))]
     InvalidInput { message: String },
 }

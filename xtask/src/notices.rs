@@ -1,11 +1,10 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    env,
     ffi::OsStr,
     fs::{self, OpenOptions},
     io::Write,
     path::{Component, Path, PathBuf},
-    process::{Command, Stdio},
+    process::Command,
 };
 
 use clap::Args;
@@ -13,52 +12,23 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use snafu::{ResultExt, ensure};
 
-use crate::error::{
-    CommandFailedSnafu, CommandStartSnafu, FileSnafu, InvalidInputSnafu, JsonSnafu, Result,
-    TomlSnafu, Utf8Snafu,
-};
+use crate::build::rustup_command;
+use crate::command::command_output;
+use crate::error::{FileSnafu, InvalidInputSnafu, JsonSnafu, Result};
 use crate::platform::Architecture;
+use crate::repository::{WorkspaceManifest, read_toml, repository_root};
 
 #[derive(Args)]
 pub(crate) struct NoticeArgs {
     /// Linux architecture of the CLI being packaged.
     #[arg(long, value_enum)]
-    architecture: Architecture,
+    pub(crate) architecture: Architecture,
     /// Rust toolchain used to build the CLI; defaults to Cargo.toml's rust-version.
     #[arg(long)]
-    rust_toolchain: Option<String>,
+    pub(crate) rust_toolchain: Option<String>,
     /// Destination for the complete notices; must not already exist.
     #[arg(long)]
-    output: PathBuf,
-}
-
-#[derive(Deserialize)]
-struct WorkspaceManifest {
-    package: RootPackage,
-    workspace: Workspace,
-}
-
-#[derive(Deserialize)]
-struct RootPackage {
-    #[serde(rename = "rust-version")]
-    rust_version: String,
-}
-
-#[derive(Deserialize)]
-struct Workspace {
-    metadata: WorkspaceMetadata,
-}
-
-#[derive(Deserialize)]
-struct WorkspaceMetadata {
-    #[serde(rename = "cli-release")]
-    cli_release: ReleaseTools,
-}
-
-#[derive(Deserialize)]
-struct ReleaseTools {
-    #[serde(rename = "cargo-about-version")]
-    cargo_about_version: String,
+    pub(crate) output: PathBuf,
 }
 
 #[derive(Clone, Deserialize)]
@@ -133,7 +103,10 @@ struct NoticeText {
 type ExtraNotices = BTreeMap<String, Vec<NoticeText>>;
 
 pub(crate) fn run(args: NoticeArgs) -> Result<()> {
-    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    generate(&repository_root(), args)
+}
+
+pub(crate) fn generate(repository: &Path, args: NoticeArgs) -> Result<()> {
     let manifest: WorkspaceManifest = read_toml(&repository.join("Cargo.toml"))?;
     let toolchain = args
         .rust_toolchain
@@ -141,7 +114,7 @@ pub(crate) fn run(args: NoticeArgs) -> Result<()> {
         .unwrap_or(&manifest.package.rust_version);
     let about_version = &manifest.workspace.metadata.cli_release.cargo_about_version;
     let release = repository.join("crates/delta-arrow-reader-cli/release");
-    let mut command = rustup_command(toolchain, args.architecture, &repository);
+    let mut command = rustup_command(toolchain, args.architecture, repository);
     let version = command_output(command.args(["cargo", "about", "--version"]))?;
     ensure!(
         version.trim() == format!("cargo-about {about_version}"),
@@ -150,7 +123,7 @@ pub(crate) fn run(args: NoticeArgs) -> Result<()> {
         }
     );
     let report = command_output(
-        rustup_command(toolchain, args.architecture, &repository)
+        rustup_command(toolchain, args.architecture, repository)
             .args([
                 "cargo",
                 "about",
@@ -175,7 +148,7 @@ pub(crate) fn run(args: NoticeArgs) -> Result<()> {
     let config: ExtraNoticesConfig = read_toml(&release.join("extra-notices.toml"))?;
     let extra = collect_extra_notices(&report.crates, &config.files, download_notice)?;
     let sysroot = command_output(
-        rustup_command(toolchain, args.architecture, &repository)
+        rustup_command(toolchain, args.architecture, repository)
             .args(["rustc", "--print", "sysroot"]),
     )?;
     let text = render_notices(
@@ -185,63 +158,8 @@ pub(crate) fn run(args: NoticeArgs) -> Result<()> {
         about_version,
     )?;
     write_notices(&args.output, &text)?;
-    println!("Dependency notices written to {}", args.output.display());
+    eprintln!("Dependency notices written to {}", args.output.display());
     Ok(())
-}
-
-fn read_toml<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
-    let text = fs::read_to_string(path).context(FileSnafu { path })?;
-    toml::from_str(&text).context(TomlSnafu { path })
-}
-
-fn rustup_command(toolchain: &str, architecture: Architecture, repository: &Path) -> Command {
-    let mut command = Command::new("rustup");
-    // Match the binary build's environment so flags cannot change dependency resolution.
-    command
-        .env_clear()
-        .envs(env::vars_os().filter(|(key, _)| keep_build_variable(key)));
-    let (cpu, cflags) = match architecture {
-        Architecture::Amd64 => ("x86-64", "-march=x86-64 -mtune=generic"),
-        Architecture::Arm64 => ("generic", "-march=armv8-a -mtune=generic"),
-    };
-    command
-        .current_dir(repository)
-        .args(["run", toolchain])
-        .env("LC_ALL", "C")
-        .env("RUSTUP_TOOLCHAIN", toolchain)
-        .env("RUSTFLAGS", format!("-Ctarget-cpu={cpu}"))
-        .env("CFLAGS", cflags)
-        .env("CXXFLAGS", cflags);
-    command
-}
-
-fn keep_build_variable(key: &OsStr) -> bool {
-    let Some(key) = key.to_str() else {
-        return false;
-    };
-    matches!(
-        key,
-        "PATH" | "HOME" | "CARGO_HOME" | "RUSTUP_HOME" | "CARGO_BUILD_JOBS" | "CARGO_NET_OFFLINE"
-    ) || matches!(
-        key.to_ascii_lowercase().as_str(),
-        "http_proxy" | "https_proxy" | "no_proxy"
-    )
-}
-
-fn command_output(command: &mut Command) -> Result<String> {
-    let program = command.get_program().to_string_lossy().into_owned();
-    let output = command
-        .stderr(Stdio::inherit())
-        .output()
-        .context(CommandStartSnafu { program: &program })?;
-    ensure!(
-        output.status.success(),
-        CommandFailedSnafu {
-            program: &program,
-            status: output.status
-        }
-    );
-    String::from_utf8(output.stdout).context(Utf8Snafu { subject: program })
 }
 
 fn read_notice(path: &Path) -> Result<String> {
