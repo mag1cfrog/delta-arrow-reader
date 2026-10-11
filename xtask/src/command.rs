@@ -56,15 +56,23 @@ pub(crate) fn output_with_redirected_stdout(
 
 pub(crate) fn run_with_timeout(command: &mut Command, timeout: Duration) -> Result<()> {
     let program = command.get_program().to_string_lossy().into_owned();
-    let mut child = command
-        .stdout(Stdio::from(io::stderr()))
-        .stderr(Stdio::inherit())
-        .spawn()
-        .context(CommandStartSnafu { program: &program })?;
-    let status =
-        wait_with_timeout(&mut child, timeout).context(CommandStartSnafu { program: &program })?;
+    let status = status_with_timeout(
+        command
+            .stdout(Stdio::from(io::stderr()))
+            .stderr(Stdio::inherit()),
+        timeout,
+    )?;
     ensure!(status.success(), CommandFailedSnafu { program, status });
     Ok(())
+}
+
+/// Run with the command's configured streams and return its exit status.
+pub(crate) fn status_with_timeout(command: &mut Command, timeout: Duration) -> Result<ExitStatus> {
+    let program = command.get_program().to_string_lossy().into_owned();
+    let mut child = command
+        .spawn()
+        .context(CommandStartSnafu { program: &program })?;
+    wait_with_timeout(&mut child, timeout).context(CommandStartSnafu { program })
 }
 
 fn capture_with_timeout(

@@ -37,29 +37,56 @@ fn captures_both_streams_without_pipe_backpressure() -> Result<()> {
 
 #[test]
 fn timeout_kills_and_reaps_the_child() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let temporary = tempfile::tempdir()?;
-    let pid_file = temporary.path().join("pid");
-    let start = Instant::now();
-    let result = capture_with_timeout(
-        Command::new("sh")
+    for capture_output in [true, false] {
+        let temporary = tempfile::tempdir()?;
+        let pid_file = temporary.path().join("pid");
+        let mut command = Command::new("sh");
+        command
             .args(["-c", "echo $$ > \"$1\"; exec sleep 30", "fixture"])
-            .arg(&pid_file),
-        Duration::from_millis(200),
-        None,
-    );
-    assert_eq!(
-        result.expect_err("sleep must time out").kind(),
-        io::ErrorKind::TimedOut
-    );
-    assert!(start.elapsed() < Duration::from_secs(5));
-    let pid = std::fs::read_to_string(pid_file)?;
-    assert!(
-        !Command::new("sh")
-            .args(["-c", "kill -0 \"$1\"", "fixture", pid.trim()])
-            .output()?
-            .status
-            .success()
-    );
+            .arg(&pid_file);
+        let timeout = Duration::from_millis(200);
+        let start = Instant::now();
+        let result = if capture_output {
+            output_with_timeout(&mut command, timeout).map(|_| ())
+        } else {
+            status_with_timeout(command.stdout(Stdio::null()).stderr(Stdio::null()), timeout)
+                .map(|_| ())
+        };
+        assert!(
+            matches!(result, Err(crate::error::Error::CommandStart { source, .. }) if source.kind() == io::ErrorKind::TimedOut)
+        );
+        assert!(start.elapsed() < Duration::from_secs(5));
+        let pid = std::fs::read_to_string(pid_file)?;
+        assert!(
+            !Command::new("sh")
+                .args(["-c", "kill -0 \"$1\"", "fixture", pid.trim()])
+                .output()?
+                .status
+                .success()
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn exit_status_preserves_redirected_streams() -> std::result::Result<(), Box<dyn std::error::Error>>
+{
+    let mut stdout = tempfile::tempfile()?;
+    let mut stderr = tempfile::tempfile()?;
+    let status = status_with_timeout(
+        Command::new("sh")
+            .args(["-c", "printf stdout; printf stderr >&2; exit 17"])
+            .stdout(stdout.try_clone()?)
+            .stderr(stderr.try_clone()?),
+        Duration::from_secs(5),
+    )?;
+    assert_eq!(status.code(), Some(17));
+    for (stream, expected) in [(&mut stdout, "stdout"), (&mut stderr, "stderr")] {
+        stream.rewind()?;
+        let mut actual = String::new();
+        stream.read_to_string(&mut actual)?;
+        assert_eq!(actual, expected);
+    }
     Ok(())
 }
 

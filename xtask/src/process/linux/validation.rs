@@ -50,12 +50,6 @@ impl ProcessFixture<'_> {
         command
     }
 
-    fn write_input_file(&self, content: &[u8]) -> Result<PathBuf> {
-        let path = self.directory.path().join("secret input, file.json");
-        write_fixture(&path, content)?;
-        Ok(path)
-    }
-
     pub(super) fn check_inspect_input_validation(&self) -> Result<()> {
         let probe = ConnectionProbe::new()?;
         let table = probe.table_url.as_str();

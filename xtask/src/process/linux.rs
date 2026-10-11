@@ -25,6 +25,8 @@ struct ProcessFixture<'a> {
 
 type ProcessCheck<'a> = fn(&ProcessFixture<'a>) -> Result<()>;
 
+mod output;
+mod planning;
 mod validation;
 
 pub(super) fn run(binary: &Path, version: &str, repository: &Path) -> Result<()> {
@@ -112,6 +114,22 @@ pub(super) fn run(binary: &Path, version: &str, repository: &Path) -> Result<()>
             "storage options byte limit",
             ProcessFixture::check_storage_options_size_limit,
         ),
+        (
+            "predicate planning",
+            ProcessFixture::check_predicate_planning,
+        ),
+        (
+            "duplicate columns during snapshot loading",
+            ProcessFixture::check_duplicate_columns,
+        ),
+        (
+            "projection planning",
+            ProcessFixture::check_projection_planning,
+        ),
+        (
+            "stdout write failures",
+            ProcessFixture::check_stdout_failures,
+        ),
     ];
     for (name, check) in checks {
         eprintln!("Process check: {name}");
@@ -143,6 +161,12 @@ impl ProcessFixture<'_> {
             .env("RUST_LOG", "trace")
             .stdin(Stdio::null());
         command
+    }
+
+    fn write_input_file(&self, content: &[u8]) -> Result<PathBuf> {
+        let path = self.directory.path().join("secret input, file.json");
+        write_fixture(&path, content)?;
+        Ok(path)
     }
 
     fn create_metadata_table(&self, fields: Value, protocol: u32) -> Result<PathBuf> {

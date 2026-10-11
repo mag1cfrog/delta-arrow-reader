@@ -87,87 +87,6 @@ class ProcessTests(unittest.TestCase):
         path.write_bytes(content)
         return path
 
-    def predicate_file(self, content):
-        path = self.cwd / "secret predicate, file.json"
-        path.write_bytes(content)
-        return path
-
-    def test_native_predicate_validation_leaves_stdout_empty(self):
-        table = self.metadata_table([
-            {"name": name, "type": kind, "nullable": True, "metadata": {}}
-            for name, kind in [("id", "integer"), ("amount", "decimal(12,2)"),
-                               ("created_at", "timestamp"), ("label", "string"),
-                               ("data", "binary"), ("day", "date")]
-        ])
-        for column, scalar in [
-            ("id", {"type": "int32", "value": "1"}),
-            ("amount", {"type": "decimal128", "value": "12345", "precision": 12, "scale": 2}),
-            ("created_at", {"type": "timestamp_us", "value": "-1", "timezone": "UTC"}),
-            ("label", {"type": "utf8", "value": "secret-literal"}),
-            ("data", {"type": "binary", "value": [0, 255]}),
-            ("day", {"type": "date32", "value": "-1"}),
-        ]:
-            with self.subTest(valid_column=column):
-                predicate = {"op": "eq", "column": column, "value": scalar}
-                path = self.predicate_file(json.dumps(predicate).encode())
-                result = self.invoke("scan", "--predicate-file", path, table)
-                self.assertEqual((result.returncode, result.stderr), (0, b""))
-
-        cases = [
-            ({"op": "is_null", "column": ""}, "invalid_column_reference"),
-            ({"op": "is_null", "column": "profile.secret"}, "invalid_column_reference"),
-            ({"op": "is_null", "column": "secret-missing"}, "column_not_found"),
-        ]
-        for column, scalar in [
-            ("id", {"type": "utf8", "value": "secret-literal"}),
-            ("id", {"type": "int64", "value": "1"}),
-            ("amount", {"type": "decimal128", "value": "1", "precision": 11, "scale": 2}),
-            ("amount", {"type": "decimal128", "value": "1", "precision": 12, "scale": 3}),
-            ("created_at", {"type": "timestamp_us", "value": "-1", "timezone": None}),
-            ("created_at", {"type": "timestamp_us", "value": "-1", "timezone": "Etc/UTC"}),
-            ("label", {"type": "large_utf8", "value": "secret-literal"}),
-            ("data", {"type": "large_binary", "value": [0, 255]}),
-            ("data", {"type": "fixed_size_binary", "value": [0, 255], "size": 2}),
-            ("day", {"type": "int32", "value": "-1"}),
-        ]:
-            cases.append(({"op": "eq", "column": column, "value": scalar}, "scalar_type_mismatch"))
-        for value, precision, scale in [("1", 0, 0), ("1", 39, 2), ("1", 12, 13),
-                                        ("1000000000000", 12, 2), ("1", 255, -128)]:
-            cases.append(({
-                "op": "eq", "column": "amount",
-                "value": {"type": "decimal128", "value": value, "precision": precision, "scale": scale},
-            }, "invalid_decimal"))
-        for op, constant in [("and", False), ("or", True)]:
-            cases.append(({"op": op, "args": [
-                {"op": "constant", "value": constant}, {"op": "is_null", "column": "secret-missing"},
-            ]}, "column_not_found"))
-        for predicate, reason in cases:
-            for flags in [(), ("--limit", "0")]:
-                with self.subTest(predicate=predicate, flags=flags):
-                    path = self.predicate_file(json.dumps(predicate).encode())
-                    diagnostic = self.assert_error(
-                        self.invoke("scan", "--predicate-file", path, *flags, table),
-                        1, "scan_planning", "unsupported_predicate",
-                    )
-                    self.assertTrue(diagnostic["message"].endswith(f"reason={reason}"), diagnostic)
-
-    def test_duplicate_table_columns_fail_during_snapshot_loading(self):
-        # Kernel rejects duplicate schema names before predicate planning can run.
-        field = {"name": "secret-id", "type": "integer", "nullable": True, "metadata": {}}
-        table = self.metadata_table([field, field])
-        path = self.predicate_file(b'{"op":"is_null","column":"secret-id"}')
-        self.assert_error(self.invoke("scan", "--predicate-file", path, table),
-                          1, "snapshot", "snapshot_load")
-
-    def test_scan_planning_errors_leave_stdout_empty(self):
-        table = CORPUS / "partitioned/table"
-        for columns in [("secret-missing",), ("id", "id"), ("id,value",), ("profile.city",)]:
-            with self.subTest(columns=columns):
-                args = ["scan", table]
-                for column in columns:
-                    args.extend(["--column", column])
-                self.assert_error(self.invoke(*args), 1, "scan_planning", "invalid_projection")
-
     def test_explicit_version_stops_before_auxiliary_listing_pages(self):
         (self.cwd / "bucket").mkdir()
         for table_name in ["table", "secret%name"]:
@@ -232,28 +151,6 @@ class ProcessTests(unittest.TestCase):
             self.assertTrue(server.requests)
             self.assertTrue(all(path == "/_delta_log" or path.startswith("/_delta_log/")
                                 for path, *_ in server.requests), server.requests)
-
-    def test_stdout_failures_including_broken_pipe(self):
-        table = self.metadata_table([{
-            "name": "id", "type": "integer", "nullable": True, "metadata": {},
-        }])
-        for args in [("--help",), ("--version",), ("inspect", table), ("scan", table)]:
-            with open("/dev/full", "wb") as sink:
-                result = subprocess.run([DAR, *args], cwd=self.cwd, env=self.env, stdout=sink,
-                                        stderr=subprocess.PIPE, timeout=15)
-            result.stdout = b""
-            self.assert_error(result, 3, "execution", "output_write")
-        for command in ["inspect", "scan"]:
-            read_fd, write_fd = os.pipe()
-            os.close(read_fd)
-            with os.fdopen(write_fd, "wb") as sink:
-                result = subprocess.run([DAR, command, table], cwd=self.cwd, env=self.env, stdout=sink,
-                                        stderr=subprocess.PIPE, timeout=15)
-            result.stdout = b""
-            self.assert_error(result, 3, "execution", "output_write")
-        with open("/dev/full", "wb") as sink:
-            result = subprocess.run([DAR, "--version"], stdout=sink, stderr=sink, timeout=15)
-        self.assertEqual(result.returncode, 3)
 
     def test_signals_stop_blocked_loading_without_child_processes(self):
         for command, signum in product(["inspect", "scan"], [signal.SIGINT, signal.SIGTERM, signal.SIGKILL]):
