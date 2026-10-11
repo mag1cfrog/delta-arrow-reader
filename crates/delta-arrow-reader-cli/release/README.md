@@ -1,10 +1,10 @@
 # CLI release tools
 
-These tools build and validate the Linux CLI archives. Builds, ELF checks,
-archive operations, dependency notice collection, and archive acceptance run
-through `cargo xtask`, a Cargo alias for the repository's private Rust maintenance
-crate. Process and scan checks run in Rust through `xtask cli test-process` and
-`xtask cli test-scan`.
+These tools build and validate the Linux CLI archives and build local container
+images from them. Builds, ELF checks, archive operations, dependency notice
+collection, and archive acceptance run through `cargo xtask`, a Cargo alias for
+the repository's private Rust maintenance crate. Process and scan checks run in
+Rust through `xtask cli test-process` and `xtask cli test-scan`.
 
 ## Validate a CLI release
 
@@ -42,14 +42,16 @@ repository. When ready to validate a release, open its CI run, choose **Review
 deployments**, select `release-checks`, and click **Approve and deploy**.
 This approval starts **Release CLI binaries** and the Python wheel checks in
 parallel. Both build the PR's merge candidate at its exact commit SHA and
-workspace version. The required `CI` check waits for approval and complete
-validation of both artifact sets. New PR commits cancel the old CI run and require a new
-approval and build.
+workspace version. After binary validation, **Release CLI images and Go consumer**
+uses those binaries on native amd64 and arm64 runners in parallel, with the same
+approval. The required `CI` check waits for all three artifact sets. New PR
+commits cancel the old CI run and require a new approval and validation.
 
-Feature PRs skip release approval and builds. They still run the small workflow
-tests alongside the shared xtask checks for Python and cache tasks. CLI unit tests,
-native builds, and runtime acceptance run only for approved release PRs or an
-explicit manual build. To run the builder manually during development, select
+Feature PRs skip release approval, builds, and image/Go acceptance. They still
+run the small workflow tests alongside the shared xtask checks for Python and
+cache tasks. CLI unit tests, native builds, and runtime acceptance run only for
+approved release PRs or an explicit manual build. To run the builder manually
+during development, select
 **Build CLI binaries** in Actions and supply the commit as `source-ref` and its
 version as `expected-version`. The successful job summary links the complete
 artifact set.
@@ -92,6 +94,67 @@ Release PR artifacts record the tested merge candidate's source SHA. A future
 publisher must verify that the release tag has the same source tree and version
 and preserve that build identity; the final merge commit can have a different
 SHA. Automatic CLI publication is tracked in issue #435.
+
+## Validate CLI images in Actions
+
+`.github/workflows/cli-images.yml` takes the complete binary artifact returned
+by a successful `cli-build.yml` validation. It verifies the exact source commit,
+workspace version, Rust release, archive checksums, and both architectures before
+building images. The images and the Go consumer use the existing `dar` bytes;
+only host-side xtask tools are compiled in Rust.
+
+Release PR CI calls this workflow after the approved binary job reports success
+and `validated=true`. Native amd64 and arm64 jobs each build a CLI image, run its
+runtime acceptance, build and run the Go example, compare the copied executable
+and notices, and export/reimport the tested image as OCI. A final job verifies
+both platform artifacts, copies their archive bytes into a complete set, and
+uploads it. Feature PRs do not run these jobs, regardless of changed paths.
+
+The reusable workflow accepts these inputs:
+
+| Input | Source |
+| --- | --- |
+| `binary-artifact-id` | Binary workflow's immutable `artifact-id` output for the complete four-file set |
+| `binary-run-id` | Run that owns the binary artifact; omit only when calling within that same run |
+| `source-ref` | Binary workflow's full `source-commit` output |
+| `expected-version` | Binary workflow's `version` output, without `v` |
+| `rust-toolchain` | Binary workflow's exact `rust-toolchain` output |
+
+Callers need `contents: read` and `actions: read` permissions and must require
+successful binary validation before calling. Missing or expired artifacts,
+partial platform uploads, and mismatched identities fail validation. There is
+no fallback to an artifact name or a different source revision.
+
+For development or recovery, manually dispatch **Validate CLI images** using
+the values from a successful binary run. The workflow revision selected for
+dispatch and the requested source commit must both contain the image tools.
+For example, after those tools are on main:
+
+```sh
+gh workflow run cli-images.yml --ref main \
+  -f binary-artifact-id="$binary_artifact_id" -f binary-run-id="$binary_run_id" \
+  -f source-ref="$source_commit" -f expected-version="$version" \
+  -f rust-toolchain="$rust_toolchain"
+```
+
+The complete Actions artifact is named
+`dar-cli-images-<source-sha>-<run-id>-<attempt>` and contains the two OCI archives
+and `cli-images.json` described below. Intermediate platform uploads are not
+validated complete sets. Both binary and image uploads use the repository's
+default retention period; publication requires both sets to remain available.
+If either has expired, validate the requested source again.
+
+Outputs match the binary workflow: `validated`, `source-commit`, `version`,
+`rust-toolchain`, `artifact-id`, `artifact-name`, and `artifact-url`.
+`validated=true` is emitted only after both native image/Go jobs pass and the
+complete upload returns an artifact ID and URL. Required `CI` also rejects
+failed, skipped, or canceled image jobs, missing outputs, and a source/version
+that differs from the binary job. The job summary links the complete artifact.
+
+This workflow has read-only permissions and publishes no registry tags.
+Issue #435 owns the publication record, final release/source-tree binding,
+GHCR authentication, and multi-platform index. Publication must preserve these
+OCI archives and their tested source labels.
 
 ## Build on Debian 12
 
@@ -402,6 +465,153 @@ download it and mount it at `/tools/xtask`. The complete artifact set contains
 only the public archives, manifest, and checksums. The aggregation job runs
 `cargo xtask` after installing the resolved Rust toolchain.
 
+## Build a local container image
+
+Use the complete four-file binary artifact set with its expected source SHA,
+workspace version, and exact Rust release. The host needs Rust to run xtask,
+`readelf` from binutils, and Docker. Run on the target architecture, or configure
+container emulation before building for another architecture.
+
+```sh
+cargo xtask cli build-image target/cli-artifacts \
+  --architecture amd64 --tag dar:local-amd64 \
+  --version "$version" --source-commit "$source_commit" --rust-toolchain "$rust_toolchain"
+docker run --rm --read-only dar:local-amd64 --version
+docker run --rm --read-only \
+  --mount type=bind,src=/absolute/path/to/table,dst=/table,readonly \
+  dar:local-amd64 inspect /table
+```
+
+For arm64, use `--architecture arm64` and a separate local tag. An existing local
+tag is replaced on a successful build. The command verifies both archives and
+the combined manifest/checksums before extracting the selected binary. Its ELF
+architecture, libraries, and hash must match the manifest. Missing archives or
+mismatched source/version metadata stop the command before Docker runs.
+
+The temporary build context contains only the Dockerfile, `dar`, `LICENSE`,
+`NOTICE`, and a derived runtime package list. The pinned Debian 12 slim image
+installs those runtime libraries and CA certificates. It contains no compiler or
+source checkout. The executable and its notices retain their archive contents
+and permissions. OCI labels record the repository, tested source SHA, workspace
+version, Apache-2.0 license, and pinned base image.
+
+The image uses UID/GID `65532:65532`, working directory `/work`, and executable
+entrypoint `/usr/local/bin/dar`. Omitting arguments prints help. Fixture and
+configuration mounts must be readable by that user. Ordinary reads work with a
+read-only root filesystem; supply credentials and storage configuration at
+runtime. Copying the binary into another image requires glibc 2.36 or newer and
+its declared libraries. Alpine and `scratch` are unsupported.
+
+This command builds a local image. It does not export OCI artifacts or publish
+to GHCR.
+
+## Check a local image at runtime
+
+Run the image on its matching Linux architecture. The host needs Docker, Rust
+for xtask, and OpenSSL for temporary test certificates. Docker must run on the
+same host as xtask: the tests bind local fixture directories and use host
+networking to reach a local HTTP/TLS fixture server.
+
+```sh
+cli_image_id="$(docker image inspect --format '{{.Id}}' dar:local-amd64)"
+cargo xtask cli test-image "$cli_image_id" \
+  --architecture amd64 --expected-version "$version" --repository .
+```
+
+Use the same image ID for the OCI export below and for the Go consumer build.
+The test command also accepts a local tag, resolves it once to an immutable
+image ID, and checks its platform before running it. It does not pull images.
+
+Every container uses a read-only root filesystem and read-only fixture mounts.
+Checks cover the default user and working directory, help/version, inspection,
+redacted errors, and Arrow IPC results against the Spark corpus. The binary and
+image suites share the projection, limit, typed predicate, execution-options,
+nested mapping, and deletion-vector assertions.
+
+The TLS checks require the image's default CA bundle, reject a locally generated
+CA by default, accept it through `SSL_CERT_FILE`/`SSL_CERT_DIR`, and reject a
+certificate issued by another CA. Certificates and options are generated at
+runtime; no external storage or credentials are required. The suite also closes
+the CLI's output pipe inside the container to avoid Docker buffering hiding a
+write failure. Only this pipe fixture gets a small writable `/tmp` tmpfs.
+
+Signal checks hold a table request open, verify that `dar` is PID 1, and send
+SIGINT and SIGTERM. Both inspection and scan must exit promptly with status 130
+and 143, without output, and close their network connection. PID 1 installs
+termination handlers because Linux otherwise ignores its default termination
+signals. Normal CLI subprocesses retain their existing signal behavior.
+
+Checks have deadlines and remove their test containers on failure. Fixture
+mount paths must be UTF-8 and cannot contain commas. This command tests runtime
+behavior; `cli images` separately verifies artifact identity and packaging.
+The Go consumer runs in its own workflow step after these runtime checks.
+
+## Export and verify image artifacts
+
+Use `cli images` to prepare container artifacts for later publication. In addition
+to the complete binary artifact set, these commands need Skopeo and umoci on a
+Unix host. `export` also needs Docker and a local image from `build-image`.
+On Debian or Ubuntu, install the container tools with
+`sudo apt-get install skopeo umoci`.
+
+Export each architecture on its build host, using the image ID tested above.
+For example, after the amd64 build and runtime checks:
+
+```sh
+cargo xtask cli images export target/cli-image-platforms/amd64 \
+  --binary-artifacts target/cli-artifacts \
+  --architecture amd64 --image "$cli_image_id" \
+  --version "$version" --source-commit "$source_commit" --rust-toolchain "$rust_toolchain"
+```
+
+Use `arm64` and its tested image ID for the other build. Each platform directory
+contains its OCI archive and a single-platform `cli-images.json`. Collect the
+two directories under `target/cli-image-platforms`, then assemble the complete
+set:
+
+```sh
+cargo xtask cli images assemble target/cli-images \
+  --inputs target/cli-image-platforms --binary-artifacts target/cli-artifacts \
+  --version "$version" --source-commit "$source_commit" --rust-toolchain "$rust_toolchain"
+cargo xtask cli images verify target/cli-images \
+  --binary-artifacts target/cli-artifacts \
+  --version "$version" --source-commit "$source_commit" --rust-toolchain "$rust_toolchain"
+```
+
+The complete directory contains exactly:
+
+```text
+dar-vX.Y.Z-linux-amd64.oci.tar
+dar-vX.Y.Z-linux-arm64.oci.tar
+cli-images.json
+```
+
+The schema-1 manifest records the workspace version, tested source SHA, Rust
+release, and pinned base image. Each target records its architecture, binary
+archive hash, `dar` hash, OCI archive hash, OCI platform manifest digest, and
+container configuration including labels. `manifest_digest` identifies the OCI
+platform manifest, not a Docker image ID or a multi-platform index.
+
+Export uses `docker save` and Skopeo's OCI conversion. Verification imports the
+archive into a temporary OCI layout with `--all --preserve-digests` and rejects
+indexes or archives containing multiple images. It checks the platform, labels,
+non-root user, entrypoint, default arguments, working directory, and environment.
+umoci then unpacks the layers without root privileges. The `dar`, `LICENSE`, and
+`NOTICE` contents and permissions must match the corresponding binary archive.
+Assembly copies the verified OCI archives byte for byte and checks their hashes
+again; it does not rebuild or repack them.
+
+All three commands print the validated manifest as JSON to stdout and send
+container tool output to stderr. Add `--architecture amd64` or `arm64` to
+`verify` for a single-platform directory. Export and assembly refuse an existing
+destination. A failed command can leave a partial destination without a complete
+manifest; use a new directory when retrying. Container tool paths must be UTF-8
+and cannot contain `:`.
+
+These commands validate packaging and file identity. The image workflow also
+runs CLI and Go acceptance before uploading the complete set. None of these
+commands publish to GHCR.
+
 ## Test the build and packaging helpers
 
 ```sh
@@ -410,9 +620,12 @@ cargo clippy --locked --package xtask --all-targets -- -D warnings
 ```
 
 The CLI release workflow runs the CLI crate's unit tests and Clippy, plus the
-xtask unit tests and the `artifacts`, `notices`, and `cli_workflow` integration
-tests. The small `cli_workflow` tests also run in ordinary PR CI. The native build
-test below runs separately in each Debian build job.
+xtask unit tests and the `artifacts`, `notices`, `cli_workflow`,
+`cli_images_workflow`, and `images` integration tests. The small workflow and
+`images` tests also run in ordinary PR CI. The image tests use a small compiled
+ELF fixture and stub container commands; they do not build containers or
+require Docker, Skopeo, or umoci.
+The native build test below runs separately in each Debian build job.
 
 The unit tests require Git, a C compiler, `objcopy`, `readelf`, and `sha256sum`.
 They use synthetic archive payloads, license fixtures, and a small compiled ELF
