@@ -152,7 +152,7 @@ reader's dependencies. Cache pruning requires `gh`, `GH_TOKEN`, and `GH_REPO`;
 the pruning job alone has `actions: write` permission.
 
 The `xtask` tests also cover Python release validation and workflow gates.
-Three release planning tests require `release-plz` 0.3.171 on `PATH` and are
+The release planning tests require `release-plz` 0.3.171 on `PATH` and are
 ignored by default. After installing that version, run the full suite with
 `cargo test --locked --manifest-path xtask/Cargo.toml -- --include-ignored`.
 CI runs this full suite. The release planning tests use temporary repositories

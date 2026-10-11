@@ -71,11 +71,15 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
 
+      - name: Prepare release PR configuration
+        run: cargo xtask prepare-release-pr-config "$RUNNER_TEMP/release-plz.toml"
+
       - name: Run release-plz
         uses: release-plz/action@v0.5
         with:
           version: '0.3.171'
           command: release-pr
+          config: ${{ runner.temp }}/release-plz.toml
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
 

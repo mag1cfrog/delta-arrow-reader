@@ -123,6 +123,11 @@ Release-plz owns the shared workspace version, the core `CHANGELOG.md`, and the
 `vX.Y.Z` tag and GitHub release. The Python crate is a git-only release-plz member;
 it has no crates.io upload, separate changelog, tag, or GitHub release.
 
+Before updating a release PR, the workflow checks the highest stable `vX.Y.Z`
+tag. If that tag predates the Python crate, it prepares a temporary configuration
+that treats Python as an initial release. Once a shared release tag contains the
+Python crate, the workflow uses the normal configuration automatically.
+
 Automatic release PRs require the repository variable
 `RELEASE_PLZ_PR_ENABLED=true`. Review the version, lockfile, and changelog in that
 PR, then merge it after its checks pass and publication is authorized. The
