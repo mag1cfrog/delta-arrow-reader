@@ -110,7 +110,10 @@ another Python thread can run during these waits.
 ## Build Python wheels in CI
 
 Pull request CI calls `.github/workflows/pypi-build.yml` for changes covered by
-the code filter. The reusable workflow builds Linux x86_64, Windows x86_64,
+the Python filter in `.github/path-filters.json`. Shared Rust code, binding code,
+Python test fixtures, workspace manifests, and package metadata trigger these
+checks. Changes confined to CLI implementation, benchmarks, or `docs/` skip them.
+The reusable workflow builds Linux x86_64, Windows x86_64,
 macOS arm64, and macOS x86_64 wheels. Callers supply two required inputs:
 
 - `source-ref`: the full commit SHA to check out and build.
@@ -123,6 +126,24 @@ its metadata and native dependencies. Each wheel is installed outside the
 checkout on Python 3.10 with PyArrow 18.0.0 and Python 3.14 with the current
 compatible PyArrow release. Linux runs the full Python suite; Windows and macOS
 run the installed-package and Arrow stream smoke checks described above.
+
+The Linux wheel is built from an extracted sdist inside a pinned manylinux
+container. The separate `Python Package` job runs Clippy and the Rust runtime
+ownership tests.
+
+`.github/workflows/cache-warm.yml` calls the same wheel workflow after relevant
+main pushes with `cache-only: true`. This mode writes compiler and Cargo registry
+caches and runs the wheel checks, but does not upload artifacts or report a
+validated artifact set. It accepts only the triggering main commit from a push
+or manual run. PR builds only read the caches. The warmer also compiles the
+Python runtime tests and retains the two most recently used Windows core target
+caches; wheel builds cache the Cargo registry without restoring core target
+directories.
+Cache write errors fail the warmer, except when another build has already
+uploaded the same immutable cache entry.
+
+To populate caches after a toolchain or workflow change, run `Warm CI caches`
+manually on main. The first build for new compiler inputs can still be cold.
 
 Each platform job uploads its artifact after both Python checks pass:
 
