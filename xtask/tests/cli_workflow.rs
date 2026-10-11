@@ -121,6 +121,19 @@ fn ci_requires_approved_and_validated_cli_artifacts_only_for_release_prs()
                                 Some((_, value)) => value,
                                 None if key.ends_with(".result") => "success",
                                 None if key.ends_with(".outputs.validated") => "true",
+                                None if key.ends_with(".outputs.source-commit") => {
+                                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                                }
+                                None if key.ends_with(".outputs.version") => "1.2.3",
+                                None if matches!(
+                                    key,
+                                    "release-cli-images.outputs.artifact-id"
+                                        | "release-cli-images.outputs.artifact-name"
+                                        | "release-cli-images.outputs.artifact-url"
+                                ) =>
+                                {
+                                    "present"
+                                }
                                 None => panic!("missing CI test input: {key}"),
                             });
                             rest = after;

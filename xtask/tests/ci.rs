@@ -252,6 +252,10 @@ fn tooling_changes_run_separate_required_checks() -> Result<()> {
         "xtask/src/main.rs",
         "xtask/tests/ci.rs",
         "xtask/src/python_wheels.rs",
+        ".github/workflows/cli-images.yml",
+        "crates/delta-arrow-reader-cli/Dockerfile",
+        "examples/go-cli/Dockerfile",
+        "examples/go-cli/scan_test.go",
     ] {
         assert!(filter_matches(&filters, "tooling", path)?, "{path}");
         for name in ["code", "python"] {
@@ -615,6 +619,7 @@ fn release_pr_requires_approved_and_validated_wheels() -> Result<()> {
                             ("release-wheels.result", wheels),
                             ("release-wheels.outputs.validated", validated),
                             ("release-cli.outputs.validated", "true"),
+                            ("release-cli-images.outputs.validated", "true"),
                         ])?;
                         let expected = release_pr != "true"
                             || approval == "success" && wheels == "success" && validated == "true";

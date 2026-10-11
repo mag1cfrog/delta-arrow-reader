@@ -26,6 +26,7 @@ use crate::error::{InvalidInputSnafu, IoSnafu, Result};
 pub(crate) type HttpResponse = Response<Full<Bytes>>;
 
 pub(crate) mod table;
+pub(crate) mod tls;
 
 #[derive(Debug)]
 pub(crate) struct RecordedRequest {
