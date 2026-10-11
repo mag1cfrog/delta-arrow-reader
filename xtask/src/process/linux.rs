@@ -31,6 +31,8 @@ mod planning;
 mod signals;
 mod validation;
 
+pub(crate) use signals::check_no_child_processes;
+
 pub(super) fn run(binary: &Path, version: &str, repository: &Path) -> Result<()> {
     let temporary = tempfile::tempdir().context(FileSnafu {
         path: std::env::temp_dir(),

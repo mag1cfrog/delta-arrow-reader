@@ -86,7 +86,7 @@ impl ProcessFixture<'_> {
     }
 }
 
-fn check_no_child_processes(child: &Child) -> Result<()> {
+pub(crate) fn check_no_child_processes(child: &Child) -> Result<()> {
     let tasks = std::path::PathBuf::from(format!("/proc/{}/task", child.id()));
     for task in fs::read_dir(&tasks).context(FileSnafu { path: &tasks })? {
         let path = task

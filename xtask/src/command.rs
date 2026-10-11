@@ -44,6 +44,20 @@ pub(crate) fn output_with_timeout(command: &mut Command, timeout: Duration) -> R
 
 #[cfg(target_os = "linux")]
 pub(crate) fn output_on_single_cpu(command: &mut Command, timeout: Duration) -> Result<Output> {
+    run_on_single_cpu(|| output_with_timeout(command, timeout))
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn spawn_on_single_cpu(command: &mut Command) -> Result<Child> {
+    run_on_single_cpu(|| {
+        command.spawn().context(CommandStartSnafu {
+            program: command.get_program().to_string_lossy(),
+        })
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn run_on_single_cpu<T: Send>(operation: impl FnOnce() -> Result<T> + Send) -> Result<T> {
     use rustix::thread::{CpuSet, sched_getaffinity, sched_setaffinity};
 
     use crate::error::{InvalidInputSnafu, IoSnafu};
@@ -73,7 +87,7 @@ pub(crate) fn output_on_single_cpu(command: &mut Command, timeout: Duration) -> 
                     .context(IoSnafu {
                         operation: "pin the test worker to one CPU",
                     })?;
-                output_with_timeout(command, timeout)
+                operation()
             })
             .context(IoSnafu {
                 operation: "start the single-CPU test worker",

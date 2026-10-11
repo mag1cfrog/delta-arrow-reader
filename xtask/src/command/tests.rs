@@ -49,6 +49,37 @@ fn single_cpu_child_preserves_caller_affinity_on_success_and_failure()
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn spawned_child_inherits_one_cpu_without_changing_the_caller()
+-> std::result::Result<(), Box<dyn std::error::Error>> {
+    use rustix::thread::{CpuSet, sched_getaffinity};
+
+    let original = sched_getaffinity(None)?;
+    let selected = (0..CpuSet::MAX_CPU)
+        .find(|cpu| original.is_set(*cpu))
+        .unwrap();
+    let mut stdout = tempfile::tempfile()?;
+    let mut child = spawn_on_single_cpu(
+        Command::new("cat")
+            .arg("/proc/self/status")
+            .stdin(Stdio::null())
+            .stdout(stdout.try_clone()?)
+            .stderr(Stdio::null()),
+    )?;
+    assert!(wait_with_timeout(&mut child, Duration::from_secs(5))?.success());
+    stdout.rewind()?;
+    let mut status = String::new();
+    stdout.read_to_string(&mut status)?;
+    let cpus = status
+        .lines()
+        .find_map(|line| line.strip_prefix("Cpus_allowed_list:"))
+        .unwrap();
+    assert_eq!(cpus.trim().parse::<usize>()?, selected);
+    assert_eq!(sched_getaffinity(None)?, original);
+    Ok(())
+}
+
+#[test]
 fn streamed_commands_require_a_successful_exit() -> Result<()> {
     run_with_timeout(
         Command::new("sh").args(["-c", "exit 0"]),

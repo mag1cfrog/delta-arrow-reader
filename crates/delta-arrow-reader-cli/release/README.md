@@ -167,6 +167,7 @@ filtering, execution options, and empty tables. Rust also checks predicates on
 adjacent Float64 values, scan thread creation failures, and HTTPS trust for both
 inspection and scanning. Read failure checks verify that a scan can return
 decodable partial batches while exiting unsuccessfully without an IPC end marker.
+Checks with stdout blocked cover early pipe closure and SIGINT/SIGTERM termination.
 The thread checks compile a C fault library with `cc`.
 The HTTPS checks use OpenSSL to generate temporary certificates and configure
 trust only for the CLI subprocess. The command then runs the remaining

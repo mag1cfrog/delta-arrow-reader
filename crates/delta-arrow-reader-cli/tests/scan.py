@@ -316,29 +316,6 @@ class ScanTests(unittest.TestCase):
             finally:
                 release_body.set()
 
-    def test_early_pipe_close_stops_a_blocked_scan(self):
-        table = self.repeated_table()
-        with self.storage(table) as server, self.start_scan(
-            server.url, "--storage-options-file", str(self.options),
-        ) as process:
-            self.wait_for_blocked_output(process)
-            self.assert_no_children(process)
-            process.stdout.close()
-            self.assertEqual(process.wait(timeout=15), 3)
-            self.assert_diagnostic(process.stderr.read(), "execution", "output_write")
-
-    def test_signals_stop_blocked_output(self):
-        table = self.repeated_table()
-        for signum in (signal.SIGINT, signal.SIGTERM):
-            with self.subTest(signal=signum), self.storage(table) as server, self.start_scan(
-                server.url, "--storage-options-file", str(self.options),
-            ) as process:
-                self.wait_for_blocked_output(process)
-                self.assert_no_children(process)
-                process.send_signal(signum)
-                self.assertEqual(process.wait(timeout=15), -signum)
-                self.assertEqual(process.stderr.read(), b"")
-
     def test_signals_stop_held_data_requests(self):
         table = self.repeated_table()
         for signum in (signal.SIGINT, signal.SIGTERM):

@@ -7,7 +7,10 @@ use crate::error::Result;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
-pub(crate) use linux::{check_diagnostic, check_error, check_inspection, compile_fault_library};
+pub(crate) use linux::{
+    check_diagnostic, check_error, check_inspection, check_no_child_processes,
+    compile_fault_library,
+};
 
 #[derive(Args)]
 pub(crate) struct TestProcessArgs {

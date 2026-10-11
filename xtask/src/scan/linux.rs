@@ -18,6 +18,7 @@ use crate::{
     process::{check_diagnostic, compile_fault_library},
 };
 
+mod blocked_output;
 mod fixtures;
 mod https;
 mod read_failure;
@@ -68,6 +69,14 @@ pub(super) fn run(binary: &Path, repository: &Path) -> Result<()> {
         (
             "later read failures leave incomplete IPC output",
             ScanFixture::check_later_read_failure,
+        ),
+        (
+            "closing stdout stops a blocked scan",
+            ScanFixture::check_closed_output_pipe,
+        ),
+        (
+            "signals stop a scan blocked on stdout",
+            ScanFixture::check_signals_during_blocked_output,
         ),
     ];
     for (name, check) in checks {
