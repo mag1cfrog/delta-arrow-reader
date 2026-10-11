@@ -152,17 +152,22 @@ jobs:
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Install release-plz for release planning checks
+        if: matrix.task == 'Lints and Docs'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: release-plz@0.3.171
       - name: Check CI workflows
         if: matrix.task == 'Lints and Docs'
         uses: docker://rhysd/actionlint:1.7.12
         with:
-          args: .github/workflows/ci.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml
-      - name: Test CI routing and cache maintenance
+          args: .github/workflows/ci.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml
+      - name: Test Rust CI tasks
         if: matrix.task == 'Lints and Docs'
         run: |
           cargo fmt --manifest-path xtask/Cargo.toml -- --check
           cargo clippy --locked --manifest-path xtask/Cargo.toml --all-targets -- -D warnings
-          cargo test --locked --manifest-path xtask/Cargo.toml
+          cargo test --locked --manifest-path xtask/Cargo.toml -- --include-ignored
       - if: matrix.task == 'Lints and Docs'
         run: python3 -m unittest discover -s benches -p test_scan_scheduling.py
       - if: matrix.task == 'Lints and Docs'

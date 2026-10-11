@@ -1,0 +1,180 @@
+name: Python release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      publish-to:
+        description: Package index, or none to build and validate only
+        required: true
+        type: choice
+        default: none
+        options:
+          - none
+          - testpypi
+          - pypi
+      expected-version:
+        description: Exact package version to build, without the v prefix
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Validate release request
+    runs-on: ubuntu-latest
+    outputs:
+      source-ref: ${{ steps.request.outputs.source-ref }}
+      expected-version: ${{ steps.request.outputs.expected-version }}
+      publish-to: ${{ steps.request.outputs.publish-to }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Read Rust version
+        id: rust-version
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
+      - name: Check event, commit, tag, and version
+        id: request
+        run: cargo xtask check-python-release-request
+
+  build:
+    name: Build and test wheels
+    needs: prepare
+    uses: ./.github/workflows/pypi-build.yml
+    with:
+      source-ref: ${{ needs.prepare.outputs.source-ref }}
+      expected-version: ${{ needs.prepare.outputs.expected-version }}
+
+  check:
+    name: Require validated wheels
+    needs: [prepare, build]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      PREPARE_RESULT: ${{ needs.prepare.result }}
+      BUILD_RESULT: ${{ needs.build.result }}
+      WHEELS_VALIDATED: ${{ needs.build.outputs.validated }}
+    steps:
+      - name: Check all build results
+        run: |
+          if [ "$PREPARE_RESULT" != "success" ] || \
+             [ "$BUILD_RESULT" != "success" ] || \
+             [ "$WHEELS_VALIDATED" != "true" ]; then
+            echo "Python release checks failed: prepare=$PREPARE_RESULT build=$BUILD_RESULT validated=$WHEELS_VALIDATED"
+            exit 1
+          fi
+          echo "All supported platform wheels passed validation"
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: [prepare, check]
+    if: >-
+      github.repository == 'mag1cfrog/delta-arrow-reader' &&
+      github.event_name == 'workflow_dispatch' &&
+      needs.prepare.outputs.publish-to == 'testpypi' &&
+      needs.check.result == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi-release
+      url: https://test.pypi.org/project/delta-arrow-reader/
+    concurrency:
+      group: python-testpypi-${{ needs.prepare.outputs.expected-version }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EXPECTED_VERSION: ${{ needs.prepare.outputs.expected-version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.source-ref }}
+          persist-credentials: false
+      - name: Read Rust version
+        id: rust-version
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: delta-arrow-reader-*-wheel
+          path: wheel-artifacts
+      - name: Verify published files and stage missing wheels
+        id: stage
+        run: |
+          cargo xtask stage-python-wheels wheel-artifacts \
+            --expected-version "$EXPECTED_VERSION" --index testpypi --destination dist
+      - name: Upload to TestPyPI
+        if: steps.stage.outputs.has-files == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/
+          skip-existing: false
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [prepare, check]
+    if: >-
+      github.repository == 'mag1cfrog/delta-arrow-reader' &&
+      (github.event_name == 'workflow_dispatch' || github.event_name == 'release') &&
+      needs.prepare.outputs.publish-to == 'pypi' &&
+      needs.check.result == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-release
+      url: https://pypi.org/project/delta-arrow-reader/
+    concurrency:
+      group: python-pypi-${{ needs.prepare.outputs.expected-version }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EXPECTED_VERSION: ${{ needs.prepare.outputs.expected-version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.source-ref }}
+          persist-credentials: false
+      - name: Read Rust version
+        id: rust-version
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: delta-arrow-reader-*-wheel
+          path: wheel-artifacts
+      - name: Verify published files and stage missing wheels
+        id: stage
+        run: |
+          cargo xtask stage-python-wheels wheel-artifacts \
+            --expected-version "$EXPECTED_VERSION" --index pypi --destination dist
+      - name: Upload to PyPI
+        if: steps.stage.outputs.has-files == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://upload.pypi.org/legacy/
+          packages-dir: dist/
+          skip-existing: false

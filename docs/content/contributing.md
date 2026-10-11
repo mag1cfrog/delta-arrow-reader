@@ -59,11 +59,11 @@ The isolated Python check imports the installed wheel without adding the current
 directory to its import path. Default Cargo commands still select the core crate;
 use `cargo check -p delta-arrow-reader-python` to check the binding crate directly.
 
-To check a wheel's filename and metadata before installation, pass its expected
-version and platform tag explicitly:
+To check a wheel's filename and metadata before installation, run `cargo xtask`
+from the repository root with the expected version and platform tag:
 
 ```console
-python crates/delta-arrow-reader-python/tests/check_wheel.py \
+cargo xtask check-python-wheel \
   /path/to/delta_arrow_reader-0.6.2-cp310-abi3-manylinux_2_28_x86_64.whl \
   --expected-version 0.6.2 --platform-tag manylinux_2_28_x86_64
 ```
@@ -146,10 +146,17 @@ fail the warmer, except when another build has uploaded the same immutable entry
 
 The cache helpers are Rust commands in the independent `xtask` crate:
 `cargo xtask check-cache-writes` and `cargo xtask prune-ci-caches`.
-CI checks their types and tests with
+Run their tests with
 `cargo test --locked --manifest-path xtask/Cargo.toml`, without compiling the
 reader's dependencies. Cache pruning requires `gh`, `GH_TOKEN`, and `GH_REPO`;
 the pruning job alone has `actions: write` permission.
+
+The `xtask` tests also cover Python release validation and workflow gates.
+Three release planning tests require `release-plz` 0.3.171 on `PATH` and are
+ignored by default. After installing that version, run the full suite with
+`cargo test --locked --manifest-path xtask/Cargo.toml -- --include-ignored`.
+CI runs this full suite. The release planning tests use temporary repositories
+and a local baseline without publishing packages.
 
 To populate caches after a toolchain or workflow change, run `Warm CI caches`
 manually on main. The first build for new compiler inputs can still be cold.
@@ -176,15 +183,17 @@ workflow result and this output before treating the artifacts as a complete
 validated set. A failed run may still contain individual platform artifacts.
 
 Download artifacts from the Actions run page. To download and check the full
-set locally, use the expected package version for that run:
+set locally, run these commands from the repository root with the expected
+package version for that run:
 
 ```console
 gh run download RUN_ID --pattern 'delta-arrow-reader-*-wheel' --dir wheel-artifacts
-python crates/delta-arrow-reader-python/tests/check_wheel.py wheel-artifacts \
-  --artifact-set --expected-version 0.6.2
+cargo xtask check-python-artifacts wheel-artifacts --expected-version 0.6.2
 ```
 
-The workflow produces build artifacts only; package publishing is separate.
+The workflow produces build artifacts only. For publisher setup, TestPyPI
+rehearsal, stable releases, and upload recovery, see
+[Publish Python wheels](python-releases.md).
 
 ## Work on the documentation
 

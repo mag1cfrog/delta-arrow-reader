@@ -2,10 +2,15 @@ use std::{
     env,
     error::Error,
     fs, io,
+    path::Path,
     process::{Command, Stdio},
 };
 
 use serde::Deserialize;
+
+mod python_release;
+mod python_upload;
+mod python_wheels;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -126,10 +131,50 @@ fn prune_ci_caches() -> Result<()> {
 
 fn main() -> Result<()> {
     let args: Vec<_> = env::args().skip(1).collect();
+    let args: Vec<_> = args.iter().map(String::as_str).collect();
     match args.as_slice() {
-        [task] if task == "check-cache-writes" => check_cache_writes(),
-        [task] if task == "prune-ci-caches" => prune_ci_caches(),
-        _ => Err("usage: cargo xtask <check-cache-writes|prune-ci-caches>".into()),
+        ["check-cache-writes"] => check_cache_writes(),
+        ["prune-ci-caches"] => prune_ci_caches(),
+        ["check-python-release-request"] => python_release::validate_release_request(),
+        [
+            "check-python-wheel",
+            path,
+            "--expected-version",
+            version,
+            "--platform-tag",
+            platform,
+        ] => python_wheels::check_wheel_metadata(Path::new(path), version, platform),
+        [
+            "check-python-artifacts",
+            directory,
+            "--expected-version",
+            version,
+        ] => python_wheels::check_wheel_artifacts(Path::new(directory), version).map(|_| ()),
+        [
+            "stage-python-wheels",
+            artifacts,
+            "--expected-version",
+            version,
+            "--index",
+            index,
+            "--destination",
+            destination,
+        ] => python_upload::stage_missing_wheels(
+            Path::new(artifacts),
+            version,
+            index,
+            Path::new(destination),
+        ),
+        _ => Err(concat!(
+            "usage: cargo xtask <task>\n",
+            "  check-cache-writes\n",
+            "  prune-ci-caches\n",
+            "  check-python-release-request\n",
+            "  check-python-wheel <path> --expected-version <version> --platform-tag <tag>\n",
+            "  check-python-artifacts <directory> --expected-version <version>\n",
+            "  stage-python-wheels <artifacts> --expected-version <version> --index <pypi|testpypi> --destination <directory>",
+        )
+        .into()),
     }
 }
 
