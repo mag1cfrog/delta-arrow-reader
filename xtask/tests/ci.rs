@@ -58,7 +58,7 @@ fn filter_matches(filters: &Value, name: &str, path: &str) -> Result<bool> {
 }
 
 #[test]
-fn python_filter_covers_inputs_without_cli_benchmarks_or_docs() -> Result<()> {
+fn python_filter_excludes_unrelated_sources_and_tools() -> Result<()> {
     let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
     for (path, expected) in [
         ("src/reader/scan.rs", true),
@@ -77,20 +77,21 @@ fn python_filter_covers_inputs_without_cli_benchmarks_or_docs() -> Result<()> {
         ("README.md", true),
         ("LICENSE", true),
         (".cargo/config.toml", true),
-        ("xtask/src/main.rs", true),
-        ("xtask/Cargo.lock", true),
+        ("xtask/Cargo.toml", true),
+        ("xtask/src/main.rs", false),
+        ("xtask/Cargo.lock", false),
         (".github/workflows/cache-warm.yml", true),
         (".github/workflows/pypi-build.yml", true),
         (".github/workflows/pypi.yml", true),
         (".github/workflows/release-plz.yml", true),
-        ("xtask/src/python_release.rs", true),
-        ("xtask/src/python_wheels.rs", true),
-        ("xtask/src/python_upload.rs", true),
-        ("xtask/tests/python_upload.rs", true),
-        ("xtask/tests/python_release.rs", true),
-        ("xtask/tests/python_wheels.rs", true),
-        ("xtask/tests/python_workflow.rs", true),
-        ("xtask/tests/release_plz.rs", true),
+        ("xtask/src/python_release.rs", false),
+        ("xtask/src/python_wheels.rs", false),
+        ("xtask/src/python_upload.rs", false),
+        ("xtask/tests/python_upload.rs", false),
+        ("xtask/tests/python_release.rs", false),
+        ("xtask/tests/python_wheels.rs", false),
+        ("xtask/tests/python_workflow.rs", false),
+        ("xtask/tests/release_plz.rs", false),
         ("release-plz.toml", true),
         ("crates/delta-arrow-reader-cli/src/main.rs", false),
         ("crates/delta-arrow-reader-cli/tests/scan.py", false),
@@ -108,6 +109,73 @@ fn python_filter_covers_inputs_without_cli_benchmarks_or_docs() -> Result<()> {
 }
 
 #[test]
+fn tooling_changes_run_separate_required_checks() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
+    for path in [
+        "xtask/src/main.rs",
+        "xtask/tests/ci.rs",
+        "xtask/src/python_wheels.rs",
+    ] {
+        assert!(filter_matches(&filters, "tooling", path)?, "{path}");
+        for name in ["code", "python"] {
+            assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
+        }
+    }
+    for path in [
+        "Cargo.toml",
+        "Cargo.lock",
+        "xtask/Cargo.toml",
+        ".cargo/config.toml",
+        "crates/delta-arrow-reader-python/Cargo.toml",
+    ] {
+        for name in ["code", "python", "tooling"] {
+            assert!(filter_matches(&filters, name, path)?, "{name}: {path}");
+        }
+    }
+    for (path, expected) in [
+        (".github/path-filters.json", true),
+        (".github/workflows/ci.yml", true),
+        (".github/workflows/cache-warm.yml", true),
+        (".github/workflows/cli-build.yml", true),
+        (".github/workflows/pypi.yml", true),
+        (".github/workflows/pypi-build.yml", true),
+        (".github/workflows/release-plz.yml", true),
+        ("release-plz.toml", true),
+        ("clippy.toml", true),
+        ("LICENSE", true),
+        ("NOTICE", true),
+        ("src/reader/options.rs", false),
+        ("crates/delta-arrow-reader-python/src/lib.rs", false),
+        ("crates/delta-arrow-reader-cli/src/main.rs", false),
+        ("benches/selective_read/src/fixtures.rs", false),
+    ] {
+        assert_eq!(
+            filter_matches(&filters, "tooling", path)?,
+            expected,
+            "{path}"
+        );
+    }
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    let jobs = &ci["jobs"];
+    assert_eq!(
+        jobs["changes"]["outputs"]["tooling"],
+        "${{ steps.filter.outputs.tooling }}"
+    );
+    assert_eq!(jobs["tooling-checks"]["needs"], "changes");
+    assert_eq!(
+        jobs["tooling-checks"]["if"],
+        "needs.changes.outputs.tooling == 'true'"
+    );
+    assert!(
+        jobs["ci"]["needs"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("tooling-checks"))
+    );
+    Ok(())
+}
+
+#[test]
 fn standalone_docs_skip_rust_checks() -> Result<()> {
     let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
     for path in [
@@ -117,7 +185,7 @@ fn standalone_docs_skip_rust_checks() -> Result<()> {
         "docs/public/cli.md",
         "docs/public/benchmarks/selective-read-results.md",
     ] {
-        for name in ["code", "python", "selective_read"] {
+        for name in ["code", "python", "tooling", "selective_read"] {
             assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
         }
     }
@@ -143,6 +211,7 @@ fn embedded_docs_trigger_their_rust_checks() -> Result<()> {
         ("benches/selective_read/src/production.rs", "selective_read"),
         ("benches/selective_read/src/large.rs", "selective_read"),
     ] {
+        assert!(filter_matches(&filters, "tooling", source)?, "{source}");
         let source = root().join(source);
         let contents = fs::read_to_string(&source)?;
         let documents: Vec<_> = include.captures_iter(&contents).collect();
@@ -221,6 +290,30 @@ fn summary_requires_benchmarks_independently_of_core_checks() -> Result<()> {
                     output.status.success(),
                     benchmark != "true" || result == "success",
                     "code={code}, benchmark={benchmark}, result={result}: {output:?}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn summary_requires_tooling_independently_of_core_checks() -> Result<()> {
+    for code in ["true", "false"] {
+        for tooling in ["true", "false"] {
+            for result in ["success", "failure", "skipped", "cancelled", ""] {
+                let output = check_ci_results(&[
+                    ("changes.outputs.code", code),
+                    ("changes.outputs.python", "false"),
+                    ("changes.outputs.tooling", tooling),
+                    ("changes.outputs.selective_read", "false"),
+                    ("changes.outputs.release_pr", "false"),
+                    ("tooling-checks.result", result),
+                ])?;
+                assert_eq!(
+                    output.status.success(),
+                    tooling != "true" || result == "success",
+                    "code={code}, tooling={tooling}, result={result}: {output:?}"
                 );
             }
         }

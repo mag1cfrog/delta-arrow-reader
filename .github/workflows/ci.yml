@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      tooling: ${{ steps.filter.outputs.tooling }}
       python: ${{ steps.filter.outputs.python }}
       selective_read: ${{ steps.filter.outputs.selective_read }}
       package_version: ${{ steps.package-version.outputs.version }}
@@ -157,24 +158,6 @@ jobs:
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
-      - name: Install release-plz for release planning checks
-        if: matrix.task == 'Lints and Docs'
-        uses: taiki-e/install-action@v2
-        with:
-          tool: release-plz@0.3.171
-      - name: Check CI workflows
-        if: matrix.task == 'Lints and Docs'
-        uses: docker://rhysd/actionlint:1.7.12
-        with:
-          args: .github/workflows/ci.yml .github/workflows/cli-build.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml
-      - name: Test CI workflows, Python, and cache tasks
-        if: matrix.task == 'Lints and Docs'
-        run: |
-          cargo clippy --locked --package xtask --all-targets -- -D warnings
-          cargo test --locked --package xtask --bin xtask cache_tests::
-          cargo test --locked --package xtask \
-            --test ci --test cli_workflow --test python_release --test python_upload --test python_wheels \
-            --test python_wheel_reuse --test python_workflow --test release_plz -- --include-ignored
       - if: matrix.task == 'Lints and Docs'
         run: python3 -m unittest discover -s benches -p test_scan_scheduling.py
       - if: matrix.task == 'Lints and Docs'
@@ -187,6 +170,50 @@ jobs:
         run: git diff --check
       - if: matrix.task == 'Package'
         run: cargo package --locked
+
+  tooling-checks:
+    name: CI Tools
+    needs: changes
+    if: needs.changes.outputs.tooling == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - name: Read Rust version
+        id: rust-version
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
+          components: clippy, rustfmt
+      - name: Cache Cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci
+          cache-targets: false
+          save-if: false
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Install release-plz for release planning checks
+        uses: taiki-e/install-action@v2
+        with:
+          tool: release-plz@0.3.171
+      - name: Check CI workflows
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: .github/workflows/ci.yml .github/workflows/cli-build.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml
+      - run: cargo fmt --package xtask -- --check
+      - name: Test CI workflows, Python, and cache tasks
+        run: |
+          cargo clippy --locked --package xtask --all-targets -- -D warnings
+          cargo test --locked --package xtask --bin xtask cache_tests::
+          cargo test --locked --package xtask \
+            --test ci --test cli_workflow --test python_release --test python_upload --test python_wheels \
+            --test python_wheel_reuse --test python_workflow --test release_plz -- --include-ignored
+      - run: git diff --check
 
   python-package:
     name: Python Package
@@ -319,7 +346,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [changes, feature-tests, platform-tests, checks, python-package, release-approval, release-wheels, release-cli, selective-read-fixtures]
+    needs: [changes, feature-tests, platform-tests, checks, tooling-checks, python-package, release-approval, release-wheels, release-cli, selective-read-fixtures]
     if: always()
     runs-on: ubuntu-latest
 
@@ -328,6 +355,12 @@ jobs:
         run: |
           if [ "${{ needs.changes.result }}" != "success" ]; then
             echo "Detect Changes did not pass: ${{ needs.changes.result }}"
+            exit 1
+          fi
+
+          if [ "${{ needs.changes.outputs.tooling }}" = "true" ] && \
+             [ "${{ needs.tooling-checks.result }}" != "success" ]; then
+            echo "CI Tools did not pass: ${{ needs.tooling-checks.result }}"
             exit 1
           fi
 
