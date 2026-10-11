@@ -7,6 +7,11 @@ pub(crate) type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
 pub(crate) enum Error {
+    #[snafu(display("Could not {operation}: {source}"))]
+    Io {
+        operation: &'static str,
+        source: io::Error,
+    },
     #[snafu(display("Could not access {}: {source}", path.display()))]
     File { path: PathBuf, source: io::Error },
     #[snafu(display("Invalid {subject}: {source}"))]

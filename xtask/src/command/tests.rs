@@ -45,6 +45,7 @@ fn timeout_kills_and_reaps_the_child() -> std::result::Result<(), Box<dyn std::e
             .args(["-c", "echo $$ > \"$1\"; exec sleep 30", "fixture"])
             .arg(&pid_file),
         Duration::from_millis(200),
+        None,
     );
     assert_eq!(
         result.expect_err("sleep must time out").kind(),
@@ -59,5 +60,28 @@ fn timeout_kills_and_reaps_the_child() -> std::result::Result<(), Box<dyn std::e
             .status
             .success()
     );
+    Ok(())
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn redirected_stdout_is_preserved_and_stderr_is_captured()
+-> std::result::Result<(), Box<dyn std::error::Error>> {
+    let mut destination = tempfile::tempfile()?;
+    let output = output_with_redirected_stdout(
+        Command::new("sh").args([
+            "-c",
+            "printf destination; head -c 131072 /dev/zero >&2; exit 17",
+        ]),
+        Stdio::from(destination.try_clone()?),
+        Duration::from_secs(5),
+    )?;
+    assert_eq!(output.status.code(), Some(17));
+    assert!(output.stdout.is_empty());
+    assert_eq!(output.stderr, vec![0; 131072]);
+    destination.rewind()?;
+    let mut actual = String::new();
+    destination.read_to_string(&mut actual)?;
+    assert_eq!(actual, "destination");
     Ok(())
 }

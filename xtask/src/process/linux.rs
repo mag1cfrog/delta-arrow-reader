@@ -25,6 +25,8 @@ struct ProcessFixture<'a> {
 
 type ProcessCheck<'a> = fn(&ProcessFixture<'a>) -> Result<()>;
 
+mod validation;
+
 pub(super) fn run(binary: &Path, version: &str, repository: &Path) -> Result<()> {
     let temporary = tempfile::tempdir().context(FileSnafu {
         path: std::env::temp_dir(),
@@ -81,6 +83,34 @@ pub(super) fn run(binary: &Path, version: &str, repository: &Path) -> Result<()>
         (
             "unused blocking prefetch",
             ProcessFixture::check_unused_blocking_prefetch,
+        ),
+        (
+            "inspect input validation",
+            ProcessFixture::check_inspect_input_validation,
+        ),
+        (
+            "scan input validation and terminal output",
+            ProcessFixture::check_scan_input_validation,
+        ),
+        (
+            "execution options validation",
+            ProcessFixture::check_execution_options_validation,
+        ),
+        (
+            "execution options size and literal dash",
+            ProcessFixture::check_execution_options_size_and_literal_dash,
+        ),
+        (
+            "predicate JSON validation",
+            ProcessFixture::check_predicate_json_validation,
+        ),
+        (
+            "predicate size and literal dash",
+            ProcessFixture::check_predicate_size_and_literal_dash,
+        ),
+        (
+            "storage options byte limit",
+            ProcessFixture::check_storage_options_size_limit,
         ),
     ];
     for (name, check) in checks {

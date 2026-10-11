@@ -37,7 +37,19 @@ pub(crate) fn run_command(command: &mut Command) -> Result<()> {
 }
 
 pub(crate) fn output_with_timeout(command: &mut Command, timeout: Duration) -> Result<Output> {
-    capture_with_timeout(command, timeout).context(CommandStartSnafu {
+    capture_with_timeout(command, timeout, None).context(CommandStartSnafu {
+        program: command.get_program().to_string_lossy(),
+    })
+}
+
+/// Capture stderr while sending stdout to the supplied destination; Output.stdout is empty.
+#[cfg(target_os = "linux")]
+pub(crate) fn output_with_redirected_stdout(
+    command: &mut Command,
+    stdout: Stdio,
+    timeout: Duration,
+) -> Result<Output> {
+    capture_with_timeout(command, timeout, Some(stdout)).context(CommandStartSnafu {
         program: command.get_program().to_string_lossy(),
     })
 }
@@ -55,12 +67,16 @@ pub(crate) fn run_with_timeout(command: &mut Command, timeout: Duration) -> Resu
     Ok(())
 }
 
-fn capture_with_timeout(command: &mut Command, timeout: Duration) -> io::Result<Output> {
+fn capture_with_timeout(
+    command: &mut Command,
+    timeout: Duration,
+    stdout_destination: Option<Stdio>,
+) -> io::Result<Output> {
     // Files keep noisy children from filling a pipe while their deadline is checked.
     let mut stdout = tempfile::tempfile()?;
     let mut stderr = tempfile::tempfile()?;
     let mut child = command
-        .stdout(stdout.try_clone()?)
+        .stdout(stdout_destination.unwrap_or(Stdio::from(stdout.try_clone()?)))
         .stderr(stderr.try_clone()?)
         .spawn()?;
     let status = wait_with_timeout(&mut child, timeout)?;

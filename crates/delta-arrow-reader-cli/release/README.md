@@ -154,10 +154,11 @@ python3 crates/delta-arrow-reader-cli/tests/scan.py /path/to/dar
 ```
 
 `test-process` requires Linux. It checks help, version, inspection, historical
-snapshots, diagnostics, and thread failures in Rust, then runs the argument,
-HTTP, pipe, and signal checks in `process.py`. Each test uses an isolated temporary
-directory, and each CLI invocation has a timeout. CI runs this command separately
-from `cargo test -p delta-arrow-reader-cli`.
+snapshots, diagnostics, thread failures, and input validation in Rust, including
+JSON size limits and terminal output rejection. It then runs the predicate
+planning, projection, HTTP, pipe, and signal checks in `process.py`. Each test uses
+an isolated temporary directory, and each CLI invocation has a timeout. CI runs
+this command separately from `cargo test -p delta-arrow-reader-cli`.
 
 In a runtime container without Cargo, use `/tools/xtask cli test-process` with
 `--repository /checks`. The source checkout supplies fixtures and the C fault

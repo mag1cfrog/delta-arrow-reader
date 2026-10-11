@@ -6,7 +6,6 @@ from itertools import product
 import json
 import os
 from pathlib import Path
-import select
 import signal
 import subprocess
 import sys
@@ -18,7 +17,6 @@ from urllib.parse import parse_qs, quote, urlsplit
 DAR = Path(sys.argv.pop(1)).resolve()
 ROOT = Path(__file__).resolve().parents[3]
 CORPUS = ROOT / "tests/reader/fixtures/external_writer/corpus"
-LIMIT = 1024 * 1024
 
 spec = importlib.util.spec_from_file_location("reader_https", ROOT / "tests/reader/https.py")
 http = importlib.util.module_from_spec(spec)
@@ -32,16 +30,6 @@ class RecordingStorageHandler(http.Storage):
 
 
 class ProcessTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        temporary = tempfile.TemporaryDirectory(prefix="dar-process-faults-")
-        cls.addClassCleanup(temporary.cleanup)
-        cls.fault_library = Path(temporary.name) / "process_faults.so"
-        subprocess.run(
-            ["cc", "-shared", "-fPIC", str(Path(__file__).with_name("process_faults.c")),
-             "-o", str(cls.fault_library), "-ldl"], check=True, capture_output=True, timeout=30,
-        )
-
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="secret-dar-")
         self.addCleanup(temporary.cleanup)
@@ -103,174 +91,6 @@ class ProcessTests(unittest.TestCase):
         path = self.cwd / "secret predicate, file.json"
         path.write_bytes(content)
         return path
-
-    def test_local_validation_before_any_table_request(self):
-        self.env.update(LD_PRELOAD=str(self.fault_library), DAR_TEST_REJECT_THREADS="1")
-        with http.serve(functools.partial(RecordingStorageHandler, directory=self.cwd)) as server:
-            table = f"http://127.0.0.1:{server.server_port}/secret-table"
-            cases = [(), ("secret-command",), ("inspect",), ("inspect", table, "secret-extra"),
-                     ("inspect", "--secret-option", table), ("inspect", "--table-version"),
-                     ("inspect", "--storage-options-file"),
-                     ("inspect", "--predicate-file", "secret-missing", table),
-                     ("inspect", "--execution-options-file", "secret-missing", table),
-                     ("inspect", "--target-partitions", "1", table),
-                     ("inspect", "--table-version", "0", "--table-version", "1", table),
-                     ("inspect", "--storage-options-file", "secret-missing", "--storage-options-file", "secret-missing", table),
-                     ("inspect", b"secret-\xff"), ("inspect", "--", table, "extra")]
-            for version in ["", "-1", "+1", " 1", "1 ", "1\n", "1.0", "1e2", "0x1", "18446744073709551616", "secret", "\u0661"]:
-                cases.append(("inspect", "--table-version", version, table))
-            for args in cases:
-                with self.subTest(args=args):
-                    self.assert_error(self.invoke(*args), 2, "configuration", "invalid_cli_argument")
-
-            for content in [b"", b"secret", b"{", b"{}secret", b"{}{}", b"\xff",
-                            b'"secret"', b"[]", b"null", b'{"secret":1}', b'{"secret":true}',
-                            b'{"secret":null}', b'{"secret":[]}', b'{"secret":{}}',
-                            b'{"secret":"a","secret":"b"}', b'{"a":"a","\\u0061":"b"}',
-                            b'{"secret":"\xff"}', b"{}" + b" " * (LIMIT - 1)]:
-                with self.subTest(content=content[:50], size=len(content)):
-                    self.assert_error(self.invoke("inspect", "--storage-options-file", self.options(content), table),
-                               2, "configuration", "invalid_input_json")
-            for path in [self.cwd / "secret-missing", self.cwd, "-"]:
-                self.assert_error(self.invoke("inspect", "--storage-options-file", path, table),
-                           2, "configuration", "input_file_io")
-            self.assertEqual(server.requests, [])
-
-    def test_scan_validation_before_any_table_request(self):
-        self.env.update(LD_PRELOAD=str(self.fault_library), DAR_TEST_REJECT_THREADS="1")
-        with http.serve(functools.partial(RecordingStorageHandler, directory=self.cwd)) as server:
-            table = f"http://127.0.0.1:{server.server_port}/secret-table"
-            cases = [(), (table, "secret-extra"), ("--column",), ("--limit",),
-                     ("--target-partitions",), ("--target-partitions", b"secret-\xff", table),
-                     ("--target-partitions", "1", "--target-partitions", "2", table),
-                     ("--predicate-file",), ("--predicate-file", b"secret-\xff", table),
-                     ("--predicate-file", "secret-missing", "--predicate-file", "secret-missing", table),
-                     ("--no-columns", "--column", "secret", table),
-                     ("--no-columns", "--no-columns", table),
-                     ("--limit", "0", "--limit", "1", table),
-                     ("--column", b"secret-\xff", table),
-                     ("--column", "id", "value", table),
-                     ("--table-version", "0", "--table-version", "1", table),
-                     (b"secret-\xff",)]
-            for limit in ["", "-1", "+1", " 1", "1 ", "1\n", "1.0", "1e2", "0x1",
-                          "18446744073709551616", "secret", "\u0661"]:
-                cases.append(("--limit", limit, table))
-                cases.append(("--target-partitions", limit, table))
-            for target in ["0", "000", "-0", "+0"]:
-                cases.append(("--target-partitions", target, table))
-            for args in cases:
-                with self.subTest(args=args):
-                    self.assert_error(self.invoke("scan", *args), 2, "configuration", "invalid_cli_argument")
-            self.assert_error(self.invoke("scan", "--storage-options-file", self.options(b"secret"), table),
-                              2, "configuration", "invalid_input_json")
-            master, slave = os.openpty()
-            try:
-                result = subprocess.run([DAR, "scan", table], cwd=self.cwd, env=self.env,
-                                        stdout=slave, stderr=subprocess.PIPE, timeout=15)
-                self.assertEqual(select.select([master], [], [], 0)[0], [], "binary output reached a terminal")
-                result.stdout = b""
-                self.assert_error(result, 2, "configuration", "invalid_cli_argument")
-            finally:
-                os.close(master)
-                os.close(slave)
-            self.assertEqual(server.requests, [])
-
-    def test_execution_options_validation_before_any_table_request(self):
-        self.env.update(LD_PRELOAD=str(self.fault_library), DAR_TEST_REJECT_THREADS="1")
-        with http.serve(functools.partial(RecordingStorageHandler, directory=self.cwd)) as server:
-            table = f"http://127.0.0.1:{server.server_port}/secret-table"
-            for args in [
-                ("--execution-options-file",),
-                ("--execution-options-file", b"secret-\xff", table),
-                ("--execution-options-file", "secret-missing", "--execution-options-file", "secret-missing", table),
-            ]:
-                with self.subTest(args=args):
-                    self.assert_error(self.invoke("scan", *args), 2, "configuration", "invalid_cli_argument")
-            for content in [
-                b"", b"\xff", b"null", b"[]", b"{}{}", b"{}" + b" " * (LIMIT - 1),
-                b'{"secret-extra":1}', b'{"parquet_backend":"secret-backend"}',
-                b'{"parquet_backend":{"direct":null}}',
-                b'{"prefetch_files_per_partition":null}',
-                b'{"prefetch_files_per_partition":1e0}',
-                b'{"prefetch_files_per_partition":18446744073709551616}',
-                b'{"parquet_metadata_size_hint_bytes":null,"parquet_metadata_size_hint_bytes":null}',
-            ]:
-                with self.subTest(content=content[:100], size=len(content)):
-                    diagnostic = self.assert_error(
-                        self.invoke("scan", "--execution-options-file", self.options(content), table),
-                        2, "configuration", "invalid_input_json",
-                    )
-                    self.assertEqual(diagnostic["message"], "Invalid JSON input.")
-            for field, values in [
-                ("max_concurrent_file_reads_per_scan", [0, sys.maxsize]),
-                ("max_concurrent_file_reads_per_partition", [0, sys.maxsize]),
-                ("output_buffer_batches_per_partition", [0, sys.maxsize]),
-                ("parquet_metadata_size_hint_bytes", [0]),
-                ("parquet_full_file_read_threshold_bytes", [0]),
-            ]:
-                for value in values:
-                    with self.subTest(field=field, value=value):
-                        content = json.dumps({field: value}).encode()
-                        self.assert_error(
-                            self.invoke("scan", "--execution-options-file", self.options(content), table),
-                            2, "configuration", "invalid_configuration",
-                        )
-            for path in [self.cwd / "secret-missing", self.cwd, "-", "/dev/zero"]:
-                with self.subTest(path=path):
-                    code = "invalid_input_json" if path == "/dev/zero" else "input_file_io"
-                    self.assert_error(self.invoke("scan", "--execution-options-file", path, table),
-                                      2, "configuration", code)
-            self.assertEqual(server.requests, [])
-
-    def test_execution_options_file_size_boundary_and_literal_dash(self):
-        table = CORPUS / "partitioned/table"
-        for content in [b"{}", b"{}" + b" " * (LIMIT - 2)]:
-            result = self.invoke("scan", "--execution-options-file", self.options(content),
-                                 "--limit", "0", table)
-            self.assertEqual((result.returncode, result.stderr), (0, b""))
-            self.assertTrue(result.stdout.endswith(b"\xff\xff\xff\xff\0\0\0\0"))
-        (self.cwd / "-").write_text('{"parquet_metadata_size_hint_bytes":null}', encoding="utf-8")
-        result = self.invoke("scan", "--execution-options-file", "-", "--limit", "0", table)
-        self.assertEqual((result.returncode, result.stderr), (0, b""))
-
-    def test_predicate_validation_before_any_table_request(self):
-        self.env.update(LD_PRELOAD=str(self.fault_library), DAR_TEST_REJECT_THREADS="1")
-        constant = b'{"op":"constant","value":true}'
-        too_deep = b'{"op":"not","arg":' * 32 + constant + b'}' * 32
-        too_wide = b'{"op":"and","args":[' + b','.join([constant] * 1024) + b']}'
-        with http.serve(functools.partial(RecordingStorageHandler, directory=self.cwd)) as server:
-            table = f"http://127.0.0.1:{server.server_port}/secret-table"
-            for content in [b"", b"\xff", b"{}", b"null", b"[]", constant + b"{}",
-                            b'{"op":"constant","value":true,"value":false}',
-                            b'{"op":"is_null","column":"secret-column","secret-extra":0}',
-                            b'{"op":"eq","column":"secret-column","value":{"type":"int64","value":"secret-value"}}',
-                            b'{"op":"eq","column":"secret-column","value":["utf8","secret-value"]}',
-                            too_deep, too_wide, constant + b" " * (LIMIT + 1 - len(constant))]:
-                with self.subTest(content=content[:100], size=len(content)):
-                    diagnostic = self.assert_error(
-                        self.invoke("scan", "--predicate-file", self.predicate_file(content), table),
-                        2, "configuration", "invalid_input_json",
-                    )
-                    self.assertEqual(diagnostic["message"], "Invalid JSON input.")
-            for path in [self.cwd / "secret-missing", self.cwd, "-", "/dev/zero"]:
-                with self.subTest(path=path):
-                    code = "invalid_input_json" if path == "/dev/zero" else "input_file_io"
-                    self.assert_error(self.invoke("scan", "--predicate-file", path, table),
-                                      2, "configuration", code)
-            self.assertEqual(server.requests, [])
-
-    def test_predicate_file_size_boundary_and_literal_dash(self):
-        table = CORPUS / "partitioned/table"
-        constant = b'{"op":"constant","value":true}'
-        for content in [constant, constant + b" " * (LIMIT - len(constant))]:
-            result = self.invoke("scan", "--predicate-file", self.predicate_file(content),
-                                 "--limit", "0", table)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(result.stderr, b"")
-            self.assertTrue(result.stdout.endswith(b"\xff\xff\xff\xff\0\0\0\0"))
-        (self.cwd / "-").write_bytes(constant)
-        result = self.invoke("scan", "--predicate-file", "-", "--limit", "0", table)
-        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_native_predicate_validation_leaves_stdout_empty(self):
         table = self.metadata_table([
@@ -347,17 +167,6 @@ class ProcessTests(unittest.TestCase):
                 for column in columns:
                     args.extend(["--column", column])
                 self.assert_error(self.invoke(*args), 1, "scan_planning", "invalid_projection")
-
-    def test_json_size_limit_stops_reading_and_counts_bytes(self):
-        table = self.metadata_table()
-        for content in [b"{}", b"{}" + b" " * (LIMIT - 2)]:
-            self.assert_inspection(self.invoke("inspect", "--storage-options-file", self.options(content), table))
-        self.assert_error(self.invoke("inspect", "--storage-options-file", "/dev/zero", table),
-                   2, "configuration", "invalid_input_json")
-        content = json.dumps({"secret": "\u00e9" * (LIMIT // 2)}, ensure_ascii=False).encode()
-        self.assertLess(len(content.decode()), LIMIT)
-        self.assert_error(self.invoke("inspect", "--storage-options-file", self.options(content), table),
-                   2, "configuration", "invalid_input_json")
 
     def test_explicit_version_stops_before_auxiliary_listing_pages(self):
         (self.cwd / "bucket").mkdir()

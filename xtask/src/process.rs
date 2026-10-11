@@ -14,7 +14,7 @@ use crate::{
 };
 
 #[cfg(target_os = "linux")]
-mod inspection;
+mod linux;
 
 #[derive(Args)]
 pub(crate) struct TestProcessArgs {
@@ -46,7 +46,7 @@ pub(crate) fn run_process_tests(binary: &Path, version: &str, repository: &Path)
     let binary = fs::canonicalize(binary).context(FileSnafu { path: binary })?;
     let repository = fs::canonicalize(repository).context(FileSnafu { path: repository })?;
     #[cfg(target_os = "linux")]
-    inspection::run(&binary, version, &repository)?;
+    linux::run(&binary, version, &repository)?;
 
     let working_directory = tempfile::tempdir().context(FileSnafu {
         path: std::env::temp_dir(),
