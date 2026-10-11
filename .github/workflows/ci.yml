@@ -8,6 +8,8 @@ permissions:
   pull-requests: read
 
 env:
+  # Keep file and line information in backtraces while reducing build artifacts.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
   SCCACHE_GHA_ENABLED: "true"
   SCCACHE_GHA_RW_MODE: READ_ONLY
   RUSTC_WRAPPER: sccache

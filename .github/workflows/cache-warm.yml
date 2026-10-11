@@ -51,6 +51,7 @@ jobs:
     needs: prepare
     runs-on: ${{ matrix.os }}
     env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_GHA_RW_MODE: READ_WRITE
       SCCACHE_LOG: sccache::server=debug
