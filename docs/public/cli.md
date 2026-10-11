@@ -51,6 +51,43 @@ For arm64, use `dar-vX.Y.Z-linux-arm64-gnu.tar.gz`. Keep `LICENSE` and `NOTICE`
 alongside `dar`, including when distributing the binary with a service. The
 executable works outside a source checkout and does not require Python or Rust.
 
+## Use a container or a Go service
+
+The CLI container packages the same standalone binary with its runtime libraries
+and CA certificates. Public image publication is handled separately. Replace
+this placeholder with a verified image digest when one is available:
+
+```sh
+dar_image='ghcr.io/OWNER/IMAGE@sha256:VERIFIED_DIGEST'
+docker run --rm --read-only "$dar_image" --version
+docker run --rm --read-only \
+  --mount type=bind,src=/absolute/path/to/table,dst=/table,readonly \
+  "$dar_image" inspect /table
+docker run --rm --read-only \
+  --mount type=bind,src=/absolute/path/to/table,dst=/table,readonly \
+  "$dar_image" scan --column id --limit 100 /table > sample.arrow
+```
+
+The image runs `dar` directly as UID/GID `65532:65532`. Omitting arguments prints
+help. Mounted files and their parent directories must be readable by that user.
+Supply storage credentials and configuration at runtime. Keep HTTPS certificate
+verification enabled and provide a readable custom trust bundle when required
+by your storage endpoint. See [HTTPS configuration](installation.md#https-and-build-prerequisites).
+
+A Go service can invoke the binary with `exec.CommandContext` and decode stdout
+with the official Arrow Go streaming IPC reader. Pass each CLI argument
+separately, drain stderr separately, and require both successful IPC decoding and
+a zero child exit status. An early stop or decoding failure must cancel, close,
+and reap the child before returning.
+
+The runnable [Go example](https://github.com/mag1cfrog/delta-arrow-reader/tree/main/examples/go-cli)
+includes bounded stderr capture, cancellation tests, and a consumer Dockerfile.
+Its `COPY --from` stages copy `/usr/local/bin/dar` and `/usr/share/doc/dar/` from
+an explicit CLI image into a Debian 12 service image. The service still needs
+glibc 2.36 or newer, the binary manifest's shared libraries, and CA certificates.
+Copying the executable alone does not support Alpine or `scratch`. The Go
+application needs no cgo or Rust toolchain at runtime.
+
 ## Build from source
 
 Install the [Rust build prerequisites](installation.md#https-and-build-prerequisites),
