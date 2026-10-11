@@ -141,11 +141,18 @@ PR. When ready to check the release wheels, open its CI run, choose
 `Approve and deploy`. This starts the three platform builds without uploading
 to a package index. The required `CI` check waits for successful approval and
 wheel validation. New commits to the PR require a new approval and build.
+The complete wheel bundle is retained for 90 days. Confirm it is still available
+before merging; if it has expired, update the open release PR and approve a new
+CI run first.
 
 Merge the PR after its checks pass and publication is authorized. The
 existing release-plz workflow publishes the core crate and its GitHub release.
-A stable published release starts `pypi.yml`, which verifies the tag and commit,
-builds and tests the wheels again, and requests the `pypi-release` environment.
+A stable published release starts `pypi.yml`, which verifies the tag and commit
+and retrieves the merged release PR's validated wheel bundle. It requires that
+PR's latest CI run to have succeeded, matches the Git tree to the release tag,
+and verifies the bundle's SHA256 and all three wheels. It then requests the
+`pypi-release` environment. This path does not build wheels. Missing, expired,
+or mismatched artifacts stop publication without a fallback build.
 Drafts, prereleases, and unrelated tags cannot upload.
 
 If the automatic Python run did not start, a maintainer can dispatch it manually
@@ -159,16 +166,18 @@ gh workflow run pypi.yml --repo mag1cfrog/delta-arrow-reader \
 ```
 
 Manual PyPI publication requires the matching version tag; a branch is rejected.
+It uses the same release PR artifact checks as automatic publication.
 If an upload already started, use the recovery steps below instead of starting
-a new build. After publication, repeat the installation and smoke check in a
+a new run. After publication, repeat the installation and smoke check in a
 fresh environment, changing the reader's index URL to `https://pypi.org/simple/`.
 Record the PyPI version URL and results in #101 before closing its checklist.
 
 ## Recover an interrupted upload
 
-Open the original `Python release` run. Confirm that preparation, all platform
-builds, and `Require validated wheels` succeeded and that only the selected
-upload job failed. Keep its three original artifacts available. Correct any
+Open the original `Python release` run. Confirm that preparation and
+`Require validated wheels` succeeded and that only the selected upload job
+failed. For PyPI, keep the release PR bundle identified in the preparation log;
+for TestPyPI, keep the publishing run's three platform artifacts. Correct any
 publisher/environment mismatch or wait for an index outage to end, then use
 **Re-run failed jobs** on that run:
 
@@ -177,7 +186,9 @@ gh run rerun RUN_ID --repo mag1cfrog/delta-arrow-reader --failed
 gh run watch RUN_ID --repo mag1cfrog/delta-arrow-reader --exit-status
 ```
 
-This reruns the failed upload job and downloads the original run's artifacts.
+This reruns the failed upload job with the original artifact selection.
+The PyPI job uses the artifact ID and SHA256 recorded during preparation, even
+if someone has since rerun the release PR's CI.
 Do not select **Re-run all jobs** or dispatch a new workflow to recover a partial
 upload. GitHub keeps the original commit and ref for a rerun and
 [allows reruns for up to 30 days](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs).

@@ -11,6 +11,7 @@ mod platform;
 mod process;
 mod python_release;
 mod python_upload;
+mod python_wheel_reuse;
 mod python_wheels;
 mod release_plz;
 mod repository;
@@ -52,6 +53,22 @@ enum Task {
     PrepareReleasePrConfig { destination: PathBuf },
     /// Validate a Python release event against the checked-out commit.
     CheckPythonReleaseRequest,
+    /// Retrieve validated wheels from the merged release PR.
+    ReusePythonWheels {
+        destination: PathBuf,
+        #[arg(long)]
+        expected_version: String,
+    },
+    /// Download and verify a release PR wheel artifact by ID and SHA256.
+    DownloadPythonWheels {
+        destination: PathBuf,
+        #[arg(long)]
+        expected_version: String,
+        #[arg(long)]
+        artifact_id: u64,
+        #[arg(long)]
+        sha256: String,
+    },
     /// Validate one Python wheel's filename and metadata.
     CheckPythonWheel {
         path: PathBuf,
@@ -117,6 +134,21 @@ fn run_task(task: Task) -> Result<()> {
         Task::PruneCiCaches => prune_ci_caches(),
         Task::PrepareReleasePrConfig { destination } => release_plz::prepare_config(&destination),
         Task::CheckPythonReleaseRequest => python_release::validate_release_request(),
+        Task::ReusePythonWheels {
+            destination,
+            expected_version,
+        } => python_wheel_reuse::reuse_release_wheels(&destination, &expected_version),
+        Task::DownloadPythonWheels {
+            destination,
+            expected_version,
+            artifact_id,
+            sha256,
+        } => python_wheel_reuse::download_wheel_artifact(
+            &destination,
+            &expected_version,
+            artifact_id,
+            &sha256,
+        ),
         Task::CheckPythonWheel {
             path,
             expected_version,

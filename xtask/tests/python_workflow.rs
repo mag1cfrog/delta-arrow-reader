@@ -108,7 +108,7 @@ fn publisher_identity_and_upload_gates_match_the_selected_index() {
                 .collect::<Vec<_>>()
                 .join(" "),
             format!(
-                "github.repository == 'mag1cfrog/delta-arrow-reader' && {events} && \
+                "!cancelled() && github.repository == 'mag1cfrog/delta-arrow-reader' && {events} && \
                  needs.prepare.outputs.publish-to == '{target}' && needs.check.result == 'success'"
             ),
         );
@@ -137,12 +137,14 @@ fn upload_reuses_artifacts_and_only_sends_missing_files() -> Result<()> {
                 "cancel-in-progress": false,
             })
         );
-        assert_eq!(
-            upload["env"],
-            json!({
-                "EXPECTED_VERSION": "${{ needs.prepare.outputs.expected-version }}",
-            })
-        );
+        let mut expected_env = json!({
+            "EXPECTED_VERSION": "${{ needs.prepare.outputs.expected-version }}",
+        });
+        if target == "pypi" {
+            expected_env["ARTIFACT_ID"] = json!("${{ needs.prepare.outputs.artifact-id }}");
+            expected_env["ARTIFACT_SHA256"] = json!("${{ needs.prepare.outputs.artifact-sha256 }}");
+        }
+        assert_eq!(upload["env"], expected_env);
         let steps = upload["steps"].as_array().unwrap();
         assert_eq!(
             steps[0]["with"],
@@ -151,21 +153,46 @@ fn upload_reuses_artifacts_and_only_sends_missing_files() -> Result<()> {
                 "persist-credentials": false,
             })
         );
-        let download = steps
-            .iter()
-            .find(|step| {
-                step["uses"]
-                    .as_str()
-                    .is_some_and(|action| action.starts_with("actions/download-artifact@"))
-            })
-            .unwrap();
-        assert_eq!(
-            download["with"],
-            json!({
-                "pattern": "delta-arrow-reader-*-wheel",
-                "path": "wheel-artifacts",
-            })
-        );
+        let download = &steps[steps.len() - 3];
+        if target == "testpypi" {
+            assert_eq!(download["uses"], "actions/download-artifact@v6");
+            assert_eq!(
+                download["with"],
+                json!({
+                    "pattern": "delta-arrow-reader-*-wheel", "path": "wheel-artifacts",
+                })
+            );
+        } else {
+            assert_eq!(upload["permissions"]["actions"], "read");
+            assert_eq!(download["env"]["GH_TOKEN"], "${{ github.token }}");
+            let script = format!(
+                "cargo() {{ printf '%s\\n' \"$@\"; }}\n{}",
+                download["run"].as_str().unwrap()
+            );
+            let output = Command::new("bash")
+                .args(["-e", "-o", "pipefail", "-c", &script])
+                .env("EXPECTED_VERSION", "1.2.3")
+                .env("ARTIFACT_ID", "901")
+                .env("ARTIFACT_SHA256", "a".repeat(64))
+                .output()?;
+            assert!(output.status.success(), "{output:?}");
+            assert_eq!(
+                String::from_utf8(output.stdout)?
+                    .lines()
+                    .collect::<Vec<_>>(),
+                [
+                    "xtask",
+                    "download-python-wheels",
+                    "wheel-artifacts",
+                    "--expected-version",
+                    "1.2.3",
+                    "--artifact-id",
+                    "901",
+                    "--sha256",
+                    &"a".repeat(64),
+                ]
+            );
+        }
         let stage = &steps[steps.len() - 2];
         assert_eq!(stage["id"], "stage");
         let script = format!(
@@ -219,33 +246,92 @@ fn upload_waits_for_successful_artifact_validation() -> Result<()> {
             "PREPARE_RESULT": "${{ needs.prepare.result }}",
             "BUILD_RESULT": "${{ needs.build.result }}",
             "WHEELS_VALIDATED": "${{ needs.build.outputs.validated }}",
+            "PUBLISH_TO": "${{ needs.prepare.outputs.publish-to }}",
+            "ARTIFACT_ID": "${{ needs.prepare.outputs.artifact-id }}",
+            "ARTIFACT_SHA256": "${{ needs.prepare.outputs.artifact-sha256 }}",
         })
     );
     for prepare in ["success", "failure", "skipped", "cancelled"] {
         for build in ["success", "failure", "skipped", "cancelled"] {
             for validated in ["true", "false", ""] {
-                let output = Command::new("bash")
-                    .args([
-                        "-e",
-                        "-o",
-                        "pipefail",
-                        "-c",
-                        check["steps"][0]["run"].as_str().unwrap(),
-                    ])
-                    .env("PREPARE_RESULT", prepare)
-                    .env("BUILD_RESULT", build)
-                    .env("WHEELS_VALIDATED", validated)
-                    .output()?;
-                let expected = prepare == "success" && build == "success" && validated == "true";
-                assert_eq!(
-                    output.status.success(),
-                    expected,
-                    "{prepare}, {build}, {validated}: {output:?}"
-                );
+                for (target, artifact_id, sha256) in [
+                    ("none", "", ""),
+                    ("testpypi", "", ""),
+                    ("pypi", "901", "digest"),
+                    ("pypi", "", "digest"),
+                    ("pypi", "901", ""),
+                    ("unknown", "", ""),
+                    ("", "", ""),
+                ] {
+                    let output = Command::new("bash")
+                        .args([
+                            "-e",
+                            "-o",
+                            "pipefail",
+                            "-c",
+                            check["steps"][0]["run"].as_str().unwrap(),
+                        ])
+                        .env("PREPARE_RESULT", prepare)
+                        .env("BUILD_RESULT", build)
+                        .env("WHEELS_VALIDATED", validated)
+                        .env("PUBLISH_TO", target)
+                        .env("ARTIFACT_ID", artifact_id)
+                        .env("ARTIFACT_SHA256", sha256)
+                        .output()?;
+                    let expected = prepare == "success"
+                        && match target {
+                            "pypi" => {
+                                build == "skipped" && !artifact_id.is_empty() && !sha256.is_empty()
+                            }
+                            "none" | "testpypi" => build == "success" && validated == "true",
+                            _ => false,
+                        };
+                    assert_eq!(
+                        output.status.success(),
+                        expected,
+                        "{prepare}, {build}, {validated}, {target}, {artifact_id}, {sha256}: {output:?}"
+                    );
+                }
             }
         }
     }
     Ok(())
+}
+
+#[test]
+fn pypi_preparation_reuses_pr_wheels_and_disables_rebuilding() {
+    let workflow = workflow();
+    assert_eq!(
+        workflow["jobs"]["build"]["if"],
+        "needs.prepare.outputs.publish-to != 'pypi'"
+    );
+    let prepare = &workflow["jobs"]["prepare"];
+    assert_eq!(
+        prepare["permissions"],
+        json!({"contents": "read", "actions": "read", "pull-requests": "read"})
+    );
+    let steps = prepare["steps"].as_array().unwrap();
+    assert_eq!(steps[steps.len() - 2]["id"], "request");
+    let wheels = steps.last().unwrap();
+    assert_eq!(wheels["id"], "wheels");
+    assert_eq!(wheels["if"], "steps.request.outputs.publish-to == 'pypi'");
+    assert!(wheels["continue-on-error"].is_null());
+    assert_eq!(
+        wheels["env"],
+        json!({
+            "GH_TOKEN": "${{ github.token }}", "EXPECTED_VERSION": "${{ steps.request.outputs.expected-version }}",
+        })
+    );
+    assert_eq!(
+        wheels["run"],
+        "cargo xtask reuse-python-wheels wheel-artifacts --expected-version \"$EXPECTED_VERSION\""
+    );
+    for field in ["artifact-id", "artifact-sha256"] {
+        assert_eq!(
+            prepare["outputs"][field],
+            format!("${{{{ steps.wheels.outputs.{field} }}}}")
+        );
+    }
 }
 
 #[test]

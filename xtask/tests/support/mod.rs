@@ -36,7 +36,7 @@ impl WheelFixture {
             let artifact = directory.join(format!("delta-arrow-reader-{platform}-wheel"));
             fs::create_dir_all(&artifact)?;
             let path = artifact.join(wheel_filename(tag));
-            write_wheel(&path, &metadata_files(tag), true)?;
+            write_zip(&path, &metadata_files(tag), true)?;
             paths.push(path);
         }
         Ok((directory, paths))
@@ -66,7 +66,11 @@ pub fn metadata_files(tag: &str) -> Vec<(String, String)> {
     ]
 }
 
-pub fn write_wheel(path: &Path, files: &[(String, String)], compressed: bool) -> Result<()> {
+pub fn write_zip(
+    path: &Path,
+    files: &[(String, impl AsRef<[u8]>)],
+    compressed: bool,
+) -> Result<()> {
     let mut archive = ZipArchiveWriter::new(fs::File::create(path)?);
     for (name, contents) in files {
         let method = if compressed {
@@ -81,13 +85,13 @@ pub fn write_wheel(path: &Path, files: &[(String, String)], compressed: bool) ->
         let descriptor = if compressed {
             let encoder = DeflateEncoder::new(&mut entry, Compression::default());
             let mut writer = config.wrap(encoder);
-            writer.write_all(contents.as_bytes())?;
+            writer.write_all(contents.as_ref())?;
             let (encoder, descriptor) = writer.finish()?;
             encoder.finish()?;
             descriptor
         } else {
             let mut writer = config.wrap(&mut entry);
-            writer.write_all(contents.as_bytes())?;
+            writer.write_all(contents.as_ref())?;
             writer.finish()?.1
         };
         entry.finish(descriptor)?;

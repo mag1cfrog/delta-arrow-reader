@@ -9,7 +9,7 @@ use rawzip::{CompressionMethod, ZipArchive};
 
 use crate::Result;
 
-const ARTIFACT_PLATFORM_TAGS: [(&str, &str); 3] = [
+pub(crate) const ARTIFACT_PLATFORM_TAGS: [(&str, &str); 3] = [
     (
         "delta-arrow-reader-linux-x86_64-wheel",
         "manylinux_2_28_x86_64",

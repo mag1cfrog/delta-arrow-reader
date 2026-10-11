@@ -132,11 +132,12 @@ jobs. A new PR revision cancels the previous run and requires a new approval.
 
 ## Build Python wheels in CI
 
-Release PR checks and the `Python release` workflow call
+Release PR checks and manual build or TestPyPI runs of `Python release` call
 `.github/workflows/pypi-build.yml` to build Linux x86_64, Windows x86_64, and macOS
-arm64 wheels. The release workflow also supports manual builds, including
-TestPyPI rehearsals. To check packaging manually before a release,
-follow [Build without uploading](python-releases.md#build-without-uploading).
+arm64 wheels. PyPI publication reuses the release PR's validated wheels after
+checking that their source tree matches the release tag. To check packaging
+manually before a release, follow
+[Build without uploading](python-releases.md#build-without-uploading).
 Callers of the reusable workflow supply two required inputs:
 
 - `source-ref`: the full commit SHA to check out and build.
@@ -181,7 +182,7 @@ ignored by default. After installing that version, run the PR CI task tests with
 cargo test --locked --package xtask --bin xtask cache_tests::
 cargo test --locked --package xtask \
   --test ci --test cli_workflow --test python_release --test python_upload --test python_wheels \
-  --test python_workflow --test release_plz -- --include-ignored
+  --test python_wheel_reuse --test python_workflow --test release_plz -- --include-ignored
 ```
 
 These PR checks cover workflow behavior, Python, and cache tasks. Release-plz PRs
@@ -222,6 +223,14 @@ Only after these steps does the reusable workflow return `validated: 'true'`.
 Callers must require both a successful workflow result and this output before
 treating the artifacts as a complete validated set. A failed run may still
 contain individual platform artifacts.
+
+PyPI preparation uses `cargo xtask reuse-python-wheels` to locate the merged
+release PR and requires its latest CI run to have succeeded. It requires a bundle
+for the same Git tree, verifies the archive's SHA256 from GitHub, and checks all
+three wheels. The upload job downloads that exact artifact ID and verifies the
+same SHA256 again. Missing, expired, or mismatched bundles stop publication. These commands
+require `gh` and `GH_TOKEN`; the preparation job has read access to Actions and
+pull requests, and the PyPI upload job has read access to Actions.
 
 Download artifacts from the Actions run page. To download and check the full
 set locally, run these commands from the repository root with the expected

@@ -1,7 +1,7 @@
 use std::{fs, path::Path, process::Command};
 
 mod support;
-use support::{PLATFORMS, Result, WheelFixture, metadata_files, wheel_filename, write_wheel};
+use support::{PLATFORMS, Result, WheelFixture, metadata_files, wheel_filename, write_zip};
 
 fn check(
     path: &Path,
@@ -39,7 +39,7 @@ fn accepts_stored_and_deflated_wheels_for_all_platforms() -> Result<()> {
     for (_, tag) in PLATFORMS {
         let path = fixture.directory.join(wheel_filename(tag));
         for compressed in [false, true] {
-            write_wheel(&path, &metadata_files(tag), compressed)?;
+            write_zip(&path, &metadata_files(tag), compressed)?;
             check(&path, "1.2.3", Some(tag), Ok(()))?;
         }
         let mut files = metadata_files(tag);
@@ -47,7 +47,7 @@ fn accepts_stored_and_deflated_wheels_for_all_platforms() -> Result<()> {
         files[0]
             .1
             .push_str("Description: first line\r\n continued\r\n\r\nName: text in the body\r\n");
-        write_wheel(&path, &files, true)?;
+        write_zip(&path, &files, true)?;
         check(&path, "1.2.3", Some(tag), Ok(()))?;
     }
     Ok(())
@@ -67,7 +67,7 @@ fn rejects_wrong_wheel_filenames() -> Result<()> {
         let path = fixture
             .directory
             .join(wheel_filename(tag).replace(old, new));
-        write_wheel(&path, &metadata_files(tag), false)?;
+        write_zip(&path, &metadata_files(tag), false)?;
         check(&path, "1.2.3", Some(tag), Err("expected wheel"))?;
     }
     Ok(())
@@ -101,7 +101,7 @@ fn rejects_inconsistent_missing_duplicate_and_folded_headers() -> Result<()> {
     ] {
         let mut files = metadata_files(tag);
         files[member].1 = files[member].1.replace(original, replacement);
-        write_wheel(&path, &files, true)?;
+        write_zip(&path, &files, true)?;
         check(&path, "1.2.3", Some(tag), Err("expected one"))?;
     }
     Ok(())
@@ -127,7 +127,7 @@ fn rejects_missing_foreign_and_duplicate_metadata_entries() -> Result<()> {
                 "nested" => files[member].0 = format!("nested/{}", files[member].0),
                 _ => unreachable!(),
             }
-            write_wheel(&path, &files, false)?;
+            write_zip(&path, &files, false)?;
             check(&path, "1.2.3", Some(tag), Err("expected exactly one"))?;
         }
     }
@@ -137,7 +137,7 @@ fn rejects_missing_foreign_and_duplicate_metadata_entries() -> Result<()> {
     ] {
         let mut files = metadata_files(tag);
         files.push((name.into(), files[0].1.clone()));
-        write_wheel(&path, &files, false)?;
+        write_zip(&path, &files, false)?;
         check(&path, "1.2.3", Some(tag), Err("ambiguous ZIP member name"))?;
     }
     Ok(())
@@ -163,7 +163,7 @@ fn rejects_metadata_paths_that_installers_can_alias() -> Result<()> {
     ] {
         let mut files = metadata_files(tag);
         files.push((alias.into(), "shadow metadata".into()));
-        write_wheel(&path, &files, false)?;
+        write_zip(&path, &files, false)?;
         check(&path, "1.2.3", Some(tag), Err("Error"))?;
     }
     Ok(())
@@ -176,7 +176,7 @@ fn rejects_invalid_archives_and_metadata_with_a_bad_crc() -> Result<()> {
     let path = fixture.directory.join(wheel_filename(tag));
     fs::write(&path, "not a ZIP archive")?;
     check(&path, "1.2.3", Some(tag), Err("Error"))?;
-    write_wheel(&path, &metadata_files(tag), false)?;
+    write_zip(&path, &metadata_files(tag), false)?;
     let mut bytes = fs::read(&path)?;
     let position = bytes
         .windows(b"Name: delta-arrow-reader".len())
@@ -186,7 +186,7 @@ fn rejects_invalid_archives_and_metadata_with_a_bad_crc() -> Result<()> {
     fs::write(&path, bytes)?;
     check(&path, "1.2.3", Some(tag), Err("Invalid checksum"))?;
 
-    write_wheel(&path, &metadata_files(tag), false)?;
+    write_zip(&path, &metadata_files(tag), false)?;
     let mut bytes = fs::read(&path)?;
     let name = b"delta_arrow_reader-1.2.3.dist-info/METADATA";
     let position = bytes
@@ -236,7 +236,7 @@ fn requires_exactly_one_valid_wheel_from_each_platform() -> Result<()> {
 
     let mut files = metadata_files(PLATFORMS[0].1);
     files[0].1 = files[0].1.replace("1.2.3", "1.2.4");
-    write_wheel(path, &files, true)?;
+    write_zip(path, &files, true)?;
     check(
         &directory,
         "1.2.3",
