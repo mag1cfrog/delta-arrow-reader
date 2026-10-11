@@ -159,12 +159,12 @@ bytes. The header and all discovered length/null bytes remain intact. Unread
 payload bytes exist only as zeroes in the in-memory buffer used with the exact
 row selection; no modified table is written.
 
-The predeclared policy considers flat, uncompressed V1 BYTE_ARRAY pages of
+The initial predeclared policy considered flat, uncompressed V1 BYTE_ARRAY pages of
 1-8 MiB, at least 64 bytes per row, and at most one-eighth selected rows. After
-bounded length discovery it requires at least 25% byte savings. Other pages
-use ordinary reads; fallback reuses already fetched bytes. This is an
-experimental filter, not a calibrated production cost model. In particular,
-rejecting a page after discovery can still cost an extra network round trip.
+bounded length discovery it required at least 25% byte savings. Other pages
+used ordinary reads; fallback reused already fetched bytes. This static filter
+did not price latency or request processing. Rejecting a page after discovery
+could still cost an extra network round trip.
 
 The declared slow profile is 200 ms latency, uniform +/-20 ms jitter and shared
 paced 150 Mbit/s. The fast control is 1 ms, no jitter and 10,000 Mbit/s. Long
@@ -179,6 +179,44 @@ or a consistent smaller regression, needs investigation. `experiment.json`
 records those criteria, identities and the active profile before querying;
 per-run files retain observations and failures. A lower median alone is not
 sufficient evidence.
+
+## Cost-model experiment
+
+The current driver includes the production `range_planning.rs` source and uses
+its cost and bounded range-planning helpers. Production source stays unchanged.
+The experiment keeps its existing 32-request limit; it does not adopt the
+production reader's complete scheduling or automatic network calibration.
+
+Before fetching page prefixes, the driver limits discovery to 10% of the
+modeled cost of reading the requested batch normally. This includes ordinary
+columns in that batch. It prices every dependent discovery round separately,
+reserves the initial prefixes together, and checks the shared budget before
+fetching any further prefix. If the first round costs too much, the driver
+issues the original reads without probing. If later discovery exhausts the
+budget, it falls back and reuses the prefix already downloaded.
+
+After locating selected values, the same planner can merge their ranges. The
+driver requires at least 25% total byte savings and more than 10% modeled
+remaining-read savings. The discovery budget limits speculative work before
+value sizes are known; it is not a 10% wall-time guarantee or an acceptable
+regression budget. The experiment still investigates regressions under the
+criteria above.
+
+`delta_length_network.py run` saves `cost-profile.json` and supplies it to both
+modes. This controlled experiment uses the proxy's bandwidth cap and its maximum
+configured latency including jitter. Request-processing cost is explicitly zero,
+an optimistic assumption. The slow proxy is checked with the existing network
+calibration helper; the fast bandwidth cap is not a measurement of achievable
+client throughput. Actual query time, CPU, memory and I/O remain measured.
+These inputs test transport-based decisions, not the accuracy of automatic
+profiling. Production integration still needs a calibrated request-processing
+estimate and must validate these decisions with the actual reader.
+
+For direct invocations, the optional cost-profile JSON goes immediately before
+the output directory. Without a profile, experimental mode uses ordinary reads.
+The query record includes the profile and counts pages rejected before probing
+and additional probes stopped by the budget. Source and profile hashes are saved
+with each experiment.
 
 ## Uncompressed observations, 2026-10-11
 
@@ -233,12 +271,63 @@ only the declared fast cases; the failure log and resume record are retained.
 Use the separate CLI invocations above when changing profiles.
 
 These results support continued feasibility work on wide values. Zstd layouts
-and a bounded policy for unsuccessful discovery remain necessary before #453
+and a validated policy for unsuccessful discovery remain necessary before #453
 can recommend production integration.
+
+## Cost-model follow-up, 2026-10-11
+
+The bounded-discovery version completed 24 full-result network checks and 36
+timing runs using the same fixtures. Three alternating pairs produced these
+slow-profile medians; times exclude initialization and include query planning,
+predicate/DV reads, discovery and full consumption.
+
+| Case and selection | Ordinary seconds | Experimental seconds | Downloaded MB | Requests |
+| --- | ---: | ---: | ---: | ---: |
+| long, scattered | 30.093 | 6.044 | 499.461 / 1.888 | 122 / 411 |
+| long, grouped | 29.805 | 5.350 | 493.156 / 2.951 | 119 / 296 |
+| selected-long, scattered | 5.267 | 5.267 | 33.858 / 33.858 | 49 / 49 |
+
+Both long-value gains exceeded the larger within-mode timing range in every
+pair. Their bytes, requests and partial-page counts matched the static-policy
+experiment. The selected-long case rejected all 24 candidate pages before
+discovery. It removed the former 24 extra requests and retained exactly the
+ordinary bytes and request count. This demonstrates rejection for that fixture;
+it does not establish that all skewed variable-length layouts avoid probing.
+
+Slow initialization medians were 0.618-0.643 seconds. Timing-run process CPU
+medians were 1.55/0.48 seconds for scattered values, 2.01/0.42 for grouped values,
+and 0.19/0.18 for selected-long values. Maximum process RSS was 151.2/162.0 MiB,
+145.9/153.8 MiB, and 41.9/42.7 MiB respectively. Full-size reconstruction buffers
+remain necessary in this prototype.
+
+Fast-control medians were 0.709/0.389 seconds for long values, 0.175/0.164 for
+selected-long values, and 0.286/0.300 for length-heavy pages. The latter two
+transferred identical bytes with identical request counts. Their pairwise
+differences changed sign and were smaller than the within-mode ranges; these
+subsecond observations do not establish a speedup or a repeatable regression.
+They also do not establish a production performance guarantee.
+
+Twenty local full-result checks covered dense, short, length-heavy and
+missing-profile fallback, plus deliberately exhausted discovery budgets, in both
+array formats and modes. A synthetic 500 ms cost profile stopped 49 second-round
+probes on the long fixture, reused their first prefixes, and returned the exact
+expected values. This local check validates fallback, not network performance.
+All other local controls used identical data bytes and requests in both modes.
+
+The first campaign attempt failed in the shared launcher after one ordinary
+validation: the cost-profile argument had displaced the required final output
+directory argument. The corrected campaign kept the output directory last.
+No timing sample had run; the failed attempt and its successful validation are
+retained separately. After exact comparisons passed, duplicate IPC outputs were
+removed with a receipt, recovering 40.0 GB. Fixtures, references, every sample,
+failure, resource record and network trace remain available.
 
 ## Remaining work for #452
 
 Inspect actual Zstd block types before considering raw-block reads. Compressed
-blocks need a recorded fallback result. Use the measured limits and losing
-cases to update #453 before recommending integration. No new production type
-support or default is enabled by this experiment.
+blocks need a recorded fallback result. The current cost experiment uses known
+proxy settings and optimistic request-processing cost; it does not complete
+automatic-profile validation or prove rejection across larger skewed batches.
+Use the measured limits and losing cases to update #453 before recommending
+integration. No new production type support or default is enabled by this
+experiment.

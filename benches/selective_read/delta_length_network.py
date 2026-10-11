@@ -93,7 +93,8 @@ def invoke(args, mode, phase, repetition, arrays):
     slot = args.output / f"{mode}-{phase}-{repetition}-{arrays}"
     slot.mkdir()
     command = storage.reader_prefix(args.state) + ["/usr/bin/time", "-f", "%U %S %M", "-o", str(slot / "resources.txt"),
-        str(args.binary), args.table, mode, args.selection, arrays, phase, str(slot / "reader")]
+        str(args.binary), args.table, mode, args.selection, arrays, phase,
+        str(args.output / "cost-profile.json"), str(slot / "reader")]
     network.control(args.state, reset=True, traced=phase == "validate")
     with (slot / "stdout.log").open("x") as stdout, (slot / "stderr.log").open("x") as stderr:
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=stdout, stderr=stderr,
@@ -145,6 +146,11 @@ def measure(args):
     prefix = digest(args.fixture / "manifest.json")
     assert args.table.rstrip("/") == f"s3://{storage.BUCKET}/{prefix}", "table must match the verified fixture"
     assert network.config(args.state) is not None, "a recorded network profile is required"
+    profile = network.config(args.state)["profile"]
+    assert profile["mbps"] > 0, "cost experiment requires a bounded bandwidth profile"
+    save(args.output / "cost-profile.json", {"latency_ms": profile["latency_ms"] + profile["jitter_ms"],
+        "mbps": profile["mbps"], "request_overhead_bytes": 0,
+        "basis": "controlled proxy settings; upper jitter bound; optimistic zero request-processing cost, not automatic calibration"})
     for item in manifest["objects"]:
         assert digest(args.fixture / item["path"]) == item["sha256"]
     reference = manifest["references"][args.selection]
@@ -154,10 +160,12 @@ def measure(args):
     save(args.output / "experiment.json", {"fixture_sha256": digest(args.fixture / "manifest.json"),
         "binary_sha256": digest(args.binary), "driver_sha256": digest(Path(__file__)), "network": network.config(args.state),
         "source_sha256": {name: digest(Path(__file__).parent / name) for name in (
-            "src/bin/delta-length-query.rs", "src/delta_length_reader.rs", "src/delta_length.rs", "Cargo.lock", "storage.py")},
+            "src/bin/delta-length-query.rs", "src/delta_length_reader.rs", "src/delta_length.rs", "Cargo.lock", "storage.py",
+            "../../src/reader/backend/direct_parquet/range_planning.rs")},
+        "cost_profile_sha256": digest(args.output / "cost-profile.json"),
         "selection": args.selection, "pairs": 3, "primary_metric": "first fully consumed query including planning, predicate and DV",
         "acceptance": "all three pairs improve beyond the larger within-mode range; investigate >5% median or consistent smaller regressions",
-        "policy": "uncompressed flat V1; >=1 MiB pages; <=1/8 selected rows; >=64 bytes/row; >=25% measured byte saving after discovery"})
+        "policy": "uncompressed flat V1; >=1 MiB pages; <=1/8 selected rows; >=64 bytes/row; discovery <=10% modeled ordinary batch cost; >=25% byte saving and >10% modeled remaining-read saving after discovery"})
     try:
         with storage.exclusive(args.state):
             storage.verify_server(args.state)

@@ -5,6 +5,14 @@ mod delta_length;
 #[path = "../delta_length_reader.rs"]
 mod delta_length_reader;
 
+// Satisfy the private planner's import without changing the production crate.
+// Only its explicit-concurrency cost helpers are used by this experiment.
+mod reader {
+    pub mod options {
+        pub const MAX_CONCURRENT_PARQUET_RANGE_READS: usize = 10;
+    }
+}
+
 use arrow::{
     array::{BooleanArray, Int32Array},
     datatypes::{DataType, Schema, SchemaRef},
@@ -13,7 +21,7 @@ use arrow::{
 };
 use delta_kernel::{Engine, scan::state::ScanFile, snapshot::Snapshot};
 use delta_kernel_default_engine::DefaultEngineBuilder;
-use delta_length_reader::{Io, Reader};
+use delta_length_reader::{CostModel, Io, Reader};
 use futures_util::TryStreamExt;
 use object_store::{ObjectStore, aws::AmazonS3Builder, path::Path as ObjectPath};
 use parquet::{
@@ -175,15 +183,19 @@ async fn query(
 
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
-    if args.len() != 7
+    if !(7..=8).contains(&args.len())
         || !matches!(args[2].as_str(), "ordinary" | "experimental")
         || !matches!(args[3].as_str(), "grouped" | "scattered" | "dense")
         || !matches!(args[4].as_str(), "arrays" | "views")
         || !matches!(args[5].as_str(), "validate" | "timing")
     {
-        return Err("TABLE_URI ordinary|experimental grouped|scattered|dense arrays|views validate|timing NEW_OUTPUT_DIRECTORY".into());
+        return Err("TABLE_URI ordinary|experimental grouped|scattered|dense arrays|views validate|timing [COST_PROFILE_JSON] NEW_OUTPUT_DIRECTORY".into());
     }
-    let output = Path::new(&args[6]);
+    let profile = (args.len() == 8).then(|| fs::read(&args[6])).transpose()?;
+    let profile = profile.as_deref().map(serde_json::from_slice).transpose()?;
+    let cost_model = profile.as_ref().map(CostModel::new).transpose()?;
+    // The shared resource-limit launcher expects the output directory last.
+    let output = Path::new(args.last().unwrap());
     fs::create_dir(output)?;
     let started = Instant::now();
     let url = Url::parse(&args[1])?;
@@ -213,7 +225,7 @@ fn main() -> Result<()> {
     )?;
     // The supervisor records initialization I/O, then resets the proxy before releasing this gate.
     std::io::stdin().read_exact(&mut [0])?;
-    let io = Arc::new(Io::new(store));
+    let io = Arc::new(Io::new(store, cost_model));
     let started = Instant::now();
     let (batches, rows, schema) = runtime.block_on(query(
         snapshot,
@@ -238,7 +250,7 @@ fn main() -> Result<()> {
         "projection":["row_id","payload_0","payload_1","payload_2","payload_3","payload_4","payload_5","payload_6","payload_7"],
         "predicate":if args[3] == "dense" { "true".to_string() } else { format!("{} = 1", args[3]) },
         "snapshot_version":0,"deletion_vectors":true,
-        "request_concurrency":32,"threads":8});
+        "request_concurrency":32,"threads":8,"cost_profile":profile});
     fs::write(
         output.join("record.json"),
         serde_json::to_vec_pretty(&record)?,
