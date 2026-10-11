@@ -8,10 +8,10 @@ use std::{
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
-use crate::{Result, python_wheels::check_wheel_set, run};
+use crate::{Result, python_wheels::check_wheel_artifacts, run};
 
 #[derive(Deserialize)]
-struct PublishedRelease {
+struct IndexRelease {
     info: PackageInfo,
     urls: Vec<PublishedFile>,
 }
@@ -25,16 +25,16 @@ struct PackageInfo {
 #[derive(Deserialize)]
 struct PublishedFile {
     filename: String,
-    digests: Digests,
+    digests: FileDigests,
     yanked: bool,
 }
 
 #[derive(Deserialize)]
-struct Digests {
+struct FileDigests {
     sha256: String,
 }
 
-fn published_files(index: &str, version: &str) -> Result<BTreeMap<String, String>> {
+fn fetch_published_hashes(index: &str, version: &str) -> Result<BTreeMap<String, String>> {
     let host = match index {
         "pypi" => "pypi.org",
         "testpypi" => "test.pypi.org",
@@ -80,29 +80,29 @@ fn published_files(index: &str, version: &str) -> Result<BTreeMap<String, String
         "200" => {}
         _ => return Err(format!("package index returned HTTP {status}").into()),
     }
-    let release: PublishedRelease = serde_json::from_str(body)?;
-    let mut name = String::new();
+    let release: IndexRelease = serde_json::from_str(body)?;
+    let mut normalized_name = String::new();
     for character in release.info.name.chars() {
         if matches!(character, '-' | '_' | '.') {
-            if !name.ends_with('-') {
-                name.push('-');
+            if !normalized_name.ends_with('-') {
+                normalized_name.push('-');
             }
         } else {
-            name.push(character.to_ascii_lowercase());
+            normalized_name.push(character.to_ascii_lowercase());
         }
     }
-    if name != "delta-arrow-reader" || release.info.version != version {
+    if normalized_name != "delta-arrow-reader" || release.info.version != version {
         return Err("index response does not match the requested package and version".into());
     }
-    let mut files = BTreeMap::new();
+    let mut hashes = BTreeMap::new();
     for entry in release.urls {
         let filename = entry.filename;
-        let digest = entry.digests.sha256;
+        let sha256 = entry.digests.sha256;
         if filename.is_empty() {
             return Err("published file has no filename".into());
         }
-        if digest.len() != 64
-            || !digest
+        if sha256.len() != 64
+            || !sha256
                 .bytes()
                 .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
         {
@@ -111,21 +111,21 @@ fn published_files(index: &str, version: &str) -> Result<BTreeMap<String, String
         if entry.yanked {
             return Err(format!("cannot resume a release with yanked files: {filename}").into());
         }
-        if files.insert(filename.clone(), digest).is_some() {
+        if hashes.insert(filename.clone(), sha256).is_some() {
             return Err(format!("duplicate published filename: {filename}").into());
         }
     }
-    Ok(files)
+    Ok(hashes)
 }
 
-pub fn prepare_upload(
+pub fn stage_missing_wheels(
     artifacts: &Path,
     version: &str,
     index: &str,
     destination: &Path,
 ) -> Result<()> {
     let mut wheels = BTreeMap::new();
-    for path in check_wheel_set(artifacts, version)? {
+    for path in check_wheel_artifacts(artifacts, version)? {
         let filename = path
             .file_name()
             .and_then(|name| name.to_str())
@@ -133,14 +133,14 @@ pub fn prepare_upload(
             .to_owned();
         wheels.insert(filename, path);
     }
-    let published = published_files(index, version)?;
-    for (filename, expected_hash) in &published {
+    let published_hashes = fetch_published_hashes(index, version)?;
+    for (filename, expected_hash) in &published_hashes {
         let path = wheels
             .get(filename)
             .ok_or_else(|| format!("unexpected published file: {filename}"))?;
-        let mut hash = Sha256::new();
-        io::copy(&mut fs::File::open(path)?, &mut hash)?;
-        if format!("{:x}", hash.finalize()) != *expected_hash {
+        let mut hasher = Sha256::new();
+        io::copy(&mut fs::File::open(path)?, &mut hasher)?;
+        if format!("{:x}", hasher.finalize()) != *expected_hash {
             return Err(format!(
                 "SHA256 mismatch for {filename}; changed binaries need a new version"
             )
@@ -150,11 +150,11 @@ pub fn prepare_upload(
 
     // Validate every published file before staging any pending upload.
     fs::create_dir(destination)?;
-    let mut count = 0;
+    let mut staged_count = 0;
     for (filename, path) in wheels {
-        if !published.contains_key(&filename) {
+        if !published_hashes.contains_key(&filename) {
             fs::copy(path, destination.join(filename))?;
-            count += 1;
+            staged_count += 1;
         }
     }
     if let Some(output) = env::var_os("GITHUB_OUTPUT").filter(|path| !path.is_empty()) {
@@ -162,8 +162,8 @@ pub fn prepare_upload(
             .create(true)
             .append(true)
             .open(output)?;
-        writeln!(output, "has-files={}", count != 0)?;
+        writeln!(output, "has-files={}", staged_count != 0)?;
     }
-    println!("Staged {count} missing wheel(s) for {index}");
+    println!("Staged {staged_count} missing wheel(s) for {index}");
     Ok(())
 }

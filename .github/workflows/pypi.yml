@@ -47,7 +47,7 @@ jobs:
           toolchain: ${{ steps.rust-version.outputs.version }}
       - name: Check event, commit, tag, and version
         id: request
-        run: cargo xtask prepare-python-release
+        run: cargo xtask check-python-release-request
 
   build:
     name: Build and test wheels
@@ -118,7 +118,7 @@ jobs:
       - name: Verify published files and stage missing wheels
         id: stage
         run: |
-          cargo xtask prepare-python-upload wheel-artifacts \
+          cargo xtask stage-python-wheels wheel-artifacts \
             --expected-version "$EXPECTED_VERSION" --index testpypi --destination dist
       - name: Upload to TestPyPI
         if: steps.stage.outputs.has-files == 'true'
@@ -169,7 +169,7 @@ jobs:
       - name: Verify published files and stage missing wheels
         id: stage
         run: |
-          cargo xtask prepare-python-upload wheel-artifacts \
+          cargo xtask stage-python-wheels wheel-artifacts \
             --expected-version "$EXPECTED_VERSION" --index pypi --destination dist
       - name: Upload to PyPI
         if: steps.stage.outputs.has-files == 'true'

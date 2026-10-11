@@ -1,7 +1,7 @@
 use std::{fs, path::Path, process::Command};
 
 mod support;
-use support::{PLATFORMS, Result, Wheels, filename, metadata, write_wheel};
+use support::{PLATFORMS, Result, WheelFixture, metadata_files, wheel_filename, write_wheel};
 
 fn check(
     path: &Path,
@@ -14,7 +14,7 @@ fn check(
         .arg(if platform.is_some() {
             "check-python-wheel"
         } else {
-            "check-python-wheels"
+            "check-python-artifacts"
         })
         .arg(path)
         .args(["--expected-version", version]);
@@ -35,14 +35,14 @@ fn check(
 
 #[test]
 fn accepts_stored_and_deflated_wheels_for_all_platforms() -> Result<()> {
-    let wheels = Wheels::new("valid")?;
+    let fixture = WheelFixture::new("valid")?;
     for (_, tag) in PLATFORMS {
-        let path = wheels.0.join(filename(tag));
+        let path = fixture.directory.join(wheel_filename(tag));
         for compressed in [false, true] {
-            write_wheel(&path, &metadata(tag), compressed)?;
+            write_wheel(&path, &metadata_files(tag), compressed)?;
             check(&path, "1.2.3", Some(tag), Ok(()))?;
         }
-        let mut files = metadata(tag);
+        let mut files = metadata_files(tag);
         files[0].1 = files[0].1.replace("Name:", "nAmE:").replace('\n', "\r\n");
         files[0]
             .1
@@ -55,7 +55,7 @@ fn accepts_stored_and_deflated_wheels_for_all_platforms() -> Result<()> {
 
 #[test]
 fn rejects_wrong_wheel_filenames() -> Result<()> {
-    let wheels = Wheels::new("filenames")?;
+    let fixture = WheelFixture::new("filenames")?;
     let tag = PLATFORMS[0].1;
     for (old, new) in [
         ("delta_arrow_reader", "other_package"),
@@ -64,8 +64,10 @@ fn rejects_wrong_wheel_filenames() -> Result<()> {
         ("abi3", "cp310"),
         (tag, "win_amd64"),
     ] {
-        let path = wheels.0.join(filename(tag).replace(old, new));
-        write_wheel(&path, &metadata(tag), false)?;
+        let path = fixture
+            .directory
+            .join(wheel_filename(tag).replace(old, new));
+        write_wheel(&path, &metadata_files(tag), false)?;
         check(&path, "1.2.3", Some(tag), Err("expected wheel"))?;
     }
     Ok(())
@@ -73,9 +75,9 @@ fn rejects_wrong_wheel_filenames() -> Result<()> {
 
 #[test]
 fn rejects_inconsistent_missing_duplicate_and_folded_headers() -> Result<()> {
-    let wheels = Wheels::new("headers")?;
+    let fixture = WheelFixture::new("headers")?;
     let tag = PLATFORMS[0].1;
-    let path = wheels.0.join(filename(tag));
+    let path = fixture.directory.join(wheel_filename(tag));
     for (member, original, replacement) in [
         (0, "Name: delta-arrow-reader\n", "Name: other-package\n"),
         (0, "Version: 1.2.3\n", "Version: 1.2.4\n"),
@@ -97,7 +99,7 @@ fn rejects_inconsistent_missing_duplicate_and_folded_headers() -> Result<()> {
             "Tag: cp310-abi3-manylinux_2_28_x86_64\nTag: cp310-abi3-win_amd64\n",
         ),
     ] {
-        let mut files = metadata(tag);
+        let mut files = metadata_files(tag);
         files[member].1 = files[member].1.replace(original, replacement);
         write_wheel(&path, &files, true)?;
         check(&path, "1.2.3", Some(tag), Err("expected one"))?;
@@ -107,12 +109,12 @@ fn rejects_inconsistent_missing_duplicate_and_folded_headers() -> Result<()> {
 
 #[test]
 fn rejects_missing_foreign_and_duplicate_metadata_entries() -> Result<()> {
-    let wheels = Wheels::new("entries")?;
+    let fixture = WheelFixture::new("entries")?;
     let tag = PLATFORMS[0].1;
-    let path = wheels.0.join(filename(tag));
+    let path = fixture.directory.join(wheel_filename(tag));
     for member in 0..2 {
         for problem in ["missing", "foreign", "duplicate", "nested"] {
-            let mut files = metadata(tag);
+            let mut files = metadata_files(tag);
             match problem {
                 "missing" => {
                     files.remove(member);
@@ -133,7 +135,7 @@ fn rejects_missing_foreign_and_duplicate_metadata_entries() -> Result<()> {
         "delta_arrow_reader-1.2.3.dist-info/METADATA\0shadow",
         "delta_arrow_reader-1.2.3.dist-info\\METADATA",
     ] {
-        let mut files = metadata(tag);
+        let mut files = metadata_files(tag);
         files.push((name.into(), files[0].1.clone()));
         write_wheel(&path, &files, false)?;
         check(&path, "1.2.3", Some(tag), Err("ambiguous ZIP member name"))?;
@@ -142,13 +144,39 @@ fn rejects_missing_foreign_and_duplicate_metadata_entries() -> Result<()> {
 }
 
 #[test]
-fn rejects_invalid_archives_and_metadata_with_a_bad_crc() -> Result<()> {
-    let wheels = Wheels::new("corrupt")?;
+fn rejects_metadata_paths_that_installers_can_alias() -> Result<()> {
+    let fixture = WheelFixture::new("metadata-aliases")?;
     let tag = PLATFORMS[0].1;
-    let path = wheels.0.join(filename(tag));
+    let path = fixture.directory.join(wheel_filename(tag));
+    for alias in [
+        "delta_arrow_reader-1.2.3.dist-info/./METADATA",
+        "delta_arrow_reader-1.2.3.dist-info//METADATA",
+        "delta_arrow_reader-1.2.3.dist-info/nested/../METADATA",
+        "delta_arrow_reader-1.2.3.dist-info/METADATA.",
+        "delta_arrow_reader-1.2.3.dist-info/METADATA ",
+        "delta_arrow_reader-1.2.3.dist-info/METADATA:",
+        "delta_arrow_reader-1.2.3.dist-info/METADATA?",
+        "delta_arrow_reader-1.2.3.dist-info/metadata",
+        "DELTA_ARROW_READER-1.2.3.DIST-INFO/METADATA",
+        "delta_arrow_reader-1.2.3.dist-info/./WHEEL",
+        "delta_arrow_reader-1.2.3.dist-info/wheel",
+    ] {
+        let mut files = metadata_files(tag);
+        files.push((alias.into(), "shadow metadata".into()));
+        write_wheel(&path, &files, false)?;
+        check(&path, "1.2.3", Some(tag), Err("Error"))?;
+    }
+    Ok(())
+}
+
+#[test]
+fn rejects_invalid_archives_and_metadata_with_a_bad_crc() -> Result<()> {
+    let fixture = WheelFixture::new("corrupt")?;
+    let tag = PLATFORMS[0].1;
+    let path = fixture.directory.join(wheel_filename(tag));
     fs::write(&path, "not a ZIP archive")?;
     check(&path, "1.2.3", Some(tag), Err("Error"))?;
-    write_wheel(&path, &metadata(tag), false)?;
+    write_wheel(&path, &metadata_files(tag), false)?;
     let mut bytes = fs::read(&path)?;
     let position = bytes
         .windows(b"Name: delta-arrow-reader".len())
@@ -158,7 +186,7 @@ fn rejects_invalid_archives_and_metadata_with_a_bad_crc() -> Result<()> {
     fs::write(&path, bytes)?;
     check(&path, "1.2.3", Some(tag), Err("InvalidChecksum"))?;
 
-    write_wheel(&path, &metadata(tag), false)?;
+    write_wheel(&path, &metadata_files(tag), false)?;
     let mut bytes = fs::read(&path)?;
     let name = b"delta_arrow_reader-1.2.3.dist-info/METADATA";
     let position = bytes
@@ -177,14 +205,14 @@ fn rejects_invalid_archives_and_metadata_with_a_bad_crc() -> Result<()> {
 
 #[test]
 fn requires_exactly_one_valid_wheel_from_each_platform() -> Result<()> {
-    let wheels = Wheels::new("artifacts")?;
-    let (directory, paths) = wheels.artifact_set()?;
+    let fixture = WheelFixture::new("artifacts")?;
+    let (directory, paths) = fixture.create_artifacts()?;
     check(&directory, "1.2.3", None, Ok(()))?;
     for path in &paths {
         let artifact = path.parent().unwrap();
-        fs::rename(artifact, wheels.0.join("removed"))?;
+        fs::rename(artifact, fixture.directory.join("removed"))?;
         check(&directory, "1.2.3", None, Err("expected artifacts"))?;
-        fs::rename(wheels.0.join("removed"), artifact)?;
+        fs::rename(fixture.directory.join("removed"), artifact)?;
     }
     let extra = directory.join("unexpected-artifact");
     fs::create_dir(&extra)?;
@@ -206,7 +234,7 @@ fn requires_exactly_one_valid_wheel_from_each_platform() -> Result<()> {
     fs::rename(wrong_platform, path)?;
     check(&directory, "1.2.4", None, Err("expected wheel"))?;
 
-    let mut files = metadata(PLATFORMS[0].1);
+    let mut files = metadata_files(PLATFORMS[0].1);
     files[0].1 = files[0].1.replace("1.2.3", "1.2.4");
     write_wheel(path, &files, true)?;
     check(

@@ -11,21 +11,21 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 mod support;
-use support::{Result, Wheels};
+use support::{Result, WheelFixture};
 
 const EXISTING_OUTPUT: &str = "existing=kept\n";
 
-struct Upload {
-    directory: Wheels,
+struct UploadFixture {
+    fixture: WheelFixture,
     artifacts: PathBuf,
-    wheels: Vec<PathBuf>,
+    wheel_paths: Vec<PathBuf>,
 }
 
-impl Upload {
+impl UploadFixture {
     fn new(name: &str) -> Result<Self> {
-        let directory = Wheels::new(name)?;
-        let (artifacts, wheels) = directory.artifact_set()?;
-        let curl = directory.0.join("curl");
+        let fixture = WheelFixture::new(name)?;
+        let (artifacts, wheel_paths) = fixture.create_artifacts()?;
+        let curl = fixture.directory.join("curl");
         fs::write(
             &curl,
             r#"#!/bin/sh
@@ -35,18 +35,18 @@ printf '%s\n%s' "$CURL_BODY" "$CURL_STATUS"
 "#,
         )?;
         fs::set_permissions(curl, fs::Permissions::from_mode(0o755))?;
-        fs::write(directory.0.join("output"), EXISTING_OUTPUT)?;
+        fs::write(fixture.directory.join("output"), EXISTING_OUTPUT)?;
         Ok(Self {
-            directory,
+            fixture,
             artifacts,
-            wheels,
+            wheel_paths,
         })
     }
 
     fn command(&self, index: &str) -> Command {
         let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
         command
-            .arg("prepare-python-upload")
+            .arg("stage-python-wheels")
             .arg(&self.artifacts)
             .args([
                 "--expected-version",
@@ -55,20 +55,24 @@ printf '%s\n%s' "$CURL_BODY" "$CURL_STATUS"
                 index,
                 "--destination",
             ])
-            .arg(self.directory.0.join("dist"))
-            .env("PATH", &self.directory.0)
-            .env("CURL_ARGUMENTS", self.directory.0.join("curl-arguments"))
+            .arg(self.fixture.directory.join("dist"))
+            .env("PATH", &self.fixture.directory)
+            .env(
+                "CURL_ARGUMENTS",
+                self.fixture.directory.join("curl-arguments"),
+            )
             .env("CURL_EXIT", "0")
             .env("CURL_STATUS", "200")
-            .env("CURL_BODY", self.release(0).unwrap().to_string())
-            .env("GITHUB_OUTPUT", self.directory.0.join("output"));
+            .env("CURL_BODY", self.index_response(0).unwrap().to_string())
+            .env("GITHUB_OUTPUT", self.fixture.directory.join("output"));
         command
     }
 
-    fn release(&self, published: usize) -> Result<Value> {
+    fn index_response(&self, published_mask: usize) -> Result<Value> {
         let mut files = Vec::new();
-        for (index, path) in self.wheels.iter().enumerate() {
-            if published & (1 << index) != 0 {
+        // Each bit selects one platform wheel already present on the index.
+        for (index, path) in self.wheel_paths.iter().enumerate() {
+            if published_mask & (1 << index) != 0 {
                 files.push(json!({
                     "filename": path.file_name().unwrap().to_str().unwrap(),
                     "digests": {"sha256": format!("{:x}", Sha256::digest(fs::read(path)?))},
@@ -82,12 +86,12 @@ printf '%s\n%s' "$CURL_BODY" "$CURL_STATUS"
         }))
     }
 
-    fn assert_staged(&self, published: usize) -> Result<()> {
-        let destination = self.directory.0.join("dist");
+    fn assert_staged(&self, published_mask: usize) -> Result<()> {
+        let destination = self.fixture.directory.join("dist");
         let mut expected = Vec::new();
-        for (index, path) in self.wheels.iter().enumerate() {
+        for (index, path) in self.wheel_paths.iter().enumerate() {
             let source = fs::read(path)?;
-            if published & (1 << index) == 0 {
+            if published_mask & (1 << index) == 0 {
                 let name = path.file_name().unwrap();
                 expected.push(name.to_owned());
                 assert_eq!(fs::read(destination.join(name))?, source);
@@ -100,7 +104,7 @@ printf '%s\n%s' "$CURL_BODY" "$CURL_STATUS"
         actual.sort();
         assert_eq!(actual, expected);
         assert_eq!(
-            fs::read_to_string(self.directory.0.join("output"))?,
+            fs::read_to_string(self.fixture.directory.join("output"))?,
             format!("{EXISTING_OUTPUT}has-files={}\n", !expected.is_empty()),
         );
         Ok(())
@@ -112,9 +116,9 @@ printf '%s\n%s' "$CURL_BODY" "$CURL_STATUS"
             String::from_utf8_lossy(&output.stderr).contains(message),
             "{output:?}",
         );
-        assert!(!self.directory.0.join("dist").exists());
+        assert!(!self.fixture.directory.join("dist").exists());
         assert_eq!(
-            fs::read_to_string(self.directory.0.join("output"))?,
+            fs::read_to_string(self.fixture.directory.join("output"))?,
             EXISTING_OUTPUT,
         );
         Ok(())
@@ -124,16 +128,16 @@ printf '%s\n%s' "$CURL_BODY" "$CURL_STATUS"
 #[test]
 fn stages_exactly_the_missing_wheels_for_every_published_subset() -> Result<()> {
     for index in ["pypi", "testpypi"] {
-        for published in 0..16 {
-            let upload = Upload::new(&format!("upload-{index}-{published}"))?;
-            let mut release = upload.release(published)?;
+        for published_mask in 0..16 {
+            let upload = UploadFixture::new(&format!("upload-{index}-{published_mask}"))?;
+            let mut release = upload.index_response(published_mask)?;
             release["info"]["name"] = json!("Delta._-Arrow.Reader");
             let output = upload
                 .command(index)
                 .env("CURL_BODY", release.to_string())
                 .output()?;
             assert!(output.status.success(), "{output:?}");
-            upload.assert_staged(published)?;
+            upload.assert_staged(published_mask)?;
         }
     }
     Ok(())
@@ -142,7 +146,7 @@ fn stages_exactly_the_missing_wheels_for_every_published_subset() -> Result<()> 
 #[test]
 fn missing_release_queries_the_selected_index_and_stages_all_wheels() -> Result<()> {
     for (index, host) in [("pypi", "pypi.org"), ("testpypi", "test.pypi.org")] {
-        let upload = Upload::new(&format!("upload-missing-{index}"))?;
+        let upload = UploadFixture::new(&format!("upload-missing-{index}"))?;
         let output = upload
             .command(index)
             .env("CURL_STATUS", "404")
@@ -150,7 +154,7 @@ fn missing_release_queries_the_selected_index_and_stages_all_wheels() -> Result<
             .output()?;
         assert!(output.status.success(), "{output:?}");
         upload.assert_staged(0)?;
-        let arguments = fs::read_to_string(upload.directory.0.join("curl-arguments"))?;
+        let arguments = fs::read_to_string(upload.fixture.directory.join("curl-arguments"))?;
         let arguments: Vec<_> = arguments.split_terminator('\0').collect();
         assert_eq!(arguments[0], "--disable");
         for pair in [
@@ -175,9 +179,9 @@ fn missing_release_queries_the_selected_index_and_stages_all_wheels() -> Result<
 
 #[test]
 fn changed_or_unexpected_published_files_stop_before_staging() -> Result<()> {
-    let upload = Upload::new("upload-changed")?;
+    let upload = UploadFixture::new("upload-changed")?;
     for index in 0..4 {
-        let mut release = upload.release(15)?;
+        let mut release = upload.index_response(15)?;
         release["urls"][index]["digests"]["sha256"] = json!("0".repeat(64));
         upload.assert_rejected(
             upload
@@ -187,7 +191,7 @@ fn changed_or_unexpected_published_files_stop_before_staging() -> Result<()> {
             "changed binaries need a new version",
         )?;
     }
-    let mut release = upload.release(1)?;
+    let mut release = upload.index_response(1)?;
     release["urls"][0]["filename"] = json!("extra.whl");
     upload.assert_rejected(
         upload
@@ -201,8 +205,8 @@ fn changed_or_unexpected_published_files_stop_before_staging() -> Result<()> {
 
 #[test]
 fn invalid_index_metadata_never_enables_an_upload() -> Result<()> {
-    let upload = Upload::new("upload-invalid-metadata")?;
-    let valid = upload.release(1)?;
+    let upload = UploadFixture::new("upload-invalid-metadata")?;
+    let valid = upload.index_response(1)?;
     let mut invalid = vec![json!(null), json!([]), json!({})];
     for (pointer, value) in [
         ("/info", json!(null)),
@@ -241,7 +245,7 @@ fn invalid_index_metadata_never_enables_an_upload() -> Result<()> {
 
 #[test]
 fn index_and_transport_failures_are_not_treated_as_missing_releases() -> Result<()> {
-    let upload = Upload::new("upload-network-errors")?;
+    let upload = UploadFixture::new("upload-network-errors")?;
     for status in ["000", "204", "301", "403", "429", "503"] {
         upload.assert_rejected(
             upload.command("pypi").env("CURL_STATUS", status).output()?,
@@ -266,21 +270,21 @@ fn index_and_transport_failures_are_not_treated_as_missing_releases() -> Result<
 
 #[test]
 fn invalid_local_inputs_stop_before_contacting_the_index() -> Result<()> {
-    let upload = Upload::new("upload-local-inputs")?;
+    let upload = UploadFixture::new("upload-local-inputs")?;
     upload.assert_rejected(
         upload.command("another-index").output()?,
         "index must be pypi or testpypi",
     )?;
-    fs::remove_file(&upload.wheels[0])?;
+    fs::remove_file(&upload.wheel_paths[0])?;
     upload.assert_rejected(upload.command("pypi").output()?, "expected one wheel")?;
-    assert!(!upload.directory.0.join("curl-arguments").exists());
+    assert!(!upload.fixture.directory.join("curl-arguments").exists());
     Ok(())
 }
 
 #[test]
 fn an_existing_destination_is_preserved_and_does_not_enable_uploads() -> Result<()> {
-    let upload = Upload::new("upload-existing-destination")?;
-    let destination = upload.directory.0.join("dist");
+    let upload = UploadFixture::new("upload-existing-destination")?;
+    let destination = upload.fixture.directory.join("dist");
     fs::create_dir(&destination)?;
     let stale = destination.join("unvalidated.whl");
     fs::write(&stale, "stale")?;
@@ -289,7 +293,7 @@ fn an_existing_destination_is_preserved_and_does_not_enable_uploads() -> Result<
     assert_eq!(fs::read_dir(destination)?.count(), 1);
     assert_eq!(fs::read_to_string(stale)?, "stale");
     assert_eq!(
-        fs::read_to_string(upload.directory.0.join("output"))?,
+        fs::read_to_string(upload.fixture.directory.join("output"))?,
         EXISTING_OUTPUT
     );
     Ok(())

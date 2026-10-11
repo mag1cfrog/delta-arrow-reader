@@ -18,41 +18,43 @@ pub const PLATFORMS: [(&str, &str); 4] = [
     ("macos-x86_64", "macosx_12_0_x86_64"),
 ];
 
-pub struct Wheels(pub PathBuf);
+pub struct WheelFixture {
+    pub directory: PathBuf,
+}
 
-impl Wheels {
+impl WheelFixture {
     pub fn new(name: &str) -> Result<Self> {
         let directory =
             env::temp_dir().join(format!("python-wheels-{name}-{}", std::process::id()));
         fs::create_dir(&directory)?;
-        Ok(Self(directory))
+        Ok(Self { directory })
     }
 
-    pub fn artifact_set(&self) -> Result<(PathBuf, Vec<PathBuf>)> {
-        let directory = self.0.join("artifacts");
+    pub fn create_artifacts(&self) -> Result<(PathBuf, Vec<PathBuf>)> {
+        let directory = self.directory.join("wheel-artifacts");
         let mut paths = Vec::new();
         for (platform, tag) in PLATFORMS {
             let artifact = directory.join(format!("delta-arrow-reader-{platform}-wheel"));
             fs::create_dir_all(&artifact)?;
-            let path = artifact.join(filename(tag));
-            write_wheel(&path, &metadata(tag), true)?;
+            let path = artifact.join(wheel_filename(tag));
+            write_wheel(&path, &metadata_files(tag), true)?;
             paths.push(path);
         }
         Ok((directory, paths))
     }
 }
 
-impl Drop for Wheels {
+impl Drop for WheelFixture {
     fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
+        let _ = fs::remove_dir_all(&self.directory);
     }
 }
 
-pub fn filename(tag: &str) -> String {
+pub fn wheel_filename(tag: &str) -> String {
     format!("delta_arrow_reader-1.2.3-cp310-abi3-{tag}.whl")
 }
 
-pub fn metadata(tag: &str) -> Vec<(String, String)> {
+pub fn metadata_files(tag: &str) -> Vec<(String, String)> {
     vec![
         (
             "delta_arrow_reader-1.2.3.dist-info/METADATA".into(),

@@ -2,7 +2,6 @@
   "code": [
     ".cargo/**",
     ".github/path-filters.json",
-    ".github/tests/**",
     "xtask/**",
     ".github/workflows/cache-warm.yml",
     ".github/workflows/ci.yml",
@@ -30,7 +29,6 @@
   "python": [
     ".cargo/**",
     ".github/path-filters.json",
-    ".github/tests/**",
     "xtask/**",
     ".github/workflows/ci.yml",
     ".github/workflows/cache-warm.yml",

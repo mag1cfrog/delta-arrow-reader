@@ -146,10 +146,17 @@ fail the warmer, except when another build has uploaded the same immutable entry
 
 The cache helpers are Rust commands in the independent `xtask` crate:
 `cargo xtask check-cache-writes` and `cargo xtask prune-ci-caches`.
-CI checks their types and tests with
+Run their tests with
 `cargo test --locked --manifest-path xtask/Cargo.toml`, without compiling the
 reader's dependencies. Cache pruning requires `gh`, `GH_TOKEN`, and `GH_REPO`;
 the pruning job alone has `actions: write` permission.
+
+The `xtask` tests also cover Python release validation and workflow gates.
+Three release planning tests require `release-plz` 0.3.171 on `PATH` and are
+ignored by default. After installing that version, run the full suite with
+`cargo test --locked --manifest-path xtask/Cargo.toml -- --include-ignored`.
+CI runs this full suite. The release planning tests use temporary repositories
+and a local baseline without publishing packages.
 
 To populate caches after a toolchain or workflow change, run `Warm CI caches`
 manually on main. The first build for new compiler inputs can still be cold.
@@ -182,7 +189,7 @@ package version for that run:
 
 ```console
 gh run download RUN_ID --pattern 'delta-arrow-reader-*-wheel' --dir wheel-artifacts
-cargo xtask check-python-wheels wheel-artifacts --expected-version 0.6.2
+cargo xtask check-python-artifacts wheel-artifacts --expected-version 0.6.2
 ```
 
 The workflow produces build artifacts only. For publisher setup, TestPyPI

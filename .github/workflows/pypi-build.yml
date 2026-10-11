@@ -305,5 +305,5 @@ jobs:
       - name: Check complete artifact set
         id: verify
         run: |
-          cargo xtask check-python-wheels wheel-artifacts --expected-version "$EXPECTED_VERSION"
+          cargo xtask check-python-artifacts wheel-artifacts --expected-version "$EXPECTED_VERSION"
           echo "validated=true" >> "$GITHUB_OUTPUT"

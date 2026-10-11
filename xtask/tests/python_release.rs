@@ -4,12 +4,12 @@ use serde_json::{Value, json};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
-struct ReleaseRepo {
+struct ReleaseRequestRepo {
     directory: PathBuf,
     sha: String,
 }
 
-impl ReleaseRepo {
+impl ReleaseRequestRepo {
     fn new(name: &str) -> Result<Self> {
         let directory =
             env::temp_dir().join(format!("python-release-{name}-{}", std::process::id()));
@@ -49,7 +49,7 @@ impl ReleaseRepo {
         Ok(())
     }
 
-    fn check(
+    fn assert_request(
         &self,
         event_name: &str,
         event: Value,
@@ -62,7 +62,7 @@ impl ReleaseRepo {
         fs::write(&event_path, serde_json::to_vec(&event)?)?;
         fs::write(&output_path, "existing=kept\n")?;
         let result = Command::new(env!("CARGO_BIN_EXE_xtask"))
-            .arg("prepare-python-release")
+            .arg("check-python-release-request")
             .current_dir(&self.directory)
             .env("GIT_CONFIG_GLOBAL", self.directory.join("empty-gitconfig"))
             .env("GIT_CONFIG_NOSYSTEM", "1")
@@ -94,7 +94,7 @@ impl ReleaseRepo {
     }
 }
 
-impl Drop for ReleaseRepo {
+impl Drop for ReleaseRequestRepo {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.directory);
     }
@@ -102,8 +102,8 @@ impl Drop for ReleaseRepo {
 
 #[test]
 fn manual_modes_require_an_exact_version_and_pypi_requires_a_tag() -> Result<()> {
-    let repo = ReleaseRepo::new("manual")?;
-    repo.check(
+    let repo = ReleaseRequestRepo::new("manual")?;
+    repo.assert_request(
         "workflow_dispatch",
         json!({"inputs": {"expected-version": "1.2.3"}}),
         "refs/heads/main",
@@ -117,7 +117,7 @@ fn manual_modes_require_an_exact_version_and_pypi_requires_a_tag() -> Result<()>
             } else {
                 Ok(mode)
             };
-            repo.check(
+            repo.assert_request(
                 "workflow_dispatch",
                 json!({"inputs": {"publish-to": mode, "expected-version": "1.2.3"}}),
                 reference,
@@ -134,7 +134,7 @@ fn manual_modes_require_an_exact_version_and_pypi_requires_a_tag() -> Result<()>
         json!({"expected-version": "1.2.3\npublish-to=pypi"}),
         json!({"expected-version": 123}),
     ] {
-        repo.check(
+        repo.assert_request(
             "workflow_dispatch",
             json!({"inputs": inputs}),
             "refs/heads/main",
@@ -143,7 +143,7 @@ fn manual_modes_require_an_exact_version_and_pypi_requires_a_tag() -> Result<()>
         )?;
     }
     for mode in [json!("unknown"), json!(null), json!(false)] {
-        repo.check(
+        repo.assert_request(
             "workflow_dispatch",
             json!({"inputs": {"publish-to": mode, "expected-version": "1.2.3"}}),
             "refs/heads/main",
@@ -156,12 +156,12 @@ fn manual_modes_require_an_exact_version_and_pypi_requires_a_tag() -> Result<()>
 
 #[test]
 fn automatic_pypi_publication_requires_a_stable_published_release() -> Result<()> {
-    let repo = ReleaseRepo::new("published")?;
+    let repo = ReleaseRequestRepo::new("published")?;
     let event = json!({
         "action": "published",
         "release": {"tag_name": "v1.2.3", "draft": false, "prerelease": false},
     });
-    repo.check(
+    repo.assert_request(
         "release",
         event.clone(),
         "refs/tags/v1.2.3",
@@ -180,7 +180,7 @@ fn automatic_pypi_publication_requires_a_stable_published_release() -> Result<()
     ] {
         let mut invalid = event.clone();
         invalid["release"][field] = value;
-        repo.check(
+        repo.assert_request(
             "release",
             invalid,
             "refs/tags/v1.2.3",
@@ -195,21 +195,21 @@ fn automatic_pypi_publication_requires_a_stable_published_release() -> Result<()
     ] {
         let mut invalid = event.clone();
         invalid["action"] = json!(action);
-        repo.check(name, invalid, "refs/tags/v1.2.3", &repo.sha, Err(error))?;
+        repo.assert_request(name, invalid, "refs/tags/v1.2.3", &repo.sha, Err(error))?;
     }
     for (reference, error) in [
         ("refs/heads/main", "PyPI requires a version tag"),
         ("refs/tags/other-v1.2.3", "selected tag must match"),
         ("refs/tags/v1.2.4", "selected tag must match"),
     ] {
-        repo.check("release", event.clone(), reference, &repo.sha, Err(error))?;
+        repo.assert_request("release", event.clone(), reference, &repo.sha, Err(error))?;
     }
     Ok(())
 }
 
 #[test]
 fn refs_and_commits_must_match_the_checkout_and_version_tag() -> Result<()> {
-    let mut repo = ReleaseRepo::new("refs")?;
+    let mut repo = ReleaseRequestRepo::new("refs")?;
     let event = json!({"inputs": {"expected-version": "1.2.3"}});
     for (reference, error) in [
         ("refs/tags/v1.2.4", "selected tag must match"),
@@ -219,7 +219,7 @@ fn refs_and_commits_must_match_the_checkout_and_version_tag() -> Result<()> {
             "other modes accept branches or version tags",
         ),
     ] {
-        repo.check(
+        repo.assert_request(
             "workflow_dispatch",
             event.clone(),
             reference,
@@ -233,7 +233,7 @@ fn refs_and_commits_must_match_the_checkout_and_version_tag() -> Result<()> {
         ("A".repeat(40), "source must be a full commit SHA"),
         ("g".repeat(40), "source must be a full commit SHA"),
     ] {
-        repo.check(
+        repo.assert_request(
             "workflow_dispatch",
             event.clone(),
             "refs/heads/main",
@@ -248,7 +248,7 @@ fn refs_and_commits_must_match_the_checkout_and_version_tag() -> Result<()> {
         "test: move past release tag",
     ])?;
     repo.sha = repo.git(&["rev-parse", "HEAD"])?;
-    repo.check(
+    repo.assert_request(
         "workflow_dispatch",
         event.clone(),
         "refs/tags/v1.2.3",
@@ -256,7 +256,7 @@ fn refs_and_commits_must_match_the_checkout_and_version_tag() -> Result<()> {
         Err("selected tag does not point to the event commit"),
     )?;
     repo.git(&["tag", "--delete", "v1.2.3"])?;
-    repo.check(
+    repo.assert_request(
         "workflow_dispatch",
         event.clone(),
         "refs/tags/v1.2.3",
@@ -264,7 +264,7 @@ fn refs_and_commits_must_match_the_checkout_and_version_tag() -> Result<()> {
         Err("git failed"),
     )?;
     repo.git(&["tag", "v1.2.3"])?;
-    repo.check(
+    repo.assert_request(
         "workflow_dispatch",
         event,
         "refs/tags/v1.2.3",
@@ -275,13 +275,13 @@ fn refs_and_commits_must_match_the_checkout_and_version_tag() -> Result<()> {
 
 #[test]
 fn version_comes_from_the_committed_workspace_manifest() -> Result<()> {
-    let mut repo = ReleaseRepo::new("version")?;
+    let mut repo = ReleaseRequestRepo::new("version")?;
     let event = json!({"inputs": {"expected-version": "1.2.3"}});
     fs::write(
         repo.directory.join("Cargo.toml"),
         "[workspace.package]\nversion = '9.9.9'\n",
     )?;
-    repo.check(
+    repo.assert_request(
         "workflow_dispatch",
         event.clone(),
         "refs/heads/main",
@@ -289,7 +289,7 @@ fn version_comes_from_the_committed_workspace_manifest() -> Result<()> {
         Ok("none"),
     )?;
     repo.commit_manifest("workspace.package.version = '1.2.3'\n[package]\nversion = '8.9.0'\n")?;
-    repo.check(
+    repo.assert_request(
         "workflow_dispatch",
         event,
         "refs/heads/main",
@@ -308,7 +308,7 @@ fn version_comes_from_the_committed_workspace_manifest() -> Result<()> {
         "",
     ] {
         repo.commit_manifest(&format!("[workspace.package]\nversion = '{version}'\n"))?;
-        repo.check(
+        repo.assert_request(
             "workflow_dispatch",
             json!({"inputs": {"expected-version": version}}),
             "refs/heads/main",
@@ -321,7 +321,7 @@ fn version_comes_from_the_committed_workspace_manifest() -> Result<()> {
         "[workspace.package]\nversion = 123\n",
     ] {
         repo.commit_manifest(manifest)?;
-        repo.check(
+        repo.assert_request(
             "workflow_dispatch",
             json!({"inputs": {"expected-version": "1.2.3"}}),
             "refs/heads/main",

@@ -9,7 +9,7 @@ use rawzip::{CompressionMethod, ZipArchive};
 
 use crate::Result;
 
-pub const ARTIFACT_PLATFORM_TAGS: [(&str, &str); 4] = [
+const ARTIFACT_PLATFORM_TAGS: [(&str, &str); 4] = [
     (
         "delta-arrow-reader-linux-x86_64-wheel",
         "manylinux_2_28_x86_64",
@@ -22,9 +22,9 @@ pub const ARTIFACT_PLATFORM_TAGS: [(&str, &str); 4] = [
     ),
 ];
 
-pub fn check_wheel(path: &Path, version: &str, platform: &str) -> Result<()> {
-    let tag = format!("cp310-abi3-{platform}");
-    let filename = format!("delta_arrow_reader-{version}-{tag}.whl");
+pub fn check_wheel_metadata(path: &Path, version: &str, platform_tag: &str) -> Result<()> {
+    let wheel_tag = format!("cp310-abi3-{platform_tag}");
+    let filename = format!("delta_arrow_reader-{version}-{wheel_tag}.whl");
     if path.file_name().and_then(|name| name.to_str()) != Some(&filename) {
         return Err(format!("expected wheel {filename:?}, got {}", path.display()).into());
     }
@@ -39,11 +39,11 @@ pub fn check_wheel(path: &Path, version: &str, platform: &str) -> Result<()> {
         ),
         (
             "WHEEL",
-            [("Root-Is-Purelib", "false"), ("Tag", tag.as_str())],
+            [("Root-Is-Purelib", "false"), ("Tag", wheel_tag.as_str())],
         ),
     ] {
         let expected_path = format!("delta_arrow_reader-{version}.dist-info/{name}");
-        let suffix = format!(".dist-info/{name}");
+        let suffix = format!(".dist-info/{name}").to_ascii_lowercase();
         let mut contents = None;
         let mut count = 0;
         let mut entries = archive.entries(&mut buffer);
@@ -51,11 +51,25 @@ pub fn check_wheel(path: &Path, version: &str, platform: &str) -> Result<()> {
         while let Some(entry) = entries.next_entry()? {
             count += 1;
             let member = entry.file_path();
-            // Installers can truncate NULs or treat backslashes as path separators.
-            if member.as_bytes().contains(&0) || member.as_bytes().contains(&b'\\') {
+            // Reject names installers can normalize onto another file, including on Windows.
+            if member.try_normalize()?.as_str().as_bytes() != member.as_bytes()
+                || member
+                    .as_bytes()
+                    .iter()
+                    .any(|byte| byte.is_ascii_control() || b"<>:\"|?*".contains(byte))
+                || member
+                    .as_bytes()
+                    .split(|byte| *byte == b'/')
+                    .any(|part| part.ends_with(b".") || part.ends_with(b" "))
+            {
                 return Err("ambiguous ZIP member name".into());
             }
-            if !member.as_bytes().ends_with(suffix.as_bytes()) {
+            // Case variants can alias the same metadata on Windows and macOS.
+            if !member
+                .as_bytes()
+                .to_ascii_lowercase()
+                .ends_with(suffix.as_bytes())
+            {
                 continue;
             }
             if contents.is_some() || member.as_bytes() != expected_path.as_bytes() {
@@ -120,7 +134,7 @@ fn check_headers(name: &str, contents: &str, expected: &[(&str, &str)]) -> Resul
     Ok(())
 }
 
-pub fn check_wheel_set(directory: &Path, version: &str) -> Result<Vec<PathBuf>> {
+pub fn check_wheel_artifacts(directory: &Path, version: &str) -> Result<Vec<PathBuf>> {
     let mut artifacts = fs::read_dir(directory)?
         .map(|entry| entry.map(|entry| entry.file_name()))
         .collect::<std::io::Result<Vec<_>>>()?;
@@ -145,7 +159,7 @@ pub fn check_wheel_set(directory: &Path, version: &str) -> Result<Vec<PathBuf>> 
             )
             .into());
         }
-        check_wheel(&paths[0], version, platform)?;
+        check_wheel_metadata(&paths[0], version, platform)?;
         wheels.extend(paths);
     }
     Ok(wheels)

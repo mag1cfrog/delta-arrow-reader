@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use crate::{Result, run};
 
-pub fn prepare_release() -> Result<()> {
+pub fn validate_release_request() -> Result<()> {
     let event: Value = serde_json::from_slice(&fs::read(env::var("GITHUB_EVENT_PATH")?)?)?;
     let event_name = env::var("GITHUB_EVENT_NAME")?;
     let reference = env::var("GITHUB_REF")?;

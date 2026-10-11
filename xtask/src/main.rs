@@ -135,7 +135,7 @@ fn main() -> Result<()> {
     match args.as_slice() {
         ["check-cache-writes"] => check_cache_writes(),
         ["prune-ci-caches"] => prune_ci_caches(),
-        ["prepare-python-release"] => python_release::prepare_release(),
+        ["check-python-release-request"] => python_release::validate_release_request(),
         [
             "check-python-wheel",
             path,
@@ -143,25 +143,36 @@ fn main() -> Result<()> {
             version,
             "--platform-tag",
             platform,
-        ] => python_wheels::check_wheel(Path::new(path), version, platform),
+        ] => python_wheels::check_wheel_metadata(Path::new(path), version, platform),
         [
-            "check-python-wheels",
+            "check-python-artifacts",
             directory,
             "--expected-version",
             version,
-        ] => python_wheels::check_wheel_set(Path::new(directory), version).map(|_| ()),
-        ["prepare-python-upload", artifacts, "--expected-version", version, "--index", index,
-         "--destination", destination] => python_upload::prepare_upload(
-            Path::new(artifacts), version, index, Path::new(destination),
+        ] => python_wheels::check_wheel_artifacts(Path::new(directory), version).map(|_| ()),
+        [
+            "stage-python-wheels",
+            artifacts,
+            "--expected-version",
+            version,
+            "--index",
+            index,
+            "--destination",
+            destination,
+        ] => python_upload::stage_missing_wheels(
+            Path::new(artifacts),
+            version,
+            index,
+            Path::new(destination),
         ),
         _ => Err(concat!(
             "usage: cargo xtask <task>\n",
             "  check-cache-writes\n",
             "  prune-ci-caches\n",
-            "  prepare-python-release\n",
+            "  check-python-release-request\n",
             "  check-python-wheel <path> --expected-version <version> --platform-tag <tag>\n",
-            "  check-python-wheels <directory> --expected-version <version>\n",
-            "  prepare-python-upload <artifacts> --expected-version <version> --index <pypi|testpypi> --destination <directory>",
+            "  check-python-artifacts <directory> --expected-version <version>\n",
+            "  stage-python-wheels <artifacts> --expected-version <version> --index <pypi|testpypi> --destination <directory>",
         )
         .into()),
     }
