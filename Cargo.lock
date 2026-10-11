@@ -4061,6 +4061,9 @@ checksum = "1ffae5123b2d3fc086436f8834ae3ab053a283cfac8fe0a0b8eaae044768a4c4"
 name = "xtask"
 version = "0.0.0"
 dependencies = [
+ "arrow-array",
+ "arrow-ipc",
+ "arrow-schema",
  "clap",
  "flate2",
  "regex",

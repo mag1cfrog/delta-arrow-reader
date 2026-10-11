@@ -1,3 +1,4 @@
+mod acceptance;
 mod artifacts;
 mod binary;
 mod build;
@@ -37,6 +38,8 @@ enum CliTask {
     BuildArchive(build::BuildArchiveArgs),
     /// Inspect and execute a binary on its supported Debian 12 platform.
     CheckBinary(binary::CheckBinaryArgs),
+    /// Run runtime acceptance tests against an extracted CLI archive.
+    TestArchive(acceptance::TestArchiveArgs),
     /// Collect dependency redistribution text for one CLI target.
     Notices(notices::NoticeArgs),
     /// Package, extract, assemble, or verify CLI binary archives.
@@ -60,6 +63,9 @@ fn main() -> Result<()> {
         } => args.run(),
         Task::Cli {
             command: CliTask::CheckBinary(args),
+        } => args.run(),
+        Task::Cli {
+            command: CliTask::TestArchive(args),
         } => args.run(),
         Task::Cli {
             command: CliTask::Notices(args),

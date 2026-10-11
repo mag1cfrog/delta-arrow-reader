@@ -1,9 +1,9 @@
 # CLI release tools
 
 These tools build and validate the Linux CLI archives. Builds, ELF checks,
-archive operations, and dependency notice collection run through `cargo xtask`,
-a Cargo alias for the repository's private Rust maintenance crate. Runtime
-acceptance tests use Python 3.11 or newer and PyArrow.
+archive operations, dependency notice collection, and archive acceptance run
+through `cargo xtask`, a Cargo alias for the repository's private Rust maintenance
+crate. The process and scan test suites use Python 3.11 or newer and PyArrow.
 
 ## Run the CI build
 
@@ -190,13 +190,30 @@ bash /checks/crates/delta-arrow-reader-cli/release/validate-runtime.sh
 ```
 
 The script records runtime package versions and checks version, inspection, and
-scan output before adding test tools. It then installs the test prerequisites,
-verifies the extracted executable's hash and ABI, and runs `process.py` and
-`scan.py`. Those tests cover external-writer fixtures, filtering and execution
+scan output before adding test tools. It then installs the test prerequisites
+and runs `xtask cli test-archive`. This command verifies the archive and extracted
+file permissions, checks the executable's hash and ABI, and validates the saved
+inspection and Arrow IPC output. It then runs `process.py` and `scan.py` using
+`python3` from `PATH`, which the script sets to the PyArrow virtual environment.
+Those tests cover external-writer fixtures, filtering and execution
 options, pipes, partial failures, signals, redaction, and trusted/untrusted HTTPS
 certificates. The archive and executable hashes are checked again afterward.
 CI uses these same commands for both architectures; see the workflow for the
 complete container invocations.
+
+To rerun acceptance after the script has installed the test tools and saved the
+smoke output, use the same mounts and environment:
+
+```sh
+PATH="/tmp/cli-runtime-venv/bin:$PATH" /tools/xtask cli test-archive /artifacts \
+  --extracted /package --smoke-output /tmp/cli-runtime-checks --repository /checks \
+  --architecture "$CLI_ARCHITECTURE" --version "$CLI_VERSION" \
+  --source-commit "$CLI_SOURCE_COMMIT" --rust-toolchain "$CLI_RUST_TOOLCHAIN"
+```
+
+`--repository` points to the mounted checkout containing the tests and fixtures.
+The command checks the archive and executable again after both test suites pass.
+Test output goes to stderr; stdout contains the acceptance result.
 
 ## Generate dependency notices
 

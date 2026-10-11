@@ -20,7 +20,7 @@ apt-get install -y --no-install-recommends \
   binutils build-essential openssl python3 python3-venv
 python3 -m venv /tmp/cli-runtime-venv
 /tmp/cli-runtime-venv/bin/python -m pip install --only-binary=:all: 'pyarrow==25.0.1'
-/tmp/cli-runtime-venv/bin/python /checks/crates/delta-arrow-reader-cli/release/run_acceptance.py \
-  /artifacts --extracted /package --smoke-output /tmp/cli-runtime-checks --xtask /tools/xtask \
+PATH="/tmp/cli-runtime-venv/bin:$PATH" /tools/xtask cli test-archive /artifacts \
+  --extracted /package --smoke-output /tmp/cli-runtime-checks --repository /checks \
   --architecture "$CLI_ARCHITECTURE" --version "$CLI_VERSION" \
   --source-commit "$CLI_SOURCE_COMMIT" --rust-toolchain "$CLI_RUST_TOOLCHAIN"

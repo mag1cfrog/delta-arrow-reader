@@ -20,7 +20,8 @@ use crate::{
 };
 
 const MANIFEST: &str = "cli-artifacts.json";
-const MEMBERS: [(&str, u32); 3] = [("dar", 0o755), ("LICENSE", 0o644), ("NOTICE", 0o644)];
+pub(crate) const MEMBERS: [(&str, u32); 3] =
+    [("dar", 0o755), ("LICENSE", 0o644), ("NOTICE", 0o644)];
 const LICENSE: &[u8] = include_bytes!("../../LICENSE");
 const NOTICE: &[u8] = include_bytes!("../../NOTICE");
 
@@ -93,7 +94,7 @@ pub(crate) struct ArtifactTarget {
     rust_target: String,
     libc: String,
     min_glibc: String,
-    runtime_dependencies: Vec<String>,
+    pub(crate) runtime_dependencies: Vec<String>,
     archive: String,
     archive_sha256: String,
     pub(crate) dar_sha256: String,
@@ -236,7 +237,7 @@ fn check_directory(directory: &Path, expected: &[String]) -> Result<()> {
     Ok(())
 }
 
-fn check_files(directory: &Path, expected: &[String]) -> Result<()> {
+pub(crate) fn check_files(directory: &Path, expected: &[String]) -> Result<()> {
     check_directory(directory, expected)?;
     for name in expected {
         require_regular_file(&directory.join(name))?;
@@ -574,7 +575,7 @@ pub(crate) fn package(
     Ok(manifest)
 }
 
-fn verify_platform(
+pub(crate) fn verify_platform(
     directory: &Path,
     identity: &BuildIdentity,
     architecture: Architecture,

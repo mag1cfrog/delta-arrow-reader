@@ -1,6 +1,6 @@
 use std::{
     io::{self, Read, Seek},
-    process::{Command, Output, Stdio},
+    process::{Child, Command, ExitStatus, Output, Stdio},
     thread,
     time::{Duration, Instant},
 };
@@ -42,6 +42,19 @@ pub(crate) fn output_with_timeout(command: &mut Command, timeout: Duration) -> R
     })
 }
 
+pub(crate) fn run_with_timeout(command: &mut Command, timeout: Duration) -> Result<()> {
+    let program = command.get_program().to_string_lossy().into_owned();
+    let mut child = command
+        .stdout(Stdio::from(io::stderr()))
+        .stderr(Stdio::inherit())
+        .spawn()
+        .context(CommandStartSnafu { program: &program })?;
+    let status =
+        wait_with_timeout(&mut child, timeout).context(CommandStartSnafu { program: &program })?;
+    ensure!(status.success(), CommandFailedSnafu { program, status });
+    Ok(())
+}
+
 fn capture_with_timeout(command: &mut Command, timeout: Duration) -> io::Result<Output> {
     // Files keep noisy children from filling a pipe while their deadline is checked.
     let mut stdout = tempfile::tempfile()?;
@@ -50,6 +63,20 @@ fn capture_with_timeout(command: &mut Command, timeout: Duration) -> io::Result<
         .stdout(stdout.try_clone()?)
         .stderr(stderr.try_clone()?)
         .spawn()?;
+    let status = wait_with_timeout(&mut child, timeout)?;
+    stdout.rewind()?;
+    stderr.rewind()?;
+    let mut output = Output {
+        status,
+        stdout: Vec::new(),
+        stderr: Vec::new(),
+    };
+    stdout.read_to_end(&mut output.stdout)?;
+    stderr.read_to_end(&mut output.stderr)?;
+    Ok(output)
+}
+
+fn wait_with_timeout(child: &mut Child, timeout: Duration) -> io::Result<ExitStatus> {
     let deadline = Instant::now() + timeout;
     let status = loop {
         match child.try_wait() {
@@ -65,17 +92,7 @@ fn capture_with_timeout(command: &mut Command, timeout: Duration) -> io::Result<
         let _ = child.kill();
         let _ = child.wait();
     }
-    let status = status?;
-    stdout.rewind()?;
-    stderr.rewind()?;
-    let mut output = Output {
-        status,
-        stdout: Vec::new(),
-        stderr: Vec::new(),
-    };
-    stdout.read_to_end(&mut output.stdout)?;
-    stderr.read_to_end(&mut output.stderr)?;
-    Ok(output)
+    status
 }
 
 #[cfg(test)]

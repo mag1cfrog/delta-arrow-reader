@@ -3,6 +3,24 @@
 use super::*;
 
 #[test]
+fn streamed_commands_require_a_successful_exit() -> Result<()> {
+    run_with_timeout(
+        Command::new("sh").args(["-c", "exit 0"]),
+        Duration::from_secs(5),
+    )?;
+    let error = run_with_timeout(
+        Command::new("sh").args(["-c", "exit 17"]),
+        Duration::from_secs(5),
+    )
+    .expect_err("nonzero exit must fail");
+    assert!(matches!(
+        error,
+        crate::error::Error::CommandFailed { status, .. } if status.code() == Some(17)
+    ));
+    Ok(())
+}
+
+#[test]
 fn captures_both_streams_without_pipe_backpressure() -> Result<()> {
     let output = output_with_timeout(
         Command::new("sh").args([

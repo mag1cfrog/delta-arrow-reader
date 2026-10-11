@@ -14,6 +14,11 @@ pub(crate) enum Error {
         subject: &'static str,
         source: serde_json::Error,
     },
+    #[snafu(display("Invalid Arrow data in {}: {source}", path.display()))]
+    Arrow {
+        path: PathBuf,
+        source: arrow_schema::ArrowError,
+    },
     #[snafu(display("Invalid TOML in {}: {source}", path.display()))]
     Toml {
         path: PathBuf,
