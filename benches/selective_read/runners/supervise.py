@@ -25,6 +25,7 @@ def integer(value):
 class Progress:
     def __init__(self, payload, query_seconds, cleanup_seconds):
         self.count = query_count(payload)
+        self.concurrent = payload.get("concurrent_queries") is not None
         self.timed = payload["purpose"] == "timing"
         self.query_seconds, self.cleanup_seconds = query_seconds, cleanup_seconds
         self.phase = "setup"
@@ -43,16 +44,23 @@ class Progress:
         elif phase in ("open", "initialization"):
             require(self.phase == "setup" and phase == ("open" if self.count == 1 else "initialization")
                     and index is None and query is None, "invalid snapshot phase")
-        elif phase == "query":
-            require(self.count > 1 and self.phase in ("initialization", "between") and integer(index)
-                    and index == len(self.queries) < self.count and query is None, "invalid query sequence")
+        elif phase in ("query", "concurrent_queries"):
+            if self.concurrent:
+                require(phase == "concurrent_queries" and self.phase == "initialization"
+                        and index is None and query is None, "invalid concurrent query start")
+            else:
+                require(phase == "query" and self.count > 1 and self.phase in ("initialization", "between")
+                        and integer(index) and index == len(self.queries) < self.count
+                        and query is None, "invalid query sequence")
             self.initialization_ns = message["initialization_ns"]
             if self.timed:
                 require(integer(self.initialization_ns), "missing initialization time")
                 if self.initialization_ns > self.query_seconds * 10**9:
                     raise TimeoutError("initialization exceeded deadline")
         elif phase == "query_end":
-            require(self.phase in ("open", "query") and integer(index) and index == len(self.queries)
+            valid_index = integer(index) and (0 <= index < self.count and
+                all(q["query_index"] != index for q in self.queries) if self.concurrent else index == len(self.queries))
+            require(self.phase in (("concurrent_queries",) if self.concurrent else ("open", "query")) and valid_index
                     and isinstance(query, dict) and set(query) == {"query_index", "output_rows", "output_batches", "completion_ns", "first_batch_ns"}, "invalid completed query")
             require(query["query_index"] == index and integer(query["output_rows"]) and integer(query["output_batches"]), "invalid query counts")
             if self.timed:
@@ -63,6 +71,10 @@ class Progress:
             else:
                 require(query["completion_ns"] is None and query["first_batch_ns"] is None, "untimed query has timing values")
             self.queries.append(query)
+            if self.concurrent:
+                self.queries.sort(key=lambda q: q["query_index"])
+                if len(self.queries) < self.count:
+                    return  # All queries share the original group deadline.
             phase = "cleanup" if len(self.queries) == self.count else "between"
         else:
             raise ValueError("unknown watchdog phase")

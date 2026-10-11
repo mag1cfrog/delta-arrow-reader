@@ -1,9 +1,15 @@
 # Experimental partial-page reads
 
-This records the opt-in reader from [#420](https://github.com/mag1cfrog/delta-arrow-reader/issues/420)
+This records the reader from [#420](https://github.com/mag1cfrog/delta-arrow-reader/issues/420)
 and transport-aware planning from [#421](https://github.com/mag1cfrog/delta-arrow-reader/issues/421).
-The option is disabled by default. [#419](https://github.com/mag1cfrog/delta-arrow-reader/issues/419)
-tracks performance validation and the decision about defaults.
+Conditional partial reads and supported S3 initialization profiling are now
+enabled by default. The [default validation](intra-page-defaults.md) records
+current measurements, initialization costs and remaining limits. Earlier
+measurements below describe the defaults in effect at the time.
+
+The [partial-read transport checks](intra-page-connections.md) cover bounded
+connection setup, connection reuse, and public S3 fallback. They also retain the
+earlier measurements that ruled out opening a new connection for every request.
 
 ## Run the portable checks
 
@@ -45,7 +51,10 @@ existing Delta reader applies DV deletions using original row coordinates.
 Predicate columns retain complete data because Parquet may cache their decoded
 batches.
 
-Eligible pages are flat nullable PLAIN INT64 V1 pages with offset indexes. Data
+Eligible pages are flat PLAIN V1 pages with offset indexes and physical types
+INT32, INT64, FLOAT or DOUBLE. Nullable and required columns are supported. The
+file's physical type and definition levels determine byte offsets; the normal
+decoder handles dates, timestamps, decimals and supported type widening. Data
 must be uncompressed or held in a single Zstd frame of raw blocks, without page
 or frame checksums. Unsupported pages go through ordinary reads. Malformed supported
 structures return errors; the standard decoder handles errors in fallback
@@ -56,20 +65,33 @@ The planner reuses the latency/throughput estimator from ordinary range reads.
 It scores bytes and request waves against shared capacity, allowing payload
 delivery to overlap requests waiting for their first byte. Serial reads and
 single waves still pay both costs. Request capacity comes from completion
-intervals in the central half of an uncontended small-response wave. This captures
-client and server work without charging the common network latency per request.
+intervals in the central half of replenished small reads, spanning at least two
+waves. This captures sustained capacity instead of the completion burst caused
+by latency jitter in one wave.
+For uncompressed nullable pages, the page size and available null counts can
+prove that null information extends beyond the header prefix. The initial
+estimate then budgets for another request. Row count alone does not establish
+this: even a million-row page can encode its null levels as a short RLE run.
+When metadata cannot settle this, bounded probes inspect the actual layout.
+
 The model takes the larger of processing and transport costs because they overlap.
 Repeated samples use a median; broad jitter can still lower the estimated capacity.
 Uncontended probes are charged at least their observed elapsed time. Partial
 reads must beat the ordinary plan by more than 10%. Missing transport evidence,
 selections covering at least half a row group or uncertain savings use ordinary
-reads. Probes also supply transport observations. Optional network
-warmup adds calibration requests during initialization. Before probing, the
+reads. The planner also requires a measured small-request cost: latency and
+bandwidth alone do not establish how quickly thousands of requests can complete.
+An unknown cost must not be treated as zero. Probes also supply transport
+observations. Network warmup adds calibration requests during
+initialization. Before probing, the
 planner includes known complete-read costs and estimates selected-value positions
 from page indexes. Large raw Zstd pages also require a dependent block-header
 probe, which is included before any I/O. With measured request overhead, this
-estimate can reject an expensive attempt without I/O. It is an approximation; actual nullable and
-compressed offsets still require probes.
+estimate can reject an expensive attempt without I/O. It is an approximation;
+actual nullable and compressed offsets still require probes.
+For required columns, the row count gives a minimum size for PLAIN values.
+Smaller Zstd pages cannot use an all-raw frame, so metadata rules them out
+without a probe.
 
 An initialized profile measures shared capacity. Both bandwidth and request
 concurrency use that scope when comparing plans. The profile accepts later
@@ -138,12 +160,36 @@ and total session time. The second query can use transport samples from the
 first. It must be reported separately from a fresh-process query. The HTTP
 counters and process resource usage cover the whole session.
 
+To compare a change against its base, add
+`--baseline-binary /path/to/base/selective-read-dar --execution-mode reuse`.
+Both executables use their default partial-read and warmup settings. The primary
+result is the first fully consumed query after initialization. Initialization and
+the second query remain separate. The harness verifies both executable hashes,
+checks resolved settings and alternates three pairs. Request tracing runs during
+validation, outside the timed samples.
+
+Add `--no-warmup` to skip both metadata and network warmup, including in `reuse`
+mode. This tests the lazy initialization used by `WarmupMode::None`. It cannot
+be combined with `--network-warmup`. Ordinary query traffic can supply latency
+and bandwidth estimates, but those alone do not enable partial-page reads.
+Network warmup, whether automatic or explicit, establishes the small-request cost;
+later partial reads can update it. Without that evidence, subsequent queries
+continue to use ordinary reads and skip partial-read row tracking.
+
+Add `--concurrent-queries 2` or `--concurrent-queries 4` with
+`--execution-mode reuse` to run the same query concurrently through one provider.
+The queries share its transport profile, worker threads, memory pool and request
+budget. Each query's latency starts at the same instant, before planning. Report
+the group's duration as the longest query latency, and throughput as the query
+count divided by that duration. Report initialization separately and include it
+in the combined cost. Do not add concurrent query latencies together.
+
 Add `--network-warmup` to calibrate the automatic mode during table initialization,
 with a five-second sampling limit. When calibration succeeds, the first query
 uses the resulting profile. Both modes retain the same metadata warmup when
-using `--execution-mode reuse`. Network calibration schedules 13.5 MiB
-across 396 requests, using up to three active data files; store retries can add
-traffic. For `reuse` measurements, report initialization, the first query, and
+using `--execution-mode reuse`. Network calibration schedules 24 MiB
+across 3,084 requests, using up to three active data files; store retries can add
+traffic. For sequential `reuse` measurements, report initialization, the first query, and
 initialization plus the first query separately. Automatic-mode initialization
 includes metadata loading and network calibration. Query durations exclude
 initialization. Label the second query separately. Compute combined durations
@@ -161,7 +207,162 @@ comes from overlapping trace intervals. Repeated requests are counted, but are
 not labelled as retries because the proxy cannot distinguish SDK retries from
 separate reads of the same range.
 
-## Paired network checks on the merged implementation
+### Numeric type fixtures
+
+The [numeric type comparison](intra-page-numeric-types.md) records the results
+against the pre-series reader, including all four retained README cases.
+
+`numeric_pages.py` generates a separate, deterministic fixture for INT32, INT64,
+FLOAT and DOUBLE, with nullable and required columns. It does not change the
+published revision-6 tables or oracle. Its small `numeric-pages` driver is built
+alongside the DAR runner; build the same driver against both reader revisions.
+
+```console
+python benches/selective_read/numeric_pages.py generate --output /path/to/numeric-fixture
+python benches/selective_read/numeric_pages.py run \
+  --fixture /path/to/numeric-fixture --state /path/to/storage-state \
+  --table s3://selective-read/verified-numeric-fixture \
+  --baseline /path/to/base/numeric-pages --candidate /path/to/change/numeric-pages \
+  --type float --output /path/to/new-results
+```
+
+Upload the generated Parquet files and Delta log with checksum verification
+before running. Repeat for each type. Use `--selection dense` for the dense
+control, a file URI for the local control, and the proxy's low-latency profile for
+the fast-network control. Validation compares independent Arrow references,
+including floating-point bits, in separate processes. Timings use defaults and
+report initialization and two fully consumed queries separately.
+
+## Missing request-cost evidence
+
+The [samples](intra-page-profile-evidence-samples.csv) and
+[build records](intra-page-profile-evidence-results.json) test enabling the option
+without initialization warmup. Before the fix, ordinary queries supplied latency
+and bandwidth estimates, but an unknown small-request cost was treated as zero.
+That could select thousands of small reads on the second query and make it much
+slower. The fix requires a measured cost before attempting partial reads and
+avoids row tracking when that evidence is absent. A deterministic regression
+test fails on the original implementation and passes with the guard.
+
+At 1 ms and 1 Gbps, second-query times in seconds were:
+
+| Table columns | Before: off | Before: auto | Fixed: off | Fixed: auto |
+| --- | ---: | ---: | ---: | ---: |
+| 416 | 1.58 | 14.38 | 1.57 | 1.57 |
+| 90 | 3.27 | 18.92 | 3.29 | 3.28 |
+
+The initial screening has one pair per case. Fixed results are medians of three
+alternating pairs per case; the CSV keeps the builds and every sample separate.
+At 200 ms +/-20 ms and 150 Mbps, a further pair per table also retained ordinary
+reads: second-query times were 10.92 versus 10.93 seconds for 416 columns and
+22.58 versus 22.58 seconds for 90 columns. Both queries in every fixed no-warmup
+session retained identical ordinary Parquet byte and request counts.
+
+Explicit network profiling still enabled partial reads on the fixed build. One
+pair per table at 200 ms +/-20 ms and 150 Mbps gave these times in seconds:
+
+| Table columns | Off first query | Auto first query | Off initialization + first | Auto initialization + first |
+| --- | ---: | ---: | ---: | ---: |
+| 416 | 10.35 | 6.49 | 11.71 | 10.99 |
+| 90 | 22.30 | 10.25 | 23.00 | 14.12 |
+
+These are bounded checks that the existing gains survive the guard, not a new
+multi-reader comparison. Across both queries, Parquet traffic fell from 345.9 to
+194.1 MB for 416 columns and from 796.1 to 332.3 MB for 90 columns. Requests rose
+from 80 to 24,526 and from 108 to 41,164. These totals exclude the separate
+24 MiB / 3,084 initialization requests. Whole-process CPU time rose from 1.93 to
+5.46 seconds and from 3.68 to 8.78 seconds; the CSV also retains peak memory and
+HTTP concurrency.
+
+All 20 declared fixed-build sessions are retained, and all 24 separate validation
+exports matched every reference value and null across 894 rows. The preceding
+eight screening sessions and 16 passing validation exports are retained too.
+No compilers appeared in 118 fixed-build process polls or 75 screening polls.
+CPU affinity was not exclusive. Data generation and full-table hashing were
+unnecessary; trace analysis ran after timing finished.
+
+This fix does not enable the option or initialization profiling by default.
+Ordinary traffic alone still cannot activate partial reads. Eligible real-S3
+performance and the remaining controls below are still pending under
+[#422](https://github.com/mag1cfrog/delta-arrow-reader/issues/422); default
+promotion is tracked separately in
+[#423](https://github.com/mag1cfrog/delta-arrow-reader/issues/423).
+
+## Concurrent-query measurements
+
+The [samples](intra-page-concurrency-samples.csv) and
+[build records](intra-page-concurrency-results.json) use reader commit
+`7015f46743688c952dd3a08c0a5d0fa9940ab100`, with only the benchmark harness
+changed to run concurrent queries. All 28 declared timing sessions are retained.
+Before timing, all 40 separate query exports matched every reference value and
+null across the 894 returned rows.
+
+Each process initializes one provider, then runs two or four copies of the same
+query. The process keeps the existing budget of four physical cores, eight worker
+threads and 8 GiB memory. Automatic mode profiles the network during initialization.
+Both modes use fresh processes and reused OS/MinIO caches. No compiler activity
+appeared in 260 process polls; CPU affinity was not an exclusive reservation.
+
+At 200 ms +/-20 ms and 150 Mbps, three alternating pairs per configuration gave
+these medians in seconds. Group time ends when the last query completes.
+
+| Table columns | Concurrent queries | Off group | Auto group | Off initialization + group | Auto initialization + group |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 416 | 2 | 19.42 | 11.60 | 20.77 | 16.09 |
+| 90 | 2 | 43.70 | 19.28 | 44.40 | 23.11 |
+| 416 | 4 | 38.01 | 22.13 | 39.38 | 26.65 |
+| 90 | 4 | 86.41 | 37.30 | 87.11 | 41.16 |
+
+With four concurrent queries, median throughput rose from 0.105 to 0.181 queries/s
+for 416 columns, and from 0.046 to 0.107 queries/s for 90 columns. The CSV retains
+each query's latency, group duration, initialization and resource observations.
+
+The four-query groups transferred median Parquet totals of 697.5 to 384.1 MB
+for 416 columns and 1,604.5 to 659.7 MB for 90 columns. These decimal byte totals
+exclude initialization profiling. Query-group requests rose from 180 to 49,756
+and from 264 to 82,880, respectively. Whole-process CPU time rose from 3.84 to
+10.62 seconds and from 8.30 to 17.81 seconds. Automatic query-group Parquet HTTP
+concurrency peaked at 512; all-object HTTP concurrency reached 515, including
+metadata traffic outside those counters.
+
+Some ordinary large responses ended near the client's default 30-second timeout
+and continued with suffix-range requests. Every result still passed validation.
+The counters retain incomplete responses and subsequent requests, including all
+transmitted body bytes. Repeated ranges are not treated as an SDK retry count.
+
+At 1 ms and 1 Gbps, one pair per table with four concurrent queries retained
+identical ordinary Parquet byte and request counts in both modes. Group durations
+were 5.59 versus 5.59 seconds for 416 columns and 12.90 versus 12.89 seconds for
+90 columns. Profiling still added about 1.3 seconds: initialization plus the group
+was 5.88 versus 7.16 seconds, and 12.97 versus 14.24 seconds. These controls show
+the initialization cost even when the query strategy correctly stays unchanged.
+
+### Public S3 correctness controls
+
+Two public Delta tables were read anonymously from AWS S3 in `us-west-2`, without
+the MinIO proxy. The [records](intra-page-concurrency-results.json) retain pinned
+snapshots, SQL, source-file checksums, exported-result checksums and calibration
+diagnostics. Each mode initialized one provider and ran two sequential queries.
+All eight exports matched an independent PyArrow read of the selected partition.
+
+| Public table | Snapshot | Selected partition | Rows per query | Automatic initialization |
+| --- | ---: | --- | ---: | --- |
+| `s3://daft-public-data/nyc-taxi-dataset-2023-jan-deltalake` | 0 | `tpep_pickup_day = 26` | 1,724 | No files large enough to sample; zero calibration requests |
+| `s3://daft-public-datasets/red-pajamas/stackexchange-sample-deltalake-zorder` | 4 | `language = 'nl'` | 1 | Complete: 24 MiB / 3,084 calibration requests in 2.91 s |
+
+Both queries retained ordinary reads. The taxi files use Snappy dictionary pages
+without offset indexes; StackExchange has no INT64 payload columns. Both snapshots
+have no DV. These bounded checks cover real-S3 initialization and fallback, not
+partial-page performance. Query observations include exports and diagnostics and
+must not be used as benchmark timings. SDK retries, TLS connection reuse, client
+geographic location and billed costs were not measured.
+
+Eligible partial-page performance on real S3 and the remaining local, dense and
+no-DV performance controls remain under
+[#422](https://github.com/mag1cfrog/delta-arrow-reader/issues/422). The option stays
+disabled by default, and the published multi-reader results are unchanged.
+
+## Historical paired network checks (2026-10-08)
 
 The [original 36 sessions](intra-page-paired-samples.csv),
 [12-session primary-profile repeat](intra-page-primary-repeat-samples.csv) and
@@ -203,10 +404,11 @@ requests, outside these query counters.
 
 The earlier 150 Mbps samples remain in the original CSV. Automatic first-query
 times ranged from 7.47 to 10.35 seconds for 416 columns and 11.97 to 22.30 seconds
-for 90 columns, with one ordinary-I/O session per table. The repeat confirms the
-90-column gain but does not reproduce the 416-column gain. Background builds
-alone therefore do not explain the missing benefit; the initialization profile
-and cost decision still need investigation.
+for 90 columns, with one ordinary-I/O session per table. The repeat confirmed the
+90-column gain but did not reproduce the 416-column gain. Background builds
+alone therefore did not explain the missing benefit. The subsequent calibration
+and cost-model fix is recorded in
+[PR #441](https://github.com/mag1cfrog/delta-arrow-reader/pull/441).
 
 The original two 1 Gbps controls produced these medians in seconds:
 
@@ -226,17 +428,20 @@ equal at 3.26 seconds. These samples do not isolate the cause of that difference
 The CSV files retain every timing, byte/request count, CPU observation and peak
 RSS; the JSON separates the original campaign from the primary-profile repeat.
 
-The option remains disabled by default. The 416-column cost decision needs
-follow-up, alongside the remaining concurrent-query, local, no-DV,
-dense-selection, unsupported-format and real-S3 checks in
-[#422](https://github.com/mag1cfrog/delta-arrow-reader/issues/422).
-The published five-reader comparison is unchanged.
+Partial-page reads were disabled by default on this build.
+[PR #444](https://github.com/mag1cfrog/delta-arrow-reader/pull/444) later enabled
+the guarded defaults. The [default validation](intra-page-defaults.md) records
+the newer measurements, concurrent-query checks and native-S3 initialization
+and fallback checks. Eligible partial-page performance on native S3 remains
+unmeasured under [#422](https://github.com/mag1cfrog/delta-arrow-reader/issues/422).
+This historical record does not change the published five-reader comparison.
 
-## Earlier profiling fix validation
+## Earlier initialization profiling measurements
 
 The [samples](intra-page-calibration-samples.csv) and
-[build records](intra-page-calibration-results.json) retain earlier fix-validation
-runs on the same two scattered DV tables. Automatic mode ran three fresh-process
+[build records](intra-page-calibration-results.json) retain measurements before
+the sustained-request calibration fix in [PR #441](https://github.com/mag1cfrog/delta-arrow-reader/pull/441).
+Automatic mode ran three fresh-process
 sessions per table and network. Each session initialized the table, including
 network profiling, then ran two queries. Both validation queries matched all
 894 reference rows, values and nulls.
@@ -274,8 +479,8 @@ and 3.33 versus 3.31 seconds for 90 columns. Profiling still added about
 2.06 versus 1.73 seconds, and 3.70 versus 3.37 seconds, respectively.
 
 These are DAR-only observations with reused OS/MinIO caches. The option remains
-disabled by default. The paired campaign above follows these measurements;
-simultaneous queries, broader format controls and real S3 validation remain under
+disabled by default. Subsequent measurements and remaining network and format
+controls are tracked in
 [#422](https://github.com/mag1cfrog/delta-arrow-reader/issues/422).
 
 ## Earlier baseline network measurements

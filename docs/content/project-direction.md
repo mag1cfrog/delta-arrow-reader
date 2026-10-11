@@ -39,7 +39,7 @@ error, ownership and validation contracts rather than redesigning them.
 | Projection/limits, Arrow C Stream and `pyarrow.RecordBatchReader` | [#105](https://github.com/mag1cfrog/delta-arrow-reader/issues/105) | Reuse the native scan; no eager collection or second producer queue |
 | Refresh and existing scan/resource controls | [#106](https://github.com/mag1cfrog/delta-arrow-reader/issues/106) | New snapshots do not retarget existing readers |
 | Supported predicates and exact schema-aware scalar conversion | [#107](https://github.com/mag1cfrog/delta-arrow-reader/issues/107) | Core predicate semantics; no Spark parsing or new expression language |
-| Platform wheels and installed-package checks | [#418](https://github.com/mag1cfrog/delta-arrow-reader/issues/418) | Validate the completed Reader API on all four wheel targets |
+| Platform wheels and installed-package checks | [#418](https://github.com/mag1cfrog/delta-arrow-reader/issues/418) | Validate the completed Reader API on all supported wheel targets |
 | Release-plz and Trusted Publishing integration | [#109](https://github.com/mag1cfrog/delta-arrow-reader/issues/109) | Reuse the validated wheel builder; first publication remains on #101's release checklist |
 
 The implementation order is #102, #417, #105, then both #106 and #107, followed
@@ -57,9 +57,10 @@ core must not acquire a hidden runtime. Keep existing redacted error contracts.
 
 The Python package now builds from source with type stubs and the Rust workspace's
 shared version. It supports snapshot loading, schema/version inspection, column
-projection, row limits, PyArrow readers, and single-use stream exports. Platform
-wheels and publishing remain planned work. Python asyncio, writes, a dataframe/query
-product and JavaScript bindings remain outside this first release.
+projection, row limits, PyArrow readers, and single-use stream exports. CI builds
+and checks platform wheels; PyPI publishing remains planned work. Python asyncio,
+writes, a dataframe/query product and JavaScript bindings remain outside this
+first release.
 
 ## Optional SQL access through DataFusion Python
 

@@ -9,9 +9,14 @@ page is for readers who want to understand or tune how the work is divided.
 
 ## Choose a warmup mode
 
-`DeltaTableBuilder::load_table` uses `WarmupMode::None` by default. Each scan
-build performs Delta log/checkpoint replay before Delta Kernel applies the query
-predicate and selects active files.
+`DeltaTableBuilder::load_table` defaults to `WarmupMode::Automatic`. For supported
+S3 stores, the Direct backend prepares reusable metadata and samples the
+network before the first query. Other stores, explicit range policies and the
+Delta Kernel backend do no warmup. Disabling partial-page reads on the table
+builder also disables automatic warmup.
+
+Choose `WarmupMode::None` to skip preparation. Each scan then performs Delta
+log/checkpoint replay before Delta Kernel applies its predicate and selects files.
 
 `DeltaTableBuilder::with_warmup(WarmupMode::QueryPlanning)` instead materializes
 a query-unfiltered set of reconciled active `add` metadata during table
@@ -31,15 +36,16 @@ to measure whether it reduces total time for your queries.
 To see how this initialization choice plays out across several queries, follow
 the [metadata warmup lifecycles](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/).
 
-For remote storage, `WarmupMode::Network` also measures transfer speed and
-request costs before the first query:
+Automatic S3 warmup measures latency, transfer speed and small-request costs
+with a five-second sampling limit. Select `WarmupMode::Network` explicitly to
+choose a different limit:
 
 ```no_run
 # use delta_arrow_reader::{DeltaTableBuilder, WarmupMode};
 # async fn example() -> Result<(), delta_arrow_reader::DeltaReaderError> {
 let table = DeltaTableBuilder::new("s3://bucket/table")
     .with_warmup(WarmupMode::Network {
-        max_duration: std::time::Duration::from_secs(5),
+        max_duration: std::time::Duration::from_secs(2),
     })
     .load_table()
     .await?;
@@ -49,17 +55,27 @@ let table = DeltaTableBuilder::new("s3://bucket/table")
 
 The time limit covers network sampling after metadata loading. Sampling uses
 up to three active files of at least 4 MiB each, found in the retained metadata.
-It schedules 13.5 MiB across 396 range requests; store retries can add traffic.
+It schedules 24 MiB across 3,084 range requests; store retries can add traffic.
+Small requests run with replenished concurrency to measure sustained capacity.
+They do not replace the latency and bandwidth samples taken at lower concurrency.
 Timed-out, failed or insufficient samples are discarded without failing table
-loading. A zero duration skips sampling.
+loading. Sampling can still add cost when later queries use ordinary reads.
+A zero duration skips sampling.
 
 Network warmup applies to the Direct backend's automatic range policy on
-built-in remote stores. Other settings retain metadata warmup only. The profile
-stays in memory and is shared by scans, table clones and refreshed snapshots.
-Uncontended reads keep updating it as conditions change. It can reject costly
-partial-page attempts before probing, but does not enable that experimental
-option or guarantee that every cost estimate is accurate. Include initialization
-in measurements to check whether warmup pays for your workload.
+supported `s3://` and `s3a://` stores. Custom HTTP settings, system proxies,
+S3 Express and other storage schemes retain ordinary reads. Explicit `Network`
+on unsupported stores retains metadata warmup only; `Automatic` skips it.
+An applicable system proxy can reject sampling after metadata preparation.
+The profile stays in memory and is shared by scans, table clones and refreshed snapshots.
+Uncontended reads can update it when they meet the same sampling conditions.
+Partial-page reads are enabled by default but require a complete measured
+profile and predicted savings above 10%. Unsupported layouts, insufficient
+evidence and predicted losing cases use ordinary reads. Measure initialization
+separately from queries and include it when evaluating total application time.
+`load_snapshot` never performs warmup; `Automatic` and `None` both preserve its
+metadata-only behavior. Converting that snapshot with `into_table` also leaves
+warmup undone; use `load_table` when you want automatic preparation.
 
 ## Choose a partition target
 

@@ -92,10 +92,10 @@ cached metadata without replaying the Delta log or checkpoint. Each query
 still applies its own projection and predicate and reads its own Parquet
 footers and data.
 
-Use query-planning warmup for a named table that will be queried repeatedly.
-Keep the default `WarmupMode::None` when you will query it only once or
-occasionally. The crate does not maintain a table-name registry or choose a
-mode automatically.
+The default `WarmupMode::Automatic` prepares supported S3 tables and profiles
+their network before querying. Use `QueryPlanning` to prepare only metadata, or
+`None` to skip preparation for a one-off or occasional query. Local tables remain
+lazy by default. The crate does not maintain a table-name registry.
 
 A registered provider stays on the Delta version that it loaded. Refreshing a
 provider does not modify the DataFusion catalog entry that points to the old

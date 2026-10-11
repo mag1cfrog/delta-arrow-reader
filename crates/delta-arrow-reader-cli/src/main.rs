@@ -1,0 +1,504 @@
+mod execution_options;
+mod input;
+mod predicate;
+
+use std::{
+    fmt,
+    io::{self, IsTerminal, Write},
+    num::NonZeroUsize,
+    process::ExitCode,
+    str::FromStr,
+};
+
+use arrow::ipc::writer::StreamWriter;
+use arrow_schema::{ArrowError, Schema};
+use clap::{Args, Parser, Subcommand, error::ErrorKind};
+use delta_arrow_reader::{
+    DeltaReaderError, DeltaScan, DeltaSnapshotSelection, DeltaTableBuilder, WarmupMode,
+};
+use serde_json::{Value, json};
+use snafu::{ResultExt, Snafu, ensure};
+
+/// Read Delta Lake snapshots as JSON metadata or Arrow IPC streams.
+#[derive(Parser)]
+#[command(name = "dar", bin_name = "dar", version)]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Print one Delta snapshot's version and full Arrow schema as JSON.
+    ///
+    /// Only snapshot metadata is loaded; data files are not read.
+    Inspect(TableArgs),
+    /// Stream a Delta snapshot's rows as Arrow IPC to stdout.
+    ///
+    /// Redirect stdout to a file or pipe; terminal output is rejected.
+    Scan {
+        #[command(flatten)]
+        table: TableArgs,
+        /// Logical column name; repeat to select columns in argument order.
+        #[arg(long = "column", value_name = "NAME")]
+        columns: Vec<String>,
+        /// Read zero columns while preserving row counts.
+        #[arg(long, conflicts_with = "columns")]
+        no_columns: bool,
+        /// Maximum output rows as unsigned decimal digits; zero is valid.
+        #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<usize>)]
+        limit: Option<usize>,
+        /// Positive execution partition target; default: native automatic selection.
+        #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
+        target_partitions: Option<NonZeroUsize>,
+        /// Local typed JSON predicate; at most 1 MiB. '-' is a filename, not stdin.
+        #[arg(long, value_name = "PATH")]
+        predicate_file: Option<String>,
+        /// Local JSON execution options; at most 1 MiB. '-' is a filename, not stdin.
+        #[arg(long, value_name = "PATH")]
+        execution_options_file: Option<String>,
+    },
+}
+
+#[derive(Args)]
+struct TableArgs {
+    /// UTF-8 local path or URL; relative paths use the working directory.
+    /// Use '--' before a table path beginning with '-'.
+    table: String,
+    /// Unsigned decimal snapshot version; default: latest.
+    #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<u64>)]
+    table_version: Option<u64>,
+    /// Local JSON object of string keys and string values.
+    /// At most 1 MiB; '-' is a filename, not stdin.
+    #[arg(long, value_name = "PATH")]
+    storage_options_file: Option<String>,
+}
+
+#[derive(Snafu)]
+enum Error {
+    #[snafu(display("Invalid command-line arguments."))]
+    Argument,
+    #[snafu(display("Invalid JSON input."))]
+    InputJson,
+    #[snafu(display("Could not read the input file."))]
+    InputIo { source: io::Error },
+    #[snafu(display("The reader runtime failed."))]
+    Runtime { source: io::Error },
+    #[snafu(display("Could not write or flush stdout."))]
+    Output { source: io::Error },
+    #[snafu(display("Could not encode the Arrow IPC stream."))]
+    ArrowIpc { source: ArrowError },
+    #[snafu(display("{source}"))]
+    Reader { source: DeltaReaderError },
+    #[snafu(display("{source}"))]
+    Configuration { source: DeltaReaderError },
+}
+
+impl From<ArrowError> for Error {
+    fn from(source: ArrowError) -> Self {
+        match source {
+            ArrowError::IoError(_, source) => Self::Output { source },
+            source => Self::ArrowIpc { source },
+        }
+    }
+}
+
+impl fmt::Debug for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, formatter)
+    }
+}
+
+impl Error {
+    fn diagnostic(&self) -> Value {
+        let (phase, code) = match self {
+            Self::Argument => ("configuration", "invalid_cli_argument"),
+            Self::InputJson => ("configuration", "invalid_input_json"),
+            Self::InputIo { .. } => ("configuration", "input_file_io"),
+            Self::Runtime { .. } => ("execution", "runtime_initialization"),
+            Self::Output { .. } => ("execution", "output_write"),
+            Self::ArrowIpc { .. } => ("execution", "arrow_ipc"),
+            Self::Reader { source } | Self::Configuration { source } => {
+                (source.phase().as_str(), source.code())
+            }
+        };
+        json!({"phase": phase, "code": code, "message": self.to_string()})
+    }
+
+    fn exit_code(&self) -> ExitCode {
+        ExitCode::from(match self {
+            Self::Argument
+            | Self::InputJson
+            | Self::InputIo { .. }
+            | Self::Configuration { .. } => 2,
+            Self::Runtime { .. } | Self::Reader { .. } | Self::ArrowIpc { .. } => 1,
+            Self::Output { .. } => 3,
+        })
+    }
+
+    fn write_diagnostic(&self) {
+        let mut stderr = io::stderr().lock();
+        let _ = writeln!(stderr, "{}", self.diagnostic()).and_then(|()| stderr.flush());
+    }
+}
+
+fn parse_unsigned_decimal<T: FromStr>(value: &str) -> Result<T, Error> {
+    ensure!(
+        !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()),
+        ArgumentSnafu
+    );
+    value.parse().map_err(|_| ArgumentSnafu.build())
+}
+
+fn encode_inspection_json(version: u64, schema: &Schema) -> Vec<u8> {
+    // Arrow Schema's Serde representation contains only JSON-compatible types.
+    // Keep upstream serialization, including metadata and nested field order.
+    let mut output = json!({
+        "format_version": 1,
+        "table_version": version.to_string(),
+        "schema": schema,
+    })
+    .to_string()
+    .into_bytes();
+    output.push(b'\n');
+    output
+}
+
+fn run() -> Result<(), Error> {
+    let command = match Cli::try_parse() {
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            return write_stdout(error.to_string().as_bytes());
+        }
+        // Clap's other diagnostics may contain argument values. Emit our redacted error.
+        Err(_) => return ArgumentSnafu.fail(),
+        Ok(cli) => cli.command,
+    };
+
+    if matches!(command, Command::Scan { .. }) {
+        ensure!(!io::stdout().is_terminal(), ArgumentSnafu);
+    }
+    let table_args = match &command {
+        Command::Inspect(table) | Command::Scan { table, .. } => table,
+    };
+    let storage_options = match &table_args.storage_options_file {
+        Some(path) => input::read_json_file::<input::StorageOptionsInput>(path)?.0,
+        None => Default::default(),
+    };
+    let predicate = match &command {
+        Command::Scan {
+            predicate_file: Some(path),
+            ..
+        } => Some(input::read_json_file::<predicate::PredicateInput>(path)?.0),
+        _ => None,
+    };
+    let execution_options = match &command {
+        Command::Scan {
+            execution_options_file: Some(path),
+            ..
+        } => {
+            let options = input::read_json_file::<
+                input::JsonObject<execution_options::ExecutionOptionsInput>,
+            >(path)?
+            .0;
+            Some(
+                options
+                    .into_execution_options()
+                    .context(ConfigurationSnafu)?,
+            )
+        }
+        _ => None,
+    };
+    // Inspect needs only metadata. Scan planning happens explicitly below.
+    let builder = DeltaTableBuilder::new(&table_args.table)
+        .with_warmup(WarmupMode::None)
+        .with_snapshot_selection(table_args.table_version.map_or(
+            DeltaSnapshotSelection::Latest,
+            DeltaSnapshotSelection::Version,
+        ))
+        .with_storage_options(storage_options);
+    // Kernel starts threads lazily and can panic without waking its caller.
+    // The CLI owns the process: fail immediately with a redacted diagnostic,
+    // including for worker panics, instead of unwinding into a blocking join.
+    std::panic::set_hook(Box::new(|_| {
+        Error::Runtime {
+            source: io::Error::other("reader runtime panicked"),
+        }
+        .write_diagnostic();
+        std::process::exit(1);
+    }));
+    // Drive async work on the calling thread. A dedicated Tokio worker can
+    // occupy the last OS thread and leave blocking loads queued forever.
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context(RuntimeSnafu)?;
+    let result = runtime.block_on(async {
+        let table = builder.load_table().await.context(ReaderSnafu)?;
+        match command {
+            Command::Inspect(_) => write_stdout(&encode_inspection_json(
+                table.version(),
+                table.schema().as_ref(),
+            )),
+            Command::Scan {
+                columns,
+                no_columns,
+                limit,
+                target_partitions,
+                ..
+            } => {
+                let mut builder = table.scan();
+                if no_columns || !columns.is_empty() {
+                    builder = builder.with_projection(columns);
+                }
+                if let Some(limit) = limit {
+                    builder = builder.with_limit(limit);
+                }
+                if let Some(predicate) = predicate {
+                    builder = builder.with_predicate(predicate);
+                }
+                if let Some(execution_options) = execution_options {
+                    builder = builder.with_execution_options(execution_options);
+                }
+                if let Some(target_partitions) = target_partitions {
+                    builder = builder
+                        .with_target_partitions(target_partitions.get())
+                        .context(ConfigurationSnafu)?;
+                }
+                write_arrow_stream(builder.build().await.context(ReaderSnafu)?).await
+            }
+        }
+    });
+    // Blocking core work must not delay process shutdown after this command finishes.
+    runtime.shutdown_background();
+    result
+}
+
+fn write_stdout(output: &[u8]) -> Result<(), Error> {
+    let mut stdout = io::stdout().lock();
+    stdout
+        .write_all(output)
+        .and_then(|()| stdout.flush())
+        .context(OutputSnafu)
+}
+
+async fn write_arrow_stream(scan: DeltaScan) -> Result<(), Error> {
+    let (result_sender, result_receiver) = tokio::sync::oneshot::channel();
+    let runtime = tokio::runtime::Handle::current();
+    // A blocked stdout must leave the runtime and its blocking pool free to read files.
+    std::thread::Builder::new()
+        .name("dar-stdout".into())
+        .spawn(move || {
+            let result = runtime.block_on(async {
+                let mut writer =
+                    StreamWriter::try_new(io::stdout().lock(), scan.schema().as_ref())?;
+                // Flush before polling so output failures stop further reads.
+                writer.flush()?;
+                let mut stream = scan.into_stream();
+                while let Some(batch) = stream.next_batch().await.context(ReaderSnafu)? {
+                    writer.write(&batch)?;
+                    writer.flush()?;
+                }
+                // finish writes the end marker and flushes; never call it after an error.
+                writer.finish()?;
+                Ok(())
+            });
+            let _ = result_sender.send(result);
+        })
+        .context(RuntimeSnafu)?;
+    result_receiver
+        .await
+        .map_err(io::Error::other)
+        .context(RuntimeSnafu)?
+}
+
+fn main() -> ExitCode {
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            error.write_diagnostic();
+            error.exit_code()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashMap, sync::Arc};
+
+    use arrow_schema::{DataType, Field, TimeUnit};
+
+    use super::*;
+
+    #[test]
+    fn inspection_format_preserves_nested_schema_and_all_metadata() {
+        let schema = Schema::new_with_metadata(
+            vec![
+                Field::new(
+                    "profile",
+                    DataType::Struct(
+                        vec![
+                            Field::new("amount", DataType::Decimal128(20, 4), false).with_metadata(
+                                HashMap::from([("comment".into(), "secret user metadata".into())]),
+                            ),
+                        ]
+                        .into(),
+                    ),
+                    true,
+                ),
+                Field::new(
+                    "times",
+                    DataType::List(Arc::new(Field::new(
+                        "element",
+                        DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                        false,
+                    ))),
+                    false,
+                ),
+            ],
+            HashMap::from([("owner".into(), "table author".into())]),
+        );
+        let encoded = encode_inspection_json(u64::MAX, &schema);
+        assert_eq!(encoded.last(), Some(&b'\n'));
+        assert_eq!(encoded.iter().filter(|&&byte| byte == b'\n').count(), 1);
+        let actual: Value = serde_json::from_slice(&encoded).unwrap();
+        // This literal freezes the upstream Arrow encoding within format version 1.
+        assert_eq!(
+            actual,
+            json!({
+                "format_version": 1, "table_version": "18446744073709551615",
+                "schema": {"fields": [
+                    {"name": "profile", "nullable": true, "dict_id": 0, "dict_is_ordered": false, "metadata": {},
+                     "data_type": {"Struct": [
+                         {"name": "amount", "data_type": {"Decimal128": [20, 4]}, "nullable": false,
+                          "dict_id": 0, "dict_is_ordered": false, "metadata": {"comment": "secret user metadata"}}
+                     ]}},
+                    {"name": "times", "nullable": false, "dict_id": 0, "dict_is_ordered": false, "metadata": {},
+                     "data_type": {"List": {
+                         "name": "element", "data_type": {"Timestamp": ["Microsecond", "UTC"]}, "nullable": false,
+                         "dict_id": 0, "dict_is_ordered": false, "metadata": {}
+                     }}}
+                ], "metadata": {"owner": "table author"}}
+            })
+        );
+        let decoded: Schema = serde_json::from_value(actual["schema"].clone()).unwrap();
+        assert_eq!(decoded, schema);
+    }
+
+    #[test]
+    fn table_version_accepts_full_unsigned_range() {
+        for text in ["0", "000", "18446744073709551615"] {
+            let cli =
+                Cli::try_parse_from(["dar", "inspect", "--table-version", text, "table"]).unwrap();
+            assert!(
+                matches!(cli.command, Command::Inspect(TableArgs {table_version: Some(version), ..}) if version == text.parse::<u64>().unwrap())
+            );
+        }
+    }
+
+    #[test]
+    fn scan_arguments_preserve_column_names_and_full_limit_range() {
+        for limit in ["0".to_owned(), "0001".to_owned(), usize::MAX.to_string()] {
+            let cli = Cli::try_parse_from([
+                "dar", "scan", "--column", "a,b", "--column", "a.b", "--column", "a,b", "--column",
+                "", "--limit", &limit, "table",
+            ])
+            .unwrap();
+            let Command::Scan {
+                columns,
+                no_columns,
+                limit: parsed_limit,
+                ..
+            } = cli.command
+            else {
+                panic!("expected scan command");
+            };
+            assert_eq!(columns, ["a,b", "a.b", "a,b", ""]);
+            assert!(!no_columns);
+            assert_eq!(parsed_limit, Some(limit.parse::<usize>().unwrap()));
+        }
+    }
+
+    #[test]
+    fn partition_targets_accept_positive_usize_values_and_preserve_omission() {
+        for text in [
+            None,
+            Some("1".into()),
+            Some("0002".into()),
+            Some(usize::MAX.to_string()),
+        ] {
+            let mut args = vec!["dar", "scan", "table"];
+            if let Some(text) = &text {
+                args.extend(["--target-partitions", text]);
+            }
+            let Command::Scan {
+                target_partitions, ..
+            } = Cli::try_parse_from(args).unwrap().command
+            else {
+                panic!("expected scan command");
+            };
+            assert_eq!(
+                target_partitions.map(NonZeroUsize::get),
+                text.map(|text| text.parse::<usize>().unwrap())
+            );
+        }
+        let overflow = (usize::MAX as u128 + 1).to_string();
+        for text in ["0", "000", &overflow] {
+            assert!(
+                Cli::try_parse_from(["dar", "scan", "--target-partitions", text, "table"]).is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn ipc_errors_distinguish_output_failures_and_redact_sources() {
+        use std::error::Error as _;
+
+        let output = Error::from(ArrowError::from(io::Error::other("secret output path")));
+        assert_eq!(output.exit_code(), ExitCode::from(3));
+        assert_eq!(output.diagnostic()["code"], "output_write");
+        assert!(output.source().unwrap().is::<io::Error>());
+        let encoding = Error::from(ArrowError::IpcError("secret schema".into()));
+        assert_eq!(encoding.exit_code(), ExitCode::from(1));
+        assert_eq!(encoding.diagnostic()["code"], "arrow_ipc");
+        assert!(encoding.source().unwrap().is::<ArrowError>());
+        for error in [output, encoding] {
+            assert_eq!(error.diagnostic()["phase"], "execution");
+            assert!(!error.diagnostic().to_string().contains("secret"));
+            assert_eq!(format!("{error:?}"), error.to_string());
+        }
+    }
+
+    #[test]
+    fn storage_options_preserve_strings() {
+        let options: input::StorageOptionsInput = serde_json::from_str(
+            r#"{"AWS_ACCESS_KEY_ID":" secret, value ","MixedCase":"unchanged"}"#,
+        )
+        .unwrap();
+        assert_eq!(options.0["AWS_ACCESS_KEY_ID"], " secret, value ");
+        assert_eq!(options.0["MixedCase"], "unchanged");
+        assert_eq!(options.0.len(), 2);
+    }
+
+    #[test]
+    fn snafu_retains_io_sources_without_exposing_them_in_diagnostics() {
+        use std::error::Error as _;
+
+        let error = Err::<(), _>(io::Error::other("secret input path"))
+            .context(InputIoSnafu)
+            .unwrap_err();
+        assert!(error.source().unwrap().is::<io::Error>());
+        assert_eq!(
+            error.diagnostic(),
+            json!({
+                "phase": "configuration", "code": "input_file_io",
+                "message": "Could not read the input file.",
+            })
+        );
+        assert_eq!(format!("{error:?}"), error.to_string());
+    }
+}

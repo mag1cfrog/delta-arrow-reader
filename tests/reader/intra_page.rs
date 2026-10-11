@@ -3,7 +3,10 @@
 use std::{fs, sync::Arc};
 
 use arrow::{
-    array::{ArrayRef, Int64Array},
+    array::{
+        ArrayRef, Date32Array, Decimal128Array, Float32Array, Float64Array, Int32Array, Int64Array,
+        TimestampMicrosecondArray,
+    },
     compute::concat_batches,
     datatypes::{DataType, Field, Schema},
     record_batch::RecordBatch,
@@ -67,6 +70,53 @@ fn create_table(
     columns.push(Arc::new(Int64Array::from_iter_values(
         (0..ROWS as i64).map(|id| i64::from(MATCHES.contains(&id))),
     )));
+    // Required physical INT32 is read through a nullable Delta long field below.
+    let typed: Vec<(&str, ArrayRef)> = vec![
+        (
+            "narrow",
+            Arc::new(Int32Array::from_iter_values(0..ROWS as i32)),
+        ),
+        (
+            "date",
+            Arc::new(Date32Array::from_iter_values(0..ROWS as i32)),
+        ),
+        (
+            "timestamp",
+            Arc::new(
+                TimestampMicrosecondArray::from_iter_values(0..ROWS as i64).with_timezone("UTC"),
+            ),
+        ),
+        (
+            "decimal32",
+            Arc::new(
+                Decimal128Array::from_iter_values(0..ROWS as i128)
+                    .with_precision_and_scale(9, 2)?,
+            ),
+        ),
+        (
+            "decimal64",
+            Arc::new(
+                Decimal128Array::from_iter_values(0..ROWS as i128)
+                    .with_precision_and_scale(18, 2)?,
+            ),
+        ),
+        (
+            "float",
+            Arc::new(Float32Array::from_iter_values(
+                (0..ROWS).map(|i| i as f32 / 2.0),
+            )),
+        ),
+        (
+            "double",
+            Arc::new(Float64Array::from_iter_values(
+                (0..ROWS).map(|i| i as f64 / 2.0),
+            )),
+        ),
+    ];
+    for (name, column) in typed {
+        fields.push(Field::new(name, column.data_type().clone(), false));
+        columns.push(column);
+    }
     let schema = Arc::new(Schema::new(fields));
     let batch = RecordBatch::try_new(schema.clone(), columns)?;
     let mut writer = ArrowWriter::try_new(Vec::new(), schema.clone(), Some(properties.build()))?;
@@ -76,11 +126,20 @@ fn create_table(
         .fields()
         .iter()
         .map(|f| {
-            json!({
-                "name": f.name(), "type": "long", "nullable": f.is_nullable(), "metadata": {}
-            })
+            let dtype = match f.data_type() {
+                DataType::Int32 | DataType::Int64 => "long".to_owned(),
+                DataType::Date32 => "date".to_owned(),
+                DataType::Timestamp(_, _) => "timestamp".to_owned(),
+                DataType::Float32 => "float".to_owned(),
+                DataType::Float64 => "double".to_owned(),
+                DataType::Decimal128(p, s) => format!("decimal({p},{s})"),
+                other => return Err(format!("unexpected fixture type: {other:?}").into()),
+            };
+            Ok(json!({
+                "name": f.name(), "type": dtype, "nullable": f.is_nullable() || f.name() == "narrow", "metadata": {}
+            }))
         })
-        .collect();
+        .collect::<TestResult<_>>()?;
     let metadata = json!({"metaData": {"id":"intra-page", "format":{"provider":"parquet","options":{}},
         "schemaString":json!({"type":"struct","fields":fields}).to_string(),"partitionColumns":[],"configuration":{}}});
     RealParquetDeltaTable::new_with_raw_parquet(
@@ -127,8 +186,8 @@ async fn scan(
     Ok((concat_batches(&schema, &batches)?, metrics.snapshot()))
 }
 
-fn intra_page_options() -> DeltaScanExecutionOptions {
-    DeltaScanExecutionOptions::new().with_experimental_intra_page_reads(true)
+fn ordinary_options() -> DeltaScanExecutionOptions {
+    DeltaScanExecutionOptions::new().with_experimental_intra_page_reads(false)
 }
 
 fn add_dv(root: &RealParquetDeltaTable) -> TestResult {
@@ -245,7 +304,7 @@ async fn intra_page_tracking_column_name_preserves_user_data() -> TestResult {
 
 #[tokio::test]
 async fn intra_page_public_scan_without_transport_evidence_matches_baseline() -> TestResult {
-    assert!(!DeltaScanExecutionOptions::default().experimental_intra_page_reads());
+    assert!(DeltaScanExecutionOptions::default().experimental_intra_page_reads());
     for codec in [
         Compression::UNCOMPRESSED,
         Compression::ZSTD(Default::default()),
@@ -255,12 +314,20 @@ async fn intra_page_public_scan_without_transport_evidence_matches_baseline() ->
             if dv {
                 add_dv(&root)?;
             }
-            let (expected, baseline) = scan(&root, Default::default(), id_filter(MATCHES)).await?;
-            let (actual, experimental) =
-                scan(&root, intra_page_options(), id_filter(MATCHES)).await?;
+            let (expected, baseline) = scan(&root, ordinary_options(), id_filter(MATCHES)).await?;
+            let (actual, experimental) = scan(
+                &root,
+                DeltaScanExecutionOptions::default(),
+                id_filter(MATCHES),
+            )
+            .await?;
             assert_eq!(actual, expected);
             assert_eq!(actual.num_rows(), MATCHES.len() - if dv { 2 } else { 0 });
-            // Local reads supply no remote transport evidence. Opting in must
+            let narrow = actual.column_by_name("narrow").unwrap();
+            assert_eq!(narrow.data_type(), &DataType::Int64);
+            assert!(actual.schema().field_with_name("narrow")?.is_nullable());
+            assert_eq!(narrow.to_data(), actual.column(0).to_data());
+            // Local reads supply no remote transport evidence. The default must
             // retain ordinary I/O until the cost model has usable observations.
             assert!(
                 experimental.parquet_data_file_bytes_received
@@ -272,11 +339,21 @@ async fn intra_page_public_scan_without_transport_evidence_matches_baseline() ->
                 op: DeltaComparison::GtEq,
                 value: DeltaScalar::Int64(0),
             };
-            let (dense, _) = scan(&root, intra_page_options(), dense_predicate.clone()).await?;
-            let (expected, _) = scan(&root, Default::default(), dense_predicate).await?;
+            let (dense, _) = scan(
+                &root,
+                DeltaScanExecutionOptions::default(),
+                dense_predicate.clone(),
+            )
+            .await?;
+            let (expected, _) = scan(&root, ordinary_options(), dense_predicate).await?;
             assert_eq!(dense, expected);
             assert_eq!(dense.num_rows(), ROWS - if dv { 2 } else { 0 });
-            let (empty, _) = scan(&root, intra_page_options(), id_filter(&[-1])).await?;
+            let (empty, _) = scan(
+                &root,
+                DeltaScanExecutionOptions::default(),
+                id_filter(&[-1]),
+            )
+            .await?;
             assert_eq!(empty.num_rows(), 0);
             // A nullable payload used by both the predicate and projection must
             // retain complete bytes for Parquet's predicate cache.
@@ -286,8 +363,8 @@ async fn intra_page_public_scan_without_transport_evidence_matches_baseline() ->
                     column: "payload_0".into(),
                 },
             ]);
-            let (expected, _) = scan(&root, Default::default(), compound.clone()).await?;
-            let (actual, _) = scan(&root, intra_page_options(), compound).await?;
+            let (expected, _) = scan(&root, ordinary_options(), compound.clone()).await?;
+            let (actual, _) = scan(&root, DeltaScanExecutionOptions::default(), compound).await?;
             assert_eq!(actual, expected);
             assert!(actual.num_rows() > 0 && actual.num_rows() < MATCHES.len());
         }
@@ -314,8 +391,13 @@ async fn intra_page_unsupported_layouts_match_baseline() -> TestResult {
         ),
     ] {
         let root = create_table(properties, repeated_value)?;
-        let (expected, _) = scan(&root, Default::default(), id_filter(MATCHES)).await?;
-        let (actual, _) = scan(&root, intra_page_options(), id_filter(MATCHES)).await?;
+        let (expected, _) = scan(&root, ordinary_options(), id_filter(MATCHES)).await?;
+        let (actual, _) = scan(
+            &root,
+            DeltaScanExecutionOptions::default(),
+            id_filter(MATCHES),
+        )
+        .await?;
         assert_eq!(actual, expected);
     }
     Ok(())
@@ -330,7 +412,7 @@ async fn intra_page_explicit_range_policies_keep_their_reads() -> TestResult {
         ParquetRangeReadPolicy::MergeRangesWithinOneMegabyte,
         ParquetRangeReadPolicy::StoreImplementation,
     ] {
-        let options = DeltaScanExecutionOptions::new().with_parquet_range_read_policy(policy);
+        let options = ordinary_options().with_parquet_range_read_policy(policy);
         let (expected, baseline) = scan(&root, options, id_filter(MATCHES)).await?;
         let (actual, experimental) = scan(
             &root,
@@ -367,14 +449,14 @@ async fn intra_page_projection_limits_and_selection_reset_preserve_rows() -> Tes
         },
         id_filter(MATCHES),
     ]);
-    let (expected, _) = scan(&root, Default::default(), overflow.clone()).await?;
-    let (actual, _) = scan(&root, intra_page_options(), overflow).await?;
+    let (expected, _) = scan(&root, ordinary_options(), overflow.clone()).await?;
+    let (actual, _) = scan(&root, DeltaScanExecutionOptions::default(), overflow).await?;
     assert_eq!(actual, expected);
 
     // Skip the first row group, hide the predicate column and apply the limit
     // after DV filtering. Empty projections must still retain their row count.
     let matches = [32_769, 65_536, 65_537, 65_538];
-    let (expected, _) = scan(&root, Default::default(), id_filter(&matches)).await?;
+    let (expected, _) = scan(&root, ordinary_options(), id_filter(&matches)).await?;
     assert_eq!(expected.num_rows(), 3);
     for indices in [&[][..], &[8][..], &[3, 1][..]] {
         for limit in [0, 1, 2, usize::MAX] {
@@ -387,7 +469,7 @@ async fn intra_page_projection_limits_and_selection_reset_preserve_rows() -> Tes
                 .with_projection(projection)
                 .with_predicate(id_filter(&matches))
                 .with_limit(limit)
-                .with_execution_options(intra_page_options())
+                .with_execution_options(DeltaScanExecutionOptions::default())
                 .build()
                 .await?;
             let stream = scan.into_stream();
@@ -487,15 +569,23 @@ async fn intra_page_corrupt_or_truncated_input_fails_the_scan() -> TestResult {
     corrupt[body..body + 4].copy_from_slice(&u32::MAX.to_le_bytes());
     fs::write(&path, corrupt)?;
     assert!(
-        scan(&root, intra_page_options(), id_filter(MATCHES))
-            .await
-            .is_err()
+        scan(
+            &root,
+            DeltaScanExecutionOptions::default(),
+            id_filter(MATCHES)
+        )
+        .await
+        .is_err()
     );
     fs::write(&path, &original[..original.len() - 10])?;
     assert!(
-        scan(&root, intra_page_options(), id_filter(MATCHES))
-            .await
-            .is_err()
+        scan(
+            &root,
+            DeltaScanExecutionOptions::default(),
+            id_filter(MATCHES)
+        )
+        .await
+        .is_err()
     );
     Ok(())
 }

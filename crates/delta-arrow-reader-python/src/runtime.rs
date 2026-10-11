@@ -69,6 +69,21 @@ mod tests {
 
     #[test]
     fn interruption_drops_pending_work_and_keeps_runtime_usable() {
+        // Python signal handlers require the thread that initialized Python.
+        // Use a fresh process so other Python tests cannot initialize it first.
+        const CHILD: &str = "DELTA_ARROW_READER_SIGNAL_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "runtime::tests::interruption_drops_pending_work_and_keeps_runtime_usable",
+                ])
+                .env(CHILD, "1")
+                .status()
+                .unwrap();
+            assert!(status.success());
+            return;
+        }
         // Initialize and check signals on the same thread, Python's main thread.
         Python::initialize();
         Python::attach(|py| {

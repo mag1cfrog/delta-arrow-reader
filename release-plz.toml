@@ -3,6 +3,11 @@ name = "delta-arrow-reader-python"
 release = false
 publish = false
 
+[[package]]
+name = "delta-arrow-reader-cli"
+release = false
+publish = false
+
 [changelog]
 commit_parsers = [
     { message = "^feat", group = "added" },

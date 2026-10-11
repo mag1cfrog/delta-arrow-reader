@@ -1,0 +1,1096 @@
+{
+  "status": "DAR-only concurrent-query validation and public-S3 correctness controls; experimental option remains disabled by default",
+  "timed_sessions": 28,
+  "exactly_validated_query_exports": 40,
+  "sample_csv_sha256": "6f7627b1672d30cc83ba08da388ae9bedb020fcdb1a7384e18d31cce2aaea3f2",
+  "source_report_sha256": "04a692ffc43367d851281cd3a4c326874b25cd73bf392b3090a81beeee8da97d",
+  "retained_artifact_directory": "/home/hanbo/repo/selective-read-intra-page-concurrent-20261008",
+  "build": {
+    "reader_git_commit": "7015f46743688c952dd3a08c0a5d0fa9940ab100",
+    "harness_git_commit": "7015f46743688c952dd3a08c0a5d0fa9940ab100",
+    "diagnostic_patch_sha256": "4c6869c4c0cea4a727851554a7f48d58ea0791f063aeb3c0bf9d8a9a27648ea4",
+    "executable_sha256": "2f1f77541bf9a6fb2d9ff3c4aca7e45982a75d09f0b8b61c492d059252e4b8d0",
+    "lockfile_sha256": "3e33227b8d98d1fbb4840f013ce48ceb9ad19fad8f460e4a0152c1737e514893",
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "rustflags": "-C target-cpu=x86-64",
+    "target": "x86_64-unknown-linux-gnu"
+  },
+  "build_record_sha256": "69333e66fa18b37616841a8cd51cb246024ecd853db60500c0ffae04f9cdd7f8",
+  "harness_source_sha256": {
+    "benches/selective_read/runners/common.rs": "59964f02cb6cbb0982cc4cf7231e632a01a359daf52c5b8fd88494a78e27706d",
+    "benches/selective_read/runners/run.py": "b2dc649cc8c517c2fd879fbfa14d675789e383ced33123f57b7ca888b0b5c3c8",
+    "benches/selective_read/runners/supervise.py": "85663059110e1f69363690f465e58b31b26543b9b40b51ff9149b829f089fb02",
+    "benches/selective_read/intra_page.py": "a539ddddd569c593e60abee03bb4b45d41e927d17e4a5d7a1f83665cfa2c4ba8",
+    "benches/selective_read/test_intra_page.py": "260847b30ea3957ab52a16301605e250254f26679c6715e80cdc5148a514c5d9"
+  },
+  "analysis_sha256": "6a2d3484dfd04889f7092633a4703a7d19a930abbf6b5bb93d90c83f1a8f5998",
+  "method": {
+    "purpose": "Shared-provider concurrent-query validation on the calibration fix; only the benchmark harness is changed.",
+    "scheduling": "One table initialization and one provider shared by all queries in a process. A common start includes query planning and scheduler waiting. All query futures are polled concurrently.",
+    "timing": "Report each query completion from the common start, group makespan as the maximum completion, throughput as query count divided by makespan, and initialization separately. Do not sum concurrent query latencies.",
+    "correctness": "Check every value and null of every concurrent query against the retained independent reference before timing each configuration.",
+    "preparation": "Build and HEAD checksum verification complete before timing. No table regeneration, upload or full-table rehash.",
+    "order": [
+      [
+        "off",
+        "auto"
+      ],
+      [
+        "auto",
+        "off"
+      ],
+      [
+        "off",
+        "auto"
+      ]
+    ],
+    "network_warmup_limit_seconds": 5,
+    "limitations": [
+      "Same SQL and snapshot within each concurrent group; no mixed-workload claim.",
+      "One pair per low-latency control; real S3 not measured.",
+      "CPU affinity is not an exclusive CPU reservation."
+    ],
+    "resources": {
+      "logical_cpus": [
+        0,
+        1,
+        2,
+        3,
+        8,
+        9,
+        10,
+        11
+      ],
+      "physical_cores": 4,
+      "worker_threads": 8,
+      "datafusion_pool_bytes": 4294967296,
+      "process_memory_bytes": 8589934592,
+      "process_accounting": "CPU and peak RSS cover the whole process, including initialization and cleanup."
+    },
+    "cache": "Fresh reader process per sample; reused OS/MinIO caches; exact validation before timing.",
+    "io": "All query-group Parquet response bytes after the first footer request. Automatic initialization separately completes 24 MiB / 3,084 requests. HTTP body bytes include incomplete responses and continuations, not headers or TLS overhead.",
+    "harness_patch": "The historical build-record field diagnostic_patch_sha256 identifies the benchmark-only concurrency patch. Production reader sources are unchanged from reader_git_commit.",
+    "measurement_activity": "Lightweight public-S3 metadata discovery overlapped part of the matrix. Public-S3 query controls, compilation and full trace analysis ran after all concurrent timing sessions finished."
+  },
+  "networks": [
+    {
+      "concurrent_queries": [
+        2,
+        4
+      ],
+      "jitter_ms": 20,
+      "latency_ms": 200,
+      "mbps": 150,
+      "name": "primary",
+      "samples_per_mode": 3,
+      "seed": "0"
+    },
+    {
+      "concurrent_queries": [
+        4
+      ],
+      "jitter_ms": 0,
+      "latency_ms": 1,
+      "mbps": 1000,
+      "name": "low",
+      "samples_per_mode": 1,
+      "seed": "0"
+    }
+  ],
+  "fixture_verification": {
+    "fixtures": [
+      {
+        "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+        "object_bytes": 70972418471,
+        "objects": 262,
+        "source_upload": "/home/hanbo/repo/selective-read-intra-page-full-20261007/upload-q2.json",
+        "source_upload_sha256": "e2d965a0b7601883a2ed9bb56c1a203bafadfaf55faad2c03d28b9a490dc727c",
+        "verification": "Every current object length and server FULL_OBJECT SHA256 match the retained upload receipt.",
+        "verified_ns": 1791504055260411028
+      },
+      {
+        "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+        "object_bytes": 32463889602,
+        "objects": 122,
+        "source_upload": "/home/hanbo/repo/selective-read-intra-page-full-20261007/upload-q4.json",
+        "source_upload_sha256": "b00eb912d2bebe8164390c5d371e738c10b03b9cb5a06258ee47a3ba622ff917",
+        "verification": "Every current object length and server FULL_OBJECT SHA256 match the retained upload receipt.",
+        "verified_ns": 1791504055360340693
+      }
+    ],
+    "server_sha256": "f06a2c432e6442f94c50a1fcd90893e7d6b0df4057dc862ef97edaca12c567e8"
+  },
+  "experiments": {
+    "416-primary-c2": {
+      "experiment_sha256": "ec581a68220b9b23355f55b0170c0f638cea9931345f899859cef1f916e7ff56",
+      "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+      "snapshot_version": 1,
+      "modes": {
+        "off": {
+          "correctness_sha256": "e46b9327059f64dc44531937862b4ddc1beae802f1ff10172f35b0ab1690ce67",
+          "aggregates": {
+            "group_seconds": {
+              "median": 19.420934579,
+              "min": 19.419557089,
+              "max": 19.485699088
+            },
+            "initialization_seconds": {
+              "median": 1.355221168,
+              "min": 1.35345383,
+              "max": 1.355225549
+            },
+            "initialization_plus_group_seconds": {
+              "median": 20.774778257,
+              "min": 20.774388409,
+              "max": 20.840924637
+            },
+            "queries_per_second": {
+              "median": 0.10298165579336303,
+              "min": 0.10263937624037685,
+              "max": 0.1029889606047132
+            },
+            "query_parquet_bytes": {
+              "median": 345853372,
+              "min": 345853372,
+              "max": 345853372
+            },
+            "query_parquet_requests": {
+              "median": 80,
+              "min": 80,
+              "max": 80
+            },
+            "query_peak_http_requests": {
+              "median": 27,
+              "min": 24,
+              "max": 30
+            },
+            "query_incomplete_parquet_responses": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "session_cpu_seconds": {
+              "median": 1.955197,
+              "min": 1.912117,
+              "max": 2.023642
+            },
+            "peak_rss_bytes": {
+              "median": 473350144,
+              "min": 465956864,
+              "max": 490061824
+            }
+          },
+          "query_latency_range_seconds": [
+            19.360065134,
+            19.485699088
+          ]
+        },
+        "auto": {
+          "correctness_sha256": "ea008838ff36c2ad023606041559c49a09e57fb1bb5470e22c3644e8fa56191a",
+          "aggregates": {
+            "group_seconds": {
+              "median": 11.597066834,
+              "min": 11.587059858,
+              "max": 11.679405079
+            },
+            "initialization_seconds": {
+              "median": 4.495699291,
+              "min": 4.488610547,
+              "max": 4.498018488
+            },
+            "initialization_plus_group_seconds": {
+              "median": 16.092766125,
+              "min": 16.075670405,
+              "max": 16.177423566999998
+            },
+            "queries_per_second": {
+              "median": 0.1724574005330769,
+              "min": 0.17124159890610127,
+              "max": 0.1726063405652599
+            },
+            "query_parquet_bytes": {
+              "median": 194868670,
+              "min": 193997586,
+              "max": 195385198
+            },
+            "query_parquet_requests": {
+              "median": 24376,
+              "min": 24272,
+              "max": 24546
+            },
+            "query_peak_http_requests": {
+              "median": 512,
+              "min": 512,
+              "max": 512
+            },
+            "query_incomplete_parquet_responses": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "session_cpu_seconds": {
+              "median": 5.621199,
+              "min": 5.595659,
+              "max": 5.66744
+            },
+            "peak_rss_bytes": {
+              "median": 483520512,
+              "min": 478810112,
+              "max": 506654720
+            }
+          },
+          "query_latency_range_seconds": [
+            11.254552103,
+            11.679405079
+          ]
+        }
+      }
+    },
+    "90-primary-c2": {
+      "experiment_sha256": "afed80337205d9696264dc5776f89267f9e06a9ae432af1f755d3bbb4fb671b9",
+      "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+      "snapshot_version": 1,
+      "modes": {
+        "off": {
+          "correctness_sha256": "45d840c213f09215d5647f366ed24e96e83e4b006510c7d985ff081ca0f89fa9",
+          "aggregates": {
+            "group_seconds": {
+              "median": 43.7040066,
+              "min": 43.688966832,
+              "max": 43.770494815
+            },
+            "initialization_seconds": {
+              "median": 0.69929834,
+              "min": 0.698730396,
+              "max": 0.699951876
+            },
+            "initialization_plus_group_seconds": {
+              "median": 44.402736996,
+              "min": 44.388918708,
+              "max": 44.469793155
+            },
+            "queries_per_second": {
+              "median": 0.04576239469998616,
+              "min": 0.045692880751135735,
+              "max": 0.045778148237991735
+            },
+            "query_parquet_bytes": {
+              "median": 801736036,
+              "min": 801642676,
+              "max": 801834164
+            },
+            "query_parquet_requests": {
+              "median": 120,
+              "min": 120,
+              "max": 120
+            },
+            "query_peak_http_requests": {
+              "median": 36,
+              "min": 36,
+              "max": 36
+            },
+            "query_incomplete_parquet_responses": {
+              "median": 12,
+              "min": 12,
+              "max": 12
+            },
+            "session_cpu_seconds": {
+              "median": 4.059073,
+              "min": 3.986907,
+              "max": 4.1968
+            },
+            "peak_rss_bytes": {
+              "median": 929964032,
+              "min": 864243712,
+              "max": 943730688
+            }
+          },
+          "query_latency_range_seconds": [
+            43.434091892,
+            43.770494815
+          ]
+        },
+        "auto": {
+          "correctness_sha256": "f0e7a597677f13839dab18f9502549b214b2c7d6595d9b32b861144f80e8b48a",
+          "aggregates": {
+            "group_seconds": {
+              "median": 19.277699871,
+              "min": 19.196747165,
+              "max": 19.283222289
+            },
+            "initialization_seconds": {
+              "median": 3.825249422,
+              "min": 3.803541761,
+              "max": 3.846634175
+            },
+            "initialization_plus_group_seconds": {
+              "median": 23.108471711,
+              "min": 23.000288926000003,
+              "max": 23.124334046
+            },
+            "queries_per_second": {
+              "median": 0.10374681696381516,
+              "min": 0.10371710547261015,
+              "max": 0.10418431741636161
+            },
+            "query_parquet_bytes": {
+              "median": 327418292,
+              "min": 325696196,
+              "max": 330705992
+            },
+            "query_parquet_requests": {
+              "median": 41710,
+              "min": 41338,
+              "max": 41866
+            },
+            "query_peak_http_requests": {
+              "median": 512,
+              "min": 512,
+              "max": 512
+            },
+            "query_incomplete_parquet_responses": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "session_cpu_seconds": {
+              "median": 9.136306,
+              "min": 9.134261,
+              "max": 9.198091
+            },
+            "peak_rss_bytes": {
+              "median": 700682240,
+              "min": 675004416,
+              "max": 715694080
+            }
+          },
+          "query_latency_range_seconds": [
+            19.129509887,
+            19.283222289
+          ]
+        }
+      }
+    },
+    "416-primary-c4": {
+      "experiment_sha256": "469b7e9606063c62e6cbd7a56a54ff1c7042c867d4213d164cde9e12b3424c17",
+      "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+      "snapshot_version": 1,
+      "modes": {
+        "off": {
+          "correctness_sha256": "a6b7784aab500e88eea26e5a898aa3e6fd08bad17bc8b8fd5c59c42b675a5f86",
+          "aggregates": {
+            "group_seconds": {
+              "median": 38.013457106,
+              "min": 38.007074362,
+              "max": 38.01796896
+            },
+            "initialization_seconds": {
+              "median": 1.367153904,
+              "min": 1.36418653,
+              "max": 1.376616102
+            },
+            "initialization_plus_group_seconds": {
+              "median": 39.377643635999995,
+              "min": 39.374228265999996,
+              "max": 39.394585062
+            },
+            "queries_per_second": {
+              "median": 0.10522589378929824,
+              "min": 0.10521340590836234,
+              "max": 0.10524356497166369
+            },
+            "query_parquet_bytes": {
+              "median": 697516920,
+              "min": 697453432,
+              "max": 697583268
+            },
+            "query_parquet_requests": {
+              "median": 180,
+              "min": 180,
+              "max": 180
+            },
+            "query_peak_http_requests": {
+              "median": 49,
+              "min": 49,
+              "max": 49
+            },
+            "query_incomplete_parquet_responses": {
+              "median": 20,
+              "min": 20,
+              "max": 20
+            },
+            "session_cpu_seconds": {
+              "median": 3.842814,
+              "min": 3.247133,
+              "max": 3.964155
+            },
+            "peak_rss_bytes": {
+              "median": 866762752,
+              "min": 823197696,
+              "max": 887111680
+            }
+          },
+          "query_latency_range_seconds": [
+            37.58954578,
+            38.01796896
+          ]
+        },
+        "auto": {
+          "correctness_sha256": "a27d3da8bc7965144a3a1bf2a1e2ea4250788ad0edd2c31bb68bd9cefe0af189",
+          "aggregates": {
+            "group_seconds": {
+              "median": 22.131606639,
+              "min": 22.08228656,
+              "max": 22.144301
+            },
+            "initialization_seconds": {
+              "median": 4.515711229,
+              "min": 4.486042737,
+              "max": 4.521755834
+            },
+            "initialization_plus_group_seconds": {
+              "median": 26.653362473,
+              "min": 26.568329297,
+              "max": 26.660012229
+            },
+            "queries_per_second": {
+              "median": 0.1807369914550739,
+              "min": 0.1806333828283855,
+              "max": 0.18114066173045804
+            },
+            "query_parquet_bytes": {
+              "median": 384105952,
+              "min": 383909404,
+              "max": 386131284
+            },
+            "query_parquet_requests": {
+              "median": 49756,
+              "min": 49364,
+              "max": 49788
+            },
+            "query_peak_http_requests": {
+              "median": 512,
+              "min": 512,
+              "max": 512
+            },
+            "query_incomplete_parquet_responses": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "session_cpu_seconds": {
+              "median": 10.61795,
+              "min": 10.576516,
+              "max": 10.689407
+            },
+            "peak_rss_bytes": {
+              "median": 771534848,
+              "min": 759508992,
+              "max": 801681408
+            }
+          },
+          "query_latency_range_seconds": [
+            21.512511037,
+            22.144301
+          ]
+        }
+      }
+    },
+    "90-primary-c4": {
+      "experiment_sha256": "440c66f7a3d41a13d212cc473f4c6b565424473d62a75cddcd21740ccb33fadd",
+      "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+      "snapshot_version": 1,
+      "modes": {
+        "off": {
+          "correctness_sha256": "2da10be9277a05d81322b7dd61714faaf2295873b6158b307344fedc8b23f38a",
+          "aggregates": {
+            "group_seconds": {
+              "median": 86.414202179,
+              "min": 86.393282568,
+              "max": 86.525152467
+            },
+            "initialization_seconds": {
+              "median": 0.698294303,
+              "min": 0.698283926,
+              "max": 0.699558093
+            },
+            "initialization_plus_group_seconds": {
+              "median": 87.112496482,
+              "min": 87.091566494,
+              "max": 87.22471055999999
+            },
+            "queries_per_second": {
+              "median": 0.046288687497389895,
+              "min": 0.04622933200291751,
+              "max": 0.046299896023184524
+            },
+            "query_parquet_bytes": {
+              "median": 1604546708,
+              "min": 1604447414,
+              "max": 1604947904
+            },
+            "query_parquet_requests": {
+              "median": 264,
+              "min": 264,
+              "max": 264
+            },
+            "query_peak_http_requests": {
+              "median": 72,
+              "min": 72,
+              "max": 72
+            },
+            "query_incomplete_parquet_responses": {
+              "median": 48,
+              "min": 48,
+              "max": 48
+            },
+            "session_cpu_seconds": {
+              "median": 8.296186,
+              "min": 8.288372,
+              "max": 8.448358
+            },
+            "peak_rss_bytes": {
+              "median": 1793433600,
+              "min": 1730191360,
+              "max": 1818525696
+            }
+          },
+          "query_latency_range_seconds": [
+            86.001618211,
+            86.525152467
+          ]
+        },
+        "auto": {
+          "correctness_sha256": "b1e761c47de149e85cef5830d430c045f403c02874fb14d1457d057af2969bc7",
+          "aggregates": {
+            "group_seconds": {
+              "median": 37.295581405,
+              "min": 37.29248557,
+              "max": 37.450997096
+            },
+            "initialization_seconds": {
+              "median": 3.844743684,
+              "min": 3.807315806,
+              "max": 3.864222046
+            },
+            "initialization_plus_group_seconds": {
+              "median": 41.156707616,
+              "min": 41.140325089,
+              "max": 41.258312902
+            },
+            "queries_per_second": {
+              "median": 0.10725131099481247,
+              "min": 0.10680623508491914,
+              "max": 0.10726021446041148
+            },
+            "query_parquet_bytes": {
+              "median": 659679728,
+              "min": 645841892,
+              "max": 660939184
+            },
+            "query_parquet_requests": {
+              "median": 82880,
+              "min": 82732,
+              "max": 84344
+            },
+            "query_peak_http_requests": {
+              "median": 512,
+              "min": 512,
+              "max": 512
+            },
+            "query_incomplete_parquet_responses": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "session_cpu_seconds": {
+              "median": 17.809205,
+              "min": 17.784771,
+              "max": 17.813126
+            },
+            "peak_rss_bytes": {
+              "median": 1224318976,
+              "min": 1173581824,
+              "max": 1228140544
+            }
+          },
+          "query_latency_range_seconds": [
+            36.998759562,
+            37.450997096
+          ]
+        }
+      }
+    },
+    "416-low-c4": {
+      "experiment_sha256": "06a7bd9f864efbda3a35c32311ffe273db643fb1c590b3c4e52a6dd3f76c27be",
+      "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+      "snapshot_version": 1,
+      "modes": {
+        "off": {
+          "correctness_sha256": "452c24f2058ecbbbb8e460baa707a9746356f3dd0c68ffadbf117bc8e5b6667e",
+          "aggregates": {
+            "group_seconds": {
+              "median": 5.586417952,
+              "min": 5.586417952,
+              "max": 5.586417952
+            },
+            "initialization_seconds": {
+              "median": 0.298013731,
+              "min": 0.298013731,
+              "max": 0.298013731
+            },
+            "initialization_plus_group_seconds": {
+              "median": 5.884431683,
+              "min": 5.884431683,
+              "max": 5.884431683
+            },
+            "queries_per_second": {
+              "median": 0.7160223302962779,
+              "min": 0.7160223302962779,
+              "max": 0.7160223302962779
+            },
+            "query_parquet_bytes": {
+              "median": 691706744,
+              "min": 691706744,
+              "max": 691706744
+            },
+            "query_parquet_requests": {
+              "median": 160,
+              "min": 160,
+              "max": 160
+            },
+            "query_peak_http_requests": {
+              "median": 49,
+              "min": 49,
+              "max": 49
+            },
+            "query_incomplete_parquet_responses": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "session_cpu_seconds": {
+              "median": 2.127923,
+              "min": 2.127923,
+              "max": 2.127923
+            },
+            "peak_rss_bytes": {
+              "median": 890081280,
+              "min": 890081280,
+              "max": 890081280
+            }
+          },
+          "query_latency_range_seconds": [
+            5.533427603,
+            5.586417952
+          ]
+        },
+        "auto": {
+          "correctness_sha256": "04e445dc4f4b6018accd5e29bf3b09aba790c7cef1d9c5b05c391b542f4cb3d9",
+          "aggregates": {
+            "group_seconds": {
+              "median": 5.58585847,
+              "min": 5.58585847,
+              "max": 5.58585847
+            },
+            "initialization_seconds": {
+              "median": 1.5759133,
+              "min": 1.5759133,
+              "max": 1.5759133
+            },
+            "initialization_plus_group_seconds": {
+              "median": 7.16177177,
+              "min": 7.16177177,
+              "max": 7.16177177
+            },
+            "queries_per_second": {
+              "median": 0.7160940474025294,
+              "min": 0.7160940474025294,
+              "max": 0.7160940474025294
+            },
+            "query_parquet_bytes": {
+              "median": 691706744,
+              "min": 691706744,
+              "max": 691706744
+            },
+            "query_parquet_requests": {
+              "median": 160,
+              "min": 160,
+              "max": 160
+            },
+            "query_peak_http_requests": {
+              "median": 40,
+              "min": 40,
+              "max": 40
+            },
+            "query_incomplete_parquet_responses": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "session_cpu_seconds": {
+              "median": 2.550408,
+              "min": 2.550408,
+              "max": 2.550408
+            },
+            "peak_rss_bytes": {
+              "median": 899616768,
+              "min": 899616768,
+              "max": 899616768
+            }
+          },
+          "query_latency_range_seconds": [
+            5.545514962,
+            5.58585847
+          ]
+        }
+      }
+    },
+    "90-low-c4": {
+      "experiment_sha256": "9dea825b3eec99686d965205f58f4cd3bd7ec33c39cfc79cf70c1e05cd501132",
+      "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+      "snapshot_version": 1,
+      "modes": {
+        "off": {
+          "correctness_sha256": "d8221819d83fa3c6b88cdd64566b0bdc655befe5e87565fe127aff31f3f11d87",
+          "aggregates": {
+            "group_seconds": {
+              "median": 12.904640424,
+              "min": 12.904640424,
+              "max": 12.904640424
+            },
+            "initialization_seconds": {
+              "median": 0.064678961,
+              "min": 0.064678961,
+              "max": 0.064678961
+            },
+            "initialization_plus_group_seconds": {
+              "median": 12.969319385,
+              "min": 12.969319385,
+              "max": 12.969319385
+            },
+            "queries_per_second": {
+              "median": 0.3099660175389944,
+              "min": 0.3099660175389944,
+              "max": 0.3099660175389944
+            },
+            "query_parquet_bytes": {
+              "median": 1592136040,
+              "min": 1592136040,
+              "max": 1592136040
+            },
+            "query_parquet_requests": {
+              "median": 216,
+              "min": 216,
+              "max": 216
+            },
+            "query_peak_http_requests": {
+              "median": 70,
+              "min": 70,
+              "max": 70
+            },
+            "query_incomplete_parquet_responses": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "session_cpu_seconds": {
+              "median": 4.466597,
+              "min": 4.466597,
+              "max": 4.466597
+            },
+            "peak_rss_bytes": {
+              "median": 1884680192,
+              "min": 1884680192,
+              "max": 1884680192
+            }
+          },
+          "query_latency_range_seconds": [
+            12.885296583,
+            12.904640424
+          ]
+        },
+        "auto": {
+          "correctness_sha256": "54187e02b0ee94d06a2ac41e64282d189c991566bc1b0e4c0fa9ccc2ac57258b",
+          "aggregates": {
+            "group_seconds": {
+              "median": 12.889954249,
+              "min": 12.889954249,
+              "max": 12.889954249
+            },
+            "initialization_seconds": {
+              "median": 1.351615867,
+              "min": 1.351615867,
+              "max": 1.351615867
+            },
+            "initialization_plus_group_seconds": {
+              "median": 14.241570116,
+              "min": 14.241570116,
+              "max": 14.241570116
+            },
+            "queries_per_second": {
+              "median": 0.3103191774563761,
+              "min": 0.3103191774563761,
+              "max": 0.3103191774563761
+            },
+            "query_parquet_bytes": {
+              "median": 1592136040,
+              "min": 1592136040,
+              "max": 1592136040
+            },
+            "query_parquet_requests": {
+              "median": 216,
+              "min": 216,
+              "max": 216
+            },
+            "query_peak_http_requests": {
+              "median": 68,
+              "min": 68,
+              "max": 68
+            },
+            "query_incomplete_parquet_responses": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "session_cpu_seconds": {
+              "median": 4.886596,
+              "min": 4.886596,
+              "max": 4.886596
+            },
+            "peak_rss_bytes": {
+              "median": 1818226688,
+              "min": 1818226688,
+              "max": 1818226688
+            }
+          },
+          "query_latency_range_seconds": [
+            12.848344999,
+            12.889954249
+          ]
+        }
+      }
+    }
+  },
+  "http_accounting": "Retain all transmitted response bytes, including incomplete bodies and subsequent range continuations. Client read timeout is the object_store 0.13.2 default of 30 seconds. Off-mode large reads under contention show incomplete responses near that limit and subsequent suffix ranges. SDK retry counts are not observed directly.",
+  "peak_concurrency": "Proxy response intervals include metadata and server completion bookkeeping; they are not a direct measurement of permits held by planned reader requests.",
+  "load_observations": {
+    "process_polls": 260,
+    "polls_with_compilers": 0
+  },
+  "public_s3_controls": {
+    "scope": "Bounded, anonymous public-S3 correctness controls; not a timing benchmark.",
+    "retained_artifact_directory": "/home/hanbo/repo/selective-read-public-s3-20261008",
+    "source_report_sha256": "0dac306893e9fd86fb772d99a6cfd1383fdfd258826f1bab6e03c085803b3ea5",
+    "reader_build": {
+      "reader_commit": "7015f46743688c952dd3a08c0a5d0fa9940ab100",
+      "reader_source_changes": "",
+      "executable_sha256": "13d7925536cdc9d470eb978f9eeb570de1c334b063d529e9be901c81c87d3b55",
+      "driver_sha256": "c33ef63de1a88b9e6fa3ac5647c582b23f1941e93a30342a52940315d9a1c9d7",
+      "validator_sha256": "1243c8212c56bcae3994558a4e2962b50de749487992c7eaa0762a837a7b6fc7",
+      "lockfile_sha256": "22a8de62e958d6a64c1f6d6bf96789ca24081d1a8384817ccc99c3c23fb08166"
+    },
+    "region": "us-west-2",
+    "authentication": "anonymous; aws_skip_signature=true",
+    "endpoint": "AWS S3 HTTPS directly, no MinIO/proxy/shaping",
+    "client_location": "workstation; geographic location unverified",
+    "exactly_validated_query_exports": 8,
+    "validation": "Replay the pinned Delta logs, read only matching partition files with PyArrow, apply the predicate independently, and compare every value and null after sorting.",
+    "timing": "All query observations include output export and diagnostics; do not use them as benchmark timings.",
+    "warmup_diagnostics": {
+      "taxi": {
+        "status": "insufficient_samples",
+        "elapsed_micros": 10,
+        "requests": 0,
+        "bytes_received": 0
+      },
+      "stackexchange": {
+        "status": "complete",
+        "elapsed_micros": 2913462,
+        "requests": 3084,
+        "bytes_received": 25165824,
+        "request_latency_micros": 208442,
+        "throughput_bytes_per_second": 25997105,
+        "request_overhead_bytes": 8981
+      }
+    },
+    "results": [
+      {
+        "case": {
+          "name": "taxi",
+          "bucket": "daft-public-data",
+          "prefix": "nyc-taxi-dataset-2023-jan-deltalake",
+          "version": 0,
+          "partition": {
+            "tpep_pickup_day": "26"
+          },
+          "columns": [
+            "VendorID",
+            "PULocationID",
+            "DOLocationID",
+            "total_amount"
+          ],
+          "sql": "SELECT \"VendorID\", \"PULocationID\", \"DOLocationID\", total_amount FROM bench WHERE tpep_pickup_day = 26 AND \"VendorID\" = 1 AND \"PULocationID\" = 161"
+        },
+        "source_receipts": [
+          {
+            "path": "tpep_pickup_day=26/0-0d9101a8-72c9-4946-bf42-d2ac99264dee-0.parquet",
+            "bytes": 2351081,
+            "sha256": "0abf0e72a18906fb69bffdbeaf9e08de6abe1763f0c7e3a7d96d1c2f7b8725c7",
+            "etag": "\"4489793a7e6c06d6ce4d13d84dd3b705-1\""
+          }
+        ],
+        "reference_rows": 1724,
+        "reference_sha256": "ebbe257d4d61c86c5ae9878f568311f7cf383123614b98c9d9c7718e0fb724c8",
+        "modes": {
+          "off": {
+            "canonical_sql": "SELECT \"VendorID\", \"PULocationID\", \"DOLocationID\", total_amount FROM bench WHERE tpep_pickup_day = 26 AND \"VendorID\" = 1 AND \"PULocationID\" = 161",
+            "initialization_seconds": 0.417196733,
+            "mode": "off",
+            "queries": [
+              {
+                "result": "query-0.arrow",
+                "rows": 1724,
+                "validation_seconds": 0.628908818,
+                "exact_result_match": true,
+                "result_sha256": "9b27cacd431c26b31e498d988cea7d71796b37be93cab8b121bd9e3273d0a39e"
+              },
+              {
+                "result": "query-1.arrow",
+                "rows": 1724,
+                "validation_seconds": 0.300181015,
+                "exact_result_match": true,
+                "result_sha256": "9b27cacd431c26b31e498d988cea7d71796b37be93cab8b121bd9e3273d0a39e"
+              }
+            ],
+            "scope": "Anonymous real-S3 correctness/fallback smoke; exports and diagnostics enabled, not a performance benchmark.",
+            "snapshot_version": "0",
+            "table": "s3://daft-public-data/nyc-taxi-dataset-2023-jan-deltalake"
+          },
+          "auto": {
+            "canonical_sql": "SELECT \"VendorID\", \"PULocationID\", \"DOLocationID\", total_amount FROM bench WHERE tpep_pickup_day = 26 AND \"VendorID\" = 1 AND \"PULocationID\" = 161",
+            "initialization_seconds": 0.331309347,
+            "mode": "auto",
+            "queries": [
+              {
+                "result": "query-0.arrow",
+                "rows": 1724,
+                "validation_seconds": 0.443374555,
+                "exact_result_match": true,
+                "result_sha256": "9b27cacd431c26b31e498d988cea7d71796b37be93cab8b121bd9e3273d0a39e"
+              },
+              {
+                "result": "query-1.arrow",
+                "rows": 1724,
+                "validation_seconds": 0.301915361,
+                "exact_result_match": true,
+                "result_sha256": "9b27cacd431c26b31e498d988cea7d71796b37be93cab8b121bd9e3273d0a39e"
+              }
+            ],
+            "scope": "Anonymous real-S3 correctness/fallback smoke; exports and diagnostics enabled, not a performance benchmark.",
+            "snapshot_version": "0",
+            "table": "s3://daft-public-data/nyc-taxi-dataset-2023-jan-deltalake"
+          }
+        }
+      },
+      {
+        "case": {
+          "name": "stackexchange",
+          "bucket": "daft-public-datasets",
+          "prefix": "red-pajamas/stackexchange-sample-deltalake-zorder",
+          "version": 4,
+          "partition": {
+            "language": "nl"
+          },
+          "columns": [
+            "question_score",
+            "timestamp",
+            "url"
+          ],
+          "sql": "SELECT question_score, \"timestamp\", url FROM bench WHERE language = 'nl' AND question_score >= 5"
+        },
+        "source_receipts": [
+          {
+            "path": "language=nl/part-00001-08805065-7ea7-4ad7-bdf2-004f87321617-c000.snappy.parquet",
+            "bytes": 53222,
+            "sha256": "e90abeab48782bc45da800f515e8d7a7843fc13b567372f19bd59481a2117a23",
+            "etag": "\"70445bc980d409a43f796885ab5f0039\""
+          }
+        ],
+        "reference_rows": 1,
+        "reference_sha256": "688da3c47e962004dd737e098bd6b67c7723ca75c8bac4e38a9e90ed891d905c",
+        "modes": {
+          "off": {
+            "canonical_sql": "SELECT question_score, \"timestamp\", url FROM bench WHERE language = 'nl' AND question_score >= 5",
+            "initialization_seconds": 1.291899816,
+            "mode": "off",
+            "queries": [
+              {
+                "result": "query-0.arrow",
+                "rows": 1,
+                "validation_seconds": 0.340596124,
+                "exact_result_match": true,
+                "result_sha256": "fbb44efe9e0d6101f9440d14001a5c58b5ce2947a3ba81c75582f83e2549caab"
+              },
+              {
+                "result": "query-1.arrow",
+                "rows": 1,
+                "validation_seconds": 0.166464631,
+                "exact_result_match": true,
+                "result_sha256": "fbb44efe9e0d6101f9440d14001a5c58b5ce2947a3ba81c75582f83e2549caab"
+              }
+            ],
+            "scope": "Anonymous real-S3 correctness/fallback smoke; exports and diagnostics enabled, not a performance benchmark.",
+            "snapshot_version": "4",
+            "table": "s3://daft-public-datasets/red-pajamas/stackexchange-sample-deltalake-zorder"
+          },
+          "auto": {
+            "canonical_sql": "SELECT question_score, \"timestamp\", url FROM bench WHERE language = 'nl' AND question_score >= 5",
+            "initialization_seconds": 4.111752854,
+            "mode": "auto",
+            "queries": [
+              {
+                "result": "query-0.arrow",
+                "rows": 1,
+                "validation_seconds": 0.203619583,
+                "exact_result_match": true,
+                "result_sha256": "fbb44efe9e0d6101f9440d14001a5c58b5ce2947a3ba81c75582f83e2549caab"
+              },
+              {
+                "result": "query-1.arrow",
+                "rows": 1,
+                "validation_seconds": 0.20332182,
+                "exact_result_match": true,
+                "result_sha256": "fbb44efe9e0d6101f9440d14001a5c58b5ce2947a3ba81c75582f83e2549caab"
+              }
+            ],
+            "scope": "Anonymous real-S3 correctness/fallback smoke; exports and diagnostics enabled, not a performance benchmark.",
+            "snapshot_version": "4",
+            "table": "s3://daft-public-datasets/red-pajamas/stackexchange-sample-deltalake-zorder"
+          }
+        }
+      }
+    ],
+    "limits": "One selected partition per table. NYC Taxi has Snappy dictionary pages without offset indexes; StackExchange has no INT64 payload columns. Both snapshots have no DV. No eligible partial-page gain is tested.",
+    "request_accounting": "Only initialization calibration requests and received bytes are measured. Per-query HTTP traffic, SDK retries, TLS connection reuse and billed costs were not instrumented.",
+    "earlier_attempt": "The first taxi off control passed both exports. Auto was not launched because the external resource wrapper tried to reuse limits.json. The corrected per-mode directories were checked in a separate complete run; the earlier attempt is retained locally."
+  },
+  "remaining": [
+    "Eligible partial-page performance on real S3 with connection/retry/cost accounting.",
+    "Local and dense-selection controls on this reader build; broader no-DV performance coverage.",
+    "Mixed concurrent workloads and a default-enablement decision remain outside this slice."
+  ]
+}

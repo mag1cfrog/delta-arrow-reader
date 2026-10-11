@@ -13,6 +13,8 @@ const READER: &str = "delta-arrow-reader";
 
 fn warmup(reuse: bool) -> common::Result<WarmupMode> {
     match std::env::var("DAR_NETWORK_WARMUP").as_deref() {
+        Ok("default") => Ok(WarmupMode::default()),
+        Ok("none") => Ok(WarmupMode::None),
         Ok("on") => Ok(WarmupMode::Network {
             max_duration: std::time::Duration::from_secs(5),
         }),
@@ -21,15 +23,16 @@ fn warmup(reuse: bool) -> common::Result<WarmupMode> {
         } else {
             WarmupMode::None
         }),
-        _ => Err("DAR_NETWORK_WARMUP must be off or on".into()),
+        _ => Err("DAR_NETWORK_WARMUP must be default, none, off or on".into()),
     }
 }
 
 fn options() -> common::Result<ScanOptions> {
     let intra_page = match std::env::var("DAR_INTRA_PAGE_READS").as_deref() {
         Err(std::env::VarError::NotPresent) | Ok("off") => false,
+        Ok("default") => DeltaScanExecutionOptions::default().experimental_intra_page_reads(),
         Ok("auto") => true,
-        _ => return Err("DAR_INTRA_PAGE_READS must be off or auto".into()),
+        _ => return Err("DAR_INTRA_PAGE_READS must be default, off or auto".into()),
     };
     Ok(ScanOptions {
         execution_options: DeltaScanExecutionOptions::new()

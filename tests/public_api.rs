@@ -229,7 +229,7 @@ fn streaming_reader_contract_is_public() {
     assert_clone::<DeltaTable>();
     assert_debug::<DeltaScanMetrics>();
     assert_debug::<WarmupMode>();
-    assert_eq!(WarmupMode::default(), WarmupMode::None);
+    assert_eq!(WarmupMode::default(), WarmupMode::Automatic);
     assert_send::<DeltaBatchStream>();
     assert_batch_stream::<DeltaBatchStream>();
 

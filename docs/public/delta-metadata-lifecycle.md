@@ -7,8 +7,9 @@ list. The list and the information used to prune it are the table's scan
 metadata.
 
 `WarmupMode` controls how much reusable metadata `load_table` prepares. The
-default `None` mode waits until each scan is built. `QueryPlanning` prepares the
-reusable Delta metadata while the table loads.
+default `Automatic` mode prepares supported S3 tables and samples their
+network; local tables remain lazy. `None` waits until each scan is built.
+`QueryPlanning` prepares reusable Delta metadata without network sampling.
 
 Each query still gets its own file, row-group, and page selection. The cache
 does not reuse one query's selection for another query or change query results.
@@ -39,7 +40,8 @@ removes the repeated replay without changing the later pruning or Parquet I/O.
 
 ## No warmup
 
-`DeltaTableBuilder::load_table()` uses `WarmupMode::None` by default:
+`WarmupMode::None` leaves reusable metadata work to each scan. This is also the
+default behavior for local tables:
 
 ```text
 table load -> table version and schema
@@ -100,9 +102,10 @@ APIs.
 | Seeing a newer version | `refresh` returns a new lazy table | `refresh` updates or reuses the retained cache |
 | Parquet metadata and data reads | Per query | Per query |
 
-Use no warmup unless you know the table will serve repeated queries and the
-saved planning time justifies slower initialization and higher memory use. No
-single query count is a reliable break-even point. The result depends on the
+The default `WarmupMode::Automatic` prepares supported S3 tables and also
+[profiles the network](scan-planning.md#choose-a-warmup-mode). Choose `None` when
+initialization time or retained metadata costs more than the expected reuse
+savings. No single query count is a reliable break-even point. The result depends on the
 table history, checkpoint shape, file count, available statistics, storage
 latency, query selectivity, and memory pressure.
 

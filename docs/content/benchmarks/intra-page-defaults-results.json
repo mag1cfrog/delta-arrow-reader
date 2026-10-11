@@ -1,0 +1,96 @@
+{
+  "scope": "Public partial-read and warmup defaults under existing benchmark resource limits. Ordinary controls retain metadata warmup. Public S3 validates initialization, resources and fallback, not eligible partial-read speedups.",
+  "base_commit": "515da2e46a83fdc00de262b3663e059c1732eb6b",
+  "runtime_patch_sha256": "0f57fc548eb6b496ee48205f1d481348e1c5f4f9af95ddf8e712170e241e1a30",
+  "runner_executable_sha256": "1456dbbd2b43db75ca5f745fd0117a5b5d407f43d01cee915e927affc98498be",
+  "runner_lockfile_sha256": "d53855cfdce00c9e8ecee9acec60daa8e4c4f745a6deadc7ff65e6e2aebca5c2",
+  "build_record_sha256": "9ed581ba5230eb3904ac55b345c5d1423325a1aba9cfbf26e8f7a123dacf2376",
+  "changed_runtime_source_sha256": {
+    "src/reader.rs": "4f59940a0b25c5fc8d71b8cf7db5062d8d341b6f386a3ad295565a161d6c6823",
+    "src/reader/options.rs": "01b615a37e79734233508b0fd45f4ba181591af741f5a9e81fc4a2bd27acef6b",
+    "src/delta/kernel.rs": "94e2999492d8d330e3a5eb845fb64e1a61e1b46565847e289710b3fea486565d",
+    "benches/selective_read/runners/dar/src/main.rs": "c532a874e72c97531a8166bb469ea3cc0d1fd8ffb50ea983b3b4f5615aaf70e9"
+  },
+  "toolchain": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "rustflags": "-C target-cpu=x86-64",
+  "samples_sha256": "03e43323af8789bc3288664e1de3819fc7ab836d02ca3fc9957b320cc0b161db",
+  "raw_report_sha256": "f88b8d4c27f016a1b3b8e0b93480230fe31a8a1e4c800caf1dd65a8daaab93a2",
+  "raw_artifacts": "/home/hanbo/repo/selective-read-intra-page-defaults-final-20261009",
+  "acceptance_driver_sha256": "370e05cfd68358c2bc5e25714b18ddb4d9b3f982817c192f025ca64a343e635f",
+  "fixtures": [
+    {
+      "columns": 416,
+      "shape": "scattered + DV",
+      "comparison_revision": 6,
+      "snapshot_version": 1,
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "workload_manifest_sha256": "d67e605e806e951219646c22bcc4ebe849b2dcdf16e1e737cff399bfc000f8e4",
+      "canonical_sql_sha256": "fd71ada3ed15deb885d584639bb71f9b669b026b278da03ab5a6e8c9c8d890eb",
+      "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
+      "output_rows": 894
+    },
+    {
+      "columns": 90,
+      "shape": "scattered + DV",
+      "comparison_revision": 6,
+      "snapshot_version": 1,
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "workload_manifest_sha256": "d67e605e806e951219646c22bcc4ebe849b2dcdf16e1e737cff399bfc000f8e4",
+      "canonical_sql_sha256": "842eb2ec78c818df0824fb49846be501876b4f80f5f40e5001086149bb1fd401",
+      "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
+      "output_rows": 894
+    }
+  ],
+  "fixture_verification": "All current object lengths and server FULL_OBJECT SHA256 matched retained upload receipts.",
+  "timing_sessions": 16,
+  "primary_samples_per_mode_per_case": 3,
+  "low_latency_samples_per_mode_per_case": 1,
+  "queries_per_session": 2,
+  "minio_exact_exports": 24,
+  "concurrent_one_table": {
+    "416": {
+      "queries": 4,
+      "rows_each": 894,
+      "fd_peak": 581
+    },
+    "90": {
+      "queries": 4,
+      "rows_each": 894,
+      "fd_peak": 607
+    }
+  },
+  "public_s3": {
+    "table": "s3://daft-public-datasets/red-pajamas/stackexchange-sample-deltalake-zorder",
+    "snapshot": 4,
+    "region": "us-west-2",
+    "consumer_executable_sha256": "cb08aba204932e2466484dc80111bd020fa73ec4c01740381b4fadcb7716fffa",
+    "reference_sha256": "76c36e40cc31213e04723e73396e6bd247784b1c82051472e2fe552fe7704c7e",
+    "exact_exports": 5,
+    "single_table": {
+      "fd_peak": 482,
+      "calibration": [
+        "complete"
+      ]
+    },
+    "four_tables": {
+      "fd_peak": 483,
+      "calibration": [
+        "timeout",
+        "timeout",
+        "timeout",
+        "timeout"
+      ]
+    },
+    "scope": "Initialization, resources and ordinary-query correctness; no eligible partial-page speedup claim."
+  },
+  "python_calibration_requests": {
+    "default": 3084,
+    "none": 0,
+    "query_planning": 0,
+    "kernel": 0,
+    "custom_timeout": 0
+  },
+  "low_profile_query_ranges_unchanged": true,
+  "traffic_scope": "Session includes initialization plus two complete queries. Client-facing HTTP body bytes; SDK retries are not separately identified.",
+  "fd_measurement": "1024 soft limit, sampled every 25 ms with guard at 896; observed peaks are not a hard process-wide bound."
+}

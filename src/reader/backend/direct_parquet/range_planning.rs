@@ -318,18 +318,21 @@ pub(super) fn choose_bounded_range_plan(
     let cost = |bytes, count| {
         partial_plan_cost(bytes, count, estimate, concurrency, request_overhead_bytes)
     };
-    let mut scores = vec![cost(bytes, exact.len())];
+    let mut best_cost = cost(bytes, exact.len());
+    let mut merge_count = 0;
     for (merged, (gap, _)) in gaps.iter().enumerate() {
         bytes += u128::from(*gap);
         if bytes > byte_budget {
             break;
         }
-        scores.push(cost(bytes, exact.len() - merged - 1));
+        let score = cost(bytes, exact.len() - merged - 1);
+        if score < best_cost {
+            best_cost = score;
+            merge_count = merged + 1;
+        }
     }
-    let best = scores.iter().copied().min()?;
-    let competitive = best.saturating_add(best.saturating_mul(DECISION_MARGIN_PERCENT) / 100);
-    // Earlier candidates transfer fewer bytes, matching the ordinary planner's margin.
-    let merge_count = scores.iter().position(|score| *score <= competitive)?;
+    // Ties keep the earlier, smaller plan. The caller applies the savings margin
+    // against ordinary reads; a slower candidate must not hide a profitable one.
     Some(merge_smallest_gaps(&exact, &gaps, merge_count))
 }
 
@@ -578,8 +581,29 @@ mod tests {
     }
 
     #[test]
+    fn bounded_plan_preserves_clear_savings() {
+        let estimate = TransportEstimate {
+            request_latency: Duration::from_secs(1),
+            shared_throughput_bytes_per_second: 1_000,
+        };
+        // Full-page reads cost 400 + 1,000 here. A three-request partial plan
+        // costs 1,300 and misses the 10% savings gate. One request costs 1,190
+        // and passes it, despite transferring more bytes than three requests.
+        assert_eq!(
+            super::choose_bounded_range_plan(
+                &[0..10, 60..70, 120..130, 180..190],
+                estimate,
+                4,
+                400,
+                100,
+            ),
+            Some(std::iter::once(0..190).collect())
+        );
+    }
+
+    #[test]
     fn bounded_planner_matches_exhaustive_small_plans() {
-        use super::{DECISION_MARGIN_PERCENT, choose_bounded_range_plan};
+        use super::choose_bounded_range_plan;
         let requested = [200..210, 0..5, 13..23, 0..10, 80..90];
         let exact = [0..10, 13..23, 80..90, 200..210];
         for concurrency in 1..=5 {
@@ -628,10 +652,9 @@ mod tests {
                         assert!(actual.is_none());
                         continue;
                     };
-                    let competitive = best + best * DECISION_MARGIN_PERCENT / 100;
                     let expected = candidates
                         .iter()
-                        .filter(|plan| score(plan) <= competitive)
+                        .filter(|plan| score(plan) == best)
                         .min_by_key(|plan| (range_bytes(plan), plan.len()));
                     assert_eq!(
                         actual.as_ref(),

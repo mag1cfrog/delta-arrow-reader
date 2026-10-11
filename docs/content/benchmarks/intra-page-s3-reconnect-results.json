@@ -1,0 +1,308 @@
+{
+  "scope": "Direct SDK requests to real S3; no Delta query or decoding in these timed phases. The table files need not support partial-page decoding to test HTTPS connection policy.",
+  "consistency": {
+    "etags_identical": true,
+    "hashes_identical_for_every_matching_workload": true,
+    "successful_samples": 20,
+    "guard_aborted_samples": 3
+  },
+  "summary": [
+    {
+      "group": "initial",
+      "kind": "serial",
+      "mode": "reuse",
+      "concurrency": 1,
+      "request_count": 24,
+      "attempts": 3,
+      "successful": 3,
+      "seconds": [
+        3.114316921,
+        1.8587702849999999,
+        1.7966038
+      ],
+      "median_seconds": 1.8587702849999999,
+      "fd_peaks": [
+        8,
+        9,
+        9
+      ],
+      "median_request_ms": 59.71909,
+      "cpu_user_seconds": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "group": "initial",
+      "kind": "serial",
+      "mode": "fresh",
+      "concurrency": 1,
+      "request_count": 24,
+      "attempts": 3,
+      "successful": 3,
+      "seconds": [
+        3.8178528849999998,
+        3.707650959,
+        3.452911836
+      ],
+      "median_seconds": 3.707650959,
+      "fd_peaks": [
+        8,
+        8,
+        9
+      ],
+      "median_request_ms": 131.433178,
+      "cpu_user_seconds": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "group": "initial",
+      "kind": "sustained",
+      "mode": "reuse",
+      "concurrency": 64,
+      "request_count": 3072,
+      "attempts": 3,
+      "successful": 3,
+      "seconds": [
+        5.352483169,
+        2.903898082,
+        3.28953552
+      ],
+      "median_seconds": 3.28953552,
+      "fd_peaks": [
+        71,
+        72,
+        72
+      ],
+      "median_request_ms": 55.282946,
+      "cpu_user_seconds": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "group": "initial",
+      "kind": "sustained",
+      "mode": "fresh",
+      "concurrency": 64,
+      "request_count": 3072,
+      "attempts": 3,
+      "successful": 3,
+      "seconds": [
+        6.2993308,
+        6.203416520999999,
+        6.194294029
+      ],
+      "median_seconds": 6.203416520999999,
+      "fd_peaks": [
+        71,
+        71,
+        71
+      ],
+      "median_request_ms": 121.802491,
+      "cpu_user_seconds": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "group": "initial",
+      "kind": "production",
+      "mode": "fresh",
+      "concurrency": 512,
+      "request_count": 3072,
+      "attempts": 3,
+      "successful": 3,
+      "seconds": [
+        14.668320484999999,
+        15.36632551,
+        14.969480748999999
+      ],
+      "median_seconds": 14.969480748999999,
+      "fd_peaks": [
+        519,
+        519,
+        519
+      ],
+      "median_request_ms": 477.910686,
+      "cpu_user_seconds": [
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "group": "production_paired",
+      "kind": "production",
+      "mode": "reuse",
+      "concurrency": 512,
+      "request_count": 3072,
+      "attempts": 3,
+      "successful": 0,
+      "seconds": [],
+      "median_seconds": null,
+      "fd_peaks": [
+        975,
+        915,
+        1004
+      ],
+      "median_request_ms": null,
+      "cpu_user_seconds": [
+        0.23075199999999998,
+        0.19249500000000008,
+        0.2051759999999998
+      ]
+    },
+    {
+      "group": "production_paired",
+      "kind": "production",
+      "mode": "fresh",
+      "concurrency": 512,
+      "request_count": 3072,
+      "attempts": 3,
+      "successful": 3,
+      "seconds": [
+        14.306900236,
+        14.794088471,
+        15.940342703999999
+      ],
+      "median_seconds": 14.794088471,
+      "fd_peaks": [
+        519,
+        519,
+        519
+      ],
+      "median_request_ms": 460.795397,
+      "cpu_user_seconds": [
+        1.24769,
+        1.231628,
+        1.2737100000000003
+      ]
+    }
+  ],
+  "diagnostic_connections_including_metadata_heads": {
+    "reuse": {
+      "connected": 2,
+      "reused_idle": 9
+    },
+    "fresh": {
+      "connected": 9,
+      "reused_idle": 2
+    }
+  },
+  "schema_version": 1,
+  "status": "Exploratory candidate, not ready to merge or enable by default.",
+  "base_commit": "167ff6d47189946980720907ef020b155a4dc606",
+  "objects": [
+    {
+      "etag": "\"fe208940ce337e5ca31af6af08dba35c\"",
+      "path": "red-pajamas/stackexchange-sample-deltalake-zorder/language=en/part-00001-fbfc0696-84cf-43d8-9ec5-75260d88cb19-c000.snappy.parquet",
+      "size": 268873366
+    },
+    {
+      "etag": "\"19ef9e76dcfe4095badea0d6f74cb10e\"",
+      "path": "red-pajamas/stackexchange-sample-deltalake-zorder/language=en/part-00002-fbfc0696-84cf-43d8-9ec5-75260d88cb19-c000.snappy.parquet",
+      "size": 268543482
+    },
+    {
+      "etag": "\"2fcd5a9026780f6f567d6e89bc90d43d\"",
+      "path": "red-pajamas/stackexchange-sample-deltalake-zorder/language=en/part-00003-fbfc0696-84cf-43d8-9ec5-75260d88cb19-c000.snappy.parquet",
+      "size": 268506915
+    }
+  ],
+  "method": {
+    "purpose": "Measure connection-policy cost on identical anonymous HTTPS S3 range requests using object_store 0.13.2 / reqwest 0.12.28.",
+    "scope": "Mechanism check, not Delta query timing. HEAD metadata and hashing are outside each phase timer. First timed phase includes the first connection. Later phases reuse the same SDK client.",
+    "endpoint": "https://s3.us-west-2.amazonaws.com/daft-public-datasets",
+    "region": "us-west-2",
+    "request_bytes": 4096,
+    "binary_sha256": "8b9858f41af0cf2bbaa3cafd33dd8a094122c96f042a7950d916e8ab6f36e87f",
+    "source_sha256": "8cef08923ecff2fa8e5007e0ed293da263014539fffd953548e9c8ce7edcafbb",
+    "cpus": [
+      0,
+      1,
+      2,
+      3,
+      8,
+      9,
+      10,
+      11
+    ],
+    "fd_soft_limit": 1024,
+    "fd_abort_threshold": 896,
+    "fd_sample_seconds": 0.025,
+    "process_timeout_seconds": 120,
+    "proxy_environment": "removed from child",
+    "timing_policy": "No concurrent compilation, data generation, benchmark process, or trace analysis. Fixed three samples, all attempts retained."
+  },
+  "artifact_directory": "/home/hanbo/repo/selective-read-s3-reconnect-20261008",
+  "artifact_sha256": {
+    "reader/Cargo.toml": "441a406442d3784a933cf53aee7aca2d4be25ac8af07ca9dd2e1d380c83478ff",
+    "reader/Cargo.lock": "8837586b82b495888ef4b22010fad2999722f22b55cc621ab13aad8d38365ede",
+    "reader/src/main.rs": "8cef08923ecff2fa8e5007e0ed293da263014539fffd953548e9c8ce7edcafbb",
+    "run.py": "90ee974409ce4e451172838a2e4f5acc1687e9d46bb1fe76ccc364fd4526d7b0",
+    "objects.json": "c743d0f8dff87970ecd38970fb80191bfcdc8023345fa8fd5279e0791dc3ccd6",
+    "plan.json": "65318bf7cce31ac986cd56a0fda222aee97bc0c86f7a034e7317b343747c41be",
+    "results.json": "11d7434459cf8853a0fcb42a58472f3459523192708be01ff2360768b32d4430",
+    "production-paired/plan.json": "6c0f4926884c5ca0718e9ad8a1b48c9be132b2922e7de049e93a2800d46d4c90",
+    "production-paired/results.json": "891f8f282302af96b5cd33ba4de91512e6f474cfe07e15f0160406eaed3357b1",
+    "connections-reuse/stderr.log": "21ed716b8d7b807759e3a079eddaa49c47c92fb17fb74d2cc09676a7ccbea393",
+    "connections-fresh/stderr.log": "2775ef5a3d5e21f8ca881292214648c3f2266f4dd84cae83b2631e1760be9084"
+  },
+  "notes": [
+    "Each complete phase reads every requested 4096-byte range, checks length and returned range, and hashes bytes in request order outside the timer. ETags and matching-workload hashes agree across all successful samples.",
+    "All 23 attempts are retained, including the 3 FD-guard aborts and 2 verbose diagnostic-only samples. Partial progress in aborted phases is not counted as a completed phase or usable timing.",
+    "The guard requests termination at 896 observed descriptors; 25 ms sampling allowed overshoot to 915-1004. The hard OS soft limit remained 1024.",
+    "Serial and concurrency-64 workloads use three alternating pairs. After concurrency-512 fresh samples were slower, a separate three-pair comparison was declared at that same concurrency.",
+    "Connection log totals include one pooled metadata connection in each diagnostic process: timed work opens 1 connection with reuse or 8 without reuse.",
+    "Native-S3 costs depend on this host and network. These samples do not measure the formal 416-column or 90-column queries, or isolate TCP from TLS and remote load.",
+    "The predeclared plan described the bucket with a virtual-hosted URL. SDK logs confirm path-style requests to s3.us-west-2.amazonaws.com; the method endpoint above records the actual endpoint. Both policies used the same SDK builder."
+  ],
+  "prior_candidate_validation": {
+    "artifact_directory": "/home/hanbo/repo/selective-read-intra-page-connection-fix-20261008",
+    "context": "Earlier full-reader candidate included separate default-enablement changes; evidence is supporting, not a timing of this isolated PR.",
+    "fd_peaks": {
+      "one_table": 525,
+      "four_concurrent_tables": 556
+    },
+    "simulated_network_query_seconds": {
+      "416-primary": [
+        6.442094385,
+        6.552928162
+      ],
+      "90-primary": [
+        10.287862074,
+        10.247057576
+      ],
+      "416-low": [
+        1.471848857,
+        1.435320438
+      ],
+      "90-low": [
+        3.449460746,
+        3.263379388
+      ]
+    },
+    "exact_exports_passed": 8,
+    "rows_per_export": 894,
+    "native_s3_init_seconds": 6.331592577,
+    "native_s3_calibration": [
+      "2026-10-09T04:04:32.068072Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed status=\"timeout\" elapsed_micros=5025480 requests=1036 bytes_received=16719872 request_latency_micros=95206 throughput_bytes_per_second=27169591"
+    ],
+    "native_s3_exact_exports_passed": 2,
+    "validation_source_sha256": "c78833f3141c0f5a7012aeed8f314983ad5e00372c87f9894140df5e99822620"
+  },
+  "isolated_pr_validation": {
+    "rust_library_tests": 444,
+    "rust_library_test_failures": 0,
+    "formatting": "passed",
+    "clippy": "passed --all-features --lib -D warnings -A clippy::chunks_exact_to_as_chunks",
+    "docs_build": "passed strict Zensical build"
+  }
+}

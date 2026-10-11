@@ -1,5 +1,6 @@
 //! Python package entrypoint.
 
+mod filters;
 mod options;
 mod runtime;
 mod stream;
@@ -66,7 +67,8 @@ fn export_schema(py: Python<'_>, schema: &Schema) -> PyResult<FFI_ArrowSchema> {
 /// With version=None, load the latest snapshot. Otherwise, version must be an
 /// integer from 0 to 2**64 - 1. Booleans are not accepted.
 /// storage_options accepts a mapping of string keys to string values.
-/// warmup="none" defers planning metadata to scans; "query_planning" prepares
+/// warmup="automatic" prepares supported S3 tables and profiles their network.
+/// "none" defers planning metadata to scans; "query_planning" prepares
 /// reusable planning metadata during loading without reading Parquet data.
 /// execution_options=None keeps the default scan execution settings.
 #[pyclass(module = "delta_arrow_reader", frozen)]
@@ -79,7 +81,7 @@ struct DeltaTable {
 #[pymethods]
 impl DeltaTable {
     #[new]
-    #[pyo3(signature = (location, *, version=None, storage_options=None, warmup="none", execution_options=None))]
+    #[pyo3(signature = (location, *, version=None, storage_options=None, warmup="automatic", execution_options=None))]
     fn new(
         py: Python<'_>,
         location: &Bound<'_, PyAny>,
@@ -113,11 +115,12 @@ impl DeltaTable {
             None => DeltaStorageOptions::new(),
         };
         let warmup = match warmup {
+            "automatic" => WarmupMode::Automatic,
             "none" => WarmupMode::None,
             "query_planning" => WarmupMode::QueryPlanning,
             _ => {
                 return Err(PyValueError::new_err(
-                    "warmup must be 'none' or 'query_planning'",
+                    "warmup must be 'automatic', 'none' or 'query_planning'",
                 ));
             }
         };
@@ -178,6 +181,25 @@ impl DeltaTable {
     ///
     /// columns=None selects all columns. A list or tuple of names selects columns
     /// in that order; an empty list selects no columns while retaining row counts.
+    /// filters=None or [] disables filtering. A list of (column, operator, value)
+    /// tuples combines conditions with AND; a list of lists combines AND groups
+    /// with OR. An empty AND group is true. "is" and "is not" require None.
+    /// Comparisons (==, !=, <, <=, >, >=) accept bool for Boolean columns and int
+    /// for signed integer columns. Integers must fit the column's bit width;
+    /// booleans cannot be used as integers. Comparisons with None are invalid.
+    /// Float columns require finite float values. Float32 rounds to its precision
+    /// and rejects overflow. Native Arrow comparisons distinguish -0.0 from 0.0.
+    /// String columns require str values encodable as UTF-8. Binary columns
+    /// require bytes; fixed-size binary values must match the column's width.
+    /// Decimal128 columns require finite decimal.Decimal values exactly fitting
+    /// the column's precision and scale, independent of the decimal context.
+    /// Date32 columns require datetime.date values; datetime.datetime is rejected.
+    /// Microsecond timestamps require naive datetime.datetime values for columns
+    /// without a timezone, and aware values for columns with a timezone. Conversion
+    /// preserves microsecond precision and does not use the process timezone.
+    /// Timestamp values must be exact datetime.datetime instances, not subclasses.
+    /// UTC offsets must be exact datetime.timedelta instances or None.
+    /// Filter columns need not appear in columns. Filters apply before limit.
     /// limit=None reads all rows. Otherwise, limit must be a nonnegative integer
     /// that fits the platform's usize. Booleans are not accepted.
     /// target_partitions=None uses automatic partition planning. An override must
@@ -186,11 +208,12 @@ impl DeltaTable {
     /// replaces the complete settings for this scan without changing the table.
     /// Planning reads Delta metadata; data-file reads start on the first pull.
     /// The stream retains its snapshot and runtime independently of this table.
-    #[pyo3(signature = (*, columns=None, limit=None, target_partitions=None, execution_options=None))]
+    #[pyo3(signature = (*, columns=None, filters=None, limit=None, target_partitions=None, execution_options=None))]
     fn scan(
         &self,
         py: Python<'_>,
         columns: Option<&Bound<'_, PyAny>>,
+        filters: Option<&Bound<'_, PyAny>>,
         limit: Option<&Bound<'_, PyInt>>,
         target_partitions: Option<&Bound<'_, PyInt>>,
         execution_options: Option<PyRef<'_, ScanExecutionOptions>>,
@@ -206,6 +229,11 @@ impl DeltaTable {
                 ));
             }
             builder = builder.with_projection(columns.extract::<Vec<String>>()?);
+        }
+        if let Some(filters) = filters
+            && let Some(predicate) = filters::to_predicate(&self.table, filters)?
+        {
+            builder = builder.with_predicate(predicate);
         }
         if let Some(limit) = limit {
             if limit.is_instance_of::<PyBool>() {
@@ -252,18 +280,26 @@ impl DeltaTable {
     ///
     /// Accepts the same keyword arguments as scan().
     /// Use a with block to close the reader, including when stopping early.
-    #[pyo3(signature = (*, columns=None, limit=None, target_partitions=None, execution_options=None))]
+    #[pyo3(signature = (*, columns=None, filters=None, limit=None, target_partitions=None, execution_options=None))]
     fn to_reader<'py>(
         &self,
         py: Python<'py>,
         columns: Option<&Bound<'_, PyAny>>,
+        filters: Option<&Bound<'_, PyAny>>,
         limit: Option<&Bound<'_, PyInt>>,
         target_partitions: Option<&Bound<'_, PyInt>>,
         execution_options: Option<PyRef<'_, ScanExecutionOptions>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let stream = Py::new(
             py,
-            self.scan(py, columns, limit, target_partitions, execution_options)?,
+            self.scan(
+                py,
+                columns,
+                filters,
+                limit,
+                target_partitions,
+                execution_options,
+            )?,
         )?;
         py.import("pyarrow")?
             .getattr("RecordBatchReader")?

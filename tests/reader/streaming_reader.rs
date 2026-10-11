@@ -363,6 +363,53 @@ fn table_loads_versions_and_public_state_is_redacted() -> TestResult {
 }
 
 #[test]
+fn predicate_column_types_use_loaded_schema_and_shared_validation() -> TestResult {
+    use super::support::RealParquetDeltaTable;
+
+    runtime()?.block_on(async {
+        for fixture in [
+            RealParquetDeltaTable::new_with_supported_types("predicate-column-types")?,
+            RealParquetDeltaTable::new_with_column_mapping("predicate-logical-columns")?,
+        ] {
+            let table = DeltaTableBuilder::new(fixture.path().to_string_lossy())
+                .load_table()
+                .await?;
+            let schema = table.schema();
+            // Type lookup must still work without the log or data files.
+            fs::remove_dir_all(fixture.path())?;
+            for field in schema.fields() {
+                assert_eq!(
+                    table.predicate_column_type(field.name())?,
+                    *field.data_type()
+                );
+            }
+            for column in ["", "profile.secret", "missing-secret"] {
+                let error = table
+                    .predicate_column_type(column)
+                    .expect_err("invalid column must be rejected");
+                let scan_error = match table
+                    .scan()
+                    .with_predicate(DeltaPredicate::IsNull {
+                        column: column.into(),
+                    })
+                    .build()
+                    .await
+                {
+                    Ok(_) => return Err("scan must reject the same column".into()),
+                    Err(error) => error,
+                };
+                assert_eq!(error.phase(), DeltaReaderPhase::ScanPlanning);
+                assert_eq!(error.code(), "unsupported_predicate");
+                assert_eq!(error.to_string(), scan_error.to_string());
+                assert!(!error.to_string().contains("secret"));
+                assert!(!format!("{error:?}").contains("secret"));
+            }
+        }
+        Ok(())
+    })
+}
+
+#[test]
 fn refresh_returns_a_new_latest_table_and_keeps_the_original_immutable() -> TestResult {
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("refresh-lazy")?;
@@ -680,7 +727,7 @@ fn eager_scan_metadata_supports_concurrent_planning_without_the_delta_log() -> T
 }
 
 #[test]
-fn eager_scan_metadata_preserves_pruning_from_a_parsed_stats_only_checkpoint() -> TestResult {
+fn fixed_snapshot_preserves_pruning_from_a_parsed_stats_only_checkpoint() -> TestResult {
     runtime()?.block_on(async {
         let fixture =
             TestTable::two_versions_with_parsed_stats_only_checkpoint("eager-checkpoint")?;
@@ -696,13 +743,15 @@ fn eager_scan_metadata_preserves_pruning_from_a_parsed_stats_only_checkpoint() -
         let delta_log = fixture.0.join("_delta_log");
         fs::remove_file(delta_log.join("00000000000000000000.json"))?;
         fs::remove_file(delta_log.join("00000000000000000001.json"))?;
-        assert!(
-            delta_log
-                .join("00000000000000000001.checkpoint.parquet")
-                .is_file()
-        );
+        // A complete checkpoint remains usable even across a large gap after log cleanup.
+        let version = 1_000_000_000_000;
+        fs::rename(
+            delta_log.join("00000000000000000001.checkpoint.parquet"),
+            delta_log.join(format!("{version:020}.checkpoint.parquet")),
+        )?;
 
         let table = DeltaTableBuilder::new(fixture.uri())
+            .with_snapshot_selection(DeltaSnapshotSelection::Version(version))
             .with_warmup(WarmupMode::QueryPlanning)
             .load_table()
             .await?;
@@ -720,7 +769,7 @@ fn eager_scan_metadata_preserves_pruning_from_a_parsed_stats_only_checkpoint() -
         )
         .await?;
 
-        assert_eq!(table.version(), 1);
+        assert_eq!(table.version(), version);
         assert_eq!(sorted_ids(&batches), [5, 6, 7, 8]);
         assert_eq!(metrics.snapshot().files_planned, 1);
         Ok::<_, Box<dyn Error>>(())

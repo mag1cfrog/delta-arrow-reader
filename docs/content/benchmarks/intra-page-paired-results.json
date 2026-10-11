@@ -1,5 +1,5 @@
 {
-  "status": "DAR-only records: 36 original sessions plus 12 separately recorded primary-profile repeat sessions. Default remains disabled.",
+  "status": "Historical DAR-only measurements from 2026-10-08: 36 original sessions plus 12 separately recorded primary-profile repeat sessions. Partial-page reads were disabled by default on this build. See intra-page-reads.md for subsequent fixes and default validation.",
   "timed_sessions": 36,
   "exactly_validated_query_exports": 24,
   "sample_csv_sha256": "62df4b5465f15c929f9a7bb7cd351cfa241f1495949c5ef075ff552b2efd3a32",
@@ -274,7 +274,7 @@
       ]
     }
   },
-  "remaining": [
+  "remaining_at_measurement": [
     "Investigate initialization-profile stability and the 416-column primary-profile cost decision; the repeat without detected background builds did not reproduce its earlier gains.",
     "Explain the first-query timing differences where ordinary Parquet I/O was retained.",
     "Simultaneous queries sharing one process-wide request budget.",

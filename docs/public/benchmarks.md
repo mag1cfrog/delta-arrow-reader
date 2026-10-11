@@ -23,7 +23,7 @@ isolate parts of Delta Arrow Reader's read path using small generated tables.
 
 | Report | What it measures |
 | --- | --- |
-| [Repeated queries](benchmarks/eager-metadata.md) | The first query, including table initialization, compared with a second query on the same open table. |
+| [Repeated queries](benchmarks/eager-metadata.md) | Initialization, the first query, and a second query on the same open table. |
 | [Predicate decoding](benchmarks/row-filter.md) | Decoding just the columns needed by a `WHERE` filter. |
 | [Page-index reads](benchmarks/page-index.md) | Skipping parts of a file when matching rows are stored close together. |
 | [Range planning](benchmarks/range-planning.md) | Trading fewer requests for more downloaded bytes under controlled latency and throughput. |
