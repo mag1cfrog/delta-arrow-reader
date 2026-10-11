@@ -6,6 +6,47 @@ is cheaper than reading complete pages. It includes a local decoder proof and
 a Delta query driver using the existing network harness. Production execution
 and the published README benchmarks are unchanged.
 
+## Decision
+
+Proceed with [#453](https://github.com/mag1cfrog/delta-arrow-reader/issues/453)
+for flat, uncompressed V1 DELTA_LENGTH_BYTE_ARRAY string and binary pages.
+On the slow network profile, measured-cost reads reduced the long-value
+scattered query from 30.095 to 5.316 seconds and the grouped query from 29.799
+to 4.539 seconds. Query downloads fell from 499.461 to 1.887 MB and from
+493.156 to 2.950 MB, respectively. Both skewed-value controls rejected discovery
+before I/O and retained the ordinary byte and request counts.
+
+These results justify production integration, not a production speedup claim.
+The prototype uses a different client and a 32-request limit. Fast-network
+results are subsecond diagnostics; some skewed runs still probe and fall back.
+Keep Zstd on ordinary reads in #453: sequential block discovery alone was
+slower than downloading complete columns in the measured layout. The
+[integration requirements](#handoff-to-453) below define the remaining gates.
+
+## Evidence
+
+The separate `delta-length-452-d9c0d6a.tar.gz` asset in the
+[benchmark evidence release](https://github.com/mag1cfrog/delta-arrow-reader/releases/tag/selective-read-benchmarks-2026-10-07)
+retains the source patch, raw samples, initialization measurements, request
+traces, resource records, fixture identities and earlier attempts. Its measured
+runtime sources match commit `d9c0d6a`. The published README results are a
+different campaign and remain unchanged.
+
+```sh
+gh release download selective-read-benchmarks-2026-10-07 \
+  --repo mag1cfrog/delta-arrow-reader \
+  --pattern 'delta-length-452-d9c0d6a.tar.gz*' \
+  --pattern 'delta-length-452-REPRODUCE.md'
+sha256sum --check delta-length-452-d9c0d6a.tar.gz.sha256
+```
+
+The accompanying reproduction guide replays the timing and I/O summaries from
+the recorded samples. Bulk fixtures, independent oracle files and exported
+result arrays are excluded from this archive; their hashes and successful
+comparison records are retained. To recheck actual values, regenerate the
+deterministic inputs and run the correctness checks below. Offline summary
+replay does not repeat those value comparisons.
+
 ## Run the proof
 
 From `benches/selective_read`, with Rust 1.98.1:
@@ -618,13 +659,53 @@ Samples, initialization captures, query traces and source hashes are retained;
 verified duplicate IPC outputs were removed after comparison. Production
 source and the published README benchmarks remain unchanged.
 
-## Remaining work for #452
+## Handoff to #453
 
-Use the uncompressed layout as the first integration candidate and retain the
-Zstd diagnostics as fallback evidence. The prototype now validates decisions
-with measured transport costs, but production integration must repeat the
-positive and losing controls with its own calibration, client and shared
-request limits. In particular, the slow skewed case's rejection at concurrency
-32 is not a promise about production's larger request allowance. Use these
-limits and observations to finish the #453 preflight/fallback handoff before
-closing #452. No new production type support or default is enabled here.
+Start with flat required or nullable BYTE_ARRAY columns representing UTF-8 or
+binary values, V1 DELTA_LENGTH_BYTE_ARRAY encoding, no compression, an offset
+index and no page checksum. Read physical nullability from the Parquet
+descriptor. Other encodings, nested types, V2 pages, checksummed pages and all
+Zstd pages keep ordinary reads in this first integration. Zstd remains a
+separate research question, not a general impossibility claim.
+
+Use the decoder API and validation bounds described above. The measured
+candidate filter is 1-8 MiB pages, at most 1,048,576 rows, at least 64 stored
+bytes per row and no more than one-eighth selected rows. It is an eligibility
+filter, not a byte-savings estimate. The prototype starts with an 8 KiB prefix;
+changing that size or other limits needs another measurement. Check existing
+cached bytes before extending the prefix. Reuse production parsing, range
+caching and resource accounting where their contracts fit. Do not copy the
+experiment's transport or calibration module into the production reader.
+
+Production cost selection must cover the whole requested batch, including
+ordinary columns. Price request capacity and each dependent discovery round
+using the existing production profile and shared concurrency. Reject an
+unaffordable initial probe before I/O; charge subsequent discovery before
+another read. The experiment's limits are 10% of modeled ordinary-read cost
+for discovery, at least 25% total byte savings and more than 10% modeled
+remaining-read savings. Preserve production's accounting of both modeled and
+observed work; a modeled budget is not a wall-time guarantee. Variable lengths
+must not use the fixed-width planner's uniform row-offset estimate.
+
+Keep missing-profile and explicit opt-out paths on ordinary reads. When a
+later probe discovers unsupported layout, exhausted budget or insufficient
+savings, reuse downloaded prefixes and fetch only missing bytes. Preserve all
+null and length control bytes. Treat malformed supported input as an error,
+not a successful partial result. Existing shared request and memory limits
+must also cover concurrent length arrays, caches and full-size reconstruction
+buffers; per-page bounds alone do not bound aggregate memory.
+
+Before enabling the new path, repeat the beneficial and losing cases with the
+actual production client, calibration and scheduling. Require actual partial
+I/O in the positive cases and record every preflight rejection or later
+fallback. In particular, rejection of the slow skewed case at concurrency 32
+is not a promise about production's larger request allowance. Retain exact
+value/null comparisons, real DVs, ordinary arrays, DataFusion view arrays,
+malformed-input checks and failure/cancellation coverage.
+
+Apply #449's regression gate: three alternating pairs for the new cases and
+all four retained README DV queries against the PR base, with initialization
+separate from the first complete query. Investigate a median regression over
+5% or a consistent smaller regression; unresolved or inconclusive results do
+not pass. The parent's final eight-case comparison remains separate. No new
+production support or default is enabled by #452.
