@@ -4,8 +4,17 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.98"
 publish = false
+default-run = "selective-read-fixtures"
 
 [workspace]
+
+[features]
+delta-length-experiment = ["parquet/experimental"]
+
+[[bin]]
+name = "delta-length-pages"
+path = "src/bin/delta-length-pages.rs"
+required-features = ["delta-length-experiment"]
 
 [dependencies]
 arrow = "=58.4.0"
