@@ -71,12 +71,13 @@ fn completed_child_preserves_stderr_and_closes_the_output_pipe() -> TestResult {
         matches!(result, Err(crate::error::Error::InvalidInput { message }) if message.contains("exited before blocking"))
     );
     let mut stdout = process.stdout.take().unwrap();
-    // Check for closed writers before a blocking read, so a retained descriptor fails instead of hanging.
-    let mut descriptors = [PollFd::new(&stdout, PollFlags::IN)];
-    assert_eq!(poll(&mut descriptors, Some(&Timespec::default()))?, 1);
-    assert!(descriptors[0].revents().contains(PollFlags::HUP));
     let mut bytes = Vec::new();
-    stdout.read_to_end(&mut bytes)?;
+    // Concurrent spawns can briefly inherit a writer until exec closes it.
+    PipeReaderWithDeadline {
+        pipe: &mut stdout,
+        deadline: Instant::now() + Duration::from_secs(5),
+    }
+    .read_to_end(&mut bytes)?;
     assert_eq!(bytes, b"stdout");
     Ok(())
 }
