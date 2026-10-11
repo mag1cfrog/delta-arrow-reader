@@ -109,6 +109,46 @@ fn python_filter_excludes_unrelated_sources_and_tools() -> Result<()> {
 }
 
 #[test]
+fn python_sources_skip_core_checks_without_losing_formatting() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
+    for path in [
+        "crates/delta-arrow-reader-python/src/lib.rs",
+        "crates/delta-arrow-reader-python/src/reader.rs",
+        "crates/delta-arrow-reader-python/tests/test_table.py",
+    ] {
+        assert!(filter_matches(&filters, "python", path)?, "{path}");
+        assert!(!filter_matches(&filters, "code", path)?, "{path}");
+    }
+    for path in [
+        "crates/delta-arrow-reader-python/Cargo.toml",
+        "pyproject.toml",
+        "delta_arrow_reader.pyi",
+    ] {
+        for name in ["code", "python"] {
+            assert!(filter_matches(&filters, name, path)?, "{name}: {path}");
+        }
+    }
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    let steps = ci["jobs"]["python-package"]["steps"].as_array().unwrap();
+    let toolchain = steps
+        .iter()
+        .find(|step| step["uses"] == "dtolnay/rust-toolchain@stable")
+        .unwrap();
+    assert!(
+        toolchain["with"]["components"]
+            .as_str()
+            .unwrap()
+            .split(',')
+            .any(|component| component.trim() == "rustfmt")
+    );
+    assert!(steps.iter().any(|step| {
+        step["run"] == "cargo fmt --package delta-arrow-reader-python -- --check"
+            && step["if"].is_null()
+    }));
+    Ok(())
+}
+
+#[test]
 fn tooling_changes_run_separate_required_checks() -> Result<()> {
     let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
     for path in [

@@ -28,7 +28,7 @@
     "docs/public/reference/execution-options.md",
     "docs/public/reference/metrics.md",
     "src/**",
-    "crates/delta-arrow-reader-python/**",
+    "crates/delta-arrow-reader-python/Cargo.toml",
     "crates/delta-arrow-reader-cli/**",
     "tests/**",
     "benches/incremental_refresh.rs",
