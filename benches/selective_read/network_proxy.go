@@ -91,18 +91,19 @@ func (l *limiter) take(ctx context.Context, bytes int) error {
 }
 
 type requestRecord struct {
-	Method        string `json:"method"`
-	Object        string `json:"object"`
-	Class         string `json:"object_class"`
-	Range         string `json:"range"`
-	RequestID     string `json:"request_id"`
-	Status        int    `json:"status"`
-	Bytes         int64  `json:"response_bytes"`
-	ContentLength int64  `json:"advertised_content_length"`
-	StartedNS     int64  `json:"started_ns"`
-	EndedNS       int64  `json:"ended_ns"`
-	DelayUS       int64  `json:"delay_us"`
-	Incomplete    bool   `json:"incomplete_body"`
+	ClientConnection string `json:"client_connection"`
+	Method           string `json:"method"`
+	Object           string `json:"object"`
+	Class            string `json:"object_class"`
+	Range            string `json:"range"`
+	RequestID        string `json:"request_id"`
+	Status           int    `json:"status"`
+	Bytes            int64  `json:"response_bytes"`
+	ContentLength    int64  `json:"advertised_content_length"`
+	StartedNS        int64  `json:"started_ns"`
+	EndedNS          int64  `json:"ended_ns"`
+	DelayUS          int64  `json:"delay_us"`
+	Incomplete       bool   `json:"incomplete_body"`
 }
 
 type snapshot struct {
@@ -247,7 +248,7 @@ func (s *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		class = "deletion_vector"
 	}
 	delay := s.profile.delay(r)
-	record := requestRecord{Method: r.Method, Object: key, Class: class, Range: r.Header.Get("Range"), StartedNS: time.Now().UnixNano(), DelayUS: delay.Microseconds(), ContentLength: -1}
+	record := requestRecord{ClientConnection: r.RemoteAddr, Method: r.Method, Object: key, Class: class, Range: r.Header.Get("Range"), StartedNS: time.Now().UnixNano(), DelayUS: delay.Microseconds(), ContentLength: -1}
 	s.mu.Lock()
 	s.stats.Active++
 	s.mu.Unlock()

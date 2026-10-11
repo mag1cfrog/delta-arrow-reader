@@ -24,6 +24,9 @@ The slow-network gains justify continuing the experiment. Production
 integration remains blocked on the fast fallback regression below. The
 prototype uses a different client and a 32-request limit. Fast-network
 results are subsecond diagnostics; some skewed runs still probe and fall back.
+Keeping a full-page response open removed the extra fallback request, but
+increased transferred bytes and connection counts in the beneficial cases. That
+replacement was tested and rejected; bounded prefix requests remain in place.
 Keep Zstd on ordinary reads in #453: sequential block discovery alone was
 slower than downloading complete columns in the measured layout. The
 [integration requirements](#handoff-to-453) below define the remaining gates.
@@ -783,8 +786,84 @@ probe cost but cannot infer selected-value sizes from page size and row count.
 Tightening a threshold to reject this fixture would not explain the loss or
 establish a general fix. Any replacement must retain the positive case and
 measure actual requests, transferred bytes and fallback costs. In particular,
-keeping one response open while inspecting its prefix is an untested option;
-its overfetch and connection-cancellation costs need evidence before adoption.
+the following control tests whether keeping one response open can avoid the
+extra fallback request without losing the partial-read benefit.
+
+### Retaining the page response
+
+This candidate requested a complete page, inspected the initial response
+chunks, and continued that same response if discovery required fallback.
+On a profitable page, it dropped the response before requesting selected
+payload ranges. It reused consumed prefix bytes and released the request
+permit before scheduling those ranges. Parser limits, cost thresholds,
+fixtures, query selections and resource limits stayed the same.
+
+Each case compared ordinary reads, the bounded-prefix candidate at `c044099`,
+and the retained-response candidate, with three alternating triples and
+independent ordinary/view-array checks for all three. Fast cost inputs were
+unchanged from the fixed-profile follow-up. Slow cost inputs came from the
+first complete measured slow profile, rounded to 210 ms, 149 Mbit/s and
+122,265 byte-equivalent request cost. The actual networks remained 1 ms with
+10,000 Mbit/s and 200 ms +/-20 ms with shared paced 150 Mbit/s. These fixed
+inputs isolate request handling; they do not establish automatic-policy gains.
+
+The table reports median query seconds, excluding initialization:
+
+| Network and case | Ordinary | Bounded prefix | Retained response |
+| --- | ---: | ---: | ---: |
+| Fast, selected-long-batch scattered | 0.560 | 0.595 | 0.549 |
+| Fast, long scattered | 0.743 | 0.180 | 0.252 |
+| Slow, long scattered | 30.100 | 5.269 | 5.376 |
+| Slow, long grouped | 29.792 | 4.457 | 4.626 |
+
+The skewed control returned to the ordinary timing range, with the same
+258,201,068 proxy bytes and 157 requests instead of 285. It still decoded
+lengths and fell back on all 128 pages. Its paired differences from ordinary
+were -29, -2 and -25 ms, within the 33 ms ordinary range; this is not a speedup
+claim.
+
+The profitable cases regressed against bounded prefixes in every pair.
+Fast scattered reads were 39.93% slower by median, with paired extra times of
+72, 30 and 123 ms. Slow scattered/grouped medians increased 2.04%/3.79%, with
+paired extra times of 143/106/104 ms and 144/169/182 ms. Those slow-network
+differences exceeded either candidate's within-mode range. Both strategies
+still partially read the same 105 scattered or 102 grouped pages.
+
+Fast scattered proxy bytes rose from 1.887 MB to 15.977-59.083 MB, although
+the reader consumed only 2.130-2.171 MB of data chunks. Slow scattered bytes
+rose from 1.887 to 4.831-4.896 MB; grouped bytes rose from 2.950 to
+5.501-5.569 MB. MB here means decimal megabytes. Proxy counts are accepted
+client-facing response writes, including data sent ahead of application
+consumption. They are not a TCP packet capture or proof that every accepted
+byte reached the client before cancellation.
+
+Untimed correctness traces now record the client endpoint for each request.
+The retained-response scattered runs used 137 distinct endpoints, versus 32
+with bounded prefixes, and left 105 incomplete responses. Grouped runs used
+133 versus 32 endpoints and left 102 incomplete responses. Bounded-prefix
+and ordinary runs had no incomplete responses. The proxy shapes request
+delay and shared bandwidth; it does not model remote TCP/TLS connection setup,
+so these results cannot establish the full reconnection cost on S3.
+
+All 24 declared full-result checks and 36 timings completed. The candidate's
+29 query/parser/planner tests passed, including interrupted and malformed
+response bodies. Both campaigns shut down their services. Local evidence in
+`retained-response-fast-v2` and `retained-response-slow-v2` retains all samples,
+traces, build identities and cleanup receipts. `retained-response-analysis.json`
+cross-checks trace counts and paired results. `retained-response-v1-source`
+retains both source versions, their patch and the restoration record; the
+candidate executable is retained separately. The initial `fast-v1` attempt
+passed one ordinary value check before a postprocessing typo stopped it.
+Its script, failure and output remain; it produced no timing samples.
+
+The retained-response replacement is rejected and removed from the candidate.
+The bounded-prefix implementation and both buffer-copy fixes remain, along
+with connection tracing for future diagnostics. This resolves the transport
+hypothesis, not the fast fallback regression. Page size and row count still
+cannot reveal which selected values hold most payload bytes. A further policy
+experiment must limit unsuccessful discovery without depending on that hidden
+distribution, preserve the beneficial cases, and include mixed profitable and
+unprofitable pages. #452 remains open and #453 remains blocked.
 
 ## Handoff to #453
 

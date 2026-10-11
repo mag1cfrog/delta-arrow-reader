@@ -73,7 +73,7 @@ func TestNetworkProxy(t *testing.T) {
 		t.Fatalf("forwarded range/latency mismatch: status=%d body=%q error=%v", resp.StatusCode, got, err)
 	}
 	value := control(false, true)
-	if len(value.Records) != 1 || value.Records[0].DelayUS != p.delay(r).Microseconds() {
+	if len(value.Records) != 1 || value.Records[0].DelayUS != p.delay(r).Microseconds() || value.Records[0].ClientConnection == "" {
 		t.Fatal(value)
 	}
 	for i := 0; i < 100; i++ {
