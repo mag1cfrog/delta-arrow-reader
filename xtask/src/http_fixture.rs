@@ -1,4 +1,5 @@
 use std::{
+    future::{Future, ready},
     sync::{Arc, mpsc},
     time::{Duration, Instant},
 };
@@ -6,7 +7,7 @@ use std::{
 use http_body_util::Full;
 use hyper::{
     Method, Request, Response, Uri,
-    body::{Bytes, Incoming},
+    body::{Body, Bytes, Incoming},
     server::conn::http1,
     service::service_fn,
 };
@@ -35,7 +36,10 @@ pub(crate) struct RecordedRequest {
 
 enum Event {
     Request(RecordedRequest),
-    Disconnected(u64),
+    Disconnected {
+        connection_id: u64,
+        response_completed: bool,
+    },
     Failed(String),
 }
 
@@ -51,20 +55,38 @@ impl HttpTestServer {
     pub fn start(
         respond: impl Fn(&Request<Incoming>) -> Result<Option<HttpResponse>> + Send + Sync + 'static,
     ) -> Result<Self> {
-        Self::start_listener(None, respond)
+        Self::start_async(move |request| ready(respond(&request)))
     }
 
     pub fn start_tls(
         config: ServerConfig,
         respond: impl Fn(&Request<Incoming>) -> Result<Option<HttpResponse>> + Send + Sync + 'static,
     ) -> Result<Self> {
-        Self::start_listener(Some(TlsAcceptor::from(Arc::new(config))), respond)
+        Self::start_listener(Some(TlsAcceptor::from(Arc::new(config))), move |request| {
+            ready(respond(&request))
+        })
     }
 
-    fn start_listener(
+    pub fn start_async<F, B>(
+        respond: impl Fn(Request<Incoming>) -> F + Send + Sync + 'static,
+    ) -> Result<Self>
+    where
+        F: Future<Output = Result<Option<Response<B>>>> + Send + 'static,
+        B: Body<Data = Bytes> + Send + 'static,
+        B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+    {
+        Self::start_listener(None, respond)
+    }
+
+    fn start_listener<F, B>(
         tls: Option<TlsAcceptor>,
-        respond: impl Fn(&Request<Incoming>) -> Result<Option<HttpResponse>> + Send + Sync + 'static,
-    ) -> Result<Self> {
+        respond: impl Fn(Request<Incoming>) -> F + Send + Sync + 'static,
+    ) -> Result<Self>
+    where
+        F: Future<Output = Result<Option<Response<B>>>> + Send + 'static,
+        B: Body<Data = Bytes> + Send + 'static,
+        B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+    {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(1)
             .enable_io()
@@ -107,15 +129,17 @@ impl HttpTestServer {
                         let respond = Arc::clone(&respond);
                         let tls = tls.clone();
                         connections.spawn(async move {
-                            if let Some(tls) = tls {
+                            let response_completed = if let Some(tls) = tls {
                                 // Rejected certificates must never reach the HTTP handler.
                                 if let Ok(socket) = tls.accept(socket).await {
-                                    serve_connection(socket, connection_id, send.clone(), respond).await;
+                                    serve_connection(socket, connection_id, send.clone(), respond).await
+                                } else {
+                                    false
                                 }
                             } else {
-                                serve_connection(socket, connection_id, send.clone(), respond).await;
-                            }
-                            let _ = send.send(Event::Disconnected(connection_id));
+                                serve_connection(socket, connection_id, send.clone(), respond).await
+                            };
+                            let _ = send.send(Event::Disconnected { connection_id, response_completed });
                         });
                     }
                     Some(result) = connections.join_next() => {
@@ -139,7 +163,7 @@ impl HttpTestServer {
             match event {
                 Event::Request(request) => requests.push(request),
                 Event::Failed(message) => return InvalidInputSnafu { message }.fail(),
-                Event::Disconnected(_) => {}
+                Event::Disconnected { .. } => {}
             }
         }
         Ok(requests)
@@ -157,9 +181,30 @@ impl HttpTestServer {
     pub fn wait_for_disconnect(&self, connection_id: u64, timeout: Duration) -> Result<()> {
         let deadline = Instant::now() + timeout;
         loop {
-            if matches!(self.next_event(deadline, "the table connection to close")?, Event::Disconnected(id) if id == connection_id)
+            if matches!(self.next_event(deadline, "the table connection to close")?, Event::Disconnected { connection_id: id, .. } if id == connection_id)
             {
                 return Ok(());
+            }
+        }
+    }
+
+    pub fn wait_for_response_complete(&self, connection_id: u64, timeout: Duration) -> Result<()> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if let Event::Disconnected {
+                connection_id: id,
+                response_completed,
+            } = self.next_event(deadline, "the table response to finish")?
+                && id == connection_id
+            {
+                return if response_completed {
+                    Ok(())
+                } else {
+                    InvalidInputSnafu {
+                        message: "table connection closed before its response completed",
+                    }
+                    .fail()
+                };
             }
         }
     }
@@ -186,34 +231,42 @@ impl HttpTestServer {
     }
 }
 
-async fn serve_connection(
+async fn serve_connection<F, B>(
     socket: impl AsyncRead + AsyncWrite + Unpin,
     connection_id: u64,
     send: mpsc::Sender<Event>,
-    respond: Arc<impl Fn(&Request<Incoming>) -> Result<Option<HttpResponse>>>,
-) {
+    respond: Arc<impl Fn(Request<Incoming>) -> F>,
+) -> bool
+where
+    F: Future<Output = Result<Option<Response<B>>>>,
+    B: Body<Data = Bytes> + 'static,
+    B::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
     let service = service_fn(move |request: Request<Incoming>| {
         let _ = send.send(Event::Request(RecordedRequest {
             connection_id,
             method: request.method().clone(),
             uri: request.uri().clone(),
         }));
-        let result = respond(&request);
-        if let Err(error) = &result {
-            let _ = send.send(Event::Failed(error.to_string()));
-        }
+        let result = respond(request);
+        let send = send.clone();
         async move {
+            let result = result.await;
+            if let Err(error) = &result {
+                let _ = send.send(Event::Failed(error.to_string()));
+            }
             match result? {
                 Some(response) => Ok::<_, crate::error::Error>(response),
                 None => std::future::pending().await,
             }
         }
     });
-    // Client cancellation is expected in the signal and prefetch checks.
-    let _ = http1::Builder::new()
+    // Distinguish a flushed response from client cancellation when a check needs completion.
+    http1::Builder::new()
         .keep_alive(false)
         .serve_connection(TokioIo::new(socket), service)
-        .await;
+        .await
+        .is_ok()
 }
 
 #[cfg(test)]

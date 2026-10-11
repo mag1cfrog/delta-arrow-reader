@@ -747,7 +747,7 @@ fn file_url(path: &Path) -> Result<String> {
         })
 }
 
-fn copy_directory(source: &Path, destination: &Path) -> Result<()> {
+pub(crate) fn copy_directory(source: &Path, destination: &Path) -> Result<()> {
     fs::create_dir_all(destination).context(FileSnafu { path: destination })?;
     for entry in fs::read_dir(source).context(FileSnafu { path: source })? {
         let entry = entry.context(FileSnafu { path: source })?;

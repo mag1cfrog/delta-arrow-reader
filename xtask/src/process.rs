@@ -9,7 +9,7 @@ mod linux;
 #[cfg(target_os = "linux")]
 pub(crate) use linux::{
     check_diagnostic, check_error, check_inspection, check_no_child_processes,
-    compile_fault_library,
+    compile_fault_library, copy_directory,
 };
 
 #[derive(Args)]

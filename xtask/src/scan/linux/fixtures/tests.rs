@@ -75,3 +75,54 @@ fn repeated_fixture_preserves_file_bytes_and_partition_metadata() -> TestResult 
     }
     Ok(())
 }
+
+#[test]
+fn expanded_fixture_preserves_rows_and_updates_sizes_and_statistics() -> TestResult {
+    let source = crate::repository::repository_root()
+        .join("tests/reader/fixtures/external_writer/corpus/partitioned/table");
+    let temporary = tempfile::tempdir()?;
+    create_repeated_table(&source, temporary.path(), 2)?;
+    let path = temporary.path().join("part-000.parquet");
+    let original = ParquetRecordBatchReaderBuilder::try_new(fs::File::open(&path)?)?
+        .build()?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let before = read_actions(temporary.path())?;
+    expand_repeated_table(temporary.path())?;
+    let content = fs::read(&path)?;
+    assert!(content.len() > 64 * 1024);
+    assert_eq!(
+        fs::read(temporary.path().join("part-001.parquet"))?,
+        content
+    );
+    let actual = ParquetRecordBatchReaderBuilder::try_new(fs::File::open(path)?)?
+        .build()?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    assert_eq!(actual.len(), 1);
+    assert_eq!(actual[0].num_rows(), original[0].num_rows());
+    assert_eq!(actual[0].schema(), original[0].schema());
+    for name in ["id", "value"] {
+        let index = actual[0].schema().index_of(name)?;
+        assert_eq!(actual[0].column(index), original[0].column(index));
+    }
+    let label = actual[0].schema().index_of("label")?;
+    let labels = actual[0]
+        .column(label)
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .unwrap();
+    for row in 0..actual[0].num_rows() {
+        assert_eq!(labels.value(row), format!("{row:04}-{}", "x".repeat(4096)));
+    }
+    let after = read_actions(temporary.path())?;
+    for (before, after) in before.iter().zip(&after) {
+        if let Some(add) = before.get("add") {
+            let mut expected = add.clone();
+            expected["size"] = json!(content.len());
+            expected.as_object_mut().unwrap().remove("stats");
+            assert_eq!(after, &json!({"add": expected}));
+        } else {
+            assert_eq!(before, after);
+        }
+    }
+    Ok(())
+}

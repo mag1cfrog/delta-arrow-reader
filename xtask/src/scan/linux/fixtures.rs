@@ -1,10 +1,14 @@
 use std::{fs, path::Path, sync::Arc};
 
-use arrow_array::{Float64Array, Int32Array, RecordBatch};
+use arrow_array::{Float64Array, Int32Array, RecordBatch, RecordBatchReader, StringArray};
 use arrow_schema::{DataType, Field, Schema};
-use parquet::arrow::ArrowWriter;
+use parquet::{
+    arrow::{ArrowWriter, arrow_reader::ParquetRecordBatchReaderBuilder},
+    basic::Compression,
+    file::properties::WriterProperties,
+};
 use serde_json::{Value, json};
-use snafu::ResultExt;
+use snafu::{ResultExt, ensure};
 
 use crate::error::{ArrowSnafu, FileSnafu, InvalidInputSnafu, JsonSnafu, ParquetSnafu, Result};
 
@@ -112,6 +116,74 @@ fn write_log(log_directory: &Path, actions: &[Value]) -> Result<()> {
     let log = log_directory.join("00000000000000000000.json");
     let contents: String = actions.iter().map(|action| format!("{action}\n")).collect();
     fs::write(&log, contents).context(FileSnafu { path: &log })
+}
+
+pub(super) fn expand_repeated_table(table: &Path) -> Result<()> {
+    let path = table.join("part-000.parquet");
+    let reader = ParquetRecordBatchReaderBuilder::try_new(
+        fs::File::open(&path).context(FileSnafu { path: &path })?,
+    )
+    .context(ParquetSnafu { path: &path })?
+    .build()
+    .context(ParquetSnafu { path: &path })?;
+    let schema = reader.schema().clone();
+    let label = schema
+        .index_of("label")
+        .context(ArrowSnafu { path: &path })?;
+    let mut content = Vec::new();
+    let properties = WriterProperties::builder()
+        .set_compression(Compression::UNCOMPRESSED)
+        .set_dictionary_enabled(false)
+        .build();
+    let mut writer = ArrowWriter::try_new(&mut content, schema, Some(properties))
+        .context(ParquetSnafu { path: &path })?;
+    let mut offset = 0;
+    for batch in reader {
+        let batch = batch.context(ArrowSnafu { path: &path })?;
+        let mut columns = batch.columns().to_vec();
+        columns[label] = Arc::new(StringArray::from_iter_values(
+            (offset..offset + batch.num_rows()).map(|row| format!("{row:04}-{}", "x".repeat(4096))),
+        ));
+        offset += batch.num_rows();
+        let expanded =
+            RecordBatch::try_new(batch.schema(), columns).context(ArrowSnafu { path: &path })?;
+        writer
+            .write(&expanded)
+            .context(ParquetSnafu { path: &path })?;
+    }
+    writer.close().context(ParquetSnafu { path: &path })?;
+    ensure!(
+        content.len() > 64 * 1024,
+        InvalidInputSnafu {
+            message: "expanded fixture must exceed the footer read size"
+        }
+    );
+    let log = table.join("_delta_log/00000000000000000000.json");
+    let mut actions: Vec<Value> = fs::read_to_string(&log)
+        .context(FileSnafu { path: &log })?
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<std::result::Result<_, _>>()
+        .context(JsonSnafu {
+            subject: "repeated fixture log actions",
+        })?;
+    for action in &mut actions {
+        if let Some(add) = action.get_mut("add") {
+            let name = add["path"].as_str().ok_or_else(|| {
+                InvalidInputSnafu {
+                    message: "repeated fixture has no data file path",
+                }
+                .build()
+            })?;
+            let path = table.join(name);
+            fs::write(&path, &content).context(FileSnafu { path: &path })?;
+            add["size"] = json!(content.len());
+            add.as_object_mut()
+                .expect("a fixture add action is an object")
+                .remove("stats");
+        }
+    }
+    write_log(&table.join("_delta_log"), &actions)
 }
 
 #[cfg(test)]

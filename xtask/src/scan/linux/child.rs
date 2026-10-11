@@ -2,7 +2,7 @@ use std::{
     fs::{self, File},
     io::{self, PipeReader, Read, Seek},
     path::PathBuf,
-    process::{Child, Command, ExitStatus, Stdio},
+    process::{Child, Command, ExitStatus, Output, Stdio},
     thread,
     time::{Duration, Instant},
 };
@@ -121,6 +121,29 @@ impl ScanProcess {
         })?;
         Ok((status, stderr))
     }
+
+    pub fn wait_with_output(&mut self, timeout: Duration) -> Result<Output> {
+        let deadline = Instant::now() + timeout;
+        let pipe = self.stdout.as_mut().ok_or_else(|| {
+            InvalidInputSnafu {
+                message: "scan stdout is already closed",
+            }
+            .build()
+        })?;
+        let mut stdout = Vec::new();
+        PipeReaderWithDeadline { pipe, deadline }
+            .read_to_end(&mut stdout)
+            .context(IoSnafu {
+                operation: "drain scan stdout",
+            })?;
+        let (status, stderr) =
+            self.wait_for_exit(deadline.saturating_duration_since(Instant::now()))?;
+        Ok(Output {
+            status,
+            stdout,
+            stderr,
+        })
+    }
 }
 
 impl Drop for ScanProcess {
@@ -130,9 +153,9 @@ impl Drop for ScanProcess {
     }
 }
 
-struct PipeReaderWithDeadline<'a> {
-    pipe: &'a mut PipeReader,
-    deadline: Instant,
+pub(super) struct PipeReaderWithDeadline<'a> {
+    pub pipe: &'a mut PipeReader,
+    pub deadline: Instant,
 }
 
 impl Read for PipeReaderWithDeadline<'_> {

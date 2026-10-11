@@ -49,9 +49,6 @@ on:
 permissions:
   contents: read
 
-env:
-  PYTHONDONTWRITEBYTECODE: '1'
-
 defaults:
   run:
     shell: bash
@@ -132,7 +129,7 @@ jobs:
             --volume "$cli_rustup_home:/rustup:ro" \
             --workdir /source --env CARGO_HOME=/cargo --env RUSTUP_HOME=/rustup \
             --env PATH=/rustup-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-            --env CARGO_BUILD_JOBS=4 --env PYTHONDONTWRITEBYTECODE=1 \
+            --env CARGO_BUILD_JOBS=4 \
             --env CLI_SOURCE_COMMIT --env CLI_VERSION --env CLI_RUST_TOOLCHAIN \
             --env CLI_ABOUT_VERSION --env CLI_ARCHITECTURE \
             "$CLI_IMAGE" bash -euo pipefail -c '
@@ -165,7 +162,7 @@ jobs:
             --volume "$RUNNER_TEMP/cli-build/artifacts:/artifacts:ro" \
             --volume "$RUNNER_TEMP/cli-extracted:/package:ro" \
             --volume "$RUNNER_TEMP/cli-build/target/debug/xtask:/tools/xtask:ro" \
-            --workdir /tmp --env PYTHONDONTWRITEBYTECODE=1 \
+            --workdir /tmp \
             --env CLI_SOURCE_COMMIT --env CLI_VERSION --env CLI_RUST_TOOLCHAIN \
             --env CLI_ARCHITECTURE "$CLI_IMAGE" \
             bash /checks/crates/delta-arrow-reader-cli/release/validate-runtime.sh

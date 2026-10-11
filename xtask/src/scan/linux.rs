@@ -21,9 +21,13 @@ use crate::{
 mod blocked_output;
 mod child;
 mod fixtures;
+mod http;
 mod https;
+mod prefetch;
 mod read_failure;
+mod scheduling;
 mod signals;
+mod slow_consumer;
 
 use fixtures::{FLOAT64_VALUES, create_float64_table, create_repeated_table};
 
@@ -84,6 +88,26 @@ pub(super) fn run(binary: &Path, repository: &Path) -> Result<()> {
             "signals stop held data requests",
             ScanFixture::check_signals_during_held_data_requests,
         ),
+        (
+            "partition targets and read capacities bound requests",
+            ScanFixture::check_partition_read_limits,
+        ),
+        (
+            "narrow execution options bound reads behind blocked stdout",
+            ScanFixture::check_narrow_read_limits,
+        ),
+        (
+            "blocked output resumes incrementally",
+            ScanFixture::check_incremental_output,
+        ),
+        (
+            "slow consumers do not time out completed responses",
+            ScanFixture::check_slow_consumer,
+        ),
+        (
+            "scan exit does not wait for blocking file prefetch",
+            ScanFixture::check_blocking_prefetch_exit,
+        ),
     ];
     for (name, check) in checks {
         eprintln!("Scan check: {name}");
@@ -134,6 +158,18 @@ impl ScanFixture<'_> {
             }
         );
         IpcTable::read_stream(&output.stdout, &self.directory.path().join("stdout.arrow"))
+    }
+
+    fn check_completed_scan(&self, scan: &mut child::ScanProcess, rows: usize) -> Result<IpcTable> {
+        let actual =
+            self.check_successful_scan(&scan.wait_with_output(Duration::from_secs(15))?)?;
+        ensure!(
+            actual.row_count() == rows,
+            InvalidInputSnafu {
+                message: format!("expected {rows} scan rows, got {}", actual.row_count()),
+            }
+        );
+        Ok(actual)
     }
 
     fn check_spark_fixtures(&self) -> Result<()> {

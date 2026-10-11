@@ -171,3 +171,34 @@ fn pipe_reads_share_one_deadline_even_when_more_bytes_are_ready() -> TestResult 
     assert_eq!(reader.read(&mut [])?, 0);
     Ok(())
 }
+
+#[test]
+fn draining_stdout_allows_a_blocked_writer_to_finish() -> TestResult {
+    let mut process = writing_process()?;
+    process.wait_for_blocked_output(Duration::from_secs(5))?;
+    let output = process.wait_with_output(Duration::from_secs(5))?;
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    assert_eq!(output.stdout, vec![0; 1048576]);
+    Ok(())
+}
+
+#[test]
+fn stalled_output_times_out_and_the_child_is_cleaned_up() -> TestResult {
+    let mut command = Command::new("sh");
+    command.args(["-c", "printf partial; exec sleep 30"]);
+    let mut process = ScanProcess::start(command)?;
+    let pid = Pid::from_child(&process.child);
+    let error = process
+        .wait_with_output(Duration::from_millis(50))
+        .unwrap_err();
+    assert!(
+        matches!(error, crate::error::Error::Io { source, .. } if source.kind() == io::ErrorKind::TimedOut)
+    );
+    drop(process);
+    assert_eq!(
+        rustix::process::test_kill_process(pid),
+        Err(rustix::io::Errno::SRCH)
+    );
+    Ok(())
+}

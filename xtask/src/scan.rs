@@ -29,27 +29,14 @@ impl TestScanArgs {
 pub(crate) fn run_scan_tests(binary: &Path, repository: &Path) -> Result<()> {
     #[cfg(target_os = "linux")]
     {
-        use std::{
-            process::{Command, Stdio},
-            time::Duration,
-        };
-
         use snafu::ResultExt;
 
-        use crate::{command::run_with_timeout, error::FileSnafu};
+        use crate::error::FileSnafu;
 
         let binary = std::fs::canonicalize(binary).context(FileSnafu { path: binary })?;
         let repository =
             std::fs::canonicalize(repository).context(FileSnafu { path: repository })?;
-        linux::run(&binary, &repository)?;
-        // shortcut: Python runs the remaining scan groups until their Rust migration is complete.
-        run_with_timeout(
-            Command::new("python3")
-                .arg(repository.join("crates/delta-arrow-reader-cli/tests/scan.py"))
-                .arg(&binary)
-                .stdin(Stdio::null()),
-            Duration::from_secs(600),
-        )
+        linux::run(&binary, &repository)
     }
     #[cfg(not(target_os = "linux"))]
     {

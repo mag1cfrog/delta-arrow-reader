@@ -16,11 +16,8 @@ test ! -s inspect.stderr
 /package/dar scan --column id --limit 2 "$cli_fixture" >scan.arrow 2>scan.stderr
 test ! -s scan.stderr
 
-apt-get install -y --no-install-recommends \
-  binutils build-essential openssl python3 python3-venv
-python3 -m venv /tmp/cli-runtime-venv
-/tmp/cli-runtime-venv/bin/python -m pip install --only-binary=:all: 'pyarrow==25.0.1'
-PATH="/tmp/cli-runtime-venv/bin:$PATH" /tools/xtask cli test-archive /artifacts \
+apt-get install -y --no-install-recommends binutils build-essential openssl
+/tools/xtask cli test-archive /artifacts \
   --extracted /package --smoke-output /tmp/cli-runtime-checks --repository /checks \
   --architecture "$CLI_ARCHITECTURE" --version "$CLI_VERSION" \
   --source-commit "$CLI_SOURCE_COMMIT" --rust-toolchain "$CLI_RUST_TOOLCHAIN"

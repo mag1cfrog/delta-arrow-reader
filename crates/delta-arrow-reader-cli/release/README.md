@@ -3,9 +3,8 @@
 These tools build and validate the Linux CLI archives. Builds, ELF checks,
 archive operations, dependency notice collection, and archive acceptance run
 through `cargo xtask`, a Cargo alias for the repository's private Rust maintenance
-crate. Process checks run in Rust through `xtask cli test-process`. Scan checks run
-through `xtask cli test-scan`, which still requires Python 3.11 or newer and PyArrow
-for the groups awaiting migration to Rust.
+crate. Process and scan checks run in Rust through `xtask cli test-process` and
+`xtask cli test-scan`.
 
 ## Run the CI build
 
@@ -145,8 +144,8 @@ the observed ELF metadata as JSON. A successful version check still requires
 the scan, process lifecycle, and HTTPS acceptance tests before release.
 
 The existing CLI test harnesses accept an executable path. With the test
-prerequisites installed (`build-essential`, OpenSSL, Python, and the PyArrow
-version used by CLI CI), run them against that same binary:
+prerequisites installed (`build-essential` and OpenSSL), run them against that
+same binary:
 
 ```sh
 cargo xtask cli test-process /path/to/dar --expected-version "$version" --repository .
@@ -170,15 +169,18 @@ decodable partial batches while exiting unsuccessfully without an IPC end marker
 Checks with stdout blocked cover early pipe closure and SIGINT/SIGTERM termination.
 Signal checks also hold data requests, read the IPC schema, and verify that
 termination closes the held connection without writing stderr.
+Scheduling checks cover partition targets and read capacities for both Parquet
+backends, bounded reads while stdout is blocked, and incremental output. Slow
+consumer checks hold stdout beyond the request timeout after a pending response
+has completed. Prefetch checks verify that row limits, read errors, and output
+errors stop the process even when a blocking file open is still pending.
 The thread checks compile a C fault library with `cc`.
 The HTTPS checks use OpenSSL to generate temporary certificates and configure
-trust only for the CLI subprocess. The command then runs the remaining
-`scan.py` groups using `python3` from `PATH`. Those groups still need PyArrow
-and a C compiler.
+trust only for the CLI subprocess.
 
 In a runtime container without Cargo, use `/tools/xtask cli test-process` and
 `/tools/xtask cli test-scan` with `--repository /checks`. The source checkout
-supplies fixtures, the remaining Python checks, and the C fault library.
+supplies fixtures and the C fault library source.
 
 ## Build and test a complete platform archive locally
 
@@ -211,8 +213,8 @@ Start a fresh pinned Debian container on the matching architecture. Use read-onl
 mounts for the source checkout at `/checks`, `target/cli-inputs/amd64` at
 `/artifacts`, `/tmp/dar-amd64-check` at `/package`, and the Debian-built
 `target/cli-build/debug/xtask` at `/tools/xtask`. Pass `CLI_ARCHITECTURE=amd64`,
-`CLI_SOURCE_COMMIT`, `CLI_VERSION`, and `CLI_RUST_TOOLCHAIN` with those values,
-plus `PYTHONDONTWRITEBYTECODE=1`, and run:
+`CLI_SOURCE_COMMIT`, `CLI_VERSION`, and `CLI_RUST_TOOLCHAIN` with those values
+and run:
 
 ```sh
 bash /checks/crates/delta-arrow-reader-cli/release/validate-runtime.sh
@@ -223,8 +225,7 @@ scan output before adding test tools. It then installs the test prerequisites
 and runs `xtask cli test-archive`. This command verifies the archive and extracted
 file permissions, checks the executable's hash and ABI, and validates the saved
 inspection and Arrow IPC output. It then runs the same process and scan suites
-as `test-process` and `test-scan`. The script sets `PATH` to the PyArrow virtual
-environment for the remaining Python checks. These tests cover external-writer
+as `test-process` and `test-scan`. These tests cover external-writer
 fixtures, filtering and execution options, pipes, partial failures, signals,
 redaction, and trusted/untrusted HTTPS certificates. The archive and executable
 hashes are checked again afterward.
@@ -235,7 +236,7 @@ To rerun acceptance after the script has installed the test tools and saved the
 smoke output, use the same mounts and environment:
 
 ```sh
-PATH="/tmp/cli-runtime-venv/bin:$PATH" /tools/xtask cli test-archive /artifacts \
+/tools/xtask cli test-archive /artifacts \
   --extracted /package --smoke-output /tmp/cli-runtime-checks --repository /checks \
   --architecture "$CLI_ARCHITECTURE" --version "$CLI_VERSION" \
   --source-commit "$CLI_SOURCE_COMMIT" --rust-toolchain "$CLI_RUST_TOOLCHAIN"
