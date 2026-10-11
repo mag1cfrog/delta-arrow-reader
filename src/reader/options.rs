@@ -126,11 +126,13 @@ impl DeltaScanExecutionOptions {
         self.experimental_intra_page_reads
     }
 
-    /// Enables experimental partial reads of flat nullable PLAIN INT64 pages.
+    /// Enables experimental partial reads of flat PLAIN numeric pages.
     ///
     /// Enabled by default. The direct reader uses predicate-derived row numbers to
     /// read selected values from uncompressed pages or Zstd raw blocks without
-    /// checksums. Unsupported layouts and bounded-work limits use ordinary reads.
+    /// checksums. Supports nullable and required INT32, INT64, FLOAT and DOUBLE
+    /// physical columns, including their existing logical type conversions.
+    /// Unsupported layouts and bounded-work limits use ordinary reads.
     /// Explicit range-read policies other than `Automatic` disable this optimization.
     /// The Delta Kernel backend ignores this direct-reader option.
     ///

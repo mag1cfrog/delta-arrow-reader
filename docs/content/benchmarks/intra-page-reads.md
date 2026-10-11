@@ -51,7 +51,10 @@ existing Delta reader applies DV deletions using original row coordinates.
 Predicate columns retain complete data because Parquet may cache their decoded
 batches.
 
-Eligible pages are flat nullable PLAIN INT64 V1 pages with offset indexes. Data
+Eligible pages are flat PLAIN V1 pages with offset indexes and physical types
+INT32, INT64, FLOAT or DOUBLE. Nullable and required columns are supported. The
+file's physical type and definition levels determine byte offsets; the normal
+decoder handles dates, timestamps, decimals and supported type widening. Data
 must be uncompressed or held in a single Zstd frame of raw blocks, without page
 or frame checksums. Unsupported pages go through ordinary reads. Malformed supported
 structures return errors; the standard decoder handles errors in fallback
@@ -65,6 +68,12 @@ single waves still pay both costs. Request capacity comes from completion
 intervals in the central half of replenished small reads, spanning at least two
 waves. This captures sustained capacity instead of the completion burst caused
 by latency jitter in one wave.
+For uncompressed nullable pages, the page size and available null counts can
+prove that null information extends beyond the header prefix. The initial
+estimate then budgets for another request. Row count alone does not establish
+this: even a million-row page can encode its null levels as a short RLE run.
+When metadata cannot settle this, bounded probes inspect the actual layout.
+
 The model takes the larger of processing and transport costs because they overlap.
 Repeated samples use a median; broad jitter can still lower the estimated capacity.
 Uncontended probes are charged at least their observed elapsed time. Partial
@@ -80,6 +89,9 @@ from page indexes. Large raw Zstd pages also require a dependent block-header
 probe, which is included before any I/O. With measured request overhead, this
 estimate can reject an expensive attempt without I/O. It is an approximation;
 actual nullable and compressed offsets still require probes.
+For required columns, the row count gives a minimum size for PLAIN values.
+Smaller Zstd pages cannot use an all-raw frame, so metadata rules them out
+without a probe.
 
 An initialized profile measures shared capacity. Both bandwidth and request
 concurrency use that scope when comparing plans. The profile accepts later
@@ -148,6 +160,14 @@ and total session time. The second query can use transport samples from the
 first. It must be reported separately from a fresh-process query. The HTTP
 counters and process resource usage cover the whole session.
 
+To compare a change against its base, add
+`--baseline-binary /path/to/base/selective-read-dar --execution-mode reuse`.
+Both executables use their default partial-read and warmup settings. The primary
+result is the first fully consumed query after initialization. Initialization and
+the second query remain separate. The harness verifies both executable hashes,
+checks resolved settings and alternates three pairs. Request tracing runs during
+validation, outside the timed samples.
+
 Add `--no-warmup` to skip both metadata and network warmup, including in `reuse`
 mode. This tests the lazy initialization used by `WarmupMode::None`. It cannot
 be combined with `--network-warmup`. Ordinary query traffic can supply latency
@@ -186,6 +206,32 @@ logs, request traces and process CPU/memory observations. Peak HTTP concurrency
 comes from overlapping trace intervals. Repeated requests are counted, but are
 not labelled as retries because the proxy cannot distinguish SDK retries from
 separate reads of the same range.
+
+### Numeric type fixtures
+
+The [numeric type comparison](intra-page-numeric-types.md) records the results
+against the pre-series reader, including all four retained README cases.
+
+`numeric_pages.py` generates a separate, deterministic fixture for INT32, INT64,
+FLOAT and DOUBLE, with nullable and required columns. It does not change the
+published revision-6 tables or oracle. Its small `numeric-pages` driver is built
+alongside the DAR runner; build the same driver against both reader revisions.
+
+```console
+python benches/selective_read/numeric_pages.py generate --output /path/to/numeric-fixture
+python benches/selective_read/numeric_pages.py run \
+  --fixture /path/to/numeric-fixture --state /path/to/storage-state \
+  --table s3://selective-read/verified-numeric-fixture \
+  --baseline /path/to/base/numeric-pages --candidate /path/to/change/numeric-pages \
+  --type float --output /path/to/new-results
+```
+
+Upload the generated Parquet files and Delta log with checksum verification
+before running. Repeat for each type. Use `--selection dense` for the dense
+control, a file URI for the local control, and the proxy's low-latency profile for
+the fast-network control. Validation compares independent Arrow references,
+including floating-point bits, in separate processes. Timings use defaults and
+report initialization and two fully consumed queries separately.
 
 ## Missing request-cost evidence
 
