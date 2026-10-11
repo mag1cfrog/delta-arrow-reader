@@ -114,7 +114,8 @@ class ProcessTests(unittest.TestCase):
                      ("inspect", "--storage-options-file", "secret-missing", "--help"),
                      ("scan", "--help"), ("scan", "-h"), ("help", "scan"),
                      ("scan", "--storage-options-file", "secret-missing", "--help"),
-                     ("scan", "--predicate-file", "secret-missing", "--help")]:
+                     ("scan", "--predicate-file", "secret-missing", "--help"),
+                     ("scan", "--execution-options-file", "secret-missing", "--help")]:
             with self.subTest(args=args):
                 result = self.invoke(*args)
                 self.assertEqual(result.returncode, 0)
@@ -125,7 +126,8 @@ class ProcessTests(unittest.TestCase):
                     self.assertIn(b"--table-version", result.stdout)
                     self.assertIn(b"--storage-options-file", result.stdout)
                 if "scan" in args:
-                    for flag in [b"--column", b"--no-columns", b"--limit", b"--predicate-file"]:
+                    for flag in [b"--column", b"--no-columns", b"--limit", b"--predicate-file",
+                                 b"--execution-options-file", b"--target-partitions"]:
                         self.assertIn(flag, result.stdout)
         for flag in ["--version", "-V"]:
             result = self.invoke(flag)
@@ -159,6 +161,8 @@ class ProcessTests(unittest.TestCase):
                      ("inspect", "--secret-option", table), ("inspect", "--table-version"),
                      ("inspect", "--storage-options-file"),
                      ("inspect", "--predicate-file", "secret-missing", table),
+                     ("inspect", "--execution-options-file", "secret-missing", table),
+                     ("inspect", "--target-partitions", "1", table),
                      ("inspect", "--table-version", "0", "--table-version", "1", table),
                      ("inspect", "--storage-options-file", "secret-missing", "--storage-options-file", "secret-missing", table),
                      ("inspect", b"secret-\xff"), ("inspect", "--", table, "extra")]
@@ -186,6 +190,8 @@ class ProcessTests(unittest.TestCase):
         with http.serve(functools.partial(RecordingStorageHandler, directory=self.cwd)) as server:
             table = f"http://127.0.0.1:{server.server_port}/secret-table"
             cases = [(), (table, "secret-extra"), ("--column",), ("--limit",),
+                     ("--target-partitions",), ("--target-partitions", b"secret-\xff", table),
+                     ("--target-partitions", "1", "--target-partitions", "2", table),
                      ("--predicate-file",), ("--predicate-file", b"secret-\xff", table),
                      ("--predicate-file", "secret-missing", "--predicate-file", "secret-missing", table),
                      ("--no-columns", "--column", "secret", table),
@@ -198,6 +204,9 @@ class ProcessTests(unittest.TestCase):
             for limit in ["", "-1", "+1", " 1", "1 ", "1\n", "1.0", "1e2", "0x1",
                           "18446744073709551616", "secret", "\u0661"]:
                 cases.append(("--limit", limit, table))
+                cases.append(("--target-partitions", limit, table))
+            for target in ["0", "000", "-0", "+0"]:
+                cases.append(("--target-partitions", target, table))
             for args in cases:
                 with self.subTest(args=args):
                     self.assert_error(self.invoke("scan", *args), 2, "configuration", "invalid_cli_argument")
@@ -214,6 +223,64 @@ class ProcessTests(unittest.TestCase):
                 os.close(master)
                 os.close(slave)
             self.assertEqual(server.requests, [])
+
+    def test_execution_options_validation_before_any_table_request(self):
+        self.env.update(LD_PRELOAD=str(self.fault_library), DAR_TEST_REJECT_THREADS="1")
+        with http.serve(functools.partial(RecordingStorageHandler, directory=self.cwd)) as server:
+            table = f"http://127.0.0.1:{server.server_port}/secret-table"
+            for args in [
+                ("--execution-options-file",),
+                ("--execution-options-file", b"secret-\xff", table),
+                ("--execution-options-file", "secret-missing", "--execution-options-file", "secret-missing", table),
+            ]:
+                with self.subTest(args=args):
+                    self.assert_error(self.invoke("scan", *args), 2, "configuration", "invalid_cli_argument")
+            for content in [
+                b"", b"\xff", b"null", b"[]", b"{}{}", b"{}" + b" " * (LIMIT - 1),
+                b'{"secret-extra":1}', b'{"parquet_backend":"secret-backend"}',
+                b'{"parquet_backend":{"direct":null}}',
+                b'{"prefetch_files_per_partition":null}',
+                b'{"prefetch_files_per_partition":1e0}',
+                b'{"prefetch_files_per_partition":18446744073709551616}',
+                b'{"parquet_metadata_size_hint_bytes":null,"parquet_metadata_size_hint_bytes":null}',
+            ]:
+                with self.subTest(content=content[:100], size=len(content)):
+                    diagnostic = self.assert_error(
+                        self.invoke("scan", "--execution-options-file", self.options(content), table),
+                        2, "configuration", "invalid_input_json",
+                    )
+                    self.assertEqual(diagnostic["message"], "Invalid JSON input.")
+            for field, values in [
+                ("max_concurrent_file_reads_per_scan", [0, sys.maxsize]),
+                ("max_concurrent_file_reads_per_partition", [0, sys.maxsize]),
+                ("output_buffer_batches_per_partition", [0, sys.maxsize]),
+                ("parquet_metadata_size_hint_bytes", [0]),
+                ("parquet_full_file_read_threshold_bytes", [0]),
+            ]:
+                for value in values:
+                    with self.subTest(field=field, value=value):
+                        content = json.dumps({field: value}).encode()
+                        self.assert_error(
+                            self.invoke("scan", "--execution-options-file", self.options(content), table),
+                            2, "configuration", "invalid_configuration",
+                        )
+            for path in [self.cwd / "secret-missing", self.cwd, "-", "/dev/zero"]:
+                with self.subTest(path=path):
+                    code = "invalid_input_json" if path == "/dev/zero" else "input_file_io"
+                    self.assert_error(self.invoke("scan", "--execution-options-file", path, table),
+                                      2, "configuration", code)
+            self.assertEqual(server.requests, [])
+
+    def test_execution_options_file_size_boundary_and_literal_dash(self):
+        table = CORPUS / "partitioned/table"
+        for content in [b"{}", b"{}" + b" " * (LIMIT - 2)]:
+            result = self.invoke("scan", "--execution-options-file", self.options(content),
+                                 "--limit", "0", table)
+            self.assertEqual((result.returncode, result.stderr), (0, b""))
+            self.assertTrue(result.stdout.endswith(b"\xff\xff\xff\xff\0\0\0\0"))
+        (self.cwd / "-").write_text('{"parquet_metadata_size_hint_bytes":null}', encoding="utf-8")
+        result = self.invoke("scan", "--execution-options-file", "-", "--limit", "0", table)
+        self.assertEqual((result.returncode, result.stderr), (0, b""))
 
     def test_predicate_validation_before_any_table_request(self):
         self.env.update(LD_PRELOAD=str(self.fault_library), DAR_TEST_REJECT_THREADS="1")

@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      python: ${{ steps.filter.outputs.python }}
       selective_read: ${{ steps.filter.outputs.selective_read }}
       package_version: ${{ steps.package-version.outputs.version }}
 
@@ -34,9 +35,9 @@ jobs:
         uses: dorny/paths-filter@v4
         with:
           filters: .github/path-filters.json
-      - name: Read Python package version
+      - name: Read workspace package version
         id: package-version
-        if: steps.filter.outputs.code == 'true'
+        if: steps.filter.outputs.code == 'true' || steps.filter.outputs.python == 'true'
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)"
           test -n "$version"
@@ -156,19 +157,27 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: release-plz@0.3.171
-      - name: Check Python workflow definitions
+      - name: Check CI workflows
         if: matrix.task == 'Lints and Docs'
         uses: docker://rhysd/actionlint:1.7.12
         with:
-          args: .github/workflows/ci.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml
+          args: .github/workflows/ci.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml
       - name: Test Python release checks
         if: matrix.task == 'Lints and Docs'
         run: |
           python3 -m venv "$RUNNER_TEMP/python-release-tests"
           "$RUNNER_TEMP/python-release-tests/bin/python" -m pip install --only-binary=:all: 'PyYAML==6.0.3'
           "$RUNNER_TEMP/python-release-tests/bin/python" -m unittest discover -s .github/tests -v
+      - name: Test CI routing and cache maintenance
+        if: matrix.task == 'Lints and Docs'
+        run: |
+          cargo fmt --manifest-path xtask/Cargo.toml -- --check
+          cargo clippy --locked --manifest-path xtask/Cargo.toml --all-targets -- -D warnings
+          cargo test --locked --manifest-path xtask/Cargo.toml
       - if: matrix.task == 'Lints and Docs'
         run: python3 -m unittest discover -s benches -p test_scan_scheduling.py
+      - if: matrix.task == 'Lints and Docs'
+        run: python3 -m unittest discover -s crates/delta-arrow-reader-cli/release
       - if: matrix.task == 'Lints and Docs'
         run: cargo fmt --all -- --check
       - if: matrix.task == 'Lints and Docs'
@@ -183,7 +192,7 @@ jobs:
   python-package:
     name: Python Package
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -213,25 +222,11 @@ jobs:
         run: cargo clippy --locked -p delta-arrow-reader-python --all-targets -- -D warnings
       - name: Test Python runtime ownership
         run: cargo test --locked -p delta-arrow-reader-python
-      - name: Build Python wheel from sdist
-        run: |
-          python -m pip install 'maturin>=1.14,<2'
-          maturin sdist --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out "$RUNNER_TEMP/python-sdist"
-          mkdir "$RUNNER_TEMP/python-source"
-          tar -xzf "$RUNNER_TEMP"/python-sdist/*.tar.gz -C "$RUNNER_TEMP/python-source" --strip-components=1
-          cd "$RUNNER_TEMP/python-source"
-          maturin build --locked --release --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out "$RUNNER_TEMP/python-wheels"
-      - name: Test installed wheel
-        working-directory: ${{ runner.temp }}
-        run: |
-          python -m venv "$RUNNER_TEMP/python-venv"
-          "$RUNNER_TEMP/python-venv/bin/python" -m pip install --only-binary=:all: "$RUNNER_TEMP"/python-wheels/*.whl
-          "$RUNNER_TEMP/python-venv/bin/python" -I -m unittest discover -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests"
 
   python-wheels:
     name: Python Wheels
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.python == 'true'
     uses: ./.github/workflows/pypi-build.yml
     with:
       source-ref: ${{ github.sha }}
@@ -273,6 +268,15 @@ jobs:
         run: |
           python -m pip install --only-binary=:all: 'pyarrow==25.0.1'
           python crates/delta-arrow-reader-cli/tests/scan.py target/debug/dar
+
+  cli-binaries:
+    name: CLI Binaries
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    uses: ./.github/workflows/cli-build.yml
+    with:
+      source-ref: ${{ github.sha }}
+      expected-version: ${{ needs.changes.outputs.package_version }}
 
   selective-read-fixtures:
     name: Public Fixture Smoke
@@ -337,7 +341,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [changes, feature-tests, platform-tests, checks, python-package, python-wheels, cli, selective-read-fixtures]
+    needs: [changes, feature-tests, platform-tests, checks, python-package, python-wheels, cli, cli-binaries, selective-read-fixtures]
     if: always()
     runs-on: ubuntu-latest
 
@@ -347,6 +351,15 @@ jobs:
           if [ "${{ needs.changes.result }}" != "success" ]; then
             echo "Detect Changes did not pass: ${{ needs.changes.result }}"
             exit 1
+          fi
+
+          if [ "${{ needs.changes.outputs.python }}" = "true" ]; then
+            if [ "${{ needs.python-package.result }}" != "success" ] || \
+               [ "${{ needs.python-wheels.result }}" != "success" ] || \
+               [ "${{ needs.python-wheels.outputs.validated }}" != "true" ]; then
+              echo "Python checks or wheel artifact validation did not pass"
+              exit 1
+            fi
           fi
 
           if [ "${{ needs.changes.outputs.code }}" != "true" ]; then
@@ -369,23 +382,14 @@ jobs:
             exit 1
           fi
 
-          if [ "${{ needs.python-package.result }}" != "success" ]; then
-            echo "Python Package did not pass: ${{ needs.python-package.result }}"
-            exit 1
-          fi
-
-          if [ "${{ needs.python-wheels.result }}" != "success" ]; then
-            echo "Python Wheels did not pass: ${{ needs.python-wheels.result }}"
-            exit 1
-          fi
-
-          if [ "${{ needs.python-wheels.outputs.validated }}" != "true" ]; then
-            echo "Python wheel artifact set was not validated"
-            exit 1
-          fi
-
           if [ "${{ needs.cli.result }}" != "success" ]; then
             echo "CLI did not pass: ${{ needs.cli.result }}"
+            exit 1
+          fi
+
+          if [ "${{ needs.cli-binaries.result }}" != "success" ] || \
+             [ "${{ needs.cli-binaries.outputs.validated }}" != "true" ]; then
+            echo "CLI binary artifact set did not pass validation"
             exit 1
           fi
 

@@ -1,0 +1,273 @@
+name: Build CLI binaries
+
+on:
+  workflow_call:
+    inputs:
+      source-ref:
+        description: Full lowercase source commit SHA to build
+        required: true
+        type: string
+      expected-version:
+        description: Optional workspace version to require, without a tag prefix
+        required: false
+        default: ''
+        type: string
+    outputs:
+      validated:
+        description: 'true only after both native platforms and the complete artifact set pass'
+        value: ${{ jobs.validate.outputs.validated }}
+      source-commit:
+        description: Full source commit used for both binaries
+        value: ${{ jobs.prepare.outputs.source-commit }}
+      version:
+        description: Workspace version from the requested source commit
+        value: ${{ jobs.prepare.outputs.version }}
+      rust-toolchain:
+        description: Exact Rust release used for both binaries
+        value: ${{ jobs.prepare.outputs.rust-toolchain }}
+      artifact-id:
+        description: Immutable Actions artifact ID for the complete four-file set
+        value: ${{ jobs.validate.outputs.artifact-id }}
+      artifact-name:
+        description: Actions artifact name for this run attempt
+        value: ${{ jobs.validate.outputs.artifact-name }}
+      artifact-url:
+        description: Download page for the complete Actions artifact
+        value: ${{ jobs.validate.outputs.artifact-url }}
+  workflow_dispatch:
+    inputs:
+      source-ref:
+        description: Full lowercase source commit SHA to validate
+        required: true
+        type: string
+      expected-version:
+        description: Optional workspace version to require, without a tag prefix
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  prepare:
+    name: Check source and toolchain
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      source-commit: ${{ steps.source.outputs.source-commit }}
+      version: ${{ steps.source.outputs.version }}
+      rust-toolchain: ${{ steps.compiler.outputs.rust-toolchain }}
+      image: ${{ steps.source.outputs.image }}
+      about-version: ${{ steps.source.outputs.about-version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.source-ref }}
+          persist-credentials: false
+      - name: Validate source SHA and workspace version
+        id: source
+        env:
+          SOURCE_REF: ${{ inputs.source-ref }}
+          EXPECTED_VERSION: ${{ inputs.expected-version }}
+          PYTHONPATH: crates/delta-arrow-reader-cli/release
+        run: |
+          python3 - <<'PY'
+          import os, re, tomllib
+          from build import DEBIAN_IMAGE, check_source
+          from notices import ABOUT_VERSION
+
+          source = os.environ['SOURCE_REF']
+          check_source(source)
+          with open('Cargo.toml', 'rb') as manifest:
+              config = tomllib.load(manifest)
+          version = config['workspace']['package']['version']
+          rust = config['package']['rust-version']
+          if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
+              raise ValueError('expected a stable workspace version')
+          if not re.fullmatch(r'[0-9]+\.[0-9]+(?:\.[0-9]+)?', rust):
+              raise ValueError('expected a numeric Rust toolchain version')
+          expected = os.environ['EXPECTED_VERSION']
+          if expected and version != expected:
+              raise ValueError(f'expected workspace version {expected!r}, got {version!r}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              for key, value in {'source-commit': source, 'version': version,
+                                 'rust-version': rust, 'image': DEBIAN_IMAGE,
+                                 'about-version': ABOUT_VERSION}.items():
+                  print(f'{key}={value}', file=output)
+          PY
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.source.outputs.rust-version }}
+      - name: Resolve exact Rust release
+        id: compiler
+        env:
+          SOURCE_REF: ${{ steps.source.outputs.source-commit }}
+          VERSION: ${{ steps.source.outputs.version }}
+          RUST_VERSION: ${{ steps.source.outputs.rust-version }}
+          PYTHONPATH: crates/delta-arrow-reader-cli/release
+        run: |
+          python3 - <<'PY'
+          import os, subprocess
+          from artifacts import build_identity
+
+          compiler = subprocess.check_output(
+              ['rustup', 'run', os.environ['RUST_VERSION'], 'rustc', '-vV'], text=True)
+          fields = dict(line.split(': ', 1) for line in compiler.splitlines() if ': ' in line)
+          identity = build_identity(os.environ['VERSION'], os.environ['SOURCE_REF'], fields['release'])
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              print(f"rust-toolchain={identity['rust_toolchain']}", file=output)
+          PY
+
+  build:
+    name: Linux ${{ matrix.architecture }}
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: amd64
+            runner: ubuntu-24.04
+          - architecture: arm64
+            runner: ubuntu-24.04-arm
+    env:
+      CLI_SOURCE_COMMIT: ${{ needs.prepare.outputs.source-commit }}
+      CLI_VERSION: ${{ needs.prepare.outputs.version }}
+      CLI_RUST_TOOLCHAIN: ${{ needs.prepare.outputs.rust-toolchain }}
+      CLI_ABOUT_VERSION: ${{ needs.prepare.outputs.about-version }}
+      CLI_ARCHITECTURE: ${{ matrix.architecture }}
+      CLI_IMAGE: ${{ needs.prepare.outputs.image }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.source-commit }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ needs.prepare.outputs.rust-toolchain }}
+      - name: Build and package in pinned Debian 12
+        run: |
+          mkdir "$RUNNER_TEMP/cli-build" "$RUNNER_TEMP/cli-cargo"
+          cli_cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+          cli_rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
+          docker run --rm --platform "linux/$CLI_ARCHITECTURE" \
+            --volume "$GITHUB_WORKSPACE:/source:ro" \
+            --volume "$RUNNER_TEMP/cli-build:/build" \
+            --volume "$RUNNER_TEMP/cli-cargo:/cargo" \
+            --volume "$cli_cargo_home/bin:/rustup-bin:ro" \
+            --volume "$cli_rustup_home:/rustup:ro" \
+            --workdir /source --env CARGO_HOME=/cargo --env RUSTUP_HOME=/rustup \
+            --env PATH=/rustup-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            --env CARGO_BUILD_JOBS=4 --env PYTHONDONTWRITEBYTECODE=1 \
+            --env CLI_SOURCE_COMMIT --env CLI_VERSION --env CLI_RUST_TOOLCHAIN \
+            --env CLI_ABOUT_VERSION --env CLI_ARCHITECTURE \
+            "$CLI_IMAGE" bash -euo pipefail -c '
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                build-essential binutils ca-certificates git pkg-config python3
+              git config --global --add safe.directory /source
+              rustup run "$CLI_RUST_TOOLCHAIN" cargo install --locked --features cli \
+                --version "$CLI_ABOUT_VERSION" cargo-about
+              export PATH="/cargo/bin:$PATH"
+              python3 crates/delta-arrow-reader-cli/release/build_archive.py \
+                --source-commit "$CLI_SOURCE_COMMIT" --architecture "$CLI_ARCHITECTURE" \
+                --expected-version "$CLI_VERSION" --expected-rust-toolchain "$CLI_RUST_TOOLCHAIN" \
+                --target-dir /build/target --output /build/artifacts
+            '
+      - name: Validate and extract the archive outside the checkout
+        run: |
+          python3 crates/delta-arrow-reader-cli/release/artifacts.py extract \
+            "$RUNNER_TEMP/cli-build/artifacts" --destination "$RUNNER_TEMP/cli-extracted" \
+            --architecture "$CLI_ARCHITECTURE" --version "$CLI_VERSION" \
+            --source-commit "$CLI_SOURCE_COMMIT" --rust-toolchain "$CLI_RUST_TOOLCHAIN"
+      - name: Execute archive acceptance tests in a fresh Debian 12 runtime
+        run: |
+          docker run --rm --platform "linux/$CLI_ARCHITECTURE" \
+            --volume "$GITHUB_WORKSPACE:/checks:ro" \
+            --volume "$RUNNER_TEMP/cli-build/artifacts:/artifacts:ro" \
+            --volume "$RUNNER_TEMP/cli-extracted:/package:ro" \
+            --workdir /tmp --env PYTHONDONTWRITEBYTECODE=1 \
+            --env CLI_SOURCE_COMMIT --env CLI_VERSION --env CLI_RUST_TOOLCHAIN \
+            --env CLI_ARCHITECTURE "$CLI_IMAGE" \
+            bash /checks/crates/delta-arrow-reader-cli/release/validate-runtime.sh
+      - name: Upload this validated platform
+        uses: actions/upload-artifact@v6
+        with:
+          name: dar-cli-${{ needs.prepare.outputs.source-commit }}-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/cli-build/artifacts/*
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+
+  validate:
+    name: Validate complete CLI artifact set
+    needs: [prepare, build]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      validated: ${{ steps.complete.outputs.validated }}
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      artifact-name: ${{ steps.complete.outputs.artifact-name }}
+      artifact-url: ${{ steps.upload.outputs.artifact-url }}
+    env:
+      PREPARE_RESULT: ${{ needs.prepare.result }}
+      BUILD_RESULT: ${{ needs.build.result }}
+      CLI_SOURCE_COMMIT: ${{ needs.prepare.outputs.source-commit }}
+      CLI_VERSION: ${{ needs.prepare.outputs.version }}
+      CLI_RUST_TOOLCHAIN: ${{ needs.prepare.outputs.rust-toolchain }}
+      CLI_ARTIFACT_NAME: dar-cli-${{ needs.prepare.outputs.source-commit }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Require both platform builds and acceptance tests
+        run: |
+          if [ "$PREPARE_RESULT" != success ] || [ "$BUILD_RESULT" != success ]; then
+            echo "CLI build failed: prepare=$PREPARE_RESULT, build=$BUILD_RESULT"
+            exit 1
+          fi
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.source-commit }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v6
+        with:
+          name: dar-cli-${{ needs.prepare.outputs.source-commit }}-amd64
+          path: ${{ runner.temp }}/cli-inputs/amd64
+      - uses: actions/download-artifact@v6
+        with:
+          name: dar-cli-${{ needs.prepare.outputs.source-commit }}-arm64
+          path: ${{ runner.temp }}/cli-inputs/arm64
+      - name: Assemble the original archives and check both identities
+        run: |
+          python3 crates/delta-arrow-reader-cli/release/artifacts.py assemble \
+            "$RUNNER_TEMP/cli-artifacts" --inputs "$RUNNER_TEMP/cli-inputs" \
+            --version "$CLI_VERSION" --source-commit "$CLI_SOURCE_COMMIT" \
+            --rust-toolchain "$CLI_RUST_TOOLCHAIN"
+      - name: Upload complete artifact set
+        id: upload
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.CLI_ARTIFACT_NAME }}
+          path: ${{ runner.temp }}/cli-artifacts/*
+          if-no-files-found: error
+          compression-level: 0
+      - name: Report successful handoff
+        id: complete
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          echo 'validated=true' >> "$GITHUB_OUTPUT"
+          echo "artifact-name=$CLI_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+          {
+            echo "Source: $CLI_SOURCE_COMMIT"
+            echo "Version: $CLI_VERSION; Rust: $CLI_RUST_TOOLCHAIN"
+            echo "Validated Linux amd64 and arm64: [$CLI_ARTIFACT_NAME]($ARTIFACT_URL)"
+          } >> "$GITHUB_STEP_SUMMARY"

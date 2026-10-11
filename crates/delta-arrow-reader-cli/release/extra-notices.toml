@@ -1,0 +1,38 @@
+# These crate releases omit files from their source repository.
+# Each URL uses the commit recorded in the crate's .cargo_vcs_info.json.
+
+[[files]]
+package = "alloc-stdlib"
+version = "0.2.4"
+url = "https://raw.githubusercontent.com/dropbox/rust-alloc-no-stdlib/ae42d22078b98549e987d2f03d12df7b984fde47/LICENSE"
+sha256 = "c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae"
+
+[[files]]
+package = "delta_kernel_default_engine"
+version = "0.25.0"
+url = "https://raw.githubusercontent.com/delta-io/delta-kernel-rs/723c9e3ee910da7634051d1bc0a1f35d81e560c4/LICENSE"
+sha256 = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+
+[[files]]
+package = "delta_kernel_default_engine"
+version = "0.25.0"
+url = "https://raw.githubusercontent.com/delta-io/delta-kernel-rs/723c9e3ee910da7634051d1bc0a1f35d81e560c4/NOTICE"
+sha256 = "5939690f74b26ce550e4c6d40f2944a0103760c8ecc76efd3a7521f779e19a11"
+
+[[files]]
+package = "flatbuffers"
+version = "25.12.19"
+url = "https://raw.githubusercontent.com/google/flatbuffers/7e163021e59cca4f8e1e35a7c828b5c6b7915953/LICENSE"
+sha256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+
+[[files]]
+package = "thrift"
+version = "0.17.0"
+url = "https://raw.githubusercontent.com/apache/thrift/60655d2de79e973b89fab52af82f9628d4843b0f/LICENSE"
+sha256 = "d315e6cdedc07c478de6992027bfb66f220886c6216fd7e9885ced30c3703646"
+
+[[files]]
+package = "thrift"
+version = "0.17.0"
+url = "https://raw.githubusercontent.com/apache/thrift/60655d2de79e973b89fab52af82f9628d4843b0f/NOTICE"
+sha256 = "c2534e065069887565f871f0648b013a7e5f4a422809faf4ae3c590b7c0bf561"

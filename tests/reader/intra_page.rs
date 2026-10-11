@@ -3,7 +3,10 @@
 use std::{fs, sync::Arc};
 
 use arrow::{
-    array::{ArrayRef, Int64Array},
+    array::{
+        ArrayRef, Date32Array, Decimal128Array, Float32Array, Float64Array, Int32Array, Int64Array,
+        TimestampMicrosecondArray,
+    },
     compute::concat_batches,
     datatypes::{DataType, Field, Schema},
     record_batch::RecordBatch,
@@ -67,6 +70,53 @@ fn create_table(
     columns.push(Arc::new(Int64Array::from_iter_values(
         (0..ROWS as i64).map(|id| i64::from(MATCHES.contains(&id))),
     )));
+    // Required physical INT32 is read through a nullable Delta long field below.
+    let typed: Vec<(&str, ArrayRef)> = vec![
+        (
+            "narrow",
+            Arc::new(Int32Array::from_iter_values(0..ROWS as i32)),
+        ),
+        (
+            "date",
+            Arc::new(Date32Array::from_iter_values(0..ROWS as i32)),
+        ),
+        (
+            "timestamp",
+            Arc::new(
+                TimestampMicrosecondArray::from_iter_values(0..ROWS as i64).with_timezone("UTC"),
+            ),
+        ),
+        (
+            "decimal32",
+            Arc::new(
+                Decimal128Array::from_iter_values(0..ROWS as i128)
+                    .with_precision_and_scale(9, 2)?,
+            ),
+        ),
+        (
+            "decimal64",
+            Arc::new(
+                Decimal128Array::from_iter_values(0..ROWS as i128)
+                    .with_precision_and_scale(18, 2)?,
+            ),
+        ),
+        (
+            "float",
+            Arc::new(Float32Array::from_iter_values(
+                (0..ROWS).map(|i| i as f32 / 2.0),
+            )),
+        ),
+        (
+            "double",
+            Arc::new(Float64Array::from_iter_values(
+                (0..ROWS).map(|i| i as f64 / 2.0),
+            )),
+        ),
+    ];
+    for (name, column) in typed {
+        fields.push(Field::new(name, column.data_type().clone(), false));
+        columns.push(column);
+    }
     let schema = Arc::new(Schema::new(fields));
     let batch = RecordBatch::try_new(schema.clone(), columns)?;
     let mut writer = ArrowWriter::try_new(Vec::new(), schema.clone(), Some(properties.build()))?;
@@ -76,11 +126,20 @@ fn create_table(
         .fields()
         .iter()
         .map(|f| {
-            json!({
-                "name": f.name(), "type": "long", "nullable": f.is_nullable(), "metadata": {}
-            })
+            let dtype = match f.data_type() {
+                DataType::Int32 | DataType::Int64 => "long".to_owned(),
+                DataType::Date32 => "date".to_owned(),
+                DataType::Timestamp(_, _) => "timestamp".to_owned(),
+                DataType::Float32 => "float".to_owned(),
+                DataType::Float64 => "double".to_owned(),
+                DataType::Decimal128(p, s) => format!("decimal({p},{s})"),
+                other => return Err(format!("unexpected fixture type: {other:?}").into()),
+            };
+            Ok(json!({
+                "name": f.name(), "type": dtype, "nullable": f.is_nullable() || f.name() == "narrow", "metadata": {}
+            }))
         })
-        .collect();
+        .collect::<TestResult<_>>()?;
     let metadata = json!({"metaData": {"id":"intra-page", "format":{"provider":"parquet","options":{}},
         "schemaString":json!({"type":"struct","fields":fields}).to_string(),"partitionColumns":[],"configuration":{}}});
     RealParquetDeltaTable::new_with_raw_parquet(
@@ -264,6 +323,10 @@ async fn intra_page_public_scan_without_transport_evidence_matches_baseline() ->
             .await?;
             assert_eq!(actual, expected);
             assert_eq!(actual.num_rows(), MATCHES.len() - if dv { 2 } else { 0 });
+            let narrow = actual.column_by_name("narrow").unwrap();
+            assert_eq!(narrow.data_type(), &DataType::Int64);
+            assert!(actual.schema().field_with_name("narrow")?.is_nullable());
+            assert_eq!(narrow.to_data(), actual.column(0).to_data());
             // Local reads supply no remote transport evidence. The default must
             // retain ordinary I/O until the cost model has usable observations.
             assert!(

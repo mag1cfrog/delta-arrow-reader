@@ -1,9 +1,11 @@
+mod execution_options;
 mod input;
 mod predicate;
 
 use std::{
     fmt,
     io::{self, IsTerminal, Write},
+    num::NonZeroUsize,
     process::ExitCode,
     str::FromStr,
 };
@@ -46,9 +48,15 @@ enum Command {
         /// Maximum output rows as unsigned decimal digits; zero is valid.
         #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<usize>)]
         limit: Option<usize>,
+        /// Positive execution partition target; default: native automatic selection.
+        #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
+        target_partitions: Option<NonZeroUsize>,
         /// Local typed JSON predicate; at most 1 MiB. '-' is a filename, not stdin.
         #[arg(long, value_name = "PATH")]
         predicate_file: Option<String>,
+        /// Local JSON execution options; at most 1 MiB. '-' is a filename, not stdin.
+        #[arg(long, value_name = "PATH")]
+        execution_options_file: Option<String>,
     },
 }
 
@@ -82,6 +90,8 @@ enum Error {
     ArrowIpc { source: ArrowError },
     #[snafu(display("{source}"))]
     Reader { source: DeltaReaderError },
+    #[snafu(display("{source}"))]
+    Configuration { source: DeltaReaderError },
 }
 
 impl From<ArrowError> for Error {
@@ -108,14 +118,19 @@ impl Error {
             Self::Runtime { .. } => ("execution", "runtime_initialization"),
             Self::Output { .. } => ("execution", "output_write"),
             Self::ArrowIpc { .. } => ("execution", "arrow_ipc"),
-            Self::Reader { source } => (source.phase().as_str(), source.code()),
+            Self::Reader { source } | Self::Configuration { source } => {
+                (source.phase().as_str(), source.code())
+            }
         };
         json!({"phase": phase, "code": code, "message": self.to_string()})
     }
 
     fn exit_code(&self) -> ExitCode {
         ExitCode::from(match self {
-            Self::Argument | Self::InputJson | Self::InputIo { .. } => 2,
+            Self::Argument
+            | Self::InputJson
+            | Self::InputIo { .. }
+            | Self::Configuration { .. } => 2,
             Self::Runtime { .. } | Self::Reader { .. } | Self::ArrowIpc { .. } => 1,
             Self::Output { .. } => 3,
         })
@@ -181,6 +196,23 @@ fn run() -> Result<(), Error> {
         } => Some(input::read_json_file::<predicate::PredicateInput>(path)?.0),
         _ => None,
     };
+    let execution_options = match &command {
+        Command::Scan {
+            execution_options_file: Some(path),
+            ..
+        } => {
+            let options = input::read_json_file::<
+                input::JsonObject<execution_options::ExecutionOptionsInput>,
+            >(path)?
+            .0;
+            Some(
+                options
+                    .into_execution_options()
+                    .context(ConfigurationSnafu)?,
+            )
+        }
+        _ => None,
+    };
     // Inspect needs only metadata. Scan planning happens explicitly below.
     let builder = DeltaTableBuilder::new(&table_args.table)
         .with_warmup(WarmupMode::None)
@@ -216,6 +248,7 @@ fn run() -> Result<(), Error> {
                 columns,
                 no_columns,
                 limit,
+                target_partitions,
                 ..
             } => {
                 let mut builder = table.scan();
@@ -227,6 +260,14 @@ fn run() -> Result<(), Error> {
                 }
                 if let Some(predicate) = predicate {
                     builder = builder.with_predicate(predicate);
+                }
+                if let Some(execution_options) = execution_options {
+                    builder = builder.with_execution_options(execution_options);
+                }
+                if let Some(target_partitions) = target_partitions {
+                    builder = builder
+                        .with_target_partitions(target_partitions.get())
+                        .context(ConfigurationSnafu)?;
                 }
                 write_arrow_stream(builder.build().await.context(ReaderSnafu)?).await
             }
@@ -379,6 +420,37 @@ mod tests {
             assert_eq!(columns, ["a,b", "a.b", "a,b", ""]);
             assert!(!no_columns);
             assert_eq!(parsed_limit, Some(limit.parse::<usize>().unwrap()));
+        }
+    }
+
+    #[test]
+    fn partition_targets_accept_positive_usize_values_and_preserve_omission() {
+        for text in [
+            None,
+            Some("1".into()),
+            Some("0002".into()),
+            Some(usize::MAX.to_string()),
+        ] {
+            let mut args = vec!["dar", "scan", "table"];
+            if let Some(text) = &text {
+                args.extend(["--target-partitions", text]);
+            }
+            let Command::Scan {
+                target_partitions, ..
+            } = Cli::try_parse_from(args).unwrap().command
+            else {
+                panic!("expected scan command");
+            };
+            assert_eq!(
+                target_partitions.map(NonZeroUsize::get),
+                text.map(|text| text.parse::<usize>().unwrap())
+            );
+        }
+        let overflow = (usize::MAX as u128 + 1).to_string();
+        for text in ["0", "000", &overflow] {
+            assert!(
+                Cli::try_parse_from(["dar", "scan", "--target-partitions", text, "table"]).is_err()
+            );
         }
     }
 

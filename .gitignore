@@ -1,3 +1,4 @@
 /target/
+/xtask/target/
 /docs/.site/
 __pycache__/
