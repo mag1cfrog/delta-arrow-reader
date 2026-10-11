@@ -96,7 +96,7 @@ pub(crate) struct ArtifactTarget {
     min_glibc: String,
     pub(crate) runtime_dependencies: Vec<String>,
     archive: String,
-    archive_sha256: String,
+    pub(crate) archive_sha256: String,
     pub(crate) dar_sha256: String,
 }
 
@@ -209,7 +209,7 @@ pub(crate) fn require_regular_file(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn check_directory(directory: &Path, expected: &[String]) -> Result<()> {
+pub(crate) fn check_directory(directory: &Path, expected: &[String]) -> Result<()> {
     ensure!(
         fs::symlink_metadata(directory)
             .context(FileSnafu { path: directory })?
@@ -245,14 +245,14 @@ pub(crate) fn check_files(directory: &Path, expected: &[String]) -> Result<()> {
     Ok(())
 }
 
-fn create_directory(directory: &Path) -> Result<()> {
+pub(crate) fn create_directory(directory: &Path) -> Result<()> {
     if let Some(parent) = directory.parent() {
         fs::create_dir_all(parent).context(FileSnafu { path: parent })?;
     }
     fs::create_dir(directory).context(FileSnafu { path: directory })
 }
 
-fn write_new_file(path: &Path, contents: &[u8]) -> Result<()> {
+pub(crate) fn write_new_file(path: &Path, contents: &[u8]) -> Result<()> {
     OpenOptions::new()
         .write(true)
         .create_new(true)

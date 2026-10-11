@@ -12,7 +12,19 @@ use crate::{
     platform::Architecture,
 };
 
-const DOCKERFILE: &[u8] = include_bytes!("../../crates/delta-arrow-reader-cli/Dockerfile");
+const DOCKERFILE: &str = include_str!("../../crates/delta-arrow-reader-cli/Dockerfile");
+
+pub(crate) fn base_image() -> Result<&'static str> {
+    DOCKERFILE
+        .lines()
+        .find_map(|line| line.strip_prefix("ARG BASE_IMAGE="))
+        .ok_or_else(|| {
+            InvalidInputSnafu {
+                message: "image Dockerfile has no default BASE_IMAGE",
+            }
+            .build()
+        })
+}
 
 #[derive(Args)]
 pub(crate) struct BuildImageArgs {

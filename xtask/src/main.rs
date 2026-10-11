@@ -7,6 +7,7 @@ mod error;
 #[cfg(target_os = "linux")]
 mod http_fixture;
 mod image;
+mod image_artifacts;
 mod notices;
 mod platform;
 mod process;
@@ -104,6 +105,11 @@ enum CliTask {
         #[command(subcommand)]
         command: artifacts::ArtifactTask,
     },
+    /// Export, assemble, or verify CLI images for publication without rebuilding.
+    Images {
+        #[command(subcommand)]
+        command: image_artifacts::ImageArtifactTask,
+    },
 }
 
 fn main() -> ExitCode {
@@ -153,6 +159,7 @@ impl CliTask {
             Self::TestScan(args) => args.run(),
             Self::Notices(args) => notices::run(args),
             Self::Artifacts { command } => command.run(),
+            Self::Images { command } => command.run(),
         }
     }
 }

@@ -12,7 +12,10 @@ use sha2::{Digest, Sha256};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
-struct ImageBuildFixture {
+#[path = "images/artifacts.rs"]
+mod artifacts;
+
+struct ImageFixture {
     root: tempfile::TempDir,
     artifacts: PathBuf,
     binary: PathBuf,
@@ -28,7 +31,7 @@ fn assert_success(output: Output) -> Output {
     output
 }
 
-impl ImageBuildFixture {
+impl ImageFixture {
     fn new(with_libgcc: bool) -> TestResult<Self> {
         let root = tempfile::tempdir()?;
         let binary = root.path().join("dar");
@@ -143,7 +146,7 @@ impl ImageBuildFixture {
 #[test]
 fn image_build_preserves_validated_files_and_uses_only_required_packages() -> TestResult {
     for with_libgcc in [false, true] {
-        let fixture = ImageBuildFixture::new(with_libgcc)?;
+        let fixture = ImageFixture::new(with_libgcc)?;
         let output = assert_success(fixture.build_command()?.output()?);
         assert_eq!(output.stdout, b"Built CLI image dar:fixture\n");
         assert_eq!(output.stderr, b"container build output\n");
@@ -222,7 +225,7 @@ fn incomplete_or_changed_artifacts_never_start_docker() -> TestResult {
         "version",
         "elf-dependencies",
     ] {
-        let fixture = ImageBuildFixture::new(false)?;
+        let fixture = ImageFixture::new(false)?;
         let mut command = fixture.build_command()?;
         match case {
             "missing-architecture" => {
@@ -295,7 +298,7 @@ fn incomplete_or_changed_artifacts_never_start_docker() -> TestResult {
 
 #[test]
 fn docker_failure_is_reported_and_temporary_files_are_removed() -> TestResult {
-    let fixture = ImageBuildFixture::new(false)?;
+    let fixture = ImageFixture::new(false)?;
     let output = fixture
         .build_command()?
         .env("IMAGE_TEST_EXIT_CODE", "17")

@@ -429,7 +429,7 @@ The temporary build context contains only the Dockerfile, `dar`, `LICENSE`,
 installs those runtime libraries and CA certificates. It contains no compiler or
 source checkout. The executable and its notices retain their archive contents
 and permissions. OCI labels record the repository, tested source SHA, workspace
-version, and Apache-2.0 license.
+version, Apache-2.0 license, and pinned base image.
 
 The image uses UID/GID `65532:65532`, working directory `/work`, and executable
 entrypoint `/usr/local/bin/dar`. Omitting arguments prints help. Fixture and
@@ -441,6 +441,71 @@ its declared libraries. Alpine and `scratch` are unsupported.
 This command builds a local image. It does not export OCI artifacts or publish
 to GHCR.
 
+## Export and verify image artifacts
+
+Use `cli images` to prepare container artifacts for later publication. In addition
+to the complete binary artifact set, these commands need Skopeo and umoci on a
+Unix host. `export` also needs Docker and a local image from `build-image`.
+On Debian or Ubuntu, install the container tools with
+`sudo apt-get install skopeo umoci`.
+
+Export each architecture on its build host. For example, after the amd64 build:
+
+```sh
+cargo xtask cli images export target/cli-image-platforms/amd64 \
+  --binary-artifacts target/cli-artifacts \
+  --architecture amd64 --image dar:local-amd64 \
+  --version "$version" --source-commit "$source_commit" --rust-toolchain "$rust_toolchain"
+```
+
+Use `arm64` and its local image tag for the other build. Each platform directory
+contains its OCI archive and a single-platform `cli-images.json`. Collect the
+two directories under `target/cli-image-platforms`, then assemble the complete
+set:
+
+```sh
+cargo xtask cli images assemble target/cli-images \
+  --inputs target/cli-image-platforms --binary-artifacts target/cli-artifacts \
+  --version "$version" --source-commit "$source_commit" --rust-toolchain "$rust_toolchain"
+cargo xtask cli images verify target/cli-images \
+  --binary-artifacts target/cli-artifacts \
+  --version "$version" --source-commit "$source_commit" --rust-toolchain "$rust_toolchain"
+```
+
+The complete directory contains exactly:
+
+```text
+dar-vX.Y.Z-linux-amd64.oci.tar
+dar-vX.Y.Z-linux-arm64.oci.tar
+cli-images.json
+```
+
+The schema-1 manifest records the workspace version, tested source SHA, Rust
+release, and pinned base image. Each target records its architecture, binary
+archive hash, `dar` hash, OCI archive hash, OCI platform manifest digest, and
+container configuration including labels. `manifest_digest` identifies the OCI
+platform manifest, not a Docker image ID or a multi-platform index.
+
+Export uses `docker save` and Skopeo's OCI conversion. Verification imports the
+archive into a temporary OCI layout with `--all --preserve-digests` and rejects
+indexes or archives containing multiple images. It checks the platform, labels,
+non-root user, entrypoint, default arguments, working directory, and environment.
+umoci then unpacks the layers without root privileges. The `dar`, `LICENSE`, and
+`NOTICE` contents and permissions must match the corresponding binary archive.
+Assembly copies the verified OCI archives byte for byte and checks their hashes
+again; it does not rebuild or repack them.
+
+All three commands print the validated manifest as JSON to stdout and send
+container tool output to stderr. Add `--architecture amd64` or `arm64` to
+`verify` for a single-platform directory. Export and assembly refuse an existing
+destination. A failed command can leave a partial destination without a complete
+manifest; use a new directory when retrying. Container tool paths must be UTF-8
+and cannot contain `:`.
+
+These checks validate packaging and file identity. They do not run the CLI or
+the Go consumer and do not upload artifacts or publish to GHCR. Runtime
+acceptance and release workflow integration remain separate steps.
+
 ## Test the build and packaging helpers
 
 ```sh
@@ -451,9 +516,9 @@ cargo clippy --locked --package xtask --all-targets -- -D warnings
 The CLI release workflow runs the CLI crate's unit tests and Clippy, plus the
 xtask unit tests and the `artifacts`, `notices`, `cli_workflow`, and `images`
 integration tests. The small `cli_workflow` and `images` tests also run in ordinary
-PR CI. The image tests use a small compiled ELF fixture and a stub container
-command; they do not build containers or require Docker. The native build test
-below runs separately in each Debian build job.
+PR CI. The image tests use a small compiled ELF fixture and stub container
+commands; they do not build containers or require Docker, Skopeo, or umoci.
+The native build test below runs separately in each Debian build job.
 
 The unit tests require Git, a C compiler, `objcopy`, `readelf`, and `sha256sum`.
 They use synthetic archive payloads, license fixtures, and a small compiled ELF
