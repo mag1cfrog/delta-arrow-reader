@@ -22,7 +22,7 @@ from storage import digest, save
 CASES = {"long": 16384, "short": 65536, "selected-long": 8192, "length-heavy": 262144}
 
 
-def generate(output, case, binary):
+def generate(output, case, binary, compression="NONE"):
     output.mkdir()
     rows = CASES[case]
     fields = [pa.field("row_id", pa.int64(), False), pa.field("grouped", pa.int32(), False), pa.field("scattered", pa.int32(), False)]
@@ -54,7 +54,8 @@ def generate(output, case, binary):
             columns.append(pa.array(values, type=field.type))
         table = pa.Table.from_arrays(columns, schema=schema)
         path = output / f"part-{file}.parquet"
-        pq.write_table(table, path, row_group_size=rows // 2, compression="NONE", use_dictionary=False,
+        pq.write_table(table, path, row_group_size=rows // 2, compression=compression,
+            compression_level=3 if compression == "zstd" else None, use_dictionary=False,
             column_encoding={field.name: "DELTA_LENGTH_BYTE_ARRAY" for field in fields[3:]},
             data_page_version="1.0", data_page_size=4 * 1024**2, max_rows_per_page=8192, write_page_index=True)
         layouts.append({"file": path.name, **json.loads(subprocess.check_output(
@@ -84,6 +85,7 @@ def generate(output, case, binary):
             writer.write_table(table)
         refs[shape] = {"path": path.name, "rows": table.num_rows, "sha256": digest(path)}
     save(output / "manifest.json", {"format": "delta-length-network-v1", "case": case, "rows_per_file": rows,
+        "compression": compression, "compression_level": 3 if compression == "zstd" else None,
         "columns": 8, "seed": 452, "row_group_rows": rows // 2, "page_target_bytes": 4 * 1024**2, "page_row_limit": 8192,
         "pyarrow": pa.__version__, "generator_sha256": digest(Path(__file__)), "dv_writer_sha256": digest(binary),
         "objects": objects, "references": refs, "layout": layouts})
@@ -186,6 +188,7 @@ if __name__ == "__main__":
     commands = parser.add_subparsers(dest="command", required=True)
     gen = commands.add_parser("generate")
     gen.add_argument("--case", choices=CASES, required=True)
+    gen.add_argument("--compression", choices=("NONE", "zstd"), default="NONE")
     for name in ("output", "binary"):
         gen.add_argument("--" + name, type=lambda p: Path(p).resolve(), required=True)
     run = commands.add_parser("run")
@@ -194,4 +197,4 @@ if __name__ == "__main__":
     run.add_argument("--table", required=True)
     run.add_argument("--selection", choices=("grouped", "scattered", "dense"), required=True)
     args = parser.parse_args()
-    generate(args.output, args.case, args.binary) if args.command == "generate" else measure(args)
+    generate(args.output, args.case, args.binary, args.compression) if args.command == "generate" else measure(args)

@@ -2,9 +2,12 @@
 
 #[path = "../delta_length.rs"]
 mod delta_length;
+#[path = "../delta_length_zstd.rs"]
+mod delta_length_zstd;
 
 use std::{
     fs::{self, File},
+    io::{Read, Seek, SeekFrom},
     path::Path,
     sync::Arc,
 };
@@ -237,18 +240,26 @@ fn check(path: &Path, expected: &RecordBatch, selection: &BooleanArray, views: b
 }
 
 fn inspect(path: &Path) -> Result<()> {
+    let mut input = File::open(path)?;
     let reader = SerializedFileReader::new_with_options(
         File::open(path)?,
         ReadOptionsBuilder::new().with_page_index().build(),
     )?;
     let metadata = reader.metadata();
     let indexes = metadata.offset_index().ok_or("missing offset indexes")?;
+    let compression = metadata.row_group(0).column(3).compression();
+    if !matches!(
+        compression,
+        Compression::UNCOMPRESSED | Compression::ZSTD(_)
+    ) {
+        return Err("inspection supports uncompressed or Zstd fixtures".into());
+    }
     let mut records = Vec::new();
     for (group, columns) in indexes.iter().enumerate() {
         let row_group = reader.get_row_group(group)?;
         for (column, index) in columns.iter().enumerate().skip(3) {
             let meta = metadata.row_group(group).column(column);
-            assert_eq!(meta.compression(), Compression::UNCOMPRESSED);
+            assert_eq!(meta.compression(), compression);
             assert_eq!(meta.column_type(), Type::BYTE_ARRAY);
             assert_eq!(meta.column_descr().max_rep_level(), 0);
             assert!((0..=1).contains(&meta.column_descr().max_def_level()));
@@ -263,6 +274,18 @@ fn inspect(path: &Path) -> Result<()> {
                     .map_or(row_group.metadata().num_rows(), |next| next.first_row_index);
                 assert_eq!(end - location.first_row_index, i64::from(page.num_values()));
                 let body = page.buffer();
+                let zstd = if matches!(compression, Compression::ZSTD(_)) {
+                    let size = usize::try_from(location.compressed_page_size)?;
+                    if size > 8 * 1024 * 1024 + 8192 {
+                        return Err("compressed page inspection bound".into());
+                    }
+                    input.seek(SeekFrom::Start(u64::try_from(location.offset)?))?;
+                    let mut raw = vec![0; size];
+                    input.read_exact(&mut raw)?;
+                    Some(delta_length_zstd::inspect(&raw, body.len())?)
+                } else {
+                    None
+                };
                 let plan = delta_length::discover(
                     body.len(),
                     page.num_values() as usize,
@@ -278,16 +301,22 @@ fn inspect(path: &Path) -> Result<()> {
                     "first_row":location.first_row_index,"rows":page.num_values(),
                     "page_bytes":location.compressed_page_size,"body_bytes":body.len(),
                     "length_and_null_bytes":plan.payload_start,"discovery_chunks":plan.probes,
-                    "nullable":meta.column_descr().max_def_level() == 1}),
+                    "nullable":meta.column_descr().max_def_level() == 1,"zstd":zstd}),
                 );
             }
             assert!(pages.get_next_page()?.is_none());
         }
     }
+    // Parquet records the codec, not the writer's compression level.
+    let compression_name = if matches!(compression, Compression::ZSTD(_)) {
+        "ZSTD"
+    } else {
+        "UNCOMPRESSED"
+    };
     println!(
         "{}",
         json!({"page_type":"DATA_PAGE","encoding":"DELTA_LENGTH_BYTE_ARRAY",
-        "compression":"UNCOMPRESSED","physical_type":"BYTE_ARRAY","offset_index":true,"pages":records})
+        "compression":compression_name,"physical_type":"BYTE_ARRAY","offset_index":true,"pages":records})
     );
     Ok(())
 }

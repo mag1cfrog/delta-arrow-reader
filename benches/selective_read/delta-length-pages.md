@@ -55,9 +55,11 @@ constructor is private, but this experiment does not need it. Normal Arrow
 readers decode the completed buffers. No fork or dependency patch is needed.
 
 The feature also enables `variant_experimental` and three `parquet-variant*`
-packages. Here it is an opt-in feature of the isolated fixture workspace; the
-production crate and ordinary fixture builds do not enable it. Any production
-proposal must account for the extra dependencies and the unstable decoder API.
+packages. Parquet's experimental feature is opt-in within the isolated fixture
+workspace; the production crate and ordinary fixture builds do not enable it.
+The inspector also enables the fixture workspace's existing optional `thrift`
+dependency to locate compressed page bodies. Any production proposal must
+account for the extra dependencies and the unstable decoder API.
 
 Before calling the dependency, the parser checks the encoded count against the
 page's non-null value count and scans the block structure. It rejects negative
@@ -96,6 +98,12 @@ Parquet encoding and saved as compressed Arrow IPC.
 Generation also runs `delta-length-pages inspect FILE` against every Parquet
 file. The manifest records actual page sizes, row counts, structural byte counts,
 encoding, compression and offset-index presence, not just writer settings.
+Add `--compression zstd` to `generate` to keep the same values and writer geometry
+with Zstd level 3. The inspector then records each page's actual block types,
+stored sizes, frame flags and block-header offsets. It fully reads and decodes
+the generated pages offline; its byte counts are not measured query transfers.
+The compression level is recorded as a writer setting; Parquet metadata
+identifies the codec only.
 
 Upload the manifest's objects to a content-addressed path on the dedicated
 MinIO server. This uses the existing upload verification without re-reading
@@ -270,9 +278,9 @@ the observer's CPU affinity. No fast sample had started. A fresh process resumed
 only the declared fast cases; the failure log and resume record are retained.
 Use the separate CLI invocations above when changing profiles.
 
-These results support continued feasibility work on wide values. Zstd layouts
-and a validated policy for unsuccessful discovery remain necessary before #453
-can recommend production integration.
+These results support continued feasibility work on wide values. The follow-ups
+below examine unsuccessful discovery and actual Zstd layouts before a production
+proposal for #453.
 
 ## Cost-model follow-up, 2026-10-11
 
@@ -322,10 +330,62 @@ retained separately. After exact comparisons passed, duplicate IPC outputs were
 removed with a receipt, recovering 40.0 GB. Fixtures, references, every sample,
 failure, resource record and network trace remain available.
 
+## Zstd layout survey, 2026-10-11
+
+The same four inputs were written with PyArrow 25.0.1, Zstd level 3, V1 pages
+and DELTA_LENGTH_BYTE_ARRAY. Their original-input oracle hashes matched the
+uncompressed fixtures for all three selections. Only compression changed.
+
+| Case | Payload pages | Entirely raw pages | Raw blocks | Compressed blocks |
+| --- | ---: | ---: | ---: | ---: |
+| long | 105 | 52 | 1,935 | 1,939 |
+| short | 128 | 64 | 160 | 192 |
+| selected-long | 32 | 0 | 1,534 | 160 |
+| length-heavy | 512 | 0 | 0 | 512 |
+
+No RLE blocks appeared. Every entirely raw page belonged to a binary column.
+For long values, the 52 binary pages contained 16-49 raw blocks each. Their
+249.351 MB of decoded bodies occupied 249.358 MB including page/frame headers.
+The 53 UTF-8 pages used compressed blocks throughout: 249.566 MB of decoded
+bodies occupied 131.587 MB. These results describe the generated random binary
+and hex-text values, not all binary or string columns.
+
+Selected-long binary pages mixed raw blocks with a compressed block. Their
+65-129 blocks per page also show why page size alone is not a discovery-cost
+estimate. Zstd block headers give stored sizes; the decoded size of a compressed
+block is not available from that header. A raw block inside a mixed frame does
+not establish a cheap mapping from decoded value offsets to file offsets.
+See [RFC 8878, block types](https://www.rfc-editor.org/rfc/rfc8878.html#section-3.1.1.2.2).
+
+Twenty local full-result checks covered grouped and scattered long values and
+scattered selections for the other three cases. Both ordinary and experimental
+modes returned the original-input values, nulls and live row IDs in ordinary
+and view arrays. The query executable was the unchanged cost-model binary.
+With the same explicit cost profile, experimental mode rejected every Zstd
+column before discovery and used exactly the ordinary data bytes and requests.
+This validates the current fallback, not a Zstd partial-read speedup. No network
+timings were collected for this survey.
+
+The first survey attempt stopped because its evidence writer tried to replace
+an existing checkpoint. The second completed the long/short controls, then hit
+the offline inspector's 128-block limit on a valid 129-block page. The final
+inspector allows up to 8,192 blocks within its 8 MiB decoded-page limit; production
+limits are unchanged. All failed attempts and completed checks were retained.
+The final survey rechecked the reused long/short layouts, then completed all
+declared controls. Verified duplicate IPC outputs were removed after comparison.
+
+The inspector and length-parser unit tests pass, as does Clippy for all targets.
+The original local decoder proof still passes all 20 cases. Regenerating the
+default uncompressed short fixture produced the same object and oracle hashes.
+The next experiment must map lengths and selected values through the observed
+raw frames and charge block-header discovery as well as payload reads. Keep
+compressed and mixed frames on ordinary reads. Raw layout alone is insufficient
+to recommend enabling the optimization.
+
 ## Remaining work for #452
 
-Inspect actual Zstd block types before considering raw-block reads. Compressed
-blocks need a recorded fallback result. The current cost experiment uses known
+Measure bounded reads of the observed all-raw Zstd pages against the recorded
+compressed/mixed-frame fallback controls. The current cost experiment uses known
 proxy settings and optimistic request-processing cost; it does not complete
 automatic-profile validation or prove rejection across larger skewed batches.
 Use the measured limits and losing cases to update #453 before recommending

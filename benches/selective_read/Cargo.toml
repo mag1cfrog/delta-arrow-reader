@@ -9,8 +9,8 @@ default-run = "selective-read-fixtures"
 [workspace]
 
 [features]
-delta-length-experiment = ["parquet/experimental"]
-delta-length-network = ["delta-length-experiment", "dep:bytes", "dep:object_store", "dep:thrift", "dep:url", "dep:delta_kernel_default_engine"]
+delta-length-experiment = ["parquet/experimental", "dep:thrift"]
+delta-length-network = ["delta-length-experiment", "dep:bytes", "dep:object_store", "dep:url", "dep:delta_kernel_default_engine"]
 
 [[bin]]
 name = "delta-length-pages"
