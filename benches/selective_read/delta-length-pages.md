@@ -20,8 +20,9 @@ to 4.539 seconds. Query downloads fell from 499.461 to 1.887 MB and from
 493.156 to 2.950 MB, respectively. Both skewed-value controls rejected discovery
 before I/O and retained the ordinary byte and request counts.
 
-These results justify production integration, not a production speedup claim.
-The prototype uses a different client and a 32-request limit. Fast-network
+The slow-network gains justify continuing the experiment. Production
+integration remains blocked on the fast fallback regression below. The
+prototype uses a different client and a 32-request limit. Fast-network
 results are subsecond diagnostics; some skewed runs still probe and fall back.
 Keep Zstd on ordinary reads in #453: sequential block discovery alone was
 slower than downloading complete columns in the measured layout. The
@@ -721,6 +722,69 @@ reveal that distribution. The remaining request, parsing and reconstruction
 cost must be evaluated here, with complete profiles kept separate from missing
 profiles. #453 repeats the settled policy on production transport; it does not
 replace this experiment's responsibility to explain and bound losing cases.
+
+### Streamed fallback and request control
+
+Further inspection found a second full-tail copy in fallback: `get_range`
+collected the response, then `finish_page` copied it into the prefix buffer.
+The candidate now appends response chunks directly to that buffer, under the
+same request permit. It checks the returned range and body length before
+returning a complete page. Chunked responses, truncated objects, failed reads
+and cancellation have focused tests. Query values and I/O plans are unchanged.
+
+Separate userspace CPU sampling, at 997 Hz, found length discovery in roughly
+1%-2% of the skewed query's samples; memory copying accounted for about half.
+Three alternating before/after profiles measured median estimated userspace
+CPU of 204/185 ms. Copying accounted for about 107/80 ms of those samples.
+These are coarse whole-process CPU estimates, including initialization, not
+query wall-time stages. They exclude kernel CPU and are not timing samples.
+
+The uninstrumented fast control still regressed. After the first three pairs
+were noisy, two further pairs were declared and retained with the originals.
+The added pairs used a fresh server with the same fixed profile, fixture and
+resource settings. All five pairs give ordinary/experimental medians of
+0.544/0.583 seconds, a 7.11% increase. Paired experimental extra times were
++58, +14, -20, +38 and +61 ms. Maximum RSS was 232.1 MiB in the preceding
+campaign and 208.4 MiB across these five candidate timings; the alternating
+CPU-profile control also showed lower memory use. Reduced copying does not resolve the
+query-time regression. Both modes still transfer 258,201,068 bytes, with
+157 ordinary requests versus 285 experimental requests, including 128 probes
+followed by 128 fallbacks.
+
+The beneficial long-value control retained 105 partial pages, 1,887,309 bytes
+and 362 requests in every experimental run. Its three ordinary/experimental
+timing medians were 0.755/0.184 seconds. All paired improvements exceeded the
+larger within-mode range. This buffer change does not alter the partial-read
+path; these results check that the existing benefit remains.
+
+One further diagnostic fetched each full page in a single request, then ran
+the same length discovery. On the skewed fixture it decoded the same 513,392
+length/null bytes and located the same 253,756,360 selected payload bytes.
+Both modes used 157 requests and 258,201,068 bytes. Ordinary/control medians
+were 0.566/0.547 seconds, with paired differences of -6, -39 and -26 ms,
+all within the 56 ms ordinary range. This does not establish a speedup. Along
+with CPU sampling, it points to split requests and buffer handling as the
+remaining cost, rather than length decoding alone. This control deliberately
+downloads every page; it is not a selective-read implementation or a proposed
+fix.
+
+All 20 additional full-result comparisons passed, including ordinary and view
+arrays. The local evidence is retained in `fallback-cpu-profile-v1`,
+`fixed-fast-control-v3`, `fallback-final-fast-controls` and
+`read-once-fast-control`. The last campaign completed all comparisons and
+timings, then failed while trying to overwrite an exclusive-create metadata
+file. Its original record and failure remain; `experiment.runtime.json`
+corrects the diagnostic source identity, and `postprocess-recovery.json`
+records verification and cleanup. No query was rerun or discarded to repair
+that bookkeeping error.
+
+The fast fallback gate remains open. The current preflight limits modeled
+probe cost but cannot infer selected-value sizes from page size and row count.
+Tightening a threshold to reject this fixture would not explain the loss or
+establish a general fix. Any replacement must retain the positive case and
+measure actual requests, transferred bytes and fallback costs. In particular,
+keeping one response open while inspecting its prefix is an untested option;
+its overfetch and connection-cancellation costs need evidence before adoption.
 
 ## Handoff to #453
 

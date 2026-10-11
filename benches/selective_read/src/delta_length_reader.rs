@@ -11,7 +11,7 @@ use std::{
 
 use bytes::Bytes;
 use futures_util::{FutureExt, StreamExt, TryStreamExt, future::BoxFuture, stream};
-use object_store::{ObjectStore, ObjectStoreExt, path::Path};
+use object_store::{GetOptions, ObjectStore, ObjectStoreExt, path::Path};
 use parquet::{
     arrow::{arrow_reader::ArrowReaderOptions, async_reader::AsyncFileReader},
     basic::{Compression, Type},
@@ -176,6 +176,39 @@ impl Io {
                 .fetch_add(1, Ordering::Relaxed);
         }
         Ok(bytes)
+    }
+
+    async fn read_tail(
+        &self,
+        path: &Path,
+        range: Range<u64>,
+        mut prefix: Vec<u8>,
+    ) -> Result<Bytes> {
+        let _permit = self.permits.acquire().await.unwrap();
+        let size = (range.end - range.start) as usize;
+        let response = self
+            .store
+            .get_opts(path, GetOptions::new().with_range(Some(range.clone())))
+            .await?;
+        if response.range != range {
+            return Err(invalid("object-store response range mismatch"));
+        }
+        // Append the response directly to avoid buffering and copying a second full tail.
+        prefix.reserve_exact(size);
+        let mut remaining = size;
+        let mut chunks = response.into_stream();
+        while let Some(chunk) = chunks.try_next().await? {
+            remaining = remaining
+                .checked_sub(chunk.len())
+                .ok_or_else(|| invalid("oversized object-store response"))?;
+            prefix.extend_from_slice(&chunk);
+        }
+        if remaining != 0 {
+            return Err(invalid("short object-store response"));
+        }
+        self.metrics.requests.fetch_add(1, Ordering::Relaxed);
+        self.metrics.bytes.fetch_add(size as u64, Ordering::Relaxed);
+        Ok(prefix.into())
     }
 }
 
@@ -514,15 +547,13 @@ impl Reader {
         Ok(output.into())
     }
 
-    async fn finish_page(&self, page: &Page, mut prefix: Vec<u8>) -> Result<Bytes> {
+    async fn finish_page(&self, page: &Page, prefix: Vec<u8>) -> Result<Bytes> {
         let start = page.range.start + prefix.len() as u64;
         if start < page.range.end {
-            prefix.extend_from_slice(
-                &self
-                    .io
-                    .read(&self.path, start..page.range.end, false)
-                    .await?,
-            );
+            return self
+                .io
+                .read_tail(&self.path, start..page.range.end, prefix)
+                .await;
         }
         Ok(prefix.into())
     }
@@ -593,6 +624,78 @@ fn header_size(bytes: &[u8], rows: usize, total_bytes: u64) -> Result<Option<usi
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn fallback_keeps_the_prefix_and_reads_only_the_tail() {
+        let store = Arc::new(object_store::memory::InMemory::new());
+        let path = Path::from("page");
+        store
+            .put(&path, Bytes::from_static(b"headerpayload").into())
+            .await
+            .unwrap();
+        let io = Io::new(
+            Arc::new(object_store::chunked::ChunkedStore::new(store, 2)),
+            None,
+        );
+        let bytes = io
+            .read_tail(&path, 6..13, b"header".to_vec())
+            .await
+            .unwrap();
+        assert_eq!(bytes.as_ref(), b"headerpayload");
+        let metrics = io.metrics.snapshot();
+        assert_eq!(metrics["data_bytes"], 7);
+        assert_eq!(metrics["data_requests"], 1);
+        assert_eq!(metrics["discovery_requests"], 0);
+        assert_eq!(io.permits.available_permits(), CONCURRENCY);
+    }
+
+    #[tokio::test]
+    async fn failed_fallback_does_not_return_partial_data_or_keep_a_permit() {
+        let store = Arc::new(object_store::memory::InMemory::new());
+        let path = Path::from("page");
+        store
+            .put(&path, Bytes::from_static(b"headerpayload").into())
+            .await
+            .unwrap();
+        let io = Io::new(store, None);
+        for (path, range) in [(path, 6..14), (Path::from("missing"), 6..13)] {
+            assert!(
+                io.read_tail(&path, range, b"header".to_vec())
+                    .await
+                    .is_err()
+            );
+            assert_eq!(io.permits.available_permits(), CONCURRENCY);
+        }
+        assert_eq!(io.metrics.snapshot()["data_requests"], 0);
+        assert_eq!(io.metrics.snapshot()["data_bytes"], 0);
+    }
+
+    #[tokio::test]
+    async fn cancelling_a_tail_response_releases_its_permit() {
+        use object_store::throttle::{ThrottleConfig, ThrottledStore};
+
+        let store = object_store::memory::InMemory::new();
+        let path = Path::from("page");
+        store
+            .put(&path, Bytes::from_static(b"headerpayload").into())
+            .await
+            .unwrap();
+        let store = ThrottledStore::new(
+            store,
+            ThrottleConfig {
+                wait_get_per_byte: Duration::from_secs(60),
+                ..Default::default()
+            },
+        );
+        let io = Io::new(Arc::new(store), None);
+        let mut read = Box::pin(io.read_tail(&path, 6..13, b"header".to_vec()));
+        assert!(read.as_mut().now_or_never().is_none());
+        assert_eq!(io.permits.available_permits(), CONCURRENCY - 1);
+        drop(read);
+        assert_eq!(io.permits.available_permits(), CONCURRENCY);
+        assert_eq!(io.metrics.snapshot()["data_requests"], 0);
+        assert_eq!(io.metrics.snapshot()["data_bytes"], 0);
+    }
 
     fn slow_model() -> CostModel {
         CostModel::new(&json!({"latency_ms":220,"mbps":150,"request_overhead_bytes":0})).unwrap()
