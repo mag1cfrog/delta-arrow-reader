@@ -233,6 +233,74 @@ fn wheel_cache_warming_requires_manual_dispatch() -> Result<()> {
 }
 
 #[test]
+fn benchmark_cache_warming_matches_pr_builds() -> Result<()> {
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    let warmer: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
+    let check = &ci["jobs"]["selective-read-fixtures"];
+    let warm = &warmer["jobs"]["selective-read-fixtures"];
+
+    assert_eq!(warm["runs-on"], check["runs-on"]);
+    assert_eq!(warm["defaults"], check["defaults"]);
+    for name in ["CARGO_TARGET_DIR", "RUSTFLAGS"] {
+        assert_eq!(warm["env"][name], check["env"][name], "{name}");
+    }
+    let check_steps = check["steps"].as_array().unwrap();
+    let warm_steps = warm["steps"].as_array().unwrap();
+    for (action, inputs) in [
+        ("dtolnay/rust-toolchain@stable", &["toolchain"][..]),
+        (
+            "Swatinem/rust-cache@v2",
+            &["workspaces", "shared-key", "cache-targets"][..],
+        ),
+    ] {
+        let check_step = check_steps
+            .iter()
+            .find(|step| step["uses"] == action)
+            .unwrap();
+        let warm_step = warm_steps
+            .iter()
+            .find(|step| step["uses"] == action)
+            .unwrap();
+        for input in inputs {
+            assert_eq!(
+                warm_step["with"][input], check_step["with"][input],
+                "{action}: {input}"
+            );
+        }
+    }
+    let warm_builds = warm_steps
+        .iter()
+        .find(|step| step["name"] == "Warm benchmark caches")
+        .unwrap()["run"]
+        .as_str()
+        .unwrap();
+    for command in check_steps.iter().filter_map(|step| step["run"].as_str()) {
+        if command.starts_with("cargo clippy ") || command.starts_with("cargo test ") {
+            let expected = if command.starts_with("cargo test ") {
+                format!("{command} --no-run")
+            } else {
+                command.to_owned()
+            };
+            assert!(
+                warm_builds.lines().any(|line| line == expected),
+                "{expected}"
+            );
+        }
+    }
+    assert_eq!(warm["env"]["SCCACHE_GHA_RW_MODE"], "READ_WRITE");
+    assert_eq!(ci["env"]["SCCACHE_GHA_RW_MODE"], "READ_ONLY");
+    assert_eq!(warm["needs"], "core");
+    assert!(
+        warmer["jobs"]["wheels"]["needs"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("selective-read-fixtures"))
+    );
+    Ok(())
+}
+
+#[test]
 fn cache_warming_requires_the_triggering_main_commit() -> Result<()> {
     let script = workflow_script(
         include_str!("../../.github/workflows/pypi-build.yml"),
@@ -354,31 +422,44 @@ fn cache_retry_cleans_the_correct_target_and_restarts_native_sccache() -> Result
         )?;
         fs::set_permissions(path, fs::Permissions::from_mode(0o755))?;
     }
-    let script = workflow_script(
+    let wheel_script = workflow_script(
         include_str!("../../.github/workflows/pypi-build.yml"),
         "Prepare cache write retry",
     );
-    for (runner, expected) in [
+    let benchmark_script = workflow_script(
+        include_str!("../../.github/workflows/cache-warm.yml"),
+        "Prepare benchmark cache write retry",
+    );
+    for (script, runner, expected) in [
         (
+            &wheel_script,
             "Linux",
             "sudo rm -rf .python-sdist-source/target\nsleep 60\n",
         ),
         (
+            &wheel_script,
             "Windows",
             "sccache --stop-server\ncargo clean --target-dir target\nsleep 60\n",
         ),
         (
+            &wheel_script,
             "macOS",
             "sccache --stop-server\ncargo clean --target-dir target\nsleep 60\n",
+        ),
+        (
+            &benchmark_script,
+            "Linux",
+            "sccache --stop-server\ncargo clean --target-dir /tmp/benchmark-fixtures\nsleep 60\n",
         ),
     ] {
         for failure in ["", "sudo", "sccache", "cargo"] {
             fs::write(&log, "")?;
             let output = Command::new("/bin/bash")
-                .args(["-euc", &script])
+                .args(["-euc", script])
                 .env("PATH", &directory)
                 .env("RUNNER_OS", runner)
                 .env("RUSTC_WRAPPER", "")
+                .env("CARGO_TARGET_DIR", "/tmp/benchmark-fixtures")
                 .env("COMMAND_LOG", &log)
                 .env("FAIL_COMMAND", failure)
                 .output()?;

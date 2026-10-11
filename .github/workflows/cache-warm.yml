@@ -143,9 +143,70 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
 
+  selective-read-fixtures:
+    name: Warm benchmark fixture caches
+    needs: core
+    runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_GHA_RW_MODE: READ_WRITE
+      SCCACHE_LOG: sccache::server=debug
+      SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
+      RUSTC_WRAPPER: sccache
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/selective-read
+      RUSTFLAGS: -C target-cpu=x86-64
+    defaults:
+      run:
+        working-directory: benches/selective_read
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.98.1'
+          components: clippy
+      - name: Cache Cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: benches/selective_read -> ../../target/selective-read
+          shared-key: selective-read-fixtures
+          cache-targets: false
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Warm benchmark caches
+        run: &warm-benchmark-caches |
+          cargo clippy --release --locked --all-targets -j8 -- -D warnings
+          cargo test --release --locked -j8 --no-run
+      - name: Check benchmark cache writes
+        id: cache-writes
+        continue-on-error: true
+        working-directory: .
+        run: cargo xtask check-cache-writes
+        env:
+          RUSTC_WRAPPER: ""
+          CARGO_TARGET_DIR: ${{ runner.temp }}/benchmark-cache-check
+      - name: Prepare benchmark cache write retry
+        if: steps.cache-writes.outcome == 'failure'
+        env:
+          RUSTC_WRAPPER: ""
+        run: |
+          sccache --stop-server
+          cargo clean --target-dir "$CARGO_TARGET_DIR"
+          sleep 60
+      - name: Retry benchmark cache writes
+        if: steps.cache-writes.outcome == 'failure'
+        run: *warm-benchmark-caches
+      - name: Check retried benchmark cache writes
+        if: steps.cache-writes.outcome == 'failure'
+        working-directory: .
+        run: cargo xtask check-cache-writes
+        env:
+          RUSTC_WRAPPER: ""
+          CARGO_TARGET_DIR: ${{ runner.temp }}/benchmark-cache-check
+
   wheels:
     name: Warm Python wheel caches
-    needs: [prepare, prune]
+    needs: [prepare, prune, selective-read-fixtures]
     if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/pypi-build.yml
     with:
