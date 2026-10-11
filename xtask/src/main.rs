@@ -16,6 +16,7 @@ mod python_release;
 mod python_upload;
 mod python_wheel_reuse;
 mod python_wheels;
+mod release_assets;
 mod release_plan;
 mod release_plz;
 mod release_selection;
@@ -123,6 +124,8 @@ enum CliTask {
     SelectReleaseArtifacts(release_selection::SelectReleaseArtifactsArgs),
     /// Download and verify release artifacts and write a local publication plan.
     PlanRelease(release_plan::PlanReleaseArgs),
+    /// Upload or reuse the exact GitHub release assets from a verified publication plan.
+    UploadReleaseAssets(release_assets::UploadReleaseAssetsArgs),
     /// Check CLI arguments, inspection, output failures, and process lifecycle on Linux.
     TestProcess(process::TestProcessArgs),
     /// Check Arrow IPC output and scan process lifecycle on Linux.
@@ -203,6 +206,7 @@ impl CliTask {
             Self::RecordValidation(args) => args.run(),
             Self::SelectReleaseArtifacts(args) => args.run(),
             Self::PlanRelease(args) => args.run(),
+            Self::UploadReleaseAssets(args) => args.run(),
             Self::TestProcess(args) => args.run(),
             Self::TestScan(args) => args.run(),
             Self::Notices(args) => notices::run(args),

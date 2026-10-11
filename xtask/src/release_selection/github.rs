@@ -20,7 +20,7 @@ use crate::{
     validation_record::{REPOSITORY, ValidationRecord},
 };
 
-pub(super) fn request(endpoint: &str) -> Command {
+pub(crate) fn request(endpoint: &str) -> Command {
     let mut command = Command::new("gh");
     command.args([
         "api",
@@ -39,7 +39,7 @@ pub(super) fn get<T: DeserializeOwned>(endpoint: &str) -> Result<T> {
     decode(&command_output(&mut request(endpoint))?)
 }
 
-pub(super) fn pages<T: DeserializeOwned>(endpoint: &str) -> Result<Vec<T>> {
+pub(crate) fn pages<T: DeserializeOwned>(endpoint: &str) -> Result<Vec<T>> {
     decode(&command_output(
         request(endpoint).args(["--paginate", "--slurp"]),
     )?)
@@ -179,18 +179,18 @@ pub(super) struct Environment {
     pub name: String,
 }
 
-pub(super) fn is_sha256(value: &str) -> bool {
+pub(crate) fn is_sha256(value: &str) -> bool {
     value.len() == 64
         && value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
-pub(crate) fn download_artifact(artifact: &Artifact) -> Result<tempfile::NamedTempFile> {
+pub(crate) fn download_to_temp_file(mut request: Command) -> Result<tempfile::NamedTempFile> {
     let file = tempfile::NamedTempFile::new().context(IoSnafu {
-        operation: "create Actions artifact download file",
+        operation: "create GitHub download file",
     })?;
-    let status = request(&format!("actions/artifacts/{}/zip", artifact.id))
+    let status = request
         .stdout(file.reopen().context(FileSnafu { path: file.path() })?)
         .stderr(Stdio::inherit())
         .status()
@@ -202,6 +202,11 @@ pub(crate) fn download_artifact(artifact: &Artifact) -> Result<tempfile::NamedTe
             status
         }
     );
+    Ok(file)
+}
+
+pub(crate) fn download_artifact(artifact: &Artifact) -> Result<tempfile::NamedTempFile> {
+    let file = download_to_temp_file(request(&format!("actions/artifacts/{}/zip", artifact.id)))?;
     ensure!(
         file.as_file()
             .metadata()

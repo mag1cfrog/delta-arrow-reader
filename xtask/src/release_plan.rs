@@ -1,4 +1,5 @@
 mod download;
+mod handoff;
 
 use std::{
     fs,
@@ -7,7 +8,7 @@ use std::{
 };
 
 use clap::Args;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use snafu::{ResultExt, ensure};
@@ -32,31 +33,35 @@ pub(crate) struct PlanReleaseArgs {
     selection: ReleaseSelectionArgs,
 }
 
-#[derive(Serialize)]
-struct ReleasePlan {
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ReleasePlan {
     schema_version: u32,
-    selection: SelectedArtifacts,
-    github_assets: Vec<ReleaseAsset>,
+    pub(crate) selection: SelectedArtifacts,
+    pub(crate) github_assets: Vec<PlannedAsset>,
     container_image: ContainerImagePlan,
 }
 
-#[derive(Serialize)]
-struct ReleaseAsset {
-    name: String,
-    path: String,
-    size: u64,
-    sha256: String,
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PlannedAsset {
+    pub(crate) name: String,
+    pub(crate) path: String,
+    pub(crate) size: u64,
+    pub(crate) sha256: String,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct ContainerImagePlan {
     reference: String,
-    index_path: &'static str,
+    index_path: String,
     index_digest: String,
     platforms: Vec<PlatformImagePlan>,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct PlatformImagePlan {
     architecture: Architecture,
     reference: String,
@@ -137,7 +142,7 @@ impl PlanReleaseArgs {
         write_new_file(&stage.join("image-index.json"), &index_bytes)?;
         let container_image = ContainerImagePlan {
             reference: format!("{IMAGE_REPOSITORY}:{}", selection.release.tag),
-            index_path: "image-index.json",
+            index_path: "image-index.json".into(),
             index_digest: format!("sha256:{:x}", Sha256::digest(&index_bytes)),
             platforms: image_manifest
                 .targets
@@ -159,7 +164,7 @@ impl PlanReleaseArgs {
             .into_iter()
             .map(|name| {
                 let path = binaries.join(&name);
-                Ok(ReleaseAsset {
+                Ok(PlannedAsset {
                     size: fs::metadata(&path)
                         .context(FileSnafu { path: &path })?
                         .len(),
@@ -193,6 +198,7 @@ impl PlanReleaseArgs {
             plan.selection.release.tag,
             output.display()
         );
+        println!("Release plan SHA256: {:x}", Sha256::digest(&bytes));
         Ok(())
     }
 }

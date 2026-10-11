@@ -41,7 +41,8 @@ pub(crate) struct ReleaseSelectionArgs {
     record_artifact_id: Option<NonZeroU64>,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct ReleaseIdentity {
     pub(crate) id: NonZeroU64,
     pub(crate) tag: String,
@@ -50,10 +51,10 @@ pub(crate) struct ReleaseIdentity {
     pub(crate) version: String,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 pub(crate) struct SelectedArtifacts {
     schema_version: u32,
-    repository: &'static str,
+    repository: String,
     pub(crate) release: ReleaseIdentity,
     #[serde(flatten)]
     pub(crate) artifacts: ValidationArtifacts,
@@ -234,7 +235,7 @@ impl ReleaseSelectionArgs {
         );
         Ok(SelectedArtifacts {
             schema_version: 1,
-            repository: REPOSITORY,
+            repository: REPOSITORY.into(),
             release,
             artifacts: candidates.pop().unwrap(),
         })
@@ -248,6 +249,28 @@ impl ReleaseIdentity {
             release.id == self.id && tag_commit(&self.tag)? == self.commit,
             InvalidInputSnafu {
                 message: "release or tag changed during artifact selection"
+            }
+        );
+        Ok(())
+    }
+}
+
+impl SelectedArtifacts {
+    pub(crate) fn revalidate(&self) -> Result<()> {
+        let current = ReleaseSelectionArgs {
+            tag: self.release.tag.clone(),
+            run_id: Some(self.artifacts.validation_record.run_id),
+            record_artifact_id: Some(self.artifacts.record_artifact.id),
+        }
+        .select()?;
+        ensure!(
+            serde_json::to_value(self).context(JsonSnafu {
+                subject: "saved release selection"
+            })? == serde_json::to_value(current).context(JsonSnafu {
+                subject: "current release selection"
+            })?,
+            InvalidInputSnafu {
+                message: "release plan provenance differs from current GitHub validation"
             }
         );
         Ok(())

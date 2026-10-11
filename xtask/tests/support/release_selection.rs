@@ -147,6 +147,15 @@ fi
     }
 
     pub fn command_for(&self, task: &str, output: &str, explicit: bool) -> Result<Command> {
+        let mut command = self.xtask()?;
+        command.args(["cli", task, output, "--tag", "v1.2.3"]);
+        if explicit {
+            command.args(["--run-id", "701", "--record-artifact-id", "901"]);
+        }
+        Ok(command)
+    }
+
+    pub fn xtask(&self) -> Result<Command> {
         let path = |endpoint: &str| {
             self.directory.path().join("responses").join(format!(
                 "{}.body",
@@ -164,10 +173,6 @@ fi
             fs::write(destination, bytes)?;
         }
         let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
-        command.args(["cli", task, output, "--tag", "v1.2.3"]);
-        if explicit {
-            command.args(["--run-id", "701", "--record-artifact-id", "901"]);
-        }
         command
             .current_dir(self.directory.path())
             .env("CLI_TEST_API", self.directory.path())

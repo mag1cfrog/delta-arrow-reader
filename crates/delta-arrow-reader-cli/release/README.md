@@ -320,11 +320,77 @@ The plan lists exactly four GitHub release assets and the versioned image
 `vX.Y.Z-linux-amd64` or `vX.Y.Z-linux-arm64` destination. There are no mutable
 `latest`, major, or minor aliases. The index's SHA256 covers its exact local bytes;
 the binary archives, OCI archives, and existing manifests are retained unchanged.
+On success the command prints the SHA256 of `release-plan.json`. Keep that hash
+as the trusted verification result when passing the directory to another job.
 
 This command prepares expected publication bytes and destinations. It does not
-inspect existing public assets or tags. Upload, conflict detection, retries, and
-the automatic release workflow remain part of #435. Local plan JSON alone does
-not authorize publication.
+inspect existing public assets or tags. The asset uploader below checks existing
+GitHub files. GHCR publication and the automatic release workflow remain part of
+#435. Local plan JSON alone does not authorize publication.
+
+## Upload verified GitHub release assets
+
+`cargo xtask cli upload-release-assets` consumes the completed plan directory and
+its SHA256 from the trusted read-only verification step. Supply that hash as
+`verified_plan_sha256` below. When transferring the directory between jobs, pass
+the expected hash through the trusted job output; do not calculate a new expected
+hash from the received directory. This binds the upload to the files that passed
+the full binary/OCI verification.
+
+First rehearse with read-only GitHub credentials:
+
+```sh
+cargo xtask cli upload-release-assets target/cli-release-plan \
+  --plan-sha256 "$verified_plan_sha256" --dry-run
+```
+
+The command authenticates the recorded selection against current GitHub metadata
+again. It requires the original validation record and both artifact sets to remain
+available and unexpired. It checks the complete local inventories, file hashes,
+manifest hashes, and image index against the pinned plan. It does not execute
+downloaded binaries, run OCI tools, or rebuild anything.
+
+The rehearsal also lists existing release assets, downloads every matching file,
+and compares its size and SHA256 with the verified plan. It reports missing files
+without uploading. Conflicts fail the rehearsal, just as they fail an upload.
+
+To upload, authenticate `gh` with the same read access plus `contents: write` and
+omit `--dry-run`:
+
+```sh
+cargo xtask cli upload-release-assets target/cli-release-plan \
+  --plan-sha256 "$verified_plan_sha256"
+```
+
+Uploads use a private copy of the verified binary files and the immutable GitHub
+release ID. Before every write, the uploader checks all existing CLI assets and
+confirms that the release is still stable and its tag still resolves to the
+verified commit. Its behavior is:
+
+| Existing asset | Result |
+| --- | --- |
+| Missing | Upload the original verified bytes |
+| Same name and identical bytes | Reuse the existing asset |
+| Same name with different bytes, incomplete upload, or duplicate entries | Fail without replacing or deleting anything |
+
+Every new asset is downloaded and checked immediately. Within one invocation,
+each asset ID is downloaded once; later checks require it to remain present with
+matching metadata. Success requires all four assets and a final release/tag
+check. Rust/Python assets and the release title and body are preserved.
+
+An upload or download error fails the command. Earlier successful uploads remain
+in place. Retry with the same verified plan and retained validation set; matching
+files are reused. Missing validation artifacts or conflicting content stop the
+retry and require a new version if the original set cannot be recovered. A
+[GitHub upload failure](https://docs.github.com/en/rest/releases/assets#upload-a-release-asset)
+can leave a `starter` asset. This uploader treats that as incomplete content and
+does not delete it automatically.
+
+In GitHub Actions, writes are restricted to the upstream `cli-release.yml`
+workflow: a release event at the verified tag/commit, or a recovery dispatch from
+`main`. PR events and other workflow refs are rejected. Wiring that workflow and
+its separate read/write jobs remains part of #435; this command alone completes
+only the GitHub asset portion, not GHCR delivery or the CLI release notes.
 
 ## Build on Debian 12
 

@@ -1,6 +1,6 @@
 use std::num::NonZeroU64;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::{
@@ -22,7 +22,7 @@ const BINARY_JOB: &str = "Release CLI binaries / Validate complete CLI artifact 
 const IMAGE_JOB: &str = "Release CLI images and Go consumer / Validate complete CLI image set";
 const RECORD_JOB: &str = "Record validated CLI artifacts";
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 pub(crate) struct ValidationArtifacts {
     pub validation_record: ValidationRecord,
     pub record_artifact: Artifact,
