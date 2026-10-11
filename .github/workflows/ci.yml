@@ -355,6 +355,12 @@ jobs:
             fi
           fi
 
+          if [ "${{ needs.changes.outputs.selective_read }}" = "true" ] && \
+             [ "${{ needs.selective-read-fixtures.result }}" != "success" ]; then
+            echo "Public Fixture Smoke did not pass: ${{ needs.selective-read-fixtures.result }}"
+            exit 1
+          fi
+
           if [ "${{ needs.changes.outputs.code }}" != "true" ]; then
             echo "No code changes detected"
             exit 0
@@ -372,11 +378,5 @@ jobs:
 
           if [ "${{ needs.checks.result }}" != "success" ]; then
             echo "Checks did not pass: ${{ needs.checks.result }}"
-            exit 1
-          fi
-
-          if [ "${{ needs.changes.outputs.selective_read }}" = "true" ] && \
-             [ "${{ needs.selective-read-fixtures.result }}" != "success" ]; then
-            echo "Public Fixture Smoke did not pass: ${{ needs.selective-read-fixtures.result }}"
             exit 1
           fi

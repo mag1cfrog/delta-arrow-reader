@@ -38,15 +38,28 @@ fn workflow_script(source: &str, step: &str) -> String {
     script
 }
 
-#[test]
-fn python_filter_covers_inputs_without_cli_benchmarks_or_docs() -> Result<()> {
-    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
-    let patterns: Vec<_> = filters["python"]
+fn filter_matches(filters: &Value, name: &str, path: &str) -> Result<bool> {
+    let patterns: Vec<_> = filters[name]
         .as_array()
         .unwrap()
         .iter()
         .map(|pattern| pattern.as_str().unwrap())
         .collect();
+    let output = Command::new("bash")
+        .args([
+            "-c",
+            "for pattern; do [[ \"$MATCH_PATH\" == $pattern ]] && exit 0; done; exit 1",
+            "--",
+        ])
+        .args(patterns)
+        .env("MATCH_PATH", path)
+        .output()?;
+    Ok(output.status.success())
+}
+
+#[test]
+fn python_filter_covers_inputs_without_cli_benchmarks_or_docs() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
     for (path, expected) in [
         ("src/reader/scan.rs", true),
         ("Cargo.lock", true),
@@ -85,16 +98,60 @@ fn python_filter_covers_inputs_without_cli_benchmarks_or_docs() -> Result<()> {
         ("tests/reader/direct.rs", false),
         ("docs/content/contributing.md", false),
     ] {
-        let output = Command::new("bash")
-            .args([
-                "-c",
-                "for pattern; do [[ \"$MATCH_PATH\" == $pattern ]] && exit 0; done; exit 1",
-                "--",
-            ])
-            .args(&patterns)
-            .env("MATCH_PATH", path)
-            .output()?;
-        assert_eq!(output.status.success(), expected, "{path}");
+        assert_eq!(
+            filter_matches(&filters, "python", path)?,
+            expected,
+            "{path}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn standalone_docs_skip_rust_checks() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
+    for path in [
+        "docs/content/contributing.md",
+        "docs/content/benchmarks/intra-page-reads.md",
+        "docs/public/python.md",
+        "docs/public/cli.md",
+        "docs/public/benchmarks/selective-read-results.md",
+    ] {
+        for name in ["code", "python", "selective_read"] {
+            assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
+        }
+    }
+    for path in [
+        "docs/content/benchmarks/selective-read-protocol.md",
+        "docs/content/benchmarks/selective-read-production-shapes.md",
+        "docs/content/benchmarks/selective-read-large-workloads.md",
+    ] {
+        assert!(filter_matches(&filters, "selective_read", path)?, "{path}");
+        assert!(!filter_matches(&filters, "code", path)?, "{path}");
+    }
+    Ok(())
+}
+
+#[test]
+fn embedded_docs_trigger_their_rust_checks() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
+    let include = regex::Regex::new(r#"include_str!\("([^"]+\.md)"\)"#)?;
+    for (source, filter) in [
+        ("src/lib.rs", "code"),
+        ("src/guides.rs", "code"),
+        ("benches/selective_read/src/main.rs", "selective_read"),
+        ("benches/selective_read/src/production.rs", "selective_read"),
+        ("benches/selective_read/src/large.rs", "selective_read"),
+    ] {
+        let source = root().join(source);
+        let contents = fs::read_to_string(&source)?;
+        let documents: Vec<_> = include.captures_iter(&contents).collect();
+        assert!(!documents.is_empty(), "{}", source.display());
+        for document in documents {
+            let path = source.parent().unwrap().join(&document[1]).canonicalize()?;
+            let path = path.strip_prefix(root())?.to_str().unwrap();
+            assert!(filter_matches(&filters, filter, path)?, "{filter}: {path}");
+        }
     }
     Ok(())
 }
@@ -141,6 +198,29 @@ fn summary_requires_python_only_when_requested() -> Result<()> {
                     output.status.success(),
                     expected,
                     "code={code}, python={python}, package={package}: {output:?}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn summary_requires_benchmarks_independently_of_core_checks() -> Result<()> {
+    for code in ["true", "false"] {
+        for benchmark in ["true", "false"] {
+            for result in ["success", "failure", "skipped", "cancelled", ""] {
+                let output = check_ci_results(&[
+                    ("changes.outputs.code", code),
+                    ("changes.outputs.python", "false"),
+                    ("changes.outputs.selective_read", benchmark),
+                    ("changes.outputs.release_pr", "false"),
+                    ("selective-read-fixtures.result", result),
+                ])?;
+                assert_eq!(
+                    output.status.success(),
+                    benchmark != "true" || result == "success",
+                    "code={code}, benchmark={benchmark}, result={result}: {output:?}"
                 );
             }
         }

@@ -18,8 +18,15 @@
     "LICENSE",
     "NOTICE",
     "README.md",
-    "docs/content/**/*.md",
-    "docs/public/**/*.md",
+    "docs/public/installation.md",
+    "docs/public/streaming-reader.md",
+    "docs/public/datafusion.md",
+    "docs/public/architecture.md",
+    "docs/public/delta-metadata-lifecycle.md",
+    "docs/public/scan-planning.md",
+    "docs/public/read-scheduling.md",
+    "docs/public/reference/execution-options.md",
+    "docs/public/reference/metrics.md",
     "src/**",
     "crates/delta-arrow-reader-python/**",
     "crates/delta-arrow-reader-cli/**",
@@ -56,6 +63,8 @@
     ".github/path-filters.json",
     ".github/workflows/ci.yml",
     "benches/selective_read/**",
-    "docs/content/benchmarks/selective-read-protocol.md"
+    "docs/content/benchmarks/selective-read-protocol.md",
+    "docs/content/benchmarks/selective-read-production-shapes.md",
+    "docs/content/benchmarks/selective-read-large-workloads.md"
   ]
 }
