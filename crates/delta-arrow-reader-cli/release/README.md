@@ -209,6 +209,63 @@ against GitHub's PR, approval, run, job, and artifact metadata, then verify the
 retained files before writing to a release or registry. That publication verifier
 is part of #435; a locally generated JSON record alone does not authorize release.
 
+## Select artifacts for an existing release
+
+`cargo xtask cli select-release-artifacts` checks the release and validation
+provenance through GitHub's API and writes a new local JSON report. Install and
+authenticate `gh` with read access to this repository's releases, PRs, Actions,
+and environments. The command downloads only the small validation record. It
+does not download the binary/image sets, execute their contents, or publish.
+
+Supply an existing published stable release tag:
+
+```sh
+cargo xtask cli select-release-artifacts selection.json --tag vX.Y.Z
+```
+
+Selection requires all of the following:
+
+- The tag resolves to a commit reachable from upstream `main`, contains the CLI,
+  and matches the workspace version. Drafts, prereleases, and non-version tags
+  are rejected. Lightweight and annotated tags are supported.
+- The commit belongs to one merged release-plz PR, identified by its bot author,
+  upstream head/base repositories, release branch prefix, and `main` target.
+- The validation comes from successful upstream `ci.yml` for that PR's merged
+  head revision. The tested source tree and version equal the release's, even
+  when the tested merge commit and final release commit have different SHAs.
+- GitHub reports successful change detection, approval, binary/image handoff,
+  record, and aggregate CI jobs, plus an approved `release-checks` review.
+  Partial reruns may reuse earlier successful producer jobs within the same
+  run and PR revision; each artifact must match its producer's actual attempt.
+- The record ZIP matches GitHub's SHA256 and size, contains only
+  `cli-validation.json`, and names complete binary/image artifacts owned by that
+  run and repository. All three artifacts must remain available and unexpired.
+
+The selector compares the record with GitHub metadata, including immutable
+repository, workflow, run, and artifact IDs. It reads the release manifests at
+the resolved commit, without fetching or relying on a surviving temporary PR
+merge commit. It checks the release and tag again before writing the report.
+
+If multiple eligible records remain, selection fails and lists their run and
+record artifact IDs. Select both explicitly to resolve the ambiguity:
+
+```sh
+cargo xtask cli select-release-artifacts selection.json --tag vX.Y.Z \
+  --run-id VALIDATION_RUN_ID --record-artifact-id RECORD_ARTIFACT_ID
+```
+
+Explicit selection applies the same checks. Missing artifacts stop selection;
+the command cannot rebuild them or fall back to current main. An API or download
+failure also stops selection, so an unavailable candidate cannot silently remove
+an ambiguity. The output path must be new.
+
+The report contains the release ID, tag, commit, tree, and version; the original
+validation record; and GitHub metadata for the three selected artifacts,
+including their ZIP SHA256 values. It is a provenance report, not an upload plan
+or publication authorization. Full binary/OCI download and integrity checks,
+publication planning, and upload remain part of #435. A publisher must perform
+those checks and recheck current release/artifact state before writing.
+
 ## Build on Debian 12
 
 `cargo xtask cli build` builds one architecture from an explicit, clean source

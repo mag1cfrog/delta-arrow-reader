@@ -6,7 +6,7 @@ use std::{
 };
 
 use clap::Args;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use snafu::{ResultExt, ensure};
 
@@ -18,7 +18,7 @@ use crate::{
     repository::{WorkspaceManifest, read_toml, repository_root},
 };
 
-const REPOSITORY: &str = "mag1cfrog/delta-arrow-reader";
+pub(crate) const REPOSITORY: &str = "mag1cfrog/delta-arrow-reader";
 
 #[derive(Args)]
 pub(crate) struct RecordValidationArgs {
@@ -39,25 +39,27 @@ pub(crate) struct RecordValidationArgs {
     run_attempt: NonZeroU64,
 }
 
-#[derive(Debug, Serialize)]
-struct ValidationRecord {
-    schema_version: u32,
-    repository: &'static str,
-    pull_request: u64,
-    pull_request_head_sha: String,
-    source_commit: String,
-    source_tree: String,
-    version: String,
-    run_id: NonZeroU64,
-    run_attempt: NonZeroU64,
-    binary_artifact: ArtifactReference,
-    image_artifact: ArtifactReference,
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ValidationRecord {
+    pub(crate) schema_version: u32,
+    pub(crate) repository: String,
+    pub(crate) pull_request: u64,
+    pub(crate) pull_request_head_sha: String,
+    pub(crate) source_commit: String,
+    pub(crate) source_tree: String,
+    pub(crate) version: String,
+    pub(crate) run_id: NonZeroU64,
+    pub(crate) run_attempt: NonZeroU64,
+    pub(crate) binary_artifact: ArtifactReference,
+    pub(crate) image_artifact: ArtifactReference,
 }
 
-#[derive(Debug, Serialize)]
-struct ArtifactReference {
-    id: NonZeroU64,
-    manifest_sha256: String,
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ArtifactReference {
+    pub(crate) id: NonZeroU64,
+    pub(crate) manifest_sha256: String,
 }
 
 impl RecordValidationArgs {
@@ -177,7 +179,7 @@ impl RecordValidationArgs {
         );
         Ok(ValidationRecord {
             schema_version: 1,
-            repository: REPOSITORY,
+            repository: REPOSITORY.into(),
             pull_request: number.unwrap(),
             pull_request_head_sha: head.into(),
             source_commit: identity.source_commit,
