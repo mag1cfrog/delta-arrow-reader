@@ -239,16 +239,3 @@ fn assert_fixture_schema_fields(actual: &Fields, oracle: &Fields, delta: &[Value
         }
     }
 }
-
-#[test]
-#[cfg(target_os = "linux")]
-fn process_contract() -> Result<(), Box<dyn std::error::Error>> {
-    // Python's stdlib supplies bounded subprocess waits, HTTP, pipes, and signals.
-    let status = Command::new("python3")
-        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/process.py"))
-        .arg(env!("CARGO_BIN_EXE_dar"))
-        .arg(env!("CARGO_PKG_VERSION"))
-        .status()?;
-    assert!(status.success(), "CLI process contract failed");
-    Ok(())
-}

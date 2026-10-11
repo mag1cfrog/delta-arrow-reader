@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
-# Run inside a fresh pinned Debian container with read-only /checks, /artifacts, /package.
+# Mount /checks, /artifacts, /package, and the Debian-built /tools/xtask read-only.
 set -euo pipefail
 : "${CLI_ARCHITECTURE:?}" "${CLI_VERSION:?}" "${CLI_SOURCE_COMMIT:?}" "${CLI_RUST_TOOLCHAIN:?}"
 
-apt-get update
-apt-get install -y --no-install-recommends ca-certificates libc6 libgcc-s1
-dpkg-query -W -f '${Package}=${Version}\n' ca-certificates libc6 libgcc-s1
+. /etc/os-release
+case "$ID" in
+  debian|ubuntu)
+    apt-get update
+    apt-get install -y --no-install-recommends ca-certificates libc6 libgcc-s1
+    dpkg-query -W -f '${Package}=${Version}\n' ca-certificates libc6 libgcc-s1
+    ;;
+  fedora)
+    dnf install -y --setopt=install_weak_deps=False ca-certificates glibc libgcc
+    rpm -q ca-certificates glibc libgcc
+    ;;
+  *) echo "Unsupported acceptance image: $ID" >&2; exit 1 ;;
+esac
 
 mkdir /tmp/cli-runtime-checks
 cd /tmp/cli-runtime-checks
@@ -16,11 +26,11 @@ test ! -s inspect.stderr
 /package/dar scan --column id --limit 2 "$cli_fixture" >scan.arrow 2>scan.stderr
 test ! -s scan.stderr
 
-apt-get install -y --no-install-recommends \
-  binutils build-essential openssl python3 python3-venv
-python3 -m venv /tmp/cli-runtime-venv
-/tmp/cli-runtime-venv/bin/python -m pip install --only-binary=:all: 'pyarrow==25.0.1'
-/tmp/cli-runtime-venv/bin/python /checks/crates/delta-arrow-reader-cli/release/run_acceptance.py \
-  /artifacts --extracted /package --smoke-output /tmp/cli-runtime-checks \
+case "$ID" in
+  debian|ubuntu) apt-get install -y --no-install-recommends binutils build-essential openssl ;;
+  fedora) dnf install -y --setopt=install_weak_deps=False binutils gcc openssl ;;
+esac
+/tools/xtask cli test-archive /artifacts \
+  --extracted /package --smoke-output /tmp/cli-runtime-checks --repository /checks \
   --architecture "$CLI_ARCHITECTURE" --version "$CLI_VERSION" \
   --source-commit "$CLI_SOURCE_COMMIT" --rust-toolchain "$CLI_RUST_TOOLCHAIN"

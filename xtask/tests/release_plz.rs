@@ -28,6 +28,11 @@ fn python_crate_uses_the_shared_release_without_separate_publication() -> Result
         .find(|package| package["name"].as_str() == Some("delta-arrow-reader-cli"))
         .unwrap();
     assert_eq!(cli["release"].as_bool(), Some(false));
+    let xtask = packages
+        .iter()
+        .find(|package| package["name"].as_str() == Some("xtask"))
+        .unwrap();
+    assert_eq!(xtask["release"].as_bool(), Some(false));
     for option in ["git_tag_name", "git_release_name"] {
         assert_eq!(config["workspace"][option].as_str(), Some("v{{ version }}"));
     }
@@ -53,7 +58,7 @@ impl ReleasePlanningWorkspace {
             "Cargo.toml",
             &format!(
                 r#"[workspace]
-members = []
+members = ["xtask"]
 default-members = ["."]
 resolver = "3"
 
@@ -75,6 +80,11 @@ exclude = {exclude}
         if python_at_baseline {
             workspace.add_python()?;
         }
+        workspace.write(
+            "xtask/Cargo.toml",
+            "[package]\nname = \"xtask\"\nversion = \"0.0.0\"\nedition = \"2024\"\npublish = false\n",
+        )?;
+        workspace.write("xtask/src/main.rs", "fn main() {}\n")?;
         workspace.write("release-plz.toml", RELEASE_CONFIG)?;
         workspace.run("git", &["init", "--initial-branch=main"])?;
         workspace.run(
@@ -110,8 +120,8 @@ exclude = {exclude}
         self.write(
             "Cargo.toml",
             &manifest.replace(
-                "members = []",
-                "members = [\"crates/delta-arrow-reader-python\", \"crates/delta-arrow-reader-cli\"]",
+                "members = [\"xtask\"]",
+                "members = [\"crates/delta-arrow-reader-python\", \"crates/delta-arrow-reader-cli\", \"xtask\"]",
             ),
         )?;
         self.write(
@@ -207,9 +217,14 @@ delta-arrow-reader = {{ version = "0.6.2", path = "../.." }}
             &self.run("cargo", &["metadata", "--no-deps", "--format-version=1"])?,
         )?;
         let packages = metadata["packages"].as_array().unwrap();
-        assert_eq!(packages.len(), 3);
+        assert_eq!(packages.len(), 4);
         for package in packages {
-            assert_eq!(package["version"], expected, "{}", package["name"]);
+            let expected_version = if package["name"] == "xtask" {
+                "0.0.0"
+            } else {
+                expected
+            };
+            assert_eq!(package["version"], expected_version, "{}", package["name"]);
         }
         Ok(())
     }

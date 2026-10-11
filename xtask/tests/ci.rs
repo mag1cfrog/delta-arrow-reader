@@ -113,7 +113,6 @@ fn summary_requires_python_only_when_requested() -> Result<()> {
                     ("changes.outputs.python", python),
                     ("changes.outputs.selective_read", "false"),
                     ("python-package.result", package),
-                    ("cli-binaries.outputs.validated", "true"),
                 ];
                 let mut rest = script.as_str();
                 let mut rendered = String::new();

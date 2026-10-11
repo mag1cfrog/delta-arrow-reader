@@ -25,6 +25,12 @@ jobs:
       python: ${{ steps.filter.outputs.python }}
       selective_read: ${{ steps.filter.outputs.selective_read }}
       package_version: ${{ steps.package-version.outputs.version }}
+      release_pr: >-
+        ${{ github.repository == 'mag1cfrog/delta-arrow-reader' &&
+            github.event.pull_request.head.repo.full_name == github.repository &&
+            github.event.pull_request.base.ref == 'main' &&
+            github.event.pull_request.user.login == 'release-plz-bot-mag1cfrog[bot]' &&
+            startsWith(github.head_ref, 'release-plz-') }}
 
     steps:
       - uses: actions/checkout@v5
@@ -37,7 +43,6 @@ jobs:
           filters: .github/path-filters.json
       - name: Read workspace package version
         id: package-version
-        if: steps.filter.outputs.code == 'true' || steps.filter.outputs.python == 'true'
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)"
           test -n "$version"
@@ -161,17 +166,17 @@ jobs:
         if: matrix.task == 'Lints and Docs'
         uses: docker://rhysd/actionlint:1.7.12
         with:
-          args: .github/workflows/ci.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml
-      - name: Test Rust CI tasks
+          args: .github/workflows/ci.yml .github/workflows/cli-build.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml
+      - name: Test CI workflows, Python, and cache tasks
         if: matrix.task == 'Lints and Docs'
         run: |
-          cargo fmt --manifest-path xtask/Cargo.toml -- --check
-          cargo clippy --locked --manifest-path xtask/Cargo.toml --all-targets -- -D warnings
-          cargo test --locked --manifest-path xtask/Cargo.toml -- --include-ignored
+          cargo clippy --locked --package xtask --all-targets -- -D warnings
+          cargo test --locked --package xtask --bin xtask cache_tests::
+          cargo test --locked --package xtask \
+            --test ci --test cli_workflow --test python_release --test python_upload --test python_wheels \
+            --test python_workflow --test release_plz -- --include-ignored
       - if: matrix.task == 'Lints and Docs'
         run: python3 -m unittest discover -s benches -p test_scan_scheduling.py
-      - if: matrix.task == 'Lints and Docs'
-        run: python3 -m unittest discover -s crates/delta-arrow-reader-cli/release
       - if: matrix.task == 'Lints and Docs'
         run: cargo fmt --all -- --check
       - if: matrix.task == 'Lints and Docs'
@@ -224,47 +229,19 @@ jobs:
           maturin develop --locked
           python -I -m unittest discover -s crates/delta-arrow-reader-python/tests
 
-  cli:
-    name: CLI
+  release-cli-approval:
+    name: Approve release CLI checks
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.release_pr == 'true'
     runs-on: ubuntu-latest
-
+    environment: cli-release-checks
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - name: Read Rust version
-        id: rust-version
-        run: |
-          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
-          test -n "$version"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ steps.rust-version.outputs.version }}
-          components: clippy
-      - name: Cache Cargo registry
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: core-ci
-          cache-targets: false
-          save-if: false
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.10
-      - run: cargo build --locked -p delta-arrow-reader-cli
-      - run: cargo test --locked -p delta-arrow-reader-cli
-      - run: cargo clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings
-      - name: Check IPC interoperability and scan process lifecycle
-        run: |
-          python -m pip install --only-binary=:all: 'pyarrow==25.0.1'
-          python crates/delta-arrow-reader-cli/tests/scan.py target/debug/dar
+      - run: echo "CLI release checks approved for this PR revision"
 
-  cli-binaries:
-    name: CLI Binaries
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
+  release-cli:
+    name: Release CLI binaries
+    needs: [changes, release-cli-approval]
+    if: needs.changes.outputs.release_pr == 'true'
     uses: ./.github/workflows/cli-build.yml
     with:
       source-ref: ${{ github.sha }}
@@ -301,7 +278,7 @@ jobs:
       - run: cargo fmt -- --check
       - run: cargo clippy --release --locked --all-targets -j8 -- -D warnings
       - run: cargo test --release --locked -j8
-      - name: Check CLI limits and executable replacement
+      - name: Check fixture generator limits and executable replacement
         run: |
           cargo build --release --locked -j8
           python3 - <<'PY'
@@ -333,7 +310,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [changes, feature-tests, platform-tests, checks, python-package, cli, cli-binaries, selective-read-fixtures]
+    needs: [changes, feature-tests, platform-tests, checks, python-package, release-cli-approval, release-cli, selective-read-fixtures]
     if: always()
     runs-on: ubuntu-latest
 
@@ -348,6 +325,15 @@ jobs:
           if [ "${{ needs.changes.outputs.python }}" = "true" ]; then
             if [ "${{ needs.python-package.result }}" != "success" ]; then
               echo "Python Package did not pass: ${{ needs.python-package.result }}"
+              exit 1
+            fi
+          fi
+
+          if [ "${{ needs.changes.outputs.release_pr }}" = "true" ]; then
+            if [ "${{ needs.release-cli-approval.result }}" != "success" ] || \
+               [ "${{ needs.release-cli.result }}" != "success" ] || \
+               [ "${{ needs.release-cli.outputs.validated }}" != "true" ]; then
+              echo "Release CLI approval or artifact validation did not pass"
               exit 1
             fi
           fi
@@ -369,17 +355,6 @@ jobs:
 
           if [ "${{ needs.checks.result }}" != "success" ]; then
             echo "Checks did not pass: ${{ needs.checks.result }}"
-            exit 1
-          fi
-
-          if [ "${{ needs.cli.result }}" != "success" ]; then
-            echo "CLI did not pass: ${{ needs.cli.result }}"
-            exit 1
-          fi
-
-          if [ "${{ needs.cli-binaries.result }}" != "success" ] || \
-             [ "${{ needs.cli-binaries.outputs.validated }}" != "true" ]; then
-            echo "CLI binary artifact set did not pass validation"
             exit 1
           fi
 

@@ -1,19 +1,157 @@
-use std::{
-    env,
-    error::Error,
-    fs, io,
-    path::Path,
-    process::{Command, Stdio},
-};
-
-use serde::Deserialize;
-
+mod acceptance;
+mod artifacts;
+mod binary;
+mod build;
+mod command;
+mod error;
+#[cfg(target_os = "linux")]
+mod http_fixture;
+mod notices;
+mod platform;
+mod process;
 mod python_release;
 mod python_upload;
 mod python_wheels;
 mod release_plz;
+mod repository;
+mod scan;
+
+use std::{
+    env,
+    error::Error,
+    fs, io,
+    path::PathBuf,
+    process::{Command, ExitCode, Stdio, Termination},
+};
+
+use clap::{Parser, Subcommand};
+use serde::Deserialize;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
+
+/// Repository maintenance tasks.
+#[derive(Parser)]
+#[command(name = "xtask", bin_name = "cargo xtask")]
+struct Arguments {
+    #[command(subcommand)]
+    command: Task,
+}
+
+#[derive(Subcommand)]
+enum Task {
+    /// Build and validate CLI distribution artifacts.
+    Cli {
+        #[command(subcommand)]
+        command: CliTask,
+    },
+    /// Check sccache write failures against its error log.
+    CheckCacheWrites,
+    /// Keep the two most recently used Windows core CI caches.
+    PruneCiCaches,
+    /// Prepare release-plz configuration for the current shared release baseline.
+    PrepareReleasePrConfig { destination: PathBuf },
+    /// Validate a Python release event against the checked-out commit.
+    CheckPythonReleaseRequest,
+    /// Validate one Python wheel's filename and metadata.
+    CheckPythonWheel {
+        path: PathBuf,
+        #[arg(long)]
+        expected_version: String,
+        #[arg(long)]
+        platform_tag: String,
+    },
+    /// Validate the complete set of Python wheel artifacts.
+    CheckPythonArtifacts {
+        directory: PathBuf,
+        #[arg(long)]
+        expected_version: String,
+    },
+    /// Stage wheels missing from the selected Python package index.
+    StagePythonWheels {
+        artifacts: PathBuf,
+        #[arg(long)]
+        expected_version: String,
+        #[arg(long)]
+        index: String,
+        #[arg(long)]
+        destination: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum CliTask {
+    /// Validate the source checkout and resolve its installed build toolchain.
+    Prepare(build::PrepareArgs),
+    /// Build and check one CLI architecture inside Debian 12.
+    Build(build::BuildArgs),
+    /// Build, check, collect notices, and package one CLI architecture.
+    BuildArchive(build::BuildArchiveArgs),
+    /// Inspect and execute a binary on a compatible Linux runtime.
+    CheckBinary(binary::CheckBinaryArgs),
+    /// Run runtime acceptance tests against an extracted CLI archive.
+    TestArchive(acceptance::TestArchiveArgs),
+    /// Check CLI arguments, inspection, output failures, and process lifecycle on Linux.
+    TestProcess(process::TestProcessArgs),
+    /// Check Arrow IPC output and scan process lifecycle on Linux.
+    TestScan(scan::TestScanArgs),
+    /// Collect dependency redistribution text for one CLI target.
+    Notices(notices::NoticeArgs),
+    /// Package, extract, assemble, or verify CLI binary archives.
+    Artifacts {
+        #[command(subcommand)]
+        command: artifacts::ArtifactTask,
+    },
+}
+
+fn main() -> ExitCode {
+    match run_task(Arguments::parse().command) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => snafu::Report::from_error(error.as_ref()).report(),
+    }
+}
+
+fn run_task(task: Task) -> Result<()> {
+    match task {
+        Task::Cli { command } => command.run().map_err(Into::into),
+        Task::CheckCacheWrites => check_cache_writes(),
+        Task::PruneCiCaches => prune_ci_caches(),
+        Task::PrepareReleasePrConfig { destination } => release_plz::prepare_config(&destination),
+        Task::CheckPythonReleaseRequest => python_release::validate_release_request(),
+        Task::CheckPythonWheel {
+            path,
+            expected_version,
+            platform_tag,
+        } => python_wheels::check_wheel_metadata(&path, &expected_version, &platform_tag),
+        Task::CheckPythonArtifacts {
+            directory,
+            expected_version,
+        } => python_wheels::check_wheel_artifacts(&directory, &expected_version).map(|_| ()),
+        Task::StagePythonWheels {
+            artifacts,
+            expected_version,
+            index,
+            destination,
+        } => {
+            python_upload::stage_missing_wheels(&artifacts, &expected_version, &index, &destination)
+        }
+    }
+}
+
+impl CliTask {
+    fn run(self) -> error::Result<()> {
+        match self {
+            Self::Prepare(args) => args.run(),
+            Self::Build(args) => args.run(),
+            Self::BuildArchive(args) => args.run(),
+            Self::CheckBinary(args) => args.run(),
+            Self::TestArchive(args) => args.run(),
+            Self::TestProcess(args) => args.run(),
+            Self::TestScan(args) => args.run(),
+            Self::Notices(args) => notices::run(args),
+            Self::Artifacts { command } => command.run(),
+        }
+    }
+}
 
 const CACHE_PREFIX: &str = "v0-rust-core-ci-targets-Windows_NT-x64-";
 const CACHE_REF: &str = "refs/heads/main";
@@ -130,61 +268,8 @@ fn prune_ci_caches() -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
-    let args: Vec<_> = env::args().skip(1).collect();
-    let args: Vec<_> = args.iter().map(String::as_str).collect();
-    match args.as_slice() {
-        ["check-cache-writes"] => check_cache_writes(),
-        ["prune-ci-caches"] => prune_ci_caches(),
-        ["prepare-release-pr-config", destination] => {
-            release_plz::prepare_config(Path::new(destination))
-        }
-        ["check-python-release-request"] => python_release::validate_release_request(),
-        [
-            "check-python-wheel",
-            path,
-            "--expected-version",
-            version,
-            "--platform-tag",
-            platform,
-        ] => python_wheels::check_wheel_metadata(Path::new(path), version, platform),
-        [
-            "check-python-artifacts",
-            directory,
-            "--expected-version",
-            version,
-        ] => python_wheels::check_wheel_artifacts(Path::new(directory), version).map(|_| ()),
-        [
-            "stage-python-wheels",
-            artifacts,
-            "--expected-version",
-            version,
-            "--index",
-            index,
-            "--destination",
-            destination,
-        ] => python_upload::stage_missing_wheels(
-            Path::new(artifacts),
-            version,
-            index,
-            Path::new(destination),
-        ),
-        _ => Err(concat!(
-            "usage: cargo xtask <task>\n",
-            "  check-cache-writes\n",
-            "  prune-ci-caches\n",
-            "  prepare-release-pr-config <destination>\n",
-            "  check-python-release-request\n",
-            "  check-python-wheel <path> --expected-version <version> --platform-tag <tag>\n",
-            "  check-python-artifacts <directory> --expected-version <version>\n",
-            "  stage-python-wheels <artifacts> --expected-version <version> --index <pypi|testpypi> --destination <directory>",
-        )
-        .into()),
-    }
-}
-
 #[cfg(test)]
-mod tests {
+mod cache_tests {
     use super::*;
 
     fn cache(id: u64) -> Cache {

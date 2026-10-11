@@ -184,7 +184,7 @@ fn rejects_invalid_archives_and_metadata_with_a_bad_crc() -> Result<()> {
         .unwrap();
     bytes[position] = b'X';
     fs::write(&path, bytes)?;
-    check(&path, "1.2.3", Some(tag), Err("InvalidChecksum"))?;
+    check(&path, "1.2.3", Some(tag), Err("Invalid checksum"))?;
 
     write_wheel(&path, &metadata_files(tag), false)?;
     let mut bytes = fs::read(&path)?;

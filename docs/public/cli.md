@@ -18,11 +18,12 @@ platforms:
 | Linux amd64 | `x86_64-unknown-linux-gnu` | glibc 2.36, baseline x86-64 CPU |
 | Linux arm64 | `aarch64-unknown-linux-gnu` | glibc 2.36, baseline ARMv8-A CPU |
 
-Both targets are built and tested on Debian 12. They use glibc and libgcc shared
-libraries. On Debian, install `libc6`, `libgcc-s1`, and `ca-certificates`; the
-certificate bundle is needed for HTTPS storage. The archives do not support
-Alpine Linux's musl runtime or a `scratch` container. Other platforms can build
-from source.
+Both targets are built on Debian 12. The same binaries are tested on Debian 12,
+Ubuntu 24.04, and Fedora 44. They use glibc and libgcc shared libraries. On Debian
+or Ubuntu, install `libc6`, `libgcc-s1`, and `ca-certificates`; on Fedora, install
+`glibc`, `libgcc`, and `ca-certificates`. The certificate bundle is needed for
+HTTPS storage. The archives do not support Alpine Linux's musl runtime or a
+`scratch` container. Other platforms can build from source.
 
 Download the complete `dar-cli-<source-sha>-<run-id>-<attempt>` artifact from a
 successful Actions run in the repository. These are CI artifacts; this workflow
