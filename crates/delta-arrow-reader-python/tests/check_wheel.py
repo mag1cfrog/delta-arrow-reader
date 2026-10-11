@@ -8,7 +8,6 @@ ARTIFACT_PLATFORM_TAGS = {
     "delta-arrow-reader-linux-x86_64-wheel": "manylinux_2_28_x86_64",
     "delta-arrow-reader-windows-x86_64-wheel": "win_amd64",
     "delta-arrow-reader-macos-arm64-wheel": "macosx_12_0_arm64",
-    "delta-arrow-reader-macos-x86_64-wheel": "macosx_12_0_x86_64",
 }
 
 

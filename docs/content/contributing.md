@@ -113,8 +113,8 @@ Pull request CI calls `.github/workflows/pypi-build.yml` for changes covered by
 the Python filter in `.github/path-filters.json`. Shared Rust code, binding code,
 Python test fixtures, workspace manifests, and package metadata trigger these
 checks. Changes confined to CLI implementation, benchmarks, or `docs/` skip them.
-The reusable workflow builds Linux x86_64, Windows x86_64,
-macOS arm64, and macOS x86_64 wheels. Callers supply two required inputs:
+The reusable workflow builds Linux x86_64, Windows x86_64, and macOS arm64
+wheels. Callers supply two required inputs:
 
 - `source-ref`: the full commit SHA to check out and build.
 - `expected-version`: the exact workspace package version, without a tag prefix.
@@ -161,15 +161,14 @@ Each platform job uploads its artifact after both Python checks pass:
 | Linux x86_64, manylinux_2_28 | `delta-arrow-reader-linux-x86_64-wheel` |
 | Windows x86_64, Windows Server 2022 | `delta-arrow-reader-windows-x86_64-wheel` |
 | macOS arm64, `macos-latest` runner | `delta-arrow-reader-macos-arm64-wheel` |
-| macOS x86_64, `macos-15-intel` runner | `delta-arrow-reader-macos-x86_64-wheel` |
 
-Both macOS wheels target macOS 12.0, matching the PyArrow 18.0.0 wheels.
+The macOS wheel targets macOS 12.0, matching the PyArrow 18.0.0 wheels.
 Delocate checks that bundled libraries support the required architecture and
 deployment target. Runtime checks run on the runners listed above, not on
 macOS 12.0 itself.
 
 The `Validate wheel artifact set` job requires all platform builds to pass,
-then downloads the four artifacts from the same workflow run. It rejects
+then downloads the three artifacts from the same workflow run. It rejects
 missing or unexpected artifacts, requires exactly one wheel per artifact,
 and checks each wheel's version and tags again. Only then does the reusable
 workflow return `validated: 'true'`. Callers must require both a successful

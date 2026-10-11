@@ -37,7 +37,6 @@ class WheelTests(unittest.TestCase):
             "manylinux_2_28_x86_64",
             "win_amd64",
             "macosx_12_0_arm64",
-            "macosx_12_0_x86_64",
         ):
             with self.subTest(platform_tag=platform_tag):
                 path = self.directory / (
@@ -138,7 +137,7 @@ class WheelTests(unittest.TestCase):
 
     def test_rejects_unexpected_platform_artifact(self):
         self.write_artifact_set()
-        (self.directory / "unexpected-artifact").mkdir()
+        (self.directory / "delta-arrow-reader-macos-x86_64-wheel").mkdir()
         with self.assertRaisesRegex(ValueError, "expected artifacts"):
             check_wheel_set(self.directory, "1.2.3")
 
