@@ -26,7 +26,7 @@ pub use predicate::{DeltaComparison, DeltaPredicate, DeltaScalar};
 use std::{
     fmt,
     pin::Pin,
-    sync::Arc,
+    sync::{Arc, RwLock},
     task::{Context, Poll},
     time::Duration,
 };
@@ -39,7 +39,7 @@ use futures_util::Stream;
 use snafu::ResultExt;
 
 use self::{
-    backend::direct_parquet::ParquetRangeReadEstimator,
+    backend::direct_parquet::{NetworkWarmupPlan, ParquetRangeReadEstimator},
     planning::{
         DeltaScanPartitionTargetOptions, DeltaScanPlan, build_physical_row_predicate, plan_scan,
     },
@@ -80,7 +80,8 @@ pub enum WarmupMode {
     /// Uses network warmup for supported S3 stores when partial-page reads are enabled.
     ///
     /// Network sampling has a five-second limit after metadata loading. Other stores,
-    /// the Delta Kernel backend, and explicit range policies perform no warmup.
+    /// the Delta Kernel backend, and explicit range policies perform no warmup. If sampling
+    /// starts but does not finish, the first later eligible scan retries it once during planning.
     #[default]
     Automatic,
     /// Performs no warmup.
@@ -92,7 +93,8 @@ pub enum WarmupMode {
     /// The time limit applies to network sampling, after metadata loading. Sampling is
     /// best effort, uses at most three files, and schedules at most 24 MiB of payload.
     /// Only the Direct backend with an automatic range policy and a supported S3
-    /// transport performs network sampling. Other settings keep metadata warmup only.
+    /// transport performs network sampling. Other settings keep metadata warmup only. An
+    /// incomplete attempt can run once more, with the same limit, during an eligible scan.
     Network {
         /// Maximum time spent sampling network reads. Zero skips sampling.
         max_duration: Duration,
@@ -108,11 +110,7 @@ impl WarmupMode {
         if self != Self::Automatic {
             return self;
         }
-        if options.experimental_intra_page_reads()
-            && options.parquet_backend() == ParquetReaderBackend::Direct
-            && options.parquet_range_read_policy() == ParquetRangeReadPolicy::Automatic
-            && context.supports_partial_reads()
-        {
+        if NetworkWarmupPlan::supports_scan(options) && context.supports_partial_reads() {
             Self::Network {
                 max_duration: Duration::from_secs(5),
             }
@@ -214,6 +212,8 @@ impl DeltaTableBuilder {
     /// The default [`WarmupMode::Automatic`] prepares query-planning metadata and samples
     /// the network for supported S3 stores. Other stores remain lazy. Select
     /// [`WarmupMode::None`] to skip this preparation, including all network probes.
+    /// A timed-out, failed, or incomplete network sample does not fail loading. The first
+    /// later filtered scan that can use partial-page reads retries sampling once while it builds.
     ///
     /// With [`WarmupMode::None`], this method loads the snapshot and converts its schema. Protocol
     /// validation and scan metadata loading remain deferred until a scan is built. This allows an
@@ -244,16 +244,21 @@ impl DeltaTableBuilder {
             validate_protocol(snapshot.protocol())?;
             materialize_eager_scan_metadata(snapshot).await?
         };
-        let mut table = DeltaTable::new(snapshot, self.execution_options);
+        let table = DeltaTable::new(snapshot, self.execution_options);
         if let WarmupMode::Network { max_duration } = warmup
-            && let Some(estimator) = backend::direct_parquet::warmup_network(
+            && let Some(plan) = NetworkWarmupPlan::new(
                 table.snapshot.as_ref(),
                 self.execution_options,
                 max_duration,
             )
-            .await
         {
-            table.range_read_estimator = estimator;
+            match plan
+                .run("initialization", &table.range_read_estimator())
+                .await
+            {
+                Some(estimator) => table.range_read_state.set_estimator(estimator),
+                None => table.range_read_state.defer_network_warmup(plan).await,
+            }
         }
         Ok(table)
     }
@@ -368,7 +373,59 @@ impl fmt::Debug for DeltaTableSnapshot {
 pub struct DeltaTable {
     snapshot: Arc<ArrowTableSnapshot>,
     execution_options: DeltaScanExecutionOptions,
-    range_read_estimator: Arc<ParquetRangeReadEstimator>,
+    range_read_state: Arc<ParquetRangeReadState>,
+}
+
+#[derive(Default)]
+struct ParquetRangeReadState {
+    estimator: RwLock<Arc<ParquetRangeReadEstimator>>,
+    recovery: tokio::sync::Mutex<Option<NetworkWarmupPlan>>,
+}
+
+impl ParquetRangeReadState {
+    fn estimator(&self) -> Arc<ParquetRangeReadEstimator> {
+        Arc::clone(
+            &self
+                .estimator
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
+    }
+
+    fn set_estimator(&self, estimator: Arc<ParquetRangeReadEstimator>) {
+        *self
+            .estimator
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = estimator;
+    }
+
+    async fn defer_network_warmup(&self, plan: NetworkWarmupPlan) {
+        *self.recovery.lock().await = Some(plan);
+    }
+
+    #[cfg(feature = "datafusion")]
+    fn network_warmup_pending(&self, options: DeltaScanExecutionOptions) -> bool {
+        NetworkWarmupPlan::supports_scan(options)
+            && self
+                .recovery
+                .try_lock()
+                // A locked state may be publishing another query's recovered estimator.
+                .map_or(true, |pending| pending.is_some())
+    }
+
+    async fn recover_network_warmup(&self, options: DeltaScanExecutionOptions) {
+        if !NetworkWarmupPlan::supports_scan(options) {
+            return;
+        }
+        let mut pending = self.recovery.lock().await;
+        let Some(plan) = pending.take() else {
+            return;
+        };
+        // Keep the lock through the attempt so concurrent scans share its result.
+        if let Some(estimator) = plan.run("recovery", &self.estimator()).await {
+            self.set_estimator(estimator);
+        }
+    }
 }
 
 impl DeltaTable {
@@ -376,8 +433,21 @@ impl DeltaTable {
         Self {
             snapshot: Arc::new(snapshot),
             execution_options,
-            range_read_estimator: Arc::default(),
+            range_read_state: Arc::default(),
         }
+    }
+
+    pub(crate) fn range_read_estimator(&self) -> Arc<ParquetRangeReadEstimator> {
+        self.range_read_state.estimator()
+    }
+
+    pub(crate) async fn recover_network_warmup(&self, options: DeltaScanExecutionOptions) {
+        self.range_read_state.recover_network_warmup(options).await;
+    }
+
+    #[cfg(feature = "datafusion")]
+    pub(crate) fn network_warmup_pending(&self, options: DeltaScanExecutionOptions) -> bool {
+        self.range_read_state.network_warmup_pending(options)
     }
 
     /// Returns the loaded Delta snapshot version.
@@ -441,17 +511,22 @@ impl DeltaTable {
     /// be loaded. No partially refreshed table is returned.
     pub async fn refresh(&self) -> Result<Self, DeltaReaderError> {
         let snapshot = Arc::clone(&self.snapshot);
-        let snapshot = tokio::task::spawn_blocking(move || snapshot.refresh())
-            .await
-            .boxed()
-            .context(SnapshotLoadSnafu {
-                reason: "snapshot_refresh_task_failed",
-            })
-            .and_then(|result| result)?;
+        let range_read_estimator = self.range_read_estimator();
+        let snapshot = tokio::task::spawn_blocking(move || {
+            // Refresh may keep reading metadata after its async caller is dropped.
+            let _active_read = range_read_estimator.start_read();
+            snapshot.refresh()
+        })
+        .await
+        .boxed()
+        .context(SnapshotLoadSnafu {
+            reason: "snapshot_refresh_task_failed",
+        })
+        .and_then(|result| result)?;
         Ok(Self {
             snapshot: Arc::new(snapshot),
             execution_options: self.execution_options,
-            range_read_estimator: Arc::clone(&self.range_read_estimator),
+            range_read_state: Arc::clone(&self.range_read_state),
         })
     }
 
@@ -534,7 +609,11 @@ impl<'table> DeltaScanBuilder<'table> {
         self
     }
 
-    /// Builds one immutable single-use scan plan without reading data files.
+    /// Builds one immutable single-use scan plan.
+    ///
+    /// Planning loads Delta metadata. If network warmup did not finish during table loading,
+    /// an eligible filtered scan also makes one bounded recovery attempt. See [`WarmupMode`].
+    /// Reads that produce query results begin when the scan's stream is polled.
     pub async fn build(self) -> Result<DeltaScan, DeltaReaderError> {
         self.table.validate_protocol()?;
         if let Some(predicate) = self.predicate.as_ref() {
@@ -602,6 +681,14 @@ impl<'table> DeltaScanBuilder<'table> {
 
         match result {
             Ok((plan, physical_row_predicate)) => {
+                if self.limit != Some(0)
+                    && physical_row_predicate.is_some()
+                    && !plan.partitions.is_empty()
+                {
+                    self.table
+                        .recover_network_warmup(self.execution_options)
+                        .await;
+                }
                 trace_planning_completed(
                     snapshot_version,
                     backend,
@@ -613,7 +700,7 @@ impl<'table> DeltaScanBuilder<'table> {
                     predicate,
                     limit: self.limit,
                     physical_row_predicate,
-                    range_read_estimator: Arc::clone(&self.table.range_read_estimator),
+                    range_read_estimator: self.table.range_read_estimator(),
                 })
             }
             Err(error) => {
@@ -666,7 +753,8 @@ impl DeltaScan {
 
     /// Converts the scan into a pull-driven Arrow batch stream.
     ///
-    /// Data-file reads begin only when the stream is polled.
+    /// Reads for query results begin when the stream is polled. Network warmup may already
+    /// have read calibration ranges during table loading or scan building.
     pub fn into_stream(self) -> DeltaBatchStream {
         let metrics = self.plan.metrics.clone();
         let schema = Arc::clone(&self.plan.projected_schema);
@@ -690,7 +778,9 @@ impl DeltaScan {
                         None,
                     )
                 }
-                ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.plan),
+                ParquetReaderBackend::DeltaKernel => {
+                    delta_kernel_executor(&self.plan, self.range_read_estimator)
+                }
             };
             scheduler.partition_streams(admission, executor)
         };
@@ -858,8 +948,9 @@ impl Drop for DeltaBatchStream {
 
 pub(crate) fn delta_kernel_executor(
     plan: &Arc<DeltaScanPlan>,
+    range_read_estimator: Arc<ParquetRangeReadEstimator>,
 ) -> FileExecutor<planning::DeltaScanFileTask, FileBatchStream> {
-    backend::kernel_reader::delta_kernel_file_executor(plan)
+    backend::kernel_reader::delta_kernel_file_executor(plan, range_read_estimator)
 }
 
 fn trace_planning_started(

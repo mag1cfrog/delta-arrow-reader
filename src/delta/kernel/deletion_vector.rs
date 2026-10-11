@@ -18,6 +18,10 @@ use crate::delta::location::{object_store_path, same_store, with_object_store_pa
 pub(crate) struct KernelDeletionVectorHandle(pub(crate) DeletionVectorDescriptor);
 
 impl KernelDeletionVectorHandle {
+    pub(crate) fn is_inline(&self) -> bool {
+        self.0.storage_type == DeletionVectorStorageType::Inline
+    }
+
     /// Validate file locations and prepare their URLs for the table's configured store.
     pub(super) fn descriptor_for_store(
         &self,

@@ -12,7 +12,10 @@ use futures_util::stream;
 use snafu::ResultExt;
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use super::{data_file_error, file_location::resolve_data_file_url};
+use super::{
+    data_file_error, direct_parquet::ParquetRangeReadEstimator,
+    file_location::resolve_data_file_url,
+};
 use crate::{
     DeltaReaderError,
     error::{CancelledSnafu, DataFileReadSnafu, PhysicalToLogicalTransformSnafu},
@@ -40,12 +43,14 @@ impl Drop for DeltaKernelFileStreamState {
 
 pub(crate) fn delta_kernel_file_executor(
     plan: &Arc<DeltaScanPlan>,
+    range_read_estimator: Arc<ParquetRangeReadEstimator>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
     let plan = Arc::clone(plan);
     let output_buffer_batches = plan.execution_options.output_buffer_batches_per_partition();
 
     Arc::new(move |task, permit, cancellation| {
         let plan = Arc::clone(&plan);
+        let range_read_estimator = Arc::clone(&range_read_estimator);
         Box::pin(async move {
             if cancellation.is_cancelled() {
                 return CancelledSnafu {
@@ -57,7 +62,11 @@ pub(crate) fn delta_kernel_file_executor(
                 output_buffer_batches,
                 permit,
                 cancellation,
-                move |output, cancellation| read_file(plan.as_ref(), task, output, &cancellation),
+                move |output, cancellation| {
+                    // Kernel may keep reading after the async consumer is dropped.
+                    let _active_read = range_read_estimator.start_read();
+                    read_file(plan.as_ref(), task, output, &cancellation)
+                },
             ))
         })
     })

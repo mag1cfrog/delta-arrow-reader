@@ -206,7 +206,9 @@ impl DeltaTable {
     /// be a positive integer that fits usize; booleans are not accepted.
     /// execution_options=None inherits the table's settings. A supplied object
     /// replaces the complete settings for this scan without changing the table.
-    /// Planning reads Delta metadata; data-file reads start on the first pull.
+    /// Planning reads Delta metadata. An eligible filtered scan also retries incomplete
+    /// automatic network warmup once. Query results are read on the first pull.
+    /// Load the table with warmup="none" to skip network calibration entirely.
     /// The stream retains its snapshot and runtime independently of this table.
     #[pyo3(signature = (*, columns=None, filters=None, limit=None, target_partitions=None, execution_options=None))]
     fn scan(

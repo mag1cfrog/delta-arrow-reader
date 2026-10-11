@@ -63,7 +63,10 @@ small-request cost to compare partial reads with complete pages,
 including probes and dependent request rounds. Partial reads must save more than
 10% of the estimated cost. Missing evidence, dense selections or uncertain
 savings retain ordinary reads. Automatic S3 table warmup supplies the initial
-profile; later uncontended reads can update it. Local scans use ordinary reads.
+profile. If that attempt starts but does not finish, the first later eligible
+filtered scan retries it once while building its plan. Concurrent scans share
+the retry, and another failure leaves ordinary reads in place. Later uncontended
+reads can update a complete profile. Local scans use ordinary reads.
 Use [`WarmupMode::None`](../scan-planning.md#choose-a-warmup-mode) to skip profiling.
 Without a measured small-request cost, later queries also retain ordinary reads.
 
