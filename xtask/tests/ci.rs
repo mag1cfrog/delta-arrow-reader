@@ -240,6 +240,64 @@ fn linux_cache_check_fails_the_job_without_masking_build_failures() -> Result<()
 }
 
 #[test]
+fn cache_retry_cleans_the_correct_target_and_restarts_native_sccache() -> Result<()> {
+    let directory = test_dir("cache-retry");
+    let log = directory.join("commands");
+    for program in ["sudo", "sccache", "cargo", "sleep"] {
+        let path = directory.join(program);
+        fs::write(
+            &path,
+            "#!/bin/sh\nprogram=${0##*/}\n[ -z \"$RUSTC_WRAPPER\" ] || exit 10\nprintf '%s %s\\n' \"$program\" \"$*\" >> \"$COMMAND_LOG\"\n[ \"$program\" != \"$FAIL_COMMAND\" ]\n",
+        )?;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755))?;
+    }
+    let script = workflow_script(
+        include_str!("../../.github/workflows/pypi-build.yml"),
+        "Prepare cache write retry",
+    );
+    for (runner, expected) in [
+        (
+            "Linux",
+            "sudo rm -rf .python-sdist-source/target\nsleep 60\n",
+        ),
+        (
+            "Windows",
+            "sccache --stop-server\ncargo clean --target-dir target\nsleep 60\n",
+        ),
+        (
+            "macOS",
+            "sccache --stop-server\ncargo clean --target-dir target\nsleep 60\n",
+        ),
+    ] {
+        for failure in ["", "sudo", "sccache", "cargo"] {
+            fs::write(&log, "")?;
+            let output = Command::new("/bin/bash")
+                .args(["-euc", &script])
+                .env("PATH", &directory)
+                .env("RUNNER_OS", runner)
+                .env("RUSTC_WRAPPER", "")
+                .env("COMMAND_LOG", &log)
+                .env("FAIL_COMMAND", failure)
+                .output()?;
+            let should_fail = !failure.is_empty() && expected.contains(failure);
+            assert_eq!(
+                output.status.success(),
+                !should_fail,
+                "{runner}: {output:?}"
+            );
+            let actual = fs::read_to_string(&log)?;
+            if should_fail {
+                assert!(!actual.contains("sleep"));
+            } else {
+                assert_eq!(actual, expected);
+            }
+        }
+    }
+    fs::remove_dir_all(directory)?;
+    Ok(())
+}
+
+#[test]
 fn prune_deletes_by_id_and_stops_on_command_or_schema_errors() -> Result<()> {
     let directory = test_dir("prune");
     let gh = directory.join("gh");

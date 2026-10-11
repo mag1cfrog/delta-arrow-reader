@@ -59,8 +59,13 @@ fn check_writes(stats: &WriteStats, log: &str) -> Result<()> {
         .collect();
     // Concurrent builds can upload the same immutable entry before either sees it.
     if errors.len() != count || errors.iter().any(|line| !line.contains("AlreadyExists")) {
+        let startup_errors = log
+            .lines()
+            .filter(|line| line.contains("storage write check failed:"))
+            .collect::<Vec<_>>()
+            .join("\n");
         return Err(format!(
-            "sccache reported {count} cache write errors\n{}",
+            "sccache reported {count} cache write errors\n{startup_errors}\n{}",
             errors.join("\n")
         )
         .into());
@@ -227,5 +232,21 @@ mod tests {
         ] {
             assert!(serde_json::from_str::<SccacheStats>(stats).is_err());
         }
+    }
+
+    #[test]
+    fn includes_the_reason_sccache_fell_back_to_read_only() {
+        let error = check_writes(
+            &WriteStats {
+                cache_write_errors: 1,
+            },
+            "storage write check failed: RateLimited\nError executing cache write: Cannot write to read-only storage",
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("storage write check failed: RateLimited")
+        );
     }
 }

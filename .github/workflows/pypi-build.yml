@@ -32,6 +32,8 @@ jobs:
         shell: bash
     strategy:
       fail-fast: false
+      # GitHub limits new cache entries to 200 per minute across the repository.
+      max-parallel: ${{ inputs.cache-only && 1 || 4 }}
       matrix:
         include:
           - name: Linux x86_64
@@ -156,8 +158,10 @@ jobs:
           tar -xzf "$RUNNER_TEMP"/python-sdist/*.tar.gz -C .python-sdist-source --strip-components=1
           cmp Cargo.lock .python-sdist-source/Cargo.lock
       - name: Build wheel
+        id: wheel-build
+        continue-on-error: ${{ inputs.cache-only && runner.os == 'Linux' }}
         uses: PyO3/maturin-action@v1
-        with:
+        with: &wheel-build-inputs
           working-directory: ${{ runner.os == 'Linux' && '.python-sdist-source' || '.' }}
           command: build
           maturin-version: v1.14.1
@@ -182,7 +186,31 @@ jobs:
             --manifest-path crates/delta-arrow-reader-python/Cargo.toml
             --compatibility pypi --auditwheel repair --interpreter ${{ matrix.interpreter }}
       - name: Check wheel cache writes
+        id: cache-writes
         if: inputs.cache-only && runner.os != 'Linux'
+        continue-on-error: true
+        run: cargo xtask check-cache-writes
+        env:
+          RUSTC_WRAPPER: ""
+      - name: Prepare cache write retry
+        if: inputs.cache-only && (steps.wheel-build.outcome == 'failure' || steps.cache-writes.outcome == 'failure')
+        env:
+          RUSTC_WRAPPER: ""
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo rm -rf .python-sdist-source/target
+          else
+            sccache --stop-server
+            cargo clean --target-dir target
+          fi
+          # Recompile after the rate-limit window; existing remote entries are reused.
+          sleep 60
+      - name: Retry wheel cache writes
+        if: inputs.cache-only && (steps.wheel-build.outcome == 'failure' || steps.cache-writes.outcome == 'failure')
+        uses: PyO3/maturin-action@v1
+        with: *wheel-build-inputs
+      - name: Check retried wheel cache writes
+        if: steps.cache-writes.outcome == 'failure'
         run: cargo xtask check-cache-writes
         env:
           RUSTC_WRAPPER: ""
