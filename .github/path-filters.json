@@ -31,7 +31,17 @@
     "crates/delta-arrow-reader-python/**",
     "crates/delta-arrow-reader-cli/**",
     "tests/**",
-    "benches/**"
+    "benches/incremental_refresh.rs",
+    "benches/page_index.rs",
+    "benches/range_planning.rs",
+    "benches/range_planning/**",
+    "benches/reader.rs",
+    "benches/row_filter.rs",
+    "benches/scan_scheduling.rs",
+    "benches/selective_read/src/control_rows.rs",
+    "benches/scan_scheduling.py",
+    "benches/test_scan_scheduling.py",
+    "benches/run_order.py"
   ],
   "tooling": [
     ".cargo/**",

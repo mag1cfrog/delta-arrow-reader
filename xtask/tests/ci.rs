@@ -249,6 +249,51 @@ fn benchmark_checks_exclude_unrelated_ci_changes() -> Result<()> {
 }
 
 #[test]
+fn core_filter_preserves_benchmark_targets_and_shared_inputs() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
+    let manifest: toml::Value = toml::from_str(include_str!("../../Cargo.toml"))?;
+    for target in manifest["bench"].as_array().unwrap() {
+        let path = target["path"].as_str().unwrap();
+        assert!(filter_matches(&filters, "code", path)?, "{path}");
+    }
+    for path in [
+        "benches/range_planning/controlled_http.rs",
+        "benches/range_planning/plan_diagnostics.rs",
+        "benches/selective_read/src/control_rows.rs",
+        "benches/scan_scheduling.py",
+        "benches/test_scan_scheduling.py",
+        "benches/run_order.py",
+    ] {
+        assert!(filter_matches(&filters, "code", path)?, "{path}");
+    }
+    for path in [
+        "benches/selective_read/Cargo.toml",
+        "benches/selective_read/Cargo.lock",
+        "benches/selective_read/rust-toolchain.toml",
+        "benches/selective_read/src/main.rs",
+        "benches/selective_read/src/fixtures.rs",
+        "benches/selective_read/src/production.rs",
+        "benches/selective_read/src/large.rs",
+        "benches/selective_read/src/tests.rs",
+        "benches/selective_read/tests/large_cli.rs",
+        "benches/selective_read/oracle.py",
+        "benches/selective_read/runners/dar/src/main.rs",
+    ] {
+        assert!(!filter_matches(&filters, "code", path)?, "{path}");
+        assert!(filter_matches(&filters, "selective_read", path)?, "{path}");
+    }
+    for path in [
+        "benches/query_shapes.sql",
+        "benches/render_comparison_chart.py",
+        "benches/render_selective_read_chart.py",
+        "benches/render_selective_s3_chart.py",
+    ] {
+        assert!(!filter_matches(&filters, "code", path)?, "{path}");
+    }
+    Ok(())
+}
+
+#[test]
 fn standalone_docs_skip_rust_checks() -> Result<()> {
     let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
     for path in [
