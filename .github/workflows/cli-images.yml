@@ -46,6 +46,9 @@ on:
       artifact-url:
         description: Download page for the complete OCI artifact
         value: ${{ jobs.validate.outputs.artifact-url }}
+      manifest-sha256:
+        description: SHA256 of the complete cli-images.json manifest
+        value: ${{ jobs.validate.outputs.manifest-sha256 }}
   workflow_dispatch:
     inputs:
       binary-artifact-id:
@@ -225,6 +228,7 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           overwrite: true
+          retention-days: 90
 
   validate:
     name: Validate complete CLI image set
@@ -237,6 +241,7 @@ jobs:
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
       artifact-name: ${{ steps.complete.outputs.artifact-name }}
       artifact-url: ${{ steps.upload.outputs.artifact-url }}
+      manifest-sha256: ${{ steps.complete.outputs.manifest-sha256 }}
     env:
       PREPARE_RESULT: ${{ needs.prepare.result }}
       IMAGES_RESULT: ${{ needs.images.result }}
@@ -291,6 +296,7 @@ jobs:
           path: ${{ runner.temp }}/cli-images/*
           if-no-files-found: error
           compression-level: 0
+          retention-days: 90
       - name: Report successful image handoff
         id: complete
         env:
@@ -299,8 +305,12 @@ jobs:
         run: |
           [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
           test -n "$ARTIFACT_URL"
-          echo 'validated=true' >> "$GITHUB_OUTPUT"
-          echo "artifact-name=$CLI_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+          manifest_sha256="$(sha256sum "$RUNNER_TEMP/cli-images/cli-images.json")"
+          {
+            echo "manifest-sha256=${manifest_sha256%% *}"
+            echo 'validated=true'
+            echo "artifact-name=$CLI_ARTIFACT_NAME"
+          } >> "$GITHUB_OUTPUT"
           {
             echo "Source: $CLI_SOURCE_COMMIT"
             echo "Version: $CLI_VERSION; Rust: $CLI_RUST_TOOLCHAIN"

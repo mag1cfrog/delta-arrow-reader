@@ -25,6 +25,7 @@ jobs:
       python: ${{ steps.filter.outputs.python }}
       selective_read: ${{ steps.filter.outputs.selective_read }}
       package_version: ${{ steps.package-version.outputs.version }}
+      pr_head_sha: ${{ github.event.pull_request.head.sha }}
       release_pr: >-
         ${{ github.repository == 'mag1cfrog/delta-arrow-reader' &&
             github.event.pull_request.head.repo.full_name == github.repository &&
@@ -172,8 +173,9 @@ jobs:
         run: |
           cargo clippy --locked --package xtask --all-targets -- -D warnings
           cargo test --locked --package xtask --bin xtask cache_tests::
+          cargo test --locked --package xtask --bin xtask validation_record::
           cargo test --locked --package xtask \
-            --test ci --test cli_workflow --test cli_images_workflow --test images --test python_release --test python_upload --test python_wheels \
+            --test ci --test cli_workflow --test cli_images_workflow --test cli_validation_workflow --test images --test python_release --test python_upload --test python_wheels \
             --test python_wheel_reuse --test python_workflow --test release_plz -- --include-ignored
       - if: matrix.task == 'Lints and Docs'
         run: python3 -m unittest discover -s benches -p test_scan_scheduling.py
@@ -274,6 +276,78 @@ jobs:
       expected-version: ${{ needs.release-cli.outputs.version }}
       rust-toolchain: ${{ needs.release-cli.outputs.rust-toolchain }}
 
+  release-cli-record:
+    name: Record validated CLI artifacts
+    needs: [changes, release-approval, release-cli, release-cli-images]
+    if: >-
+      needs.changes.outputs.release_pr == 'true' &&
+      needs.release-approval.result == 'success' &&
+      needs.release-cli.result == 'success' &&
+      needs.release-cli.outputs.validated == 'true' &&
+      needs.release-cli-images.result == 'success' &&
+      needs.release-cli-images.outputs.validated == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      validated: ${{ steps.complete.outputs.validated }}
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      artifact-name: ${{ steps.complete.outputs.artifact-name }}
+      artifact-url: ${{ steps.upload.outputs.artifact-url }}
+      source-commit: ${{ steps.record.outputs.source-commit }}
+      pr-head-sha: ${{ steps.record.outputs.pr-head-sha }}
+      version: ${{ steps.record.outputs.version }}
+    env:
+      CLI_RECORD_NAME: dar-cli-validation-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ needs.release-cli.outputs.rust-toolchain }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci
+          cache-targets: false
+          save-if: false
+      - uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Bind validated artifacts to the tested PR revision
+        id: record
+        env:
+          CLI_JOB_RESULTS: ${{ toJSON(needs) }}
+        shell: bash
+        run: |
+          printf '%s\n' "$CLI_JOB_RESULTS" > "$RUNNER_TEMP/cli-job-results.json"
+          cargo xtask cli record-validation "$RUNNER_TEMP/cli-validation.json" \
+            --event "$GITHUB_EVENT_PATH" --job-results "$RUNNER_TEMP/cli-job-results.json" \
+            --source-commit "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"
+          jq -r '"source-commit=\(.source_commit)", "pr-head-sha=\(.pull_request_head_sha)", "version=\(.version)"' \
+            "$RUNNER_TEMP/cli-validation.json" >> "$GITHUB_OUTPUT"
+      - name: Upload CLI validation record
+        id: upload
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.CLI_RECORD_NAME }}
+          path: ${{ runner.temp }}/cli-validation.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Require the uploaded record
+        id: complete
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        shell: bash
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          test -n "$ARTIFACT_URL"
+          echo 'validated=true' >> "$GITHUB_OUTPUT"
+          echo "artifact-name=$CLI_RECORD_NAME" >> "$GITHUB_OUTPUT"
+          echo "CLI validation record: [$CLI_RECORD_NAME]($ARTIFACT_URL)" >> "$GITHUB_STEP_SUMMARY"
+
   selective-read-fixtures:
     name: Public Fixture Smoke
     needs: changes
@@ -337,7 +411,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [changes, feature-tests, platform-tests, checks, python-package, release-approval, release-wheels, release-cli, release-cli-images, selective-read-fixtures]
+    needs: [changes, feature-tests, platform-tests, checks, python-package, release-approval, release-wheels, release-cli, release-cli-images, release-cli-record, selective-read-fixtures]
     if: always()
     runs-on: ubuntu-latest
 
@@ -376,6 +450,20 @@ jobs:
                [ -z "${{ needs.release-cli-images.outputs.version }}" ] || \
                [ "${{ needs.release-cli-images.outputs.version }}" != "${{ needs.release-cli.outputs.version }}" ]; then
               echo "Release CLI image validation or artifact handoff did not pass"
+              exit 1
+            fi
+            if [ "${{ needs.release-cli-record.result }}" != "success" ] || \
+               [ "${{ needs.release-cli-record.outputs.validated }}" != "true" ] || \
+               [ -z "${{ needs.release-cli-record.outputs.artifact-id }}" ] || \
+               [ -z "${{ needs.release-cli-record.outputs.artifact-name }}" ] || \
+               [ -z "${{ needs.release-cli-record.outputs.artifact-url }}" ] || \
+               [ -z "${{ needs.release-cli-record.outputs.source-commit }}" ] || \
+               [ "${{ needs.release-cli-record.outputs.source-commit }}" != "${{ needs.release-cli.outputs.source-commit }}" ] || \
+               [ -z "${{ needs.release-cli-record.outputs.pr-head-sha }}" ] || \
+               [ "${{ needs.release-cli-record.outputs.pr-head-sha }}" != "${{ needs.changes.outputs.pr_head_sha }}" ] || \
+               [ -z "${{ needs.release-cli-record.outputs.version }}" ] || \
+               [ "${{ needs.release-cli-record.outputs.version }}" != "${{ needs.release-cli.outputs.version }}" ]; then
+              echo "Release CLI validation record upload or PR identity did not pass"
               exit 1
             fi
             if [ "${{ needs.release-wheels.result }}" != "success" ] || \

@@ -44,8 +44,9 @@ This approval starts **Release CLI binaries** and the Python wheel checks in
 parallel. Both build the PR's merge candidate at its exact commit SHA and
 workspace version. After binary validation, **Release CLI images and Go consumer**
 uses those binaries on native amd64 and arm64 runners in parallel, with the same
-approval. The required `CI` check waits for all three artifact sets. New PR
-commits cancel the old CI run and require a new approval and validation.
+approval. The required `CI` check waits for all three artifact sets and the
+separate CLI validation record. New PR commits cancel the old CI run and require
+a new approval and validation.
 
 Feature PRs skip release approval, builds, and image/Go acceptance. They still
 run the small workflow tests alongside the shared xtask checks for Python and
@@ -74,6 +75,7 @@ The reusable workflow returns:
 | `validated` | `true` only after source checks, both builds, and all six runtime checks pass and the complete set is uploaded |
 | `source-commit`, `version`, `rust-toolchain` | Resolved source SHA, workspace version, and exact Rust release |
 | `artifact-id`, `artifact-name`, `artifact-url` | The complete set's immutable Actions ID, run-specific name, and download page |
+| `manifest-sha256` | SHA256 of the uploaded complete `cli-artifacts.json` |
 
 Consumers must depend on the successful job and require `validated == 'true'`.
 Within the same workflow run, download that exact artifact with
@@ -85,7 +87,7 @@ release from the workflow outputs. Intermediate platform archives and
 `dar-cli-tools-<source-sha>-<architecture>` artifacts support runtime checks.
 They are not complete, validated sets for downstream consumers.
 
-Actions retention settings apply. Missing, expired, incomplete, or mismatched
+CLI artifacts are retained for 90 days. Missing, expired, incomplete, or mismatched
 artifacts must stop downstream work. Rerun this builder for the explicit source
 commit to obtain a new validated set and reference. Container and release jobs
 must consume its existing archive bytes without rebuilding or repacking them.
@@ -140,21 +142,72 @@ gh workflow run cli-images.yml --ref main \
 The complete Actions artifact is named
 `dar-cli-images-<source-sha>-<run-id>-<attempt>` and contains the two OCI archives
 and `cli-images.json` described below. Intermediate platform uploads are not
-validated complete sets. Both binary and image uploads use the repository's
-default retention period; publication requires both sets to remain available.
+validated complete sets. Both binary and image uploads have a 90-day retention
+period; publication requires both sets to remain available.
 If either has expired, validate the requested source again.
 
 Outputs match the binary workflow: `validated`, `source-commit`, `version`,
-`rust-toolchain`, `artifact-id`, `artifact-name`, and `artifact-url`.
+`rust-toolchain`, `artifact-id`, `artifact-name`, `artifact-url`, and
+`manifest-sha256`. The manifest hash covers the uploaded complete `cli-images.json`.
 `validated=true` is emitted only after both native image/Go jobs pass and the
 complete upload returns an artifact ID and URL. Required `CI` also rejects
 failed, skipped, or canceled image jobs, missing outputs, and a source/version
 that differs from the binary job. The job summary links the complete artifact.
 
 This workflow has read-only permissions and publishes no registry tags.
-Issue #435 owns the publication record, final release/source-tree binding,
+Issue #435 owns the validation record, final release/source-tree binding,
 GHCR authentication, and multi-platform index. Publication must preserve these
 OCI archives and their tested source labels.
+
+## Record validated CLI artifacts
+
+On approved release PRs, the **Record validated CLI artifacts** job follows both
+CLI workflows. It uses their immutable artifact IDs and manifest hashes, checks
+their successful results and matching source/version/toolchain, and writes
+`cli-validation.json`. The job checks out the tested merge candidate and requires
+its two parents to match the event's base and PR head commits. It reads the source
+tree from Git and the workspace version from that clean checkout.
+
+The record job compiles only xtask. It does not download the binary/image sets
+or repeat their acceptance checks. Each producer hashes its complete manifest
+after artifact upload and returns that hash only as part of a successful handoff.
+
+The schema-1 record contains:
+
+| Field | Meaning |
+| --- | --- |
+| `repository`, `pull_request`, `pull_request_head_sha` | Upstream release PR and its validated head revision |
+| `source_commit`, `source_tree`, `version` | Actual tested merge candidate, Git tree, and workspace version |
+| `run_id`, `run_attempt` | CI run and attempt that created the record |
+| `binary_artifact.id`, `binary_artifact.manifest_sha256` | Complete binary set's Actions ID and `cli-artifacts.json` hash |
+| `image_artifact.id`, `image_artifact.manifest_sha256` | Complete OCI set's Actions ID and `cli-images.json` hash |
+
+Existing manifests remain the source of per-file hashes and platform digests.
+The record does not modify them or replace the tested source SHA with a later
+release commit. Source-tree equality lets publication compare the tested merge
+candidate with a final squash or merge commit even when their SHAs differ.
+
+The upload is named `dar-cli-validation-<source-sha>-<run-id>-<attempt>`, contains
+only `cli-validation.json`, and is retained for 90 days, like the complete binary
+and image sets. It never overwrites an earlier record. Required `CI` rejects a
+failed, canceled, skipped, or missing record upload, missing upload outputs, and
+a record associated with a different source, PR head, or version. Ordinary
+feature PRs skip this job.
+
+To reproduce record creation from a CI checkout with the original event and
+the record job's serialized `needs` context:
+
+```sh
+cargo xtask cli record-validation "$RUNNER_TEMP/cli-validation.json" \
+  --event "$GITHUB_EVENT_PATH" --job-results "$RUNNER_TEMP/cli-job-results.json" \
+  --source-commit "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"
+```
+
+The output path must be new. The command checks the supplied event and results;
+it does not authenticate them against GitHub. Publication must verify the record
+against GitHub's PR, approval, run, job, and artifact metadata, then verify the
+retained files before writing to a release or registry. That publication verifier
+is part of #435; a locally generated JSON record alone does not authorize release.
 
 ## Build on Debian 12
 
@@ -621,7 +674,8 @@ cargo clippy --locked --package xtask --all-targets -- -D warnings
 
 The CLI release workflow runs the CLI crate's unit tests and Clippy, plus the
 xtask unit tests and the `artifacts`, `notices`, `cli_workflow`,
-`cli_images_workflow`, and `images` integration tests. The small workflow and
+`cli_images_workflow`, and `images` integration tests. Record unit tests and the
+`cli_validation_workflow` checks also run in ordinary PR CI. The small workflow and
 `images` tests also run in ordinary PR CI. The image tests use a small compiled
 ELF fixture and stub container commands; they do not build containers or
 require Docker, Skopeo, or umoci.

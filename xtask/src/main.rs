@@ -19,6 +19,7 @@ mod python_wheels;
 mod release_plz;
 mod repository;
 mod scan;
+mod validation_record;
 
 use std::{
     env,
@@ -114,6 +115,8 @@ enum CliTask {
     TestArchive(acceptance::TestArchiveArgs),
     /// Check a local container's read-only execution, TLS, IPC, and process lifecycle.
     TestImage(image_runtime::TestImageArgs),
+    /// Record an approved release PR's validated binary and image artifact identities.
+    RecordValidation(validation_record::RecordValidationArgs),
     /// Check CLI arguments, inspection, output failures, and process lifecycle on Linux.
     TestProcess(process::TestProcessArgs),
     /// Check Arrow IPC output and scan process lifecycle on Linux.
@@ -191,6 +194,7 @@ impl CliTask {
             Self::CheckBinary(args) => args.run(),
             Self::TestArchive(args) => args.run(),
             Self::TestImage(args) => args.run(),
+            Self::RecordValidation(args) => args.run(),
             Self::TestProcess(args) => args.run(),
             Self::TestScan(args) => args.run(),
             Self::Notices(args) => notices::run(args),

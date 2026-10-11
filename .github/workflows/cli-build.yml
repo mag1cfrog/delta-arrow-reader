@@ -34,6 +34,9 @@ on:
       artifact-url:
         description: Download page for the complete Actions artifact
         value: ${{ jobs.validate.outputs.artifact-url }}
+      manifest-sha256:
+        description: SHA256 of the complete cli-artifacts.json manifest
+        value: ${{ jobs.validate.outputs.manifest-sha256 }}
   workflow_dispatch:
     inputs:
       source-ref:
@@ -194,6 +197,7 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           overwrite: true
+          retention-days: 90
       - name: Upload native acceptance tool
         uses: actions/upload-artifact@v6
         with:
@@ -201,6 +205,7 @@ jobs:
           path: ${{ runner.temp }}/cli-build/xtask
           if-no-files-found: error
           overwrite: true
+          retention-days: 90
 
   runtime:
     name: Test ${{ matrix.distribution.name }} / ${{ matrix.platform.architecture }}
@@ -271,6 +276,7 @@ jobs:
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
       artifact-name: ${{ steps.complete.outputs.artifact-name }}
       artifact-url: ${{ steps.upload.outputs.artifact-url }}
+      manifest-sha256: ${{ steps.complete.outputs.manifest-sha256 }}
     env:
       PREPARE_RESULT: ${{ needs.prepare.result }}
       CHECKS_RESULT: ${{ needs.checks.result }}
@@ -317,13 +323,21 @@ jobs:
           path: ${{ runner.temp }}/cli-artifacts/*
           if-no-files-found: error
           compression-level: 0
+          retention-days: 90
       - name: Report successful handoff
         id: complete
         env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
           ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
         run: |
-          echo 'validated=true' >> "$GITHUB_OUTPUT"
-          echo "artifact-name=$CLI_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          test -n "$ARTIFACT_URL"
+          manifest_sha256="$(sha256sum "$RUNNER_TEMP/cli-artifacts/cli-artifacts.json")"
+          {
+            echo "manifest-sha256=${manifest_sha256%% *}"
+            echo 'validated=true'
+            echo "artifact-name=$CLI_ARTIFACT_NAME"
+          } >> "$GITHUB_OUTPUT"
           {
             echo "Source: $CLI_SOURCE_COMMIT"
             echo "Version: $CLI_VERSION; Rust: $CLI_RUST_TOOLCHAIN"

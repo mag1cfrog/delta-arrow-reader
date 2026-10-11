@@ -219,14 +219,14 @@ fn print_json(value: &impl Serialize) -> Result<()> {
     Ok(())
 }
 
-fn is_full_commit_sha(commit: &str) -> bool {
+pub(crate) fn is_full_commit_sha(commit: &str) -> bool {
     commit.len() == 40
         && commit
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
-fn check_source(repository: &Path, source_commit: &str) -> Result<()> {
+pub(crate) fn check_source(repository: &Path, source_commit: &str) -> Result<()> {
     ensure!(
         is_full_commit_sha(source_commit),
         InvalidInputSnafu {

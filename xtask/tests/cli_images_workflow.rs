@@ -314,6 +314,11 @@ fn image_handoff_requires_all_jobs_and_upload_outputs() -> TestResult {
         complete["run"].as_str().unwrap()
     );
     let root = tempfile::tempdir()?;
+    fs::create_dir(root.path().join("cli-images"))?;
+    fs::write(
+        root.path().join("cli-images/cli-images.json"),
+        "image manifest fixture",
+    )?;
     let handoff = root.path().join("output");
     for prepare in ["success", "failure", "skipped", "cancelled", ""] {
         for images in ["success", "failure", "skipped", "cancelled", ""] {
@@ -335,6 +340,7 @@ fn image_handoff_requires_all_jobs_and_upload_outputs() -> TestResult {
                     .env("CLI_VERSION", "1.2.3")
                     .env("CLI_RUST_TOOLCHAIN", "1.94.1")
                     .env("GITHUB_OUTPUT", &handoff)
+                    .env("RUNNER_TEMP", root.path())
                     .env("GITHUB_STEP_SUMMARY", root.path().join("summary"))
                     .output()?;
                 let expected =
@@ -384,6 +390,7 @@ fn required_ci_rejects_missing_or_failed_image_handoffs_only_on_release_prs() ->
                 ("changes.outputs.python", "false"),
                 ("changes.outputs.selective_read", "false"),
                 ("changes.outputs.release_pr", release),
+                ("changes.outputs.pr_head_sha", "pr-head"),
                 ("release-cli.outputs.validated", "true"),
                 ("release-wheels.outputs.validated", "true"),
                 (
@@ -404,6 +411,19 @@ fn required_ci_rejects_missing_or_failed_image_handoffs_only_on_release_prs() ->
                     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 ),
                 ("release-cli-images.outputs.version", "1.2.3"),
+                ("release-cli-record.outputs.validated", "true"),
+                ("release-cli-record.outputs.artifact-id", "124"),
+                ("release-cli-record.outputs.artifact-name", "record-fixture"),
+                (
+                    "release-cli-record.outputs.artifact-url",
+                    "https://example.invalid/record",
+                ),
+                (
+                    "release-cli-record.outputs.source-commit",
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                ),
+                ("release-cli-record.outputs.pr-head-sha", "pr-head"),
+                ("release-cli-record.outputs.version", "1.2.3"),
             ]);
             let mut cases = vec![("release-cli-images.result", "success")];
             for result in ["failure", "skipped", "cancelled", ""] {

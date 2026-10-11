@@ -165,6 +165,7 @@ fn release_pr_requires_approved_and_validated_wheels() -> Result<()> {
                             ("release-wheels.outputs.validated", validated),
                             ("release-cli.outputs.validated", "true"),
                             ("release-cli-images.outputs.validated", "true"),
+                            ("release-cli-record.outputs.validated", "true"),
                         ])?;
                         let expected = release_pr != "true"
                             || approval == "success" && wheels == "success" && validated == "true";
@@ -175,6 +176,54 @@ fn release_pr_requires_approved_and_validated_wheels() -> Result<()> {
                         );
                     }
                 }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn release_pr_requires_the_record_upload_and_matching_pr_identity() -> Result<()> {
+    for code in ["true", "false"] {
+        for release_pr in ["true", "false"] {
+            for (key, value, passes) in [
+                ("release-cli-record.result", "success", true),
+                ("release-cli-record.result", "failure", false),
+                ("release-cli-record.result", "cancelled", false),
+                ("release-cli-record.result", "skipped", false),
+                ("release-cli-record.result", "", false),
+                ("release-cli-record.outputs.validated", "false", false),
+                ("release-cli-record.outputs.validated", "", false),
+                ("release-cli-record.outputs.artifact-id", "", false),
+                ("release-cli-record.outputs.artifact-name", "", false),
+                ("release-cli-record.outputs.artifact-url", "", false),
+                ("release-cli-record.outputs.source-commit", "", false),
+                (
+                    "release-cli-record.outputs.source-commit",
+                    "different",
+                    false,
+                ),
+                ("release-cli-record.outputs.pr-head-sha", "", false),
+                ("release-cli-record.outputs.pr-head-sha", "different", false),
+                ("release-cli-record.outputs.version", "", false),
+                ("release-cli-record.outputs.version", "different", false),
+            ] {
+                let output = check_ci_results(&[
+                    (key, value),
+                    ("changes.outputs.code", code),
+                    ("changes.outputs.python", "false"),
+                    ("changes.outputs.selective_read", "false"),
+                    ("changes.outputs.release_pr", release_pr),
+                    ("release-cli.outputs.validated", "true"),
+                    ("release-cli-images.outputs.validated", "true"),
+                    ("release-cli-record.outputs.validated", "true"),
+                    ("release-wheels.outputs.validated", "true"),
+                ])?;
+                assert_eq!(
+                    output.status.success(),
+                    release_pr != "true" || passes,
+                    "code={code}, release={release_pr}, {key}={value:?}: {output:?}"
+                );
             }
         }
     }

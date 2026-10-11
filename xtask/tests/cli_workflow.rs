@@ -123,12 +123,14 @@ fn ci_requires_approved_and_validated_cli_artifacts_only_for_release_prs()
                                     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                                 }
                                 None if key.ends_with(".outputs.version") => "1.2.3",
-                                None if matches!(
-                                    key,
-                                    "release-cli-images.outputs.artifact-id"
-                                        | "release-cli-images.outputs.artifact-name"
-                                        | "release-cli-images.outputs.artifact-url"
-                                ) =>
+                                None if key == "changes.outputs.pr_head_sha"
+                                    || key.ends_with(".outputs.pr-head-sha") =>
+                                {
+                                    "pr-head"
+                                }
+                                None if key.ends_with(".outputs.artifact-id")
+                                    || key.ends_with(".outputs.artifact-name")
+                                    || key.ends_with(".outputs.artifact-url") =>
                                 {
                                     "present"
                                 }
@@ -181,6 +183,11 @@ fn cli_handoff_requires_source_checks_builds_and_runtime_tests() -> Result<(), B
         steps.last().unwrap()["run"].as_str().unwrap()
     );
     let directory = tempfile::tempdir()?;
+    fs::create_dir(directory.path().join("cli-artifacts"))?;
+    fs::write(
+        directory.path().join("cli-artifacts/cli-artifacts.json"),
+        "manifest fixture",
+    )?;
     let handoff = directory.path().join("output");
     let summary = directory.path().join("summary");
     for (stage, variable) in stages.iter().zip(variables) {
@@ -191,6 +198,7 @@ fn cli_handoff_requires_source_checks_builds_and_runtime_tests() -> Result<(), B
                 .envs(variables.map(|name| (name, "success")))
                 .env(variable, result)
                 .env("GITHUB_OUTPUT", &handoff)
+                .env("RUNNER_TEMP", directory.path())
                 .env("GITHUB_STEP_SUMMARY", &summary)
                 .env(
                     "CLI_SOURCE_COMMIT",
@@ -199,6 +207,7 @@ fn cli_handoff_requires_source_checks_builds_and_runtime_tests() -> Result<(), B
                 .env("CLI_VERSION", "0.0.0")
                 .env("CLI_RUST_TOOLCHAIN", "1.94.1")
                 .env("CLI_ARTIFACT_NAME", "test-artifact")
+                .env("ARTIFACT_ID", "123")
                 .env("ARTIFACT_URL", "https://example.invalid/artifact")
                 .output()?;
             let expected = result == "success";
