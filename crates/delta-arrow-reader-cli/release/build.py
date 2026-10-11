@@ -3,14 +3,21 @@
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tomllib
 from pathlib import Path
 
-from artifacts import RUST_TARGETS, build_identity, file_sha256
-from check_binary import RUNTIME_PACKAGES, check_binary, check_environment
+from check_binary import (
+    RUNTIME_PACKAGES,
+    RUST_TARGETS,
+    check_binary,
+    check_environment,
+    file_sha256,
+)
 
+REPOSITORY = Path(__file__).resolve().parents[3]
 DEBIAN_IMAGE = (
     "docker.io/library/debian@sha256:"
     "7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587"
@@ -19,6 +26,22 @@ BASELINE_FLAGS = {
     "amd64": ("x86-64", "-march=x86-64 -mtune=generic"),
     "arm64": ("generic", "-march=armv8-a -mtune=generic"),
 }
+
+
+def build_identity(version, source_commit, rust_toolchain):
+    for name, value, pattern in (
+        ("version", version, r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"),
+        ("source commit", source_commit, r"[0-9a-f]{40}"),
+        ("Rust toolchain", rust_toolchain, r"[0-9]+\.[0-9]+\.[0-9]+"),
+    ):
+        if not re.fullmatch(pattern, value):
+            raise ValueError(f"invalid {name}: {value!r}")
+    return {
+        "schema_version": 1,
+        "version": version,
+        "source_commit": source_commit,
+        "rust_toolchain": rust_toolchain,
+    }
 
 
 def build_environment(architecture, rust_toolchain):

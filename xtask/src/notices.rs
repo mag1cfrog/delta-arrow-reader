@@ -8,7 +8,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use clap::{Args, ValueEnum};
+use clap::Args;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use snafu::{ResultExt, ensure};
@@ -17,6 +17,7 @@ use crate::error::{
     CommandFailedSnafu, CommandStartSnafu, FileSnafu, InvalidInputSnafu, JsonSnafu, Result,
     TomlSnafu, Utf8Snafu,
 };
+use crate::platform::Architecture;
 
 #[derive(Args)]
 pub(crate) struct NoticeArgs {
@@ -29,21 +30,6 @@ pub(crate) struct NoticeArgs {
     /// Destination for the complete notices; must not already exist.
     #[arg(long)]
     output: PathBuf,
-}
-
-#[derive(Clone, Copy, ValueEnum)]
-enum Architecture {
-    Amd64,
-    Arm64,
-}
-
-impl Architecture {
-    fn rust_target(self) -> &'static str {
-        match self {
-            Self::Amd64 => "x86_64-unknown-linux-gnu",
-            Self::Arm64 => "aarch64-unknown-linux-gnu",
-        }
-    }
 }
 
 #[derive(Deserialize)]

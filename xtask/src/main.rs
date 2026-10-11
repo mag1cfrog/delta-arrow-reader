@@ -1,5 +1,7 @@
+mod artifacts;
 mod error;
 mod notices;
+mod platform;
 
 use clap::{Parser, Subcommand};
 use error::Result;
@@ -25,6 +27,11 @@ enum Task {
 enum CliTask {
     /// Collect dependency redistribution text for one CLI target.
     Notices(notices::NoticeArgs),
+    /// Package, extract, assemble, or verify CLI binary archives.
+    Artifacts {
+        #[command(subcommand)]
+        command: artifacts::ArtifactTask,
+    },
 }
 
 #[snafu::report]
@@ -33,5 +40,8 @@ fn main() -> Result<()> {
         Task::Cli {
             command: CliTask::Notices(args),
         } => notices::run(args),
+        Task::Cli {
+            command: CliTask::Artifacts { command },
+        } => command.run(),
     }
 }

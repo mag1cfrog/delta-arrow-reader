@@ -116,7 +116,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import os, subprocess
-          from artifacts import build_identity
+          from build import build_identity
 
           compiler = subprocess.check_output(
               ['rustup', 'run', os.environ['RUST_VERSION'], 'rustc', '-vV'], text=True)
@@ -185,7 +185,7 @@ jobs:
             '
       - name: Validate and extract the archive outside the checkout
         run: |
-          python3 crates/delta-arrow-reader-cli/release/artifacts.py extract \
+          "$RUNNER_TEMP/cli-build/target/debug/xtask" cli artifacts extract \
             "$RUNNER_TEMP/cli-build/artifacts" --destination "$RUNNER_TEMP/cli-extracted" \
             --architecture "$CLI_ARCHITECTURE" --version "$CLI_VERSION" \
             --source-commit "$CLI_SOURCE_COMMIT" --rust-toolchain "$CLI_RUST_TOOLCHAIN"
@@ -195,6 +195,7 @@ jobs:
             --volume "$GITHUB_WORKSPACE:/checks:ro" \
             --volume "$RUNNER_TEMP/cli-build/artifacts:/artifacts:ro" \
             --volume "$RUNNER_TEMP/cli-extracted:/package:ro" \
+            --volume "$RUNNER_TEMP/cli-build/target/debug/xtask:/tools/xtask:ro" \
             --workdir /tmp --env PYTHONDONTWRITEBYTECODE=1 \
             --env CLI_SOURCE_COMMIT --env CLI_VERSION --env CLI_RUST_TOOLCHAIN \
             --env CLI_ARCHITECTURE "$CLI_IMAGE" \
@@ -245,9 +246,12 @@ jobs:
         with:
           name: dar-cli-${{ needs.prepare.outputs.source-commit }}-arm64
           path: ${{ runner.temp }}/cli-inputs/arm64
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ needs.prepare.outputs.rust-toolchain }}
       - name: Assemble the original archives and check both identities
         run: |
-          python3 crates/delta-arrow-reader-cli/release/artifacts.py assemble \
+          cargo xtask cli artifacts assemble \
             "$RUNNER_TEMP/cli-artifacts" --inputs "$RUNNER_TEMP/cli-inputs" \
             --version "$CLI_VERSION" --source-commit "$CLI_SOURCE_COMMIT" \
             --rust-toolchain "$CLI_RUST_TOOLCHAIN"

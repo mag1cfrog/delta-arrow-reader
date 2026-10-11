@@ -1,4 +1,5 @@
 import contextlib
+import json
 import os
 import subprocess
 import tempfile
@@ -8,7 +9,8 @@ from unittest import mock
 
 import build
 import build_archive
-from artifacts import RUST_TARGETS, build_identity, file_sha256
+from build import build_identity
+from check_binary import RUST_TARGETS, file_sha256
 
 
 class BuildTests(unittest.TestCase):
@@ -36,9 +38,9 @@ class BuildTests(unittest.TestCase):
                 notices.assert_not_called()
                 self.assertFalse(output.exists())
 
-    def test_archive_rejects_binary_replacement_after_build_validation(self):
+    def test_archive_uses_caller_paths_and_rejects_replaced_binary(self):
         identity = build_identity("1.2.3", "a" * 40, "1.94.1")
-        with tempfile.TemporaryDirectory() as temporary:
+        with tempfile.TemporaryDirectory() as temporary, contextlib.chdir(temporary):
             target = Path(temporary)
             binary = target / RUST_TARGETS["amd64"] / "release/dar"
             binary.parent.mkdir(parents=True)
@@ -57,16 +59,26 @@ class BuildTests(unittest.TestCase):
                 binary.write_bytes(b"replacement binary")
                 Path(command[-1]).write_text("Dependency license and copyright.\n")
 
+            def package_binary(command, **kwargs):
+                self.assertEqual(command[0], str(target / "debug/xtask"))
+                self.assertEqual(command[1:4], ["cli", "artifacts", "package"])
+                self.assertEqual(command[4], str(target / "artifacts"))
+                self.assertEqual(command[command.index("--binary") + 1], str(binary))
+                return json.dumps({"targets": [{"dar_sha256": file_sha256(binary)}]})
+
             with (
                 mock.patch("build_archive.build", return_value=metadata),
                 mock.patch("build_archive.check_source"),
                 mock.patch(
                     "build_archive.subprocess.run", side_effect=replace_binary
                 ),
+                mock.patch(
+                    "build_archive.subprocess.check_output", side_effect=package_binary
+                ),
                 self.assertRaisesRegex(ValueError, "differs from the validated build"),
             ):
                 build_archive.build_archive(
-                    identity, "amd64", target, target / "artifacts"
+                    identity, "amd64", Path("."), Path("artifacts")
                 )
 
     def test_notice_failure_stops_archive_creation(self):
@@ -89,7 +101,7 @@ class BuildTests(unittest.TestCase):
             with (
                 mock.patch("build_archive.build", return_value=identity),
                 mock.patch("build_archive.subprocess.run", side_effect=fail_notices),
-                mock.patch("build_archive.package") as package,
+                mock.patch("build_archive.subprocess.check_output") as package,
                 self.assertRaises(subprocess.CalledProcessError),
             ):
                 build_archive.build_archive(identity, "arm64", target, output)

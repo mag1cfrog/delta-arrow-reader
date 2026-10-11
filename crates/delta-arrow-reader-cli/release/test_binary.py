@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 import check_binary
-from artifacts import file_sha256
+from check_binary import file_sha256
 
 
 def readelf_output(architecture="amd64"):

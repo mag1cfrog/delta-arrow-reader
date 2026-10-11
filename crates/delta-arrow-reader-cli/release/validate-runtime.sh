@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run inside a fresh pinned Debian container with read-only /checks, /artifacts, /package.
+# Mount /checks, /artifacts, /package, and the Debian-built /tools/xtask read-only.
 set -euo pipefail
 : "${CLI_ARCHITECTURE:?}" "${CLI_VERSION:?}" "${CLI_SOURCE_COMMIT:?}" "${CLI_RUST_TOOLCHAIN:?}"
 
@@ -21,6 +21,6 @@ apt-get install -y --no-install-recommends \
 python3 -m venv /tmp/cli-runtime-venv
 /tmp/cli-runtime-venv/bin/python -m pip install --only-binary=:all: 'pyarrow==25.0.1'
 /tmp/cli-runtime-venv/bin/python /checks/crates/delta-arrow-reader-cli/release/run_acceptance.py \
-  /artifacts --extracted /package --smoke-output /tmp/cli-runtime-checks \
+  /artifacts --extracted /package --smoke-output /tmp/cli-runtime-checks --xtask /tools/xtask \
   --architecture "$CLI_ARCHITECTURE" --version "$CLI_VERSION" \
   --source-commit "$CLI_SOURCE_COMMIT" --rust-toolchain "$CLI_RUST_TOOLCHAIN"

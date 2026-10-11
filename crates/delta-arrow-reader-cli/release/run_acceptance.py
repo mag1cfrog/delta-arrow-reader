@@ -7,27 +7,40 @@ import sys
 from pathlib import Path
 
 import pyarrow as pa
-from artifacts import (
-    MANIFEST,
-    MEMBER_MODES,
-    REPOSITORY,
-    RUST_TARGETS,
-    archive_name,
-    build_identity,
-    check_files,
-    check_manifest,
-    file_sha256,
-)
-from check_binary import check_binary
+from build import REPOSITORY, build_identity
+from check_binary import RUST_TARGETS, check_binary, file_sha256, require_regular_file
+
+MEMBER_MODES = {"dar": 0o755, "LICENSE": 0o644, "NOTICE": 0o644}
 
 
-def run_acceptance(directory, extracted, smoke_output, identity, architecture):
-    check_files(directory, [archive_name(identity["version"], architecture), MANIFEST])
-    [target] = check_manifest(directory, identity, [architecture])
-    check_files(extracted, MEMBER_MODES)
+def verify_platform(xtask, directory, identity, architecture):
+    manifest = json.loads(
+        subprocess.check_output(
+            [
+                str(xtask), "cli", "artifacts", "verify", str(directory),
+                "--architecture", architecture, "--version", identity["version"],
+                "--source-commit", identity["source_commit"],
+                "--rust-toolchain", identity["rust_toolchain"],
+            ],
+            text=True,
+        )
+    )
+    [target] = manifest["targets"]
+    return target
+
+
+def run_acceptance(directory, extracted, smoke_output, identity, architecture, xtask):
+    target = verify_platform(xtask, directory, identity, architecture)
+    if (
+        extracted.is_symlink()
+        or not extracted.is_dir()
+        or sorted(path.name for path in extracted.iterdir()) != sorted(MEMBER_MODES)
+    ):
+        raise ValueError("expected only the extracted dar, LICENSE, and NOTICE files")
     if extracted.resolve().is_relative_to(REPOSITORY):
         raise ValueError("the archive must be extracted outside the source checkout")
     for name, mode in MEMBER_MODES.items():
+        require_regular_file(extracted / name)
         if (extracted / name).stat().st_mode & 0o7777 != mode:
             raise ValueError(f"unexpected extracted permissions: {name}")
     binary = (extracted / "dar").resolve()
@@ -70,7 +83,7 @@ def run_acceptance(directory, extracted, smoke_output, identity, architecture):
             check=True,
             timeout=600,
         )
-    check_manifest(directory, identity, [architecture])
+    verify_platform(xtask, directory, identity, architecture)
     if file_sha256(binary) != target["dar_sha256"]:
         raise ValueError("binary changed during acceptance tests")
 
@@ -80,6 +93,7 @@ def main():
     parser.add_argument("directory", type=Path)
     parser.add_argument("--extracted", type=Path, required=True)
     parser.add_argument("--smoke-output", type=Path, required=True)
+    parser.add_argument("--xtask", type=Path, required=True)
     parser.add_argument("--architecture", choices=RUST_TARGETS, required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--source-commit", required=True)
@@ -87,7 +101,8 @@ def main():
     args = parser.parse_args()
     identity = build_identity(args.version, args.source_commit, args.rust_toolchain)
     run_acceptance(
-        args.directory, args.extracted, args.smoke_output, identity, args.architecture
+        args.directory, args.extracted, args.smoke_output, identity, args.architecture,
+        args.xtask,
     )
     print(f"Archive acceptance passed: {args.architecture}")
 

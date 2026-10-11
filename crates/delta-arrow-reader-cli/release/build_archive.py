@@ -1,15 +1,18 @@
 """Build and package one CLI architecture inside the pinned Debian environment."""
 
 import argparse
+import json
 import subprocess
 import tempfile
 from pathlib import Path
 
-from artifacts import REPOSITORY, RUST_TARGETS, build_identity, check_manifest, package
-from build import build, build_environment, check_source
+from build import REPOSITORY, build, build_environment, build_identity, check_source
+from check_binary import RUST_TARGETS
 
 
 def build_archive(identity, architecture, target_dir, output):
+    target_dir = target_dir.absolute()
+    output = output.absolute()
     metadata = build(
         identity["source_commit"],
         architecture,
@@ -34,15 +37,19 @@ def build_archive(identity, architecture, target_dir, output):
         )
         check_source(identity["source_commit"])
         binary = target_dir / RUST_TARGETS[architecture] / "release/dar"
-        package(
-            binary,
-            notices,
-            output,
-            identity,
-            architecture,
-            metadata["runtime_dependencies"],
+        command = [
+            str(target_dir / "debug/xtask"), "cli", "artifacts", "package", str(output),
+            "--binary", str(binary), "--dependency-notices", str(notices),
+            "--architecture", architecture, "--version", identity["version"],
+            "--source-commit", identity["source_commit"],
+            "--rust-toolchain", identity["rust_toolchain"],
+        ]
+        for dependency in metadata["runtime_dependencies"]:
+            command.extend(["--runtime-dependency", dependency])
+        manifest = json.loads(
+            subprocess.check_output(command, cwd=REPOSITORY, text=True)
         )
-    [target] = check_manifest(output, identity, [architecture])
+    [target] = manifest["targets"]
     if target["dar_sha256"] != metadata["dar_sha256"]:
         raise ValueError("packaged binary differs from the validated build")
 

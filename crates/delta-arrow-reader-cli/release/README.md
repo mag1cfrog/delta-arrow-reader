@@ -1,10 +1,10 @@
 # CLI release tools
 
-These tools build and validate the Linux CLI archives. Dependency notice
-collection runs through `cargo xtask`, a Cargo alias for the repository's private
-Rust maintenance crate. The other build and packaging helpers require Python
-3.11 or newer and use the standard library. Runtime acceptance tests also use
-PyArrow.
+These tools build and validate the Linux CLI archives. Archive operations and
+dependency notice collection run through `cargo xtask`, a Cargo alias for the
+repository's private Rust maintenance crate. The binary build helpers require
+Python 3.11 or newer and use the standard library. Runtime acceptance tests also
+use PyArrow.
 
 ## Run the CI build
 
@@ -48,9 +48,9 @@ Within the same workflow run, download that exact artifact with
 [`actions/download-artifact@v6`](https://github.com/actions/download-artifact/tree/v6),
 using either `artifact-ids` or `name` from the outputs. Downloads across runs also
 require `run-id` and `github-token`. Check out the returned source commit and run
-`artifacts.py verify` with the expected version, source SHA, and Rust release
-from the workflow outputs. Intermediate artifacts ending in `-amd64` or `-arm64`
-are inputs to assembly, not complete sets for downstream consumers.
+`cargo xtask cli artifacts verify` with the expected version, source SHA, and Rust
+release from the workflow outputs. Intermediate artifacts ending in `-amd64` or
+`-arm64` are inputs to assembly, not complete sets for downstream consumers.
 
 Actions retention settings apply. Missing, expired, incomplete, or mismatched
 artifacts must stop downstream work. Rerun this builder for the explicit source
@@ -164,14 +164,15 @@ The output directory must not exist. Before execution, extract the validated
 platform archive to a new directory outside the checkout:
 
 ```sh
-python3 crates/delta-arrow-reader-cli/release/artifacts.py extract target/cli-inputs/amd64 \
+target/cli-build/debug/xtask cli artifacts extract target/cli-inputs/amd64 \
   --destination /tmp/dar-amd64-check --architecture amd64 \
   --version "$version" --source-commit "$source_commit" --rust-toolchain "$rust_toolchain"
 ```
 
 Start a fresh pinned Debian container on the matching architecture. Use read-only
 mounts for the source checkout at `/checks`, `target/cli-inputs/amd64` at
-`/artifacts`, and `/tmp/dar-amd64-check` at `/package`. Pass `CLI_ARCHITECTURE=amd64`,
+`/artifacts`, `/tmp/dar-amd64-check` at `/package`, and the Debian-built
+`target/cli-build/debug/xtask` at `/tools/xtask`. Pass `CLI_ARCHITECTURE=amd64`,
 `CLI_SOURCE_COMMIT`, `CLI_VERSION`, and `CLI_RUST_TOOLCHAIN` with those values,
 plus `PYTHONDONTWRITEBYTECODE=1`, and run:
 
@@ -237,7 +238,7 @@ workspace version, full lowercase commit SHA, and exact Rust release version
 (for example, `1.94.0`). The destination must not exist.
 
 ```sh
-python3 crates/delta-arrow-reader-cli/release/artifacts.py package target/cli-inputs/amd64 \
+cargo xtask cli artifacts package target/cli-inputs/amd64 \
   --version "$version" --source-commit "$source_commit" --rust-toolchain "$rust_toolchain" \
   --architecture amd64 --binary "$validated_binary" \
   --dependency-notices "$dependency_notices" \
@@ -251,7 +252,7 @@ names, not Debian package names. The tool sorts the names and rejects duplicates
 
 Use the dependency notices file generated for this build. The packager appends
 it to the repository's `NOTICE` and includes the repository's `LICENSE` unchanged.
-The packager checks only that the supplied text is nonempty; collection and
+The packager requires non-whitespace text; collection and
 dependency coverage checks belong to `cargo xtask cli notices`.
 
 Repeat for `arm64`, using that architecture's validated binary and dependencies.
@@ -267,11 +268,11 @@ Place both platform directories under `target/cli-inputs`, named `amd64` and
 `arm64`. Extra or missing directories and files cause assembly to fail.
 
 ```sh
-python3 crates/delta-arrow-reader-cli/release/artifacts.py assemble target/cli-artifacts \
+cargo xtask cli artifacts assemble target/cli-artifacts \
   --inputs target/cli-inputs \
   --version "$version" --source-commit "$source_commit" --rust-toolchain "$rust_toolchain"
 
-python3 crates/delta-arrow-reader-cli/release/artifacts.py verify target/cli-artifacts \
+cargo xtask cli artifacts verify target/cli-artifacts \
   --version "$version" --source-commit "$source_commit" --rust-toolchain "$rust_toolchain"
 ```
 
@@ -288,6 +289,19 @@ license and notices, metadata, and SHA-256 hashes. Supply the expected identity
 from the requested build, rather than reading it from the downloaded manifest.
 Keep the complete set unchanged when passing it to downstream jobs. A failed
 command may leave an incomplete destination; use a new directory for the retry.
+
+All four artifact commands write the validated manifest as JSON to stdout and
+return a nonzero exit status on failure. To verify a single platform directory,
+add `--architecture amd64` or `--architecture arm64` to `verify`. Without that
+option, `verify` requires the complete four-file set. Extraction requires Unix
+file permissions and refuses an existing destination.
+
+Build xtask from the source checkout used for artifact validation. It embeds
+that checkout's `LICENSE` and `NOTICE`, so the same executable can validate
+archives in the runtime container without a Rust installation. The build workflow
+mounts the Debian-built tool at `/tools/xtask`; it uploads only the public
+archives, manifest, and checksums. The aggregation job runs `cargo xtask` after
+installing the resolved Rust toolchain.
 
 ## Test the build and packaging helpers
 

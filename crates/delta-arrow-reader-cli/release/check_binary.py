@@ -1,6 +1,7 @@
 """Inspect a CLI ELF binary and execute it on its supported Debian 12 platform."""
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -9,14 +10,11 @@ import struct
 import subprocess
 from pathlib import Path
 
-from artifacts import (
-    MIN_GLIBC,
-    RUST_TARGETS,
-    check_runtime_dependencies,
-    file_sha256,
-    require_regular_file,
-)
-
+MIN_GLIBC = "2.36"
+RUST_TARGETS = {
+    "amd64": "x86_64-unknown-linux-gnu",
+    "arm64": "aarch64-unknown-linux-gnu",
+}
 ELF_PLATFORMS = {
     "amd64": {
         "elf_machine": 62,
@@ -30,6 +28,32 @@ ELF_PLATFORMS = {
     },
 }
 RUNTIME_PACKAGES = ["ca-certificates", "libc6", "libgcc-s1"]
+
+
+def file_sha256(path):
+    with path.open("rb") as source:
+        return hashlib.file_digest(source, "sha256").hexdigest()
+
+
+def require_regular_file(path):
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"expected a regular file: {path}")
+
+
+def check_runtime_dependencies(dependencies):
+    if (
+        not isinstance(dependencies, list)
+        or not dependencies
+        or any(
+            not isinstance(name, str)
+            or not re.fullmatch(r"[A-Za-z0-9_+.-]+\.so(?:\.[0-9]+)*", name)
+            for name in dependencies
+        )
+        or dependencies != sorted(set(dependencies))
+    ):
+        raise ValueError(
+            "runtime_dependencies must be sorted, unique ELF library names"
+        )
 
 
 def check_environment(architecture):
