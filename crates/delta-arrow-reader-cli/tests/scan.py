@@ -8,7 +8,6 @@ import json
 import os
 from pathlib import Path
 import shutil
-import signal
 import struct
 import subprocess
 import sys
@@ -35,10 +34,6 @@ class ScanStorage(http.Storage):
         if self.path.endswith(".parquet"):
             with self.server.lock:
                 self.server.data_paths.add(self.path)
-            if self.server.block_data:
-                self.server.held.set()
-                self.wait_for_disconnect(self.server.disconnected)
-                return None
         return super().send_head()
 
 
@@ -82,13 +77,10 @@ class ScanTests(unittest.TestCase):
         return table
 
     @contextlib.contextmanager
-    def storage(self, table, *, block_data=False, handler=ScanStorage):
+    def storage(self, table, *, handler=ScanStorage):
         with http.serve(functools.partial(handler, directory=table)) as server:
             server.lock = threading.Lock()
             server.data_paths = set()
-            server.block_data = block_data
-            server.held = threading.Event()
-            server.disconnected = threading.Event()
             server.url = f"http://127.0.0.1:{server.server_port}/"
             yield server
 
@@ -147,10 +139,6 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(diagnostic["phase"], phase)
         self.assertEqual(diagnostic["code"], code)
         self.assertNotIn(b"secret", stderr)
-
-    def assert_no_children(self, process):
-        for children in Path(f"/proc/{process.pid}/task").glob("*/children"):
-            self.assertEqual(children.read_text().strip(), "")
 
     def test_partition_targets_and_read_capacities_bound_file_requests(self):
         class HeldDataStorage(ScanStorage):
@@ -315,21 +303,6 @@ class ScanTests(unittest.TestCase):
                 self.assertTrue(stdout.endswith(IPC_END))
             finally:
                 release_body.set()
-
-    def test_signals_stop_held_data_requests(self):
-        table = self.repeated_table()
-        for signum in (signal.SIGINT, signal.SIGTERM):
-            with self.subTest(signal=signum), self.storage(table, block_data=True) as server, self.start_scan(
-                server.url, "--storage-options-file", str(self.options),
-            ) as process:
-                self.assertTrue(server.held.wait(10), "data request never started")
-                reader = self.read_with_timeout(process, lambda: pa.ipc.open_stream(process.stdout))
-                self.assertEqual(reader.schema.names, ["id", "value", "label", "region"])
-                self.assert_no_children(process)
-                process.send_signal(signum)
-                self.assertEqual(process.wait(timeout=15), -signum)
-                self.assertEqual(process.stderr.read(), b"")
-                self.assertTrue(server.disconnected.wait(5), "terminated process retained a socket")
 
     def test_scan_exit_does_not_wait_for_blocking_file_prefetch(self):
         table = self.cwd / "prefetch-table"

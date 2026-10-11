@@ -19,9 +19,11 @@ use crate::{
 };
 
 mod blocked_output;
+mod child;
 mod fixtures;
 mod https;
 mod read_failure;
+mod signals;
 
 use fixtures::{FLOAT64_VALUES, create_float64_table, create_repeated_table};
 
@@ -77,6 +79,10 @@ pub(super) fn run(binary: &Path, repository: &Path) -> Result<()> {
         (
             "signals stop a scan blocked on stdout",
             ScanFixture::check_signals_during_blocked_output,
+        ),
+        (
+            "signals stop held data requests",
+            ScanFixture::check_signals_during_held_data_requests,
         ),
     ];
     for (name, check) in checks {

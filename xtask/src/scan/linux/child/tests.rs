@@ -1,4 +1,10 @@
-use rustix::event::{PollFd, PollFlags, Timespec, poll};
+use std::io::Write;
+
+use arrow_ipc::writer::StreamWriter;
+use arrow_schema::{ArrowError, DataType, Field, Schema};
+use rustix::process::Pid;
+
+use crate::process::check_no_child_processes;
 
 use super::*;
 
@@ -86,5 +92,82 @@ fn waiting_for_blocked_output_times_out_for_an_idle_child() -> TestResult {
         matches!(result, Err(crate::error::Error::InvalidInput { message }) if message.contains("before the deadline"))
     );
     assert!(start.elapsed() < Duration::from_secs(5));
+    Ok(())
+}
+
+#[test]
+fn reads_schema_before_the_child_writes_any_batches_or_exits() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("schema.arrow");
+    let schema = Schema::new(vec![Field::new("id", DataType::Int32, false)]);
+    drop(StreamWriter::try_new(File::create(&path)?, &schema)?);
+    let mut command = Command::new("sh");
+    command
+        .args(["-c", "cat \"$1\"; exec sleep 30", "schema-fixture"])
+        .arg(path);
+    let mut process = ScanProcess::start(command)?;
+    assert_eq!(*process.read_schema(Duration::from_secs(5))?, schema);
+    assert!(process.child.try_wait()?.is_none());
+    Ok(())
+}
+
+#[test]
+fn schema_reads_time_out_when_a_writer_stalls() -> TestResult {
+    let schema = Schema::new(vec![Field::new("id", DataType::Int32, false)]);
+    let mut encoded = Vec::new();
+    drop(StreamWriter::try_new(&mut encoded, &schema)?);
+    for prefix in [&encoded[..0], &encoded[..4], &encoded[..8]] {
+        let (mut pipe, mut writer) = io::pipe()?;
+        writer.write_all(prefix)?;
+        let start = Instant::now();
+        let reader = PipeReaderWithDeadline {
+            pipe: &mut pipe,
+            deadline: start + Duration::from_millis(50),
+        };
+        let error =
+            StreamReader::try_new(reader, None).expect_err("incomplete schema must time out");
+        assert!(
+            matches!(error, ArrowError::IoError(_, source) if source.kind() == io::ErrorKind::TimedOut)
+        );
+        assert!(start.elapsed() < Duration::from_secs(5));
+    }
+    Ok(())
+}
+
+#[test]
+fn schema_reads_report_early_eof_without_waiting_for_the_deadline() -> TestResult {
+    for prefix in [b"".as_slice(), b"\xff\xff\xff\xff"] {
+        let (mut pipe, mut writer) = io::pipe()?;
+        writer.write_all(prefix)?;
+        drop(writer);
+        let reader = PipeReaderWithDeadline {
+            pipe: &mut pipe,
+            deadline: Instant::now() + Duration::from_secs(5),
+        };
+        let error = StreamReader::try_new(reader, None).expect_err("missing schema must fail");
+        assert!(
+            !matches!(error, ArrowError::IoError(_, source) if source.kind() == io::ErrorKind::TimedOut)
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn pipe_reads_share_one_deadline_even_when_more_bytes_are_ready() -> TestResult {
+    let (mut pipe, mut writer) = io::pipe()?;
+    writer.write_all(b"abc")?;
+    let mut reader = PipeReaderWithDeadline {
+        pipe: &mut pipe,
+        deadline: Instant::now() + Duration::from_millis(200),
+    };
+    let mut byte = [0];
+    reader.read_exact(&mut byte)?;
+    assert_eq!(&byte, b"a");
+    thread::sleep(Duration::from_millis(250));
+    assert_eq!(
+        reader.read(&mut byte).unwrap_err().kind(),
+        io::ErrorKind::TimedOut
+    );
+    assert_eq!(reader.read(&mut [])?, 0);
     Ok(())
 }
