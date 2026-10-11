@@ -773,7 +773,9 @@ impl DeltaScan {
                         None,
                     )
                 }
-                ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.plan),
+                ParquetReaderBackend::DeltaKernel => {
+                    delta_kernel_executor(&self.plan, self.range_read_estimator)
+                }
             };
             scheduler.partition_streams(admission, executor)
         };
@@ -941,8 +943,9 @@ impl Drop for DeltaBatchStream {
 
 pub(crate) fn delta_kernel_executor(
     plan: &Arc<DeltaScanPlan>,
+    range_read_estimator: Arc<ParquetRangeReadEstimator>,
 ) -> FileExecutor<planning::DeltaScanFileTask, FileBatchStream> {
-    backend::kernel_reader::delta_kernel_file_executor(plan)
+    backend::kernel_reader::delta_kernel_file_executor(plan, range_read_estimator)
 }
 
 fn trace_planning_started(

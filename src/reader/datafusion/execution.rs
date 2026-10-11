@@ -654,7 +654,9 @@ impl ExecutionPlan for DeltaScanExec {
                 Arc::clone(&self.range_read_estimator),
                 self.parquet_metadata_cache.clone(),
             ),
-            ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.reader_plan),
+            ParquetReaderBackend::DeltaKernel => {
+                delta_kernel_executor(&self.reader_plan, Arc::clone(&self.range_read_estimator))
+            }
         };
         let stream = DeltaScanScheduler::new_with_limiter(
             Arc::clone(&self.reader_plan),

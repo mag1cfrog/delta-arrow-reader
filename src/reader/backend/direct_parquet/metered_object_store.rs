@@ -60,13 +60,13 @@ pub(crate) struct ParquetRangeReadEstimator {
     partial_range_store: Option<Arc<dyn ObjectStore>>,
 }
 
-struct ActiveRead {
+pub(in crate::reader) struct ActiveRead {
     activity: Arc<Mutex<ReadActivity>>,
     isolated_epoch: Option<u64>,
 }
 
 impl ActiveRead {
-    fn can_sample(&self) -> bool {
+    pub(in crate::reader) fn can_sample(&self) -> bool {
         // A new read changes the epoch even if it finishes before this one.
         self.isolated_epoch
             == Some(
@@ -190,6 +190,10 @@ impl MeteredParquetObjectStore {
     ) -> Self {
         self.range_read_estimator = range_read_estimator;
         self
+    }
+
+    pub(super) fn range_read_estimator(&self) -> &Arc<ParquetRangeReadEstimator> {
+        &self.range_read_estimator
     }
 
     async fn get_with_metrics(
@@ -590,7 +594,7 @@ impl ParquetRangeReadEstimator {
         }
     }
 
-    fn start_read(&self) -> ActiveRead {
+    pub(in crate::reader) fn start_read(&self) -> ActiveRead {
         let mut activity = self
             .activity
             .lock()

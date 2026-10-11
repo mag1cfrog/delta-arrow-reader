@@ -536,6 +536,7 @@ impl DirectParquetReader {
             &self.engine_context,
             request.task.deletion_vector.clone(),
             &self.metrics,
+            self.store.range_read_estimator(),
         )
         .await?;
         if request.cancellation.is_cancelled() {
@@ -1295,6 +1296,124 @@ pub(in crate::reader) mod tests {
         Ok(())
     }
 
+    async fn gated_recovery_table(
+        backend: ParquetReaderBackend,
+    ) -> Result<(crate::DeltaTable, Arc<GatedObjectStore>, TestDir), Box<dyn std::error::Error>>
+    {
+        let root = TestDir::new("recovery-kernel-reads")?;
+        let file = parquet_bytes_for(
+            Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)])),
+            vec![Arc::new(Int32Array::from(vec![1, 2, 3, 4, 5, 6]))],
+        )?;
+        let request = if backend == ParquetReaderBackend::Direct {
+            write_partitioned_dv_table(&root, &file)?;
+            GateRequest::File(DV_FILE)
+        } else {
+            write_partitioned_non_dv_table(&root, &file)?;
+            GateRequest::Range(0)
+        };
+        let store = GatedObjectStore::new(
+            Arc::new(object_store::local::LocalFileSystem::new_with_prefix(
+                root.path(),
+            )?),
+            request,
+        );
+        static NEXT_STORE: AtomicUsize = AtomicUsize::new(0);
+        let scheme = format!(
+            "darrecovery{}x{}",
+            std::process::id(),
+            NEXT_STORE.fetch_add(1, Ordering::Relaxed)
+        );
+        let weak = Arc::downgrade(&store);
+        crate::delta::kernel::insert_url_handler(
+            &scheme,
+            Arc::new(move |_, _| {
+                let store = weak.upgrade().ok_or_else(|| ObjectStoreError::Generic {
+                    store: "recovery-test-store",
+                    source: io::Error::other("store was released").into(),
+                })?;
+                Ok((Box::new(store), Path::from("")))
+            }),
+        )?;
+        let table = crate::DeltaTableBuilder::new(format!("{scheme}://table/"))
+            .with_warmup(crate::WarmupMode::None)
+            .load_table()
+            .await?;
+        Ok((table, store, root))
+    }
+
+    #[tokio::test]
+    async fn network_recovery_rejects_dv_and_kernel_reads_even_after_cancellation()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use futures_util::TryStreamExt;
+
+        for backend in [
+            ParquetReaderBackend::Direct,
+            ParquetReaderBackend::DeltaKernel,
+        ] {
+            for cancel in [false, true] {
+                let (table, gate, _root) = gated_recovery_table(backend).await?;
+                let original = table.range_read_estimator();
+                let (warmup, calibration) = network_warmup_fixture().await?;
+                table.range_read_state.defer_network_warmup(warmup).await;
+                let options = DeltaScanExecutionOptions::default().with_parquet_backend(backend);
+                let scan = table.scan().with_execution_options(options).build().await?;
+                if backend == ParquetReaderBackend::DeltaKernel {
+                    gate.gate_next_range();
+                }
+                let mut read = Box::pin(scan.into_stream().try_collect::<Vec<_>>());
+                let started = tokio::select! {
+                    result = &mut read => {
+                        gate.release.add_permits(1);
+                        return Err(format!("query completed before the gated read: {result:?}").into());
+                    }
+                    result = tokio::time::timeout(Duration::from_secs(5), gate.wait_started()) => result
+                };
+                if let Err(error) = started {
+                    gate.release.add_permits(1);
+                    return Err(error.into());
+                }
+                let read = if cancel {
+                    drop(read);
+                    None
+                } else {
+                    Some(read)
+                };
+                let recovered_scan = table
+                    .scan()
+                    .with_predicate(crate::DeltaPredicate::Compare {
+                        column: "id".into(),
+                        op: crate::DeltaComparison::Gt,
+                        value: crate::DeltaScalar::Int32(1),
+                    })
+                    .build()
+                    .await;
+                let published = !Arc::ptr_eq(&original, &table.range_read_estimator());
+                // Release blocked workers before any assertion can fail the test.
+                gate.release.add_permits(1);
+                if let Some(read) = read {
+                    let batches = tokio::time::timeout(Duration::from_secs(5), read).await??;
+                    let expected = if backend == ParquetReaderBackend::Direct {
+                        vec![1, 2, 3, 4, 6]
+                    } else {
+                        vec![1, 2, 3, 4, 5, 6]
+                    };
+                    assert_eq!(int32_ids(&batches)?, expected);
+                }
+                tokio::time::timeout(Duration::from_secs(5), async {
+                    while !original.start_read().can_sample() {
+                        tokio::task::yield_now().await;
+                    }
+                })
+                .await?;
+                let _ = recovered_scan?;
+                assert!(!published, "{backend:?}, cancelled={cancel}");
+                assert_eq!(calibration.range_call_count(), 12);
+            }
+        }
+        Ok(())
+    }
+
     pub(super) struct TestDir(PathBuf);
 
     impl TestDir {
@@ -1323,11 +1442,13 @@ pub(in crate::reader) mod tests {
     pub(super) enum GateRequest {
         FullGet,
         Range(usize),
+        File(&'static str),
     }
 
     pub(in crate::reader) struct GatedObjectStore {
         inner: Arc<dyn ObjectStore>,
         gate_full_get: bool,
+        gate_file: Option<&'static str>,
         range_target: AtomicUsize,
         fail_range_target: AtomicUsize,
         corrupt_range_target: AtomicUsize,
@@ -1340,13 +1461,15 @@ pub(in crate::reader) mod tests {
 
     impl GatedObjectStore {
         pub(super) fn new(inner: Arc<dyn ObjectStore>, request: GateRequest) -> Arc<Self> {
-            let (gate_full_get, range_target) = match request {
-                GateRequest::FullGet => (true, 0),
-                GateRequest::Range(target) => (false, target),
+            let (gate_full_get, range_target, gate_file) = match request {
+                GateRequest::FullGet => (true, 0, None),
+                GateRequest::Range(target) => (false, target, None),
+                GateRequest::File(path) => (false, 0, Some(path)),
             };
             Arc::new(Self {
                 inner,
                 gate_full_get,
+                gate_file,
                 range_target: AtomicUsize::new(range_target),
                 fail_range_target: AtomicUsize::new(0),
                 corrupt_range_target: AtomicUsize::new(0),
@@ -1471,6 +1594,8 @@ pub(in crate::reader) mod tests {
             }
             let should_gate = if options.head {
                 false
+            } else if self.gate_file == Some(location.as_ref()) {
+                true
             } else if let Some(call) = range_call {
                 !self.gate_full_get && self.range_target.load(Ordering::Acquire) == call
             } else {
@@ -2012,7 +2137,7 @@ pub(in crate::reader) mod tests {
         plan: Arc<crate::reader::planning::DeltaScanPlan>,
     ) -> Result<Vec<RecordBatch>, DeltaReaderError> {
         let scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
-        let executor = delta_kernel_file_executor(&plan);
+        let executor = delta_kernel_file_executor(&plan, Arc::default());
         let mut batches = Vec::new();
         for partition in 0..plan.partitions.len() {
             let mut stream = scheduler.partition_stream(
@@ -3965,7 +4090,7 @@ pub(in crate::reader) mod tests {
         let stream = scheduler.partition_stream(
             0,
             Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
-            delta_kernel_file_executor(&plan),
+            delta_kernel_file_executor(&plan, Arc::default()),
         )?;
 
         drop(stream);
@@ -4309,15 +4434,12 @@ pub(in crate::reader) mod tests {
 
             let metrics = plan.metrics.snapshot();
             assert_eq!(metrics.parquet_data_file_bytes_received, Some(0));
-            match gate_request {
-                GateRequest::FullGet => {
-                    assert_eq!(metrics.parquet_data_file_full_get_operations, Some(1));
-                    assert_eq!(metrics.parquet_data_file_range_get_operations, Some(0));
-                }
-                GateRequest::Range(_) => {
-                    assert_eq!(metrics.parquet_data_file_full_get_operations, Some(0));
-                    assert_eq!(metrics.parquet_data_file_range_get_operations, Some(1));
-                }
+            if matches!(gate_request, GateRequest::FullGet) {
+                assert_eq!(metrics.parquet_data_file_full_get_operations, Some(1));
+                assert_eq!(metrics.parquet_data_file_range_get_operations, Some(0));
+            } else {
+                assert_eq!(metrics.parquet_data_file_full_get_operations, Some(0));
+                assert_eq!(metrics.parquet_data_file_range_get_operations, Some(1));
             }
         }
         Ok(())
