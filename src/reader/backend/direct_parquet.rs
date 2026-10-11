@@ -134,9 +134,14 @@ impl NetworkWarmupPlan {
                 == crate::reader::ParquetRangeReadPolicy::Automatic
     }
 
-    pub(crate) async fn run(&self, phase: &'static str) -> Option<Arc<ParquetRangeReadEstimator>> {
+    pub(crate) async fn run(
+        &self,
+        phase: &'static str,
+        previous_estimator: &ParquetRangeReadEstimator,
+    ) -> Option<Arc<ParquetRangeReadEstimator>> {
         let estimator = Arc::new(
-            ParquetRangeReadEstimator::for_network_warmup()
+            previous_estimator
+                .for_network_warmup()
                 .with_partial_range_store(Arc::clone(&self.partial_read_store)),
         );
         let metrics = DeltaScanMetrics::new(DeltaScanMetricsConfig {
@@ -987,7 +992,7 @@ fn cancelled_error() -> DeltaReaderError {
 }
 
 #[cfg(test)]
-mod tests {
+pub(in crate::reader) mod tests {
     use std::{
         collections::HashMap,
         fmt,
@@ -1076,27 +1081,25 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn network_warmup_recovers_once_and_concurrent_queries_share_it()
-    -> Result<(), Box<dyn std::error::Error>> {
+    pub(in crate::reader) async fn network_warmup_fixture()
+    -> Result<(NetworkWarmupPlan, Arc<GatedObjectStore>), Box<dyn std::error::Error>> {
         let memory = InMemory::new();
         let path = Path::from("data.parquet");
         let size = 8 * 1024 * 1024;
         memory
             .put(&path, bytes::Bytes::from(vec![0; size]).into())
             .await?;
-        let throttled = Arc::new(ThrottledStore::new(
-            memory.clone(),
+        let store = GatedObjectStore::ungated(Arc::new(ThrottledStore::new(
+            memory,
             ThrottleConfig {
                 wait_get_per_call: Duration::from_millis(1),
                 wait_get_per_byte: Duration::from_nanos(20),
                 ..Default::default()
             },
-        ));
-        let gated = GatedObjectStore::new(throttled, GateRequest::Range(1));
+        )));
         let plan = NetworkWarmupPlan {
-            object_store: gated.clone(),
-            partial_read_store: gated.clone(),
+            object_store: store.clone(),
+            partial_read_store: store.clone(),
             files: vec![(path, size as u64)],
             snapshot_version: 1,
             max_duration: Duration::from_secs(2),
@@ -1104,136 +1107,154 @@ mod tests {
                 super::range_planning::MAX_SHARED_RANGE_READS,
             ))),
         };
+        Ok((plan, store))
+    }
 
-        assert!(plan.run("initialization").await.is_none());
-        assert!(gated.was_cancelled());
-        let requests_after_timeout = gated.range_calls.load(Ordering::Acquire);
-
-        let state = Arc::new(ParquetRangeReadState::default());
-        state.defer_network_warmup(plan).await;
-        let disabled =
-            DeltaScanExecutionOptions::default().with_experimental_intra_page_reads(false);
-        state.recover_network_warmup(disabled).await;
-        assert_eq!(
-            gated.range_calls.load(Ordering::Acquire),
-            requests_after_timeout,
-            "an opted-out query must leave recovery pending"
+    #[tokio::test]
+    async fn network_warmup_recovers_once_and_concurrent_queries_share_it()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (plan, gated) = network_warmup_fixture().await?;
+        let state = ParquetRangeReadState::default();
+        let original_estimator = state.estimator();
+        gated.gate_next_range();
+        assert!(
+            plan.run("initialization", &original_estimator)
+                .await
+                .is_none()
         );
+        assert!(gated.was_cancelled());
+        tokio::time::timeout(Duration::from_secs(5), gated.wait_started()).await?;
+        let requests_after_timeout = gated.range_call_count();
+        state.defer_network_warmup(plan).await;
+        for options in [
+            DeltaScanExecutionOptions::default().with_experimental_intra_page_reads(false),
+            DeltaScanExecutionOptions::default()
+                .with_parquet_backend(ParquetReaderBackend::DeltaKernel),
+            DeltaScanExecutionOptions::default()
+                .with_parquet_range_read_policy(crate::reader::ParquetRangeReadPolicy::ExactRanges),
+        ] {
+            state.recover_network_warmup(options).await;
+            assert_eq!(gated.range_call_count(), requests_after_timeout);
+        }
 
         gated.gate_next_range();
-        let first = tokio::spawn({
-            let state = Arc::clone(&state);
-            async move {
-                state
-                    .recover_network_warmup(DeltaScanExecutionOptions::default())
-                    .await;
-            }
-        });
-        let second = tokio::spawn({
-            let state = Arc::clone(&state);
-            async move {
-                state
-                    .recover_network_warmup(DeltaScanExecutionOptions::default())
-                    .await;
-            }
-        });
+        let first = state.recover_network_warmup(DeltaScanExecutionOptions::default());
+        let second = state.recover_network_warmup(DeltaScanExecutionOptions::default());
+        tokio::pin!(first, second);
+        assert!(futures_util::poll!(&mut first).is_pending());
         tokio::time::timeout(Duration::from_secs(5), gated.wait_started()).await?;
+        assert!(futures_util::poll!(&mut second).is_pending());
+        assert!(Arc::ptr_eq(&original_estimator, &state.estimator()));
         gated.release.add_permits(1);
-        first.await?;
-        second.await?;
+        first.await;
+        second.await;
 
-        let requests_after_recovery = gated.range_calls.load(Ordering::Acquire);
+        let requests_after_recovery = gated.range_call_count();
         assert_eq!(requests_after_recovery, requests_after_timeout + 3_084);
+        let recovered = state.estimator();
+        assert!(!Arc::ptr_eq(&original_estimator, &recovered));
         state
             .recover_network_warmup(DeltaScanExecutionOptions::default())
             .await;
-        assert_eq!(
-            gated.range_calls.load(Ordering::Acquire),
-            requests_after_recovery,
-            "repeated queries must not rerun recovery"
-        );
+        assert_eq!(gated.range_call_count(), requests_after_recovery);
+        assert!(Arc::ptr_eq(&recovered, &state.estimator()));
+        let store = MeteredParquetObjectStore::new(
+            gated,
+            metrics(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        )
+        .with_range_read_estimator(recovered);
+        assert!(store.transport_estimate().is_some());
+        assert!(store.request_overhead_bytes().is_some());
+        Ok(())
+    }
 
-        let failing = GatedObjectStore::ungated(Arc::new(memory.clone()));
-        failing.fail_range(1);
-        let failed_plan = NetworkWarmupPlan {
-            object_store: failing.clone(),
-            partial_read_store: failing.clone(),
-            files: vec![(Path::from("data.parquet"), size as u64)],
-            snapshot_version: 1,
-            max_duration: Duration::from_secs(2),
-            range_read_budget: Box::leak(Box::new(tokio::sync::Semaphore::new(
-                super::range_planning::MAX_SHARED_RANGE_READS,
-            ))),
-        };
-        assert!(failed_plan.run("initialization").await.is_none());
-        let failed_state = ParquetRangeReadState::default();
-        failed_state.defer_network_warmup(failed_plan).await;
-        failing.fail_range(failing.range_calls.load(Ordering::Acquire) + 1);
-        failed_state
-            .recover_network_warmup(DeltaScanExecutionOptions::default())
-            .await;
-        let requests_after_failed_recovery = failing.range_calls.load(Ordering::Acquire);
-        failed_state
-            .recover_network_warmup(DeltaScanExecutionOptions::default())
-            .await;
-        assert_eq!(
-            failing.range_calls.load(Ordering::Acquire),
-            requests_after_failed_recovery,
-            "a permanent failure must not retry on every query"
-        );
-
-        let cancelled = GatedObjectStore::new(Arc::new(memory.clone()), GateRequest::Range(1));
-        let cancelled_budget: &'static tokio::sync::Semaphore = Box::leak(Box::new(
-            tokio::sync::Semaphore::new(super::range_planning::MAX_SHARED_RANGE_READS),
-        ));
-        let cancelled_state = Arc::new(ParquetRangeReadState::default());
-        cancelled_state
-            .defer_network_warmup(NetworkWarmupPlan {
-                object_store: cancelled.clone(),
-                partial_read_store: cancelled.clone(),
-                files: vec![(Path::from("data.parquet"), size as u64)],
-                snapshot_version: 1,
-                max_duration: Duration::from_secs(2),
-                range_read_budget: cancelled_budget,
-            })
-            .await;
-        let recovery = tokio::spawn({
-            let state = Arc::clone(&cancelled_state);
-            async move {
+    #[tokio::test]
+    async fn failed_or_cancelled_network_recovery_keeps_the_previous_profile()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for cancel in [false, true] {
+            let (plan, store) = network_warmup_fixture().await?;
+            let budget = plan.range_read_budget;
+            let state = ParquetRangeReadState::default();
+            let original_estimator = state.estimator();
+            state.defer_network_warmup(plan).await;
+            if cancel {
+                store.gate_next_range();
+                let mut recovery =
+                    Box::pin(state.recover_network_warmup(DeltaScanExecutionOptions::default()));
+                assert!(futures_util::poll!(&mut recovery).is_pending());
+                tokio::time::timeout(Duration::from_secs(5), store.wait_started()).await?;
+                drop(recovery);
+                assert!(store.was_cancelled());
+            } else {
+                store.fail_range(1);
                 state
                     .recover_network_warmup(DeltaScanExecutionOptions::default())
                     .await;
             }
-        });
-        tokio::time::timeout(Duration::from_secs(5), cancelled.wait_started()).await?;
-        recovery.abort();
-        let cancellation = recovery
-            .await
-            .expect_err("aborted recovery unexpectedly completed");
-        assert!(cancellation.is_cancelled());
-        assert!(cancelled.was_cancelled());
-        assert_eq!(
-            cancelled_budget.available_permits(),
-            super::range_planning::MAX_SHARED_RANGE_READS
-        );
-        let requests_after_cancellation = cancelled.range_calls.load(Ordering::Acquire);
-        cancelled_state
-            .recover_network_warmup(DeltaScanExecutionOptions::default())
-            .await;
-        assert_eq!(
-            cancelled.range_calls.load(Ordering::Acquire),
-            requests_after_cancellation,
-            "a cancelled recovery must not retry on the next query"
-        );
+            assert_eq!(
+                budget.available_permits(),
+                super::range_planning::MAX_SHARED_RANGE_READS
+            );
+            let requests = store.range_call_count();
+            state
+                .recover_network_warmup(DeltaScanExecutionOptions::default())
+                .await;
+            assert_eq!(store.range_call_count(), requests);
+            assert!(Arc::ptr_eq(&original_estimator, &state.estimator()));
+        }
+        Ok(())
+    }
 
-        let store = MeteredParquetObjectStore::new(
-            Arc::new(memory),
+    #[tokio::test]
+    async fn network_recovery_rejects_samples_overlapping_an_existing_scan()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (plan, calibration) = network_warmup_fixture().await?;
+        let budget = plan.range_read_budget;
+        let peer = GatedObjectStore::new(Arc::clone(&calibration.inner), GateRequest::Range(1));
+        calibration.range_target.store(9, Ordering::Release);
+        let state = ParquetRangeReadState::default();
+        let original_estimator = state.estimator();
+        let existing_scan = MeteredParquetObjectStore::new(
+            peer.clone(),
             metrics(),
             MultiRangeReadStrategy::ChooseAutomatically,
         )
-        .with_range_read_estimator(state.estimator());
-        assert!(store.transport_estimate().is_some());
-        assert!(store.request_overhead_bytes().is_some());
+        .with_range_read_estimator(Arc::clone(&original_estimator));
+        let path = plan.files[0].0.clone();
+        let ranges: Vec<_> = std::iter::once(0..1_048_576).collect();
+        let scan = existing_scan.get_ranges(&path, &ranges);
+        tokio::pin!(scan);
+        tokio::select! {
+            _ = &mut scan => panic!("existing range read completed before release"),
+            result = tokio::time::timeout(Duration::from_secs(5), peer.wait_started()) => result?
+        }
+        state.defer_network_warmup(plan).await;
+        let recovery = state.recover_network_warmup(DeltaScanExecutionOptions::default());
+        tokio::pin!(recovery);
+        tokio::select! {
+            _ = &mut recovery => panic!("recovery completed before the third bandwidth sample"),
+            result = tokio::time::timeout(Duration::from_secs(5), calibration.wait_started()) => result?
+        }
+        // The existing scan overlaps the first two complete bandwidth samples.
+        peer.release.add_permits(1);
+        scan.await?;
+        calibration.release.add_permits(1);
+        recovery.await;
+        assert_eq!(
+            budget.available_permits(),
+            super::range_planning::MAX_SHARED_RANGE_READS
+        );
+        assert!(Arc::ptr_eq(&original_estimator, &state.estimator()));
+        let requests = calibration.range_call_count();
+        assert_eq!(
+            requests, 12,
+            "contended bandwidth samples must stop calibration"
+        );
+        state
+            .recover_network_warmup(DeltaScanExecutionOptions::default())
+            .await;
+        assert_eq!(calibration.range_call_count(), requests);
         Ok(())
     }
 
@@ -1267,7 +1288,7 @@ mod tests {
         Range(usize),
     }
 
-    pub(super) struct GatedObjectStore {
+    pub(in crate::reader) struct GatedObjectStore {
         inner: Arc<dyn ObjectStore>,
         gate_full_get: bool,
         range_target: AtomicUsize,
@@ -1316,6 +1337,10 @@ mod tests {
             self.cancelled.load(Ordering::Acquire)
         }
 
+        pub(in crate::reader) fn range_call_count(&self) -> usize {
+            self.range_calls.load(Ordering::Acquire)
+        }
+
         fn multi_range_call_count(&self) -> usize {
             self.multi_range_calls.load(Ordering::Acquire)
         }
@@ -1331,7 +1356,7 @@ mod tests {
             self.fail_range(self.range_calls.load(Ordering::Acquire) + 1);
         }
 
-        pub(super) fn fail_range(&self, range: usize) {
+        pub(in crate::reader) fn fail_range(&self, range: usize) {
             self.fail_range_target.store(range, Ordering::Release);
         }
 

@@ -54,12 +54,13 @@ pub(crate) struct MeteredParquetObjectStore {
 #[derive(Default)]
 pub(crate) struct ParquetRangeReadEstimator {
     samples: Mutex<TransportSampleWindows>,
+    activity: Arc<Mutex<RangeReadActivity>>,
     require_isolated_reads: bool,
     partial_range_store: Option<Arc<dyn ObjectStore>>,
 }
 
 struct ActiveRangeRead<'a> {
-    estimator: &'a ParquetRangeReadEstimator,
+    activity: &'a Mutex<RangeReadActivity>,
     isolated_epoch: Option<u64>,
 }
 
@@ -68,8 +69,7 @@ impl ActiveRangeRead<'_> {
         // A new read changes the epoch even if it finishes before this one.
         self.isolated_epoch
             == Some(
-                self.estimator
-                    .samples
+                self.activity
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .read_epoch,
@@ -79,8 +79,7 @@ impl ActiveRangeRead<'_> {
 
 impl Drop for ActiveRangeRead<'_> {
     fn drop(&mut self) {
-        self.estimator
-            .samples
+        self.activity
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .active_reads -= 1;
@@ -92,6 +91,10 @@ struct TransportSampleWindows {
     latencies: VecDeque<Duration>,
     throughputs: VecDeque<ThroughputSample>,
     request_overheads: VecDeque<Duration>,
+}
+
+#[derive(Default)]
+struct RangeReadActivity {
     active_reads: usize,
     read_epoch: u64,
 }
@@ -542,24 +545,25 @@ impl ParquetRangeReadEstimator {
         self
     }
 
-    /// Initialization samples measure shared capacity before any file tasks are running.
-    pub(super) fn for_network_warmup() -> Self {
+    /// Fresh samples still share activity with scans using the previous profile.
+    pub(super) fn for_network_warmup(&self) -> Self {
         Self {
+            activity: Arc::clone(&self.activity),
             require_isolated_reads: true,
             ..Self::default()
         }
     }
 
     fn start_read(&self) -> ActiveRangeRead<'_> {
-        let mut samples = self
-            .samples
+        let mut activity = self
+            .activity
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        samples.read_epoch = samples.read_epoch.wrapping_add(1);
-        let isolated_epoch = (samples.active_reads == 0).then_some(samples.read_epoch);
-        samples.active_reads += 1;
+        activity.read_epoch = activity.read_epoch.wrapping_add(1);
+        let isolated_epoch = (activity.active_reads == 0).then_some(activity.read_epoch);
+        activity.active_reads += 1;
         ActiveRangeRead {
-            estimator: self,
+            activity: &self.activity,
             isolated_epoch,
         }
     }
@@ -1120,8 +1124,9 @@ mod tests {
             direct_metrics(),
             MultiRangeReadStrategy::ChooseAutomatically,
         );
-        let store = store
-            .with_range_read_estimator(Arc::new(ParquetRangeReadEstimator::for_network_warmup()));
+        let store = store.with_range_read_estimator(Arc::new(
+            ParquetRangeReadEstimator::default().for_network_warmup(),
+        ));
         assert!(!store.warmup(&[], &budget).await?);
         assert!(!store.warmup(&[(path.clone(), 1)], &budget).await?);
         let files = [(path.clone(), size as u64)];
@@ -1140,8 +1145,10 @@ mod tests {
         // Planning and request overhead both use shared capacity, regardless of
         // how many files are reading. Overlapping plans cannot recalibrate it.
         let overhead = store.request_overhead_bytes().unwrap();
+        let next_profile = store.range_read_estimator.for_network_warmup();
+        assert!(next_profile.current_transport_estimate().estimate.is_none());
         let first = store.range_read_estimator.start_read();
-        let second = store.range_read_estimator.start_read();
+        let second = next_profile.start_read();
         let shared = store.transport_estimate().unwrap();
         assert_eq!(shared, estimate);
         assert!(!first.can_sample());
@@ -1162,6 +1169,7 @@ mod tests {
         );
         drop(first);
         assert!(store.range_read_estimator.start_read().can_sample());
+        assert!(next_profile.start_read().can_sample());
         assert_eq!(store.transport_estimate(), Some(estimate));
         // Transport evidence alone is incomplete when all small-request
         // observations overlap another read and must be discarded.
@@ -1170,7 +1178,9 @@ mod tests {
             direct_metrics(),
             MultiRangeReadStrategy::ChooseAutomatically,
         )
-        .with_range_read_estimator(Arc::new(ParquetRangeReadEstimator::for_network_warmup()));
+        .with_range_read_estimator(Arc::new(
+            ParquetRangeReadEstimator::default().for_network_warmup(),
+        ));
         contended.seed_transport_estimate(estimate);
         let _peer = contended.range_read_estimator.start_read();
         assert!(!contended.warmup(&files, &budget).await?);
@@ -1196,7 +1206,7 @@ mod tests {
         assert_eq!(
             stalled
                 .range_read_estimator
-                .samples
+                .activity
                 .lock()
                 .unwrap()
                 .active_reads,
@@ -1731,7 +1741,9 @@ mod tests {
             MultiRangeReadStrategy::ChooseAutomatically,
         )
         .with_range_read_estimator(Arc::new(
-            ParquetRangeReadEstimator::for_network_warmup().with_partial_range_store(gated.clone()),
+            ParquetRangeReadEstimator::default()
+                .for_network_warmup()
+                .with_partial_range_store(gated.clone()),
         ));
         let ranges = [0..1, 2..3, 4..5, 6..7];
         let budget = Semaphore::new(4);

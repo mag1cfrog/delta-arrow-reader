@@ -252,7 +252,10 @@ impl DeltaTableBuilder {
                 max_duration,
             )
         {
-            match plan.run("initialization").await {
+            match plan
+                .run("initialization", &table.range_read_estimator())
+                .await
+            {
                 Some(estimator) => table.range_read_state.set_estimator(estimator),
                 None => table.range_read_state.defer_network_warmup(plan).await,
             }
@@ -419,7 +422,7 @@ impl ParquetRangeReadState {
             return;
         };
         // Keep the lock through the attempt so concurrent scans share its result.
-        if let Some(estimator) = plan.run("recovery").await {
+        if let Some(estimator) = plan.run("recovery", &self.estimator()).await {
             self.set_estimator(estimator);
         }
     }
@@ -601,7 +604,11 @@ impl<'table> DeltaScanBuilder<'table> {
         self
     }
 
-    /// Builds one immutable single-use scan plan without reading data files.
+    /// Builds one immutable single-use scan plan.
+    ///
+    /// Planning loads Delta metadata. If network warmup did not finish during table loading,
+    /// an eligible filtered scan also makes one bounded recovery attempt. See [`WarmupMode`].
+    /// Reads that produce query results begin when the scan's stream is polled.
     pub async fn build(self) -> Result<DeltaScan, DeltaReaderError> {
         self.table.validate_protocol()?;
         if let Some(predicate) = self.predicate.as_ref() {
@@ -741,7 +748,8 @@ impl DeltaScan {
 
     /// Converts the scan into a pull-driven Arrow batch stream.
     ///
-    /// Data-file reads begin only when the stream is polled.
+    /// Reads for query results begin when the stream is polled. Network warmup may already
+    /// have read calibration ranges during table loading or scan building.
     pub fn into_stream(self) -> DeltaBatchStream {
         let metrics = self.plan.metrics.clone();
         let schema = Arc::clone(&self.plan.projected_schema);

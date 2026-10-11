@@ -1105,6 +1105,88 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn native_and_datafusion_scans_use_the_recovered_profile() -> TestResult {
+        use crate::reader::backend::direct_parquet::tests::network_warmup_fixture;
+        use crate::{DeltaComparison, DeltaPredicate, DeltaScalar};
+        use futures_util::TryStreamExt;
+
+        for datafusion_first in [false, true] {
+            let fixture = TestTable::partitioned("recovered-profile")?;
+            let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
+            let original = table.range_read_estimator();
+            // Inject failed calibration while keeping real Delta query execution.
+            let (warmup, probe) = network_warmup_fixture().await?;
+            probe.fail_range(1);
+            assert!(warmup.run("initialization", &original).await.is_none());
+            table.range_read_state.defer_network_warmup(warmup).await;
+            let requests_before_recovery = probe.range_call_count();
+            let predicate = DeltaPredicate::Compare {
+                column: "id".into(),
+                op: DeltaComparison::Gt,
+                value: DeltaScalar::Int32(1),
+            };
+            let filters = [col("id").gt(lit(1_i32))];
+            let no_matches = [col("id").gt(lit(99_i32))];
+            let provider = DeltaTableProvider::try_new(table.clone(), ScanOptions::default())?;
+            let context = SessionContext::new();
+            for scan in [
+                table.scan(),
+                table.scan().with_predicate(predicate.clone()).with_limit(0),
+                table.scan().with_predicate(DeltaPredicate::Compare {
+                    column: "id".into(),
+                    op: DeltaComparison::Gt,
+                    value: DeltaScalar::Int32(99),
+                }),
+            ] {
+                let _ = scan.build().await?;
+            }
+            for (filters, limit) in [
+                (&[][..], None),
+                (filters.as_slice(), Some(0)),
+                (no_matches.as_slice(), None),
+            ] {
+                provider
+                    .scan(&context.state(), None, filters, limit)
+                    .await?;
+            }
+            assert_eq!(probe.range_call_count(), requests_before_recovery);
+            assert!(table.network_warmup_pending(DeltaScanExecutionOptions::default()));
+
+            for use_datafusion in [datafusion_first, !datafusion_first, datafusion_first] {
+                let mut actual = if use_datafusion {
+                    let plan = provider
+                        .scan(&context.state(), None, &filters, None)
+                        .await?;
+                    let scan = plan
+                        .downcast_ref::<DeltaScanExec>()
+                        .ok_or("expected DeltaScanExec")?;
+                    assert!(Arc::ptr_eq(
+                        &scan.range_read_estimator,
+                        &table.range_read_estimator()
+                    ));
+                    ids(&datafusion::physical_plan::collect(plan, context.task_ctx()).await?)
+                } else {
+                    let scan = table
+                        .scan()
+                        .with_predicate(predicate.clone())
+                        .build()
+                        .await?;
+                    assert!(Arc::ptr_eq(
+                        &scan.range_read_estimator,
+                        &table.range_read_estimator()
+                    ));
+                    ids(&scan.into_stream().try_collect::<Vec<_>>().await?)
+                };
+                actual.sort_unstable();
+                assert_eq!(actual, [2, 3, 4]);
+                assert!(!Arc::ptr_eq(&original, &table.range_read_estimator()));
+                assert_eq!(probe.range_call_count(), requests_before_recovery + 3_084);
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn table_scopes_the_range_estimator_and_repartitioning_creates_a_metadata_cache()
     -> TestResult {
         let fixture = TestTable::partitioned("shared-range-read-estimator")?;

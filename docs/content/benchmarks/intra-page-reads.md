@@ -95,10 +95,11 @@ without a probe.
 
 An initialized profile measures shared capacity. Both bandwidth and request
 concurrency use that scope when comparing plans. The profile accepts later
-samples only from plans that neither overlap another plan using the profile nor
-queue for request capacity. This prevents contention from inflating measured
-request overhead or reducing the estimated bandwidth. Traffic outside the reader
-can still affect measurements.
+samples only from plans that neither overlap another plan from the same loaded
+table nor queue for request capacity. Recovery shares this activity tracking with
+existing scans while collecting fresh samples. This prevents contention from
+inflating measured request overhead or reducing the estimated bandwidth. Traffic
+outside the reader can still affect measurements.
 
 Planned range requests share a process-wide ceiling of 512 concurrent reads.
 Each request waits for one slot and releases it after its response finishes,
