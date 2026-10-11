@@ -19,7 +19,8 @@ import network
 import storage
 from storage import digest, save
 
-CASES = {"long": 16384, "short": 65536, "selected-long": 8192, "length-heavy": 262144}
+CASES = {"long": 16384, "short": 65536, "selected-long": 8192,
+    "selected-long-batch": 65536, "length-heavy": 262144}
 
 
 def generate(output, case, binary, compression="NONE"):
@@ -46,7 +47,7 @@ def generate(output, case, binary, compression="NONE"):
             values = []
             for row in range(rows):
                 size = (1536 + rng.randrange(1024) if case == "long" else 8 + rng.randrange(56) if case == "short"
-                    else (262144 if row % 997 == 0 else row % 2) if case == "selected-long" else rng.randrange(2))
+                    else (262144 if row % 997 == 0 else row % 2) if case in ("selected-long", "selected-long-batch") else rng.randrange(2))
                 value = rng.randbytes(size)
                 if pa.types.is_string(field.type):
                     value = value[:size // 2].hex() + ("\u00e9" if size > 2 else "")

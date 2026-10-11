@@ -87,13 +87,17 @@ python delta_length_network.py generate --case long \
   --output "$experiment_root/long"
 ```
 
-The four cases are `long`, `short`, `selected-long` and `length-heavy`. Each
+The cases are `long`, `short`, `selected-long`, `selected-long-batch` and
+`length-heavy`. Each
 contains two unpartitioned Delta files, a real DV per file, eight required or
 nullable UTF-8/binary payload columns, and `row_id`, `grouped` and `scattered`
 columns. `grouped = 1` selects eight adjacent rows per 2,048; `scattered = 1`
 selects one per 997. `dense` reads all live rows. DVs delete every 103rd physical
 row. The independent expected values are filtered from the Python input before
 Parquet encoding and saved as compressed Arrow IPC.
+`selected-long-batch` keeps the selected-long value-length rule but increases
+rows per file from 8,192 to 65,536 and rows per group from 4,096 to 32,768.
+This lets discovery pass the initial cost gate and tests the later fallback.
 
 Generation also runs `delta-length-pages inspect FILE` against every Parquet
 file. The manifest records actual page sizes, row counts, structural byte counts,
@@ -434,12 +438,55 @@ The production fixed-width planner already estimates dependent Zstd rounds
 before probing; variable-length integration must preserve that check. The
 diagnostic bypasses the cost gate deliberately to measure the rejected work.
 
+## Larger skewed batches, 2026-10-11
+
+The uncompressed `selected-long-batch` table occupies 258.7 MB. Its 128 payload
+pages each contain 8,192 rows and occupy 1.58-2.37 MB. After DVs, the scattered
+predicate selects 130 of 129,798 live rows, but those rows contain 99.905% of the
+live payload bytes. The query executable and cost policy are unchanged from the
+cost-model follow-up above. Three alternating pairs produced these medians:
+
+| Profile | Ordinary seconds | Experimental seconds | Query requests |
+| --- | ---: | ---: | ---: |
+| 200 ms +/-20 ms, shared 150 Mbit/s | 17.379 | 18.012 | 157 / 285 |
+| 1 ms, shared 10,000 Mbit/s | 0.574 | 0.610 | 157 / 349 |
+
+Both modes downloaded exactly 258,201,068 bytes per query. All 128 candidate
+pages passed the initial cost gate, then fell back. Slow-profile discovery made
+128 first-prefix requests; the budget refused 64 further requests. Fast-profile
+discovery made 192 requests across at most two dependent rounds per page.
+The eight full-result checks passed for both modes and array forms. Traces
+confirmed that fallback reused prefixes without repeating or omitting page bytes.
+All 12 timing samples and the failed preflight source-hash check were retained;
+that failed attempt stopped before starting storage or taking any sample.
+
+The slow regression was 3.65%. Every pair lost 0.621-0.651 seconds, exceeding the
+0.055-second within-mode range. This is a repeatable cost of unsuccessful
+discovery, not a zero-cost rejection. The fast median increased 6.20%; all pairs
+lost time, but only one difference exceeded the within-mode range. Those
+subsecond measurements require investigation rather than a precise slowdown
+claim. Timing-run process CPU medians were 1.25/1.26 seconds on the slow profile
+and 0.52/0.61 on the fast profile. Maximum process RSS was 196.9/212.7 MiB and
+195.9/222.0 MiB, respectively. These resource figures include initialization.
+
+Trace analysis found an avoidable request in the prototype. Every page's length
+and null information fits in the first 8 KiB response. After removing its
+25-byte Parquet header, the transport caches 8,167 body bytes. The parser starts
+with a separate 4 KiB buffer; growing it to 8 KiB asks the transport for another
+25 bytes even when the cached prefix already contains the complete structure.
+The slow budget rejects these 64 extensions, while the fast profile permits
+them. Let the parser examine the already fetched prefix before requesting more,
+then repeat the affected positive and losing controls. This remains a known
+prototype limitation, not a production reader change. The experiment does not
+yet justify claiming that skewed batches avoid extra requests or query cost.
+
 ## Remaining work for #452
 
 Use the uncompressed layout as the first integration candidate and retain the
-Zstd diagnostics as fallback evidence. The current cost experiment uses known
-proxy settings and optimistic request-processing cost; it does not complete
-automatic-profile validation or prove rejection across larger skewed batches.
+Zstd diagnostics as fallback evidence. Fix the redundant prefix extension and
+repeat the affected controls. The current cost experiment uses known proxy
+settings and optimistic request-processing cost; automatic-profile validation
+and the final preflight/fallback recommendation remain incomplete.
 Use the measured limits and losing cases to update #453 before recommending
 integration. No new production type support or default is enabled by this
 experiment.
