@@ -1,4 +1,4 @@
-"""Linux scan checks: python scan.py /path/to/dar (requires PyArrow)."""
+"""Remaining Python scan checks, invoked by cargo xtask cli test-scan."""
 
 import concurrent.futures
 import contextlib
@@ -159,39 +159,6 @@ class ScanTests(unittest.TestCase):
         for children in Path(f"/proc/{process.pid}/task").glob("*/children"):
             self.assertEqual(children.read_text().strip(), "")
 
-    def test_ipc_matches_spark_fixtures(self):
-        for name in ("partitioned", "nested_mapping", "deletion_vectors"):
-            fixture = CORPUS / name
-            with pa.ipc.open_file(fixture / "expected.arrow") as source:
-                expected = source.read_all()
-            for columns in (None, ["value", "id"], []):
-                projected = expected if columns is None else expected.select(columns)
-                for limit in (None, 0, 1, 1000):
-                    with self.subTest(fixture=name, columns=columns, limit=limit):
-                        flags = ["--no-columns"] if columns == [] else []
-                        for column in columns or []:
-                            flags.extend(["--column", column])
-                        if limit is not None:
-                            flags.extend(["--limit", str(limit)])
-                        result = subprocess.run(
-                            [DAR, "scan", *flags, str(fixture / "table")], env=self.env,
-                            capture_output=True, check=True, timeout=15,
-                        )
-                        self.assertEqual(result.stderr, b"")
-                        self.assertTrue(result.stdout.endswith(IPC_END))
-                        actual = pa.ipc.open_stream(result.stdout).read_all()
-                        # The Rust integration test compares exact metadata with
-                        # the core; Spark's independent oracle omits mapping IDs.
-                        self.assertTrue(actual.schema.equals(projected.schema, check_metadata=False))
-                        self.assertEqual(actual.num_rows, min(projected.num_rows, limit)
-                                         if limit is not None else projected.num_rows)
-                        if actual.num_columns and actual.num_rows:
-                            if limit == 1:
-                                self.assertIn(actual.to_pylist()[0], projected.to_pylist())
-                            else:
-                                self.assertTrue(actual.sort_by("id").equals(
-                                    projected.sort_by("id"), check_metadata=False))
-
     def test_https_trust_for_inspection_and_scan(self):
         (self.cwd / "extensions").write_text(
             "basicConstraints=critical,CA:FALSE\n"
@@ -228,48 +195,6 @@ class ScanTests(unittest.TestCase):
                             self.assertTrue(result.stdout.endswith(IPC_END))
                             actual = pa.ipc.open_stream(result.stdout).read_all().sort_by("id")
                             self.assertTrue(actual.equals(expected, check_metadata=False))
-
-    def test_predicate_filters_a_column_omitted_from_output(self):
-        predicate = self.cwd / "predicate.json"
-        predicate.write_text(json.dumps({
-            "op": "eq", "column": "id", "value": {"type": "int32", "value": "10"},
-        }), encoding="utf-8")
-        with self.start_scan(CORPUS / "partitioned/table", "--predicate-file", str(predicate),
-                             "--column", "value") as process:
-            stdout, stderr = process.communicate(timeout=15)
-            self.assertEqual((process.returncode, stderr), (0, b""))
-            self.assertTrue(stdout.endswith(IPC_END))
-            actual = pa.ipc.open_stream(stdout).read_all()
-            self.assertEqual(actual.schema.names, ["value"])
-            self.assertEqual(actual.to_pylist(), [{"value": 30}])
-
-    def test_execution_options_compose_with_filtered_scans(self):
-        predicate = self.cwd / "predicate.json"
-        predicate.write_text(json.dumps({
-            "op": "eq", "column": "id", "value": {"type": "int32", "value": "10"},
-        }), encoding="utf-8")
-        options = self.cwd / "execution-options.json"
-        for backend in ["direct", "delta_kernel", None]:
-            flags = []
-            if backend is not None:
-                options.write_text(json.dumps({
-                    "parquet_backend": backend, "max_concurrent_file_reads_per_scan": 1,
-                    "max_concurrent_file_reads_per_partition": 1, "output_buffer_batches_per_partition": 1,
-                    "prefetch_files_per_partition": 0, "parquet_metadata_size_hint_bytes": None,
-                    "parquet_full_file_read_threshold_bytes": 1048576,
-                }), encoding="utf-8")
-                flags = ["--execution-options-file", str(options), "--target-partitions", "2"]
-            with self.subTest(backend=backend), self.start_scan(
-                CORPUS / "partitioned/table", *flags, "--predicate-file", str(predicate),
-                "--column", "value", "--limit", "1",
-            ) as process:
-                stdout, stderr = process.communicate(timeout=15)
-                self.assertEqual((process.returncode, stderr), (0, b""))
-                self.assertTrue(stdout.endswith(IPC_END))
-                actual = pa.ipc.open_stream(stdout).read_all()
-                self.assertEqual(actual.schema.names, ["value"])
-                self.assertEqual(actual.schema.field("value").type, pa.int32())
-                self.assertEqual(actual.to_pylist(), [{"value": 30}])
 
     def test_partition_targets_and_read_capacities_bound_file_requests(self):
         class HeldDataStorage(ScanStorage):
@@ -406,17 +331,6 @@ class ScanTests(unittest.TestCase):
                 actual = pa.ipc.open_stream(stdout).read_all()
                 self.assertEqual(actual.sort_by("id").to_pylist(),
                                  [rows[row_id - 1] for row_id in expected_ids])
-
-    def test_empty_table_retains_schema(self):
-        table = self.repeated_table(count=0)
-        for flags, names in [((), ["id", "value", "label", "region"]), (("--no-columns",), [])]:
-            with self.subTest(flags=flags), self.start_scan(table, *flags) as process:
-                stdout, stderr = process.communicate(timeout=15)
-                self.assertEqual((process.returncode, stderr), (0, b""))
-                actual = pa.ipc.open_stream(stdout).read_all()
-                self.assertEqual(actual.schema.names, names)
-                self.assertEqual(actual.num_rows, 0)
-                self.assertTrue(stdout.endswith(IPC_END))
 
     def test_scan_thread_start_failures_do_not_hang(self):
         table = self.repeated_table()

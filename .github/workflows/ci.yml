@@ -264,7 +264,7 @@ jobs:
       - name: Check IPC interoperability and scan process lifecycle
         run: |
           python -m pip install --only-binary=:all: 'pyarrow==25.0.1'
-          python crates/delta-arrow-reader-cli/tests/scan.py target/debug/dar
+          cargo xtask cli test-scan target/debug/dar --repository .
 
   cli-binaries:
     name: CLI Binaries

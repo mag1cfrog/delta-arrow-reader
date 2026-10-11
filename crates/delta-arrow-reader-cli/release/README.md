@@ -3,8 +3,9 @@
 These tools build and validate the Linux CLI archives. Builds, ELF checks,
 archive operations, dependency notice collection, and archive acceptance run
 through `cargo xtask`, a Cargo alias for the repository's private Rust maintenance
-crate. Process checks run in Rust through `xtask cli test-process`. The scan suite
-requires Python 3.11 or newer and PyArrow.
+crate. Process checks run in Rust through `xtask cli test-process`. Scan checks run
+through `xtask cli test-scan`, which still requires Python 3.11 or newer and PyArrow
+for the groups awaiting migration to Rust.
 
 ## Run the CI build
 
@@ -149,7 +150,7 @@ version used by CLI CI), run them against that same binary:
 
 ```sh
 cargo xtask cli test-process /path/to/dar --expected-version "$version" --repository .
-python3 crates/delta-arrow-reader-cli/tests/scan.py /path/to/dar
+cargo xtask cli test-scan /path/to/dar --repository .
 ```
 
 `test-process` requires Linux. It checks help, version, inspection, historical
@@ -160,9 +161,15 @@ signal handling. These checks need a C compiler for the fault library. Each test
 uses an isolated temporary directory, and each CLI invocation has a timeout. CI
 runs this command separately from `cargo test -p delta-arrow-reader-cli`.
 
-In a runtime container without Cargo, use `/tools/xtask cli test-process` with
-`--repository /checks`. The source checkout supplies fixtures and the C fault
-library, which the command compiles with `cc`.
+`test-scan` also requires Linux. Rust checks IPC output against Spark fixtures,
+including column projection, row limits, nested schemas, deletion vectors,
+filtering, execution options, and empty tables. The command then runs the remaining
+`scan.py` groups using `python3` from `PATH`. Those groups still need PyArrow,
+OpenSSL, and a C compiler.
+
+In a runtime container without Cargo, use `/tools/xtask cli test-process` and
+`/tools/xtask cli test-scan` with `--repository /checks`. The source checkout
+supplies fixtures, the remaining Python checks, and the C fault library.
 
 ## Build and test a complete platform archive locally
 
@@ -206,11 +213,12 @@ The script records runtime package versions and checks version, inspection, and
 scan output before adding test tools. It then installs the test prerequisites
 and runs `xtask cli test-archive`. This command verifies the archive and extracted
 file permissions, checks the executable's hash and ABI, and validates the saved
-inspection and Arrow IPC output. It then runs the process checks and `scan.py`.
-The scan suite uses `python3` from `PATH`, which the script sets to the PyArrow
-virtual environment. These tests cover external-writer fixtures, filtering and
-execution options, pipes, partial failures, signals, redaction, and trusted/untrusted HTTPS
-certificates. The archive and executable hashes are checked again afterward.
+inspection and Arrow IPC output. It then runs the same process and scan suites
+as `test-process` and `test-scan`. The script sets `PATH` to the PyArrow virtual
+environment for the remaining Python checks. These tests cover external-writer
+fixtures, filtering and execution options, pipes, partial failures, signals,
+redaction, and trusted/untrusted HTTPS certificates. The archive and executable
+hashes are checked again afterward.
 CI uses these same commands for both architectures; see the workflow for the
 complete container invocations.
 

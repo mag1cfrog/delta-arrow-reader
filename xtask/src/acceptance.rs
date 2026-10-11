@@ -2,8 +2,6 @@ use std::{
     fs::{self, File},
     io::Cursor,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
-    time::Duration,
 };
 
 use arrow_array::{ArrayRef, RecordBatch};
@@ -16,10 +14,10 @@ use crate::{
     artifacts::{MEMBERS, check_files, file_sha256, verify_platform},
     binary::check_binary,
     build::BuildIdentity,
-    command::run_with_timeout,
     error::{ArrowSnafu, FileSnafu, InvalidInputSnafu, JsonSnafu, Result},
     platform::Architecture,
     process::run_process_tests,
+    scan::run_scan_tests,
 };
 
 #[derive(Args)]
@@ -67,14 +65,7 @@ impl TestArchiveArgs {
         check_smoke_output(&self.smoke_output, &expected)?;
 
         run_process_tests(&binary, &self.identity.version, &repository)?;
-        run_with_timeout(
-            Command::new("python3")
-                .arg(repository.join("crates/delta-arrow-reader-cli/tests/scan.py"))
-                .arg(&binary)
-                .current_dir(&self.smoke_output)
-                .stdin(Stdio::null()),
-            Duration::from_secs(600),
-        )?;
+        run_scan_tests(&binary, &repository)?;
         verify_platform(&self.directory, &self.identity, self.architecture)?;
         ensure!(
             file_sha256(&binary)? == target.dar_sha256,

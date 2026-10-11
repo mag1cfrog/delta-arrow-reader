@@ -56,19 +56,24 @@ fn held_requests_detect_their_own_client_disconnect()
 }
 
 #[test]
-fn shutdown_closes_blocked_connections_and_the_listener()
+fn shutdown_drops_listener_and_connection_tasks()
 -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let server = HttpTestServer::start(|_| Ok(None))?;
+    let handler = Arc::new(|_: &Request<Incoming>| Ok(None));
+    let handler_lifetime = Arc::downgrade(&handler);
+    let server = HttpTestServer::start(move |request| handler(request))?;
     let mut socket = connect(&server)?;
     server.wait_for_request(Duration::from_secs(2))?;
-    let address = server.origin.trim_start_matches("http://").to_owned();
     drop(server);
     match socket.read(&mut [0]) {
         Ok(0) => {}
         Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => {}
         other => panic!("server retained a blocked connection: {other:?}"),
     }
-    assert!(TcpStream::connect(address).is_err());
+    // A released port can be reused; track the handler owned by both task types instead.
+    assert!(
+        handler_lifetime.upgrade().is_none(),
+        "listener or connection task retained its handler"
+    );
     Ok(())
 }
 

@@ -8,6 +8,7 @@ mod notices;
 mod platform;
 mod process;
 mod repository;
+mod scan;
 
 use clap::{Parser, Subcommand};
 use error::Result;
@@ -43,6 +44,8 @@ enum CliTask {
     TestArchive(acceptance::TestArchiveArgs),
     /// Check CLI arguments, inspection, output failures, and process lifecycle on Linux.
     TestProcess(process::TestProcessArgs),
+    /// Check Arrow IPC output and scan process lifecycle on Linux.
+    TestScan(scan::TestScanArgs),
     /// Collect dependency redistribution text for one CLI target.
     Notices(notices::NoticeArgs),
     /// Package, extract, assemble, or verify CLI binary archives.
@@ -72,6 +75,9 @@ fn main() -> Result<()> {
         } => args.run(),
         Task::Cli {
             command: CliTask::TestProcess(args),
+        } => args.run(),
+        Task::Cli {
+            command: CliTask::TestScan(args),
         } => args.run(),
         Task::Cli {
             command: CliTask::Notices(args),
