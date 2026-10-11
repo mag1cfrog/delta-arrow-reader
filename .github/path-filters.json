@@ -6,6 +6,7 @@
     ".github/workflows/cache-warm.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/cli-build.yml",
+    ".github/workflows/cli-images.yml",
     ".github/workflows/pypi-build.yml",
     ".github/workflows/pypi.yml",
     ".github/workflows/release-plz.yml",
@@ -23,6 +24,7 @@
     "src/**",
     "crates/delta-arrow-reader-python/**",
     "crates/delta-arrow-reader-cli/**",
+    "examples/go-cli/**",
     "xtask/**",
     "tests/**",
     "benches/**"

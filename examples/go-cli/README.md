@@ -119,3 +119,9 @@ consumer stops. They also check that the child was reaped. The optional
 `DAR_BINARY` test compares a real scan with the existing Spark oracle and
 checks that reader errors remain redacted. The Docker build runs the process
 tests without a Rust build or fixture download.
+
+The approved release PR image workflow runs these Docker build tests on native
+amd64 and arm64 runners. It then runs each final consumer image against the
+local fixture, requires `{"rows":360,"id_sum":64980}`, and checks that the copied
+`dar`, `LICENSE`, and `NOTICE` match the validated CLI image. Feature PRs skip
+these container checks.

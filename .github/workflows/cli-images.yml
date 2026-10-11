@@ -1,0 +1,308 @@
+name: Validate CLI images
+
+on:
+  workflow_call:
+    inputs:
+      binary-artifact-id:
+        description: Immutable Actions ID of a successfully validated complete binary set
+        required: true
+        type: string
+      binary-run-id:
+        description: Run containing that binary artifact; omit for the current run
+        required: false
+        default: ''
+        type: string
+      source-ref:
+        description: Full lowercase tested source commit SHA from the binary builder
+        required: true
+        type: string
+      expected-version:
+        description: Exact workspace version from the binary builder, without v
+        required: true
+        type: string
+      rust-toolchain:
+        description: Exact Rust release recorded by the binary builder
+        required: true
+        type: string
+    outputs:
+      validated:
+        description: 'true only after both native image/Go checks and the complete OCI upload succeed'
+        value: ${{ jobs.validate.outputs.validated }}
+      source-commit:
+        description: Actual tested source commit, preserved in the OCI labels
+        value: ${{ jobs.prepare.outputs.source-commit }}
+      version:
+        description: Validated workspace version
+        value: ${{ jobs.prepare.outputs.version }}
+      rust-toolchain:
+        description: Rust release recorded in the input binaries
+        value: ${{ jobs.prepare.outputs.rust-toolchain }}
+      artifact-id:
+        description: Immutable Actions ID of the complete three-file OCI set
+        value: ${{ jobs.validate.outputs.artifact-id }}
+      artifact-name:
+        description: Actions artifact name for this run attempt
+        value: ${{ jobs.validate.outputs.artifact-name }}
+      artifact-url:
+        description: Download page for the complete OCI artifact
+        value: ${{ jobs.validate.outputs.artifact-url }}
+  workflow_dispatch:
+    inputs:
+      binary-artifact-id:
+        description: Immutable Actions ID of a successfully validated complete binary set
+        required: true
+        type: string
+      binary-run-id:
+        description: Run containing that binary artifact
+        required: true
+        type: string
+      source-ref:
+        description: Full lowercase tested source commit SHA from the binary builder
+        required: true
+        type: string
+      expected-version:
+        description: Exact workspace version from the binary builder, without v
+        required: true
+        type: string
+      rust-toolchain:
+        description: Exact Rust release recorded by the binary builder
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  SCCACHE_GHA_ENABLED: 'true'
+  SCCACHE_GHA_RW_MODE: READ_ONLY
+  RUSTC_WRAPPER: sccache
+  CLI_BINARY_ARTIFACT_ID: ${{ inputs.binary-artifact-id }}
+  CLI_BINARY_RUN_ID: ${{ inputs.binary-run-id || github.run_id }}
+  CLI_SOURCE_COMMIT: ${{ inputs.source-ref }}
+  CLI_VERSION: ${{ inputs.expected-version }}
+  CLI_RUST_TOOLCHAIN: ${{ inputs.rust-toolchain }}
+
+jobs:
+  prepare:
+    name: Verify binary artifact and source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      source-commit: ${{ steps.prepare.outputs.source-commit }}
+      version: ${{ steps.prepare.outputs.version }}
+      rust-toolchain: ${{ steps.prepare.outputs.rust-toolchain }}
+    steps:
+      - name: Require explicit artifact and build identity
+        run: |
+          [[ "$CLI_BINARY_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$CLI_BINARY_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$CLI_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$CLI_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$CLI_RUST_TOOLCHAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.source-ref }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v6
+        with:
+          artifact-ids: ${{ inputs.binary-artifact-id }}
+          run-id: ${{ inputs.binary-run-id || github.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/cli-binaries
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ inputs.rust-toolchain }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci
+          cache-targets: false
+          save-if: false
+      - uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Validate source, toolchain, and complete binary set
+        id: prepare
+        run: |
+          cargo xtask cli prepare --source-commit "$CLI_SOURCE_COMMIT" \
+            --expected-version "$CLI_VERSION" > "$RUNNER_TEMP/cli-identity.json"
+          jq -e --arg rust "$CLI_RUST_TOOLCHAIN" \
+            '."rust-toolchain" == $rust' "$RUNNER_TEMP/cli-identity.json"
+          cargo xtask cli artifacts verify "$RUNNER_TEMP/cli-binaries" \
+            --version "$CLI_VERSION" --source-commit "$CLI_SOURCE_COMMIT" \
+            --rust-toolchain "$CLI_RUST_TOOLCHAIN"
+          jq -r 'to_entries[] | "\(.key)=\(.value)"' \
+            "$RUNNER_TEMP/cli-identity.json" >> "$GITHUB_OUTPUT"
+
+  images:
+    name: Image and Go / ${{ matrix.architecture }}
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: amd64
+            runner: ubuntu-24.04
+          - architecture: arm64
+            runner: ubuntu-24.04-arm
+    env:
+      CLI_ARCHITECTURE: ${{ matrix.architecture }}
+      CLI_IMAGE: localhost/dar-cli:candidate-${{ matrix.architecture }}
+      GO_IMAGE: localhost/dar-go:candidate-${{ matrix.architecture }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.source-commit }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v6
+        with:
+          artifact-ids: ${{ inputs.binary-artifact-id }}
+          run-id: ${{ inputs.binary-run-id || github.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/cli-binaries
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ needs.prepare.outputs.rust-toolchain }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci
+          cache-targets: false
+          save-if: false
+      - uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Install OCI verification tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends skopeo umoci
+      - name: Build and test the native CLI image
+        run: |
+          case "$CLI_ARCHITECTURE:$(uname -m)" in
+            amd64:x86_64|arm64:aarch64) ;;
+            *) echo 'Image checks require the matching native runner'; exit 1 ;;
+          esac
+          cargo xtask cli build-image "$RUNNER_TEMP/cli-binaries" \
+            --architecture "$CLI_ARCHITECTURE" --tag "$CLI_IMAGE" \
+            --version "$CLI_VERSION" --source-commit "$CLI_SOURCE_COMMIT" \
+            --rust-toolchain "$CLI_RUST_TOOLCHAIN"
+          cli_image_id="$(docker image inspect --format '{{.Id}}' "$CLI_IMAGE")"
+          cargo xtask cli test-image "$cli_image_id" --architecture "$CLI_ARCHITECTURE" \
+            --expected-version "$CLI_VERSION" --repository "$GITHUB_WORKSPACE"
+          echo "CLI_IMAGE_ID=$cli_image_id" >> "$GITHUB_ENV"
+      - name: Build and test the Go consumer
+        run: |
+          docker tag "$CLI_IMAGE_ID" "$CLI_IMAGE"
+          docker build --platform "linux/$CLI_ARCHITECTURE" \
+            --build-arg "DAR_IMAGE=$CLI_IMAGE" --tag "$GO_IMAGE" examples/go-cli
+          cli_fixture="$GITHUB_WORKSPACE/tests/reader/fixtures/external_writer/corpus/partitioned/table"
+          docker run --rm --read-only --network=none --cap-drop=ALL \
+            --security-opt=no-new-privileges --security-opt=label=disable \
+            --mount "type=bind,src=$cli_fixture,dst=/table,readonly" \
+            "$GO_IMAGE" -dar /usr/local/bin/dar -table /table > "$RUNNER_TEMP/go-scan.json"
+          jq -e '. == {"rows":360,"id_sum":64980}' "$RUNNER_TEMP/go-scan.json"
+          for image in "$CLI_IMAGE_ID" "$GO_IMAGE"; do
+            docker run --rm --read-only --network=none --entrypoint sha256sum "$image" \
+              /usr/local/bin/dar /usr/share/doc/dar/LICENSE /usr/share/doc/dar/NOTICE \
+              > "$RUNNER_TEMP/image-files.sha256"
+            if [ "$image" = "$CLI_IMAGE_ID" ]; then
+              cp "$RUNNER_TEMP/image-files.sha256" "$RUNNER_TEMP/cli-files.sha256"
+            else
+              cmp "$RUNNER_TEMP/cli-files.sha256" "$RUNNER_TEMP/image-files.sha256"
+            fi
+          done
+      - name: Export and reimport the tested image
+        run: |
+          cargo xtask cli images export "$RUNNER_TEMP/cli-image-platform" \
+            --binary-artifacts "$RUNNER_TEMP/cli-binaries" \
+            --architecture "$CLI_ARCHITECTURE" --image "$CLI_IMAGE_ID" \
+            --version "$CLI_VERSION" --source-commit "$CLI_SOURCE_COMMIT" \
+            --rust-toolchain "$CLI_RUST_TOOLCHAIN"
+      - name: Upload tested platform image
+        uses: actions/upload-artifact@v6
+        with:
+          name: dar-cli-image-${{ needs.prepare.outputs.source-commit }}-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/cli-image-platform/*
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+
+  validate:
+    name: Validate complete CLI image set
+    needs: [prepare, images]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      validated: ${{ steps.complete.outputs.validated }}
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      artifact-name: ${{ steps.complete.outputs.artifact-name }}
+      artifact-url: ${{ steps.upload.outputs.artifact-url }}
+    env:
+      PREPARE_RESULT: ${{ needs.prepare.result }}
+      IMAGES_RESULT: ${{ needs.images.result }}
+      CLI_ARTIFACT_NAME: dar-cli-images-${{ needs.prepare.outputs.source-commit }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Require both native image and Go checks
+        run: |
+          if [ "$PREPARE_RESULT" != success ] || [ "$IMAGES_RESULT" != success ]; then
+            echo "CLI image validation failed: prepare=$PREPARE_RESULT, images=$IMAGES_RESULT"
+            exit 1
+          fi
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.source-commit }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v6
+        with:
+          artifact-ids: ${{ inputs.binary-artifact-id }}
+          run-id: ${{ inputs.binary-run-id || github.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/cli-binaries
+      - uses: actions/download-artifact@v6
+        with:
+          name: dar-cli-image-${{ needs.prepare.outputs.source-commit }}-amd64
+          path: ${{ runner.temp }}/cli-image-inputs/amd64
+      - uses: actions/download-artifact@v6
+        with:
+          name: dar-cli-image-${{ needs.prepare.outputs.source-commit }}-arm64
+          path: ${{ runner.temp }}/cli-image-inputs/arm64
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ needs.prepare.outputs.rust-toolchain }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci
+          cache-targets: false
+          save-if: false
+      - uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Install OCI verification tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends skopeo umoci
+      - name: Assemble the original OCI archives and verify both identities
+        run: |
+          cargo xtask cli images assemble "$RUNNER_TEMP/cli-images" \
+            --inputs "$RUNNER_TEMP/cli-image-inputs" --binary-artifacts "$RUNNER_TEMP/cli-binaries" \
+            --version "$CLI_VERSION" --source-commit "$CLI_SOURCE_COMMIT" \
+            --rust-toolchain "$CLI_RUST_TOOLCHAIN"
+      - name: Upload complete image set
+        id: upload
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.CLI_ARTIFACT_NAME }}
+          path: ${{ runner.temp }}/cli-images/*
+          if-no-files-found: error
+          compression-level: 0
+      - name: Report successful image handoff
+        id: complete
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          test -n "$ARTIFACT_URL"
+          echo 'validated=true' >> "$GITHUB_OUTPUT"
+          echo "artifact-name=$CLI_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+          {
+            echo "Source: $CLI_SOURCE_COMMIT"
+            echo "Version: $CLI_VERSION; Rust: $CLI_RUST_TOOLCHAIN"
+            echo "Validated native amd64 and arm64 images and Go consumers: [$CLI_ARTIFACT_NAME]($ARTIFACT_URL)"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -164,6 +164,7 @@ fn release_pr_requires_approved_and_validated_wheels() -> Result<()> {
                             ("release-wheels.result", wheels),
                             ("release-wheels.outputs.validated", validated),
                             ("release-cli.outputs.validated", "true"),
+                            ("release-cli-images.outputs.validated", "true"),
                         ])?;
                         let expected = release_pr != "true"
                             || approval == "success" && wheels == "success" && validated == "true";

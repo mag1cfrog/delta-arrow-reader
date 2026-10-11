@@ -42,14 +42,16 @@ repository. When ready to validate a release, open its CI run, choose **Review
 deployments**, select `release-checks`, and click **Approve and deploy**.
 This approval starts **Release CLI binaries** and the Python wheel checks in
 parallel. Both build the PR's merge candidate at its exact commit SHA and
-workspace version. The required `CI` check waits for approval and complete
-validation of both artifact sets. New PR commits cancel the old CI run and require a new
-approval and build.
+workspace version. After binary validation, **Release CLI images and Go consumer**
+uses those binaries on native amd64 and arm64 runners in parallel, with the same
+approval. The required `CI` check waits for all three artifact sets. New PR
+commits cancel the old CI run and require a new approval and validation.
 
-Feature PRs skip release approval and builds. They still run the small workflow
-tests alongside the shared xtask checks for Python and cache tasks. CLI unit tests,
-native builds, and runtime acceptance run only for approved release PRs or an
-explicit manual build. To run the builder manually during development, select
+Feature PRs skip release approval, builds, and image/Go acceptance. They still
+run the small workflow tests alongside the shared xtask checks for Python and
+cache tasks. CLI unit tests, native builds, and runtime acceptance run only for
+approved release PRs or an explicit manual build. To run the builder manually
+during development, select
 **Build CLI binaries** in Actions and supply the commit as `source-ref` and its
 version as `expected-version`. The successful job summary links the complete
 artifact set.
@@ -92,6 +94,67 @@ Release PR artifacts record the tested merge candidate's source SHA. A future
 publisher must verify that the release tag has the same source tree and version
 and preserve that build identity; the final merge commit can have a different
 SHA. Automatic CLI publication is tracked in issue #435.
+
+## Validate CLI images in Actions
+
+`.github/workflows/cli-images.yml` takes the complete binary artifact returned
+by a successful `cli-build.yml` validation. It verifies the exact source commit,
+workspace version, Rust release, archive checksums, and both architectures before
+building images. The images and the Go consumer use the existing `dar` bytes;
+only host-side xtask tools are compiled in Rust.
+
+Release PR CI calls this workflow after the approved binary job reports success
+and `validated=true`. Native amd64 and arm64 jobs each build a CLI image, run its
+runtime acceptance, build and run the Go example, compare the copied executable
+and notices, and export/reimport the tested image as OCI. A final job verifies
+both platform artifacts, copies their archive bytes into a complete set, and
+uploads it. Feature PRs do not run these jobs, regardless of changed paths.
+
+The reusable workflow accepts these inputs:
+
+| Input | Source |
+| --- | --- |
+| `binary-artifact-id` | Binary workflow's immutable `artifact-id` output for the complete four-file set |
+| `binary-run-id` | Run that owns the binary artifact; omit only when calling within that same run |
+| `source-ref` | Binary workflow's full `source-commit` output |
+| `expected-version` | Binary workflow's `version` output, without `v` |
+| `rust-toolchain` | Binary workflow's exact `rust-toolchain` output |
+
+Callers need `contents: read` and `actions: read` permissions and must require
+successful binary validation before calling. Missing or expired artifacts,
+partial platform uploads, and mismatched identities fail validation. There is
+no fallback to an artifact name or a different source revision.
+
+For development or recovery, manually dispatch **Validate CLI images** using
+the values from a successful binary run. The workflow revision selected for
+dispatch and the requested source commit must both contain the image tools.
+For example, after those tools are on main:
+
+```sh
+gh workflow run cli-images.yml --ref main \
+  -f binary-artifact-id="$binary_artifact_id" -f binary-run-id="$binary_run_id" \
+  -f source-ref="$source_commit" -f expected-version="$version" \
+  -f rust-toolchain="$rust_toolchain"
+```
+
+The complete Actions artifact is named
+`dar-cli-images-<source-sha>-<run-id>-<attempt>` and contains the two OCI archives
+and `cli-images.json` described below. Intermediate platform uploads are not
+validated complete sets. Both binary and image uploads use the repository's
+default retention period; publication requires both sets to remain available.
+If either has expired, validate the requested source again.
+
+Outputs match the binary workflow: `validated`, `source-commit`, `version`,
+`rust-toolchain`, `artifact-id`, `artifact-name`, and `artifact-url`.
+`validated=true` is emitted only after both native image/Go jobs pass and the
+complete upload returns an artifact ID and URL. Required `CI` also rejects
+failed, skipped, or canceled image jobs, missing outputs, and a source/version
+that differs from the binary job. The job summary links the complete artifact.
+
+This workflow has read-only permissions and publishes no registry tags.
+Issue #435 owns the publication record, final release/source-tree binding,
+GHCR authentication, and multi-platform index. Publication must preserve these
+OCI archives and their tested source labels.
 
 ## Build on Debian 12
 
@@ -481,7 +544,7 @@ signals. Normal CLI subprocesses retain their existing signal behavior.
 Checks have deadlines and remove their test containers on failure. Fixture
 mount paths must be UTF-8 and cannot contain commas. This command tests runtime
 behavior; `cli images` separately verifies artifact identity and packaging.
-The Go consumer and release workflow integration are separate checks.
+The Go consumer runs in its own workflow step after these runtime checks.
 
 ## Export and verify image artifacts
 
@@ -501,7 +564,7 @@ cargo xtask cli images export target/cli-image-platforms/amd64 \
   --version "$version" --source-commit "$source_commit" --rust-toolchain "$rust_toolchain"
 ```
 
-Use `arm64` and its local image tag for the other build. Each platform directory
+Use `arm64` and its tested image ID for the other build. Each platform directory
 contains its OCI archive and a single-platform `cli-images.json`. Collect the
 two directories under `target/cli-image-platforms`, then assemble the complete
 set:
@@ -545,9 +608,9 @@ destination. A failed command can leave a partial destination without a complete
 manifest; use a new directory when retrying. Container tool paths must be UTF-8
 and cannot contain `:`.
 
-These checks validate packaging and file identity. They do not run the CLI or
-the Go consumer and do not upload artifacts or publish to GHCR. Runtime
-acceptance and release workflow integration remain separate steps.
+These commands validate packaging and file identity. The image workflow also
+runs CLI and Go acceptance before uploading the complete set. None of these
+commands publish to GHCR.
 
 ## Test the build and packaging helpers
 
@@ -557,10 +620,11 @@ cargo clippy --locked --package xtask --all-targets -- -D warnings
 ```
 
 The CLI release workflow runs the CLI crate's unit tests and Clippy, plus the
-xtask unit tests and the `artifacts`, `notices`, `cli_workflow`, and `images`
-integration tests. The small `cli_workflow` and `images` tests also run in ordinary
-PR CI. The image tests use a small compiled ELF fixture and stub container
-commands; they do not build containers or require Docker, Skopeo, or umoci.
+xtask unit tests and the `artifacts`, `notices`, `cli_workflow`,
+`cli_images_workflow`, and `images` integration tests. The small workflow and
+`images` tests also run in ordinary PR CI. The image tests use a small compiled
+ELF fixture and stub container commands; they do not build containers or
+require Docker, Skopeo, or umoci.
 The native build test below runs separately in each Debian build job.
 
 The unit tests require Git, a C compiler, `objcopy`, `readelf`, and `sha256sum`.
