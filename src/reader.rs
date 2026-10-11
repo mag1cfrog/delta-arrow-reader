@@ -511,13 +511,18 @@ impl DeltaTable {
     /// be loaded. No partially refreshed table is returned.
     pub async fn refresh(&self) -> Result<Self, DeltaReaderError> {
         let snapshot = Arc::clone(&self.snapshot);
-        let snapshot = tokio::task::spawn_blocking(move || snapshot.refresh())
-            .await
-            .boxed()
-            .context(SnapshotLoadSnafu {
-                reason: "snapshot_refresh_task_failed",
-            })
-            .and_then(|result| result)?;
+        let range_read_estimator = self.range_read_estimator();
+        let snapshot = tokio::task::spawn_blocking(move || {
+            // Refresh may keep reading metadata after its async caller is dropped.
+            let _active_read = range_read_estimator.start_read();
+            snapshot.refresh()
+        })
+        .await
+        .boxed()
+        .context(SnapshotLoadSnafu {
+            reason: "snapshot_refresh_task_failed",
+        })
+        .and_then(|result| result)?;
         Ok(Self {
             snapshot: Arc::new(snapshot),
             execution_options: self.execution_options,

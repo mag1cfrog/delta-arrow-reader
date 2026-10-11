@@ -1297,21 +1297,16 @@ pub(in crate::reader) mod tests {
     }
 
     async fn gated_recovery_table(
-        backend: ParquetReaderBackend,
+        deletion_vector: TestDeletionVector,
+        request: GateRequest,
     ) -> Result<(crate::DeltaTable, Arc<GatedObjectStore>, TestDir), Box<dyn std::error::Error>>
     {
-        let root = TestDir::new("recovery-kernel-reads")?;
+        let root = TestDir::new("recovery-table-reads")?;
         let file = parquet_bytes_for(
             Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)])),
             vec![Arc::new(Int32Array::from(vec![1, 2, 3, 4, 5, 6]))],
         )?;
-        let request = if backend == ParquetReaderBackend::Direct {
-            write_partitioned_dv_table(&root, &file)?;
-            GateRequest::File(DV_FILE)
-        } else {
-            write_partitioned_non_dv_table(&root, &file)?;
-            GateRequest::Range(0)
-        };
+        write_partitioned_table(&root, &file, deletion_vector)?;
         let store = GatedObjectStore::new(
             Arc::new(object_store::local::LocalFileSystem::new_with_prefix(
                 root.path(),
@@ -1352,7 +1347,12 @@ pub(in crate::reader) mod tests {
             ParquetReaderBackend::DeltaKernel,
         ] {
             for cancel in [false, true] {
-                let (table, gate, _root) = gated_recovery_table(backend).await?;
+                let (deletion_vector, request) = if backend == ParquetReaderBackend::Direct {
+                    (TestDeletionVector::Relative, GateRequest::File(DV_FILE))
+                } else {
+                    (TestDeletionVector::None, GateRequest::Range(0))
+                };
+                let (table, gate, _root) = gated_recovery_table(deletion_vector, request).await?;
                 let original = table.range_read_estimator();
                 let (warmup, calibration) = network_warmup_fixture().await?;
                 table.range_read_state.defer_network_warmup(warmup).await;
@@ -1410,6 +1410,84 @@ pub(in crate::reader) mod tests {
                 assert!(!published, "{backend:?}, cancelled={cancel}");
                 assert_eq!(calibration.range_call_count(), 12);
             }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn network_recovery_rejects_refresh_reads_even_after_cancellation()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use futures_util::TryStreamExt;
+
+        const NEW_COMMIT: &str = "_delta_log/00000000000000000001.json";
+        for cancel in [false, true] {
+            let (mut table, gate, root) =
+                gated_recovery_table(TestDeletionVector::None, GateRequest::File(NEW_COMMIT))
+                    .await?;
+            // Failed automatic warmup has already cached the original scan metadata.
+            table.snapshot = Arc::new(
+                crate::reader::materialize_eager_scan_metadata((*table.snapshot).clone()).await?,
+            );
+            let original = table.range_read_estimator();
+            let (warmup, calibration) = network_warmup_fixture().await?;
+            table.range_read_state.defer_network_warmup(warmup).await;
+            fs::write(
+                root.path().join(NEW_COMMIT),
+                r#"{"commitInfo":{"timestamp":1}}"#,
+            )?;
+
+            let mut refresh = Box::pin(table.refresh());
+            let started = tokio::select! {
+                result = &mut refresh => {
+                    gate.release.add_permits(tokio::sync::Semaphore::MAX_PERMITS);
+                    return Err(format!("refresh completed before the gated read: {:?}",
+                        result.map(|table| table.version())).into());
+                }
+                result = tokio::time::timeout(Duration::from_secs(5), gate.wait_started()) => result
+            };
+            if let Err(error) = started {
+                gate.release
+                    .add_permits(tokio::sync::Semaphore::MAX_PERMITS);
+                return Err(error.into());
+            }
+            let refresh = if cancel {
+                drop(refresh);
+                None
+            } else {
+                Some(refresh)
+            };
+            let scan = table
+                .scan()
+                .with_predicate(crate::DeltaPredicate::Compare {
+                    column: "id".into(),
+                    op: crate::DeltaComparison::Gt,
+                    value: crate::DeltaScalar::Int32(1),
+                })
+                .build()
+                .await;
+            let published = !Arc::ptr_eq(&original, &table.range_read_estimator());
+            // Refresh may read the commit again to update cached scan metadata.
+            gate.release
+                .add_permits(tokio::sync::Semaphore::MAX_PERMITS);
+            if let Some(refresh) = refresh {
+                let refreshed = tokio::time::timeout(Duration::from_secs(5), refresh).await??;
+                assert_eq!(refreshed.version(), 1);
+                assert!(Arc::ptr_eq(
+                    &table.range_read_state,
+                    &refreshed.range_read_state
+                ));
+            }
+            tokio::time::timeout(Duration::from_secs(5), async {
+                while !original.start_read().can_sample() {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await?;
+            let batches = scan?.into_stream().try_collect::<Vec<_>>().await?;
+            assert_eq!(int32_ids(&batches)?, [2, 3, 4, 5, 6]);
+            assert_eq!(table.version(), 0);
+            assert!(!published, "refresh cancelled={cancel}");
+            assert_eq!(calibration.range_call_count(), 12);
         }
         Ok(())
     }
