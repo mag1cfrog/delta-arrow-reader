@@ -318,7 +318,7 @@ fn check_readelf_output(output: &str, architecture: Architecture) -> Result<ElfM
     })
 }
 
-fn inspect_elf(binary: &Path, architecture: Architecture) -> Result<BinaryMetadata> {
+pub(crate) fn inspect_elf(binary: &Path, architecture: Architecture) -> Result<BinaryMetadata> {
     ensure!(
         cfg!(unix),
         InvalidInputSnafu {

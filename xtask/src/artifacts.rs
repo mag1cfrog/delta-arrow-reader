@@ -90,7 +90,7 @@ pub(crate) struct ArtifactManifest {
 #[serde(deny_unknown_fields)]
 pub(crate) struct ArtifactTarget {
     os: String,
-    architecture: Architecture,
+    pub(crate) architecture: Architecture,
     rust_target: String,
     libc: String,
     min_glibc: String,
@@ -593,14 +593,23 @@ fn extract(
     identity: &BuildIdentity,
     architecture: Architecture,
 ) -> Result<ArtifactManifest> {
+    let manifest = verify_platform(directory, identity, architecture)?;
+    extract_verified_archive(directory, destination, &manifest.targets[0])?;
+    Ok(manifest)
+}
+
+/// Extract a target from a verified manifest and recheck the copied bytes.
+pub(crate) fn extract_verified_archive(
+    directory: &Path,
+    destination: &Path,
+    target: &ArtifactTarget,
+) -> Result<()> {
     ensure!(
         cfg!(unix),
         InvalidInputSnafu {
             message: "archive extraction requires Unix file permissions"
         }
     );
-    let manifest = verify_platform(directory, identity, architecture)?;
-    let target = &manifest.targets[0];
     create_directory(destination)?;
     let path = directory.join(&target.archive);
     let mut archive = Archive::new(MultiGzDecoder::new(
@@ -643,7 +652,7 @@ fn extract(
             message: "archive or binary changed during extraction"
         }
     );
-    Ok(manifest)
+    Ok(())
 }
 
 fn checksum_text(directory: &Path, identity: &BuildIdentity) -> Result<String> {
@@ -695,7 +704,7 @@ fn assemble(inputs: &Path, directory: &Path, identity: &BuildIdentity) -> Result
     verify(directory, identity)
 }
 
-fn verify(directory: &Path, identity: &BuildIdentity) -> Result<ArtifactManifest> {
+pub(crate) fn verify(directory: &Path, identity: &BuildIdentity) -> Result<ArtifactManifest> {
     let mut names: Vec<_> = Architecture::ALL
         .into_iter()
         .map(|arch| archive_name(identity, arch))

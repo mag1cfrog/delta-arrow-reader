@@ -1,10 +1,10 @@
 # CLI release tools
 
-These tools build and validate the Linux CLI archives. Builds, ELF checks,
-archive operations, dependency notice collection, and archive acceptance run
-through `cargo xtask`, a Cargo alias for the repository's private Rust maintenance
-crate. Process and scan checks run in Rust through `xtask cli test-process` and
-`xtask cli test-scan`.
+These tools build and validate the Linux CLI archives and build local container
+images from them. Builds, ELF checks, archive operations, dependency notice
+collection, and archive acceptance run through `cargo xtask`, a Cargo alias for
+the repository's private Rust maintenance crate. Process and scan checks run in
+Rust through `xtask cli test-process` and `xtask cli test-scan`.
 
 ## Validate a CLI release
 
@@ -401,6 +401,46 @@ download it and mount it at `/tools/xtask`. The complete artifact set contains
 only the public archives, manifest, and checksums. The aggregation job runs
 `cargo xtask` after installing the resolved Rust toolchain.
 
+## Build a local container image
+
+Use the complete four-file binary artifact set with its expected source SHA,
+workspace version, and exact Rust release. The host needs Rust to run xtask,
+`readelf` from binutils, and Docker. Run on the target architecture, or configure
+container emulation before building for another architecture.
+
+```sh
+cargo xtask cli build-image target/cli-artifacts \
+  --architecture amd64 --tag dar:local-amd64 \
+  --version "$version" --source-commit "$source_commit" --rust-toolchain "$rust_toolchain"
+docker run --rm --read-only dar:local-amd64 --version
+docker run --rm --read-only \
+  --mount type=bind,src=/absolute/path/to/table,dst=/table,readonly \
+  dar:local-amd64 inspect /table
+```
+
+For arm64, use `--architecture arm64` and a separate local tag. An existing local
+tag is replaced on a successful build. The command verifies both archives and
+the combined manifest/checksums before extracting the selected binary. Its ELF
+architecture, libraries, and hash must match the manifest. Missing archives or
+mismatched source/version metadata stop the command before Docker runs.
+
+The temporary build context contains only the Dockerfile, `dar`, `LICENSE`,
+`NOTICE`, and a derived runtime package list. The pinned Debian 12 slim image
+installs those runtime libraries and CA certificates. It contains no compiler or
+source checkout. The executable and its notices retain their archive contents
+and permissions. OCI labels record the repository, tested source SHA, workspace
+version, and Apache-2.0 license.
+
+The image uses UID/GID `65532:65532`, working directory `/work`, and executable
+entrypoint `/usr/local/bin/dar`. Omitting arguments prints help. Fixture and
+configuration mounts must be readable by that user. Ordinary reads work with a
+read-only root filesystem; supply credentials and storage configuration at
+runtime. Copying the binary into another image requires glibc 2.36 or newer and
+its declared libraries. Alpine and `scratch` are unsupported.
+
+This command builds a local image. It does not export OCI artifacts or publish
+to GHCR.
+
 ## Test the build and packaging helpers
 
 ```sh
@@ -409,9 +449,11 @@ cargo clippy --locked --package xtask --all-targets -- -D warnings
 ```
 
 The CLI release workflow runs the CLI crate's unit tests and Clippy, plus the
-xtask unit tests and the `artifacts`, `notices`, and `cli_workflow` integration
-tests. The small `cli_workflow` tests also run in ordinary PR CI. The native build
-test below runs separately in each Debian build job.
+xtask unit tests and the `artifacts`, `notices`, `cli_workflow`, and `images`
+integration tests. The small `cli_workflow` and `images` tests also run in ordinary
+PR CI. The image tests use a small compiled ELF fixture and a stub container
+command; they do not build containers or require Docker. The native build test
+below runs separately in each Debian build job.
 
 The unit tests require Git, a C compiler, `objcopy`, `readelf`, and `sha256sum`.
 They use synthetic archive payloads, license fixtures, and a small compiled ELF

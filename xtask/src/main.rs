@@ -6,6 +6,7 @@ mod command;
 mod error;
 #[cfg(target_os = "linux")]
 mod http_fixture;
+mod image;
 mod notices;
 mod platform;
 mod process;
@@ -86,6 +87,8 @@ enum CliTask {
     Build(build::BuildArgs),
     /// Build, check, collect notices, and package one CLI architecture.
     BuildArchive(build::BuildArchiveArgs),
+    /// Build a local container image from the complete validated binary artifact set.
+    BuildImage(image::BuildImageArgs),
     /// Inspect and execute a binary on a compatible Linux runtime.
     CheckBinary(binary::CheckBinaryArgs),
     /// Run runtime acceptance tests against an extracted CLI archive.
@@ -143,6 +146,7 @@ impl CliTask {
             Self::Prepare(args) => args.run(),
             Self::Build(args) => args.run(),
             Self::BuildArchive(args) => args.run(),
+            Self::BuildImage(args) => args.run(),
             Self::CheckBinary(args) => args.run(),
             Self::TestArchive(args) => args.run(),
             Self::TestProcess(args) => args.run(),
