@@ -39,6 +39,43 @@ struct PublishedAsset {
     digest: Option<String>,
 }
 
+#[derive(Args)]
+pub(crate) struct VerifyReleaseAssetsArgs {
+    /// Completed plan-release directory, including the original binary and image files.
+    directory: PathBuf,
+    /// SHA256 of release-plan.json from the trusted read-only verification step.
+    #[arg(long)]
+    plan_sha256: String,
+}
+
+impl VerifyReleaseAssetsArgs {
+    pub(crate) fn run(self) -> Result<()> {
+        let plan = ReleasePlan::load_for_publication(&self.directory, &self.plan_sha256)?;
+        let missing = check_existing_assets(&plan, &mut BTreeMap::new())?;
+        ensure!(
+            missing.is_empty(),
+            InvalidInputSnafu {
+                message: "GitHub release is missing CLI assets"
+            }
+        );
+        plan.selection.release.ensure_unchanged()?;
+        println!(
+            "All four downloaded CLI assets, including SHA256SUMS, match the verified publication plan."
+        );
+        Ok(())
+    }
+}
+
+pub(crate) fn require_no_published_assets(plan: &ReleasePlan) -> Result<()> {
+    ensure!(
+        check_existing_assets(plan, &mut BTreeMap::new())?.len() == plan.github_assets.len(),
+        InvalidInputSnafu {
+            message: "cannot replace the validation record after CLI release assets have been published"
+        }
+    );
+    Ok(())
+}
+
 impl UploadReleaseAssetsArgs {
     pub(crate) fn run(self) -> Result<()> {
         let plan = ReleasePlan::load_for_publication(&self.directory, &self.plan_sha256)?;

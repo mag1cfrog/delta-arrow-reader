@@ -39,13 +39,12 @@ copies `dar`, its `LICENSE`, and its `NOTICE` from an explicit CLI image. The
 final image contains the two executables, Debian runtime libraries, and CA
 certificates. It contains no Go or Rust toolchain.
 
-From the repository root, replace the placeholder below with a verified image
-digest for the selected platform or a multi-platform index containing it. Public
-CLI image publication is handled separately; this placeholder is not a published
-image reference.
+From the repository root, replace `RELEASE_INDEX_HASH` below with the index hash
+from a completed GitHub Release's CLI section. The public index contains amd64
+and arm64. Use `linux/arm64` instead of `linux/amd64` when building for arm64.
 
 ```sh
-dar_image='ghcr.io/OWNER/IMAGE@sha256:VERIFIED_DIGEST'
+dar_image='ghcr.io/mag1cfrog/delta-arrow-reader@sha256:RELEASE_INDEX_HASH'
 docker build --platform linux/amd64 \
   --build-arg DAR_IMAGE="$dar_image" \
   --tag dar-go-example examples/go-cli

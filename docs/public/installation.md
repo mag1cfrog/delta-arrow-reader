@@ -67,6 +67,72 @@ also satisfy WebPKI's validation rules. Kernel HTTPS connections use TLS 1.2
 or 1.3. Storage options and proxy configuration continue to use the underlying
 clients' existing interfaces.
 
+## CLI binaries and container images
+
+The `dar` executable lets Go and other languages read Delta tables through a
+subprocess. `inspect` returns JSON; `scan` writes an Arrow IPC stream to stdout.
+Installation requires no Rust or Python runtime.
+
+Choose a stable version from [GitHub Releases](https://github.com/mag1cfrog/delta-arrow-reader/releases)
+whose CLI section reports successful download verification. Older releases may
+have no CLI files. Replace `X.Y.Z` below with that version, without the `v`
+prefix. On Linux, run this script in a writable directory; it downloads both architectures
+so the complete checksum file can be checked before extraction:
+
+```sh
+set -eu
+version=X.Y.Z
+mkdir "dar-$version"
+cd "dar-$version"
+release_url="https://github.com/mag1cfrog/delta-arrow-reader/releases/download/v$version"
+for file in "dar-v$version-linux-amd64-gnu.tar.gz" \
+            "dar-v$version-linux-arm64-gnu.tar.gz" cli-artifacts.json SHA256SUMS; do
+  curl --fail --location --output "$file" "$release_url/$file"
+done
+sha256sum --check SHA256SUMS
+case "$(uname -m)" in
+  x86_64) architecture=amd64 ;;
+  aarch64|arm64) architecture=arm64 ;;
+  *) echo 'No release binary for this architecture' >&2; exit 1 ;;
+esac
+mkdir cli
+tar -xzf "dar-v$version-linux-$architecture-gnu.tar.gz" -C cli
+./cli/dar --version
+```
+
+Add the extracted `cli` directory to your application's executable search path,
+or invoke `dar` by its absolute path. Keep `LICENSE` and `NOTICE` beside it when
+redistributing the binary. `cli-artifacts.json` records the tested source commit,
+toolchain, runtime libraries, and binary/archive hashes. The Release's CLI
+section also lists the final release commit and the checksum file's own hash.
+The tested PR merge commit and final release commit may differ while containing
+the same source tree.
+
+The binaries support Linux amd64 with a baseline x86-64 CPU and Linux arm64 with
+a baseline ARMv8-A CPU. Both require glibc 2.36 or newer, libgcc, and CA
+certificates for HTTPS. The same Debian 12 builds are tested on Debian 12,
+Ubuntu 24.04, and Fedora 44. Install `libc6`, `libgcc-s1`, and `ca-certificates`
+on Debian/Ubuntu, or `glibc`, `libgcc`, and `ca-certificates` on Fedora. Alpine's
+musl runtime, `scratch`, macOS, and Windows have no official CLI release binary.
+
+The public container includes those runtime dependencies. It runs `dar` as a
+command and exits; it does not host an HTTP service. Pin the version:
+
+```sh
+docker run --rm --read-only ghcr.io/mag1cfrog/delta-arrow-reader:vX.Y.Z --version
+```
+
+For a digest pin, copy the index digest from the Release's CLI section and use
+`ghcr.io/mag1cfrog/delta-arrow-reader@sha256:<index-hash>`. The index contains
+both `linux/amd64` and `linux/arm64`. Public pulls need no GitHub login.
+There are no `latest`, major-version, or minor-version aliases.
+
+See the [CLI guide](cli.md) for table mounts, storage configuration, and scan
+options. The [Go consumer](https://github.com/mag1cfrog/delta-arrow-reader/tree/main/examples/go-cli)
+shows how to copy the binary and notices from a pinned CLI image into a service
+image, read Arrow batches without cgo, and handle process failures. The service
+image must provide the same glibc, libgcc, and certificate dependencies.
+
 ## Python
 
 The Python package loads Delta snapshots, exposes their versions and Arrow

@@ -43,6 +43,11 @@ cargo add tokio --features macros,rt-multi-thread
 For Python, [install a CI wheel or build from source to read tables with PyArrow](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python).
 PyPI publishing is planned.
 
+For Go and other languages, [install a version-pinned `dar` binary or container](https://mag1cfrog.github.io/delta-arrow-reader/installation/#cli-binaries-and-container-images).
+The [CLI](https://mag1cfrog.github.io/delta-arrow-reader/cli/) returns snapshot
+metadata as JSON and rows as an Arrow IPC stream. The [Go example](examples/go-cli)
+reads that stream through a subprocess without cgo.
+
 Read up to 100 rows from an existing Delta table:
 
 ```rust,no_run

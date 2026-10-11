@@ -222,6 +222,17 @@ fn check_existing_images<'a>(
     Ok(missing)
 }
 
+pub(crate) fn require_no_published_images(plan: &ReleasePlan) -> Result<()> {
+    ensure!(
+        check_existing_images(plan, &mut BTreeSet::new())?.len()
+            == plan.container_image.platforms.len() + 1,
+        InvalidInputSnafu {
+            message: "cannot replace the validation record after CLI images have been published"
+        }
+    );
+    Ok(())
+}
+
 fn read_manifest(reference: &str, config: Option<&Path>) -> Result<Option<Vec<u8>>> {
     let mut command = Command::new("regctl");
     command.args(["manifest", "get", reference, "--format", "raw-body"]);

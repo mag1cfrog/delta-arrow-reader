@@ -206,14 +206,15 @@ jobs:
       - name: Check CI workflows
         uses: docker://rhysd/actionlint:1.7.12
         with:
-          args: .github/workflows/ci.yml .github/workflows/cli-build.yml .github/workflows/cli-images.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml .github/workflows/benchmark-fixtures.yml
+          args: .github/workflows/ci.yml .github/workflows/cli-build.yml .github/workflows/cli-images.yml .github/workflows/cli-release.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml .github/workflows/benchmark-fixtures.yml
       - run: cargo fmt --package xtask -- --check
       - name: Test CI workflows, Python, and cache tasks
         run: |
           cargo clippy --locked --package xtask --all-targets -- -D warnings
           cargo test --locked --package xtask --bin xtask cache_tests::
           cargo test --locked --package xtask --bin xtask validation_record::
-          cargo test --locked --package xtask --test cli_release_plan --test cli_release_assets --test cli_release_images
+          cargo test --locked --package xtask --test cli_release_plan --test cli_release_assets --test cli_release_images \
+            --test cli_release_request --test cli_release_notes --test cli_release_workflow
           cargo test --locked --package xtask \
             --test ci --test cli_workflow --test cli_images_workflow --test cli_validation_workflow --test cli_release_selection --test images --test python_release --test python_upload --test python_wheels \
             --test python_wheel_reuse --test python_workflow --test release_plz -- --include-ignored

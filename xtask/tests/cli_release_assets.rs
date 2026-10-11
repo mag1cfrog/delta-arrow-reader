@@ -246,6 +246,41 @@ fn publishes_exact_files_and_repeating_the_same_plan_is_a_no_op() -> Result<()> 
 }
 
 #[test]
+fn delivery_requires_all_assets_and_checks_the_downloaded_bytes() -> Result<()> {
+    let fixture = UploadFixture::new()?;
+    let verify = || -> Result<Command> {
+        let mut command = fixture.plan.selection.xtask()?;
+        command.args([
+            "cli",
+            "verify-release-assets",
+            "plan",
+            "--plan-sha256",
+            &fixture.plan_hash,
+        ]);
+        Ok(command)
+    };
+    fixture.rejected(verify()?.output()?, "missing CLI assets")?;
+    PlanFixture::success(fixture.command()?.output()?);
+    PlanFixture::success(verify()?.output()?);
+    let assets = fixture.remote()?;
+    let id = assets[1]["id"].as_u64().unwrap();
+    fs::write(
+        fixture
+            .plan
+            .selection
+            .directory
+            .path()
+            .join(format!("remote/{id}")),
+        "corrupt bytes despite unchanged metadata",
+    )?;
+    let output = verify()?.output()?;
+    assert!(!output.status.success(), "{output:?}");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("different bytes"));
+    assert_eq!(fixture.uploads()?.len(), 4);
+    Ok(())
+}
+
+#[test]
 fn read_only_rehearsal_uses_the_same_remote_conflict_checks() -> Result<()> {
     let fixture = UploadFixture::new()?;
     fixture.add_existing(0)?;

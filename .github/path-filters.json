@@ -51,6 +51,7 @@
     ".github/workflows/cache-warm.yml",
     ".github/workflows/cli-build.yml",
     ".github/workflows/cli-images.yml",
+    ".github/workflows/cli-release.yml",
     ".github/workflows/pypi-build.yml",
     ".github/workflows/pypi.yml",
     ".github/workflows/release-plz.yml",

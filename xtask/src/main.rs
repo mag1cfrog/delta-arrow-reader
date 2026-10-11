@@ -18,8 +18,10 @@ mod python_wheel_reuse;
 mod python_wheels;
 mod release_assets;
 mod release_images;
+mod release_notes;
 mod release_plan;
 mod release_plz;
+mod release_request;
 mod release_selection;
 mod repository;
 mod scan;
@@ -125,12 +127,18 @@ enum CliTask {
     SelectReleaseArtifacts(release_selection::SelectReleaseArtifactsArgs),
     /// Download and verify release artifacts and write a local publication plan.
     PlanRelease(release_plan::PlanReleaseArgs),
+    /// Validate the Actions release event and select its original validation record.
+    CheckReleaseRequest,
     /// Upload or reuse the exact GitHub release assets from a verified publication plan.
     UploadReleaseAssets(release_assets::UploadReleaseAssetsArgs),
+    /// Require all four GitHub assets and verify their downloaded bytes against the plan.
+    VerifyReleaseAssets(release_assets::VerifyReleaseAssetsArgs),
     /// Publish or reuse the verified CLI image platforms and version index on GHCR.
     UploadReleaseImages(release_images::UploadReleaseImagesArgs),
     /// Download published CLI images anonymously and verify their binary contents.
     VerifyReleaseImages(release_images::VerifyReleaseImagesArgs),
+    /// Update only the CLI release section and record the selected validation identity.
+    UpdateReleaseNotes(release_notes::UpdateReleaseNotesArgs),
     /// Check CLI arguments, inspection, output failures, and process lifecycle on Linux.
     TestProcess(process::TestProcessArgs),
     /// Check Arrow IPC output and scan process lifecycle on Linux.
@@ -211,9 +219,12 @@ impl CliTask {
             Self::RecordValidation(args) => args.run(),
             Self::SelectReleaseArtifacts(args) => args.run(),
             Self::PlanRelease(args) => args.run(),
+            Self::CheckReleaseRequest => release_request::check_release_request(),
             Self::UploadReleaseAssets(args) => args.run(),
+            Self::VerifyReleaseAssets(args) => args.run(),
             Self::UploadReleaseImages(args) => args.run(),
             Self::VerifyReleaseImages(args) => args.run(),
+            Self::UpdateReleaseNotes(args) => args.run(),
             Self::TestProcess(args) => args.run(),
             Self::TestScan(args) => args.run(),
             Self::Notices(args) => notices::run(args),

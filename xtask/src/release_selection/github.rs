@@ -35,7 +35,7 @@ pub(crate) fn request(endpoint: &str) -> Command {
     command
 }
 
-pub(super) fn get<T: DeserializeOwned>(endpoint: &str) -> Result<T> {
+pub(crate) fn get<T: DeserializeOwned>(endpoint: &str) -> Result<T> {
     decode(&command_output(&mut request(endpoint))?)
 }
 

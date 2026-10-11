@@ -32,13 +32,13 @@ pub(crate) struct SelectReleaseArtifactsArgs {
 pub(crate) struct ReleaseSelectionArgs {
     /// Existing published stable release tag, such as v1.2.3.
     #[arg(long)]
-    tag: String,
+    pub(crate) tag: String,
     /// Select this validation run explicitly; requires --record-artifact-id.
     #[arg(long, requires = "record_artifact_id")]
-    run_id: Option<NonZeroU64>,
+    pub(crate) run_id: Option<NonZeroU64>,
     /// Select this immutable record artifact explicitly; requires --run-id.
     #[arg(long, requires = "run_id")]
-    record_artifact_id: Option<NonZeroU64>,
+    pub(crate) record_artifact_id: Option<NonZeroU64>,
 }
 
 #[derive(Deserialize, Serialize)]

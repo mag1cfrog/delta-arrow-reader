@@ -6,6 +6,9 @@ collection, and archive acceptance run through `cargo xtask`, a Cargo alias for
 the repository's private Rust maintenance crate. Process and scan checks run in
 Rust through `xtask cli test-process` and `xtask cli test-scan`.
 
+For approval, automatic publication, and recovery, follow the
+[CLI release runbook](../../../docs/content/cli-release.md).
+
 ## Validate a CLI release
 
 `.github/workflows/cli-build.yml` validates a CLI release candidate. It runs the
@@ -94,10 +97,11 @@ artifacts must stop downstream work. Rerun this builder for the explicit source
 commit to obtain a new validated set and reference. Container and release jobs
 must consume its existing archive bytes without rebuilding or repacking them.
 
-Release PR artifacts record the tested merge candidate's source SHA. A future
-publisher must verify that the release tag has the same source tree and version
-and preserve that build identity; the final merge commit can have a different
-SHA. Automatic CLI publication is tracked in issue #435.
+Release PR artifacts record the tested merge candidate's source SHA. The
+publisher verifies that the release tag has the same source tree and version
+and preserves that build identity; the final merge commit can have a different
+SHA. The [release runbook](../../../docs/content/cli-release.md) covers automatic
+publication, permissions, and recovery with the original validated artifacts.
 
 ## Validate CLI images in Actions
 
@@ -161,10 +165,10 @@ complete upload returns an artifact ID and URL. Required `CI` also rejects
 failed, skipped, or canceled image jobs, missing outputs, and a source/version
 that differs from the binary job. The job summary links the complete artifact.
 
-This workflow has read-only permissions and publishes no registry tags.
-Issue #435 owns the validation record, final release/source-tree binding,
-GHCR authentication, and multi-platform index. Publication must preserve these
-OCI archives and their tested source labels.
+This workflow has read-only permissions and publishes no registry tags. The
+separate `cli-release.yml` publisher verifies the validation record and final
+release tree, then uploads the OCI images and a multi-platform index to GHCR.
+It preserves these OCI archives and their tested source labels.
 
 ## Record validated CLI artifacts
 
@@ -213,8 +217,9 @@ cargo xtask cli record-validation "$RUNNER_TEMP/cli-validation.json" \
 The output path must be new. The command checks the supplied event and results;
 it does not authenticate them against GitHub. Publication must verify the record
 against GitHub's PR, approval, run, job, and artifact metadata, then verify the
-retained files before writing to a release or registry. That publication verifier
-is part of #435; a locally generated JSON record alone does not authorize release.
+retained files before writing to a release or registry. The following selection
+and planning commands perform that verification; a locally generated JSON
+record alone does not authorize release.
 
 ## Select artifacts for an existing release
 
@@ -329,9 +334,10 @@ On success the command prints the SHA256 of `release-plan.json`. Keep that hash
 as the trusted verification result when passing the directory to another job.
 
 This command prepares expected publication bytes and destinations. It does not
-inspect existing public assets or tags. The asset uploader below checks existing
-GitHub files. GHCR publication and the automatic release workflow remain part of
-#435. Local plan JSON alone does not authorize publication.
+inspect existing public assets or tags. The asset and image uploaders below
+check existing destinations. The automatic release workflow runs both in
+read-only rehearsal before passing the verified plan to its write jobs. Local
+plan JSON alone does not authorize publication.
 
 ## Upload verified GitHub release assets
 
@@ -393,9 +399,10 @@ does not delete it automatically.
 
 In GitHub Actions, writes are restricted to the upstream `cli-release.yml`
 workflow: a release event at the verified tag/commit, or a recovery dispatch from
-`main`. PR events and other workflow refs are rejected. Wiring that workflow and
-its separate read/write jobs remains part of #435. This command uploads the
-GitHub assets; the following commands handle GHCR.
+`main`. PR events and other workflow refs are rejected. The workflow separates
+verification, asset writes, package writes, public delivery checks, and notes
+completion. This command uploads the GitHub assets; the following commands
+handle GHCR.
 
 ## Publish the verified CLI images
 
@@ -470,9 +477,14 @@ binary archives, including file modes. It rechecks the public tags and release
 identity before reporting success. It does not execute the images or repeat
 the native, Go, or distribution acceptance tests.
 
-The automatic release workflow, release notes, and combined GitHub/GHCR delivery
-gate remain part of #435. These commands do not enable automatic publication by
-themselves.
+The automatic release workflow runs this check after downloading and verifying
+all four GitHub release files with `cli verify-release-assets`. Only then does
+`cli update-release-notes --status complete` mark the CLI section complete. The
+notes command preserves the title and text outside the CLI markers; it relies
+on its caller to run both delivery checks first. Before uploading any bytes,
+the workflow records the original validation selection with `--status pending`.
+The [runbook](../../../docs/content/cli-release.md) includes exact command order,
+manual recovery inputs, package visibility setup, and first-release evidence.
 
 ## Build on Debian 12
 
@@ -937,7 +949,7 @@ cargo test --locked --package xtask
 cargo clippy --locked --package xtask --all-targets -- -D warnings
 ```
 
-The CLI release workflow runs the CLI crate's unit tests and Clippy, plus the
+The CLI build workflow runs the CLI crate's unit tests and Clippy, plus the
 xtask unit tests and the `artifacts`, `notices`, `cli_workflow`,
 `cli_images_workflow`, and `images` integration tests. Record unit tests and the
 `cli_validation_workflow` checks also run in ordinary PR CI. The small workflow and
@@ -945,6 +957,14 @@ xtask unit tests and the `artifacts`, `notices`, `cli_workflow`,
 ELF fixture and stub container commands; they do not build containers or
 require Docker, Skopeo, or umoci.
 The native build test below runs separately in each Debian build job.
+
+Ordinary tooling CI also runs the `cli_release_selection`, `cli_release_plan`,
+`cli_release_assets`, `cli_release_images`, `cli_release_request`,
+`cli_release_notes`, and `cli_release_workflow` tests. They use controlled
+transport responses to check provenance, unchanged bytes, permission boundaries,
+partial failures, and retry behavior. The ignored real registry test runs in
+the approved image validation workflow. Publication itself runs no build or
+acceptance matrix.
 
 The unit tests require Git, a C compiler, `objcopy`, `readelf`, and `sha256sum`.
 They use synthetic archive payloads, license fixtures, and a small compiled ELF
