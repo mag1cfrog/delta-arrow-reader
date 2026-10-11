@@ -243,6 +243,41 @@ impl ReleaseSelectionArgs {
 }
 
 impl ReleaseIdentity {
+    pub(crate) fn require_publication_context(&self) -> Result<()> {
+        if env::var("GITHUB_ACTIONS").as_deref() != Ok("true") {
+            return Ok(());
+        }
+        let reference = match env::var("GITHUB_EVENT_NAME").as_deref() {
+            Ok("release") => {
+                ensure!(
+                    env::var("GITHUB_SHA").as_deref() == Ok(self.commit.as_str()),
+                    InvalidInputSnafu {
+                        message: "release event commit differs from the verified release"
+                    }
+                );
+                format!("refs/tags/{}", self.tag)
+            }
+            Ok("workflow_dispatch") => "refs/heads/main".into(),
+            _ => return InvalidInputSnafu {
+                message: "CLI publication in Actions requires a release event or recovery dispatch",
+            }
+            .fail(),
+        };
+        ensure!(
+            env::var("GITHUB_REPOSITORY").as_deref() == Ok(REPOSITORY)
+                && env::var("GITHUB_REF").as_deref() == Ok(reference.as_str())
+                && env::var("GITHUB_WORKFLOW_REF").as_deref()
+                    == Ok(
+                        format!("{REPOSITORY}/.github/workflows/cli-release.yml@{reference}")
+                            .as_str()
+                    ),
+            InvalidInputSnafu {
+                message: "CLI publication requires the trusted upstream release workflow and ref"
+            }
+        );
+        Ok(())
+    }
+
     pub(crate) fn ensure_unchanged(&self) -> Result<()> {
         let release = stable_release(&self.tag)?;
         ensure!(

@@ -325,6 +325,30 @@ fn verify(
     Ok(manifest)
 }
 
+pub(crate) fn verify_downloaded_image(
+    directory: &Path,
+    binary_artifacts: &Path,
+    identity: &BuildIdentity,
+    binaries: &ArtifactManifest,
+    architecture: Architecture,
+    manifest_digest: &str,
+) -> Result<()> {
+    let input = ImageArtifactInput {
+        directory: directory.into(),
+        binary_artifacts: binary_artifacts.into(),
+        identity: identity.clone(),
+    };
+    let observed = describe_image(directory, &input, binary_target(binaries, architecture)?)?;
+    // Exporting changes the outer tar file, while the OCI manifest and its blobs stay identical.
+    ensure!(
+        observed.manifest_digest == manifest_digest,
+        InvalidInputSnafu {
+            message: "downloaded image has a different platform manifest digest"
+        }
+    );
+    Ok(())
+}
+
 fn describe_image(
     directory: &Path,
     input: &ImageArtifactInput,

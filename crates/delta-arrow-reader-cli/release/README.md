@@ -50,8 +50,10 @@ a new approval and validation.
 
 Feature PRs skip release approval, builds, and image/Go acceptance. They still
 run the small workflow tests alongside the shared xtask checks for Python and
-cache tasks. CLI unit tests, native builds, and runtime acceptance run only for
-approved release PRs or an explicit manual build. To run the builder manually
+cache tasks when tooling files change. Changes to CLI source or its dependencies
+also run the separate CLI Source job with formatting, Clippy, and unit tests.
+Native builds and runtime acceptance run only for approved release PRs or an
+explicit manual build. To run the builder manually
 during development, select
 **Build CLI binaries** in Actions and supply the commit as `source-ref` and its
 version as `expected-version`. The successful job summary links the complete
@@ -111,8 +113,11 @@ runtime acceptance, build and run the Go example, compare the copied executable
 and notices, and export/reimport the tested image as OCI. A final job verifies
 both platform artifacts, copies their archive bytes into a complete set, and
 uploads it. That final job also tests release planning with small OCI fixtures
-using real `skopeo` and `umoci`. Feature PRs run the fast planning tests with tool
-substitutes; they do not run these image jobs, regardless of changed paths.
+using real `skopeo` and `umoci`, then tests publication with `regctl` v0.9.2 and a
+disposable local registry. The registry test preserves both platform digests and
+the exact index bytes, and downloads both images to compare their executables
+with the binary archives. Feature PRs run the fast tests with tool substitutes;
+they do not run these image jobs, regardless of changed paths.
 
 The reusable workflow accepts these inputs:
 
@@ -389,8 +394,85 @@ does not delete it automatically.
 In GitHub Actions, writes are restricted to the upstream `cli-release.yml`
 workflow: a release event at the verified tag/commit, or a recovery dispatch from
 `main`. PR events and other workflow refs are rejected. Wiring that workflow and
-its separate read/write jobs remains part of #435; this command alone completes
-only the GitHub asset portion, not GHCR delivery or the CLI release notes.
+its separate read/write jobs remains part of #435. This command uploads the
+GitHub assets; the following commands handle GHCR.
+
+## Publish the verified CLI images
+
+Use the same completed plan directory and trusted plan SHA256 as the GitHub
+asset uploader. Install [regctl v0.9.2](https://github.com/regclient/regclient/releases/tag/v0.9.2).
+The validation workflow downloads this version and verifies its pinned SHA256.
+`regctl` handles registry authentication, OCI uploads, and downloads; xtask
+checks the release identity and content before each write.
+
+For a rehearsal, authenticate `regctl` with credentials that can read the target
+package, then run:
+
+```sh
+cargo xtask cli upload-release-images /path/to/release-plan \
+  --plan-sha256 "$cli_verified_plan_sha256" --dry-run
+```
+
+The command checks all three destinations before uploading anything. An existing
+reference must return the exact manifest bytes recorded in the plan. Only a
+registry HTTP 404 means that a reference is absent; authentication, network,
+rate-limit, and server errors stop the command. Removing `--dry-run` enables
+uploads and requires package write access:
+
+```sh
+cargo xtask cli upload-release-images /path/to/release-plan \
+  --plan-sha256 "$cli_verified_plan_sha256"
+```
+
+For version `X.Y.Z`, the destinations are:
+
+- `ghcr.io/mag1cfrog/delta-arrow-reader:vX.Y.Z-linux-amd64`
+- `ghcr.io/mag1cfrog/delta-arrow-reader:vX.Y.Z-linux-arm64`
+- `ghcr.io/mag1cfrog/delta-arrow-reader:vX.Y.Z`
+
+The uploader imports the original OCI archives without rebuilding. Both
+platform manifests must be present at their expected digests before it uploads
+the exact `image-index.json` bytes under the version tag. It copies its inputs
+into a private temporary directory and rechecks their hashes before the first
+registry request. It checks all three remote references again before each write
+and stops if existing content conflicts or a previously verified reference
+disappears. It creates no `latest`, major, or minor aliases.
+
+Retry a failed publication with the same retained plan and trusted hash.
+Identical remote content is reused, and only missing references are uploaded.
+The command never deletes or overwrites a conflicting reference. Expired or
+changed validation artifacts stop recovery. Use one publisher at a time for a
+release version: registry tag writes do not provide a transaction spanning
+the preceding reads. The release workflow must serialize publication and
+recovery for that version, and other tools must not write those tags concurrently.
+
+After upload, the command checks anonymous access to the index and both platform
+manifests. It uses an empty registry configuration with Docker credentials
+disabled, regardless of the publisher's login. A private package fails this
+check. GitHub creates new container packages as private, so the first publication
+may require the owner to open the container package's settings, change its
+visibility to **Public**, and rerun the same plan. This visibility change is a
+one-time setup; the uploader does not change it. See GitHub's
+[container registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
+and [package visibility settings](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility).
+
+Run the full download check in a separate job with no package write permission.
+It also needs `skopeo` and `umoci`, and GitHub read access to revalidate provenance:
+
+```sh
+cargo xtask cli verify-release-images /path/to/release-plan \
+  --plan-sha256 "$cli_verified_plan_sha256"
+```
+
+This downloads both images anonymously by their planned digests, checks the
+image configuration, and compares `dar`, `LICENSE`, and `NOTICE` with the verified
+binary archives, including file modes. It rechecks the public tags and release
+identity before reporting success. It does not execute the images or repeat
+the native, Go, or distribution acceptance tests.
+
+The automatic release workflow, release notes, and combined GitHub/GHCR delivery
+gate remain part of #435. These commands do not enable automatic publication by
+themselves.
 
 ## Build on Debian 12
 

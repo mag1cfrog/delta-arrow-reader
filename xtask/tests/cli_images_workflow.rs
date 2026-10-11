@@ -507,12 +507,18 @@ fn ordinary_ci_only_adds_small_image_workflow_checks() {
     for target in ["--test cli_images_workflow", "--test images"] {
         assert!(script.contains(target), "missing image check: {target}");
     }
-    let planning: Vec<_> = script
-        .lines()
-        .filter(|line| line.contains("--test cli_release_plan"))
-        .collect();
-    assert_eq!(planning.len(), 1);
-    assert!(!planning[0].contains("ignored"));
+    for target in [
+        "cli_release_plan",
+        "cli_release_assets",
+        "cli_release_images",
+    ] {
+        let commands: Vec<_> = script
+            .lines()
+            .filter(|line| line.contains(&format!("--test {target}")))
+            .collect();
+        assert_eq!(commands.len(), 1);
+        assert!(!commands[0].contains("ignored"));
+    }
     let images = images_workflow();
     assert_eq!(
         named_step(
@@ -520,6 +526,22 @@ fn ordinary_ci_only_adds_small_image_workflow_checks() {
             "Test release planning with real OCI tools"
         )["run"],
         "cargo test --locked --package xtask --test cli_release_plan -- --ignored"
+    );
+    let install = named_step(
+        &images["jobs"]["validate"],
+        "Install registry publication tool",
+    )["run"]
+        .as_str()
+        .unwrap();
+    assert!(install.contains("regclient/regclient/releases/download/v0.9.2/regctl-linux-amd64"));
+    assert!(install.contains("4da11cfe7009661a498ffafc11f510049864ffb4eb44961743618b3975db3c55"));
+    assert!(install.contains("sha256sum --check"));
+    assert_eq!(
+        named_step(
+            &images["jobs"]["validate"],
+            "Test publication with a disposable local registry"
+        )["run"],
+        "cargo test --locked --package xtask --test cli_release_images -- --ignored"
     );
     for (name, job) in ci["jobs"].as_object().unwrap() {
         if name != "release-cli-images" {

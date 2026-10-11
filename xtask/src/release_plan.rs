@@ -23,7 +23,7 @@ use crate::{
     release_selection::{ReleaseSelectionArgs, SelectedArtifacts},
 };
 
-const IMAGE_REPOSITORY: &str = "ghcr.io/mag1cfrog/delta-arrow-reader";
+pub(crate) const IMAGE_REPOSITORY: &str = "ghcr.io/mag1cfrog/delta-arrow-reader";
 
 #[derive(Args)]
 pub(crate) struct PlanReleaseArgs {
@@ -39,7 +39,7 @@ pub(crate) struct ReleasePlan {
     schema_version: u32,
     pub(crate) selection: SelectedArtifacts,
     pub(crate) github_assets: Vec<PlannedAsset>,
-    container_image: ContainerImagePlan,
+    pub(crate) container_image: ContainerImagePlan,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -53,21 +53,21 @@ pub(crate) struct PlannedAsset {
 
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct ContainerImagePlan {
-    reference: String,
-    index_path: String,
-    index_digest: String,
-    platforms: Vec<PlatformImagePlan>,
+pub(crate) struct ContainerImagePlan {
+    pub(crate) reference: String,
+    pub(crate) index_path: String,
+    pub(crate) index_digest: String,
+    pub(crate) platforms: Vec<PlatformImagePlan>,
 }
 
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct PlatformImagePlan {
-    architecture: Architecture,
-    reference: String,
-    archive_path: String,
-    archive_sha256: String,
-    manifest_digest: String,
+pub(crate) struct PlatformImagePlan {
+    pub(crate) architecture: Architecture,
+    pub(crate) reference: String,
+    pub(crate) archive_path: String,
+    pub(crate) archive_sha256: String,
+    pub(crate) manifest_digest: String,
 }
 
 impl PlanReleaseArgs {

@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    env, fs,
+    fs,
     num::NonZeroU64,
     path::{Path, PathBuf},
     process::Command,
@@ -14,7 +14,7 @@ use crate::{
     command::command_output,
     error::{FileSnafu, InvalidInputSnafu, IoSnafu, JsonSnafu, Result},
     release_plan::{PlannedAsset, ReleasePlan},
-    release_selection::{ReleaseIdentity, github},
+    release_selection::github,
     validation_record::REPOSITORY,
 };
 
@@ -43,7 +43,7 @@ impl UploadReleaseAssetsArgs {
     pub(crate) fn run(self) -> Result<()> {
         let plan = ReleasePlan::load_for_publication(&self.directory, &self.plan_sha256)?;
         if !self.dry_run {
-            require_publication_context(&plan.selection.release)?;
+            plan.selection.release.require_publication_context()?;
         }
         eprintln!(
             "CLI release {}: validation run {}, record artifact {}, binary artifact {}, image artifact {}.",
@@ -128,41 +128,6 @@ fn upload_asset(
     serde_json::from_str(&response).context(JsonSnafu {
         subject: "uploaded GitHub release asset",
     })
-}
-
-fn require_publication_context(release: &ReleaseIdentity) -> Result<()> {
-    if env::var("GITHUB_ACTIONS").as_deref() != Ok("true") {
-        return Ok(());
-    }
-    let reference =
-        match env::var("GITHUB_EVENT_NAME").as_deref() {
-            Ok("release") => {
-                ensure!(
-                    env::var("GITHUB_SHA").as_deref() == Ok(release.commit.as_str()),
-                    InvalidInputSnafu {
-                        message: "release event commit differs from the verified release"
-                    }
-                );
-                format!("refs/tags/{}", release.tag)
-            }
-            Ok("workflow_dispatch") => "refs/heads/main".into(),
-            _ => return InvalidInputSnafu {
-                message: "CLI publication in Actions requires a release event or recovery dispatch",
-            }
-            .fail(),
-        };
-    ensure!(
-        env::var("GITHUB_REPOSITORY").as_deref() == Ok(REPOSITORY)
-            && env::var("GITHUB_REF").as_deref() == Ok(reference.as_str())
-            && env::var("GITHUB_WORKFLOW_REF").as_deref()
-                == Ok(
-                    format!("{REPOSITORY}/.github/workflows/cli-release.yml@{reference}").as_str()
-                ),
-        InvalidInputSnafu {
-            message: "CLI publication requires the trusted upstream release workflow and ref"
-        }
-    );
-    Ok(())
 }
 
 fn check_existing_assets<'a>(
