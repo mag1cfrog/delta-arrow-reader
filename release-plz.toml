@@ -1,7 +1,19 @@
+[workspace]
+git_tag_name = "v{{ version }}"
+git_release_name = "v{{ version }}"
+
+[[package]]
+name = "delta-arrow-reader"
+changelog_include = ["delta-arrow-reader-python"]
+
 [[package]]
 name = "delta-arrow-reader-python"
-release = false
+git_only = true
 publish = false
+git_tag_enable = false
+git_release_enable = false
+changelog_update = false
+semver_check = false
 
 [[package]]
 name = "delta-arrow-reader-cli"

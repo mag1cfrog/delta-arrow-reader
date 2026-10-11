@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      python: ${{ steps.filter.outputs.python }}
       selective_read: ${{ steps.filter.outputs.selective_read }}
       package_version: ${{ steps.package-version.outputs.version }}
 
@@ -36,7 +37,7 @@ jobs:
           filters: .github/path-filters.json
       - name: Read workspace package version
         id: package-version
-        if: steps.filter.outputs.code == 'true'
+        if: steps.filter.outputs.code == 'true' || steps.filter.outputs.python == 'true'
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)"
           test -n "$version"
@@ -151,14 +152,27 @@ jobs:
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Install release-plz for release planning checks
+        if: matrix.task == 'Lints and Docs'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: release-plz@0.3.171
+      - name: Check CI workflows
+        if: matrix.task == 'Lints and Docs'
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: .github/workflows/ci.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml
+      - name: Test Rust CI tasks
+        if: matrix.task == 'Lints and Docs'
+        run: |
+          cargo clippy --locked --package xtask --all-targets -- -D warnings
+          # The native CLI build test runs in Debian 12 in cli-build.yml.
+          cargo test --locked --package xtask -- \
+            --include-ignored --skip native_build_preserves_metadata_and_rejects_source_changes
       - if: matrix.task == 'Lints and Docs'
         run: python3 -m unittest discover -s benches -p test_scan_scheduling.py
       - if: matrix.task == 'Lints and Docs'
         run: cargo fmt --all -- --check
-      - if: matrix.task == 'Lints and Docs'
-        run: cargo test --locked --package xtask
-      - if: matrix.task == 'Lints and Docs'
-        run: cargo clippy --locked --package xtask --all-targets -- -D warnings
       - if: matrix.task == 'Lints and Docs'
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - if: matrix.task == 'Lints and Docs'
@@ -171,7 +185,7 @@ jobs:
   python-package:
     name: Python Package
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -201,25 +215,11 @@ jobs:
         run: cargo clippy --locked -p delta-arrow-reader-python --all-targets -- -D warnings
       - name: Test Python runtime ownership
         run: cargo test --locked -p delta-arrow-reader-python
-      - name: Build Python wheel from sdist
-        run: |
-          python -m pip install 'maturin>=1.14,<2'
-          maturin sdist --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out "$RUNNER_TEMP/python-sdist"
-          mkdir "$RUNNER_TEMP/python-source"
-          tar -xzf "$RUNNER_TEMP"/python-sdist/*.tar.gz -C "$RUNNER_TEMP/python-source" --strip-components=1
-          cd "$RUNNER_TEMP/python-source"
-          maturin build --locked --release --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out "$RUNNER_TEMP/python-wheels"
-      - name: Test installed wheel
-        working-directory: ${{ runner.temp }}
-        run: |
-          python -m venv "$RUNNER_TEMP/python-venv"
-          "$RUNNER_TEMP/python-venv/bin/python" -m pip install --only-binary=:all: "$RUNNER_TEMP"/python-wheels/*.whl
-          "$RUNNER_TEMP/python-venv/bin/python" -I -m unittest discover -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests"
 
   python-wheels:
     name: Python Wheels
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.python == 'true'
     uses: ./.github/workflows/pypi-build.yml
     with:
       source-ref: ${{ github.sha }}
@@ -345,6 +345,15 @@ jobs:
             exit 1
           fi
 
+          if [ "${{ needs.changes.outputs.python }}" = "true" ]; then
+            if [ "${{ needs.python-package.result }}" != "success" ] || \
+               [ "${{ needs.python-wheels.result }}" != "success" ] || \
+               [ "${{ needs.python-wheels.outputs.validated }}" != "true" ]; then
+              echo "Python checks or wheel artifact validation did not pass"
+              exit 1
+            fi
+          fi
+
           if [ "${{ needs.changes.outputs.code }}" != "true" ]; then
             echo "No code changes detected"
             exit 0
@@ -362,21 +371,6 @@ jobs:
 
           if [ "${{ needs.checks.result }}" != "success" ]; then
             echo "Checks did not pass: ${{ needs.checks.result }}"
-            exit 1
-          fi
-
-          if [ "${{ needs.python-package.result }}" != "success" ]; then
-            echo "Python Package did not pass: ${{ needs.python-package.result }}"
-            exit 1
-          fi
-
-          if [ "${{ needs.python-wheels.result }}" != "success" ]; then
-            echo "Python Wheels did not pass: ${{ needs.python-wheels.result }}"
-            exit 1
-          fi
-
-          if [ "${{ needs.python-wheels.outputs.validated }}" != "true" ]; then
-            echo "Python wheel artifact set was not validated"
             exit 1
           fi
 

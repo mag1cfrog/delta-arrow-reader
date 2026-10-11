@@ -22,9 +22,8 @@ repository = "https://github.com/mag1cfrog/delta-arrow-reader"
 readme = "README.md"
 keywords = ["delta-lake", "arrow", "parquet", "datafusion"]
 categories = ["asynchronous", "database"]
+# Keep root Python metadata and stubs packaged so release-plz detects their changes.
 exclude = [
-    "pyproject.toml",
-    "delta_arrow_reader.pyi",
     ".cargo/**",
     ".github/**",
     ".gitignore",

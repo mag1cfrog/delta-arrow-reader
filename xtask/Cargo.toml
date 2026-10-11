@@ -12,6 +12,7 @@ arrow-ipc = "58.3.0"
 arrow-schema = "58.3.0"
 clap = { version = "4", default-features = false, features = ["derive", "std", "help", "usage"] }
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
+rawzip = "0.5.2"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -19,8 +20,11 @@ sha2 = "0.10"
 snafu = "0.9"
 tar = { version = "0.4", default-features = false }
 tempfile = "3"
-toml = { version = "0.9", default-features = false, features = ["parse", "serde", "std"] }
+toml = { version = "1", default-features = false, features = ["parse", "serde", "std"] }
 url = "2"
+
+[dev-dependencies]
+serde_yaml_ng = "0.10"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 http-body-util = { version = "0.1", features = ["channel"] }

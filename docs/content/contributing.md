@@ -59,11 +59,11 @@ The isolated Python check imports the installed wheel without adding the current
 directory to its import path. Default Cargo commands still select the core crate;
 use `cargo check -p delta-arrow-reader-python` to check the binding crate directly.
 
-To check a wheel's filename and metadata before installation, pass its expected
-version and platform tag explicitly:
+To check a wheel's filename and metadata before installation, run `cargo xtask`
+from the repository root with the expected version and platform tag:
 
 ```console
-python crates/delta-arrow-reader-python/tests/check_wheel.py \
+cargo xtask check-python-wheel \
   /path/to/delta_arrow_reader-0.6.2-cp310-abi3-manylinux_2_28_x86_64.whl \
   --expected-version 0.6.2 --platform-tag manylinux_2_28_x86_64
 ```
@@ -110,8 +110,11 @@ another Python thread can run during these waits.
 ## Build Python wheels in CI
 
 Pull request CI calls `.github/workflows/pypi-build.yml` for changes covered by
-the code filter. The reusable workflow builds Linux x86_64, Windows x86_64,
-macOS arm64, and macOS x86_64 wheels. Callers supply two required inputs:
+the Python filter in `.github/path-filters.json`. Shared Rust code, binding code,
+Python test fixtures, workspace manifests, and package metadata trigger these
+checks. Changes confined to CLI implementation, benchmarks, or `docs/` skip them.
+The reusable workflow builds Linux x86_64, Windows x86_64, and macOS arm64
+wheels. Callers supply two required inputs:
 
 - `source-ref`: the full commit SHA to check out and build.
 - `expected-version`: the exact workspace package version, without a tag prefix.
@@ -124,6 +127,47 @@ checkout on Python 3.10 with PyArrow 18.0.0 and Python 3.14 with the current
 compatible PyArrow release. Linux runs the full Python suite; Windows and macOS
 run the installed-package and Arrow stream smoke checks described above.
 
+The Linux wheel is built from an extracted sdist inside a pinned manylinux
+container. The separate `Python Package` job runs Clippy and the Rust runtime
+ownership tests.
+
+`.github/workflows/cache-warm.yml` calls the same wheel workflow after relevant
+main pushes with `cache-only: true`. This mode writes compiler and Cargo registry
+caches and runs the wheel checks, but does not upload artifacts or report a
+validated artifact set. It accepts only the triggering main commit from a push
+or manual run. PR builds only read the caches. The warmer also compiles the
+Python runtime tests and retains the two most recently used Windows core target
+caches; wheel builds cache the Cargo registry without restoring core target
+directories.
+Core and wheel cache warming each run one platform at a time to reduce cache
+upload bursts. A failed cache write gets one fresh build after a 60-second wait,
+reusing entries that were already uploaded. Persistent cache write errors
+fail the warmer, except when another build has uploaded the same immutable entry.
+
+The cache helpers are Rust commands in the workspace's private `xtask` crate:
+`cargo xtask check-cache-writes` and `cargo xtask prune-ci-caches`.
+Run its CLI, cache, and Python release tests with
+`cargo test --locked --package xtask`.
+Cache pruning requires `gh`, `GH_TOKEN`, and `GH_REPO`;
+the pruning job alone has `actions: write` permission.
+
+The `xtask` tests also cover Python release validation and workflow gates.
+Three release planning tests require `release-plz` 0.3.171 on `PATH` and are
+ignored by default. After installing that version, run the Ubuntu CI checks with:
+
+```sh
+cargo test --locked --package xtask -- \
+  --include-ignored --skip native_build_preserves_metadata_and_rejects_source_changes
+```
+
+The skipped native CLI build test runs separately in Debian 12 through
+`.github/workflows/cli-build.yml`, on both supported architectures. The release
+planning tests use temporary repositories and a local baseline without
+publishing packages.
+
+To populate caches after a toolchain or workflow change, run `Warm CI caches`
+manually on main. The first build for new compiler inputs can still be cold.
+
 Each platform job uploads its artifact after both Python checks pass:
 
 | Build environment | Artifact |
@@ -131,15 +175,14 @@ Each platform job uploads its artifact after both Python checks pass:
 | Linux x86_64, manylinux_2_28 | `delta-arrow-reader-linux-x86_64-wheel` |
 | Windows x86_64, Windows Server 2022 | `delta-arrow-reader-windows-x86_64-wheel` |
 | macOS arm64, `macos-latest` runner | `delta-arrow-reader-macos-arm64-wheel` |
-| macOS x86_64, `macos-15-intel` runner | `delta-arrow-reader-macos-x86_64-wheel` |
 
-Both macOS wheels target macOS 12.0, matching the PyArrow 18.0.0 wheels.
+The macOS wheel targets macOS 12.0, matching the PyArrow 18.0.0 wheels.
 Delocate checks that bundled libraries support the required architecture and
 deployment target. Runtime checks run on the runners listed above, not on
 macOS 12.0 itself.
 
 The `Validate wheel artifact set` job requires all platform builds to pass,
-then downloads the four artifacts from the same workflow run. It rejects
+then downloads the three artifacts from the same workflow run. It rejects
 missing or unexpected artifacts, requires exactly one wheel per artifact,
 and checks each wheel's version and tags again. Only then does the reusable
 workflow return `validated: 'true'`. Callers must require both a successful
@@ -147,15 +190,17 @@ workflow result and this output before treating the artifacts as a complete
 validated set. A failed run may still contain individual platform artifacts.
 
 Download artifacts from the Actions run page. To download and check the full
-set locally, use the expected package version for that run:
+set locally, run these commands from the repository root with the expected
+package version for that run:
 
 ```console
 gh run download RUN_ID --pattern 'delta-arrow-reader-*-wheel' --dir wheel-artifacts
-python crates/delta-arrow-reader-python/tests/check_wheel.py wheel-artifacts \
-  --artifact-set --expected-version 0.6.2
+cargo xtask check-python-artifacts wheel-artifacts --expected-version 0.6.2
 ```
 
-The workflow produces build artifacts only; package publishing is separate.
+The workflow produces build artifacts only. For publisher setup, TestPyPI
+rehearsal, stable releases, and upload recovery, see
+[Publish Python wheels](python-releases.md).
 
 ## Work on the documentation
 

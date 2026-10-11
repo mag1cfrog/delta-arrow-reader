@@ -81,7 +81,9 @@ The wheel builder targets these systems:
 | Linux x86_64, glibc 2.28 or newer | `manylinux_2_28_x86_64` |
 | Windows x86_64 | `win_amd64` |
 | macOS arm64, macOS 12.0 or newer | `macosx_12_0_arm64` |
-| macOS x86_64, macOS 12.0 or newer | `macosx_12_0_x86_64` |
+
+Intel Macs (macOS x86_64) have no official wheels or CI coverage. Source builds
+on Intel Macs are untested and unsupported.
 
 Each platform has one `cp310-abi3` wheel. A successful build tests that same
 wheel on CPython 3.10 with PyArrow 18.0.0 and CPython 3.14 with the current

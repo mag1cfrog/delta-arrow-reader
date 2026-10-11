@@ -11,9 +11,13 @@ on:
         description: Exact workspace package version, without a tag prefix
         required: true
         type: string
+      cache-only:
+        description: Warm main's build caches without uploading wheel artifacts
+        type: boolean
+        default: false
     outputs:
       validated:
-        description: 'true only after all four platform artifacts pass validation'
+        description: 'true only after all supported platform artifacts pass validation'
         value: ${{ jobs.validate.outputs.validated }}
 
 permissions:
@@ -28,6 +32,8 @@ jobs:
         shell: bash
     strategy:
       fail-fast: false
+      # GitHub limits new cache entries to 200 per minute across the repository.
+      max-parallel: ${{ inputs.cache-only && 1 || 3 }}
       matrix:
         include:
           - name: Linux x86_64
@@ -61,23 +67,15 @@ jobs:
             venv-python: bin/python
             test-args: '-k installed'
             artifact: delta-arrow-reader-macos-arm64-wheel
-          - name: macOS x86_64
-            os: macos-15-intel
-            target: x86_64-apple-darwin
-            manylinux: 'off'
-            interpreter: python
-            macos-deployment-target: '12.0'
-            platform-tag: macosx_12_0_x86_64
-            wheel-dir: unrepaired-dist
-            venv-python: bin/python
-            test-args: '-k installed'
-            artifact: delta-arrow-reader-macos-x86_64-wheel
     env:
       SOURCE_REF: ${{ inputs.source-ref }}
       EXPECTED_VERSION: ${{ inputs.expected-version }}
+      CACHE_ONLY: ${{ inputs.cache-only }}
       CARGO_INCREMENTAL: "0"
       SCCACHE_GHA_ENABLED: "true"
-      SCCACHE_GHA_RW_MODE: READ_ONLY
+      SCCACHE_GHA_RW_MODE: ${{ inputs.cache-only && 'READ_WRITE' || 'READ_ONLY' }}
+      SCCACHE_LOG: ${{ inputs.cache-only && 'sccache::server=debug' || '' }}
+      SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
       RUSTC_WRAPPER: ${{ matrix.manylinux == 'off' && 'sccache' || '' }}
       MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos-deployment-target }}
 
@@ -88,6 +86,16 @@ jobs:
       - name: Check build inputs and read Rust version
         id: versions
         run: |
+          if [ "$CACHE_ONLY" = "true" ]; then
+            if [ "$GITHUB_REF" != "refs/heads/main" ] || [ "$SOURCE_REF" != "$GITHUB_SHA" ]; then
+              echo "Cache warming must build the triggering main commit"
+              exit 1
+            fi
+            case "$GITHUB_EVENT_NAME" in
+              push|workflow_dispatch) ;;
+              *) echo "Cache warming requires a main push or manual run"; exit 1 ;;
+            esac
+          fi
           source_sha="$(git rev-parse HEAD)"
           if [ "$source_sha" != "$SOURCE_REF" ]; then
             echo "Expected source commit $SOURCE_REF, checked out $source_sha"
@@ -107,12 +115,17 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.10'
+      - name: Stabilize Windows compiler outputs
+        if: runner.os == 'Windows'
+        run: |
+          echo "CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_DEBUG=0" >> "$GITHUB_ENV"
+          echo "RUSTFLAGS=-C link-arg=/Brepro --remap-path-prefix=${GITHUB_WORKSPACE}=." >> "$GITHUB_ENV"
       - name: Cache Cargo registry
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ${{ runner.os == 'Windows' && 'core-ci-targets' || 'core-ci' }}
-          cache-targets: ${{ runner.os == 'Windows' }}
-          save-if: false
+          shared-key: python-wheels
+          cache-targets: false
+          save-if: ${{ inputs.cache-only }}
       - name: Prepare Cargo cache mounts
         if: runner.os == 'Linux'
         id: cargo-cache
@@ -123,23 +136,75 @@ jobs:
       - name: Set up sccache
         if: runner.os != 'Linux'
         uses: mozilla-actions/sccache-action@v0.0.10
-      - name: Build wheel
-        uses: PyO3/maturin-action@v1
         with:
+          version: v0.18.0
+      - name: Prepare Linux source from sdist
+        if: runner.os == 'Linux'
+        run: |
+          python -m pip install 'maturin==1.14.1'
+          maturin sdist --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out "$RUNNER_TEMP/python-sdist"
+          mkdir .python-sdist-source
+          tar -xzf "$RUNNER_TEMP"/python-sdist/*.tar.gz -C .python-sdist-source --strip-components=1
+          cmp Cargo.lock .python-sdist-source/Cargo.lock
+      - name: Build wheel
+        id: wheel-build
+        continue-on-error: ${{ inputs.cache-only && runner.os == 'Linux' }}
+        uses: PyO3/maturin-action@v1
+        with: &wheel-build-inputs
+          working-directory: ${{ runner.os == 'Linux' && '.python-sdist-source' || '.' }}
           command: build
           maturin-version: v1.14.1
           rust-toolchain: ${{ steps.versions.outputs.rust-version }}
-          target: ${{ matrix.target }}
+          # Native Windows builds need RUSTFLAGS on host build scripts and proc macros too.
+          target: ${{ runner.os != 'Windows' && matrix.target || '' }}
+          container: ${{ runner.os == 'Linux' && 'quay.io/pypa/manylinux_2_28_x86_64@sha256:4131ddd7acb9c6c966af02fe7e71edc51e078c2d41f475966697676430bfa2ae' || '' }}
           manylinux: ${{ matrix.manylinux }}
           sccache: ${{ runner.os == 'Linux' }}
           docker-options: >-
             --volume "${{ steps.cargo-cache.outputs.path }}/registry:/root/.cargo/registry"
             --volume "${{ steps.cargo-cache.outputs.path }}/git:/root/.cargo/git"
-          before-script-linux: dnf install -y openssl-devel
+          before-script-linux: |
+            # OpenSSL's build dependencies are all in BaseOS; skip unrelated mirrors.
+            dnf install -y --repo=baseos openssl-devel
+            printf 'sccache==0.16.0\n' > /tmp/sccache-constraints.txt
+            export UV_CONSTRAINT=/tmp/sccache-constraints.txt
+            export SCCACHE_ERROR_LOG=/tmp/sccache.log
+            if [ "$SCCACHE_GHA_RW_MODE" = "READ_WRITE" ]; then
+              trap 'RUSTC_WRAPPER= cargo run --locked --manifest-path "$GITHUB_WORKSPACE/xtask/Cargo.toml" -- check-cache-writes' EXIT
+            fi
           args: >-
-            --locked --release --out ${{ matrix.wheel-dir }} --target-dir target
+            --locked --release --out ${{ runner.os == 'Linux' && '../dist' || matrix.wheel-dir }} --target-dir target
             --manifest-path crates/delta-arrow-reader-python/Cargo.toml
             --compatibility pypi --auditwheel repair --interpreter ${{ matrix.interpreter }}
+      - name: Check wheel cache writes
+        id: cache-writes
+        if: inputs.cache-only && runner.os != 'Linux'
+        continue-on-error: true
+        run: cargo xtask check-cache-writes
+        env:
+          RUSTC_WRAPPER: ""
+      - name: Prepare cache write retry
+        if: inputs.cache-only && (steps.wheel-build.outcome == 'failure' || steps.cache-writes.outcome == 'failure')
+        env:
+          RUSTC_WRAPPER: ""
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo rm -rf .python-sdist-source/target
+          else
+            sccache --stop-server
+            cargo clean --target-dir target
+          fi
+          # Recompile after the rate-limit window; existing remote entries are reused.
+          sleep 60
+      - name: Retry wheel cache writes
+        if: inputs.cache-only && (steps.wheel-build.outcome == 'failure' || steps.cache-writes.outcome == 'failure')
+        uses: PyO3/maturin-action@v1
+        with: *wheel-build-inputs
+      - name: Check retried wheel cache writes
+        if: steps.cache-writes.outcome == 'failure'
+        run: cargo xtask check-cache-writes
+        env:
+          RUSTC_WRAPPER: ""
       - name: Inspect and repair Windows DLL dependencies
         if: runner.os == 'Windows'
         run: |
@@ -154,13 +219,16 @@ jobs:
             --wheel-dir dist unrepaired-dist/*.whl
           delocate-listdeps --all dist/*.whl
       - name: Inspect wheel metadata
+        env:
+          RUSTC_WRAPPER: ""
         run: |
           git diff --exit-code -- Cargo.lock
-          python crates/delta-arrow-reader-python/tests/check_wheel.py dist/*.whl \
+          cargo xtask check-python-wheel dist/*.whl \
             --expected-version "$EXPECTED_VERSION" --platform-tag '${{ matrix.platform-tag }}'
       - name: Inspect Linux native dependencies
         if: runner.os == 'Linux'
         run: |
+          cmp Cargo.lock .python-sdist-source/Cargo.lock
           python -m pip install --only-binary=:all: auditwheel
           auditwheel show dist/*.whl
       - name: Test installed wheel on Python 3.10 and PyArrow 18.0.0
@@ -183,6 +251,7 @@ jobs:
           python314/${{ matrix.venv-python }} -I -m unittest discover \
             -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" ${{ matrix.test-args }}
       - name: Upload validated wheel
+        if: ${{ !inputs.cache-only }}
         uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact }}
@@ -192,7 +261,7 @@ jobs:
   validate:
     name: Validate wheel artifact set
     needs: build
-    if: always()
+    if: ${{ always() && !inputs.cache-only }}
     runs-on: ubuntu-latest
     outputs:
       validated: ${{ steps.verify.outputs.validated }}
@@ -209,9 +278,15 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.source-ref }}
-      - uses: actions/setup-python@v6
+      - name: Read Rust version
+        id: rust-version
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          python-version: '3.10'
+          toolchain: ${{ steps.rust-version.outputs.version }}
       - uses: actions/download-artifact@v6
         with:
           pattern: delta-arrow-reader-*-wheel
@@ -219,6 +294,5 @@ jobs:
       - name: Check complete artifact set
         id: verify
         run: |
-          python crates/delta-arrow-reader-python/tests/check_wheel.py wheel-artifacts \
-            --artifact-set --expected-version "$EXPECTED_VERSION"
+          cargo xtask check-python-artifacts wheel-artifacts --expected-version "$EXPECTED_VERSION"
           echo "validated=true" >> "$GITHUB_OUTPUT"
