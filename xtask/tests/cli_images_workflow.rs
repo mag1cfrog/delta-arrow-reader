@@ -382,6 +382,8 @@ fn required_ci_rejects_missing_or_failed_image_handoffs_only_on_release_prs() ->
             let valid = BTreeMap::from([
                 ("changes.outputs.code", code),
                 ("changes.outputs.python", "false"),
+                ("changes.outputs.cli", "false"),
+                ("changes.outputs.tooling", "false"),
                 ("changes.outputs.selective_read", "false"),
                 ("changes.outputs.release_pr", release),
                 ("release-cli.outputs.validated", "true"),
@@ -456,24 +458,34 @@ fn required_ci_rejects_missing_or_failed_image_handoffs_only_on_release_prs() ->
 fn ordinary_ci_only_adds_small_image_workflow_checks() {
     let filters: Value =
         serde_json::from_str(include_str!("../../.github/path-filters.json")).unwrap();
-    for path in [".github/workflows/cli-images.yml", "examples/go-cli/**"] {
-        assert!(filters["code"].as_array().unwrap().contains(&json!(path)));
+    for path in [
+        ".github/workflows/cli-images.yml",
+        "crates/delta-arrow-reader-cli/Dockerfile",
+        "examples/go-cli/**",
+    ] {
+        assert!(
+            filters["tooling"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(path))
+        );
+        assert!(!filters["code"].as_array().unwrap().contains(&json!(path)));
         assert!(!filters["python"].as_array().unwrap().contains(&json!(path)));
     }
     let ci = ci_workflow();
-    let checks = &ci["jobs"]["checks"];
+    let checks = &ci["jobs"]["tooling-checks"];
     assert!(
         named_step(checks, "Check CI workflows")["with"]["args"]
             .as_str()
             .unwrap()
             .contains(".github/workflows/cli-images.yml")
     );
-    assert!(
-        named_step(checks, "Test CI workflows, Python, and cache tasks")["run"]
-            .as_str()
-            .unwrap()
-            .contains("--test cli_images_workflow")
-    );
+    let tests = named_step(checks, "Test CI workflows, Python, and cache tasks")["run"]
+        .as_str()
+        .unwrap();
+    for target in ["--test cli_images_workflow", "--test images"] {
+        assert!(tests.contains(target), "missing image check: {target}");
+    }
     for (name, job) in ci["jobs"].as_object().unwrap() {
         if name != "release-cli-images" {
             assert_ne!(job["uses"], "./.github/workflows/cli-images.yml");

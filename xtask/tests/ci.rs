@@ -38,15 +38,28 @@ fn workflow_script(source: &str, step: &str) -> String {
     script
 }
 
-#[test]
-fn python_filter_covers_inputs_without_cli_benchmarks_or_docs() -> Result<()> {
-    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
-    let patterns: Vec<_> = filters["python"]
+fn filter_matches(filters: &Value, name: &str, path: &str) -> Result<bool> {
+    let patterns: Vec<_> = filters[name]
         .as_array()
         .unwrap()
         .iter()
         .map(|pattern| pattern.as_str().unwrap())
         .collect();
+    let output = Command::new("bash")
+        .args([
+            "-c",
+            "for pattern; do [[ \"$MATCH_PATH\" == $pattern ]] && exit 0; done; exit 1",
+            "--",
+        ])
+        .args(patterns)
+        .env("MATCH_PATH", path)
+        .output()?;
+    Ok(output.status.success())
+}
+
+#[test]
+fn python_filter_excludes_unrelated_sources_and_tools() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
     for (path, expected) in [
         ("src/reader/scan.rs", true),
         ("Cargo.lock", true),
@@ -64,20 +77,21 @@ fn python_filter_covers_inputs_without_cli_benchmarks_or_docs() -> Result<()> {
         ("README.md", true),
         ("LICENSE", true),
         (".cargo/config.toml", true),
-        ("xtask/src/main.rs", true),
-        ("xtask/Cargo.lock", true),
+        ("xtask/Cargo.toml", true),
+        ("xtask/src/main.rs", false),
+        ("xtask/Cargo.lock", false),
         (".github/workflows/cache-warm.yml", true),
         (".github/workflows/pypi-build.yml", true),
         (".github/workflows/pypi.yml", true),
         (".github/workflows/release-plz.yml", true),
-        ("xtask/src/python_release.rs", true),
-        ("xtask/src/python_wheels.rs", true),
-        ("xtask/src/python_upload.rs", true),
-        ("xtask/tests/python_upload.rs", true),
-        ("xtask/tests/python_release.rs", true),
-        ("xtask/tests/python_wheels.rs", true),
-        ("xtask/tests/python_workflow.rs", true),
-        ("xtask/tests/release_plz.rs", true),
+        ("xtask/src/python_release.rs", false),
+        ("xtask/src/python_wheels.rs", false),
+        ("xtask/src/python_upload.rs", false),
+        ("xtask/tests/python_upload.rs", false),
+        ("xtask/tests/python_release.rs", false),
+        ("xtask/tests/python_wheels.rs", false),
+        ("xtask/tests/python_workflow.rs", false),
+        ("xtask/tests/release_plz.rs", false),
         ("release-plz.toml", true),
         ("crates/delta-arrow-reader-cli/src/main.rs", false),
         ("crates/delta-arrow-reader-cli/tests/scan.py", false),
@@ -85,16 +99,387 @@ fn python_filter_covers_inputs_without_cli_benchmarks_or_docs() -> Result<()> {
         ("tests/reader/direct.rs", false),
         ("docs/content/contributing.md", false),
     ] {
-        let output = Command::new("bash")
-            .args([
-                "-c",
-                "for pattern; do [[ \"$MATCH_PATH\" == $pattern ]] && exit 0; done; exit 1",
-                "--",
-            ])
-            .args(&patterns)
-            .env("MATCH_PATH", path)
-            .output()?;
-        assert_eq!(output.status.success(), expected, "{path}");
+        assert_eq!(
+            filter_matches(&filters, "python", path)?,
+            expected,
+            "{path}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn python_sources_skip_core_checks_without_losing_formatting() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
+    for path in [
+        "crates/delta-arrow-reader-python/src/lib.rs",
+        "crates/delta-arrow-reader-python/src/reader.rs",
+        "crates/delta-arrow-reader-python/tests/test_table.py",
+    ] {
+        assert!(filter_matches(&filters, "python", path)?, "{path}");
+        assert!(!filter_matches(&filters, "code", path)?, "{path}");
+    }
+    for path in [
+        "crates/delta-arrow-reader-python/Cargo.toml",
+        "pyproject.toml",
+        "delta_arrow_reader.pyi",
+    ] {
+        for name in ["code", "python"] {
+            assert!(filter_matches(&filters, name, path)?, "{name}: {path}");
+        }
+    }
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    let steps = ci["jobs"]["python-package"]["steps"].as_array().unwrap();
+    let toolchain = steps
+        .iter()
+        .find(|step| step["uses"] == "dtolnay/rust-toolchain@stable")
+        .unwrap();
+    assert!(
+        toolchain["with"]["components"]
+            .as_str()
+            .unwrap()
+            .split(',')
+            .any(|component| component.trim() == "rustfmt")
+    );
+    assert!(steps.iter().any(|step| {
+        step["run"] == "cargo fmt --package delta-arrow-reader-python -- --check"
+            && step["if"].is_null()
+    }));
+    Ok(())
+}
+
+#[test]
+fn cli_sources_run_separate_required_checks() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
+    for path in [
+        "crates/delta-arrow-reader-cli/src/main.rs",
+        "crates/delta-arrow-reader-cli/src/predicate/tests.rs",
+        "crates/delta-arrow-reader-cli/tests/cli.rs",
+        "crates/delta-arrow-reader-cli/tests/predicates/mod.rs",
+    ] {
+        assert!(filter_matches(&filters, "cli", path)?, "{path}");
+        for name in ["code", "python", "tooling", "selective_read"] {
+            assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
+        }
+    }
+    for path in [
+        "Cargo.toml",
+        "Cargo.lock",
+        "xtask/Cargo.toml",
+        "crates/delta-arrow-reader-cli/Cargo.toml",
+        "crates/delta-arrow-reader-python/Cargo.toml",
+        ".cargo/config.toml",
+        ".github/path-filters.json",
+        ".github/workflows/ci.yml",
+        ".github/workflows/cache-warm.yml",
+        "clippy.toml",
+        "src/reader/options.rs",
+        "tests/reader/fixtures/external_writer/corpus/table/data.parquet",
+    ] {
+        for name in ["code", "cli"] {
+            assert!(filter_matches(&filters, name, path)?, "{name}: {path}");
+        }
+    }
+    for path in [
+        "crates/delta-arrow-reader-python/src/lib.rs",
+        "crates/delta-arrow-reader-python/tests/test_table.py",
+        "xtask/src/main.rs",
+        "benches/page_index.rs",
+        "benches/selective_read/src/main.rs",
+        "tests/reader/direct.rs",
+        ".github/workflows/cli-build.yml",
+    ] {
+        assert!(!filter_matches(&filters, "cli", path)?, "{path}");
+    }
+
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    let jobs = &ci["jobs"];
+    assert_eq!(
+        jobs["changes"]["outputs"]["cli"],
+        "${{ steps.filter.outputs.cli }}"
+    );
+    assert_eq!(jobs["cli-checks"]["needs"], "changes");
+    assert_eq!(
+        jobs["cli-checks"]["if"],
+        "needs.changes.outputs.cli == 'true'"
+    );
+    assert!(
+        jobs["ci"]["needs"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("cli-checks"))
+    );
+    let steps = jobs["cli-checks"]["steps"].as_array().unwrap();
+    let toolchain = steps
+        .iter()
+        .find(|step| step["uses"] == "dtolnay/rust-toolchain@stable")
+        .unwrap();
+    for component in ["clippy", "rustfmt"] {
+        assert!(
+            toolchain["with"]["components"]
+                .as_str()
+                .unwrap()
+                .split(',')
+                .any(|installed| installed.trim() == component)
+        );
+    }
+    for command in [
+        "cargo fmt --package delta-arrow-reader-cli -- --check",
+        "cargo clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings",
+        "cargo test --locked -p delta-arrow-reader-cli",
+    ] {
+        assert!(
+            steps
+                .iter()
+                .any(|step| step["run"] == command && step["if"].is_null())
+        );
+    }
+    let warmer: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
+    assert!(
+        warmer["on"]["push"]["paths"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("crates/delta-arrow-reader-cli/**"))
+    );
+    Ok(())
+}
+
+#[test]
+fn tooling_changes_run_separate_required_checks() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
+    for path in [
+        "xtask/src/main.rs",
+        "xtask/tests/ci.rs",
+        "xtask/src/python_wheels.rs",
+        ".github/workflows/cli-images.yml",
+        "crates/delta-arrow-reader-cli/Dockerfile",
+        "examples/go-cli/Dockerfile",
+        "examples/go-cli/scan_test.go",
+    ] {
+        assert!(filter_matches(&filters, "tooling", path)?, "{path}");
+        for name in ["code", "python"] {
+            assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
+        }
+    }
+    for path in [
+        "Cargo.toml",
+        "Cargo.lock",
+        "xtask/Cargo.toml",
+        ".cargo/config.toml",
+        "crates/delta-arrow-reader-python/Cargo.toml",
+    ] {
+        for name in ["code", "python", "tooling"] {
+            assert!(filter_matches(&filters, name, path)?, "{name}: {path}");
+        }
+    }
+    for (path, expected) in [
+        (".github/path-filters.json", true),
+        (".github/workflows/ci.yml", true),
+        (".github/workflows/cache-warm.yml", true),
+        (".github/workflows/cli-build.yml", true),
+        (".github/workflows/pypi.yml", true),
+        (".github/workflows/pypi-build.yml", true),
+        (".github/workflows/release-plz.yml", true),
+        ("release-plz.toml", true),
+        ("clippy.toml", true),
+        ("LICENSE", true),
+        ("NOTICE", true),
+        ("src/reader/options.rs", false),
+        ("crates/delta-arrow-reader-python/src/lib.rs", false),
+        ("crates/delta-arrow-reader-cli/src/main.rs", false),
+        ("benches/selective_read/src/fixtures.rs", false),
+    ] {
+        assert_eq!(
+            filter_matches(&filters, "tooling", path)?,
+            expected,
+            "{path}"
+        );
+    }
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    let jobs = &ci["jobs"];
+    assert_eq!(
+        jobs["changes"]["outputs"]["tooling"],
+        "${{ steps.filter.outputs.tooling }}"
+    );
+    assert_eq!(jobs["tooling-checks"]["needs"], "changes");
+    assert_eq!(
+        jobs["tooling-checks"]["if"],
+        "needs.changes.outputs.tooling == 'true'"
+    );
+    assert!(
+        jobs["ci"]["needs"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("tooling-checks"))
+    );
+    Ok(())
+}
+
+#[test]
+fn benchmark_checks_exclude_unrelated_ci_changes() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
+    for (path, expected) in [
+        (".github/workflows/ci.yml", false),
+        (".github/workflows/cli-build.yml", false),
+        (".github/workflows/pypi-build.yml", false),
+        (".github/workflows/benchmark-fixtures.yml", true),
+        (".github/path-filters.json", true),
+        (".cargo/config.toml", true),
+        ("clippy.toml", true),
+        ("benches/selective_read/Cargo.toml", true),
+        ("benches/selective_read/Cargo.lock", true),
+        ("benches/selective_read/src/fixtures.rs", true),
+        ("benches/selective_read/oracle.py", true),
+        ("src/reader/options.rs", false),
+        ("xtask/src/main.rs", false),
+    ] {
+        assert_eq!(
+            filter_matches(&filters, "selective_read", path)?,
+            expected,
+            "{path}"
+        );
+    }
+    let workflow = ".github/workflows/benchmark-fixtures.yml";
+    assert!(filter_matches(&filters, "tooling", workflow)?);
+    for name in ["code", "python"] {
+        assert!(!filter_matches(&filters, name, workflow)?, "{name}");
+    }
+
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    let jobs = &ci["jobs"];
+    assert_eq!(
+        jobs["changes"]["outputs"]["selective_read"],
+        "${{ steps.filter.outputs.selective_read }}"
+    );
+    let caller = &jobs["selective-read-fixtures"];
+    assert_eq!(caller["needs"], "changes");
+    assert_eq!(
+        caller["if"],
+        "needs.changes.outputs.selective_read == 'true'"
+    );
+    assert_eq!(caller["uses"], format!("./{workflow}"));
+    assert!(
+        jobs["ci"]["needs"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("selective-read-fixtures"))
+    );
+    let lint = jobs["tooling-checks"]["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|step| step["name"] == "Check CI workflows")
+        .unwrap();
+    assert!(
+        lint["with"]["args"]
+            .as_str()
+            .unwrap()
+            .split_whitespace()
+            .any(|argument| argument == workflow)
+    );
+    let warmer: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
+    assert!(
+        warmer["on"]["push"]["paths"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(workflow))
+    );
+    Ok(())
+}
+
+#[test]
+fn core_filter_preserves_benchmark_targets_and_shared_inputs() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
+    let manifest: toml::Value = toml::from_str(include_str!("../../Cargo.toml"))?;
+    for target in manifest["bench"].as_array().unwrap() {
+        let path = target["path"].as_str().unwrap();
+        assert!(filter_matches(&filters, "code", path)?, "{path}");
+    }
+    for path in [
+        "benches/range_planning/controlled_http.rs",
+        "benches/range_planning/plan_diagnostics.rs",
+        "benches/selective_read/src/control_rows.rs",
+        "benches/scan_scheduling.py",
+        "benches/test_scan_scheduling.py",
+        "benches/run_order.py",
+    ] {
+        assert!(filter_matches(&filters, "code", path)?, "{path}");
+    }
+    for path in [
+        "benches/selective_read/Cargo.toml",
+        "benches/selective_read/Cargo.lock",
+        "benches/selective_read/rust-toolchain.toml",
+        "benches/selective_read/src/main.rs",
+        "benches/selective_read/src/fixtures.rs",
+        "benches/selective_read/src/production.rs",
+        "benches/selective_read/src/large.rs",
+        "benches/selective_read/src/tests.rs",
+        "benches/selective_read/tests/large_cli.rs",
+        "benches/selective_read/oracle.py",
+        "benches/selective_read/runners/dar/src/main.rs",
+    ] {
+        assert!(!filter_matches(&filters, "code", path)?, "{path}");
+        assert!(filter_matches(&filters, "selective_read", path)?, "{path}");
+    }
+    for path in [
+        "benches/query_shapes.sql",
+        "benches/render_comparison_chart.py",
+        "benches/render_selective_read_chart.py",
+        "benches/render_selective_s3_chart.py",
+    ] {
+        assert!(!filter_matches(&filters, "code", path)?, "{path}");
+    }
+    Ok(())
+}
+
+#[test]
+fn standalone_docs_skip_rust_checks() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
+    for path in [
+        "docs/content/contributing.md",
+        "docs/content/benchmarks/intra-page-reads.md",
+        "docs/public/python.md",
+        "docs/public/cli.md",
+        "docs/public/benchmarks/selective-read-results.md",
+    ] {
+        for name in ["code", "python", "cli", "tooling", "selective_read"] {
+            assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
+        }
+    }
+    for path in [
+        "docs/content/benchmarks/selective-read-protocol.md",
+        "docs/content/benchmarks/selective-read-production-shapes.md",
+        "docs/content/benchmarks/selective-read-large-workloads.md",
+    ] {
+        assert!(filter_matches(&filters, "selective_read", path)?, "{path}");
+        assert!(!filter_matches(&filters, "code", path)?, "{path}");
+    }
+    Ok(())
+}
+
+#[test]
+fn embedded_docs_trigger_their_rust_checks() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
+    let include = regex::Regex::new(r#"include_str!\("([^"]+\.md)"\)"#)?;
+    for (source, filter) in [
+        ("src/lib.rs", "code"),
+        ("src/guides.rs", "code"),
+        ("benches/selective_read/src/main.rs", "selective_read"),
+        ("benches/selective_read/src/production.rs", "selective_read"),
+        ("benches/selective_read/src/large.rs", "selective_read"),
+    ] {
+        assert!(filter_matches(&filters, "tooling", source)?, "{source}");
+        let source = root().join(source);
+        let contents = fs::read_to_string(&source)?;
+        let documents: Vec<_> = include.captures_iter(&contents).collect();
+        assert!(!documents.is_empty(), "{}", source.display());
+        for document in documents {
+            let path = source.parent().unwrap().join(&document[1]).canonicalize()?;
+            let path = path.strip_prefix(root())?.to_str().unwrap();
+            assert!(filter_matches(&filters, filter, path)?, "{filter}: {path}");
+        }
     }
     Ok(())
 }
@@ -141,6 +526,76 @@ fn summary_requires_python_only_when_requested() -> Result<()> {
                     output.status.success(),
                     expected,
                     "code={code}, python={python}, package={package}: {output:?}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn summary_requires_cli_independently_of_core_checks() -> Result<()> {
+    for code in ["true", "false"] {
+        for cli in ["true", "false"] {
+            for result in ["success", "failure", "skipped", "cancelled", ""] {
+                let output = check_ci_results(&[
+                    ("changes.outputs.code", code),
+                    ("changes.outputs.python", "false"),
+                    ("changes.outputs.cli", cli),
+                    ("changes.outputs.release_pr", "false"),
+                    ("cli-checks.result", result),
+                ])?;
+                assert_eq!(
+                    output.status.success(),
+                    cli != "true" || result == "success",
+                    "code={code}, cli={cli}, result={result}: {output:?}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn summary_requires_benchmarks_independently_of_core_checks() -> Result<()> {
+    for code in ["true", "false"] {
+        for benchmark in ["true", "false"] {
+            for result in ["success", "failure", "skipped", "cancelled", ""] {
+                let output = check_ci_results(&[
+                    ("changes.outputs.code", code),
+                    ("changes.outputs.python", "false"),
+                    ("changes.outputs.selective_read", benchmark),
+                    ("changes.outputs.release_pr", "false"),
+                    ("selective-read-fixtures.result", result),
+                ])?;
+                assert_eq!(
+                    output.status.success(),
+                    benchmark != "true" || result == "success",
+                    "code={code}, benchmark={benchmark}, result={result}: {output:?}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn summary_requires_tooling_independently_of_core_checks() -> Result<()> {
+    for code in ["true", "false"] {
+        for tooling in ["true", "false"] {
+            for result in ["success", "failure", "skipped", "cancelled", ""] {
+                let output = check_ci_results(&[
+                    ("changes.outputs.code", code),
+                    ("changes.outputs.python", "false"),
+                    ("changes.outputs.tooling", tooling),
+                    ("changes.outputs.selective_read", "false"),
+                    ("changes.outputs.release_pr", "false"),
+                    ("tooling-checks.result", result),
+                ])?;
+                assert_eq!(
+                    output.status.success(),
+                    tooling != "true" || result == "success",
+                    "code={code}, tooling={tooling}, result={result}: {output:?}"
                 );
             }
         }
@@ -229,6 +684,79 @@ fn wheel_cache_warming_requires_manual_dispatch() -> Result<()> {
     assert_eq!(
         warmer["jobs"]["wheels"]["if"],
         "github.event_name == 'workflow_dispatch'"
+    );
+    Ok(())
+}
+
+#[test]
+fn benchmark_cache_warming_matches_pr_builds() -> Result<()> {
+    let benchmark: Value = serde_yaml_ng::from_str(include_str!(
+        "../../.github/workflows/benchmark-fixtures.yml"
+    ))?;
+    let warmer: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
+    let check = &benchmark["jobs"]["fixtures"];
+    let warm = &warmer["jobs"]["selective-read-fixtures"];
+
+    assert_eq!(warm["runs-on"], check["runs-on"]);
+    assert_eq!(warm["defaults"], check["defaults"]);
+    for name in ["CARGO_TARGET_DIR", "RUSTFLAGS"] {
+        assert_eq!(warm["env"][name], check["env"][name], "{name}");
+    }
+    let check_steps = check["steps"].as_array().unwrap();
+    let warm_steps = warm["steps"].as_array().unwrap();
+    for (action, inputs) in [
+        ("dtolnay/rust-toolchain@stable", &["toolchain"][..]),
+        (
+            "Swatinem/rust-cache@v2",
+            &["workspaces", "shared-key", "cache-targets"][..],
+        ),
+    ] {
+        let check_step = check_steps
+            .iter()
+            .find(|step| step["uses"] == action)
+            .unwrap();
+        let warm_step = warm_steps
+            .iter()
+            .find(|step| step["uses"] == action)
+            .unwrap();
+        for input in inputs {
+            assert_eq!(
+                warm_step["with"][input], check_step["with"][input],
+                "{action}: {input}"
+            );
+        }
+    }
+    let warm_builds = warm_steps
+        .iter()
+        .find(|step| step["name"] == "Warm benchmark caches")
+        .unwrap()["run"]
+        .as_str()
+        .unwrap();
+    for command in check_steps.iter().filter_map(|step| step["run"].as_str()) {
+        if command.starts_with("cargo clippy ") || command.starts_with("cargo test ") {
+            let expected = if command.starts_with("cargo test ") {
+                format!("{command} --no-run")
+            } else {
+                command.to_owned()
+            };
+            assert!(
+                warm_builds.lines().any(|line| line == expected),
+                "{expected}"
+            );
+        }
+    }
+    assert_eq!(warm["env"]["SCCACHE_GHA_RW_MODE"], "READ_WRITE");
+    assert_eq!(benchmark["on"], json!({"workflow_call": null}));
+    assert_eq!(benchmark["env"]["SCCACHE_GHA_ENABLED"], "true");
+    assert_eq!(benchmark["env"]["SCCACHE_GHA_RW_MODE"], "READ_ONLY");
+    assert_eq!(benchmark["env"]["RUSTC_WRAPPER"], "sccache");
+    assert_eq!(warm["needs"], "core");
+    assert!(
+        warmer["jobs"]["wheels"]["needs"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("selective-read-fixtures"))
     );
     Ok(())
 }
@@ -355,31 +883,44 @@ fn cache_retry_cleans_the_correct_target_and_restarts_native_sccache() -> Result
         )?;
         fs::set_permissions(path, fs::Permissions::from_mode(0o755))?;
     }
-    let script = workflow_script(
+    let wheel_script = workflow_script(
         include_str!("../../.github/workflows/pypi-build.yml"),
         "Prepare cache write retry",
     );
-    for (runner, expected) in [
+    let benchmark_script = workflow_script(
+        include_str!("../../.github/workflows/cache-warm.yml"),
+        "Prepare benchmark cache write retry",
+    );
+    for (script, runner, expected) in [
         (
+            &wheel_script,
             "Linux",
             "sudo rm -rf .python-sdist-source/target\nsleep 60\n",
         ),
         (
+            &wheel_script,
             "Windows",
             "sccache --stop-server\ncargo clean --target-dir target\nsleep 60\n",
         ),
         (
+            &wheel_script,
             "macOS",
             "sccache --stop-server\ncargo clean --target-dir target\nsleep 60\n",
+        ),
+        (
+            &benchmark_script,
+            "Linux",
+            "sccache --stop-server\ncargo clean --target-dir /tmp/benchmark-fixtures\nsleep 60\n",
         ),
     ] {
         for failure in ["", "sudo", "sccache", "cargo"] {
             fs::write(&log, "")?;
             let output = Command::new("/bin/bash")
-                .args(["-euc", &script])
+                .args(["-euc", script])
                 .env("PATH", &directory)
                 .env("RUNNER_OS", runner)
                 .env("RUSTC_WRAPPER", "")
+                .env("CARGO_TARGET_DIR", "/tmp/benchmark-fixtures")
                 .env("COMMAND_LOG", &log)
                 .env("FAIL_COMMAND", failure)
                 .output()?;
@@ -402,36 +943,79 @@ fn cache_retry_cleans_the_correct_target_and_restarts_native_sccache() -> Result
 }
 
 #[test]
-fn core_cache_warming_builds_python_tests_only_on_linux_and_stops_on_failure() -> Result<()> {
+fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<()> {
     let directory = test_dir("core-warm");
     let cargo = directory.join("cargo");
     fs::write(
         &cargo,
-        "#!/bin/sh\nprintf '%s\\n' \"$*\"\nexit \"$CARGO_EXIT\"\n",
+        "#!/bin/sh\nprintf '%s\\n' \"$*\"\n[ \"$*\" != \"$FAIL_CARGO_COMMAND\" ]\n",
     )?;
     fs::set_permissions(cargo, fs::Permissions::from_mode(0o755))?;
-    let script = workflow_script(
-        &include_str!("../../.github/workflows/cache-warm.yml")
-            .replace("run: &warm-test-caches |", "run: |"),
-        "Warm test caches",
-    );
+    let warmer: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
+    let steps = warmer["jobs"]["core"]["steps"].as_array().unwrap();
+    let script = steps
+        .iter()
+        .find(|step| step["name"] == "Warm core caches")
+        .unwrap()["run"]
+        .as_str()
+        .unwrap();
+    let retry = steps
+        .iter()
+        .find(|step| step["name"] == "Retry core cache writes")
+        .unwrap();
+    assert_eq!(retry["run"], script);
+    assert_eq!(retry["if"], "steps.cache-writes.outcome == 'failure'");
+
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    for job in ["checks", "tooling-checks", "python-package", "cli-checks"] {
+        let commands = ci["jobs"][job]["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|step| step["run"].as_str())
+            .flat_map(str::lines);
+        for command in commands {
+            if command.starts_with("cargo clippy ") || command.starts_with("RUSTDOCFLAGS=") {
+                assert!(
+                    script.lines().any(|line| line.trim() == command),
+                    "{command}"
+                );
+            }
+        }
+    }
+
     for runner in ["Linux", "Windows", "macOS"] {
-        for exit in ["0", "7"] {
+        let mut commands = vec![
+            "test --locked --all-features --no-run",
+            "test --locked --no-run",
+        ];
+        if runner == "Linux" {
+            commands.extend([
+                "test --locked -p delta-arrow-reader-python --no-run",
+                "test --locked -p delta-arrow-reader-cli --no-run",
+                "test --locked --package xtask --bin xtask --no-run",
+                "clippy --locked --all-targets --all-features -- -D warnings",
+                "clippy --locked -p delta-arrow-reader-python --all-targets -- -D warnings",
+                "clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings",
+                "clippy --locked --package xtask --all-targets -- -D warnings",
+                "doc --locked --all-features --no-deps",
+            ]);
+        }
+        for fail_at in 0..=commands.len() {
             let output = Command::new("/bin/bash")
-                .args(["-euc", &script])
+                .args(["-euc", script])
                 .env("PATH", &directory)
                 .env("RUNNER_OS", runner)
-                .env("CARGO_EXIT", exit)
+                .env("FAIL_CARGO_COMMAND", commands.get(fail_at).unwrap_or(&""))
                 .output()?;
-            assert_eq!(output.status.success(), exit == "0");
-            let mut expected = "test --locked --all-features --no-run\n".to_owned();
-            if exit == "0" {
-                expected.push_str("test --locked --no-run\n");
-                if runner == "Linux" {
-                    expected.push_str("test --locked -p delta-arrow-reader-python --no-run\n");
-                }
-            }
-            assert_eq!(String::from_utf8(output.stdout)?, expected);
+            assert_eq!(
+                output.status.success(),
+                fail_at == commands.len(),
+                "{runner}, fail_at={fail_at}: {output:?}"
+            );
+            let expected = commands[..(fail_at + 1).min(commands.len())].join("\n") + "\n";
+            assert_eq!(String::from_utf8(output.stdout)?, expected, "{runner}");
         }
     }
     fs::remove_dir_all(directory)?;
