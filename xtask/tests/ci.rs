@@ -655,36 +655,77 @@ fn cache_retry_cleans_the_correct_target_and_restarts_native_sccache() -> Result
 }
 
 #[test]
-fn core_cache_warming_builds_python_tests_only_on_linux_and_stops_on_failure() -> Result<()> {
+fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<()> {
     let directory = test_dir("core-warm");
     let cargo = directory.join("cargo");
     fs::write(
         &cargo,
-        "#!/bin/sh\nprintf '%s\\n' \"$*\"\nexit \"$CARGO_EXIT\"\n",
+        "#!/bin/sh\nprintf '%s\\n' \"$*\"\n[ \"$*\" != \"$FAIL_CARGO_COMMAND\" ]\n",
     )?;
     fs::set_permissions(cargo, fs::Permissions::from_mode(0o755))?;
-    let script = workflow_script(
-        &include_str!("../../.github/workflows/cache-warm.yml")
-            .replace("run: &warm-test-caches |", "run: |"),
-        "Warm test caches",
-    );
+    let warmer: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
+    let steps = warmer["jobs"]["core"]["steps"].as_array().unwrap();
+    let script = steps
+        .iter()
+        .find(|step| step["name"] == "Warm core caches")
+        .unwrap()["run"]
+        .as_str()
+        .unwrap();
+    let retry = steps
+        .iter()
+        .find(|step| step["name"] == "Retry core cache writes")
+        .unwrap();
+    assert_eq!(retry["run"], script);
+    assert_eq!(retry["if"], "steps.cache-writes.outcome == 'failure'");
+
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    for job in ["checks", "tooling-checks", "python-package"] {
+        let commands = ci["jobs"][job]["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|step| step["run"].as_str())
+            .flat_map(str::lines);
+        for command in commands {
+            if command.starts_with("cargo clippy ") || command.starts_with("RUSTDOCFLAGS=") {
+                assert!(
+                    script.lines().any(|line| line.trim() == command),
+                    "{command}"
+                );
+            }
+        }
+    }
+
     for runner in ["Linux", "Windows", "macOS"] {
-        for exit in ["0", "7"] {
+        let mut commands = vec![
+            "test --locked --all-features --no-run",
+            "test --locked --no-run",
+        ];
+        if runner == "Linux" {
+            commands.extend([
+                "test --locked -p delta-arrow-reader-python --no-run",
+                "test --locked --package xtask --bin xtask --no-run",
+                "clippy --locked --all-targets --all-features -- -D warnings",
+                "clippy --locked -p delta-arrow-reader-python --all-targets -- -D warnings",
+                "clippy --locked --package xtask --all-targets -- -D warnings",
+                "doc --locked --all-features --no-deps",
+            ]);
+        }
+        for fail_at in 0..=commands.len() {
             let output = Command::new("/bin/bash")
-                .args(["-euc", &script])
+                .args(["-euc", script])
                 .env("PATH", &directory)
                 .env("RUNNER_OS", runner)
-                .env("CARGO_EXIT", exit)
+                .env("FAIL_CARGO_COMMAND", commands.get(fail_at).unwrap_or(&""))
                 .output()?;
-            assert_eq!(output.status.success(), exit == "0");
-            let mut expected = "test --locked --all-features --no-run\n".to_owned();
-            if exit == "0" {
-                expected.push_str("test --locked --no-run\n");
-                if runner == "Linux" {
-                    expected.push_str("test --locked -p delta-arrow-reader-python --no-run\n");
-                }
-            }
-            assert_eq!(String::from_utf8(output.stdout)?, expected);
+            assert_eq!(
+                output.status.success(),
+                fail_at == commands.len(),
+                "{runner}, fail_at={fail_at}: {output:?}"
+            );
+            let expected = commands[..(fail_at + 1).min(commands.len())].join("\n") + "\n";
+            assert_eq!(String::from_utf8(output.stdout)?, expected, "{runner}");
         }
     }
     fs::remove_dir_all(directory)?;
