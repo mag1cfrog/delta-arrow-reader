@@ -71,7 +71,7 @@ fn compiler_release_requires_the_declared_numeric_version() -> TestResult {
 fn native_build_preserves_metadata_and_rejects_source_changes() -> TestResult {
     let compiler = command_output(Command::new("rustc").arg("-vV"))?;
     let config: WorkspaceManifest = read_toml(&repository_root().join("Cargo.toml"))?;
-    let release = compiler_release(&compiler, &config.package.rust_version)?;
+    let release = compiler_release(&compiler, &config.workspace.package.rust_version)?;
     let temporary = tempfile::tempdir()?;
     let repository = temporary.path();
     git(repository, &["init", "--quiet"])?;
@@ -83,12 +83,13 @@ fn native_build_preserves_metadata_and_rejects_source_changes() -> TestResult {
 name = "delta-arrow-reader-cli"
 version.workspace = true
 edition = "2024"
-rust-version = "1.94"
+rust-version.workspace = true
 [[bin]]
 name = "dar"
 path = "main.rs"
 [workspace]
 [workspace.package]
+rust-version = "1.94"
 version = "1.2.3"
 [workspace.metadata.cli-release]
 cargo-about-version = "0.9.2"

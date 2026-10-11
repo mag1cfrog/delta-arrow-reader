@@ -19,7 +19,7 @@ export DAR_BINARY=/absolute/path/to/dar
 cd examples/go-cli
 CGO_ENABLED=0 go run . \
   -dar "$DAR_BINARY" \
-  -table ../../tests/reader/fixtures/external_writer/corpus/partitioned/table
+  -table ../../crates/delta-arrow-reader/tests/reader/fixtures/external_writer/corpus/partitioned/table
 ```
 
 The expected result is:
@@ -49,7 +49,7 @@ docker build --platform linux/amd64 \
   --build-arg DAR_IMAGE="$dar_image" \
   --tag dar-go-example examples/go-cli
 docker run --rm --read-only --network none --cap-drop ALL \
-  --mount type=bind,src="$PWD/tests/reader/fixtures/external_writer/corpus/partitioned/table",dst=/table,readonly \
+  --mount type=bind,src="$PWD/crates/delta-arrow-reader/tests/reader/fixtures/external_writer/corpus/partitioned/table",dst=/table,readonly \
   dar-go-example -dar /usr/local/bin/dar -table /table
 ```
 

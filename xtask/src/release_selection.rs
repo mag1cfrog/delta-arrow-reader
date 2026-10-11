@@ -12,7 +12,6 @@ use crate::{
     build::{is_full_commit_sha, is_stable_version},
     command::command_output,
     error::{Error, FileSnafu, InvalidInputSnafu, JsonSnafu, Result, TomlSnafu},
-    repository::WorkspaceManifest,
     validation_record::REPOSITORY,
 };
 use github::{
@@ -396,8 +395,20 @@ fn resolve_release(tag: &str) -> Result<ReleaseIdentity> {
             message: "release commit is not reachable from upstream main"
         }
     );
-    let manifest: WorkspaceManifest = read_manifest("Cargo.toml", &commit)?;
-    let version = manifest.workspace.package.version;
+    // Historical releases may declare their toolchain outside workspace.package.
+    let manifest: toml::Value = read_manifest("Cargo.toml", &commit)?;
+    let version = manifest
+        .get("workspace")
+        .and_then(|workspace| workspace.get("package"))
+        .and_then(|package| package.get("version"))
+        .and_then(toml::Value::as_str)
+        .ok_or_else(|| {
+            InvalidInputSnafu {
+                message: "release manifest must contain workspace.package.version",
+            }
+            .build()
+        })?
+        .to_owned();
     ensure!(
         tag == format!("v{version}"),
         InvalidInputSnafu {

@@ -1,142 +1,16 @@
 [workspace]
-members = ["crates/delta-arrow-reader-python", "crates/delta-arrow-reader-cli", "xtask"]
-default-members = ["."]
+members = [
+    "crates/delta-arrow-reader",
+    "crates/delta-arrow-reader-cli",
+    "crates/delta-arrow-reader-python",
+    "xtask",
+]
+default-members = ["crates/delta-arrow-reader"]
 resolver = "3"
 
 [workspace.package]
 version = "0.6.2"
+rust-version = "1.94"
 
 [workspace.metadata.cli-release]
 cargo-about-version = "0.9.2"
-
-[package]
-name = "delta-arrow-reader"
-version.workspace = true
-edition = "2024"
-rust-version = "1.94"
-description = "Read-only Delta Lake to Apache Arrow reader"
-license = "Apache-2.0"
-documentation = "https://docs.rs/delta-arrow-reader"
-homepage = "https://github.com/mag1cfrog/delta-arrow-reader"
-repository = "https://github.com/mag1cfrog/delta-arrow-reader"
-readme = "README.md"
-keywords = ["delta-lake", "arrow", "parquet", "datafusion"]
-categories = ["asynchronous", "database"]
-# Keep root Python metadata and stubs packaged so release-plz detects their changes.
-exclude = [
-    ".cargo/**",
-    ".github/**",
-    ".gitignore",
-    "xtask/**",
-    "benches/incremental_refresh.rs",
-    "benches/reader.rs",
-    "benches/page_index.rs",
-    "benches/range_planning.rs",
-    "benches/range_planning/**",
-    "benches/row_filter.rs",
-    "benches/selective_read/**",
-    "benches/scan_scheduling.rs",
-    "benches/scan_scheduling.py",
-    "benches/test_scan_scheduling.py",
-    "tests/benchmark_harness.rs",
-    "tests/cloud_table_locations.rs",
-    "tests/incremental_refresh_benchmark_harness.rs",
-    "tests/page_index_benchmark_harness.rs",
-    "tests/range_planning_benchmark_harness.rs",
-    "tests/reader.rs",
-    "tests/reader/**",
-    "tests/row_filter_benchmark_harness.rs",
-    "tests/scan_scheduling_benchmark_harness.rs",
-]
-
-# Explicit paths let Cargo load Python sdists where benchmark sources are excluded.
-[[bench]]
-name = "reader"
-path = "benches/reader.rs"
-harness = false
-required-features = ["datafusion"]
-test = false
-
-[[bench]]
-name = "row_filter"
-path = "benches/row_filter.rs"
-harness = false
-test = false
-
-[[bench]]
-name = "page_index"
-path = "benches/page_index.rs"
-harness = false
-test = false
-
-[[bench]]
-name = "range_planning"
-path = "benches/range_planning.rs"
-harness = false
-test = false
-
-[[bench]]
-name = "incremental_refresh"
-path = "benches/incremental_refresh.rs"
-harness = false
-test = false
-
-[[bench]]
-name = "scan_scheduling"
-path = "benches/scan_scheduling.rs"
-harness = false
-test = false
-
-[features]
-datafusion = ["dep:datafusion"]
-
-[package.metadata.docs.rs]
-all-features = true
-targets = [
-    "x86_64-unknown-linux-gnu",
-    "aarch64-apple-darwin",
-    "x86_64-pc-windows-msvc",
-]
-
-[lints.rust]
-missing_docs = "deny"
-
-[lints.clippy]
-expect_used = "deny"
-mod_module_files = "deny"
-panic = "deny"
-unwrap_used = "deny"
-
-[dependencies]
-async-trait = "0.1"
-arrow = "58.3.0"
-bytes = "1"
-chrono = { version = "0.4", default-features = false, features = ["std"] }
-datafusion = { version = "54.1.0", default-features = false, features = ["sql"], optional = true }
-delta_kernel = { version = "=0.25.0", default-features = false, features = ["arrow", "internal-api"] }
-delta_kernel_default_engine = { version = "=0.25.0", default-features = false, features = ["arrow", "rustls"] }
-futures-util = "0.3"
-hyper = { version = "1", features = ["client", "http1"] }
-hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "native-tokio", "ring", "tls12"] }
-hyper-util = { version = "0.1.21", features = ["client-legacy", "client-pool", "client-proxy", "client-proxy-system", "http1", "tokio"] }
-object_store = "0.13.2"
-parquet = { version = "58.3.0", features = ["async", "object_store"] }
-rand = "0.10"
-roaring = "0.11"
-rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-snafu = "0.9"
-thrift = { version = "0.17", default-features = false }
-tokio = { version = "1", features = ["net", "rt-multi-thread", "sync", "time"] }
-tower = { version = "0.5", features = ["limit", "util"] }
-tracing = "0.1"
-url = "2"
-
-[dev-dependencies]
-hyper = { version = "1", features = ["server"] }
-serde_json = "1"
-
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"
-
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_System_SystemInformation"] }

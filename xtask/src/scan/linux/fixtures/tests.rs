@@ -47,8 +47,9 @@ fn float64_fixture_preserves_adjacent_values_and_declares_its_schema() -> TestRe
 
 #[test]
 fn repeated_fixture_preserves_file_bytes_and_partition_metadata() -> TestResult {
-    let source = crate::repository::repository_root()
-        .join("tests/reader/fixtures/external_writer/corpus/partitioned/table");
+    let source = crate::repository::repository_root().join(
+        "crates/delta-arrow-reader/tests/reader/fixtures/external_writer/corpus/partitioned/table",
+    );
     let actions = read_actions(&source)?;
     let template = actions.iter().find_map(|action| action.get("add")).unwrap();
     let original = fs::read(source.join(template["path"].as_str().unwrap()))?;
@@ -78,8 +79,9 @@ fn repeated_fixture_preserves_file_bytes_and_partition_metadata() -> TestResult 
 
 #[test]
 fn expanded_fixture_preserves_rows_and_updates_sizes_and_statistics() -> TestResult {
-    let source = crate::repository::repository_root()
-        .join("tests/reader/fixtures/external_writer/corpus/partitioned/table");
+    let source = crate::repository::repository_root().join(
+        "crates/delta-arrow-reader/tests/reader/fixtures/external_writer/corpus/partitioned/table",
+    );
     let temporary = tempfile::tempdir()?;
     create_repeated_table(&source, temporary.path(), 2)?;
     let path = temporary.path().join("part-000.parquet");

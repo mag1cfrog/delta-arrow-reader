@@ -20,7 +20,7 @@ func TestRealCLI(t *testing.T) {
 	if executable == "" {
 		t.Skip("set DAR_BINARY to an absolute path to run the real CLI check")
 	}
-	fixture := filepath.Join("..", "..", "tests", "reader", "fixtures", "external_writer", "corpus", "partitioned")
+	fixture := filepath.Join("..", "..", "crates", "delta-arrow-reader", "tests", "reader", "fixtures", "external_writer", "corpus", "partitioned")
 	file, err := os.Open(filepath.Join(fixture, "expected.arrow"))
 	if err != nil {
 		t.Fatal(err)

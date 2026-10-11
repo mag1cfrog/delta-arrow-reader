@@ -111,7 +111,7 @@ pub(crate) fn generate(repository: &Path, args: NoticeArgs) -> Result<()> {
     let toolchain = args
         .rust_toolchain
         .as_deref()
-        .unwrap_or(&manifest.package.rust_version);
+        .unwrap_or(&manifest.workspace.package.rust_version);
     let about_version = &manifest.workspace.metadata.cli_release.cargo_about_version;
     let release = repository.join("crates/delta-arrow-reader-cli/release");
     let mut command = rustup_command(toolchain, args.architecture, repository);

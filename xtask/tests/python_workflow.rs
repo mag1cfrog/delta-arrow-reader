@@ -368,6 +368,100 @@ fn incomplete_artifacts_cannot_reach_the_upload_directory() -> Result<()> {
 }
 
 #[test]
+fn linux_sdist_lockfile_checks_allow_pruning_but_reject_drift() -> Result<()> {
+    let builder: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;
+    let steps = builder["jobs"]["build"]["steps"].as_array().unwrap();
+    let script = |name| {
+        steps.iter().find(|step| step["name"] == name).unwrap()["run"]
+            .as_str()
+            .unwrap()
+    };
+    let fixture = WheelFixture::new("sdist-lockfile")?;
+    let directory = &fixture.directory;
+    let original_lock = "version = 4\n\n[[package]]\nname = \"kept\"\nversion = \"0.1.0\"\n\n\
+                         [[package]]\nname = \"omitted\"\nversion = \"0.1.0\"\n";
+    for (path, contents) in [
+        (
+            "Cargo.toml",
+            "[workspace]\nmembers = [\"kept\"]\nresolver = \"3\"\n",
+        ),
+        ("Cargo.lock", original_lock),
+        (
+            "kept/Cargo.toml",
+            "[package]\nname = \"kept\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        ),
+        ("kept/src/lib.rs", ""),
+    ] {
+        let path = directory.join("source").join(path);
+        fs::create_dir_all(path.parent().unwrap())?;
+        fs::write(path, contents)?;
+    }
+    let runner_temp = directory.join("temp");
+    fs::create_dir_all(runner_temp.join("python-sdist"))?;
+    let output = Command::new("tar")
+        .arg("-czf")
+        .arg(runner_temp.join("python-sdist/source.tar.gz"))
+        .arg("-C")
+        .arg(directory)
+        .arg("source")
+        .output()?;
+    assert!(output.status.success(), "{output:?}");
+    // Use a local archive and real Cargo pruning; skip package installation and wheel tools.
+    let mut prepare = Command::new("bash");
+    prepare
+        .args([
+            "-e",
+            "-o",
+            "pipefail",
+            "-c",
+            &format!(
+                "python() {{ :; }}\nmaturin() {{ :; }}\n{}",
+                script("Prepare Linux source from sdist")
+            ),
+        ])
+        .current_dir(directory)
+        .env("RUNNER_TEMP", &runner_temp);
+    fs::write(directory.join("Cargo.lock"), "different workspace lockfile")?;
+    assert!(!prepare.output()?.status.success());
+    fs::remove_dir_all(directory.join(".python-sdist-source"))?;
+    fs::write(directory.join("Cargo.lock"), original_lock)?;
+    let output = prepare.output()?;
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        fs::read_to_string(directory.join("Cargo.lock"))?,
+        original_lock
+    );
+    let lockfile = directory.join(".python-sdist-source/Cargo.lock");
+    assert!(!fs::read_to_string(&lockfile)?.contains("omitted"));
+    for changed in [false, true] {
+        if changed {
+            fs::write(&lockfile, original_lock)?;
+        }
+        let output = Command::new("bash")
+            .args([
+                "-e",
+                "-o",
+                "pipefail",
+                "-c",
+                &format!(
+                    "python() {{ :; }}\nauditwheel() {{ printf 'inspected\\n'; }}\n{}",
+                    script("Inspect Linux native dependencies")
+                ),
+            ])
+            .current_dir(directory)
+            .env("RUNNER_TEMP", &runner_temp)
+            .output()?;
+        assert_eq!(output.status.success(), !changed, "{output:?}");
+        assert_eq!(
+            String::from_utf8(output.stdout)?.contains("inspected"),
+            !changed
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn builder_reports_validation_only_after_successful_builds_and_complete_artifacts() -> Result<()> {
     let builder: Value =
         serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;

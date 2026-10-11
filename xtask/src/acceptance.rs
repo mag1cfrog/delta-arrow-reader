@@ -61,7 +61,7 @@ impl TestArchiveArgs {
             }
         );
         let expected = repository
-            .join("tests/reader/fixtures/external_writer/corpus/partitioned/expected.arrow");
+            .join("crates/delta-arrow-reader/tests/reader/fixtures/external_writer/corpus/partitioned/expected.arrow");
         check_smoke_output(&self.smoke_output, &expected)?;
 
         run_process_tests(&binary, &self.identity.version, &repository)?;

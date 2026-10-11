@@ -1,7 +1,21 @@
 # Development
 
 This page is for contributors working on Delta Arrow Reader itself. Applications
-that use the crate can start with the [installation guide](../public/installation.md).
+that use the crate can start with the [installation guide](../../crates/delta-arrow-reader/docs/public/installation.md).
+
+## Repository layout
+
+The root `Cargo.toml` defines the workspace. Each product lives under `crates/`:
+
+- `delta-arrow-reader/` contains the Rust library, its tests, Rust benchmarks,
+  and public documentation.
+- `delta-arrow-reader-cli/` contains the `dar` command and its release tooling.
+- `delta-arrow-reader-python/` contains the Python extension, `pyproject.toml`,
+  type stub, and Python tests.
+
+Shared benchmark tools remain in `benches/`, contributor documentation in `docs/`,
+and repository automation in `xtask/`.
+Run the commands below from the repository root.
 
 ## Run the local checks
 
@@ -43,7 +57,7 @@ for approval and artifact details.
 ## Build the Python package locally
 
 For source installation and a table reading example, see the
-[Python installation guide](../public/installation.md#python).
+[Python installation guide](../../crates/delta-arrow-reader/docs/public/installation.md#python).
 
 To build and test the wheel directly, run these commands from the repository
 root on Linux or macOS:
@@ -52,7 +66,7 @@ root on Linux or macOS:
 python3 -m venv target/python-venv
 . target/python-venv/bin/activate
 python -m pip install 'maturin>=1.14,<2'
-maturin build --locked --out target/python-wheels
+maturin build --locked --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out target/python-wheels
 python -m pip install --force-reinstall target/python-wheels/*.whl
 python -I -m unittest discover -s crates/delta-arrow-reader-python/tests
 cargo test --locked -p delta-arrow-reader-python
@@ -92,9 +106,21 @@ selects columns and filters rows, and closes the reader before consuming all res
 It uses the checked-in Spark fixture and checks batch values after closing the
 reader. These checks also run in the full Python suite.
 
-Python packaging configuration and the type stub live at the repository root.
-Use `maturin sdist --out target/python-sdist` to package Git-tracked workspace
-files with their matching lockfile. Track new source files before packaging.
+Python packaging configuration and the type stub live in
+`crates/delta-arrow-reader-python/`. Package the binding, its local Rust
+dependencies, and the workspace lockfile:
+
+```console
+maturin sdist --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out target/python-sdist
+```
+
+Track new source files before packaging.
+
+The source archive contains the binding and core crates. Before building an
+extracted archive with `--locked`, run `cargo update --workspace --offline` in
+the extracted directory. This removes entries for omitted workspace members
+while retaining the locked registry versions. CI first checks that the archive
+contains the original workspace lockfile, then performs this pruning.
 
 The binding's runtime owner lives in `crates/delta-arrow-reader-python/src/runtime.rs`.
 Table loading, scan planning, and batch reads use its `wait` method, which releases
@@ -119,7 +145,8 @@ checks. Changes confined to CLI implementation, benchmarks, or `docs/` skip them
 
 The job runs Clippy, the Rust runtime ownership tests, and the full Python suite
 on Linux with Python 3.10 and PyArrow 18.0.0. It uses `maturin develop --locked`
-to install a debug build in a virtual environment. Feature pull requests do not
+with the binding crate's manifest to install a debug build in a virtual
+environment. Feature pull requests do not
 build the three release wheels.
 
 Release-plz pull requests targeting main also require three-platform wheel
@@ -248,9 +275,10 @@ TestPyPI rehearsal, stable releases, and upload recovery, see
 
 ## Work on the documentation
 
-The Markdown files in `docs/public/` are the source for the documentation
-site. The guides listed in `src/guides.rs` are also included in the generated
-Rust documentation.
+The Markdown files in `crates/delta-arrow-reader/docs/public/` are the source
+for the documentation site. The guides listed in
+`crates/delta-arrow-reader/src/guides.rs` are also included in the generated Rust
+documentation.
 
 Use absolute links between shared pages. Mark runnable Rust examples as
 `no_run`, and mark incomplete snippets as `ignore`, so both documentation
@@ -260,6 +288,6 @@ Install the documentation dependencies, then build or serve the site:
 
 ```console
 python -m pip install -r docs/requirements.txt
-python -m zensical build --strict -f docs/mkdocs.yml
-python -m zensical serve -f docs/mkdocs.yml
+python -m zensical build --strict -f crates/delta-arrow-reader/docs/mkdocs.yml
+python -m zensical serve -f crates/delta-arrow-reader/docs/mkdocs.yml
 ```

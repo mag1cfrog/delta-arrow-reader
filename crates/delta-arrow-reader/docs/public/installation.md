@@ -186,7 +186,7 @@ repository root, run these commands on Linux or macOS:
 ```console
 python3 -m venv target/python-venv
 . target/python-venv/bin/activate
-python -m pip install .
+python -m pip install ./crates/delta-arrow-reader-python
 ```
 
 Installation also installs PyArrow 18 or newer. The

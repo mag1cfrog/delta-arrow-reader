@@ -5,7 +5,7 @@ These three Delta tables were written by Apache Spark 4.0.1 and Delta Lake
 exported its schema and complete result to `expected.arrow` with PyArrow
 20.0.0. The reader and its synthetic fixture helpers take no part in generation.
 The data is original synthetic data under the repository's [Apache-2.0
-license](../../../../LICENSE).
+license](../../../../../../LICENSE).
 
 | Table | Snapshot | Live / physical rows | Parquet layout | Coverage |
 | --- | ---: | ---: | --- | --- |
@@ -34,7 +34,7 @@ cargo test --locked --features datafusion --test reader external_writer
 
 Normal tests read only these local files. They need no Python, Java, Spark,
 cloud credentials, or downloads beyond the usual Rust dependencies. The corpus
-is under `tests/reader`, which is excluded from the published crate.
+is under `crates/delta-arrow-reader/tests/reader`, which is excluded from the published crate.
 
 The tests check complete schemas and values against Spark, including nested
 nulls and deleted-row exclusion. They compare filtered scans with Arrow
@@ -57,7 +57,7 @@ directory; the generator refuses to overwrite an existing one:
 ```sh
 JAVA_HOME=/path/to/java-21 SPARK_LOCAL_IP=127.0.0.1 \
   uv run --python 3.13.12 --script \
-  tests/reader/fixtures/external_writer/generate.py \
+  crates/delta-arrow-reader/tests/reader/fixtures/external_writer/generate.py \
   /tmp/new-external-writer-corpus
 ```
 

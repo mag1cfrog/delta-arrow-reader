@@ -17,7 +17,7 @@ struct SmokeFixture {
 impl SmokeFixture {
     fn new() -> TestResult<Self> {
         let expected_path = crate::repository::repository_root()
-            .join("tests/reader/fixtures/external_writer/corpus/partitioned/expected.arrow");
+            .join("crates/delta-arrow-reader/tests/reader/fixtures/external_writer/corpus/partitioned/expected.arrow");
         let mut reader = FileReader::try_new(File::open(&expected_path)?, None)?;
         let id = reader.schema().index_of("id")?;
         let batch = reader.next().ok_or("empty fixture")??.project(&[id])?;

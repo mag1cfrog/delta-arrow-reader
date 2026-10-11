@@ -262,7 +262,7 @@ fn render_section(plan: &ReleasePlan, state: &PublicationState) -> Result<String
     }
     text.push_str(&format!(
         "\nUse a version or digest when running the image or copying `dar` into a Go service image. \
-         See [installation and checksum verification](https://github.com/{REPOSITORY}/blob/{commit}/docs/public/installation.md#cli-binaries-and-container-images) \
+         See [installation and checksum verification](https://github.com/{REPOSITORY}/blob/{commit}/crates/delta-arrow-reader/docs/public/installation.md#cli-binaries-and-container-images) \
          and the [Go consumer](https://github.com/{REPOSITORY}/tree/{commit}/examples/go-cli).\n\n{END}",
         commit = release.commit,
     ));

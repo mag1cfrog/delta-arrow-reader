@@ -17,7 +17,7 @@ from pathlib import Path
 
 from delta_arrow_reader import DeltaTable
 
-location = Path("tests/reader/fixtures/external_writer/corpus/partitioned/table")
+location = Path("crates/delta-arrow-reader/tests/reader/fixtures/external_writer/corpus/partitioned/table")
 table = DeltaTable(location)
 print(f"Snapshot: {table.version}")
 print(table.schema)

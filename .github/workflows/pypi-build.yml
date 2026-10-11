@@ -146,6 +146,9 @@ jobs:
           mkdir .python-sdist-source
           tar -xzf "$RUNNER_TEMP"/python-sdist/*.tar.gz -C .python-sdist-source --strip-components=1
           cmp Cargo.lock .python-sdist-source/Cargo.lock
+          # shortcut: Maturin retains omitted workspace members in Cargo.lock; remove when its sdist lockfile matches the packaged workspace.
+          cargo update --workspace --offline --manifest-path .python-sdist-source/Cargo.toml
+          cp .python-sdist-source/Cargo.lock "$RUNNER_TEMP/python-sdist/Cargo.lock"
       - name: Build wheel
         id: wheel-build
         continue-on-error: ${{ inputs.cache-only && runner.os == 'Linux' }}
@@ -228,7 +231,7 @@ jobs:
       - name: Inspect Linux native dependencies
         if: runner.os == 'Linux'
         run: |
-          cmp Cargo.lock .python-sdist-source/Cargo.lock
+          cmp "$RUNNER_TEMP/python-sdist/Cargo.lock" .python-sdist-source/Cargo.lock
           python -m pip install --only-binary=:all: auditwheel
           auditwheel show dist/*.whl
       - name: Test installed wheel on Python 3.10 and PyArrow 18.0.0

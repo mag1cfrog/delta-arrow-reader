@@ -1,4 +1,5 @@
 /target/
 /xtask/target/
 /docs/.site/
+/crates/delta-arrow-reader/docs/.site/
 __pycache__/

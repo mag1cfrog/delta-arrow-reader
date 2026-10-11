@@ -367,7 +367,7 @@ impl ProcessFixture<'_> {
     fn check_historical_snapshots(&self) -> Result<()> {
         let corpus = self
             .repository
-            .join("tests/reader/fixtures/external_writer/corpus");
+            .join("crates/delta-arrow-reader/tests/reader/fixtures/external_writer/corpus");
         for (name, latest) in [
             ("partitioned", "0"),
             ("nested_mapping", "1"),

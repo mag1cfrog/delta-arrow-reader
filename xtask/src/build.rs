@@ -102,12 +102,12 @@ impl PrepareArgs {
         }
         let compiler = command_output(Command::new("rustup").args([
             "run",
-            &manifest.package.rust_version,
+            &manifest.workspace.package.rust_version,
             "rustc",
             "--version",
             "--verbose",
         ]))?;
-        let release = compiler_release(&compiler, &manifest.package.rust_version)?;
+        let release = compiler_release(&compiler, &manifest.workspace.package.rust_version)?;
         let identity = BuildIdentity {
             version: manifest.workspace.package.version,
             source_commit: self.source_commit,
@@ -302,7 +302,7 @@ fn build_binary(repository: &Path, args: &BuildArgs) -> Result<BuildMetadata> {
     let toolchain = args
         .rust_toolchain
         .as_deref()
-        .unwrap_or(&manifest.package.rust_version);
+        .unwrap_or(&manifest.workspace.package.rust_version);
     let compiler = command_output(
         rustup_command(toolchain, args.architecture, repository).args([
             "rustc",
@@ -320,7 +320,7 @@ fn build_binary(repository: &Path, args: &BuildArgs) -> Result<BuildMetadata> {
     let identity = BuildIdentity {
         version: manifest.workspace.package.version,
         source_commit: args.source_commit.clone(),
-        rust_toolchain: compiler_release(&compiler, &manifest.package.rust_version)?,
+        rust_toolchain: compiler_release(&compiler, &manifest.workspace.package.rust_version)?,
     };
     identity.validate()?;
     let target_dir = std::path::absolute(&args.target_dir).context(FileSnafu {

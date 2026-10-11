@@ -68,7 +68,7 @@ class TableTests(unittest.TestCase):
         }}
 
     def http_support(self):
-        support = (Path(__file__).resolve().parents[3] / "tests/reader/https.py")
+        support = (Path(__file__).resolve().parents[3] / "crates/delta-arrow-reader/tests/reader/https.py")
         spec = importlib.util.spec_from_file_location("reader_https", support)
         http = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(http)
@@ -76,7 +76,7 @@ class TableTests(unittest.TestCase):
 
     def test_installed_wheel_stream_smoke(self):
         fixture = (Path(__file__).resolve().parents[3]
-                   / "tests/reader/fixtures/external_writer/corpus/partitioned")
+                   / "crates/delta-arrow-reader/tests/reader/fixtures/external_writer/corpus/partitioned")
         with pa.ipc.open_file(fixture / "expected.arrow") as source:
             rows = source.read_all().to_pylist()
         expected = {row["id"]: row["label"] for row in rows
@@ -362,7 +362,7 @@ class TableTests(unittest.TestCase):
 
     def test_external_writer_fixtures_match_spark(self):
         corpus = (Path(__file__).resolve().parents[3]
-                  / "tests/reader/fixtures/external_writer/corpus")
+                  / "crates/delta-arrow-reader/tests/reader/fixtures/external_writer/corpus")
         manifest = json.loads((corpus / "manifest.json").read_text(encoding="utf-8"))
         for fixture in manifest["fixtures"]:
             with self.subTest(fixture=fixture["name"]):
@@ -396,7 +396,7 @@ class TableTests(unittest.TestCase):
 
     def test_projection_and_limits_preserve_order_values_and_row_counts(self):
         fixture = (Path(__file__).resolve().parents[3]
-                   / "tests/reader/fixtures/external_writer/corpus/partitioned/table")
+                   / "crates/delta-arrow-reader/tests/reader/fixtures/external_writer/corpus/partitioned/table")
         table = DeltaTable(fixture)
         with table.to_reader() as reader:
             full = reader.read_all()
@@ -427,7 +427,7 @@ class TableTests(unittest.TestCase):
 
     def test_filter_groups_preserve_projection_limits_and_deletion_vectors(self):
         corpus = (Path(__file__).resolve().parents[3]
-                  / "tests/reader/fixtures/external_writer/corpus")
+                  / "crates/delta-arrow-reader/tests/reader/fixtures/external_writer/corpus")
         manifest = json.loads((corpus / "manifest.json").read_text(encoding="utf-8"))
         for fixture in manifest["fixtures"]:
             directory = corpus / fixture["name"]
