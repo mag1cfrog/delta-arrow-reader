@@ -377,15 +377,67 @@ declared controls. Verified duplicate IPC outputs were removed after comparison.
 The inspector and length-parser unit tests pass, as does Clippy for all targets.
 The original local decoder proof still passes all 20 cases. Regenerating the
 default uncompressed short fixture produced the same object and oracle hashes.
-The next experiment must map lengths and selected values through the observed
-raw frames and charge block-header discovery as well as payload reads. Keep
-compressed and mixed frames on ordinary reads. Raw layout alone is insufficient
-to recommend enabling the optimization.
+Raw layout alone is insufficient to recommend enabling the optimization. The
+following diagnostic measures block-header discovery before adding length/value
+mapping and reconstruction to the query driver.
+
+## Raw-block discovery cost, 2026-10-11
+
+[delta_length_zstd_probe.py](delta_length_zstd_probe.py) compares downloading all
+eight payload columns with discovering only the raw binary pages' block headers.
+It uses the same long-value Zstd fixture and processes its four row groups in
+order, as the isolated query driver does. Within each group, requests run with
+32 workers. Both modes use the existing curl/SigV4 client through the paced
+proxy. The measured process had eight reader CPUs, an 8 GiB memory limit and
+no swap, enforced by `storage.reader_prefix`.
+
+This is an optimistic discovery diagnostic, not a query benchmark. Offline
+inspection supplies eligible pages and Parquet header lengths. Each page's first
+8 KiB request contains its frame header; subsequent block positions are computed
+from the headers actually returned over the network. The diagnostic does not
+use the offline block offsets to schedule requests. It omits length discovery,
+selected-value reads, reconstruction, predicates, DVs and result decoding.
+
+Three alternating pairs on each profile produced these medians:
+
+| Profile | Complete payload reads, seconds | Raw-header discovery only, seconds |
+| --- | ---: | ---: |
+| 200 ms +/-20 ms, shared 150 Mbit/s | 21.143 | 39.436 |
+| 1 ms, shared 10,000 Mbit/s | 1.151 | 2.368 |
+
+Every pair favored complete reads by more than the larger within-mode timing
+range. Complete reads used 32 requests and 380,945,504 bytes. Header discovery
+used 1,935 requests and 431,633 bytes. Every complete response matched its local
+column hash; every discovered header matched the independently inspected layout.
+All 12 samples and request traces were retained, with no failures or retries.
+The slow proxy passed the existing latency, pacing and cancellation calibration.
+
+The four groups' longest header chains require 48, 42, 49 and 49 requests.
+With the slow profile's minimum 180 ms delay, those 188 dependent rounds alone
+need at least 33.84 seconds under this scheduling. The traces recorded 37.984
+seconds of injected delay on those critical paths. This already exceeds the
+measured complete reads, before adding selected payloads or decoding. More
+workers cannot overlap dependent requests within a page.
+
+Curl starts a process and connection per request. Its overhead is included in
+both modes and dominates the fast control; that control does not predict a
+pooled Rust client's performance. Slow-profile median client CPU was 2.032
+seconds for complete reads and 11.235 seconds for headers. Whole-process peak RSS
+was about 513 MiB, a cumulative high-water mark rather than a mode comparison.
+The slow-profile latency floor establishes the limitation independently of
+curl's process overhead.
+
+The sequential header strategy is unsuitable for this measured layout and
+schedule. Keep these Zstd columns on ordinary reads in the initial #453 proposal.
+This does not rule out other page geometry or a different discovery schedule.
+The production fixed-width planner already estimates dependent Zstd rounds
+before probing; variable-length integration must preserve that check. The
+diagnostic bypasses the cost gate deliberately to measure the rejected work.
 
 ## Remaining work for #452
 
-Measure bounded reads of the observed all-raw Zstd pages against the recorded
-compressed/mixed-frame fallback controls. The current cost experiment uses known
+Use the uncompressed layout as the first integration candidate and retain the
+Zstd diagnostics as fallback evidence. The current cost experiment uses known
 proxy settings and optimistic request-processing cost; it does not complete
 automatic-profile validation or prove rejection across larger skewed batches.
 Use the measured limits and losing cases to update #453 before recommending
