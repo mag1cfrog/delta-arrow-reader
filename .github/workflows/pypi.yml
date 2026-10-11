@@ -36,12 +36,18 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-python@v6
+      - name: Read Rust version
+        id: rust-version
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          python-version: '3.12'
+          toolchain: ${{ steps.rust-version.outputs.version }}
       - name: Check event, commit, tag, and version
         id: request
-        run: python .github/scripts/prepare_python_release.py
+        run: cargo xtask prepare-python-release
 
   build:
     name: Build and test wheels

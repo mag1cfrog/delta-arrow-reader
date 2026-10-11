@@ -7,6 +7,8 @@ use std::{
 
 use serde::Deserialize;
 
+mod python_release;
+
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 const CACHE_PREFIX: &str = "v0-rust-core-ci-targets-Windows_NT-x64-";
@@ -129,7 +131,10 @@ fn main() -> Result<()> {
     match args.as_slice() {
         [task] if task == "check-cache-writes" => check_cache_writes(),
         [task] if task == "prune-ci-caches" => prune_ci_caches(),
-        _ => Err("usage: cargo xtask <check-cache-writes|prune-ci-caches>".into()),
+        [task] if task == "prepare-python-release" => python_release::prepare_release(),
+        _ => Err(
+            "usage: cargo xtask <check-cache-writes|prune-ci-caches|prepare-python-release>".into(),
+        ),
     }
 }
 
