@@ -8,8 +8,12 @@ and the published README benchmarks are unchanged.
 
 ## Decision
 
-Proceed with [#453](https://github.com/mag1cfrog/delta-arrow-reader/issues/453)
-for flat, uncompressed V1 DELTA_LENGTH_BYTE_ARRAY string and binary pages.
+The integration candidate for
+[#453](https://github.com/mag1cfrog/delta-arrow-reader/issues/453) is flat,
+uncompressed V1 DELTA_LENGTH_BYTE_ARRAY string and binary pages. #452 remains
+under review while the fixed-profile follow-up below examines fast-network
+fallback costs. These costs belong to this experiment's acceptance, before
+production integration begins.
 On the slow network profile, measured-cost reads reduced the long-value
 scattered query from 30.095 to 5.316 seconds and the grouped query from 29.799
 to 4.539 seconds. Query downloads fell from 499.461 to 1.887 MB and from
@@ -46,6 +50,8 @@ result arrays are excluded from this archive; their hashes and successful
 comparison records are retained. To recheck actual values, regenerate the
 deterministic inputs and run the correctness checks below. Offline summary
 replay does not repeat those value comparisons.
+That archive covers the measured-profile campaign. The later fixed-profile
+controls below are retained separately pending review and publication.
 
 ## Run the proof
 
@@ -260,7 +266,7 @@ value sizes are known; it is not a 10% wall-time guarantee or an acceptable
 regression budget. The experiment still investigates regressions under the
 criteria above.
 
-`delta_length_network.py run` now passes `auto` to both modes. Each process
+By default, `delta_length_network.py run` passes `auto` to both modes. Each process
 measures transport during initialization using the same client and concurrency
 limit as its query. Three plans each fetch four concurrent 1 MiB ranges. Payload
 intervals that overlap count once; a throughput sample needs at least 10 ms of
@@ -283,6 +289,12 @@ prototype's 32-request limit on its existing SDK client. Production uses a
 different partial-read transport and a larger shared concurrency limit. #453
 must reuse production calibration and validate its actual scheduling; the
 prototype's measured profile cannot simply be carried across.
+
+For a diagnostic with identical available cost inputs in every run, pass
+`--cost-profile /absolute/path/to/profile.json` to the Python runner. It copies
+that JSON into the output directory and verifies each reader used those values.
+This bypasses calibration and is recorded as a fixed diagnostic control; its
+initialization times and results must stay separate from automatic-policy runs.
 
 For direct invocations, optional `auto` or a cost-profile JSON path goes
 immediately before the output directory. `auto` requires S3. Manual profiles
@@ -658,6 +670,57 @@ for overlapping transfers, sustained request capacity and unavailable profiles.
 Samples, initialization captures, query traces and source hashes are retained;
 verified duplicate IPC outputs were removed after comparison. Production
 source and the published README benchmarks remain unchanged.
+
+## Fixed-profile fallback follow-up, 2026-10-11
+
+The measured fast matrix mixed available and unavailable profiles. In
+particular, all five experimental long-value runs lacked a profile, while two
+skewed-value runs issued 128 probes and then fell back. Its pooled medians could
+not establish how the active policy performed on the fast link.
+
+Two further campaigns hold cost inputs fixed using the first complete
+experimental fast-profile record: latency rounded up to 5 ms, bandwidth down
+to 1,804 Mbit/s, and request cost 62,692 byte-equivalent units. The network
+remains 1 ms and 10,000 Mbit/s. Each campaign has three alternating pairs and
+independent ordinary/view-array correctness checks for both modes. These are
+controlled subsecond diagnostics, not new automatic-policy timing claims.
+
+The first campaign exposed consistent paired extra time in the skewed case.
+Code review also found that `range` copied a completed page into another
+full-size buffer even when it was the only piece of the requested range.
+The second campaign returns that existing buffer directly. No cost threshold,
+fixture, row selection or I/O plan changed.
+
+| Campaign and case | Ordinary seconds | Experimental seconds | Paired experimental extra time |
+| --- | ---: | ---: | ---: |
+| Before buffer reuse, long scattered | 0.698 | 0.397 | -306, -352, -298 ms |
+| Before buffer reuse, selected-long-batch | 0.555 | 0.574 | +30, +17, +18 ms |
+| With buffer reuse, long scattered | 0.720 | 0.165 | -503, -558, -524 ms |
+| With buffer reuse, selected-long-batch | 0.574 | 0.576 | +17, +2, +5 ms |
+
+All 16 full-result checks and 24 timing runs completed. The long case exercised
+105 partial pages in every experimental run, retaining 1,887,309 query bytes
+and 362 requests versus ordinary reads' 499,461,298 bytes and 122 requests.
+Experimental process CPU medians were 0.36 seconds before buffer reuse and
+0.09 afterwards. These were separate campaigns; the paired controls and raw
+samples are retained rather than attributing every timing change to the edit.
+
+The skewed case still issued 128 probes and fell back on all 128 pages. Both
+modes transferred 258,201,068 bytes, with 157 ordinary requests and 285
+experimental requests. Prefixes were reused, so probes added requests without
+duplicate downloads. The observed median excess was 3.27% before buffer reuse
+and 0.34% afterwards. In the latter campaign, all paired differences were
+positive but smaller than the 34.7 ms within-mode range. Process CPU medians
+were 0.53/0.56 seconds and peak RSS 193.8/232.1 MiB for ordinary/experimental.
+This does not establish zero overhead or a completed no-regression check.
+
+Preflight admits these probes because their modeled cost fits the discovery
+budget. Only after decoding lengths does it learn that selected values occupy
+most payload bytes. Page size, row count and selected-row count alone do not
+reveal that distribution. The remaining request, parsing and reconstruction
+cost must be evaluated here, with complete profiles kept separate from missing
+profiles. #453 repeats the settled policy on production transport; it does not
+replace this experiment's responsibility to explain and bound losing cases.
 
 ## Handoff to #453
 

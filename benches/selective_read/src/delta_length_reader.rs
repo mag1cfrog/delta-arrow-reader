@@ -347,6 +347,9 @@ impl Reader {
             .buffered(CONCURRENCY)
             .try_collect()
             .await?;
+        if let [piece] = pieces.as_slice() {
+            return Ok(piece.clone());
+        }
         let mut output = Vec::with_capacity((range.end - range.start) as usize);
         for bytes in pieces {
             output.extend_from_slice(&bytes);

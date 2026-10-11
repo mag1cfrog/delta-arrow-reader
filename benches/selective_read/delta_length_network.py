@@ -97,7 +97,7 @@ def invoke(args, mode, phase, repetition, arrays):
     slot.mkdir()
     command = storage.reader_prefix(args.state) + ["/usr/bin/time", "-f", "%U %S %M", "-o", str(slot / "resources.txt"),
         str(args.binary), args.table, mode, args.selection, arrays, phase,
-        "auto", str(slot / "reader")]
+        str(args.cost_profile) if args.cost_profile else "auto", str(slot / "reader")]
     network.control(args.state, reset=True, traced=phase == "validate")
     with (slot / "stdout.log").open("x") as stdout, (slot / "stderr.log").open("x") as stderr:
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=stdout, stderr=stderr,
@@ -129,6 +129,8 @@ def invoke(args, mode, phase, repetition, arrays):
             process.wait(timeout=10)
     capture = network.finish(args.state, slot)
     record = json.loads((slot / "reader/record.json").read_text())
+    if args.cost_profile:
+        assert record["cost_profile"] == args.profile_record, "fixed cost profile changed"
     if phase == "validate":
         actual = pa.ipc.open_stream(slot / "reader/result.arrow").read_all().cast(args.expected.schema)
         # Both paths preserve file/row order; compare exact values and nulls without sorting large payloads.
@@ -143,6 +145,10 @@ def invoke(args, mode, phase, repetition, arrays):
 
 def measure(args):
     args.output.mkdir()
+    args.profile_record = json.loads(args.cost_profile.read_text()) if args.cost_profile else None
+    if args.cost_profile:
+        args.cost_profile = args.output / "cost-profile.json"
+        save(args.cost_profile, args.profile_record)
     manifest = json.loads((args.fixture / "manifest.json").read_text())
     assert manifest["format"] == "delta-length-network-v1"
     assert pa.__version__ == manifest["pyarrow"], "oracle Arrow version changed"
@@ -160,7 +166,8 @@ def measure(args):
         "source_sha256": {name: digest(Path(__file__).parent / name) for name in (
             "src/bin/delta-length-query.rs", "src/delta_length_reader.rs", "src/delta_length_profile.rs", "src/delta_length.rs", "Cargo.lock", "storage.py",
             "../../src/reader/backend/direct_parquet/range_planning.rs")},
-        "cost_profile": "measured during each process initialization on the same client, including request capacity; incomplete measurements keep ordinary reads",
+        "cost_profile": {"basis": "fixed diagnostic control", "values": args.profile_record} if args.cost_profile else
+            "measured during each process initialization on the same client, including request capacity; incomplete measurements keep ordinary reads",
         "selection": args.selection, "pairs": 3, "primary_metric": "first fully consumed query including planning, predicate and DV",
         "acceptance": "all three pairs improve beyond the larger within-mode range; investigate >5% median or consistent smaller regressions",
         "policy": "uncompressed flat V1; >=1 MiB pages; <=1/8 selected rows; >=64 bytes/row; discovery <=10% modeled ordinary batch cost; >=25% byte saving and >10% modeled remaining-read saving after discovery"})
@@ -191,6 +198,8 @@ if __name__ == "__main__":
     for name in ("output", "binary", "state", "fixture"):
         run.add_argument("--" + name, type=lambda p: Path(p).resolve(), required=True)
     run.add_argument("--table", required=True)
+    run.add_argument("--cost-profile", type=lambda p: Path(p).resolve(),
+        help="fixed cost-profile JSON for diagnostic controls; default: measure during initialization")
     run.add_argument("--selection", choices=("grouped", "scattered", "dense"), required=True)
     args = parser.parse_args()
     generate(args.output, args.case, args.binary, args.compression) if args.command == "generate" else measure(args)
