@@ -119,14 +119,23 @@ checks. Changes confined to CLI implementation, benchmarks, or `docs/` skip them
 
 The job runs Clippy, the Rust runtime ownership tests, and the full Python suite
 on Linux with Python 3.10 and PyArrow 18.0.0. It uses `maturin develop --locked`
-to install a debug build in a virtual environment. Pull requests do not build
-the three release wheels.
+to install a debug build in a virtual environment. Feature pull requests do not
+build the three release wheels.
+
+Release-plz pull requests targeting main also require three-platform wheel
+validation. CI identifies them by the release bot's identity and a
+`release-plz-` branch in this repository. `Approve release wheel checks` waits
+for approval through the `python-release-checks` environment before starting
+the builds. The required `CI` check succeeds only after approval and complete
+wheel validation, in addition to the usual checks. Feature PRs skip both release
+jobs. A new PR revision cancels the previous run and requires a new approval.
 
 ## Build Python wheels in CI
 
-The `Python release` workflow calls `.github/workflows/pypi-build.yml` to build
-Linux x86_64, Windows x86_64, and macOS arm64 wheels. This runs for releases and
-manual builds, including TestPyPI rehearsals. To check packaging before a release,
+Release PR checks and the `Python release` workflow call
+`.github/workflows/pypi-build.yml` to build Linux x86_64, Windows x86_64, and macOS
+arm64 wheels. The release workflow also supports manual builds, including
+TestPyPI rehearsals. To check packaging manually before a release,
 follow [Build without uploading](python-releases.md#build-without-uploading).
 Callers of the reusable workflow supply two required inputs:
 
@@ -218,8 +227,8 @@ gh run download RUN_ID --pattern 'delta-arrow-reader-*-wheel' --dir wheel-artifa
 cargo xtask check-python-artifacts wheel-artifacts --expected-version 0.6.2
 ```
 
-The workflow produces build artifacts only. For publisher setup, TestPyPI
-rehearsal, stable releases, and upload recovery, see
+The reusable wheel workflow produces build artifacts only. For publisher setup,
+TestPyPI rehearsal, stable releases, and upload recovery, see
 [Publish Python wheels](python-releases.md).
 
 ## Work on the documentation

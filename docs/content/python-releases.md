@@ -22,6 +22,12 @@ In the repository's Settings > Environments, create `testpypi-release` and
 publication and allow `v*` tags in its deployment rules. Allow the intended
 rehearsal branch or tag on `testpypi-release`.
 
+Create a separate `python-release-checks` environment for release PR builds.
+Add the maintainer as a required reviewer, allow the branch pattern
+`refs/pull/*/merge`, and disable administrator bypass. Allow self-review so the
+maintainer can approve a run they restart. This environment needs no secrets
+or PyPI publisher registration; it only approves building and testing wheels.
+
 Register a separate GitHub Actions Trusted Publisher on each index. Use these
 values, including the environment field:
 
@@ -130,10 +136,16 @@ Python crate, the workflow uses the normal configuration automatically.
 
 Automatic release PRs require the repository variable
 `RELEASE_PLZ_PR_ENABLED=true`. Review the version, lockfile, and changelog in that
-PR, then merge it after its checks pass and publication is authorized. The
+PR. When ready to check the release wheels, open its CI run, choose
+`Review deployments`, select `python-release-checks`, and click
+`Approve and deploy`. This starts the three platform builds without uploading
+to a package index. The required `CI` check waits for successful approval and
+wheel validation. New commits to the PR require a new approval and build.
+
+Merge the PR after its checks pass and publication is authorized. The
 existing release-plz workflow publishes the core crate and its GitHub release.
 A stable published release starts `pypi.yml`, which verifies the tag and commit,
-builds and tests the wheels, and requests the `pypi-release` environment.
+builds and tests the wheels again, and requests the `pypi-release` environment.
 Drafts, prereleases, and unrelated tags cannot upload.
 
 If the automatic Python run did not start, a maintainer can dispatch it manually
