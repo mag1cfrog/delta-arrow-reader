@@ -130,8 +130,10 @@ impl DeltaScanExecutionOptions {
     ///
     /// Enabled by default. The direct reader uses predicate-derived row numbers to
     /// read selected values from uncompressed pages or Zstd raw blocks without
-    /// checksums. Supports nullable and required INT32, INT64, FLOAT and DOUBLE
-    /// physical columns, including their existing logical type conversions.
+    /// checksums. Supports nullable and required INT32, INT64, FLOAT, DOUBLE and
+    /// FIXED_LEN_BYTE_ARRAY physical columns, including existing decimal
+    /// conversions. Fixed-length widths come from the Parquet schema. This does
+    /// not add new Delta type mappings, such as fixed-size binary to Delta binary.
     /// Unsupported layouts and bounded-work limits use ordinary reads.
     /// Explicit range-read policies other than `Automatic` disable this optimization.
     /// The Delta Kernel backend ignores this direct-reader option.

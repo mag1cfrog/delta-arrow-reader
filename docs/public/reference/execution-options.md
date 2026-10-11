@@ -53,8 +53,10 @@ that scan; it cannot undo initialization already performed. Streaming does not
 require DataFusion.
 
 Supported pages are flat PLAIN V1 pages with offset indexes and physical types
-INT32, INT64, FLOAT or DOUBLE. Nullable and required columns are supported,
-including their existing date, timestamp, decimal and type-widening conversions.
+INT32, INT64, FLOAT, DOUBLE or FIXED_LEN_BYTE_ARRAY. Nullable and required columns
+are supported, including existing date, timestamp, decimal and type-widening conversions.
+Fixed-length decimal widths come from the Parquet schema. This optimization does
+not add new Delta type mappings, such as fixed-size binary to Delta binary.
 Data must be uncompressed or held in Zstd raw blocks without checksums. Other
 layouts and explicit range-read policy overrides use ordinary reads.
 
