@@ -12,6 +12,7 @@ mod process;
 mod python_release;
 mod python_upload;
 mod python_wheels;
+mod release_plz;
 mod repository;
 mod scan;
 
@@ -47,6 +48,8 @@ enum Task {
     CheckCacheWrites,
     /// Keep the two most recently used Windows core CI caches.
     PruneCiCaches,
+    /// Prepare release-plz configuration for the current shared release baseline.
+    PrepareReleasePrConfig { destination: PathBuf },
     /// Validate a Python release event against the checked-out commit.
     CheckPythonReleaseRequest,
     /// Validate one Python wheel's filename and metadata.
@@ -112,6 +115,7 @@ fn run_task(task: Task) -> Result<()> {
         Task::Cli { command } => command.run().map_err(Into::into),
         Task::CheckCacheWrites => check_cache_writes(),
         Task::PruneCiCaches => prune_ci_caches(),
+        Task::PrepareReleasePrConfig { destination } => release_plz::prepare_config(&destination),
         Task::CheckPythonReleaseRequest => python_release::validate_release_request(),
         Task::CheckPythonWheel {
             path,

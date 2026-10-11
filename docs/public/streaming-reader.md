@@ -38,14 +38,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 Loading the table and reading its rows are separate steps. `load_table` selects
 one Delta table version and reads its Arrow schema. The loaded table stays on
 that version. Each `build` evaluates the Delta scan metadata to choose the
-active files and requested columns. The reader opens the Parquet files only
-after you poll the returned batch stream.
+active files and requested columns. Reads for query results begin when you poll
+the returned batch stream. On supported S3 stores, automatic warmup also reads
+calibration ranges during loading. If that attempt is incomplete, the first
+eligible filtered scan retries it once during `build`. Use `WarmupMode::None`
+when loading the table to skip network calibration.
 
 ## Reuse scan metadata across queries
 
-The default `load_table` path works well when you query a table once or only
-occasionally. If one process will run several queries against the same loaded
-table, you can cache its reusable scan metadata during table loading:
+Automatic warmup already caches scan metadata for supported S3 stores. To
+prepare this metadata for repeated queries on any store without network
+sampling, select `WarmupMode::QueryPlanning`:
 
 ```no_run
 use delta_arrow_reader::{DeltaTableBuilder, WarmupMode};

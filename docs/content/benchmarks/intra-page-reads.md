@@ -95,10 +95,11 @@ without a probe.
 
 An initialized profile measures shared capacity. Both bandwidth and request
 concurrency use that scope when comparing plans. The profile accepts later
-samples only from plans that neither overlap another plan using the profile nor
-queue for request capacity. This prevents contention from inflating measured
-request overhead or reducing the estimated bandwidth. Traffic outside the reader
-can still affect measurements.
+samples only from plans that neither overlap another plan from the same loaded
+table nor queue for request capacity. Recovery shares this activity tracking with
+existing scans while collecting fresh samples. This prevents contention from
+inflating measured request overhead or reducing the estimated bandwidth. Traffic
+outside the reader can still affect measurements.
 
 Planned range requests share a process-wide ceiling of 512 concurrent reads.
 Each request waits for one slot and releases it after its response finishes,
@@ -195,8 +196,12 @@ includes metadata loading and network calibration. Query durations exclude
 initialization. Label the second query separately. Compute combined durations
 within each session before taking medians.
 The `network_warmup` diagnostic records completion, timeout or failure and the
-measured profile. Incomplete profiles are discarded. Later uncontended reads
-update the estimates, so initialization does not lock in a strategy.
+measured profile. It reports `phase="initialization"` or `phase="recovery"`.
+Incomplete profiles are discarded. After an incomplete initialization attempt,
+the first eligible query makes one bounded recovery attempt during planning;
+concurrent queries share it, and its time remains inside that query's clock.
+Later uncontended reads update a complete profile, so initialization does not
+lock in a strategy.
 
 Use `--local-table /path/to/table` for a local control. Remote runs record the
 proxy's exact latency, jitter, shared bandwidth and seed. Change profiles with

@@ -107,14 +107,25 @@ for `KeyboardInterrupt` during loading or planning, a terminal PyArrow exception
 during a batch read, and clean process exit. The HTTP handlers also verify that
 another Python thread can run during these waits.
 
-## Build Python wheels in CI
+## Python checks in pull requests
 
-Pull request CI calls `.github/workflows/pypi-build.yml` for changes covered by
+Pull request CI runs the `Python Package` job for changes covered by
 the Python filter in `.github/path-filters.json`. Shared Rust code, binding code,
 Python test fixtures, workspace manifests, and package metadata trigger these
 checks. Changes confined to CLI implementation, benchmarks, or `docs/` skip them.
-The reusable workflow builds Linux x86_64, Windows x86_64, and macOS arm64
-wheels. Callers supply two required inputs:
+
+The job runs Clippy, the Rust runtime ownership tests, and the full Python suite
+on Linux with Python 3.10 and PyArrow 18.0.0. It uses `maturin develop --locked`
+to install a debug build in a virtual environment. Pull requests do not build
+the three release wheels.
+
+## Build Python wheels in CI
+
+The `Python release` workflow calls `.github/workflows/pypi-build.yml` to build
+Linux x86_64, Windows x86_64, and macOS arm64 wheels. This runs for releases and
+manual builds, including TestPyPI rehearsals. To check packaging before a release,
+follow [Build without uploading](python-releases.md#build-without-uploading).
+Callers of the reusable workflow supply two required inputs:
 
 - `source-ref`: the full commit SHA to check out and build.
 - `expected-version`: the exact workspace package version, without a tag prefix.
@@ -128,17 +139,16 @@ compatible PyArrow release. Linux runs the full Python suite; Windows and macOS
 run the installed-package and Arrow stream smoke checks described above.
 
 The Linux wheel is built from an extracted sdist inside a pinned manylinux
-container. The separate `Python Package` job runs Clippy and the Rust runtime
-ownership tests.
+container.
 
-`.github/workflows/cache-warm.yml` calls the same wheel workflow after relevant
-main pushes with `cache-only: true`. This mode writes compiler and Cargo registry
-caches and runs the wheel checks, but does not upload artifacts or report a
-validated artifact set. It accepts only the triggering main commit from a push
-or manual run. PR builds only read the caches. The warmer also compiles the
-Python runtime tests and retains the two most recently used Windows core target
-caches; wheel builds cache the Cargo registry without restoring core target
-directories.
+After relevant main pushes, `.github/workflows/cache-warm.yml` warms core test
+caches, including the Python runtime tests on Linux, and retains the two most
+recently used Windows core target caches. PR builds only read the caches.
+Only manual runs of `Warm CI caches` also call the wheel workflow with
+`cache-only: true`. This mode accepts only the triggering main commit, writes
+compiler and Cargo registry caches, and runs the wheel checks. It does not upload
+artifacts or report a validated artifact set. Wheel builds cache the Cargo registry
+without restoring core target directories.
 Core and wheel cache warming each run one platform at a time to reduce cache
 upload bursts. A failed cache write gets one fresh build after a 60-second wait,
 reusing entries that were already uploaded. Persistent cache write errors
@@ -152,7 +162,7 @@ Cache pruning requires `gh`, `GH_TOKEN`, and `GH_REPO`;
 the pruning job alone has `actions: write` permission.
 
 The `xtask` tests also cover Python release validation and workflow gates.
-Three release planning tests require `release-plz` 0.3.171 on `PATH` and are
+The release planning tests require `release-plz` 0.3.171 on `PATH` and are
 ignored by default. After installing that version, run the PR CI task tests with:
 
 ```sh

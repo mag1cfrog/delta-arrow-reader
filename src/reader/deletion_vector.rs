@@ -15,6 +15,7 @@ use crate::{
     DeltaReaderError, DeltaScanMetrics,
     delta::kernel::{DeltaKernelEngineContext, KernelDeletionVectorHandle},
     error::DeletionVectorReadSnafu,
+    reader::backend::direct_parquet::ParquetRangeReadEstimator,
 };
 
 /// A data file's deletion-vector handle and reusable decoded row coordinates.
@@ -174,6 +175,7 @@ pub(crate) async fn load_deletion_vector_masker(
     engine_context: &Arc<DeltaKernelEngineContext>,
     metadata: DeletionVectorMetadata,
     metrics: &DeltaScanMetrics,
+    range_read_estimator: &Arc<ParquetRangeReadEstimator>,
 ) -> Result<Option<DeletionVectorMasker>, DeltaReaderError> {
     let Some(handle) = metadata.handle.clone() else {
         return Ok(None);
@@ -186,7 +188,10 @@ pub(crate) async fn load_deletion_vector_masker(
         None => {
             let engine_context = Arc::clone(engine_context);
             let metrics_for_task = metrics.clone();
+            let range_read_estimator = Arc::clone(range_read_estimator);
             let rows = match tokio::task::spawn_blocking(move || {
+                // A running blocking read survives cancellation of its async caller.
+                let _active_read = (!handle.is_inline()).then(|| range_read_estimator.start_read());
                 load_deletion_vector_rows(engine_context.as_ref(), &handle, &metrics_for_task)
             })
             .await
@@ -509,7 +514,7 @@ mod tests {
 
     use super::{
         DeletionVectorMasker, DeletionVectorMetadata, DeletionVectorRows,
-        load_deletion_vector_masker,
+        ParquetRangeReadEstimator, load_deletion_vector_masker,
     };
     use crate::{
         DeltaReaderError, DeltaReaderPhase, DeltaScanMetrics, DeltaSnapshotSelection,
@@ -627,6 +632,8 @@ mod tests {
         let table = DeltaLogTable::new("inline")?;
         let snapshot = table.snapshot()?;
         let engine_context = Arc::clone(snapshot.engine_context());
+        let range_read_estimator = Arc::new(ParquetRangeReadEstimator::default());
+        let sample = range_read_estimator.start_read();
 
         let absent_metrics = metrics();
         let absent_metadata = DeletionVectorMetadata::default();
@@ -634,6 +641,7 @@ mod tests {
             snapshot.engine_context(),
             absent_metadata,
             &absent_metrics,
+            &range_read_estimator,
         )
         .await?;
         assert!(absent.is_none());
@@ -648,12 +656,14 @@ mod tests {
             load_deletion_vector_masker(
                 snapshot.engine_context(),
                 inline_metadata.clone(),
-                &inline_metrics
+                &inline_metrics,
+                &range_read_estimator,
             ),
             load_deletion_vector_masker(
                 snapshot.engine_context(),
                 second_metadata,
-                &inline_metrics
+                &inline_metrics,
+                &range_read_estimator,
             )
         );
         let masker = masker?.expect("inline descriptor must produce a masker");
@@ -691,6 +701,7 @@ mod tests {
             snapshot.engine_context(),
             inline_metadata,
             &inline_metrics,
+            &range_read_estimator,
         )
         .await?
         .expect("released inline payload must reload");
@@ -703,6 +714,7 @@ mod tests {
         assert_eq!(metrics.deletion_vector_failures, 0);
         assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
         assert!(Arc::ptr_eq(&engine_context, snapshot.engine_context()));
+        assert!(sample.can_sample(), "absent and inline DVs perform no I/O");
         Ok(())
     }
 
@@ -722,6 +734,7 @@ mod tests {
                 snapshot.engine_context(),
                 relative_metadata,
                 &relative_metrics,
+                &Arc::default(),
             ))?
             .expect("relative descriptor must produce a masker");
         assert_eq!(masker.deleted_rows.all_indexes(), [0, 9]);
@@ -737,6 +750,7 @@ mod tests {
                 snapshot.engine_context(),
                 empty_metadata,
                 &empty_metrics,
+                &Arc::default(),
             ))?
             .expect("empty present descriptor must produce a masker");
         assert!(empty.deleted_rows.max().is_none());
@@ -762,6 +776,7 @@ mod tests {
                 snapshot.engine_context(),
                 missing,
                 &metrics,
+                &Arc::default(),
             ))
             .err()
             .expect("missing payload must fail");
@@ -810,6 +825,7 @@ mod tests {
                     snapshot.engine_context(),
                     metadata,
                     &metrics,
+                    &Arc::default(),
                 ))
                 .err()
                 .expect("invalid Kernel payload must fail");
@@ -1272,6 +1288,7 @@ mod tests {
                 snapshot.engine_context(),
                 missing_relative_metadata()?,
                 &payload_metrics,
+                &Arc::default(),
             ))
             .err()
             .expect("missing payload must fail");

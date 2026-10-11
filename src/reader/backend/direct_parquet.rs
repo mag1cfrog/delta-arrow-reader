@@ -76,76 +76,114 @@ use crate::{
     },
 };
 
-pub(crate) async fn warmup_network(
-    snapshot: &crate::delta::snapshot::ArrowTableSnapshot,
-    options: DeltaScanExecutionOptions,
+pub(crate) struct NetworkWarmupPlan {
+    object_store: Arc<dyn ObjectStore>,
+    partial_read_store: Arc<dyn ObjectStore>,
+    files: Vec<(Path, u64)>,
+    snapshot_version: u64,
     max_duration: Duration,
-) -> Option<Arc<ParquetRangeReadEstimator>> {
-    let context = snapshot.engine_context();
-    let strategy = MultiRangeReadStrategy::for_policy(
-        options.parquet_range_read_policy(),
-        context.table_url(),
-    );
-    if max_duration.is_zero()
-        || options.parquet_backend() != ParquetReaderBackend::Direct
-        || strategy != MultiRangeReadStrategy::ChooseAutomatically
-    {
-        return None;
+    range_read_budget: &'static tokio::sync::Semaphore,
+}
+
+impl NetworkWarmupPlan {
+    pub(crate) fn new(
+        snapshot: &crate::delta::snapshot::ArrowTableSnapshot,
+        options: DeltaScanExecutionOptions,
+        max_duration: Duration,
+    ) -> Option<Self> {
+        let context = snapshot.engine_context();
+        let strategy = MultiRangeReadStrategy::for_policy(
+            options.parquet_range_read_policy(),
+            context.table_url(),
+        );
+        if max_duration.is_zero()
+            || options.parquet_backend() != ParquetReaderBackend::Direct
+            || strategy != MultiRangeReadStrategy::ChooseAutomatically
+        {
+            return None;
+        }
+        let files = crate::delta::kernel::sample_data_files(
+            snapshot.eager_scan_metadata()?,
+            WARMUP_READ_BYTES,
+            WARMUP_FILE_LIMIT,
+        )
+        .into_iter()
+        .filter_map(|(path, size)| {
+            resolve_data_file_path(context.file_resolution_url(), &path)
+                .ok()
+                .map(|path| (path, size))
+        })
+        .collect::<Vec<_>>();
+        if files.is_empty() {
+            return None;
+        }
+        Some(Self {
+            object_store: context.object_store(),
+            partial_read_store: context.partial_read_store()?,
+            files,
+            snapshot_version: snapshot.version(),
+            max_duration,
+            range_read_budget: &range_planning::RANGE_READ_PERMITS,
+        })
     }
-    let files: Vec<_> = crate::delta::kernel::sample_data_files(
-        snapshot.eager_scan_metadata()?,
-        WARMUP_READ_BYTES,
-        WARMUP_FILE_LIMIT,
-    )
-    .into_iter()
-    .filter_map(|(path, size)| {
-        resolve_data_file_path(context.file_resolution_url(), &path)
-            .ok()
-            .map(|path| (path, size))
-    })
-    .collect();
-    if files.is_empty() {
-        return None;
+
+    pub(crate) fn supports_scan(options: DeltaScanExecutionOptions) -> bool {
+        options.experimental_intra_page_reads()
+            && options.parquet_backend() == ParquetReaderBackend::Direct
+            && options.parquet_range_read_policy()
+                == crate::reader::ParquetRangeReadPolicy::Automatic
     }
-    let estimator = Arc::new(
-        ParquetRangeReadEstimator::for_network_warmup()
-            .with_partial_range_store(context.partial_read_store()?),
-    );
-    let metrics = DeltaScanMetrics::new(DeltaScanMetricsConfig {
-        snapshot_version: snapshot.version(),
-        parquet_backend: ParquetReaderBackend::Direct,
-        scan_partitions_planned: 0,
-        files_planned: files.len(),
-        add_actions_excluded_during_planning: None,
-        estimated_input_rows: None,
-        estimated_input_bytes: None,
-    });
-    let store = MeteredParquetObjectStore::new(context.object_store(), metrics.clone(), strategy)
+
+    pub(crate) async fn run(
+        &self,
+        phase: &'static str,
+        previous_estimator: &ParquetRangeReadEstimator,
+    ) -> Option<Arc<ParquetRangeReadEstimator>> {
+        let estimator = Arc::new(
+            previous_estimator
+                .for_network_warmup()
+                .with_partial_range_store(Arc::clone(&self.partial_read_store)),
+        );
+        let metrics = DeltaScanMetrics::new(DeltaScanMetricsConfig {
+            snapshot_version: self.snapshot_version,
+            parquet_backend: ParquetReaderBackend::Direct,
+            scan_partitions_planned: 0,
+            files_planned: self.files.len(),
+            add_actions_excluded_during_planning: None,
+            estimated_input_rows: None,
+            estimated_input_bytes: None,
+        });
+        let store = MeteredParquetObjectStore::new(
+            Arc::clone(&self.object_store),
+            metrics.clone(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        )
         .with_range_read_estimator(Arc::clone(&estimator));
-    let started = Instant::now();
-    let outcome = tokio::time::timeout(
-        max_duration,
-        store.warmup(&files, &range_planning::RANGE_READ_PERMITS),
-    )
-    .await;
-    let status = match outcome {
-        Ok(Ok(true)) => "complete",
-        Ok(Ok(false)) => "insufficient_samples",
-        Ok(Err(_)) => "read_failed",
-        Err(_) => "timeout",
-    };
-    let counts = metrics.snapshot();
-    let estimate = store.transport_estimate();
-    tracing::debug!(target: "delta_arrow_reader::diagnostics::network_warmup",
-        status, elapsed_micros = started.elapsed().as_micros(),
-        requests = counts.parquet_data_file_range_get_operations,
-        bytes_received = counts.parquet_data_file_bytes_received,
-        request_latency_micros = estimate.map(|value| value.request_latency.as_micros()),
-        throughput_bytes_per_second = estimate.map(|value| value.shared_throughput_bytes_per_second),
-        request_overhead_bytes = store.request_overhead_bytes(),
-        "Network warmup completed");
-    // Incomplete calibration must not seed a partially measured network profile.
-    (status == "complete").then_some(estimator)
+        let started = Instant::now();
+        let outcome = tokio::time::timeout(
+            self.max_duration,
+            store.warmup(&self.files, self.range_read_budget),
+        )
+        .await;
+        let status = match outcome {
+            Ok(Ok(true)) => "complete",
+            Ok(Ok(false)) => "insufficient_samples",
+            Ok(Err(_)) => "read_failed",
+            Err(_) => "timeout",
+        };
+        let counts = metrics.snapshot();
+        let estimate = store.transport_estimate();
+        tracing::debug!(target: "delta_arrow_reader::diagnostics::network_warmup",
+            phase, status, elapsed_micros = started.elapsed().as_micros(),
+            requests = counts.parquet_data_file_range_get_operations,
+            bytes_received = counts.parquet_data_file_bytes_received,
+            request_latency_micros = estimate.map(|value| value.request_latency.as_micros()),
+            throughput_bytes_per_second = estimate.map(|value| value.shared_throughput_bytes_per_second),
+            request_overhead_bytes = store.request_overhead_bytes(),
+            "Network warmup completed");
+        // Incomplete calibration must not seed a partially measured network profile.
+        (status == "complete").then_some(estimator)
+    }
 }
 
 struct DirectParquetReader {
@@ -498,6 +536,7 @@ impl DirectParquetReader {
             &self.engine_context,
             request.task.deletion_vector.clone(),
             &self.metrics,
+            self.store.range_read_estimator(),
         )
         .await?;
         if request.cancellation.is_cancelled() {
@@ -954,7 +993,7 @@ fn cancelled_error() -> DeltaReaderError {
 }
 
 #[cfg(test)]
-mod tests {
+pub(in crate::reader) mod tests {
     use std::{
         collections::HashMap,
         fmt,
@@ -965,7 +1004,7 @@ mod tests {
             Arc,
             atomic::{AtomicBool, AtomicUsize, Ordering},
         },
-        time::{SystemTime, UNIX_EPOCH},
+        time::{Duration, SystemTime, UNIX_EPOCH},
     };
 
     use arrow::{
@@ -984,7 +1023,9 @@ mod tests {
         CopyOptions, Error as ObjectStoreError, GetOptions, GetResult, GetResultPayload,
         ListResult, MultipartUpload, ObjectMeta, ObjectStore, ObjectStoreExt, PutMultipartOptions,
         PutOptions, PutPayload, PutResult, RenameOptions, Result as ObjectStoreResult,
-        memory::InMemory, path::Path,
+        memory::InMemory,
+        path::Path,
+        throttle::{ThrottleConfig, ThrottledStore},
     };
     use parquet::arrow::{ArrowSchemaConverter, ArrowWriter, PARQUET_FIELD_ID_META_KEY};
     use parquet::basic::Compression;
@@ -992,7 +1033,7 @@ mod tests {
     use parquet::file::properties::{EnabledStatistics, WriterProperties};
 
     use super::{
-        DirectParquetReader, LogicalDataFileReadRequest, ParquetMetadataCache,
+        DirectParquetReader, LogicalDataFileReadRequest, NetworkWarmupPlan, ParquetMetadataCache,
         PhysicalParquetStreamOptions, RowFilterInput, arrow_reader_options, data_file_error,
         direct_parquet_file_executor,
     };
@@ -1006,6 +1047,7 @@ mod tests {
         },
         delta::snapshot::load_delta_table_snapshot_blocking,
         reader::{
+            ParquetRangeReadState,
             backend::direct_parquet::metered_object_store::{
                 MeteredParquetObjectStore, MultiRangeReadStrategy,
             },
@@ -1040,6 +1082,416 @@ mod tests {
         Ok(())
     }
 
+    pub(in crate::reader) async fn network_warmup_fixture()
+    -> Result<(NetworkWarmupPlan, Arc<GatedObjectStore>), Box<dyn std::error::Error>> {
+        let memory = InMemory::new();
+        let path = Path::from("data.parquet");
+        let size = 8 * 1024 * 1024;
+        memory
+            .put(&path, bytes::Bytes::from(vec![0; size]).into())
+            .await?;
+        let store = GatedObjectStore::ungated(Arc::new(ThrottledStore::new(
+            memory,
+            ThrottleConfig {
+                wait_get_per_call: Duration::from_millis(1),
+                wait_get_per_byte: Duration::from_nanos(20),
+                ..Default::default()
+            },
+        )));
+        let plan = NetworkWarmupPlan {
+            object_store: store.clone(),
+            partial_read_store: store.clone(),
+            files: vec![(path, size as u64)],
+            snapshot_version: 1,
+            max_duration: Duration::from_secs(2),
+            range_read_budget: Box::leak(Box::new(tokio::sync::Semaphore::new(
+                super::range_planning::MAX_SHARED_RANGE_READS,
+            ))),
+        };
+        Ok((plan, store))
+    }
+
+    #[tokio::test]
+    async fn network_warmup_recovers_once_and_concurrent_queries_share_it()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (plan, gated) = network_warmup_fixture().await?;
+        let state = ParquetRangeReadState::default();
+        let original_estimator = state.estimator();
+        gated.gate_next_range();
+        assert!(
+            plan.run("initialization", &original_estimator)
+                .await
+                .is_none()
+        );
+        assert!(gated.was_cancelled());
+        tokio::time::timeout(Duration::from_secs(5), gated.wait_started()).await?;
+        let requests_after_timeout = gated.range_call_count();
+        state.defer_network_warmup(plan).await;
+        for options in [
+            DeltaScanExecutionOptions::default().with_experimental_intra_page_reads(false),
+            DeltaScanExecutionOptions::default()
+                .with_parquet_backend(ParquetReaderBackend::DeltaKernel),
+            DeltaScanExecutionOptions::default()
+                .with_parquet_range_read_policy(crate::reader::ParquetRangeReadPolicy::ExactRanges),
+        ] {
+            state.recover_network_warmup(options).await;
+            assert_eq!(gated.range_call_count(), requests_after_timeout);
+        }
+
+        gated.gate_next_range();
+        let first = state.recover_network_warmup(DeltaScanExecutionOptions::default());
+        let second = state.recover_network_warmup(DeltaScanExecutionOptions::default());
+        tokio::pin!(first, second);
+        assert!(futures_util::poll!(&mut first).is_pending());
+        tokio::time::timeout(Duration::from_secs(5), gated.wait_started()).await?;
+        assert!(futures_util::poll!(&mut second).is_pending());
+        assert!(Arc::ptr_eq(&original_estimator, &state.estimator()));
+        gated.release.add_permits(1);
+        first.await;
+        second.await;
+
+        let requests_after_recovery = gated.range_call_count();
+        assert_eq!(requests_after_recovery, requests_after_timeout + 3_084);
+        let recovered = state.estimator();
+        assert!(!Arc::ptr_eq(&original_estimator, &recovered));
+        state
+            .recover_network_warmup(DeltaScanExecutionOptions::default())
+            .await;
+        assert_eq!(gated.range_call_count(), requests_after_recovery);
+        assert!(Arc::ptr_eq(&recovered, &state.estimator()));
+        let store = MeteredParquetObjectStore::new(
+            gated,
+            metrics(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        )
+        .with_range_read_estimator(recovered);
+        assert!(store.transport_estimate().is_some());
+        assert!(store.request_overhead_bytes().is_some());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn failed_or_cancelled_network_recovery_keeps_the_previous_profile()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for cancel in [false, true] {
+            let (plan, store) = network_warmup_fixture().await?;
+            let budget = plan.range_read_budget;
+            let state = ParquetRangeReadState::default();
+            let original_estimator = state.estimator();
+            state.defer_network_warmup(plan).await;
+            if cancel {
+                store.gate_next_range();
+                let mut recovery =
+                    Box::pin(state.recover_network_warmup(DeltaScanExecutionOptions::default()));
+                assert!(futures_util::poll!(&mut recovery).is_pending());
+                tokio::time::timeout(Duration::from_secs(5), store.wait_started()).await?;
+                drop(recovery);
+                assert!(store.was_cancelled());
+            } else {
+                store.fail_range(1);
+                state
+                    .recover_network_warmup(DeltaScanExecutionOptions::default())
+                    .await;
+            }
+            assert_eq!(
+                budget.available_permits(),
+                super::range_planning::MAX_SHARED_RANGE_READS
+            );
+            let requests = store.range_call_count();
+            state
+                .recover_network_warmup(DeltaScanExecutionOptions::default())
+                .await;
+            assert_eq!(store.range_call_count(), requests);
+            assert!(Arc::ptr_eq(&original_estimator, &state.estimator()));
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn network_recovery_rejects_samples_overlapping_an_existing_scan()
+    -> Result<(), Box<dyn std::error::Error>> {
+        #[derive(Clone, Copy, Debug)]
+        enum ExistingRead {
+            PlannedRanges,
+            SingleRange,
+            FullFile,
+            StoreRanges,
+        }
+
+        for read in [
+            ExistingRead::PlannedRanges,
+            ExistingRead::SingleRange,
+            ExistingRead::FullFile,
+            ExistingRead::StoreRanges,
+        ] {
+            let (plan, calibration) = network_warmup_fixture().await?;
+            let budget = plan.range_read_budget;
+            let gate = if matches!(read, ExistingRead::FullFile) {
+                GateRequest::FullGet
+            } else {
+                GateRequest::Range(1)
+            };
+            let peer = GatedObjectStore::new(Arc::clone(&calibration.inner), gate);
+            calibration.range_target.store(9, Ordering::Release);
+            let state = ParquetRangeReadState::default();
+            let original_estimator = state.estimator();
+            let strategy = if matches!(read, ExistingRead::StoreRanges) {
+                MultiRangeReadStrategy::UseStoreImplementation
+            } else {
+                MultiRangeReadStrategy::ChooseAutomatically
+            };
+            let existing_scan = MeteredParquetObjectStore::new(peer.clone(), metrics(), strategy)
+                .with_range_read_estimator(Arc::clone(&original_estimator));
+            let path = plan.files[0].0.clone();
+            let ranges: Vec<_> = std::iter::once(0..1_048_576).collect();
+            let scan = async {
+                match read {
+                    ExistingRead::SingleRange => {
+                        existing_scan.get_range(&path, ranges[0].clone()).await?;
+                    }
+                    ExistingRead::FullFile => {
+                        existing_scan.get(&path).await?.bytes().await?;
+                    }
+                    ExistingRead::PlannedRanges | ExistingRead::StoreRanges => {
+                        existing_scan.get_ranges(&path, &ranges).await?;
+                    }
+                }
+                Ok::<_, ObjectStoreError>(())
+            };
+            tokio::pin!(scan);
+            tokio::select! {
+                _ = &mut scan => panic!("existing read completed before release: {read:?}"),
+                result = tokio::time::timeout(Duration::from_secs(5), peer.wait_started()) => result?
+            }
+            state.defer_network_warmup(plan).await;
+            let recovery = state.recover_network_warmup(DeltaScanExecutionOptions::default());
+            tokio::pin!(recovery);
+            tokio::select! {
+                _ = &mut recovery => panic!("recovery completed before the third bandwidth sample"),
+                result = tokio::time::timeout(Duration::from_secs(5), calibration.wait_started()) => result?
+            }
+            // The existing scan overlaps the first two complete bandwidth samples.
+            peer.release.add_permits(1);
+            scan.await?;
+            calibration.release.add_permits(1);
+            recovery.await;
+            assert_eq!(
+                budget.available_permits(),
+                super::range_planning::MAX_SHARED_RANGE_READS
+            );
+            assert!(
+                Arc::ptr_eq(&original_estimator, &state.estimator()),
+                "{read:?}"
+            );
+            let requests = calibration.range_call_count();
+            assert_eq!(
+                requests, 12,
+                "contended bandwidth samples must stop calibration: {read:?}"
+            );
+            state
+                .recover_network_warmup(DeltaScanExecutionOptions::default())
+                .await;
+            assert_eq!(calibration.range_call_count(), requests);
+        }
+        Ok(())
+    }
+
+    async fn gated_recovery_table(
+        deletion_vector: TestDeletionVector,
+        request: GateRequest,
+    ) -> Result<(crate::DeltaTable, Arc<GatedObjectStore>, TestDir), Box<dyn std::error::Error>>
+    {
+        let root = TestDir::new("recovery-table-reads")?;
+        let file = parquet_bytes_for(
+            Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)])),
+            vec![Arc::new(Int32Array::from(vec![1, 2, 3, 4, 5, 6]))],
+        )?;
+        write_partitioned_table(&root, &file, deletion_vector)?;
+        let store = GatedObjectStore::new(
+            Arc::new(object_store::local::LocalFileSystem::new_with_prefix(
+                root.path(),
+            )?),
+            request,
+        );
+        static NEXT_STORE: AtomicUsize = AtomicUsize::new(0);
+        let scheme = format!(
+            "darrecovery{}x{}",
+            std::process::id(),
+            NEXT_STORE.fetch_add(1, Ordering::Relaxed)
+        );
+        let weak = Arc::downgrade(&store);
+        crate::delta::kernel::insert_url_handler(
+            &scheme,
+            Arc::new(move |_, _| {
+                let store = weak.upgrade().ok_or_else(|| ObjectStoreError::Generic {
+                    store: "recovery-test-store",
+                    source: io::Error::other("store was released").into(),
+                })?;
+                Ok((Box::new(store), Path::from("")))
+            }),
+        )?;
+        let table = crate::DeltaTableBuilder::new(format!("{scheme}://table/"))
+            .with_warmup(crate::WarmupMode::None)
+            .load_table()
+            .await?;
+        Ok((table, store, root))
+    }
+
+    #[tokio::test]
+    async fn network_recovery_rejects_dv_and_kernel_reads_even_after_cancellation()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use futures_util::TryStreamExt;
+
+        for backend in [
+            ParquetReaderBackend::Direct,
+            ParquetReaderBackend::DeltaKernel,
+        ] {
+            for cancel in [false, true] {
+                let (deletion_vector, request) = if backend == ParquetReaderBackend::Direct {
+                    (TestDeletionVector::Relative, GateRequest::File(DV_FILE))
+                } else {
+                    (TestDeletionVector::None, GateRequest::Range(0))
+                };
+                let (table, gate, _root) = gated_recovery_table(deletion_vector, request).await?;
+                let original = table.range_read_estimator();
+                let (warmup, calibration) = network_warmup_fixture().await?;
+                table.range_read_state.defer_network_warmup(warmup).await;
+                let options = DeltaScanExecutionOptions::default().with_parquet_backend(backend);
+                let scan = table.scan().with_execution_options(options).build().await?;
+                if backend == ParquetReaderBackend::DeltaKernel {
+                    gate.gate_next_range();
+                }
+                let mut read = Box::pin(scan.into_stream().try_collect::<Vec<_>>());
+                let started = tokio::select! {
+                    result = &mut read => {
+                        gate.release.add_permits(1);
+                        return Err(format!("query completed before the gated read: {result:?}").into());
+                    }
+                    result = tokio::time::timeout(Duration::from_secs(5), gate.wait_started()) => result
+                };
+                if let Err(error) = started {
+                    gate.release.add_permits(1);
+                    return Err(error.into());
+                }
+                let read = if cancel {
+                    drop(read);
+                    None
+                } else {
+                    Some(read)
+                };
+                let recovered_scan = table
+                    .scan()
+                    .with_predicate(crate::DeltaPredicate::Compare {
+                        column: "id".into(),
+                        op: crate::DeltaComparison::Gt,
+                        value: crate::DeltaScalar::Int32(1),
+                    })
+                    .build()
+                    .await;
+                let published = !Arc::ptr_eq(&original, &table.range_read_estimator());
+                // Release blocked workers before any assertion can fail the test.
+                gate.release.add_permits(1);
+                if let Some(read) = read {
+                    let batches = tokio::time::timeout(Duration::from_secs(5), read).await??;
+                    let expected = if backend == ParquetReaderBackend::Direct {
+                        vec![1, 2, 3, 4, 6]
+                    } else {
+                        vec![1, 2, 3, 4, 5, 6]
+                    };
+                    assert_eq!(int32_ids(&batches)?, expected);
+                }
+                tokio::time::timeout(Duration::from_secs(5), async {
+                    while !original.start_read().can_sample() {
+                        tokio::task::yield_now().await;
+                    }
+                })
+                .await?;
+                let _ = recovered_scan?;
+                assert!(!published, "{backend:?}, cancelled={cancel}");
+                assert_eq!(calibration.range_call_count(), 12);
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn network_recovery_rejects_refresh_reads_even_after_cancellation()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use futures_util::TryStreamExt;
+
+        const NEW_COMMIT: &str = "_delta_log/00000000000000000001.json";
+        for cancel in [false, true] {
+            let (mut table, gate, root) =
+                gated_recovery_table(TestDeletionVector::None, GateRequest::File(NEW_COMMIT))
+                    .await?;
+            // Failed automatic warmup has already cached the original scan metadata.
+            table.snapshot = Arc::new(
+                crate::reader::materialize_eager_scan_metadata((*table.snapshot).clone()).await?,
+            );
+            let original = table.range_read_estimator();
+            let (warmup, calibration) = network_warmup_fixture().await?;
+            table.range_read_state.defer_network_warmup(warmup).await;
+            fs::write(
+                root.path().join(NEW_COMMIT),
+                r#"{"commitInfo":{"timestamp":1}}"#,
+            )?;
+
+            let mut refresh = Box::pin(table.refresh());
+            let started = tokio::select! {
+                result = &mut refresh => {
+                    gate.release.add_permits(tokio::sync::Semaphore::MAX_PERMITS);
+                    return Err(format!("refresh completed before the gated read: {:?}",
+                        result.map(|table| table.version())).into());
+                }
+                result = tokio::time::timeout(Duration::from_secs(5), gate.wait_started()) => result
+            };
+            if let Err(error) = started {
+                gate.release
+                    .add_permits(tokio::sync::Semaphore::MAX_PERMITS);
+                return Err(error.into());
+            }
+            let refresh = if cancel {
+                drop(refresh);
+                None
+            } else {
+                Some(refresh)
+            };
+            let scan = table
+                .scan()
+                .with_predicate(crate::DeltaPredicate::Compare {
+                    column: "id".into(),
+                    op: crate::DeltaComparison::Gt,
+                    value: crate::DeltaScalar::Int32(1),
+                })
+                .build()
+                .await;
+            let published = !Arc::ptr_eq(&original, &table.range_read_estimator());
+            // Refresh may read the commit again to update cached scan metadata.
+            gate.release
+                .add_permits(tokio::sync::Semaphore::MAX_PERMITS);
+            if let Some(refresh) = refresh {
+                let refreshed = tokio::time::timeout(Duration::from_secs(5), refresh).await??;
+                assert_eq!(refreshed.version(), 1);
+                assert!(Arc::ptr_eq(
+                    &table.range_read_state,
+                    &refreshed.range_read_state
+                ));
+            }
+            tokio::time::timeout(Duration::from_secs(5), async {
+                while !original.start_read().can_sample() {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await?;
+            let batches = scan?.into_stream().try_collect::<Vec<_>>().await?;
+            assert_eq!(int32_ids(&batches)?, [2, 3, 4, 5, 6]);
+            assert_eq!(table.version(), 0);
+            assert!(!published, "refresh cancelled={cancel}");
+            assert_eq!(calibration.range_call_count(), 12);
+        }
+        Ok(())
+    }
+
     pub(super) struct TestDir(PathBuf);
 
     impl TestDir {
@@ -1068,11 +1520,13 @@ mod tests {
     pub(super) enum GateRequest {
         FullGet,
         Range(usize),
+        File(&'static str),
     }
 
-    pub(super) struct GatedObjectStore {
+    pub(in crate::reader) struct GatedObjectStore {
         inner: Arc<dyn ObjectStore>,
         gate_full_get: bool,
+        gate_file: Option<&'static str>,
         range_target: AtomicUsize,
         fail_range_target: AtomicUsize,
         corrupt_range_target: AtomicUsize,
@@ -1085,13 +1539,15 @@ mod tests {
 
     impl GatedObjectStore {
         pub(super) fn new(inner: Arc<dyn ObjectStore>, request: GateRequest) -> Arc<Self> {
-            let (gate_full_get, range_target) = match request {
-                GateRequest::FullGet => (true, 0),
-                GateRequest::Range(target) => (false, target),
+            let (gate_full_get, range_target, gate_file) = match request {
+                GateRequest::FullGet => (true, 0, None),
+                GateRequest::Range(target) => (false, target, None),
+                GateRequest::File(path) => (false, 0, Some(path)),
             };
             Arc::new(Self {
                 inner,
                 gate_full_get,
+                gate_file,
                 range_target: AtomicUsize::new(range_target),
                 fail_range_target: AtomicUsize::new(0),
                 corrupt_range_target: AtomicUsize::new(0),
@@ -1119,6 +1575,10 @@ mod tests {
             self.cancelled.load(Ordering::Acquire)
         }
 
+        pub(in crate::reader) fn range_call_count(&self) -> usize {
+            self.range_calls.load(Ordering::Acquire)
+        }
+
         fn multi_range_call_count(&self) -> usize {
             self.multi_range_calls.load(Ordering::Acquire)
         }
@@ -1134,7 +1594,7 @@ mod tests {
             self.fail_range(self.range_calls.load(Ordering::Acquire) + 1);
         }
 
-        pub(super) fn fail_range(&self, range: usize) {
+        pub(in crate::reader) fn fail_range(&self, range: usize) {
             self.fail_range_target.store(range, Ordering::Release);
         }
 
@@ -1212,6 +1672,8 @@ mod tests {
             }
             let should_gate = if options.head {
                 false
+            } else if self.gate_file == Some(location.as_ref()) {
+                true
             } else if let Some(call) = range_call {
                 !self.gate_full_get && self.range_target.load(Ordering::Acquire) == call
             } else {
@@ -1753,7 +2215,7 @@ mod tests {
         plan: Arc<crate::reader::planning::DeltaScanPlan>,
     ) -> Result<Vec<RecordBatch>, DeltaReaderError> {
         let scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
-        let executor = delta_kernel_file_executor(&plan);
+        let executor = delta_kernel_file_executor(&plan, Arc::default());
         let mut batches = Vec::new();
         for partition in 0..plan.partitions.len() {
             let mut stream = scheduler.partition_stream(
@@ -3706,7 +4168,7 @@ mod tests {
         let stream = scheduler.partition_stream(
             0,
             Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
-            delta_kernel_file_executor(&plan),
+            delta_kernel_file_executor(&plan, Arc::default()),
         )?;
 
         drop(stream);
@@ -4050,15 +4512,12 @@ mod tests {
 
             let metrics = plan.metrics.snapshot();
             assert_eq!(metrics.parquet_data_file_bytes_received, Some(0));
-            match gate_request {
-                GateRequest::FullGet => {
-                    assert_eq!(metrics.parquet_data_file_full_get_operations, Some(1));
-                    assert_eq!(metrics.parquet_data_file_range_get_operations, Some(0));
-                }
-                GateRequest::Range(_) => {
-                    assert_eq!(metrics.parquet_data_file_full_get_operations, Some(0));
-                    assert_eq!(metrics.parquet_data_file_range_get_operations, Some(1));
-                }
+            if matches!(gate_request, GateRequest::FullGet) {
+                assert_eq!(metrics.parquet_data_file_full_get_operations, Some(1));
+                assert_eq!(metrics.parquet_data_file_range_get_operations, Some(0));
+            } else {
+                assert_eq!(metrics.parquet_data_file_full_get_operations, Some(0));
+                assert_eq!(metrics.parquet_data_file_range_get_operations, Some(1));
             }
         }
         Ok(())

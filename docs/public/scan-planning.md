@@ -1,8 +1,8 @@
 # Scan Planning
 
 Scan planning turns the files in a Delta snapshot into a bounded set of tasks.
-It happens after the reader knows which columns and rows the query needs, but
-before it opens any Parquet data files.
+It happens after the reader knows which columns and rows the query needs.
+Planning may also retry incomplete network warmup before query execution begins.
 
 If you only need to run a query, the defaults are a good place to start. This
 page is for readers who want to understand or tune how the work is divided.
@@ -62,6 +62,16 @@ Timed-out, failed or insufficient samples are discarded without failing table
 loading. Sampling can still add cost when later queries use ordinary reads.
 A zero duration skips sampling.
 
+If network sampling starts but does not finish, the table keeps one recovery
+attempt. The first later filtered scan that can use partial-page reads runs that
+attempt while building its plan. Concurrent scans share the attempt. It uses the
+same time and I/O limits as initialization. If it also fails or is cancelled,
+later scans keep using ordinary reads without trying again. A scan that disables
+partial-page reads, selects another backend or uses an explicit range policy does
+not consume the pending attempt. `WarmupMode::None` never schedules recovery.
+Recovery shares the loaded table's range-read activity, so it rejects samples
+that overlap existing range reads, including reads using the previous profile.
+
 Network warmup applies to the Direct backend's automatic range policy on
 supported `s3://` and `s3a://` stores. Custom HTTP settings, system proxies,
 S3 Express and other storage schemes retain ordinary reads. Explicit `Network`
@@ -73,6 +83,9 @@ Partial-page reads are enabled by default but require a complete measured
 profile and predicted savings above 10%. Unsupported layouts, insufficient
 evidence and predicted losing cases use ordinary reads. Measure initialization
 separately from queries and include it when evaluating total application time.
+The `network_warmup` diagnostic reports `phase="initialization"` or
+`phase="recovery"`. Recovery time belongs to the scan build that runs it,
+rather than table initialization.
 `load_snapshot` never performs warmup; `Automatic` and `None` both preserve its
 metadata-only behavior. Converting that snapshot with `into_table` also leaves
 warmup undone; use `load_table` when you want automatic preparation.
@@ -99,8 +112,8 @@ parallelism. It then caps that number with the values it can determine cheaply:
 - available memory, allowing 256 MiB per partition
 
 The result is always at least one. If a host signal is unavailable, the reader
-leaves out that cap instead of failing the query. It does not run network or
-storage performance probes while planning a scan.
+leaves out that cap instead of failing the query. Choosing the partition target
+does not run network or storage performance probes.
 
 On Linux, the memory hint is the smaller of host availability from
 `/proc/meminfo` and the process's remaining cgroup memory allowance. The reader

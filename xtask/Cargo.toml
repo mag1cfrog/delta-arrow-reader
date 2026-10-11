@@ -20,7 +20,7 @@ sha2 = "0.10"
 snafu = "0.9"
 tar = { version = "0.4", default-features = false }
 tempfile = "3"
-toml = { version = "1", default-features = false, features = ["parse", "serde", "std"] }
+toml = { version = "1", default-features = false, features = ["display", "parse", "serde", "std"] }
 url = "2"
 
 [dev-dependencies]

@@ -65,7 +65,7 @@ fn python_filter_covers_inputs_without_cli_benchmarks_or_docs() -> Result<()> {
         ("LICENSE", true),
         (".cargo/config.toml", true),
         ("xtask/src/main.rs", true),
-        ("xtask/Cargo.toml", true),
+        ("xtask/Cargo.lock", true),
         (".github/workflows/cache-warm.yml", true),
         (".github/workflows/pypi-build.yml", true),
         (".github/workflows/pypi.yml", true),
@@ -108,45 +108,57 @@ fn summary_requires_python_only_when_requested() -> Result<()> {
     for code in ["true", "false"] {
         for python in ["true", "false"] {
             for package in ["success", "failure", "skipped", "cancelled"] {
-                for wheels in ["success", "failure", "skipped", "cancelled"] {
-                    for validated in ["true", "false", ""] {
-                        let values = [
-                            ("changes.outputs.code", code),
-                            ("changes.outputs.python", python),
-                            ("changes.outputs.selective_read", "false"),
-                            ("python-package.result", package),
-                            ("python-wheels.result", wheels),
-                            ("python-wheels.outputs.validated", validated),
-                        ];
-                        let mut rest = script.as_str();
-                        let mut rendered = String::new();
-                        while let Some((before, after)) = rest.split_once("${{ needs.") {
-                            let (key, after) = after.split_once(" }}").unwrap();
-                            rendered.push_str(before);
-                            rendered.push_str(
-                                values
-                                    .iter()
-                                    .find(|(name, _)| *name == key)
-                                    .map_or("success", |(_, value)| *value),
-                            );
-                            rest = after;
-                        }
-                        rendered.push_str(rest);
-                        let output = Command::new("bash")
-                            .args(["-e", "-c", &rendered])
-                            .output()?;
-                        let expected = python != "true"
-                            || package == "success" && wheels == "success" && validated == "true";
-                        assert_eq!(
-                            output.status.success(),
-                            expected,
-                            "code={code}, python={python}, package={package}, wheels={wheels}, validated={validated}: {output:?}"
-                        );
-                    }
+                let values = [
+                    ("changes.outputs.code", code),
+                    ("changes.outputs.python", python),
+                    ("changes.outputs.selective_read", "false"),
+                    ("python-package.result", package),
+                ];
+                let mut rest = script.as_str();
+                let mut rendered = String::new();
+                while let Some((before, after)) = rest.split_once("${{ needs.") {
+                    let (key, after) = after.split_once(" }}").unwrap();
+                    rendered.push_str(before);
+                    rendered.push_str(
+                        values
+                            .iter()
+                            .find(|(name, _)| *name == key)
+                            .map_or("success", |(_, value)| *value),
+                    );
+                    rest = after;
                 }
+                rendered.push_str(rest);
+                let output = Command::new("bash")
+                    .args(["-e", "-c", &rendered])
+                    .output()?;
+                let expected = python != "true" || package == "success";
+                assert_eq!(
+                    output.status.success(),
+                    expected,
+                    "code={code}, python={python}, package={package}: {output:?}"
+                );
             }
         }
     }
+    Ok(())
+}
+
+#[test]
+fn development_workflows_do_not_automatically_build_release_wheels() -> Result<()> {
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    assert!(
+        ci["jobs"]
+            .as_object()
+            .unwrap()
+            .values()
+            .all(|job| job["uses"] != "./.github/workflows/pypi-build.yml")
+    );
+    let warmer: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
+    assert_eq!(
+        warmer["jobs"]["wheels"]["if"],
+        "github.event_name == 'workflow_dispatch'"
+    );
     Ok(())
 }
 
@@ -216,12 +228,12 @@ fn cache_warming_requires_the_triggering_main_commit() -> Result<()> {
 }
 
 #[test]
-fn linux_cache_check_fails_the_job_without_masking_build_failures() -> Result<()> {
+fn linux_cache_check_isolates_build_outputs_without_masking_build_failures() -> Result<()> {
     let directory = test_dir("linux-exit");
     let cargo = directory.join("cargo");
     fs::write(
         &cargo,
-        "#!/bin/sh\ntest -z \"$RUSTC_WRAPPER\" || exit 10\nexit \"$CACHE_CHECK_EXIT\"\n",
+        "#!/bin/sh\ntest -z \"$RUSTC_WRAPPER\" || exit 10\nprintf '%s\\n' \"$@\"\nexit \"$CACHE_CHECK_EXIT\"\n",
     )?;
     fs::set_permissions(&cargo, fs::Permissions::from_mode(0o755))?;
     let trap = include_str!("../../.github/workflows/pypi-build.yml")
@@ -241,6 +253,18 @@ fn linux_cache_check_fails_the_job_without_masking_build_failures() -> Result<()
                 output.status.success(),
                 build_status == 0 && check_status == 0,
                 "build={build_status}, check={check_status}: {output:?}"
+            );
+            let stdout = String::from_utf8(output.stdout)?;
+            let args: Vec<_> = stdout.lines().collect();
+            let target = args
+                .windows(2)
+                .find(|args| args[0] == "--target-dir")
+                .expect("container cache check must use a separate target directory")[1];
+            let target = Path::new(target);
+            assert!(target.is_absolute(), "container target must be absolute");
+            assert!(
+                !target.starts_with(root()),
+                "container target must stay outside the mounted workspace"
             );
         }
     }

@@ -141,9 +141,11 @@ impl DeltaScanExecutionOptions {
     /// probes and dependent request rounds. Missing evidence, dense selections,
     /// an unmeasured small-request cost, or insufficient shared request capacity
     /// retain ordinary reads. Automatic table warmup supplies the full profile for
-    /// supported S3 stores. This scan option itself sends no calibration requests.
+    /// supported S3 stores. If that warmup did not finish, an eligible filtered scan
+    /// retries it once while building its plan.
     /// Passing `false` restores ordinary reads and skips automatic table warmup when
-    /// supplied to the table builder. Explicit warmup settings remain in effect.
+    /// supplied to the table builder. It also skips pending recovery for this scan.
+    /// Explicit warmup settings remain in effect during table loading.
     pub const fn with_experimental_intra_page_reads(mut self, enabled: bool) -> Self {
         self.experimental_intra_page_reads = enabled;
         self
