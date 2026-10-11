@@ -27,7 +27,7 @@ class BuildTests(unittest.TestCase):
                         "build_archive.build",
                         return_value=dict(identity, **{field: value}),
                     ),
-                    mock.patch("build_archive.generate_notices") as notices,
+                    mock.patch("build_archive.subprocess.run") as notices,
                     self.assertRaisesRegex(ValueError, "differs"),
                 ):
                     build_archive.build_archive(
@@ -49,22 +49,52 @@ class BuildTests(unittest.TestCase):
                 runtime_dependencies=["libc.so.6"],
             )
 
-            def replace_binary(_architecture, *, rust_toolchain):
-                self.assertEqual(rust_toolchain, identity["rust_toolchain"])
+            def replace_binary(command, **kwargs):
+                self.assertEqual(
+                    command[:3], ["rustup", "run", identity["rust_toolchain"]]
+                )
+                self.assertTrue(kwargs["check"])
                 binary.write_bytes(b"replacement binary")
-                return "Dependency license and copyright.\n"
+                Path(command[-1]).write_text("Dependency license and copyright.\n")
 
             with (
                 mock.patch("build_archive.build", return_value=metadata),
                 mock.patch("build_archive.check_source"),
                 mock.patch(
-                    "build_archive.generate_notices", side_effect=replace_binary
+                    "build_archive.subprocess.run", side_effect=replace_binary
                 ),
                 self.assertRaisesRegex(ValueError, "differs from the validated build"),
             ):
                 build_archive.build_archive(
                     identity, "amd64", target, target / "artifacts"
                 )
+
+    def test_notice_failure_stops_archive_creation(self):
+        identity = build_identity("1.2.3", "a" * 40, "1.94.1")
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary)
+            output = target / "artifacts"
+
+            def fail_notices(command, **kwargs):
+                self.assertTrue(kwargs["check"])
+                self.assertEqual(
+                    command[command.index("--rust-toolchain") + 1],
+                    identity["rust_toolchain"],
+                )
+                self.assertEqual(
+                    command[command.index("--target-dir") + 1], str(target)
+                )
+                raise subprocess.CalledProcessError(17, command)
+
+            with (
+                mock.patch("build_archive.build", return_value=identity),
+                mock.patch("build_archive.subprocess.run", side_effect=fail_notices),
+                mock.patch("build_archive.package") as package,
+                self.assertRaises(subprocess.CalledProcessError),
+            ):
+                build_archive.build_archive(identity, "arm64", target, output)
+            package.assert_not_called()
+            self.assertFalse(output.exists())
 
     def test_build_flags_cannot_inherit_host_cpu_or_compiler_overrides(self):
         overrides = {

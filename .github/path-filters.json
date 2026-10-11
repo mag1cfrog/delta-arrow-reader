@@ -18,6 +18,7 @@
     "src/**",
     "crates/delta-arrow-reader-python/**",
     "crates/delta-arrow-reader-cli/**",
+    "xtask/**",
     "tests/**",
     "benches/**"
   ],

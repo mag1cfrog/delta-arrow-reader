@@ -1,12 +1,12 @@
 """Build and package one CLI architecture inside the pinned Debian environment."""
 
 import argparse
+import subprocess
 import tempfile
 from pathlib import Path
 
-from artifacts import RUST_TARGETS, build_identity, check_manifest, package
-from build import build, check_source
-from notices import generate_notices
+from artifacts import REPOSITORY, RUST_TARGETS, build_identity, check_manifest, package
+from build import build, build_environment, check_source
 
 
 def build_archive(identity, architecture, target_dir, output):
@@ -20,10 +20,17 @@ def build_archive(identity, architecture, target_dir, output):
         raise ValueError("build version, source commit, or Rust toolchain differs")
     with tempfile.TemporaryDirectory(prefix="cli-notices-") as temporary:
         notices = Path(temporary) / "notices.txt"
-        notices.write_text(
-            generate_notices(architecture, rust_toolchain=identity["rust_toolchain"]),
-            encoding="utf-8",
-            newline="\n",
+        subprocess.run(
+            [
+                "rustup", "run", identity["rust_toolchain"], "cargo", "run",
+                "--locked", "--package", "xtask", "--target-dir", str(target_dir),
+                "--", "cli", "notices", "--architecture", architecture,
+                "--rust-toolchain", identity["rust_toolchain"],
+                "--output", str(notices),
+            ],
+            check=True,
+            cwd=REPOSITORY,
+            env=build_environment(architecture, identity["rust_toolchain"]),
         )
         check_source(identity["source_commit"])
         binary = target_dir / RUST_TARGETS[architecture] / "release/dar"

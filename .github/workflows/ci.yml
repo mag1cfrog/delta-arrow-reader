@@ -158,6 +158,10 @@ jobs:
       - if: matrix.task == 'Lints and Docs'
         run: cargo fmt --all -- --check
       - if: matrix.task == 'Lints and Docs'
+        run: cargo test --locked --package xtask
+      - if: matrix.task == 'Lints and Docs'
+        run: cargo clippy --locked --package xtask --all-targets -- -D warnings
+      - if: matrix.task == 'Lints and Docs'
         run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - if: matrix.task == 'Lints and Docs'
         run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --all-features --no-deps

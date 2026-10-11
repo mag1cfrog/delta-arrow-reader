@@ -82,7 +82,6 @@ jobs:
           python3 - <<'PY'
           import os, re, tomllib
           from build import DEBIAN_IMAGE, check_source
-          from notices import ABOUT_VERSION
 
           source = os.environ['SOURCE_REF']
           check_source(source)
@@ -90,6 +89,7 @@ jobs:
               config = tomllib.load(manifest)
           version = config['workspace']['package']['version']
           rust = config['package']['rust-version']
+          about_version = config['workspace']['metadata']['cli-release']['cargo-about-version']
           if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
               raise ValueError('expected a stable workspace version')
           if not re.fullmatch(r'[0-9]+\.[0-9]+(?:\.[0-9]+)?', rust):
@@ -100,7 +100,7 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               for key, value in {'source-commit': source, 'version': version,
                                  'rust-version': rust, 'image': DEBIAN_IMAGE,
-                                 'about-version': ABOUT_VERSION}.items():
+                                 'about-version': about_version}.items():
                   print(f'{key}={value}', file=output)
           PY
       - uses: dtolnay/rust-toolchain@stable
@@ -173,7 +173,7 @@ jobs:
             "$CLI_IMAGE" bash -euo pipefail -c '
               apt-get update
               apt-get install -y --no-install-recommends \
-                build-essential binutils ca-certificates git pkg-config python3
+                build-essential binutils ca-certificates curl git pkg-config python3
               git config --global --add safe.directory /source
               rustup run "$CLI_RUST_TOOLCHAIN" cargo install --locked --features cli \
                 --version "$CLI_ABOUT_VERSION" cargo-about
