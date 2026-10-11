@@ -22,11 +22,12 @@ In the repository's Settings > Environments, create `testpypi-release` and
 publication and allow `v*` tags in its deployment rules. Allow the intended
 rehearsal branch or tag on `testpypi-release`.
 
-Create a separate `python-release-checks` environment for release PR builds.
-Add the maintainer as a required reviewer, allow the branch pattern
+Create a `release-checks` environment shared by the Python and CLI release PR
+checks. Add the maintainer as a required reviewer, allow the branch pattern
 `refs/pull/*/merge`, and disable administrator bypass. Allow self-review so the
 maintainer can approve a run they restart. This environment needs no secrets
-or PyPI publisher registration; it only approves building and testing wheels.
+or PyPI publisher registration; it approves building and testing both artifact
+sets.
 
 Register a separate GitHub Actions Trusted Publisher on each index. Use these
 values, including the environment field:
@@ -136,11 +137,12 @@ Python crate, the workflow uses the normal configuration automatically.
 
 Automatic release PRs require the repository variable
 `RELEASE_PLZ_PR_ENABLED=true`. Review the version, lockfile, and changelog in that
-PR. When ready to check the release wheels, open its CI run, choose
-`Review deployments`, select `python-release-checks`, and click
-`Approve and deploy`. This starts the three platform builds without uploading
-to a package index. The required `CI` check waits for successful approval and
-wheel validation. New commits to the PR require a new approval and build.
+PR. When ready to validate the release, open its CI run, choose
+`Review deployments`, select `release-checks`, and click `Approve and deploy`.
+This starts the three Python wheel builds and the CLI checks in parallel,
+without uploading to a package index. The required `CI` check waits for
+successful approval and complete validation of both artifact sets. New commits
+to the PR require a new approval and build.
 The complete wheel bundle is retained for 90 days. Confirm it is still available
 before merging; if it has expired, update the open release PR and approve a new
 CI run first.

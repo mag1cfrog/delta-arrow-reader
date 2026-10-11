@@ -229,36 +229,27 @@ jobs:
           maturin develop --locked
           python -I -m unittest discover -s crates/delta-arrow-reader-python/tests
 
-  release-wheel-approval:
-    name: Approve release wheel checks
+  release-approval:
+    name: Approve release checks
     needs: changes
     if: needs.changes.outputs.release_pr == 'true'
     runs-on: ubuntu-latest
-    environment: python-release-checks
+    environment: release-checks
     steps:
-      - run: echo "Release wheel checks approved for this PR revision"
+      - run: echo "Release checks approved for this PR revision"
 
   release-wheels:
     name: Release Python Wheels
-    needs: [changes, release-wheel-approval]
+    needs: [changes, release-approval]
     if: needs.changes.outputs.release_pr == 'true'
     uses: ./.github/workflows/pypi-build.yml
     with:
       source-ref: ${{ github.sha }}
       expected-version: ${{ needs.changes.outputs.package_version }}
 
-  release-cli-approval:
-    name: Approve release CLI checks
-    needs: changes
-    if: needs.changes.outputs.release_pr == 'true'
-    runs-on: ubuntu-latest
-    environment: cli-release-checks
-    steps:
-      - run: echo "CLI release checks approved for this PR revision"
-
   release-cli:
     name: Release CLI binaries
-    needs: [changes, release-cli-approval]
+    needs: [changes, release-approval]
     if: needs.changes.outputs.release_pr == 'true'
     uses: ./.github/workflows/cli-build.yml
     with:
@@ -328,7 +319,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [changes, feature-tests, platform-tests, checks, python-package, release-wheel-approval, release-wheels, release-cli-approval, release-cli, selective-read-fixtures]
+    needs: [changes, feature-tests, platform-tests, checks, python-package, release-approval, release-wheels, release-cli, selective-read-fixtures]
     if: always()
     runs-on: ubuntu-latest
 
@@ -348,16 +339,18 @@ jobs:
           fi
 
           if [ "${{ needs.changes.outputs.release_pr }}" = "true" ]; then
-            if [ "${{ needs.release-cli-approval.result }}" != "success" ] || \
-               [ "${{ needs.release-cli.result }}" != "success" ] || \
-               [ "${{ needs.release-cli.outputs.validated }}" != "true" ]; then
-              echo "Release CLI approval or artifact validation did not pass"
+            if [ "${{ needs.release-approval.result }}" != "success" ]; then
+              echo "Release approval did not pass"
               exit 1
             fi
-            if [ "${{ needs.release-wheel-approval.result }}" != "success" ] || \
-               [ "${{ needs.release-wheels.result }}" != "success" ] || \
+            if [ "${{ needs.release-cli.result }}" != "success" ] || \
+               [ "${{ needs.release-cli.outputs.validated }}" != "true" ]; then
+              echo "Release CLI artifact validation did not pass"
+              exit 1
+            fi
+            if [ "${{ needs.release-wheels.result }}" != "success" ] || \
                [ "${{ needs.release-wheels.outputs.validated }}" != "true" ]; then
-              echo "Release wheel approval or artifact validation did not pass"
+              echo "Release wheel artifact validation did not pass"
               exit 1
             fi
           fi

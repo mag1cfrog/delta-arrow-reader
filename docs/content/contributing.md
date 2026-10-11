@@ -124,11 +124,12 @@ build the three release wheels.
 
 Release-plz pull requests targeting main also require three-platform wheel
 validation. CI identifies them by the release bot's identity and a
-`release-plz-` branch in this repository. `Approve release wheel checks` waits
-for approval through the `python-release-checks` environment before starting
-the builds. The required `CI` check succeeds only after approval and complete
-wheel validation, in addition to the usual checks. Feature PRs skip both release
-jobs. A new PR revision cancels the previous run and requires a new approval.
+`release-plz-` branch in this repository. `Approve release checks` waits for
+approval through the `release-checks` environment. One approval starts the
+Python wheel and CLI checks in parallel. The required `CI` check succeeds only
+after approval and complete validation of both artifact sets, in addition to
+the usual checks. Feature PRs skip these release jobs. A new PR revision cancels
+the previous run and requires a new approval.
 
 ## Build Python wheels in CI
 
@@ -185,10 +186,10 @@ cargo test --locked --package xtask \
   --test python_wheel_reuse --test python_workflow --test release_plz -- --include-ignored
 ```
 
-These PR checks cover workflow behavior, Python, and cache tasks. Release-plz PRs
-also wait for approval through `cli-release-checks` before calling
-`.github/workflows/cli-build.yml`. The required `CI` check then requires CLI unit
-tests, release-tool tests, and archive acceptance to pass. Feature PRs skip those
+These PR checks cover workflow behavior, Python, and cache tasks. On release-plz
+PRs, the shared `release-checks` approval also starts
+`.github/workflows/cli-build.yml`. The `CI` check passes only after CLI unit
+tests, release-tool tests, and archive acceptance succeed. Feature PRs skip those
 release jobs. The builder's native build test runs in Debian 12 on both supported
 architectures, and its archive tests run in parallel on Debian 12, Ubuntu 24.04,
 and Fedora 44. **Build CLI binaries** also supports manual runs with an explicit

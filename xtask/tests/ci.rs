@@ -160,7 +160,7 @@ fn release_pr_requires_approved_and_validated_wheels() -> Result<()> {
                             ("changes.outputs.python", "true"),
                             ("changes.outputs.selective_read", "false"),
                             ("changes.outputs.release_pr", release_pr),
-                            ("release-wheel-approval.result", approval),
+                            ("release-approval.result", approval),
                             ("release-wheels.result", wheels),
                             ("release-wheels.outputs.validated", validated),
                             ("release-cli.outputs.validated", "true"),
@@ -181,14 +181,20 @@ fn release_pr_requires_approved_and_validated_wheels() -> Result<()> {
 }
 
 #[test]
-fn release_wheel_builds_wait_for_pr_approval_and_block_the_ci_summary() -> Result<()> {
+fn release_wheel_builds_share_approval_with_cli() -> Result<()> {
     let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
     let jobs = &ci["jobs"];
-    assert_eq!(
-        jobs["release-wheel-approval"]["environment"],
-        "python-release-checks"
-    );
-    for name in ["release-wheel-approval", "release-wheels"] {
+    let approvals: Vec<_> = jobs
+        .as_object()
+        .unwrap()
+        .iter()
+        .filter(|(_, job)| !job["environment"].is_null())
+        .map(|(name, _)| name.as_str())
+        .collect();
+    assert_eq!(approvals, ["release-approval"]);
+    assert_eq!(jobs["release-approval"]["environment"], "release-checks");
+    assert_eq!(jobs["release-approval"]["needs"], "changes");
+    for name in ["release-approval", "release-wheels", "release-cli"] {
         assert_eq!(
             jobs[name]["if"],
             "needs.changes.outputs.release_pr == 'true'"
@@ -202,10 +208,9 @@ fn release_wheel_builds_wait_for_pr_approval_and_block_the_ci_summary() -> Resul
     }
     let wheels = &jobs["release-wheels"];
     assert_eq!(wheels["uses"], "./.github/workflows/pypi-build.yml");
-    assert_eq!(
-        wheels["needs"],
-        json!(["changes", "release-wheel-approval"])
-    );
+    for name in ["release-wheels", "release-cli"] {
+        assert_eq!(jobs[name]["needs"], json!(["changes", "release-approval"]));
+    }
     assert_eq!(
         wheels["with"],
         json!({
