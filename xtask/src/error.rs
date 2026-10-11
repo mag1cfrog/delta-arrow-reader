@@ -14,6 +14,9 @@ pub(crate) enum Error {
     },
     #[snafu(display("Could not access {}: {source}", path.display()))]
     File { path: PathBuf, source: io::Error },
+    #[cfg(target_os = "linux")]
+    #[snafu(display("Could not create HTTP fixture response: {source}"))]
+    HttpResponse { source: hyper::http::Error },
     #[snafu(display("Invalid {subject}: {source}"))]
     Json {
         subject: &'static str,

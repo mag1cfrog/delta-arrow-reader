@@ -25,8 +25,11 @@ struct ProcessFixture<'a> {
 
 type ProcessCheck<'a> = fn(&ProcessFixture<'a>) -> Result<()>;
 
+mod http;
+mod http_server;
 mod output;
 mod planning;
+mod signals;
 mod validation;
 
 pub(super) fn run(binary: &Path, version: &str, repository: &Path) -> Result<()> {
@@ -129,6 +132,18 @@ pub(super) fn run(binary: &Path, version: &str, repository: &Path) -> Result<()>
         (
             "stdout write failures",
             ProcessFixture::check_stdout_failures,
+        ),
+        (
+            "explicit versions stop before auxiliary listing pages",
+            ProcessFixture::check_paginated_listing,
+        ),
+        (
+            "HTTP inspection reads only metadata",
+            ProcessFixture::check_http_metadata_only,
+        ),
+        (
+            "signals terminate blocked loading without child processes",
+            ProcessFixture::check_signals,
         ),
     ];
     for (name, check) in checks {

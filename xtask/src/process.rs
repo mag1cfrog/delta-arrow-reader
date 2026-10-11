@@ -1,17 +1,8 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
-    time::Duration,
-};
+use std::path::{Path, PathBuf};
 
 use clap::Args;
-use snafu::{ResultExt, ensure};
 
-use crate::{
-    command::run_with_timeout,
-    error::{FileSnafu, InvalidInputSnafu, Result},
-};
+use crate::error::Result;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -23,7 +14,7 @@ pub(crate) struct TestProcessArgs {
     /// Exact version expected from dar --version.
     #[arg(long)]
     expected_version: String,
-    /// Source checkout containing the process tests, fault library, and fixtures.
+    /// Source checkout containing the fault library and external-writer fixtures.
     #[arg(long)]
     repository: PathBuf,
 }
@@ -37,26 +28,23 @@ impl TestProcessArgs {
 }
 
 pub(crate) fn run_process_tests(binary: &Path, version: &str, repository: &Path) -> Result<()> {
-    ensure!(
-        cfg!(target_os = "linux"),
-        InvalidInputSnafu {
-            message: format!("CLI process tests for dar {version} require Linux")
-        }
-    );
-    let binary = fs::canonicalize(binary).context(FileSnafu { path: binary })?;
-    let repository = fs::canonicalize(repository).context(FileSnafu { path: repository })?;
     #[cfg(target_os = "linux")]
-    linux::run(&binary, version, &repository)?;
+    {
+        use snafu::ResultExt;
 
-    let working_directory = tempfile::tempdir().context(FileSnafu {
-        path: std::env::temp_dir(),
-    })?;
-    run_with_timeout(
-        Command::new("python3")
-            .arg(repository.join("crates/delta-arrow-reader-cli/tests/process.py"))
-            .arg(binary)
-            .current_dir(working_directory.path())
-            .stdin(Stdio::null()),
-        Duration::from_secs(600),
-    )
+        use crate::error::FileSnafu;
+
+        let binary = std::fs::canonicalize(binary).context(FileSnafu { path: binary })?;
+        let repository =
+            std::fs::canonicalize(repository).context(FileSnafu { path: repository })?;
+        linux::run(&binary, version, &repository)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (binary, repository);
+        crate::error::InvalidInputSnafu {
+            message: format!("CLI process tests for dar {version} require Linux"),
+        }
+        .fail()
+    }
 }

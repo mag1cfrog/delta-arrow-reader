@@ -100,7 +100,7 @@ fn capture_with_timeout(
     Ok(output)
 }
 
-fn wait_with_timeout(child: &mut Child, timeout: Duration) -> io::Result<ExitStatus> {
+pub(crate) fn wait_with_timeout(child: &mut Child, timeout: Duration) -> io::Result<ExitStatus> {
     let deadline = Instant::now() + timeout;
     let status = loop {
         match child.try_wait() {

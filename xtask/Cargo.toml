@@ -23,4 +23,8 @@ toml = { version = "0.9", default-features = false, features = ["parse", "serde"
 url = "2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-rustix = { version = "1", features = ["event", "pty"] }
+http-body-util = "0.1"
+hyper = { version = "1", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+rustix = { version = "1", features = ["event", "process", "pty"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "time"] }
