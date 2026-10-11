@@ -257,6 +257,7 @@ jobs:
           name: ${{ matrix.artifact }}
           path: dist/*.whl
           if-no-files-found: error
+          overwrite: ${{ github.event_name == 'pull_request' }}
 
   validate:
     name: Validate wheel artifact set
@@ -264,7 +265,7 @@ jobs:
     if: ${{ always() && !inputs.cache-only }}
     runs-on: ubuntu-latest
     outputs:
-      validated: ${{ steps.verify.outputs.validated }}
+      validated: ${{ steps.complete.outputs.validated }}
     env:
       BUILD_RESULT: ${{ needs.build.result }}
       EXPECTED_VERSION: ${{ inputs.expected-version }}
@@ -295,4 +296,19 @@ jobs:
         id: verify
         run: |
           cargo xtask check-python-artifacts wheel-artifacts --expected-version "$EXPECTED_VERSION"
+          # Tree IDs still match after a squash merge if the source files are unchanged.
+          source_tree="$(git rev-parse 'HEAD^{tree}')"
+          echo "source-tree=$source_tree" >> "$GITHUB_OUTPUT"
+      - name: Save release PR wheels
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v6
+        with:
+          name: python-wheels-${{ steps.verify.outputs.source-tree }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: wheel-artifacts/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
+      - name: Report validated wheel set
+        id: complete
+        run: |
           echo "validated=true" >> "$GITHUB_OUTPUT"

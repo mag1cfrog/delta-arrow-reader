@@ -213,10 +213,15 @@ macOS 12.0 itself.
 The `Validate wheel artifact set` job requires all platform builds to pass,
 then downloads the three artifacts from the same workflow run. It rejects
 missing or unexpected artifacts, requires exactly one wheel per artifact,
-and checks each wheel's version and tags again. Only then does the reusable
-workflow return `validated: 'true'`. Callers must require both a successful
-workflow result and this output before treating the artifacts as a complete
-validated set. A failed run may still contain individual platform artifacts.
+and checks each wheel's version and tags again. For release PRs, it then saves
+the complete set as `python-wheels-<git-tree>-<run-id>-<run-attempt>`, preserving
+the three platform directories. The Git tree identifies the checked-out files
+even when a squash merge changes the commit SHA. This artifact is retained for
+90 days, and reruns save a separate copy. A failed upload fails the check.
+Only after these steps does the reusable workflow return `validated: 'true'`.
+Callers must require both a successful workflow result and this output before
+treating the artifacts as a complete validated set. A failed run may still
+contain individual platform artifacts.
 
 Download artifacts from the Actions run page. To download and check the full
 set locally, run these commands from the repository root with the expected

@@ -1,6 +1,6 @@
 #![cfg(unix)]
 
-use std::{collections::BTreeSet, fs, process::Command};
+use std::{collections::BTreeSet, fs, path::Path, process::Command};
 
 use serde_json::{Value, json};
 
@@ -9,6 +9,23 @@ use support::{Result, WheelFixture};
 
 fn workflow() -> Value {
     serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi.yml")).unwrap()
+}
+
+fn git(directory: &Path, args: &[&str]) -> Result<String> {
+    let output = Command::new("git")
+        .args([
+            "-c",
+            "user.name=Wheel workflow test",
+            "-c",
+            "user.email=wheel-test@example.invalid",
+        ])
+        .args(args)
+        .current_dir(directory)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .output()?;
+    assert!(output.status.success(), "git {args:?}: {output:?}");
+    Ok(String::from_utf8(output.stdout)?.trim().to_owned())
 }
 
 #[test]
@@ -277,7 +294,7 @@ fn builder_reports_validation_only_after_successful_builds_and_complete_artifact
     assert_eq!(validation["if"], "${{ always() && !inputs.cache-only }}");
     assert_eq!(
         validation["outputs"]["validated"],
-        "${{ steps.verify.outputs.validated }}"
+        "${{ steps.complete.outputs.validated }}"
     );
     assert_eq!(
         validation["env"],
@@ -288,13 +305,23 @@ fn builder_reports_validation_only_after_successful_builds_and_complete_artifact
     );
     let steps = validation["steps"].as_array().unwrap();
     let verify = steps.iter().find(|step| step["id"] == "verify").unwrap();
+    let complete = steps.iter().find(|step| step["id"] == "complete").unwrap();
     let script = format!(
-        "{}\n{}",
+        "{}\n{}\n{}",
         steps[0]["run"].as_str().unwrap(),
-        verify["run"].as_str().unwrap()
+        verify["run"].as_str().unwrap(),
+        complete["run"].as_str().unwrap()
     )
     .replace("cargo xtask", "\"$XTASK_BINARY\"");
     let fixture = WheelFixture::new("workflow-validation")?;
+    git(&fixture.directory, &["init", "--initial-branch=main"])?;
+    fs::write(fixture.directory.join("source.txt"), "release source\n")?;
+    git(&fixture.directory, &["add", "source.txt"])?;
+    git(
+        &fixture.directory,
+        &["commit", "-m", "test: release source"],
+    )?;
+    let source_tree = git(&fixture.directory, &["rev-parse", "HEAD^{tree}"])?;
     let (artifacts, wheels) = fixture.create_artifacts()?;
     let configured_artifacts: BTreeSet<_> =
         builder["jobs"]["build"]["strategy"]["matrix"]["include"]
@@ -331,12 +358,46 @@ fn builder_reports_validation_only_after_successful_builds_and_complete_artifact
             assert_eq!(
                 fs::read_to_string(&output_file)?,
                 if expected {
-                    "existing=kept\nvalidated=true\n"
+                    format!("existing=kept\nsource-tree={source_tree}\nvalidated=true\n")
                 } else {
-                    "existing=kept\n"
+                    "existing=kept\n".to_owned()
                 }
             );
         }
     }
+    Ok(())
+}
+
+#[test]
+fn release_pr_wheels_are_saved_before_reporting_success() -> Result<()> {
+    let builder: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;
+    let platform_upload = builder["jobs"]["build"]["steps"]
+        .as_array()
+        .unwrap()
+        .last()
+        .unwrap();
+    assert_eq!(
+        platform_upload["with"]["overwrite"],
+        "${{ github.event_name == 'pull_request' }}"
+    );
+    let steps = builder["jobs"]["validate"]["steps"].as_array().unwrap();
+    let tail = &steps[steps.len() - 3..];
+    assert_eq!(tail[0]["id"], "verify");
+    assert_eq!(tail[1]["uses"], "actions/upload-artifact@v6");
+    assert_eq!(tail[1]["if"], "github.event_name == 'pull_request'");
+    assert!(tail[1]["continue-on-error"].is_null());
+    assert_eq!(
+        tail[1]["with"],
+        json!({
+            "name": "python-wheels-${{ steps.verify.outputs.source-tree }}-${{ github.run_id }}-${{ github.run_attempt }}",
+            "path": "wheel-artifacts/",
+            "if-no-files-found": "error",
+            "compression-level": 0,
+            "retention-days": 90,
+        })
+    );
+    assert_eq!(tail[2]["id"], "complete");
+    assert!(tail[2]["if"].is_null());
     Ok(())
 }
