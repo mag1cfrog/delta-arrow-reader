@@ -19,6 +19,7 @@ use crate::{
 };
 
 mod fixtures;
+mod https;
 
 use fixtures::{FLOAT64_VALUES, create_float64_table, create_repeated_table};
 
@@ -58,6 +59,10 @@ pub(super) fn run(binary: &Path, repository: &Path) -> Result<()> {
         (
             "scan thread creation failures do not hang",
             ScanFixture::check_thread_start_failures,
+        ),
+        (
+            "HTTPS trust for inspection and scan",
+            ScanFixture::check_https_trust,
         ),
     ];
     for (name, check) in checks {

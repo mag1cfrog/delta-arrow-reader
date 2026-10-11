@@ -4,6 +4,8 @@ mod binary;
 mod build;
 mod command;
 mod error;
+#[cfg(target_os = "linux")]
+mod http_fixture;
 mod notices;
 mod platform;
 mod process;

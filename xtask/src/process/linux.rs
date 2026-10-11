@@ -26,7 +26,6 @@ struct ProcessFixture<'a> {
 type ProcessCheck<'a> = fn(&ProcessFixture<'a>) -> Result<()>;
 
 mod http;
-mod http_server;
 mod output;
 mod planning;
 mod signals;
@@ -649,7 +648,7 @@ pub(crate) fn compile_fault_library(repository: &Path, destination: &Path) -> Re
     )
 }
 
-fn check_error(output: &Output, status: i32, phase: &str, code: &str) -> Result<Value> {
+pub(crate) fn check_error(output: &Output, status: i32, phase: &str, code: &str) -> Result<Value> {
     ensure!(
         output.status.code() == Some(status) && output.stdout.is_empty(),
         InvalidInputSnafu {
@@ -693,7 +692,7 @@ pub(crate) fn check_diagnostic(stderr: &[u8], phase: &str, code: &str) -> Result
     Ok(value)
 }
 
-fn check_inspection(output: &Output) -> Result<Value> {
+pub(crate) fn check_inspection(output: &Output) -> Result<Value> {
     ensure!(
         output.status.success()
             && output.stderr.is_empty()

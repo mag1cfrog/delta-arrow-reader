@@ -1,23 +1,19 @@
-use std::{collections::BTreeMap, fs, ops::Range};
+use std::{collections::BTreeMap, fs};
 
-use http_body_util::Full;
-use hyper::{
-    Method, Request, Response, StatusCode,
-    body::{Bytes, Incoming},
-    header::{CONTENT_RANGE, CONTENT_TYPE, HeaderValue, RANGE},
-};
+use hyper::{Method, StatusCode, body::Bytes};
 use serde_json::json;
 use snafu::{ResultExt, ensure};
 
-use super::{
-    ProcessFixture, check_error, check_inspection,
-    http_server::{HttpResponse, HttpTestServer},
-    run_cli,
+use super::{ProcessFixture, check_error, check_inspection, run_cli};
+use crate::{
+    error::{FileSnafu, InvalidInputSnafu, Result},
+    http_fixture::{
+        HttpTestServer,
+        table::{HttpTable, file_response, response, xml_response},
+    },
 };
-use crate::error::{FileSnafu, HttpResponseSnafu, InvalidInputSnafu, Result};
 
 const COMMIT_FILE_NAME: &str = "00000000000000000000.json";
-const LAST_MODIFIED: &str = "Thu, 01 Jan 2026 00:00:00 GMT";
 
 impl ProcessFixture<'_> {
     pub(super) fn check_paginated_listing(&self) -> Result<()> {
@@ -114,35 +110,13 @@ impl ProcessFixture<'_> {
             .repository
             .join("tests/reader/fixtures/external_writer/corpus/deletion_vectors/table");
         let mut files = BTreeMap::new();
-        let mut listing = String::from("<multistatus xmlns=\"DAV:\">");
         for name in [COMMIT_FILE_NAME, "00000000000000000001.json"] {
             let path = table.join("_delta_log").join(name);
             let data = Bytes::from(fs::read(&path).context(FileSnafu { path })?);
-            let href = format!("/_delta_log/{name}");
-            listing.push_str(&format!(
-                "<response><href>{href}</href><propstat><prop><getcontentlength>{}</getcontentlength>\
-                 <getlastmodified>{LAST_MODIFIED}</getlastmodified><resourcetype/></prop>\
-                 <status>HTTP/1.1 200 OK</status></propstat></response>", data.len(),
-            ));
-            files.insert(href, data);
+            files.insert(format!("/_delta_log/{name}"), data);
         }
-        listing.push_str("</multistatus>");
-        let listing = Bytes::from(listing);
-        let server = HttpTestServer::start(move |request| {
-            let path = request.uri().path();
-            let response =
-                if request.method() == "PROPFIND" && path.trim_end_matches('/') == "/_delta_log" {
-                    xml_response(StatusCode::MULTI_STATUS, listing.clone())
-                } else if matches!(*request.method(), Method::GET | Method::HEAD) {
-                    match files.get(path) {
-                        Some(data) => file_response(request, data)?,
-                        None => response(StatusCode::NOT_FOUND, Bytes::new()),
-                    }
-                } else {
-                    response(StatusCode::NOT_FOUND, Bytes::new())
-                };
-            Ok(Some(response))
-        })?;
+        let table = HttpTable::from_files(files);
+        let server = HttpTestServer::start(move |request| table.respond(request).map(Some))?;
         let options = self.write_input_file(br#"{"allow_http":"true"}"#)?;
         let output = run_cli(
             self.command()
@@ -191,63 +165,3 @@ fn s3_listing(table: &str, last_entry: &str, commit_size: usize) -> Bytes {
     xml.push_str("</ListBucketResult>");
     Bytes::from(xml)
 }
-
-fn response(status: StatusCode, body: Bytes) -> HttpResponse {
-    let mut response = Response::new(Full::new(body));
-    *response.status_mut() = status;
-    response
-}
-
-fn xml_response(status: StatusCode, body: Bytes) -> HttpResponse {
-    let mut response = response(status, body);
-    response
-        .headers_mut()
-        .insert(CONTENT_TYPE, HeaderValue::from_static("application/xml"));
-    response
-}
-
-fn file_response(request: &Request<Incoming>, data: &Bytes) -> Result<HttpResponse> {
-    let mut builder = Response::builder().header("Last-Modified", LAST_MODIFIED);
-    let body = if let Some(range) = request.headers().get(RANGE) {
-        let Some(range) = range
-            .to_str()
-            .ok()
-            .and_then(|range| byte_range(range, data.len()))
-        else {
-            return Ok(response(StatusCode::RANGE_NOT_SATISFIABLE, Bytes::new()));
-        };
-        builder = builder.status(StatusCode::PARTIAL_CONTENT).header(
-            CONTENT_RANGE,
-            format!("bytes {}-{}/{}", range.start, range.end - 1, data.len()),
-        );
-        data.slice(range)
-    } else {
-        data.clone()
-    };
-    builder
-        .header("Content-Length", body.len())
-        .body(Full::new(if request.method() == Method::HEAD {
-            Bytes::new()
-        } else {
-            body
-        }))
-        .context(HttpResponseSnafu)
-}
-
-fn byte_range(header: &str, size: usize) -> Option<Range<usize>> {
-    let (start, end) = header.strip_prefix("bytes=")?.split_once('-')?;
-    let range = if start.is_empty() {
-        size.saturating_sub(end.parse::<usize>().ok()?)..size
-    } else {
-        let end = if end.is_empty() {
-            size
-        } else {
-            end.parse::<usize>().ok()?.saturating_add(1).min(size)
-        };
-        start.parse().ok()?..end
-    };
-    (range.start < range.end).then_some(range)
-}
-
-#[cfg(test)]
-mod tests;

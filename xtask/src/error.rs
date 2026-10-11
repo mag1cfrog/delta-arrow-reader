@@ -17,6 +17,15 @@ pub(crate) enum Error {
     #[cfg(target_os = "linux")]
     #[snafu(display("Could not create HTTP fixture response: {source}"))]
     HttpResponse { source: hyper::http::Error },
+    #[cfg(target_os = "linux")]
+    #[snafu(display("Could not read TLS fixture {}: {source}", path.display()))]
+    Pem {
+        path: PathBuf,
+        source: tokio_rustls::rustls::pki_types::pem::Error,
+    },
+    #[cfg(target_os = "linux")]
+    #[snafu(display("Could not configure fixture TLS: {source}"))]
+    Tls { source: tokio_rustls::rustls::Error },
     #[snafu(display("Invalid {subject}: {source}"))]
     Json {
         subject: &'static str,

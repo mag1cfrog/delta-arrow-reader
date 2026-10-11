@@ -12,14 +12,22 @@ use hyper::{
 };
 use hyper_util::rt::TokioIo;
 use snafu::ResultExt;
-use tokio::{net::TcpListener, runtime::Runtime, task::JoinSet};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::TcpListener,
+    runtime::Runtime,
+    task::JoinSet,
+};
+use tokio_rustls::{TlsAcceptor, rustls::ServerConfig};
 
 use crate::error::{InvalidInputSnafu, IoSnafu, Result};
 
-pub(super) type HttpResponse = Response<Full<Bytes>>;
+pub(crate) type HttpResponse = Response<Full<Bytes>>;
+
+pub(crate) mod table;
 
 #[derive(Debug)]
-pub(super) struct RecordedRequest {
+pub(crate) struct RecordedRequest {
     pub connection_id: u64,
     pub method: Method,
     pub uri: Uri,
@@ -31,7 +39,7 @@ enum Event {
     Failed(String),
 }
 
-pub(super) struct HttpTestServer {
+pub(crate) struct HttpTestServer {
     pub origin: String,
     events: mpsc::Receiver<Event>,
     // Dropping the runtime cancels the listener and every connection task.
@@ -41,6 +49,20 @@ pub(super) struct HttpTestServer {
 impl HttpTestServer {
     /// Returning None holds the response until the client disconnects.
     pub fn start(
+        respond: impl Fn(&Request<Incoming>) -> Result<Option<HttpResponse>> + Send + Sync + 'static,
+    ) -> Result<Self> {
+        Self::start_listener(None, respond)
+    }
+
+    pub fn start_tls(
+        config: ServerConfig,
+        respond: impl Fn(&Request<Incoming>) -> Result<Option<HttpResponse>> + Send + Sync + 'static,
+    ) -> Result<Self> {
+        Self::start_listener(Some(TlsAcceptor::from(Arc::new(config))), respond)
+    }
+
+    fn start_listener(
+        tls: Option<TlsAcceptor>,
         respond: impl Fn(&Request<Incoming>) -> Result<Option<HttpResponse>> + Send + Sync + 'static,
     ) -> Result<Self> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -59,6 +81,11 @@ impl HttpTestServer {
         let address = listener.local_addr().context(IoSnafu {
             operation: "read the HTTP fixture address",
         })?;
+        let origin = if tls.is_some() {
+            format!("https://localhost:{}", address.port())
+        } else {
+            format!("http://{address}")
+        };
         let (send, events) = mpsc::channel();
         let respond = Arc::new(respond);
         runtime.spawn(async move {
@@ -78,26 +105,16 @@ impl HttpTestServer {
                         next_connection += 1;
                         let send = send.clone();
                         let respond = Arc::clone(&respond);
+                        let tls = tls.clone();
                         connections.spawn(async move {
-                            let notifications = send.clone();
-                            let service = service_fn(move |request: Request<Incoming>| {
-                                let _ = notifications.send(Event::Request(RecordedRequest {
-                                    connection_id, method: request.method().clone(), uri: request.uri().clone(),
-                                }));
-                                let result = respond(&request);
-                                if let Err(error) = &result {
-                                    let _ = notifications.send(Event::Failed(error.to_string()));
+                            if let Some(tls) = tls {
+                                // Rejected certificates must never reach the HTTP handler.
+                                if let Ok(socket) = tls.accept(socket).await {
+                                    serve_connection(socket, connection_id, send.clone(), respond).await;
                                 }
-                                async move {
-                                    match result? {
-                                        Some(response) => Ok::<_, crate::error::Error>(response),
-                                        None => std::future::pending().await,
-                                    }
-                                }
-                            });
-                            // Client cancellation is expected in the signal and prefetch checks.
-                            let _ = http1::Builder::new().keep_alive(false)
-                                .serve_connection(TokioIo::new(socket), service).await;
+                            } else {
+                                serve_connection(socket, connection_id, send.clone(), respond).await;
+                            }
                             let _ = send.send(Event::Disconnected(connection_id));
                         });
                     }
@@ -110,7 +127,7 @@ impl HttpTestServer {
             }
         });
         Ok(Self {
-            origin: format!("http://{address}"),
+            origin,
             events,
             _runtime: runtime,
         })
@@ -167,6 +184,36 @@ impl HttpTestServer {
             event => Ok(event),
         }
     }
+}
+
+async fn serve_connection(
+    socket: impl AsyncRead + AsyncWrite + Unpin,
+    connection_id: u64,
+    send: mpsc::Sender<Event>,
+    respond: Arc<impl Fn(&Request<Incoming>) -> Result<Option<HttpResponse>>>,
+) {
+    let service = service_fn(move |request: Request<Incoming>| {
+        let _ = send.send(Event::Request(RecordedRequest {
+            connection_id,
+            method: request.method().clone(),
+            uri: request.uri().clone(),
+        }));
+        let result = respond(&request);
+        if let Err(error) = &result {
+            let _ = send.send(Event::Failed(error.to_string()));
+        }
+        async move {
+            match result? {
+                Some(response) => Ok::<_, crate::error::Error>(response),
+                None => std::future::pending().await,
+            }
+        }
+    });
+    // Client cancellation is expected in the signal and prefetch checks.
+    let _ = http1::Builder::new()
+        .keep_alive(false)
+        .serve_connection(TokioIo::new(socket), service)
+        .await;
 }
 
 #[cfg(test)]

@@ -3,10 +3,11 @@ use std::{fs, io, os::unix::process::ExitStatusExt, process::Child, time::Durati
 use rustix::process::{Pid, Signal, kill_process};
 use snafu::{ResultExt, ensure};
 
-use super::{ProcessFixture, http_server::HttpTestServer};
+use super::ProcessFixture;
 use crate::{
     command::wait_with_timeout,
     error::{CommandStartSnafu, FileSnafu, InvalidInputSnafu, IoSnafu, Result},
+    http_fixture::HttpTestServer,
 };
 
 impl ProcessFixture<'_> {
