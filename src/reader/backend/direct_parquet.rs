@@ -1209,52 +1209,89 @@ pub(in crate::reader) mod tests {
     #[tokio::test]
     async fn network_recovery_rejects_samples_overlapping_an_existing_scan()
     -> Result<(), Box<dyn std::error::Error>> {
-        let (plan, calibration) = network_warmup_fixture().await?;
-        let budget = plan.range_read_budget;
-        let peer = GatedObjectStore::new(Arc::clone(&calibration.inner), GateRequest::Range(1));
-        calibration.range_target.store(9, Ordering::Release);
-        let state = ParquetRangeReadState::default();
-        let original_estimator = state.estimator();
-        let existing_scan = MeteredParquetObjectStore::new(
-            peer.clone(),
-            metrics(),
-            MultiRangeReadStrategy::ChooseAutomatically,
-        )
-        .with_range_read_estimator(Arc::clone(&original_estimator));
-        let path = plan.files[0].0.clone();
-        let ranges: Vec<_> = std::iter::once(0..1_048_576).collect();
-        let scan = existing_scan.get_ranges(&path, &ranges);
-        tokio::pin!(scan);
-        tokio::select! {
-            _ = &mut scan => panic!("existing range read completed before release"),
-            result = tokio::time::timeout(Duration::from_secs(5), peer.wait_started()) => result?
+        #[derive(Clone, Copy, Debug)]
+        enum ExistingRead {
+            PlannedRanges,
+            SingleRange,
+            FullFile,
+            StoreRanges,
         }
-        state.defer_network_warmup(plan).await;
-        let recovery = state.recover_network_warmup(DeltaScanExecutionOptions::default());
-        tokio::pin!(recovery);
-        tokio::select! {
-            _ = &mut recovery => panic!("recovery completed before the third bandwidth sample"),
-            result = tokio::time::timeout(Duration::from_secs(5), calibration.wait_started()) => result?
+
+        for read in [
+            ExistingRead::PlannedRanges,
+            ExistingRead::SingleRange,
+            ExistingRead::FullFile,
+            ExistingRead::StoreRanges,
+        ] {
+            let (plan, calibration) = network_warmup_fixture().await?;
+            let budget = plan.range_read_budget;
+            let gate = if matches!(read, ExistingRead::FullFile) {
+                GateRequest::FullGet
+            } else {
+                GateRequest::Range(1)
+            };
+            let peer = GatedObjectStore::new(Arc::clone(&calibration.inner), gate);
+            calibration.range_target.store(9, Ordering::Release);
+            let state = ParquetRangeReadState::default();
+            let original_estimator = state.estimator();
+            let strategy = if matches!(read, ExistingRead::StoreRanges) {
+                MultiRangeReadStrategy::UseStoreImplementation
+            } else {
+                MultiRangeReadStrategy::ChooseAutomatically
+            };
+            let existing_scan = MeteredParquetObjectStore::new(peer.clone(), metrics(), strategy)
+                .with_range_read_estimator(Arc::clone(&original_estimator));
+            let path = plan.files[0].0.clone();
+            let ranges: Vec<_> = std::iter::once(0..1_048_576).collect();
+            let scan = async {
+                match read {
+                    ExistingRead::SingleRange => {
+                        existing_scan.get_range(&path, ranges[0].clone()).await?;
+                    }
+                    ExistingRead::FullFile => {
+                        existing_scan.get(&path).await?.bytes().await?;
+                    }
+                    ExistingRead::PlannedRanges | ExistingRead::StoreRanges => {
+                        existing_scan.get_ranges(&path, &ranges).await?;
+                    }
+                }
+                Ok::<_, ObjectStoreError>(())
+            };
+            tokio::pin!(scan);
+            tokio::select! {
+                _ = &mut scan => panic!("existing read completed before release: {read:?}"),
+                result = tokio::time::timeout(Duration::from_secs(5), peer.wait_started()) => result?
+            }
+            state.defer_network_warmup(plan).await;
+            let recovery = state.recover_network_warmup(DeltaScanExecutionOptions::default());
+            tokio::pin!(recovery);
+            tokio::select! {
+                _ = &mut recovery => panic!("recovery completed before the third bandwidth sample"),
+                result = tokio::time::timeout(Duration::from_secs(5), calibration.wait_started()) => result?
+            }
+            // The existing scan overlaps the first two complete bandwidth samples.
+            peer.release.add_permits(1);
+            scan.await?;
+            calibration.release.add_permits(1);
+            recovery.await;
+            assert_eq!(
+                budget.available_permits(),
+                super::range_planning::MAX_SHARED_RANGE_READS
+            );
+            assert!(
+                Arc::ptr_eq(&original_estimator, &state.estimator()),
+                "{read:?}"
+            );
+            let requests = calibration.range_call_count();
+            assert_eq!(
+                requests, 12,
+                "contended bandwidth samples must stop calibration: {read:?}"
+            );
+            state
+                .recover_network_warmup(DeltaScanExecutionOptions::default())
+                .await;
+            assert_eq!(calibration.range_call_count(), requests);
         }
-        // The existing scan overlaps the first two complete bandwidth samples.
-        peer.release.add_permits(1);
-        scan.await?;
-        calibration.release.add_permits(1);
-        recovery.await;
-        assert_eq!(
-            budget.available_permits(),
-            super::range_planning::MAX_SHARED_RANGE_READS
-        );
-        assert!(Arc::ptr_eq(&original_estimator, &state.estimator()));
-        let requests = calibration.range_call_count();
-        assert_eq!(
-            requests, 12,
-            "contended bandwidth samples must stop calibration"
-        );
-        state
-            .recover_network_warmup(DeltaScanExecutionOptions::default())
-            .await;
-        assert_eq!(calibration.range_call_count(), requests);
         Ok(())
     }
 

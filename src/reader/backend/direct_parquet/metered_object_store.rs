@@ -5,6 +5,7 @@ use std::{
     fmt, io,
     ops::Range,
     sync::{Arc, Mutex},
+    task::Poll,
     time::{Duration, Instant},
 };
 
@@ -54,17 +55,17 @@ pub(crate) struct MeteredParquetObjectStore {
 #[derive(Default)]
 pub(crate) struct ParquetRangeReadEstimator {
     samples: Mutex<TransportSampleWindows>,
-    activity: Arc<Mutex<RangeReadActivity>>,
+    activity: Arc<Mutex<ReadActivity>>,
     require_isolated_reads: bool,
     partial_range_store: Option<Arc<dyn ObjectStore>>,
 }
 
-struct ActiveRangeRead<'a> {
-    activity: &'a Mutex<RangeReadActivity>,
+struct ActiveRead {
+    activity: Arc<Mutex<ReadActivity>>,
     isolated_epoch: Option<u64>,
 }
 
-impl ActiveRangeRead<'_> {
+impl ActiveRead {
     fn can_sample(&self) -> bool {
         // A new read changes the epoch even if it finishes before this one.
         self.isolated_epoch
@@ -77,7 +78,7 @@ impl ActiveRangeRead<'_> {
     }
 }
 
-impl Drop for ActiveRangeRead<'_> {
+impl Drop for ActiveRead {
     fn drop(&mut self) {
         self.activity
             .lock()
@@ -94,7 +95,7 @@ struct TransportSampleWindows {
 }
 
 #[derive(Default)]
-struct RangeReadActivity {
+struct ReadActivity {
     active_reads: usize,
     read_epoch: u64,
 }
@@ -191,6 +192,36 @@ impl MeteredParquetObjectStore {
         self
     }
 
+    async fn get_metered(
+        &self,
+        location: &Path,
+        options: GetOptions,
+        active_read: Option<ActiveRead>,
+    ) -> Result<GetResult> {
+        let should_meter_payload = !options.head;
+        if should_meter_payload {
+            if options.range.is_some() {
+                self.metrics.record_parquet_data_file_range_get_operation();
+            } else {
+                self.metrics.record_parquet_data_file_full_get_operation();
+            }
+        }
+
+        let result = self
+            .inner
+            .get_opts(location, options)
+            .instrument(tracing::debug_span!(
+                target: "delta_arrow_reader::profile",
+                "Object store transport"
+            ))
+            .await?;
+        if should_meter_payload {
+            Ok(meter_get_result(result, self.metrics.clone(), active_read))
+        } else {
+            Ok(result)
+        }
+    }
+
     /// Reads one physical range and measures request latency separately from payload delivery.
     async fn read_range_with_timing(
         &self,
@@ -214,8 +245,9 @@ impl MeteredParquetObjectStore {
         };
         let expected_bytes = range.end - range.start;
         let request_started = Instant::now();
+        // The surrounding range plan already tracks activity for these requests.
         let result = self
-            .get_opts(location, GetOptions::new().with_range(Some(range)))
+            .get_metered(location, GetOptions::new().with_range(Some(range)), None)
             .await?;
         let payload_started = Instant::now();
         let bytes = result.bytes().await?;
@@ -554,7 +586,7 @@ impl ParquetRangeReadEstimator {
         }
     }
 
-    fn start_read(&self) -> ActiveRangeRead<'_> {
+    fn start_read(&self) -> ActiveRead {
         let mut activity = self
             .activity
             .lock()
@@ -562,8 +594,8 @@ impl ParquetRangeReadEstimator {
         activity.read_epoch = activity.read_epoch.wrapping_add(1);
         let isolated_epoch = (activity.active_reads == 0).then_some(activity.read_epoch);
         activity.active_reads += 1;
-        ActiveRangeRead {
-            activity: &self.activity,
+        ActiveRead {
+            activity: Arc::clone(&self.activity),
             isolated_epoch,
         }
     }
@@ -769,28 +801,8 @@ impl ObjectStore for MeteredParquetObjectStore {
     }
 
     async fn get_opts(&self, location: &Path, options: GetOptions) -> Result<GetResult> {
-        let should_meter_payload = !options.head;
-        if should_meter_payload {
-            if options.range.is_some() {
-                self.metrics.record_parquet_data_file_range_get_operation();
-            } else {
-                self.metrics.record_parquet_data_file_full_get_operation();
-            }
-        }
-
-        let result = self
-            .inner
-            .get_opts(location, options)
-            .instrument(tracing::debug_span!(
-                target: "delta_arrow_reader::profile",
-                "Object store transport"
-            ))
-            .await?;
-        if should_meter_payload {
-            Ok(meter_get_result(result, self.metrics.clone()))
-        } else {
-            Ok(result)
-        }
+        let active_read = (!options.head).then(|| self.range_read_estimator.start_read());
+        self.get_metered(location, options, active_read).await
     }
 
     async fn get_ranges(&self, location: &Path, ranges: &[Range<u64>]) -> Result<Vec<Bytes>> {
@@ -800,6 +812,7 @@ impl ObjectStore for MeteredParquetObjectStore {
 
         match self.multi_range_read_strategy {
             MultiRangeReadStrategy::UseStoreImplementation => {
+                let _active_read = self.range_read_estimator.start_read();
                 let plan_started = Instant::now();
                 let exact_ranges = merge_ranges(ranges, 0);
                 self.metrics
@@ -895,7 +908,11 @@ impl ObjectStore for MeteredParquetObjectStore {
     }
 }
 
-fn meter_get_result(result: GetResult, metrics: DeltaScanMetrics) -> GetResult {
+fn meter_get_result(
+    result: GetResult,
+    metrics: DeltaScanMetrics,
+    mut active_read: Option<ActiveRead>,
+) -> GetResult {
     let GetResult {
         payload,
         meta,
@@ -904,17 +921,7 @@ fn meter_get_result(result: GetResult, metrics: DeltaScanMetrics) -> GetResult {
     } = result;
 
     let payload = match payload {
-        GetResultPayload::Stream(payload) => {
-            let payload = payload
-                .map(move |result| {
-                    if let Ok(bytes) = &result {
-                        metrics.record_parquet_data_file_bytes_received(bytes.len());
-                    }
-                    result
-                })
-                .boxed();
-            GetResultPayload::Stream(payload)
-        }
+        GetResultPayload::Stream(payload) => payload,
         #[cfg(not(target_arch = "wasm32"))]
         GetResultPayload::File(file, path) => {
             let local_result = GetResult {
@@ -923,18 +930,33 @@ fn meter_get_result(result: GetResult, metrics: DeltaScanMetrics) -> GetResult {
                 range: range.clone(),
                 attributes: attributes.clone(),
             };
-            let payload = stream::once(async move {
-                let bytes = local_result.bytes().await?;
-                metrics.record_parquet_data_file_bytes_received(bytes.len());
-                Ok(bytes)
-            })
-            .boxed();
-            GetResultPayload::Stream(payload)
+            stream::once(async move { local_result.bytes().await }).boxed()
         }
     };
 
+    // Headers alone do not end a read; hold its activity until the body finishes.
+    let mut payload = Some(payload);
+    let payload = stream::poll_fn(move |cx| {
+        let Some(stream) = payload.as_mut() else {
+            return Poll::Ready(None);
+        };
+        let next = stream.poll_next_unpin(cx);
+        match &next {
+            Poll::Ready(Some(Ok(bytes))) => {
+                metrics.record_parquet_data_file_bytes_received(bytes.len());
+            }
+            Poll::Ready(_) => {
+                payload = None;
+                active_read.take();
+            }
+            Poll::Pending => {}
+        }
+        next
+    })
+    .boxed();
+
     GetResult {
-        payload,
+        payload: GetResultPayload::Stream(payload),
         meta,
         range,
         attributes,
@@ -1564,6 +1586,7 @@ mod tests {
         let _result = head_store
             .get_opts(&Path::from("data.parquet"), options)
             .await?;
+        assert!(head_store.range_read_estimator.start_read().can_sample());
         let snapshot = head_metrics.snapshot();
         assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(0));
         assert_eq!(snapshot.parquet_data_file_full_get_operations, Some(0));
@@ -1582,6 +1605,7 @@ mod tests {
             )
             .await;
         assert!(result.is_err());
+        assert!(failure_store.range_read_estimator.start_read().can_sample());
         let snapshot = failure_metrics.snapshot();
         assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(1));
         assert_eq!(snapshot.parquet_data_file_full_get_operations, Some(0));
@@ -2451,7 +2475,14 @@ mod tests {
         assert_eq!(result.meta.location, Path::from("data.parquet"));
         assert_eq!(result.meta.e_tag.as_deref(), Some("opaque-etag"));
         assert_eq!(result.range, 0..8);
-        assert_eq!(result.bytes().await?.as_ref(), b"abcdefgh");
+        assert!(!success_store.range_read_estimator.start_read().can_sample());
+        let mut payload = result.into_stream();
+        let mut bytes = Vec::new();
+        while let Some(chunk) = payload.next().await {
+            bytes.extend_from_slice(&chunk?);
+        }
+        assert_eq!(bytes, b"abcdefgh");
+        assert!(success_store.range_read_estimator.start_read().can_sample());
         assert_eq!(
             success_metrics.snapshot().parquet_data_file_bytes_received,
             Some(8)
@@ -2480,7 +2511,9 @@ mod tests {
                 .as_ref(),
             b"abc"
         );
+        assert!(!dropped_store.range_read_estimator.start_read().can_sample());
         drop(payload);
+        assert!(dropped_store.range_read_estimator.start_read().can_sample());
         assert_eq!(
             dropped_metrics.snapshot().parquet_data_file_bytes_received,
             Some(3)
@@ -2507,10 +2540,38 @@ mod tests {
             .await?
             .into_stream();
         assert!(payload.next().await.transpose()?.is_some());
+        assert!(!error_store.range_read_estimator.start_read().can_sample());
         assert!(payload.next().await.transpose().is_err());
+        assert!(error_store.range_read_estimator.start_read().can_sample());
+        assert!(payload.next().await.is_none());
         assert_eq!(
             error_metrics.snapshot().parquet_data_file_bytes_received,
             Some(3)
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cancelling_a_pending_body_releases_read_activity() -> Result<()> {
+        let (retained, mut released) = tokio::sync::oneshot::channel::<()>();
+        let payload = stream::once(async move {
+            let _retained = retained;
+            futures_util::future::pending::<Result<Bytes>>().await
+        })
+        .boxed();
+        let store = scripted_store(
+            test_get_result(GetResultPayload::Stream(payload), 0..8),
+            direct_metrics(),
+        );
+        let result = store.get(&Path::from("data.parquet")).await?;
+        let mut body = Box::pin(result.bytes());
+        assert!(futures_util::poll!(&mut body).is_pending());
+        assert!(!store.range_read_estimator.start_read().can_sample());
+        drop(body);
+        assert!(store.range_read_estimator.start_read().can_sample());
+        assert_eq!(
+            released.try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Closed)
         );
         Ok(())
     }
@@ -2531,7 +2592,9 @@ mod tests {
                 GetOptions::new().with_range(Some(range.clone())),
             )
             .await?;
+        assert!(!dropped_store.range_read_estimator.start_read().can_sample());
         drop(result);
+        assert!(dropped_store.range_read_estimator.start_read().can_sample());
         assert_eq!(
             dropped_metrics.snapshot().parquet_data_file_bytes_received,
             Some(0)
@@ -2554,6 +2617,12 @@ mod tests {
             .ok_or_else(missing_chunk)?;
         assert_eq!(bytes.len(), usize::try_from(range.end - range.start)?);
         assert!(payload.next().await.is_none());
+        assert!(
+            delivered_store
+                .range_read_estimator
+                .start_read()
+                .can_sample()
+        );
         assert_eq!(
             delivered_metrics
                 .snapshot()
