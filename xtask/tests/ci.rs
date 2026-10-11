@@ -217,12 +217,12 @@ fn cache_warming_requires_the_triggering_main_commit() -> Result<()> {
 }
 
 #[test]
-fn linux_cache_check_fails_the_job_without_masking_build_failures() -> Result<()> {
+fn linux_cache_check_isolates_build_outputs_without_masking_build_failures() -> Result<()> {
     let directory = test_dir("linux-exit");
     let cargo = directory.join("cargo");
     fs::write(
         &cargo,
-        "#!/bin/sh\ntest -z \"$RUSTC_WRAPPER\" || exit 10\nexit \"$CACHE_CHECK_EXIT\"\n",
+        "#!/bin/sh\ntest -z \"$RUSTC_WRAPPER\" || exit 10\nprintf '%s\\n' \"$@\"\nexit \"$CACHE_CHECK_EXIT\"\n",
     )?;
     fs::set_permissions(&cargo, fs::Permissions::from_mode(0o755))?;
     let trap = include_str!("../../.github/workflows/pypi-build.yml")
@@ -242,6 +242,18 @@ fn linux_cache_check_fails_the_job_without_masking_build_failures() -> Result<()
                 output.status.success(),
                 build_status == 0 && check_status == 0,
                 "build={build_status}, check={check_status}: {output:?}"
+            );
+            let stdout = String::from_utf8(output.stdout)?;
+            let args: Vec<_> = stdout.lines().collect();
+            let target = args
+                .windows(2)
+                .find(|args| args[0] == "--target-dir")
+                .expect("container cache check must use a separate target directory")[1];
+            let target = Path::new(target);
+            assert!(target.is_absolute(), "container target must be absolute");
+            assert!(
+                !target.starts_with(root()),
+                "container target must stay outside the mounted workspace"
             );
         }
     }
