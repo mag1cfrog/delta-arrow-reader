@@ -139,9 +139,9 @@ or manual run. PR builds only read the caches. The warmer also compiles the
 Python runtime tests and retains the two most recently used Windows core target
 caches; wheel builds cache the Cargo registry without restoring core target
 directories.
-Wheel cache warming runs one platform at a time to stay within GitHub's cache
-upload limit. A failed wheel cache write gets one fresh build after a 60-second
-wait, reusing entries that were already uploaded. Persistent cache write errors
+Core and wheel cache warming each run one platform at a time to reduce cache
+upload bursts. A failed cache write gets one fresh build after a 60-second wait,
+reusing entries that were already uploaded. Persistent cache write errors
 fail the warmer, except when another build has uploaded the same immutable entry.
 
 The cache helpers are Rust commands in the independent `xtask` crate:
