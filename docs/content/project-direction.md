@@ -1,9 +1,9 @@
 ---
-title: Project direction and Python plan
-description: Core Reader priorities, an independent Python binding plan, and an optional DataFusion Python integration investigation.
+title: Project direction and language support
+description: Core Reader priorities, Python bindings, CLI distribution, and an optional DataFusion Python integration investigation.
 ---
 
-# Project direction and Python plan
+# Project direction and language support
 
 The project focuses on reading Delta tables into Arrow batches. On September 27,
 2026 (UTC), the maintainer stopped investment in the Spark SQL compatibility
@@ -61,6 +61,22 @@ projection, row limits, PyArrow readers, and single-use stream exports. CI build
 and checks platform wheels; PyPI publishing remains planned work. Python asyncio,
 writes, a dataframe/query product and JavaScript bindings remain outside this
 first release.
+
+## CLI access from other languages
+
+The [CLI workstream](https://github.com/mag1cfrog/delta-arrow-reader/issues/428)
+exposes the existing reader through a subprocess: `dar inspect` returns JSON,
+and `dar scan` streams Arrow IPC. The [Go example](../../examples/go-cli)
+demonstrates process cleanup, cancellation, and streaming consumption without
+cgo. This boundary does not require a hosted service or another scan engine.
+
+Linux amd64 and arm64 releases use the workspace version. Heavy binary,
+distribution, image, and Go checks run on the release PR after approval.
+Publication reuses those exact archives and OCI images in GitHub Releases and
+GHCR. See the [release runbook](cli-release.md) for recovery and first-release
+evidence, and [installation](../public/installation.md#cli-binaries-and-container-images)
+for supported runtimes and version/digest pins. The first actual public release
+remains part of the parent issue's release checklist.
 
 ## Optional SQL access through DataFusion Python
 

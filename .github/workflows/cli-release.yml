@@ -1,0 +1,318 @@
+name: CLI release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Read-only rehearsal or publication recovery
+        required: true
+        type: choice
+        default: rehearse
+        options: [rehearse, publish]
+      tag:
+        description: Existing stable release tag, such as vX.Y.Z
+        required: true
+        type: string
+      validation-run-id:
+        description: Original approved release PR validation run ID
+        required: true
+        type: string
+      record-artifact-id:
+        description: Immutable cli-validation.json artifact ID from that run
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: cli-release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  REGCTL_SHA256: 4da11cfe7009661a498ffafc11f510049864ffb4eb44961743618b3975db3c55
+
+jobs:
+  prepare:
+    name: Verify original CLI artifacts
+    if: github.repository == 'mag1cfrog/delta-arrow-reader'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      packages: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      publish: ${{ steps.request.outputs.publish }}
+      tag: ${{ steps.request.outputs.tag }}
+      validation-run-id: ${{ steps.request.outputs.validation-run-id }}
+      record-artifact-id: ${{ steps.request.outputs.record-artifact-id }}
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      plan-sha256: ${{ steps.handoff.outputs.plan-sha256 }}
+      publisher-sha256: ${{ steps.handoff.outputs.publisher-sha256 }}
+    steps:
+      - name: Configure publication paths
+        run: |
+          echo "PUBLICATION=$RUNNER_TEMP/cli-publication" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/cli-maintenance-target" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Read request toolchain
+        id: request-rust
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.request-rust.outputs.version }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci
+          cache-targets: false
+          save-if: false
+      - name: Check event and select validation
+        id: request
+        run: cargo xtask cli check-release-request
+      - name: Check out the verified release commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.request.outputs.release-commit }}
+          persist-credentials: false
+      - name: Read publisher toolchain
+        id: publisher-rust
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.publisher-rust.outputs.version }}
+      - name: Install OCI verification tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends skopeo umoci
+      - name: Prepare trusted publication tools
+        run: |
+          mkdir "$PUBLICATION"
+          cargo build --locked --package xtask
+          cp "$CARGO_TARGET_DIR/debug/xtask" "$PUBLICATION/xtask"
+          curl --fail --silent --show-error --location \
+            https://github.com/regclient/regclient/releases/download/v0.9.2/regctl-linux-amd64 \
+            --output "$PUBLICATION/regctl"
+          printf '%s  %s\n' "$REGCTL_SHA256" "$PUBLICATION/regctl" | sha256sum --check
+          chmod 700 "$PUBLICATION/regctl"
+          echo "$PUBLICATION" >> "$GITHUB_PATH"
+      - name: Download and verify the selected original artifacts
+        env:
+          CLI_TAG: ${{ steps.request.outputs.tag }}
+          VALIDATION_RUN_ID: ${{ steps.request.outputs.validation-run-id }}
+          RECORD_ARTIFACT_ID: ${{ steps.request.outputs.record-artifact-id }}
+        run: |
+          xtask cli plan-release "$PUBLICATION/plan" --tag "$CLI_TAG" \
+            --run-id "$VALIDATION_RUN_ID" --record-artifact-id "$RECORD_ARTIFACT_ID"
+      - name: Rehearse all publication operations
+        id: handoff
+        run: |
+          plan_sha256="$(sha256sum "$PUBLICATION/plan/release-plan.json" | cut -d ' ' -f 1)"
+          printf '%s' "$GH_TOKEN" | regctl registry login ghcr.io --user "$GITHUB_ACTOR" --pass-stdin
+          xtask cli update-release-notes "$PUBLICATION/plan" --plan-sha256 "$plan_sha256" --status pending --dry-run
+          xtask cli upload-release-assets "$PUBLICATION/plan" --plan-sha256 "$plan_sha256" --dry-run
+          xtask cli upload-release-images "$PUBLICATION/plan" --plan-sha256 "$plan_sha256" --dry-run
+          echo "plan-sha256=$plan_sha256" >> "$GITHUB_OUTPUT"
+          echo "publisher-sha256=$(sha256sum "$PUBLICATION/xtask" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - name: Save the verified plan and publisher
+        id: upload
+        uses: actions/upload-artifact@v6
+        with:
+          name: cli-publication-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cli-publication/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Report recovery identities
+        env:
+          CLI_TAG: ${{ steps.request.outputs.tag }}
+          VALIDATION_RUN_ID: ${{ steps.request.outputs.validation-run-id }}
+          RECORD_ARTIFACT_ID: ${{ steps.request.outputs.record-artifact-id }}
+          HANDOFF_ID: ${{ steps.upload.outputs.artifact-id }}
+        run: |
+          [[ "$HANDOFF_ID" =~ ^[1-9][0-9]*$ ]]
+          printf 'CLI release: %s\n\nValidation run: %s\n\nRecord artifact: %s\n\n' \
+            "$CLI_TAG" "$VALIDATION_RUN_ID" "$RECORD_ARTIFACT_ID" >> "$GITHUB_STEP_SUMMARY"
+
+  assets:
+    name: Publish CLI release assets
+    needs: prepare
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+      pull-requests: read
+      packages: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PLAN_SHA256: ${{ needs.prepare.outputs.plan-sha256 }}
+      PUBLISHER_SHA256: ${{ needs.prepare.outputs.publisher-sha256 }}
+    steps:
+      - name: Configure publication paths
+        run: echo "PUBLICATION=$RUNNER_TEMP/cli-publication" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v6
+        with:
+          artifact-ids: ${{ needs.prepare.outputs.artifact-id }}
+          path: ${{ runner.temp }}/cli-publication
+      - name: Verify publication tools before execution
+        run: |
+          printf '%s  %s\n' "$PUBLISHER_SHA256" "$PUBLICATION/xtask" "$REGCTL_SHA256" "$PUBLICATION/regctl" | sha256sum --check
+          chmod 700 "$PUBLICATION/xtask" "$PUBLICATION/regctl"
+          echo "$PUBLICATION" >> "$GITHUB_PATH"
+      - name: Record the selected validation and upload missing assets
+        run: |
+          printf '%s' "$GH_TOKEN" | regctl registry login ghcr.io --user "$GITHUB_ACTOR" --pass-stdin
+          xtask cli update-release-notes "$PUBLICATION/plan" --plan-sha256 "$PLAN_SHA256" --status pending
+          xtask cli upload-release-assets "$PUBLICATION/plan" --plan-sha256 "$PLAN_SHA256"
+
+  images:
+    name: Publish CLI container images
+    needs: [prepare, assets]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      packages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PLAN_SHA256: ${{ needs.prepare.outputs.plan-sha256 }}
+      PUBLISHER_SHA256: ${{ needs.prepare.outputs.publisher-sha256 }}
+    steps:
+      - name: Configure publication paths
+        run: echo "PUBLICATION=$RUNNER_TEMP/cli-publication" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v6
+        with:
+          artifact-ids: ${{ needs.prepare.outputs.artifact-id }}
+          path: ${{ runner.temp }}/cli-publication
+      - name: Verify publication tools before execution
+        run: |
+          printf '%s  %s\n' "$PUBLISHER_SHA256" "$PUBLICATION/xtask" "$REGCTL_SHA256" "$PUBLICATION/regctl" | sha256sum --check
+          chmod 700 "$PUBLICATION/xtask" "$PUBLICATION/regctl"
+          echo "$PUBLICATION" >> "$GITHUB_PATH"
+      - name: Upload missing images and require public access
+        run: |
+          printf '%s' "$GH_TOKEN" | regctl registry login ghcr.io --user "$GITHUB_ACTOR" --pass-stdin
+          xtask cli upload-release-images "$PUBLICATION/plan" --plan-sha256 "$PLAN_SHA256"
+
+  delivery:
+    name: Verify public CLI delivery
+    needs: [prepare, assets, images]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      verified: ${{ steps.verify.outputs.verified }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PLAN_SHA256: ${{ needs.prepare.outputs.plan-sha256 }}
+      PUBLISHER_SHA256: ${{ needs.prepare.outputs.publisher-sha256 }}
+    steps:
+      - name: Configure publication paths
+        run: echo "PUBLICATION=$RUNNER_TEMP/cli-publication" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v6
+        with:
+          artifact-ids: ${{ needs.prepare.outputs.artifact-id }}
+          path: ${{ runner.temp }}/cli-publication
+      - name: Verify publication tools before execution
+        run: |
+          printf '%s  %s\n' "$PUBLISHER_SHA256" "$PUBLICATION/xtask" "$REGCTL_SHA256" "$PUBLICATION/regctl" | sha256sum --check
+          chmod 700 "$PUBLICATION/xtask" "$PUBLICATION/regctl"
+          echo "$PUBLICATION" >> "$GITHUB_PATH"
+      - name: Install OCI verification tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends skopeo umoci
+      - name: Download and verify published CLI bytes
+        id: verify
+        run: |
+          xtask cli verify-release-assets "$PUBLICATION/plan" --plan-sha256 "$PLAN_SHA256"
+          xtask cli verify-release-images "$PUBLICATION/plan" --plan-sha256 "$PLAN_SHA256"
+          echo 'verified=true' >> "$GITHUB_OUTPUT"
+
+  notes:
+    name: Complete the CLI release section
+    needs: [prepare, delivery]
+    if: needs.prepare.outputs.publish == 'true' && needs.delivery.outputs.verified == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PLAN_SHA256: ${{ needs.prepare.outputs.plan-sha256 }}
+      PUBLISHER_SHA256: ${{ needs.prepare.outputs.publisher-sha256 }}
+    steps:
+      - name: Configure publication paths
+        run: echo "PUBLICATION=$RUNNER_TEMP/cli-publication" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v6
+        with:
+          artifact-ids: ${{ needs.prepare.outputs.artifact-id }}
+          path: ${{ runner.temp }}/cli-publication
+      - name: Verify publication tools before execution
+        run: |
+          printf '%s  %s\n' "$PUBLISHER_SHA256" "$PUBLICATION/xtask" "$REGCTL_SHA256" "$PUBLICATION/regctl" | sha256sum --check
+          chmod 700 "$PUBLICATION/xtask" "$PUBLICATION/regctl"
+          echo "$PUBLICATION" >> "$GITHUB_PATH"
+      - name: Mark verified CLI delivery complete
+        run: xtask cli update-release-notes "$PUBLICATION/plan" --plan-sha256 "$PLAN_SHA256" --status complete
+
+  result:
+    name: CLI publication result
+    needs: [prepare, assets, images, delivery, notes]
+    if: always()
+    runs-on: ubuntu-24.04
+    env:
+      PREPARE: ${{ needs.prepare.result }}
+      PUBLISH: ${{ needs.prepare.outputs.publish }}
+      ASSETS: ${{ needs.assets.result }}
+      IMAGES: ${{ needs.images.result }}
+      DELIVERY: ${{ needs.delivery.result }}
+      VERIFIED: ${{ needs.delivery.outputs.verified }}
+      NOTES: ${{ needs.notes.result }}
+    steps:
+      - name: Require complete publication or a read-only rehearsal
+        run: |
+          test "$PREPARE" = success
+          case "$PUBLISH" in
+            true)
+              test "$ASSETS" = success
+              test "$IMAGES" = success
+              test "$DELIVERY" = success
+              test "$VERIFIED" = true
+              test "$NOTES" = success
+              echo 'CLI assets, public images, and release notes are complete.' >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            false)
+              test "$ASSETS" = skipped
+              test "$IMAGES" = skipped
+              test "$DELIVERY" = skipped
+              test "$NOTES" = skipped
+              echo 'Read-only CLI publication rehearsal passed.' >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *) echo 'Missing publication mode'; exit 1 ;;
+          esac

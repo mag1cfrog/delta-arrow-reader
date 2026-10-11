@@ -31,6 +31,8 @@ pub(crate) enum Error {
         subject: &'static str,
         source: serde_json::Error,
     },
+    #[snafu(display("Invalid Actions artifact ZIP: {source}"))]
+    ArtifactZip { source: rawzip::Error },
     #[snafu(display("Invalid Arrow data in {}: {source}", path.display()))]
     Arrow {
         path: PathBuf,
@@ -60,4 +62,6 @@ pub(crate) enum Error {
     Pattern { source: regex::Error },
     #[snafu(display("{message}"))]
     InvalidInput { message: String },
+    #[snafu(display("Ineligible CLI release validation: {message}"))]
+    IneligibleReleaseValidation { message: String },
 }

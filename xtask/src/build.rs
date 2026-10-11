@@ -219,14 +219,14 @@ fn print_json(value: &impl Serialize) -> Result<()> {
     Ok(())
 }
 
-fn is_full_commit_sha(commit: &str) -> bool {
+pub(crate) fn is_full_commit_sha(commit: &str) -> bool {
     commit.len() == 40
         && commit
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
-fn check_source(repository: &Path, source_commit: &str) -> Result<()> {
+pub(crate) fn check_source(repository: &Path, source_commit: &str) -> Result<()> {
     ensure!(
         is_full_commit_sha(source_commit),
         InvalidInputSnafu {
@@ -375,22 +375,24 @@ fn build_binary(repository: &Path, args: &BuildArgs) -> Result<BuildMetadata> {
     Ok(metadata)
 }
 
+pub(crate) fn is_stable_version(version: &str) -> bool {
+    is_numeric_version(version)
+        && version
+            .split('.')
+            .all(|part| part == "0" || !part.starts_with('0'))
+}
+
+fn is_numeric_version(version: &str) -> bool {
+    version.split('.').count() == 3
+        && version
+            .split('.')
+            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
 impl BuildIdentity {
     pub(crate) fn validate(&self) -> Result<()> {
-        let numeric_version = |version: &str, allow_leading_zero: bool| {
-            version.split('.').count() == 3
-                && version.split('.').all(|part| {
-                    !part.is_empty()
-                        && part.bytes().all(|byte| byte.is_ascii_digit())
-                        && (allow_leading_zero || part == "0" || !part.starts_with('0'))
-                })
-        };
         for (name, value, valid) in [
-            (
-                "version",
-                &self.version,
-                numeric_version(&self.version, false),
-            ),
+            ("version", &self.version, is_stable_version(&self.version)),
             (
                 "source commit",
                 &self.source_commit,
@@ -399,7 +401,7 @@ impl BuildIdentity {
             (
                 "Rust toolchain",
                 &self.rust_toolchain,
-                numeric_version(&self.rust_toolchain, true),
+                is_numeric_version(&self.rust_toolchain),
             ),
         ] {
             ensure!(

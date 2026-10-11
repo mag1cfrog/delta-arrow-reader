@@ -10,8 +10,7 @@ it with redirected stdout or a subprocess pipe.
 
 ## Use a Linux binary
 
-The **Build CLI binaries** workflow produces validated archives for these
-platforms:
+CLI releases provide validated archives for these platforms:
 
 | Platform | Rust target | Minimum runtime |
 | --- | --- | --- |
@@ -25,40 +24,22 @@ or Ubuntu, install `libc6`, `libgcc-s1`, and `ca-certificates`; on Fedora, insta
 HTTPS storage. The archives do not support Alpine Linux's musl runtime or a
 `scratch` container. Other platforms can build from source.
 
-Download the complete `dar-cli-<source-sha>-<run-id>-<attempt>` artifact from a
-successful Actions run in the repository. These are CI artifacts; this workflow
-does not publish GitHub Releases. The download contains both architecture
-archives, `cli-artifacts.json`, and `SHA256SUMS`. The manifest records the source
-commit, version, exact Rust release, shared libraries, and archive/binary hashes.
-
-Extract the Actions download into an empty directory and check all its files:
-
-```sh
-sha256sum --check SHA256SUMS
-```
-
-After all checks pass, choose the archive matching your CPU. For amd64, replace
-`X.Y.Z` with the version in the manifest and use a new destination directory:
-
-```sh
-mkdir dar-cli
-tar -xzf dar-vX.Y.Z-linux-amd64-gnu.tar.gz -C dar-cli
-./dar-cli/dar --version
-export PATH="$PWD/dar-cli:$PATH"
-```
-
-For arm64, use `dar-vX.Y.Z-linux-arm64-gnu.tar.gz`. Keep `LICENSE` and `NOTICE`
-alongside `dar`, including when distributing the binary with a service. The
-executable works outside a source checkout and does not require Python or Rust.
+Follow the [version-pinned installation and checksum steps](installation.md#cli-binaries-and-container-images)
+to download the two archives, `cli-artifacts.json`, and `SHA256SUMS` from a
+completed GitHub Release. Extract the archive for your CPU after verification.
+Keep `LICENSE` and `NOTICE` alongside `dar`, including when distributing it with
+a service. The executable works outside a source checkout and does not require
+Python or Rust.
 
 ## Use a container or a Go service
 
 The CLI container packages the same standalone binary with its runtime libraries
-and CA certificates. Public image publication is handled separately. Replace
-this placeholder with a verified image digest when one is available:
+and CA certificates. Copy the index digest from the completed Release's CLI
+section and replace `RELEASE_INDEX_HASH` below. Docker selects the matching
+architecture from the index:
 
 ```sh
-dar_image='ghcr.io/OWNER/IMAGE@sha256:VERIFIED_DIGEST'
+dar_image='ghcr.io/mag1cfrog/delta-arrow-reader@sha256:RELEASE_INDEX_HASH'
 docker run --rm --read-only "$dar_image" --version
 docker run --rm --read-only \
   --mount type=bind,src=/absolute/path/to/table,dst=/table,readonly \
@@ -69,7 +50,8 @@ docker run --rm --read-only \
 ```
 
 The image runs `dar` directly as UID/GID `65532:65532`. Omitting arguments prints
-help. Mounted files and their parent directories must be readable by that user.
+help. Each invocation exits when the command finishes; the image does not run a
+Reader server. Mounted files and their parent directories must be readable by that user.
 Supply storage credentials and configuration at runtime. Keep HTTPS certificate
 verification enabled and provide a readable custom trust bundle when required
 by your storage endpoint. See [HTTPS configuration](installation.md#https-and-build-prerequisites).

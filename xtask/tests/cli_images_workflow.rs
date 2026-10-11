@@ -314,6 +314,11 @@ fn image_handoff_requires_all_jobs_and_upload_outputs() -> TestResult {
         complete["run"].as_str().unwrap()
     );
     let root = tempfile::tempdir()?;
+    fs::create_dir(root.path().join("cli-images"))?;
+    fs::write(
+        root.path().join("cli-images/cli-images.json"),
+        "image manifest fixture",
+    )?;
     let handoff = root.path().join("output");
     for prepare in ["success", "failure", "skipped", "cancelled", ""] {
         for images in ["success", "failure", "skipped", "cancelled", ""] {
@@ -335,6 +340,7 @@ fn image_handoff_requires_all_jobs_and_upload_outputs() -> TestResult {
                     .env("CLI_VERSION", "1.2.3")
                     .env("CLI_RUST_TOOLCHAIN", "1.94.1")
                     .env("GITHUB_OUTPUT", &handoff)
+                    .env("RUNNER_TEMP", root.path())
                     .env("GITHUB_STEP_SUMMARY", root.path().join("summary"))
                     .output()?;
                 let expected =
@@ -386,6 +392,7 @@ fn required_ci_rejects_missing_or_failed_image_handoffs_only_on_release_prs() ->
                 ("changes.outputs.tooling", "false"),
                 ("changes.outputs.selective_read", "false"),
                 ("changes.outputs.release_pr", release),
+                ("changes.outputs.pr_head_sha", "pr-head"),
                 ("release-cli.outputs.validated", "true"),
                 ("release-wheels.outputs.validated", "true"),
                 (
@@ -406,6 +413,19 @@ fn required_ci_rejects_missing_or_failed_image_handoffs_only_on_release_prs() ->
                     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 ),
                 ("release-cli-images.outputs.version", "1.2.3"),
+                ("release-cli-record.outputs.validated", "true"),
+                ("release-cli-record.outputs.artifact-id", "124"),
+                ("release-cli-record.outputs.artifact-name", "record-fixture"),
+                (
+                    "release-cli-record.outputs.artifact-url",
+                    "https://example.invalid/record",
+                ),
+                (
+                    "release-cli-record.outputs.source-commit",
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                ),
+                ("release-cli-record.outputs.pr-head-sha", "pr-head"),
+                ("release-cli-record.outputs.version", "1.2.3"),
             ]);
             let mut cases = vec![("release-cli-images.result", "success")];
             for result in ["failure", "skipped", "cancelled", ""] {
@@ -480,12 +500,49 @@ fn ordinary_ci_only_adds_small_image_workflow_checks() {
             .unwrap()
             .contains(".github/workflows/cli-images.yml")
     );
-    let tests = named_step(checks, "Test CI workflows, Python, and cache tasks")["run"]
+    let script = named_step(checks, "Test CI workflows, Python, and cache tasks")["run"]
+        .as_str()
+        .unwrap()
+        .replace("\\\n", " ");
+    for target in ["--test cli_images_workflow", "--test images"] {
+        assert!(script.contains(target), "missing image check: {target}");
+    }
+    for target in [
+        "cli_release_plan",
+        "cli_release_assets",
+        "cli_release_images",
+    ] {
+        let commands: Vec<_> = script
+            .lines()
+            .filter(|line| line.contains(&format!("--test {target}")))
+            .collect();
+        assert_eq!(commands.len(), 1);
+        assert!(!commands[0].contains("ignored"));
+    }
+    let images = images_workflow();
+    assert_eq!(
+        named_step(
+            &images["jobs"]["validate"],
+            "Test release planning with real OCI tools"
+        )["run"],
+        "cargo test --locked --package xtask --test cli_release_plan -- --ignored"
+    );
+    let install = named_step(
+        &images["jobs"]["validate"],
+        "Install registry publication tool",
+    )["run"]
         .as_str()
         .unwrap();
-    for target in ["--test cli_images_workflow", "--test images"] {
-        assert!(tests.contains(target), "missing image check: {target}");
-    }
+    assert!(install.contains("regclient/regclient/releases/download/v0.9.2/regctl-linux-amd64"));
+    assert!(install.contains("4da11cfe7009661a498ffafc11f510049864ffb4eb44961743618b3975db3c55"));
+    assert!(install.contains("sha256sum --check"));
+    assert_eq!(
+        named_step(
+            &images["jobs"]["validate"],
+            "Test publication with a disposable local registry"
+        )["run"],
+        "cargo test --locked --package xtask --test cli_release_images -- --ignored"
+    );
     for (name, job) in ci["jobs"].as_object().unwrap() {
         if name != "release-cli-images" {
             assert_ne!(job["uses"], "./.github/workflows/cli-images.yml");
