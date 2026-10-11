@@ -173,6 +173,7 @@ fn partial_file(input: &Path, output: &Path, selected: &[bool]) -> Result<Vec<Va
                     rows,
                     nullable,
                     &selected,
+                    Vec::new(),
                     |range: std::ops::Range<usize>| ready(Ok(body[range].to_vec())),
                 )
                 .now_or_never()
@@ -291,6 +292,7 @@ fn inspect(path: &Path) -> Result<()> {
                     page.num_values() as usize,
                     meta.column_descr().max_def_level() == 1,
                     &[],
+                    Vec::new(),
                     |range: std::ops::Range<usize>| ready(Ok(body[range].to_vec())),
                 )
                 .now_or_never()

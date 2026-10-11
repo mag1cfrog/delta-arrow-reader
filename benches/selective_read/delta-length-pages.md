@@ -69,6 +69,9 @@ cleared. The current experiment caps each page at 8 MiB and 1,048,576 rows,
 structural discovery at 1 MiB and nine fetches, block size at 32,768 values,
 and selected ranges at 8,192. Unsupported layouts and exhausted budgets require
 ordinary-read fallback; the verifier fails instead of hiding such a case.
+The caller can supply an already fetched body prefix. The parser checks its size
+and examines all of it before requesting more bytes. A supplied prefix counts
+as the first discovery chunk, so reuse does not bypass the byte or fetch limits.
 
 ## Run the network experiment
 
@@ -165,9 +168,10 @@ runs, IPC export. It is not query-only CPU time.
 
 Proxy captures include every query response body, including metadata and DVs.
 Reader counters cover data ranges only and distinguish prefix discovery from
-payload reads. Logical parser chunks can differ from network discovery rounds
-because the initial 8 KiB request contains both the page header and some body
-bytes. The header and all discovered length/null bytes remain intact. Unread
+payload reads. `logical_prefix_chunks` counts chunks for pages whose length
+discovery completed, including the supplied cached prefix. `discovery_requests`
+also counts probes that failed to complete length discovery. The header and all
+discovered length/null bytes remain intact. Unread
 payload bytes exist only as zeroes in the in-memory buffer used with the exact
 row selection; no modified table is written.
 
@@ -474,19 +478,71 @@ and null information fits in the first 8 KiB response. After removing its
 25-byte Parquet header, the transport caches 8,167 body bytes. The parser starts
 with a separate 4 KiB buffer; growing it to 8 KiB asks the transport for another
 25 bytes even when the cached prefix already contains the complete structure.
-The slow budget rejects these 64 extensions, while the fast profile permits
-them. Let the parser examine the already fetched prefix before requesting more,
-then repeat the affected positive and losing controls. This remains a known
-prototype limitation, not a production reader change. The experiment does not
-yet justify claiming that skewed batches avoid extra requests or query cost.
+The slow budget rejected these 64 extensions, while the fast profile permitted
+them. The follow-up below tests letting the parser examine all cached bytes
+before requesting more. The initial probe still has a cost when the lengths
+reveal that the selected values contain almost all of the payload.
+
+## Cached-prefix reuse, 2026-10-11
+
+The parser now starts with the body bytes already fetched alongside the page
+header. It requests only extensions beyond that prefix. Regression checks cover
+a complete cached length stream, an incomplete prefix that needs more bytes,
+and supplied prefixes exceeding the page or discovery limit. The initial prefix
+still counts toward the nine-chunk limit and the transport's cost budget.
+
+The repeated network matrix passed 24 full-result checks and completed 36 timing
+runs, using the same fixtures and three alternating pairs per case. Slow means
+200 ms +/-20 ms with shared 150 Mbit/s; fast means 1 ms with shared 10,000 Mbit/s.
+
+| Profile and case | Ordinary seconds | Experimental seconds |
+| --- | ---: | ---: |
+| Slow, long scattered | 30.113 | 5.330 |
+| Slow, long grouped | 29.803 | 4.565 |
+| Slow, selected-long scattered | 5.269 | 5.269 |
+| Slow, selected-long-batch scattered | 17.366 | 18.017 |
+| Fast, long scattered | 0.728 | 0.369 |
+| Fast, selected-long-batch scattered | 0.553 | 0.576 |
+
+The slow long-value queries retain gains exceeding the timing spread in all
+pairs. Their experimental medians were 6.044 and 5.350 seconds before the fix.
+Query requests fell from 411 to 362 for scattered matches and from 296 to 247
+for grouped matches. Discovery now uses one round per page in both cases.
+Transferred bytes changed only slightly: this fix removes dependent requests,
+while the existing partial reads provide the byte savings.
+
+For larger skewed batches, both profiles now use 128 initial probes and no
+extensions. Fast query requests fell from 349 to 285; slow requests remained
+285 because the old budget already refused the extensions. Traces in both array
+formats verify that every page is covered once by its prefix and remaining
+suffix, with no gaps, repeated bytes or 25-byte extension requests.
+Ordinary reads use 157 requests and the same 258,201,068 bytes. Initial discovery
+still costs time: all slow pairs lost 0.647-0.664 seconds, beyond a 0.024-second
+within-mode range. All fast pairs also lost time, by 0.023-0.033 seconds versus a
+0.021-second range. These short fast samples are diagnostics, not a general
+slowdown estimate. The smaller selected-long case still rejects discovery
+before I/O and uses exactly the ordinary 49 requests and 33,858,108 bytes.
+
+For the larger skewed batch, ordinary/experimental process CPU medians were
+1.24/1.36 seconds on the slow profile and 0.50/0.56 on the fast profile. Maximum
+process RSS was 194.6/222.6 MiB and 194.2/231.6 MiB, respectively. The first
+probe and full-page reconstruction still have costs after this fix.
+
+The parser, planner and budget unit tests, Clippy and the 20-case local decoder
+proof passed. Twenty local full-result controls also passed. The first local
+control script stopped at an obsolete expectation: its synthetic 500 ms profile
+previously rejected redundant extensions. With reuse, all 105 long-value pages
+complete discovery from the initial prefix. The updated control requires that
+behavior and exact values in both array formats. Both attempts are retained.
+Verified duplicate IPC outputs were removed after comparison; samples, traces,
+resource records, fixtures and independent oracles remain available.
 
 ## Remaining work for #452
 
 Use the uncompressed layout as the first integration candidate and retain the
-Zstd diagnostics as fallback evidence. Fix the redundant prefix extension and
-repeat the affected controls. The current cost experiment uses known proxy
-settings and optimistic request-processing cost; automatic-profile validation
-and the final preflight/fallback recommendation remain incomplete.
+Zstd diagnostics as fallback evidence. The current cost experiment uses known
+proxy settings and optimistic request-processing cost; automatic-profile
+validation and the final preflight/fallback recommendation remain incomplete.
 Use the measured limits and losing cases to update #453 before recommending
 integration. No new production type support or default is enabled by this
 experiment.

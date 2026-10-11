@@ -376,6 +376,7 @@ impl Reader {
             page.rows,
             page.nullable,
             &page.selected,
+            prefix[header..].to_vec(),
             |range| {
                 let cached = cached.clone();
                 let rounds = rounds.clone();

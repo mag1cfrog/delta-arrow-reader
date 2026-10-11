@@ -30,28 +30,37 @@ pub struct Plan {
     pub ranges: Vec<Range<usize>>,
     pub payload_start: usize,
     pub selected_bytes: usize,
+    /// Prefix chunks used, including a nonempty prefix supplied by the caller.
     pub probes: usize,
 }
 
-/// Fetch each prefix extension once. Unsupported layouts and exhausted budgets mean ordinary-read fallback; malformed
-/// supported input is an error. No payload bytes may replace missing lengths/nulls.
+/// Inspect an already fetched body prefix before requesting any extensions.
+/// The supplied prefix counts toward the discovery budget. Unsupported layouts
+/// and exhausted budgets require fallback; malformed supported input is an error.
+/// No payload bytes may replace missing lengths/nulls.
 pub async fn discover<F: Future<Output = Result<Vec<u8>>>>(
     page_bytes: usize,
     rows: usize,
     nullable: bool,
     selected: &[usize],
+    mut prefix: Vec<u8>,
     mut fetch: impl FnMut(Range<usize>) -> F,
 ) -> Result<Plan> {
     if page_bytes > MAX_PAGE_BYTES || rows > MAX_ROWS {
         return Err(Fallback("page size or row count"));
+    }
+    if prefix.len() > page_bytes {
+        return Err(Invalid("prefix exceeds page boundary"));
+    }
+    if prefix.len() > MAX_PREFIX_BYTES {
+        return Err(Fallback("length discovery budget"));
     }
     if selected.last().is_some_and(|row| *row >= rows)
         || selected.windows(2).any(|pair| pair[0] >= pair[1])
     {
         return Err(Invalid("row selection"));
     }
-    let mut prefix = Vec::new();
-    for probes in 0..=MAX_PROBES {
+    for probes in usize::from(!prefix.is_empty())..=MAX_PROBES {
         match value_ranges(&prefix, page_bytes, rows, nullable, selected) {
             Ok((payload_start, mut ranges)) => {
                 let selected_bytes = ranges.iter().map(|r| r.len()).sum();
@@ -299,10 +308,50 @@ mod tests {
             rows,
             nullable,
             selected,
+            Vec::new(),
             |range: std::ops::Range<usize>| ready(Ok(bytes[range].to_vec())),
         )
         .now_or_never()
         .unwrap()
+    }
+
+    #[test]
+    fn discovery_uses_cached_bytes_before_extending_the_prefix() {
+        let lengths: Vec<_> = (0..8192).map(|i| i * 7919 % 16).collect();
+        let bytes = body(&lengths);
+        let selected = [0, 31, 8191];
+        let expected = plan(&bytes, lengths.len(), false, &selected).unwrap();
+        // An 8 KiB response includes the page header as well as the cached body.
+        let cached_bytes = 8192 - 25;
+        assert!(expected.payload_start > 4096 && expected.payload_start < cached_bytes);
+        for initial in [cached_bytes, 37] {
+            let mut fetched = initial;
+            let mut requests = 0;
+            let plan = discover(
+                bytes.len(),
+                lengths.len(),
+                false,
+                &selected,
+                bytes[..initial].to_vec(),
+                |range| {
+                    assert_eq!(
+                        range.start, fetched,
+                        "cached bytes must not be fetched again"
+                    );
+                    fetched = range.end;
+                    requests += 1;
+                    ready(Ok(bytes[range].to_vec()))
+                },
+            )
+            .now_or_never()
+            .unwrap()
+            .unwrap();
+            assert_eq!(plan.payload_start, expected.payload_start);
+            assert_eq!(plan.selected_bytes, expected.selected_bytes);
+            assert_eq!(plan.prefix, bytes[..fetched]);
+            assert_eq!(plan.probes, requests + 1);
+            assert_eq!(requests == 0, initial == cached_bytes);
+        }
     }
 
     #[test]
@@ -408,24 +457,28 @@ mod tests {
         );
         assert!(length_stream_end(&[255; 16], 1).is_err());
         assert_eq!(
-            discover(10, 1, false, &[0], |_| ready(Ok(vec![])))
+            discover(10, 1, false, &[0], Vec::new(), |_| ready(Ok(vec![])))
                 .now_or_never()
                 .unwrap()
                 .err(),
             Some(Invalid("short prefix read"))
         );
         assert_eq!(
-            discover(MAX_PAGE_BYTES + 1, 1, false, &[], |_| ready(Ok(vec![])))
-                .now_or_never()
-                .unwrap()
-                .err(),
+            discover(MAX_PAGE_BYTES + 1, 1, false, &[], Vec::new(), |_| ready(
+                Ok(vec![])
+            ))
+            .now_or_never()
+            .unwrap()
+            .err(),
             Some(Fallback("page size or row count"))
         );
         assert_eq!(
-            discover(1, MAX_ROWS + 1, false, &[], |_| ready(Ok(vec![])))
-                .now_or_never()
-                .unwrap()
-                .err(),
+            discover(1, MAX_ROWS + 1, false, &[], Vec::new(), |_| ready(Ok(
+                vec![]
+            )))
+            .now_or_never()
+            .unwrap()
+            .err(),
             Some(Fallback("page size or row count"))
         );
         let bytes = [1, 0, 16, 0]; // Definition stream exceeds the prefix budget.
@@ -435,6 +488,7 @@ mod tests {
             1,
             true,
             &[],
+            Vec::new(),
             |range: std::ops::Range<usize>| {
                 requests += 1;
                 let mut prefix = vec![0; range.len()];
@@ -446,12 +500,30 @@ mod tests {
         .unwrap();
         assert_eq!(result.err(), Some(Fallback("length discovery budget")));
         assert_eq!(requests, 1);
+        for (page_bytes, prefix, error) in [
+            (1, vec![0; 2], Invalid("prefix exceeds page boundary")),
+            (
+                MAX_PAGE_BYTES,
+                vec![0; MAX_PREFIX_BYTES + 1],
+                Fallback("length discovery budget"),
+            ),
+        ] {
+            assert_eq!(
+                discover(page_bytes, 1, false, &[], prefix, |_| async {
+                    panic!("invalid cached prefixes must not trigger I/O")
+                })
+                .now_or_never()
+                .unwrap()
+                .err(),
+                Some(error)
+            );
+        }
     }
 
     #[test]
     fn failed_or_cancelled_reads_never_produce_a_plan() {
         let mut requests = 0;
-        let failed = discover(8192, 1, false, &[0], |_| {
+        let failed = discover(8192, 1, false, &[0], Vec::new(), |_| {
             requests += 1;
             ready(Err(Error::Io("connection reset".into())))
         })
@@ -459,7 +531,7 @@ mod tests {
         .unwrap();
         assert_eq!(failed.err(), Some(Error::Io("connection reset".into())));
         assert_eq!(requests, 1);
-        let pending = discover(8192, 1, false, &[0], |_| {
+        let pending = discover(8192, 1, false, &[0], Vec::new(), |_| {
             requests += 1;
             futures_util::future::pending()
         });
