@@ -1,7 +1,7 @@
 //! Bounded discovery of flat, uncompressed DELTA_LENGTH_BYTE_ARRAY V1 bodies.
 //! This experiment receives an already checked page boundary and row selection.
 
-use std::ops::Range;
+use std::{future::Future, ops::Range};
 
 use parquet::data_type::Int32Type;
 use parquet::encodings::decoding::{Decoder, DeltaBitPackDecoder};
@@ -19,6 +19,8 @@ pub enum Error {
     Invalid(&'static str),
     Fallback(&'static str),
     NeedBytes(usize),
+    #[allow(dead_code)] // The local proof has no fallible I/O callback.
+    Io(String),
 }
 type Result<T> = std::result::Result<T, Error>;
 use Error::{Fallback, Invalid, NeedBytes};
@@ -33,12 +35,12 @@ pub struct Plan {
 
 /// Fetch each prefix extension once. Unsupported layouts and exhausted budgets mean ordinary-read fallback; malformed
 /// supported input is an error. No payload bytes may replace missing lengths/nulls.
-pub fn discover(
+pub async fn discover<F: Future<Output = Result<Vec<u8>>>>(
     page_bytes: usize,
     rows: usize,
     nullable: bool,
     selected: &[usize],
-    mut fetch: impl FnMut(Range<usize>) -> Result<Vec<u8>>,
+    mut fetch: impl FnMut(Range<usize>) -> F,
 ) -> Result<Plan> {
     if page_bytes > MAX_PAGE_BYTES || rows > MAX_ROWS {
         return Err(Fallback("page size or row count"));
@@ -77,7 +79,7 @@ pub fn discover(
                     .max(prefix.len() * 2)
                     .min(page_bytes)
                     .min(MAX_PREFIX_BYTES);
-                let bytes = fetch(prefix.len()..end)?;
+                let bytes = fetch(prefix.len()..end).await?;
                 if bytes.len() != end - prefix.len() {
                     return Err(Invalid("short prefix read"));
                 }
@@ -278,6 +280,7 @@ fn value_ranges(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::{FutureExt, future::ready};
     use parquet::encodings::encoding::{DeltaBitPackEncoder, Encoder};
 
     fn body(lengths: &[i32]) -> Vec<u8> {
@@ -291,9 +294,15 @@ mod tests {
     }
 
     fn plan(bytes: &[u8], rows: usize, nullable: bool, selected: &[usize]) -> Result<Plan> {
-        discover(bytes.len(), rows, nullable, selected, |range| {
-            Ok(bytes[range].to_vec())
-        })
+        discover(
+            bytes.len(),
+            rows,
+            nullable,
+            selected,
+            |range: std::ops::Range<usize>| ready(Ok(bytes[range].to_vec())),
+        )
+        .now_or_never()
+        .unwrap()
     }
 
     #[test]
@@ -399,26 +408,63 @@ mod tests {
         );
         assert!(length_stream_end(&[255; 16], 1).is_err());
         assert_eq!(
-            discover(10, 1, false, &[0], |_| Ok(vec![])).err(),
+            discover(10, 1, false, &[0], |_| ready(Ok(vec![])))
+                .now_or_never()
+                .unwrap()
+                .err(),
             Some(Invalid("short prefix read"))
         );
         assert_eq!(
-            discover(MAX_PAGE_BYTES + 1, 1, false, &[], |_| panic!()).err(),
+            discover(MAX_PAGE_BYTES + 1, 1, false, &[], |_| ready(Ok(vec![])))
+                .now_or_never()
+                .unwrap()
+                .err(),
             Some(Fallback("page size or row count"))
         );
         assert_eq!(
-            discover(1, MAX_ROWS + 1, false, &[], |_| panic!()).err(),
+            discover(1, MAX_ROWS + 1, false, &[], |_| ready(Ok(vec![])))
+                .now_or_never()
+                .unwrap()
+                .err(),
             Some(Fallback("page size or row count"))
         );
         let bytes = [1, 0, 16, 0]; // Definition stream exceeds the prefix budget.
         let mut requests = 0;
-        let result = discover(MAX_PAGE_BYTES, 1, true, &[], |range| {
-            requests += 1;
-            let mut prefix = vec![0; range.len()];
-            prefix[..4].copy_from_slice(&bytes);
-            Ok(prefix)
-        });
+        let result = discover(
+            MAX_PAGE_BYTES,
+            1,
+            true,
+            &[],
+            |range: std::ops::Range<usize>| {
+                requests += 1;
+                let mut prefix = vec![0; range.len()];
+                prefix[..4].copy_from_slice(&bytes);
+                ready(Ok(prefix))
+            },
+        )
+        .now_or_never()
+        .unwrap();
         assert_eq!(result.err(), Some(Fallback("length discovery budget")));
         assert_eq!(requests, 1);
+    }
+
+    #[test]
+    fn failed_or_cancelled_reads_never_produce_a_plan() {
+        let mut requests = 0;
+        let failed = discover(8192, 1, false, &[0], |_| {
+            requests += 1;
+            ready(Err(Error::Io("connection reset".into())))
+        })
+        .now_or_never()
+        .unwrap();
+        assert_eq!(failed.err(), Some(Error::Io("connection reset".into())));
+        assert_eq!(requests, 1);
+        let pending = discover(8192, 1, false, &[0], |_| {
+            requests += 1;
+            futures_util::future::pending()
+        });
+        // Dropping an unfinished discovery must not return a partially filled plan.
+        assert!(pending.now_or_never().is_none());
+        assert_eq!(requests, 2);
     }
 }

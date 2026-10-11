@@ -15,6 +15,7 @@ use arrow::{
     datatypes::{DataType, Field, Schema},
     record_batch::RecordBatch,
 };
+use futures_util::{FutureExt, future::ready};
 use parquet::{
     arrow::{
         ArrowWriter,
@@ -164,9 +165,15 @@ fn partial_file(input: &Path, output: &Path, selected: &[bool]) -> Result<Vec<Va
                     .enumerate()
                     .filter_map(|(row, keep)| keep.then_some(row))
                     .collect();
-                let plan = delta_length::discover(body.len(), rows, nullable, &selected, |range| {
-                    Ok(body[range].to_vec())
-                })
+                let plan = delta_length::discover(
+                    body.len(),
+                    rows,
+                    nullable,
+                    &selected,
+                    |range: std::ops::Range<usize>| ready(Ok(body[range].to_vec())),
+                )
+                .now_or_never()
+                .unwrap()
                 .map_err(|error| format!("{error:?}"))?;
                 partial[start..end].fill(0);
                 partial[start..start + plan.prefix.len()].copy_from_slice(&plan.prefix);
@@ -229,8 +236,90 @@ fn check(path: &Path, expected: &RecordBatch, selection: &BooleanArray, views: b
     Ok(())
 }
 
+fn inspect(path: &Path) -> Result<()> {
+    let reader = SerializedFileReader::new_with_options(
+        File::open(path)?,
+        ReadOptionsBuilder::new().with_page_index().build(),
+    )?;
+    let metadata = reader.metadata();
+    let indexes = metadata.offset_index().ok_or("missing offset indexes")?;
+    let mut records = Vec::new();
+    for (group, columns) in indexes.iter().enumerate() {
+        let row_group = reader.get_row_group(group)?;
+        for (column, index) in columns.iter().enumerate().skip(3) {
+            let meta = metadata.row_group(group).column(column);
+            assert_eq!(meta.compression(), Compression::UNCOMPRESSED);
+            assert_eq!(meta.column_type(), Type::BYTE_ARRAY);
+            assert_eq!(meta.column_descr().max_rep_level(), 0);
+            assert!((0..=1).contains(&meta.column_descr().max_def_level()));
+            let mut pages = row_group.get_column_page_reader(column)?;
+            for (i, location) in index.page_locations().iter().enumerate() {
+                let page = pages.get_next_page()?.ok_or("missing indexed page")?;
+                assert_eq!(page.page_type(), PageType::DATA_PAGE);
+                assert_eq!(page.encoding(), Encoding::DELTA_LENGTH_BYTE_ARRAY);
+                let end = index
+                    .page_locations()
+                    .get(i + 1)
+                    .map_or(row_group.metadata().num_rows(), |next| next.first_row_index);
+                assert_eq!(end - location.first_row_index, i64::from(page.num_values()));
+                let body = page.buffer();
+                let plan = delta_length::discover(
+                    body.len(),
+                    page.num_values() as usize,
+                    meta.column_descr().max_def_level() == 1,
+                    &[],
+                    |range: std::ops::Range<usize>| ready(Ok(body[range].to_vec())),
+                )
+                .now_or_never()
+                .unwrap()
+                .map_err(|error| format!("{error:?}"))?;
+                records.push(
+                    json!({"row_group":group,"column":meta.column_path().string(),
+                    "first_row":location.first_row_index,"rows":page.num_values(),
+                    "page_bytes":location.compressed_page_size,"body_bytes":body.len(),
+                    "length_and_null_bytes":plan.payload_start,"discovery_chunks":plan.probes,
+                    "nullable":meta.column_descr().max_def_level() == 1}),
+                );
+            }
+            assert!(pages.get_next_page()?.is_none());
+        }
+    }
+    println!(
+        "{}",
+        json!({"page_type":"DATA_PAGE","encoding":"DELTA_LENGTH_BYTE_ARRAY",
+        "compression":"UNCOMPRESSED","physical_type":"BYTE_ARRAY","offset_index":true,"pages":records})
+    );
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args_os().collect();
+    if args.len() == 3 && args[1] == "inspect" {
+        return inspect(Path::new(&args[2]));
+    }
+    if args.len() == 5 && args[1] == "dv" {
+        use delta_kernel::actions::deletion_vector_writer::{
+            KernelDeletionVector, StreamingDeletionVectorWriter,
+        };
+        let rows: u64 = args[2].to_str().ok_or("row count")?.parse()?;
+        if rows == 0 || rows > 1048576 {
+            return Err("DV fixture row bound".into());
+        }
+        let uuid = uuid::Uuid::parse_str(args[3].to_str().ok_or("DV UUID")?)?;
+        let mut bitmap = KernelDeletionVector::new();
+        bitmap.add_deleted_row_indexes((0..rows).step_by(103));
+        let mut bytes = Vec::new();
+        let mut writer = StreamingDeletionVectorWriter::new(&mut bytes);
+        let descriptor = writer.write_deletion_vector(bitmap)?;
+        writer.finalize()?;
+        std::io::Write::write_all(&mut File::create_new(&args[4])?, &bytes)?;
+        println!(
+            "{}",
+            json!({"storageType":"u","pathOrInlineDv":z85::encode(uuid.as_bytes()),
+            "offset":descriptor.offset,"sizeInBytes":descriptor.size_in_bytes,"cardinality":descriptor.cardinality})
+        );
+        return Ok(());
+    }
     if args.len() != 2 {
         return Err("delta-length-pages NEW_OUTPUT_DIRECTORY".into());
     }
