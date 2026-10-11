@@ -116,7 +116,7 @@ fn inspection_command_output(command: &mut Command) -> Result<String> {
     String::from_utf8(output.stdout).context(Utf8Snafu { subject: program })
 }
 
-pub(crate) fn check_environment(architecture: Architecture) -> Result<()> {
+pub(crate) fn check_build_environment(architecture: Architecture) -> Result<()> {
     let path = Path::new("/etc/os-release");
     let release = fs::read_to_string(path).context(FileSnafu { path })?;
     let glibc = inspection_command_output(
@@ -125,10 +125,10 @@ pub(crate) fn check_environment(architecture: Architecture) -> Result<()> {
             .env("LC_ALL", "C"),
     )?;
     let machine = inspection_command_output(Command::new("uname").arg("-m").env("LC_ALL", "C"))?;
-    check_runtime_environment(&release, glibc.trim(), machine.trim(), architecture)
+    check_build_requirements(&release, glibc.trim(), machine.trim(), architecture)
 }
 
-fn check_runtime_environment(
+fn check_build_requirements(
     release: &str,
     glibc: &str,
     machine: &str,
@@ -144,13 +144,47 @@ fn check_runtime_environment(
     ensure!(
         release.get("ID") == Some(&"debian") && release.get("VERSION_ID") == Some(&"12"),
         InvalidInputSnafu {
-            message: "build and runtime checks require Debian 12"
+            message: "release builds require Debian 12"
         }
     );
     ensure!(
         glibc == format!("glibc {MIN_GLIBC}"),
         InvalidInputSnafu {
             message: format!("expected the Debian 12 glibc {MIN_GLIBC} runtime")
+        }
+    );
+    check_runtime_requirements(glibc, machine, architecture)
+}
+
+fn check_runtime_environment(architecture: Architecture) -> Result<()> {
+    let glibc = inspection_command_output(
+        Command::new("getconf")
+            .arg("GNU_LIBC_VERSION")
+            .env("LC_ALL", "C"),
+    )?;
+    let machine = inspection_command_output(Command::new("uname").arg("-m").env("LC_ALL", "C"))?;
+    check_runtime_requirements(glibc.trim(), machine.trim(), architecture)
+}
+
+fn check_runtime_requirements(
+    glibc: &str,
+    machine: &str,
+    architecture: Architecture,
+) -> Result<()> {
+    let version = glibc.strip_prefix("glibc ").ok_or_else(|| {
+        InvalidInputSnafu {
+            message: "runtime must use glibc",
+        }
+        .build()
+    })?;
+    let mut version = parse_glibc_version(version)?;
+    let mut minimum = parse_glibc_version(MIN_GLIBC)?;
+    version.resize(3, 0);
+    minimum.resize(3, 0);
+    ensure!(
+        version >= minimum,
+        InvalidInputSnafu {
+            message: format!("runtime requires glibc {MIN_GLIBC} or newer, got {glibc}"),
         }
     );
     ensure!(
@@ -199,7 +233,7 @@ fn parse_glibc_version(version: &str) -> Result<Vec<u64>> {
                 .iter()
                 .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit())),
         InvalidInputSnafu {
-            message: "missing or unsupported GLIBC symbol requirements"
+            message: "expected a GLIBC version with two or three numeric components"
         }
     );
     parts
@@ -338,7 +372,7 @@ pub(crate) fn check_binary(
     version: &str,
     expected_sha256: &str,
 ) -> Result<BinaryMetadata> {
-    check_environment(architecture)?;
+    check_runtime_environment(architecture)?;
     inspect_and_execute_binary(binary, architecture, version, expected_sha256)
 }
 

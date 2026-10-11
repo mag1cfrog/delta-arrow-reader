@@ -83,7 +83,7 @@ enum CliTask {
     Build(build::BuildArgs),
     /// Build, check, collect notices, and package one CLI architecture.
     BuildArchive(build::BuildArchiveArgs),
-    /// Inspect and execute a binary on its supported Debian 12 platform.
+    /// Inspect and execute a binary on a compatible Linux runtime.
     CheckBinary(binary::CheckBinaryArgs),
     /// Run runtime acceptance tests against an extracted CLI archive.
     TestArchive(acceptance::TestArchiveArgs),
@@ -265,7 +265,7 @@ fn prune_ci_caches() -> Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
+mod cache_tests {
     use super::*;
 
     fn cache(id: u64) -> Cache {

@@ -18,24 +18,24 @@ cargo package --locked
 
 ## Test the CLI
 
-Run the CLI checks from the repository root on Linux, with Python 3.12 or
-newer and a C compiler available:
+Run the CLI checks from the repository root on Linux, with a C compiler and
+OpenSSL available. Set `cli_version` to the workspace version in `Cargo.toml`:
 
 ```console
+cli_version=0.6.2
 cargo build --locked -p delta-arrow-reader-cli
 cargo test --locked -p delta-arrow-reader-cli
 cargo clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings
-python3 -m venv target/cli-test-venv
-. target/cli-test-venv/bin/activate
-python -m pip install --only-binary=:all: 'pyarrow==25.0.1'
-python crates/delta-arrow-reader-cli/tests/scan.py target/debug/dar
+cargo xtask cli test-process target/debug/dar --expected-version "$cli_version" --repository .
+cargo xtask cli test-scan target/debug/dar --repository .
 ```
 
 The Cargo tests compare IPC schemas and rows with the Rust core and check
-argument validation and process errors. The PyArrow suite independently reads
-the output and exercises backpressure, partial results, broken pipes, signals,
-and shutdown with pending blocking reads. It uses checked-in fixtures, a local
-HTTP server, and Linux process controls; no cloud credentials are needed.
+argument validation and process errors. The xtask suites read the IPC output and
+exercise backpressure, partial results, broken pipes, signals, HTTPS, and shutdown
+with pending blocking reads. They use checked-in fixtures, local servers, and
+Linux process controls; no cloud credentials are needed. These CLI checks run
+in the manual release validation workflow, outside PR CI.
 
 ## Build the Python package locally
 
@@ -153,17 +153,22 @@ the pruning job alone has `actions: write` permission.
 
 The `xtask` tests also cover Python release validation and workflow gates.
 Three release planning tests require `release-plz` 0.3.171 on `PATH` and are
-ignored by default. After installing that version, run the Ubuntu CI checks with:
+ignored by default. After installing that version, run the PR CI task tests with:
 
 ```sh
-cargo test --locked --package xtask -- \
-  --include-ignored --skip native_build_preserves_metadata_and_rejects_source_changes
+cargo test --locked --package xtask --bin xtask cache_tests::
+cargo test --locked --package xtask \
+  --test ci --test python_release --test python_upload --test python_wheels \
+  --test python_workflow --test release_plz -- --include-ignored
 ```
 
-The skipped native CLI build test runs separately in Debian 12 through
-`.github/workflows/cli-build.yml`, on both supported architectures. The release
-planning tests use temporary repositories and a local baseline without
-publishing packages.
+These PR checks cover Python and cache tasks. CLI unit tests, release-tool tests,
+and archive acceptance run through `.github/workflows/cli-build.yml` before a CLI
+release. Run **Build CLI binaries** manually for the release commit and version;
+PR CI does not call it. Its native build test runs in Debian 12 on both supported
+architectures, and its archive tests run in parallel on Debian 12, Ubuntu 24.04,
+and Fedora 44. The Python release planning tests use temporary repositories and a
+local baseline without publishing packages.
 
 To populate caches after a toolchain or workflow change, run `Warm CI caches`
 manually on main. The first build for new compiler inputs can still be cold.

@@ -14,7 +14,7 @@ on:
         type: string
     outputs:
       validated:
-        description: 'true only after both native platforms and the complete artifact set pass'
+        description: 'true only after source checks, both builds, all six runtime checks, and the complete artifact set pass'
         value: ${{ jobs.validate.outputs.validated }}
       source-commit:
         description: Full source commit used for both binaries
@@ -88,8 +88,43 @@ jobs:
             --expected-version "$EXPECTED_VERSION" \
             | jq -r 'to_entries[] | "\(.key)=\(.value)"' >> "$GITHUB_OUTPUT"
 
+  checks:
+    name: Check CLI source and release tools
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      SCCACHE_GHA_RW_MODE: READ_ONLY
+      RUSTC_WRAPPER: sccache
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.source-commit }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ needs.prepare.outputs.rust-toolchain }}
+          components: clippy
+      - name: Cache Cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci
+          cache-targets: false
+          save-if: false
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Lint CLI and release tools
+        run: cargo clippy --locked -p delta-arrow-reader-cli -p xtask --all-targets -- -D warnings
+      - name: Test CLI source
+        run: cargo test --locked -p delta-arrow-reader-cli
+      - name: Test CLI release tools
+        run: |
+          cargo test --locked --package xtask --bin xtask \
+            --test artifacts --test notices --test cli_workflow
+
   build:
-    name: Linux ${{ matrix.architecture }}
+    name: Build Linux ${{ matrix.architecture }}
     needs: prepare
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
@@ -148,25 +183,10 @@ jobs:
                 --source-commit "$CLI_SOURCE_COMMIT" --architecture "$CLI_ARCHITECTURE" \
                 --version "$CLI_VERSION" --rust-toolchain "$CLI_RUST_TOOLCHAIN" \
                 --target-dir /build/target --output /build/artifacts
+              install -m 755 /build/target/debug/xtask /build/xtask
+              strip --strip-debug /build/xtask
             '
-      - name: Validate and extract the archive outside the checkout
-        run: |
-          "$RUNNER_TEMP/cli-build/target/debug/xtask" cli artifacts extract \
-            "$RUNNER_TEMP/cli-build/artifacts" --destination "$RUNNER_TEMP/cli-extracted" \
-            --architecture "$CLI_ARCHITECTURE" --version "$CLI_VERSION" \
-            --source-commit "$CLI_SOURCE_COMMIT" --rust-toolchain "$CLI_RUST_TOOLCHAIN"
-      - name: Execute archive acceptance tests in a fresh Debian 12 runtime
-        run: |
-          docker run --rm --platform "linux/$CLI_ARCHITECTURE" \
-            --volume "$GITHUB_WORKSPACE:/checks:ro" \
-            --volume "$RUNNER_TEMP/cli-build/artifacts:/artifacts:ro" \
-            --volume "$RUNNER_TEMP/cli-extracted:/package:ro" \
-            --volume "$RUNNER_TEMP/cli-build/target/debug/xtask:/tools/xtask:ro" \
-            --workdir /tmp \
-            --env CLI_SOURCE_COMMIT --env CLI_VERSION --env CLI_RUST_TOOLCHAIN \
-            --env CLI_ARCHITECTURE "$CLI_IMAGE" \
-            bash /checks/crates/delta-arrow-reader-cli/release/validate-runtime.sh
-      - name: Upload this validated platform
+      - name: Upload platform archive
         uses: actions/upload-artifact@v6
         with:
           name: dar-cli-${{ needs.prepare.outputs.source-commit }}-${{ matrix.architecture }}
@@ -174,10 +194,75 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           overwrite: true
+      - name: Upload native acceptance tool
+        uses: actions/upload-artifact@v6
+        with:
+          name: dar-cli-tools-${{ needs.prepare.outputs.source-commit }}-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/cli-build/xtask
+          if-no-files-found: error
+          overwrite: true
+
+  runtime:
+    name: Test ${{ matrix.distribution.name }} / ${{ matrix.platform.architecture }}
+    needs: [prepare, build]
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - architecture: amd64
+            runner: ubuntu-24.04
+          - architecture: arm64
+            runner: ubuntu-24.04-arm
+        distribution:
+          - name: Debian 12
+            image: ${{ needs.prepare.outputs.image }}
+          - name: Ubuntu 24.04
+            image: docker.io/library/ubuntu@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+          - name: Fedora 44
+            image: registry.fedoraproject.org/fedora@sha256:1b8544582f974533fb8d9a5d6bf6dc2caf0d977ea54979d5e864a6ffd345c32e
+    env:
+      CLI_SOURCE_COMMIT: ${{ needs.prepare.outputs.source-commit }}
+      CLI_VERSION: ${{ needs.prepare.outputs.version }}
+      CLI_RUST_TOOLCHAIN: ${{ needs.prepare.outputs.rust-toolchain }}
+      CLI_ARCHITECTURE: ${{ matrix.platform.architecture }}
+      CLI_IMAGE: ${{ matrix.distribution.image }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.source-commit }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v6
+        with:
+          name: dar-cli-${{ needs.prepare.outputs.source-commit }}-${{ matrix.platform.architecture }}
+          path: ${{ runner.temp }}/cli-artifacts
+      - uses: actions/download-artifact@v6
+        with:
+          name: dar-cli-tools-${{ needs.prepare.outputs.source-commit }}-${{ matrix.platform.architecture }}
+          path: ${{ runner.temp }}/cli-tools
+      - name: Validate and extract the archive outside the checkout
+        run: |
+          chmod 755 "$RUNNER_TEMP/cli-tools/xtask"
+          "$RUNNER_TEMP/cli-tools/xtask" cli artifacts extract \
+            "$RUNNER_TEMP/cli-artifacts" --destination "$RUNNER_TEMP/cli-extracted" \
+            --architecture "$CLI_ARCHITECTURE" --version "$CLI_VERSION" \
+            --source-commit "$CLI_SOURCE_COMMIT" --rust-toolchain "$CLI_RUST_TOOLCHAIN"
+      - name: Execute archive acceptance tests in a fresh runtime
+        run: |
+          docker run --rm --platform "linux/$CLI_ARCHITECTURE" \
+            --volume "$GITHUB_WORKSPACE:/checks:ro" \
+            --volume "$RUNNER_TEMP/cli-artifacts:/artifacts:ro" \
+            --volume "$RUNNER_TEMP/cli-extracted:/package:ro" \
+            --volume "$RUNNER_TEMP/cli-tools/xtask:/tools/xtask:ro" \
+            --workdir /tmp \
+            --env CLI_SOURCE_COMMIT --env CLI_VERSION --env CLI_RUST_TOOLCHAIN \
+            --env CLI_ARCHITECTURE "$CLI_IMAGE" \
+            bash /checks/crates/delta-arrow-reader-cli/release/validate-runtime.sh
 
   validate:
     name: Validate complete CLI artifact set
-    needs: [prepare, build]
+    needs: [prepare, checks, build, runtime]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -188,16 +273,19 @@ jobs:
       artifact-url: ${{ steps.upload.outputs.artifact-url }}
     env:
       PREPARE_RESULT: ${{ needs.prepare.result }}
+      CHECKS_RESULT: ${{ needs.checks.result }}
       BUILD_RESULT: ${{ needs.build.result }}
+      RUNTIME_RESULT: ${{ needs.runtime.result }}
       CLI_SOURCE_COMMIT: ${{ needs.prepare.outputs.source-commit }}
       CLI_VERSION: ${{ needs.prepare.outputs.version }}
       CLI_RUST_TOOLCHAIN: ${{ needs.prepare.outputs.rust-toolchain }}
       CLI_ARTIFACT_NAME: dar-cli-${{ needs.prepare.outputs.source-commit }}-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
-      - name: Require both platform builds and acceptance tests
+      - name: Require source checks, both builds, and every runtime check
         run: |
-          if [ "$PREPARE_RESULT" != success ] || [ "$BUILD_RESULT" != success ]; then
-            echo "CLI build failed: prepare=$PREPARE_RESULT, build=$BUILD_RESULT"
+          if [ "$PREPARE_RESULT" != success ] || [ "$CHECKS_RESULT" != success ] || \
+             [ "$BUILD_RESULT" != success ] || [ "$RUNTIME_RESULT" != success ]; then
+            echo "CLI validation failed: prepare=$PREPARE_RESULT, checks=$CHECKS_RESULT, build=$BUILD_RESULT, runtime=$RUNTIME_RESULT"
             exit 1
           fi
       - uses: actions/checkout@v5
@@ -239,5 +327,5 @@ jobs:
           {
             echo "Source: $CLI_SOURCE_COMMIT"
             echo "Version: $CLI_VERSION; Rust: $CLI_RUST_TOOLCHAIN"
-            echo "Validated Linux amd64 and arm64: [$CLI_ARTIFACT_NAME]($ARTIFACT_URL)"
+            echo "Validated Linux amd64 and arm64 on Debian 12, Ubuntu 24.04, and Fedora 44: [$CLI_ARTIFACT_NAME]($ARTIFACT_URL)"
           } >> "$GITHUB_STEP_SUMMARY"

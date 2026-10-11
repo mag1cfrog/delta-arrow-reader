@@ -74,10 +74,10 @@ fn glibc_versions_are_compared_numerically() -> TestResult {
 }
 
 #[test]
-fn runtime_must_match_the_supported_platform() -> TestResult {
+fn release_builds_require_the_pinned_debian_baseline() -> TestResult {
     for architecture in Architecture::ALL {
         let release = "ID=debian\nVERSION_ID=\"12\"\n";
-        check_runtime_environment(
+        check_build_requirements(
             release,
             "glibc 2.36",
             architecture.uname_machine(),
@@ -97,8 +97,43 @@ fn runtime_must_match_the_supported_platform() -> TestResult {
             (release, "glibc 2.39", architecture.uname_machine()),
             (release, "glibc 2.36", "unsupported"),
         ] {
-            assert!(check_runtime_environment(release, glibc, machine, architecture).is_err());
+            assert!(check_build_requirements(release, glibc, machine, architecture).is_err());
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn runtime_requires_compatible_glibc_and_matching_architecture() -> TestResult {
+    for architecture in Architecture::ALL {
+        for version in ["2.36", "2.36.0", "2.39", "2.43", "2.100"] {
+            check_runtime_requirements(
+                &format!("glibc {version}"),
+                architecture.uname_machine(),
+                architecture,
+            )?;
+        }
+        for glibc in [
+            "glibc 2.9",
+            "glibc 2.35.99",
+            "musl 1.2.5",
+            "glibc 2",
+            "glibc 2.36.preview",
+            "glibc 2.36.0.1",
+            "glibc 2.18446744073709551616",
+        ] {
+            assert!(
+                check_runtime_requirements(glibc, architecture.uname_machine(), architecture)
+                    .is_err(),
+                "accepted {glibc}"
+            );
+        }
+        let other_machine = if architecture == Architecture::Amd64 {
+            "aarch64"
+        } else {
+            "x86_64"
+        };
+        assert!(check_runtime_requirements("glibc 2.36", other_machine, architecture).is_err());
     }
     Ok(())
 }

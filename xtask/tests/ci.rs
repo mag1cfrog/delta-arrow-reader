@@ -117,7 +117,6 @@ fn summary_requires_python_only_when_requested() -> Result<()> {
                             ("python-package.result", package),
                             ("python-wheels.result", wheels),
                             ("python-wheels.outputs.validated", validated),
-                            ("cli-binaries.outputs.validated", "true"),
                         ];
                         let mut rest = script.as_str();
                         let mut rendered = String::new();

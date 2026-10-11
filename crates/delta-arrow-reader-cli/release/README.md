@@ -6,10 +6,16 @@ through `cargo xtask`, a Cargo alias for the repository's private Rust maintenan
 crate. Process and scan checks run in Rust through `xtask cli test-process` and
 `xtask cli test-scan`.
 
-## Run the CI build
+## Validate a CLI release
 
-`.github/workflows/cli-build.yml` runs on native amd64 and arm64 runners. Both
-platforms build and execute the archive's binary in the pinned Debian 12 image.
+`.github/workflows/cli-build.yml` validates a CLI release candidate. It runs the
+CLI unit tests, Clippy, and release-tool tests alongside native amd64 and arm64
+builds. Both platforms build once in the pinned Debian 12 image. After both builds
+finish, six parallel jobs test the original archives on Debian 12, Ubuntu 24.04,
+and Fedora 44, on both architectures. Each job downloads its architecture's
+archive and the xtask executable built on Debian; runtime jobs do not compile
+Rust. All three runtime images are pinned by digest. Available runner capacity
+determines how many jobs can start at once.
 The workflow has read-only repository permissions and uploads Actions artifacts.
 It does not publish releases or container images.
 
@@ -30,16 +36,23 @@ or an unsupported historical checkout fails the build; there is no fallback to
 `main`. The prepare job resolves the workspace's Rust version once, then both
 platform jobs install and use that exact patch release.
 
-For a manual run, select **Build CLI binaries** in Actions and supply the same
-inputs. The successful job summary links the complete artifact set. PR CI calls
-this workflow too. The required `CI` job checks its result and `validated` output;
-a failed, skipped, or cancelled architecture cannot pass.
+Before distributing a CLI release, select **Build CLI binaries** in Actions and
+supply the release commit as `source-ref` and its version as `expected-version`.
+The successful job summary links the complete artifact set. PR CI does not run
+CLI tests or call this workflow. Shared xtask checks for Python and cache tasks
+remain in PR CI. CLI regressions can therefore remain undetected until this
+release validation runs; maintainers can also run it manually during development.
+
+The workflow runs only when dispatched manually or called by another workflow.
+It reports `validated=true` only after source checks, both builds, all six runtime
+checks, and artifact assembly succeed. Release consumers must require this result
+before distributing the artifacts.
 
 The reusable workflow returns:
 
 | Output | Meaning |
 | --- | --- |
-| `validated` | `true` only after both platforms pass and the complete set is uploaded |
+| `validated` | `true` only after source checks, both builds, and all six runtime checks pass and the complete set is uploaded |
 | `source-commit`, `version`, `rust-toolchain` | Resolved source SHA, workspace version, and exact Rust release |
 | `artifact-id`, `artifact-name`, `artifact-url` | The complete set's immutable Actions ID, run-specific name, and download page |
 
@@ -49,8 +62,9 @@ Within the same workflow run, download that exact artifact with
 using either `artifact-ids` or `name` from the outputs. Downloads across runs also
 require `run-id` and `github-token`. Check out the returned source commit and run
 `cargo xtask cli artifacts verify` with the expected version, source SHA, and Rust
-release from the workflow outputs. Intermediate artifacts ending in `-amd64` or
-`-arm64` are inputs to assembly, not complete sets for downstream consumers.
+release from the workflow outputs. Intermediate platform archives and
+`dar-cli-tools-<source-sha>-<architecture>` artifacts support runtime checks.
+They are not complete, validated sets for downstream consumers.
 
 Actions retention settings apply. Missing, expired, incomplete, or mismatched
 artifacts must stop downstream work. Rerun this builder for the explicit source
@@ -123,11 +137,13 @@ the binary hash before and after execution.
 
 ## Check the runtime independently
 
-Use a fresh container from the same pinned image, with only `dar`, test inputs,
-and the runtime packages `ca-certificates`, `libc6`, and `libgcc-s1`. Run version,
-inspection, and scan checks there before installing test instrumentation. The
-binary is dynamically linked to glibc and libgcc; this does not support Alpine
-or a `scratch` image.
+Use a fresh container from one of the pinned runtime images. Install
+`ca-certificates`, `libc6`, and `libgcc-s1` on Debian or Ubuntu, or
+`ca-certificates`, `glibc`, and `libgcc` on Fedora. Run version, inspection, and
+scan checks with these runtime packages before installing test instrumentation.
+The binary is dynamically linked to glibc and libgcc; this does not support
+Alpine's musl runtime or a `scratch` image. These containers test distribution
+userland and shared libraries while sharing the runner's kernel.
 
 For an explicit ELF and version check, install `binutils` in the test container
 and mount the Debian-built xtask executable read-only at `/tools/xtask`.
@@ -139,13 +155,15 @@ Pass the version and hash from the earlier validated build:
   --expected-version "$version" --expected-sha256 "$dar_sha256"
 ```
 
-This command requires Debian 12 and the matching CPU architecture. It reports
-the observed ELF metadata as JSON. A successful version check still requires
-the scan, process lifecycle, and HTTPS acceptance tests before release.
+This command requires glibc 2.36 or newer and the matching CPU architecture,
+without requiring a particular distribution. The binary's own GLIBC symbol
+requirements must still stay at or below 2.36. It reports the observed ELF
+metadata as JSON. A successful version check still requires the scan, process
+lifecycle, and HTTPS acceptance tests before release.
 
 The existing CLI test harnesses accept an executable path. With the test
-prerequisites installed (`build-essential` and OpenSSL), run them against that
-same binary:
+prerequisites installed (`build-essential` and `openssl` on Debian or Ubuntu,
+or `gcc` and `openssl` on Fedora), run them against that same binary:
 
 ```sh
 cargo xtask cli test-process /path/to/dar --expected-version "$version" --repository .
@@ -209,8 +227,9 @@ target/cli-build/debug/xtask cli artifacts extract target/cli-inputs/amd64 \
   --version "$version" --source-commit "$source_commit" --rust-toolchain "$rust_toolchain"
 ```
 
-Start a fresh pinned Debian container on the matching architecture. Use read-only
-mounts for the source checkout at `/checks`, `target/cli-inputs/amd64` at
+Start a fresh container on the matching architecture, using one of the Debian,
+Ubuntu, or Fedora image digests in the workflow. Use read-only mounts for the
+source checkout at `/checks`, `target/cli-inputs/amd64` at
 `/artifacts`, `/tmp/dar-amd64-check` at `/package`, and the Debian-built
 `target/cli-build/debug/xtask` at `/tools/xtask`. Pass `CLI_ARCHITECTURE=amd64`,
 `CLI_SOURCE_COMMIT`, `CLI_VERSION`, and `CLI_RUST_TOOLCHAIN` with those values
@@ -229,8 +248,8 @@ as `test-process` and `test-scan`. These tests cover external-writer
 fixtures, filtering and execution options, pipes, partial failures, signals,
 redaction, and trusted/untrusted HTTPS certificates. The archive and executable
 hashes are checked again afterward.
-CI uses these same commands for both architectures; see the workflow for the
-complete container invocations.
+CI uses these same commands in all six architecture/distribution combinations;
+see the workflow for the complete container invocations.
 
 To rerun acceptance after the script has installed the test tools and saved the
 smoke output, use the same mounts and environment:
@@ -355,10 +374,11 @@ file permissions and refuses an existing destination.
 
 Build xtask from the source checkout used for artifact validation. It embeds
 that checkout's `LICENSE` and `NOTICE`, so the same executable can validate
-archives in the runtime container without a Rust installation. The build workflow
-mounts the Debian-built tool at `/tools/xtask`; it uploads only the public
-archives, manifest, and checksums. The aggregation job runs `cargo xtask` after
-installing the resolved Rust toolchain.
+archives in the runtime container without a Rust installation. Each build uploads
+the Debian-built tool as a separate intermediate Actions artifact. Runtime jobs
+download it and mount it at `/tools/xtask`. The complete artifact set contains
+only the public archives, manifest, and checksums. The aggregation job runs
+`cargo xtask` after installing the resolved Rust toolchain.
 
 ## Test the build and packaging helpers
 
@@ -366,6 +386,10 @@ installing the resolved Rust toolchain.
 cargo test --locked --package xtask
 cargo clippy --locked --package xtask --all-targets -- -D warnings
 ```
+
+The CLI release workflow runs the CLI crate's unit tests and Clippy, plus the
+xtask unit tests and the `artifacts`, `notices`, and `cli_workflow` integration
+tests. The native build test below runs separately in each Debian build job.
 
 The unit tests require Git, a C compiler, `objcopy`, `readelf`, and `sha256sum`.
 They use synthetic archive payloads, license fixtures, and a small compiled ELF

@@ -296,7 +296,7 @@ fn compiler_release(output: &str, declared: &str) -> Result<String> {
 }
 
 fn build_binary(repository: &Path, args: &BuildArgs) -> Result<BuildMetadata> {
-    binary::check_environment(args.architecture)?;
+    binary::check_build_environment(args.architecture)?;
     check_source(repository, &args.source_commit)?;
     let manifest: WorkspaceManifest = read_toml(&repository.join("Cargo.toml"))?;
     let toolchain = args
