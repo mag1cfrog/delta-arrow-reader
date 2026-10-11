@@ -35,14 +35,9 @@ class ScanStorage(http.Storage):
         if self.path.endswith(".parquet"):
             with self.server.lock:
                 self.server.data_paths.add(self.path)
-                fail = (self.server.fail_after is not None
-                        and len(self.server.data_paths) > self.server.fail_after)
             if self.server.block_data:
                 self.server.held.set()
                 self.wait_for_disconnect(self.server.disconnected)
-                return None
-            if fail:
-                self.send_error(404, "secret simulated data-file failure")
                 return None
         return super().send_head()
 
@@ -87,11 +82,10 @@ class ScanTests(unittest.TestCase):
         return table
 
     @contextlib.contextmanager
-    def storage(self, table, *, fail_after=None, block_data=False, handler=ScanStorage):
+    def storage(self, table, *, block_data=False, handler=ScanStorage):
         with http.serve(functools.partial(handler, directory=table)) as server:
             server.lock = threading.Lock()
             server.data_paths = set()
-            server.fail_after = fail_after
             server.block_data = block_data
             server.held = threading.Event()
             server.disconnected = threading.Event()
@@ -321,26 +315,6 @@ class ScanTests(unittest.TestCase):
                 self.assertTrue(stdout.endswith(IPC_END))
             finally:
                 release_body.set()
-
-    def test_later_read_failure_leaves_decodable_but_unsuccessful_output(self):
-        table = self.repeated_table()
-        with self.storage(table, fail_after=4) as server, self.start_scan(
-            server.url, "--storage-options-file", str(self.options),
-        ) as process:
-            stdout, stderr = process.communicate(timeout=15)
-            self.assertEqual(process.returncode, 1)
-            self.assert_diagnostic(stderr, "data_file_read", "data_file_read")
-            self.assertFalse(stdout.endswith(IPC_END))
-            partial = pa.ipc.open_stream(stdout).read_all()
-            self.assertGreater(partial.num_rows, 0)
-            self.assertLess(partial.num_rows, 32 * 120)
-            # EOF at a batch boundary decodes successfully. The required child
-            # status check still rejects this as an incomplete result.
-            result = subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
-            with self.assertRaises(subprocess.CalledProcessError):
-                result.check_returncode()
-            with self.assertRaises((pa.ArrowInvalid, OSError)):
-                pa.ipc.open_stream(stdout[:-1]).read_all()
 
     def test_early_pipe_close_stops_a_blocked_scan(self):
         table = self.repeated_table()

@@ -20,6 +20,7 @@ use crate::{
 
 mod fixtures;
 mod https;
+mod read_failure;
 
 use fixtures::{FLOAT64_VALUES, create_float64_table, create_repeated_table};
 
@@ -63,6 +64,10 @@ pub(super) fn run(binary: &Path, repository: &Path) -> Result<()> {
         (
             "HTTPS trust for inspection and scan",
             ScanFixture::check_https_trust,
+        ),
+        (
+            "later read failures leave incomplete IPC output",
+            ScanFixture::check_later_read_failure,
         ),
     ];
     for (name, check) in checks {

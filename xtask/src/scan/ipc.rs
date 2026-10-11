@@ -7,6 +7,8 @@ use snafu::{ResultExt, ensure};
 
 use crate::error::{ArrowSnafu, FileSnafu, InvalidInputSnafu, Result};
 
+pub(super) const IPC_END_MARKER: [u8; 8] = [255, 255, 255, 255, 0, 0, 0, 0];
+
 pub(super) struct IpcTable {
     pub schema: SchemaRef,
     pub batches: Vec<RecordBatch>,
@@ -26,7 +28,7 @@ impl IpcTable {
 
     pub fn read_stream(payload: &[u8], path: &Path) -> Result<Self> {
         ensure!(
-            payload.ends_with(&[255, 255, 255, 255, 0, 0, 0, 0]),
+            payload.ends_with(&IPC_END_MARKER),
             InvalidInputSnafu {
                 message: "scan is missing its IPC end marker"
             }
