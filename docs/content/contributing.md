@@ -35,7 +35,10 @@ argument validation and process errors. The xtask suites read the IPC output and
 exercise backpressure, partial results, broken pipes, signals, HTTPS, and shutdown
 with pending blocking reads. They use checked-in fixtures, local servers, and
 Linux process controls; no cloud credentials are needed. These CLI checks run
-in the manual release validation workflow, outside PR CI.
+after approval on release-plz PRs or through a manual release validation run.
+Feature PRs skip the CLI builds and acceptance suites. See the
+[CLI release tools](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-cli/release/README.md#validate-a-cli-release)
+for approval and artifact details.
 
 ## Build the Python package locally
 
@@ -168,17 +171,19 @@ ignored by default. After installing that version, run the PR CI task tests with
 ```sh
 cargo test --locked --package xtask --bin xtask cache_tests::
 cargo test --locked --package xtask \
-  --test ci --test python_release --test python_upload --test python_wheels \
+  --test ci --test cli_workflow --test python_release --test python_upload --test python_wheels \
   --test python_workflow --test release_plz -- --include-ignored
 ```
 
-These PR checks cover Python and cache tasks. CLI unit tests, release-tool tests,
-and archive acceptance run through `.github/workflows/cli-build.yml` before a CLI
-release. Run **Build CLI binaries** manually for the release commit and version;
-PR CI does not call it. Its native build test runs in Debian 12 on both supported
+These PR checks cover workflow behavior, Python, and cache tasks. Release-plz PRs
+also wait for approval through `cli-release-checks` before calling
+`.github/workflows/cli-build.yml`. The required `CI` check then requires CLI unit
+tests, release-tool tests, and archive acceptance to pass. Feature PRs skip those
+release jobs. The builder's native build test runs in Debian 12 on both supported
 architectures, and its archive tests run in parallel on Debian 12, Ubuntu 24.04,
-and Fedora 44. The Python release planning tests use temporary repositories and a
-local baseline without publishing packages.
+and Fedora 44. **Build CLI binaries** also supports manual runs with an explicit
+commit and version. The Python release planning tests use temporary repositories
+and a local baseline without publishing packages.
 
 To populate caches after a toolchain or workflow change, run `Warm CI caches`
 manually on main. The first build for new compiler inputs can still be cold.

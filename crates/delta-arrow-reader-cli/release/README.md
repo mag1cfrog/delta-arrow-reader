@@ -36,12 +36,28 @@ or an unsupported historical checkout fails the build; there is no fallback to
 `main`. The prepare job resolves the workspace's Rust version once, then both
 platform jobs install and use that exact patch release.
 
-Before distributing a CLI release, select **Build CLI binaries** in Actions and
-supply the release commit as `source-ref` and its version as `expected-version`.
-The successful job summary links the complete artifact set. PR CI does not run
-CLI tests or call this workflow. Shared xtask checks for Python and cache tasks
-remain in PR CI. CLI regressions can therefore remain undetected until this
-release validation runs; maintainers can also run it manually during development.
+Release-plz PRs targeting main must pass this workflow before merging. CI
+identifies them by the release bot's identity and a `release-plz-` branch in this
+repository. When ready to validate a release, open its CI run, choose **Review
+deployments**, select `cli-release-checks`, and click **Approve and deploy**.
+Approval starts **Release CLI binaries**, which builds the PR's merge candidate
+at its exact commit SHA and workspace version. The required `CI` check waits for
+approval and the complete validated artifact set. New PR commits cancel the old
+CI run and require a new approval and build.
+
+Feature PRs skip both CLI release jobs. They still run the small workflow tests
+alongside the shared xtask checks for Python and cache tasks. CLI unit tests,
+native builds, and runtime acceptance run only for approved release PRs or an
+explicit manual build. To run the builder manually during development, select
+**Build CLI binaries** in Actions and supply the commit as `source-ref` and its
+version as `expected-version`. The successful job summary links the complete
+artifact set.
+
+Configure `cli-release-checks` in **Settings > Environments** with the maintainer
+as a required reviewer, administrator bypass disabled, and self-review allowed
+so the maintainer can approve a run they restart. Allow the deployment branch
+pattern `refs/pull/*/merge`. This environment needs no secrets or publishing
+permissions; it approves only the release PR's builds and tests.
 
 The workflow runs only when dispatched manually or called by another workflow.
 It reports `validated=true` only after source checks, both builds, all six runtime
@@ -70,6 +86,11 @@ Actions retention settings apply. Missing, expired, incomplete, or mismatched
 artifacts must stop downstream work. Rerun this builder for the explicit source
 commit to obtain a new validated set and reference. Container and release jobs
 must consume its existing archive bytes without rebuilding or repacking them.
+
+Release PR artifacts record the tested merge candidate's source SHA. A future
+publisher must verify that the release tag has the same source tree and version
+and preserve that build identity; the final merge commit can have a different
+SHA. Automatic CLI publication is tracked in issue #435.
 
 ## Build on Debian 12
 
@@ -389,7 +410,8 @@ cargo clippy --locked --package xtask --all-targets -- -D warnings
 
 The CLI release workflow runs the CLI crate's unit tests and Clippy, plus the
 xtask unit tests and the `artifacts`, `notices`, and `cli_workflow` integration
-tests. The native build test below runs separately in each Debian build job.
+tests. The small `cli_workflow` tests also run in ordinary PR CI. The native build
+test below runs separately in each Debian build job.
 
 The unit tests require Git, a C compiler, `objcopy`, `readelf`, and `sha256sum`.
 They use synthetic archive payloads, license fixtures, and a small compiled ELF

@@ -25,6 +25,12 @@ jobs:
       python: ${{ steps.filter.outputs.python }}
       selective_read: ${{ steps.filter.outputs.selective_read }}
       package_version: ${{ steps.package-version.outputs.version }}
+      release_pr: >-
+        ${{ github.repository == 'mag1cfrog/delta-arrow-reader' &&
+            github.event.pull_request.head.repo.full_name == github.repository &&
+            github.event.pull_request.base.ref == 'main' &&
+            github.event.pull_request.user.login == 'release-plz-bot-mag1cfrog[bot]' &&
+            startsWith(github.head_ref, 'release-plz-') }}
 
     steps:
       - uses: actions/checkout@v5
@@ -37,7 +43,6 @@ jobs:
           filters: .github/path-filters.json
       - name: Read workspace package version
         id: package-version
-        if: steps.filter.outputs.code == 'true' || steps.filter.outputs.python == 'true'
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)"
           test -n "$version"
@@ -162,13 +167,13 @@ jobs:
         uses: docker://rhysd/actionlint:1.7.12
         with:
           args: .github/workflows/ci.yml .github/workflows/cli-build.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml
-      - name: Test Python and cache CI tasks
+      - name: Test CI workflows, Python, and cache tasks
         if: matrix.task == 'Lints and Docs'
         run: |
           cargo clippy --locked --package xtask --all-targets -- -D warnings
           cargo test --locked --package xtask --bin xtask cache_tests::
           cargo test --locked --package xtask \
-            --test ci --test python_release --test python_upload --test python_wheels \
+            --test ci --test cli_workflow --test python_release --test python_upload --test python_wheels \
             --test python_workflow --test release_plz -- --include-ignored
       - if: matrix.task == 'Lints and Docs'
         run: python3 -m unittest discover -s benches -p test_scan_scheduling.py
@@ -223,6 +228,24 @@ jobs:
           python -m pip install 'maturin==1.14.1' 'pyarrow==18.0.0'
           maturin develop --locked
           python -I -m unittest discover -s crates/delta-arrow-reader-python/tests
+
+  release-cli-approval:
+    name: Approve release CLI checks
+    needs: changes
+    if: needs.changes.outputs.release_pr == 'true'
+    runs-on: ubuntu-latest
+    environment: cli-release-checks
+    steps:
+      - run: echo "CLI release checks approved for this PR revision"
+
+  release-cli:
+    name: Release CLI binaries
+    needs: [changes, release-cli-approval]
+    if: needs.changes.outputs.release_pr == 'true'
+    uses: ./.github/workflows/cli-build.yml
+    with:
+      source-ref: ${{ github.sha }}
+      expected-version: ${{ needs.changes.outputs.package_version }}
 
   selective-read-fixtures:
     name: Public Fixture Smoke
@@ -287,7 +310,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [changes, feature-tests, platform-tests, checks, python-package, selective-read-fixtures]
+    needs: [changes, feature-tests, platform-tests, checks, python-package, release-cli-approval, release-cli, selective-read-fixtures]
     if: always()
     runs-on: ubuntu-latest
 
@@ -302,6 +325,15 @@ jobs:
           if [ "${{ needs.changes.outputs.python }}" = "true" ]; then
             if [ "${{ needs.python-package.result }}" != "success" ]; then
               echo "Python Package did not pass: ${{ needs.python-package.result }}"
+              exit 1
+            fi
+          fi
+
+          if [ "${{ needs.changes.outputs.release_pr }}" = "true" ]; then
+            if [ "${{ needs.release-cli-approval.result }}" != "success" ] || \
+               [ "${{ needs.release-cli.result }}" != "success" ] || \
+               [ "${{ needs.release-cli.outputs.validated }}" != "true" ]; then
+              echo "Release CLI approval or artifact validation did not pass"
               exit 1
             fi
           fi
