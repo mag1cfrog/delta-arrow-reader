@@ -298,6 +298,43 @@ fn cache_retry_cleans_the_correct_target_and_restarts_native_sccache() -> Result
 }
 
 #[test]
+fn core_cache_warming_builds_python_tests_only_on_linux_and_stops_on_failure() -> Result<()> {
+    let directory = test_dir("core-warm");
+    let cargo = directory.join("cargo");
+    fs::write(
+        &cargo,
+        "#!/bin/sh\nprintf '%s\\n' \"$*\"\nexit \"$CARGO_EXIT\"\n",
+    )?;
+    fs::set_permissions(cargo, fs::Permissions::from_mode(0o755))?;
+    let script = workflow_script(
+        &include_str!("../../.github/workflows/cache-warm.yml")
+            .replace("run: &warm-test-caches |", "run: |"),
+        "Warm test caches",
+    );
+    for runner in ["Linux", "Windows", "macOS"] {
+        for exit in ["0", "7"] {
+            let output = Command::new("/bin/bash")
+                .args(["-euc", &script])
+                .env("PATH", &directory)
+                .env("RUNNER_OS", runner)
+                .env("CARGO_EXIT", exit)
+                .output()?;
+            assert_eq!(output.status.success(), exit == "0");
+            let mut expected = "test --locked --all-features --no-run\n".to_owned();
+            if exit == "0" {
+                expected.push_str("test --locked --no-run\n");
+                if runner == "Linux" {
+                    expected.push_str("test --locked -p delta-arrow-reader-python --no-run\n");
+                }
+            }
+            assert_eq!(String::from_utf8(output.stdout)?, expected);
+        }
+    }
+    fs::remove_dir_all(directory)?;
+    Ok(())
+}
+
+#[test]
 fn prune_deletes_by_id_and_stops_on_command_or_schema_errors() -> Result<()> {
     let directory = test_dir("prune");
     let gh = directory.join("gh");
