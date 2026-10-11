@@ -122,6 +122,12 @@ impl IntraPageReader {
         path: Path,
     ) -> Result<Self> {
         if let Some(selection) = &selection {
+            for column in metadata.file_metadata().schema_descr().columns() {
+                if column.physical_type() == Type::FIXED_LEN_BYTE_ARRAY && column.type_length() <= 0
+                {
+                    return Err(invalid_data("non-positive fixed-length value width"));
+                }
+            }
             let mut first = 0_u64;
             let mut state = selection
                 .lock()
@@ -177,6 +183,7 @@ impl IntraPageReader {
             let value_width = match descriptor.physical_type() {
                 Type::INT32 | Type::FLOAT => 4,
                 Type::INT64 | Type::DOUBLE => 8,
+                Type::FIXED_LEN_BYTE_ARRAY => descriptor.type_length() as usize,
                 _ => continue,
             };
             if predicate_columns.leaf_included(column)
@@ -368,31 +375,54 @@ impl IntraPageReader {
                 page.range.start..(page.range.start + page::PAGE_PREFIX_BYTES).min(page.range.end)
             })
             .collect();
-        // Charge another structural read only when metadata proves it cannot fit
-        // in the prefix. A large nullable page can still have a tiny RLE stream.
-        let mut extra_probe_bytes = 0;
-        let mut extra_probes = 0;
+        // Charge dependent rounds separately; raw-block headers are found one at a time.
+        let mut extra_rounds = [(0_u128, 0_usize); MAX_PROBE_ROUNDS - 1];
         for page in pages {
-            let size = match page.compression {
-                Compression::ZSTD(_)
-                    if page.range.end - page.range.start
-                        > page::PAGE_PREFIX_BYTES + page::MAX_ZSTD_BLOCK_BYTES as u64 + 3 =>
-                {
-                    3
+            let (rounds, size) = match page.compression {
+                Compression::ZSTD(_) => {
+                    let bytes_after_prefix =
+                        (page.range.end - page.range.start).saturating_sub(page::PAGE_PREFIX_BYTES);
+                    let minimum_blocks =
+                        bytes_after_prefix.div_ceil(page::MAX_ZSTD_BLOCK_BYTES as u64 + 3);
+                    // The prefix may already hold the first block's header.
+                    (minimum_blocks.saturating_sub(1) as usize, 3)
                 }
                 Compression::UNCOMPRESSED if page.nullable => {
+                    // A large nullable page can still have a tiny RLE stream.
                     let structure_bytes = (page.range.end - page.range.start)
-                        .saturating_sub((page.max_value_count * page.value_width) as u64);
+                        .saturating_sub(page.max_value_count as u64 * page.value_width as u64);
                     if structure_bytes <= page::PAGE_PREFIX_BYTES {
                         continue;
                     }
-                    u128::from(structure_bytes)
+                    (1, u128::from(structure_bytes))
                 }
                 _ => continue,
             };
-            extra_probe_bytes += size;
-            extra_probes += 1;
+            if rounds >= MAX_PROBE_ROUNDS {
+                tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
+                    eligible = true, fallback_reason = "probe_round_limit",
+                    minimum_probe_rounds = rounds + 1, "Partial-page read skipped");
+                return Ok(None);
+            }
+            for (bytes, requests) in &mut extra_rounds[..rounds] {
+                *bytes += size;
+                *requests += 1;
+            }
         }
+        let extra_probe_bytes = extra_rounds.iter().map(|(bytes, _)| bytes).sum::<u128>();
+        let extra_probes = extra_rounds
+            .iter()
+            .map(|(_, requests)| requests)
+            .sum::<usize>();
+        let extra_probe_cost = extra_rounds.iter().fold(0_u128, |cost, (bytes, requests)| {
+            cost.saturating_add(partial_plan_cost(
+                *bytes,
+                *requests,
+                estimate,
+                concurrency,
+                request_overhead_bytes,
+            ))
+        });
         let cost = partial_plan_cost(
             range_bytes(&plan),
             plan.len(),
@@ -407,13 +437,7 @@ impl IntraPageReader {
             concurrency,
             request_overhead_bytes,
         ))
-        .saturating_add(partial_plan_cost(
-            extra_probe_bytes,
-            extra_probes,
-            estimate,
-            concurrency,
-            request_overhead_bytes,
-        ));
+        .saturating_add(extra_probe_cost);
         if !partial_read_has_clear_savings(cost, ordinary_cost) {
             trace(
                 "preflight",
@@ -669,14 +693,13 @@ mod tests {
         bytes: Bytes,
         rows: usize,
         codec: Compression,
+        schema: &str,
     ) -> TestResult<(ColumnDescPtr, SerializedPageReader<Bytes>)> {
         use parquet::{
             file::metadata::ColumnChunkMetaData,
             schema::{parser::parse_message_type, types::SchemaDescriptor},
         };
-        let schema = SchemaDescriptor::new(Arc::new(parse_message_type(
-            "message test { optional int64 value; }",
-        )?));
+        let schema = SchemaDescriptor::new(Arc::new(parse_message_type(schema)?));
         let metadata = ColumnChunkMetaData::builder(schema.column(0))
             .set_compression(codec)
             .set_num_values(rows as i64)
@@ -687,13 +710,140 @@ mod tests {
         Ok((schema.column(0), reader))
     }
 
+    fn raw_zstd_frame(body: &[u8], block_size: usize) -> Vec<u8> {
+        let mut frame = vec![0x28, 0xb5, 0x2f, 0xfd, 0xa0];
+        frame.extend_from_slice(&(body.len() as u32).to_le_bytes());
+        let chunks = body.chunks(block_size);
+        let count = chunks.len();
+        for (i, chunk) in chunks.enumerate() {
+            let header = ((chunk.len() as u32) << 3) | u32::from(i + 1 == count);
+            frame.extend_from_slice(&header.to_le_bytes()[..3]);
+            frame.extend_from_slice(chunk);
+        }
+        frame
+    }
+
     fn decompress_page(bytes: Bytes, rows: usize, codec: Compression) -> TestResult<Bytes> {
-        Ok(standard_page_reader(bytes, rows, codec)?
-            .1
-            .get_next_page()?
-            .ok_or("missing page")?
-            .buffer()
-            .clone())
+        Ok(
+            standard_page_reader(bytes, rows, codec, "message test { optional int64 value; }")?
+                .1
+                .get_next_page()?
+                .ok_or("missing page")?
+                .buffer()
+                .clone(),
+        )
+    }
+
+    #[test]
+    fn intra_page_rejects_non_positive_schema_width() -> TestResult {
+        use super::super::{metered_object_store::MultiRangeReadStrategy, tests::metrics};
+        use object_store::memory::InMemory;
+        use parquet::{
+            file::metadata::FileMetaData,
+            schema::{parser::parse_message_type, types::SchemaDescriptor},
+        };
+        // Parquet rejects negative widths, but its schema parser accepts zero.
+        assert!(
+            parse_message_type("message test { required fixed_len_byte_array(-1) value; }")
+                .is_err()
+        );
+        let schema = Arc::new(SchemaDescriptor::new(Arc::new(parse_message_type(
+            "message test { required fixed_len_byte_array(0) value; }",
+        )?)));
+        let metadata = Arc::new(ParquetMetaData::new(
+            FileMetaData::new(1, 0, None, None, schema, None),
+            vec![],
+        ));
+        let store = Arc::new(MeteredParquetObjectStore::new(
+            Arc::new(InMemory::new()),
+            metrics(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        ));
+        let path = Path::from("invalid.parquet");
+        let error = IntraPageReader::new(
+            ParquetObjectReader::new(store.clone(), path.clone()),
+            metadata,
+            Some(Arc::new(Mutex::new(SelectedRows::default()))),
+            0,
+            store,
+            path,
+        )
+        .err()
+        .ok_or("zero-width values accepted")?;
+        assert!(
+            error
+                .to_string()
+                .contains("non-positive fixed-length value width")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn intra_page_fixed_width_values_cross_raw_zstd_blocks() -> TestResult {
+        use parquet::{column::reader::ColumnReaderImpl, data_type::FixedLenByteArrayType};
+        for width in [3, 9, 16] {
+            let rows = 50_000;
+            let body: Vec<u8> = (0..rows * width).map(|i| (i % 251) as u8).collect();
+            let frame = raw_zstd_frame(&body, 131_069);
+            let full = encode_page(&frame, body.len(), rows, None)?;
+            let page = Page {
+                range: 0..full.len() as u64,
+                first_file_row: 0,
+                row_count: rows,
+                max_value_count: rows,
+                value_width: width,
+                nullable: false,
+                compression: Compression::ZSTD(Default::default()),
+            };
+            let selected = [0, 131_069 / width as u64, rows as u64 - 1];
+            let mut cache = RangeCache {
+                entries: vec![(0..4096, full.slice(..4096))],
+            };
+            let ranges = loop {
+                match selected_value_ranges(&cache, &page, &selected) {
+                    Ok(ranges) => break ranges,
+                    Err(ProbeError::NeedBytes(range)) => {
+                        assert!(cache.entries.len() < MAX_PROBE_ROUNDS);
+                        cache.entries.push((
+                            range.clone(),
+                            full.slice(range.start as usize..range.end as usize),
+                        ));
+                    }
+                    Err(error) => {
+                        return Err(format!("unexpected fixed-width probe: {error:?}").into());
+                    }
+                }
+            };
+            assert_eq!(
+                ranges.len(),
+                4,
+                "one {width}-byte value crosses a block boundary"
+            );
+            for range in ranges {
+                cache.entries.push((
+                    range.clone(),
+                    full.slice(range.start as usize..range.end as usize),
+                ));
+            }
+            assert!(cache.byte_len() < full.len() / 2);
+            let (desc, reader) = standard_page_reader(
+                cache.read_with_zero_fill(&page.range),
+                rows,
+                page.compression,
+                &format!("message test {{ required fixed_len_byte_array({width}) value; }}"),
+            )?;
+            let mut column = ColumnReaderImpl::<FixedLenByteArrayType>::new(desc, Box::new(reader));
+            let mut values = Vec::new();
+            assert_eq!(
+                column.read_records(rows, None, None, &mut values)?,
+                (rows, rows, rows)
+            );
+            for row in selected {
+                let start = row as usize * width;
+                assert_eq!(values[row as usize].data(), &body[start..start + width]);
+            }
+        }
+        Ok(())
     }
 
     #[test]
@@ -716,7 +866,12 @@ mod tests {
             nullable: true,
             compression: Compression::UNCOMPRESSED,
         };
-        let (desc, reader) = standard_page_reader(bytes.clone(), page.row_count, page.compression)?;
+        let (desc, reader) = standard_page_reader(
+            bytes.clone(),
+            page.row_count,
+            page.compression,
+            "message test { optional int64 value; }",
+        )?;
         let mut column = ColumnReaderImpl::<Int64Type>::new(desc, Box::new(reader));
         let (mut levels, mut values) = (Vec::new(), Vec::new());
         assert_eq!(
@@ -790,14 +945,7 @@ mod tests {
         for value in 0_i64..20_000 {
             body.extend_from_slice(&value.to_le_bytes());
         }
-        let mut frame = vec![0x28, 0xb5, 0x2f, 0xfd, 0xa0];
-        frame.extend_from_slice(&(body.len() as u32).to_le_bytes());
-        let chunks = [&body[..131_069], &body[131_069..]];
-        for (i, chunk) in chunks.iter().enumerate() {
-            let block_header = ((chunk.len() as u32) << 3) | u32::from(i == 1);
-            frame.extend_from_slice(&block_header.to_le_bytes()[..3]);
-            frame.extend_from_slice(chunk);
-        }
+        let frame = raw_zstd_frame(&body, 131_069);
         let full = encode_page(&frame, body.len(), 20_000, None)?;
         let page = Page {
             range: 0..full.len() as u64,
@@ -999,6 +1147,53 @@ mod tests {
                 Err(ProbeError::Unsupported)
             ));
         }
+        // Many raw blocks require many dependent probes, or exceed the probe cap.
+        for (rows, latency_ms, profitable) in [
+            (262_144, 200, false),
+            (262_144, 1, true),
+            (500_000, 1, false),
+        ] {
+            let body = vec![7; rows * 9];
+            let frame = raw_zstd_frame(&body, page::MAX_ZSTD_BLOCK_BYTES);
+            let bytes = encode_page(&frame, body.len(), rows, None)?;
+            reader.file_size = bytes.len() as u64;
+            memory.put(&path, bytes.into()).await?;
+            let page = Page {
+                range: 0..reader.file_size,
+                first_file_row: 0,
+                row_count: rows,
+                max_value_count: rows,
+                value_width: 9,
+                nullable: false,
+                compression: Compression::ZSTD(Default::default()),
+            };
+            let estimate = TransportEstimate {
+                request_latency: Duration::from_millis(latency_ms),
+                ..estimate
+            };
+            reader.store.seed_transport_estimate(estimate);
+            reader.store.seed_request_overhead(Duration::ZERO);
+            let before = metrics.snapshot().parquet_data_file_bytes_received.unwrap();
+            let result = reader
+                .read_partial_pages(
+                    std::slice::from_ref(&page.range),
+                    std::slice::from_ref(&page),
+                    &[0, rows as u64 - 1],
+                    estimate,
+                    &budget,
+                )
+                .await?;
+            assert_eq!(result.is_some(), profitable);
+            let received = metrics.snapshot().parquet_data_file_bytes_received.unwrap() - before;
+            if profitable {
+                assert!(received < reader.file_size / 2);
+                let decoded = decompress_page(result.unwrap()[0].clone(), rows, page.compression)?;
+                assert_eq!(&decoded[..9], &body[..9]);
+                assert_eq!(&decoded[body.len() - 9..], &body[body.len() - 9..]);
+            } else {
+                assert_eq!(received, 0, "known probe rounds must be charged before I/O");
+            }
+        }
         Ok(())
     }
 
@@ -1064,8 +1259,8 @@ mod tests {
     }
 
     #[test]
-    fn intra_page_numeric_lengths_and_row_boundaries() -> TestResult {
-        for value_width in [4, 8] {
+    fn intra_page_fixed_width_lengths_and_row_boundaries() -> TestResult {
+        for value_width in [1, 3, 4, 8, 9, 16, 31] {
             for nullable in [false, true] {
                 // Three present values, optionally preceded by one RLE level run.
                 let mut body = if nullable {
@@ -1352,8 +1547,8 @@ mod tests {
         };
         use arrow::{
             array::{
-                ArrayRef, Date32Array, Decimal128Array, Float32Array, Float64Array, Int32Array,
-                TimestampMicrosecondArray, make_array, new_null_array,
+                ArrayRef, Date32Array, Decimal128Array, FixedSizeBinaryArray, Float32Array,
+                Float64Array, Int32Array, TimestampMicrosecondArray, make_array, new_null_array,
             },
             buffer::NullBuffer,
             compute::concat_batches,
@@ -1404,7 +1599,7 @@ mod tests {
         for (i, value) in f64_special.into_iter().enumerate() {
             doubles[i * 8_191] = f64::from_bits(value);
         }
-        for payload in [
+        let mut payloads = vec![
             Arc::new(Int32Array::from_iter_values(bits.iter().map(|v| *v as i32))) as ArrayRef,
             Arc::new(Int64Array::from_iter_values(bits.iter().map(|v| *v as i64))),
             Arc::new(Float32Array::from(floats)),
@@ -1428,7 +1623,27 @@ mod tests {
                 )
                 .with_precision_and_scale(18, 2)?,
             ),
-        ] {
+        ];
+        for precision in [20, 38] {
+            payloads.push(Arc::new(
+                Decimal128Array::from_iter_values(bits.iter().enumerate().map(|(i, value)| {
+                    let signed = ((*value as i128) << 64) | bits[(i + rows / 2) % rows] as i128;
+                    signed % 10_i128.pow(precision.into())
+                }))
+                .with_precision_and_scale(precision, 4)?,
+            ));
+        }
+        for width in [3, 9, 16] {
+            payloads.push(Arc::new(FixedSizeBinaryArray::try_from_iter(
+                bits.iter().enumerate().map(|(i, value)| {
+                    let mut bytes = value.to_le_bytes().to_vec();
+                    bytes.extend_from_slice(&bits[(i + rows / 2) % rows].to_le_bytes());
+                    bytes.truncate(width);
+                    bytes
+                }),
+            )?));
+        }
+        for payload in payloads {
             let dtype = payload.data_type().clone();
             let schema = Arc::new(Schema::new(vec![
                 Field::new("id", DataType::Int64, false),
@@ -1463,7 +1678,18 @@ mod tests {
                 ..economical
             };
             let long_levels = TransportEstimate {
-                request_latency: Duration::from_millis(400),
+                // Wider values save more transfer time, so use a costlier probe
+                // to keep this a control where the second read removes the gain.
+                request_latency: Duration::from_millis(
+                    if matches!(
+                        dtype,
+                        DataType::Decimal128(19.., _) | DataType::FixedSizeBinary(9..)
+                    ) {
+                        800
+                    } else {
+                        400
+                    },
+                ),
                 ..economical
             };
             for (codec, group_rows) in [
@@ -1476,7 +1702,11 @@ mod tests {
                 if codec != Compression::UNCOMPRESSED
                     && !matches!(
                         dtype,
-                        DataType::Int32 | DataType::Int64 | DataType::Float32 | DataType::Float64
+                        DataType::Int32
+                            | DataType::Int64
+                            | DataType::Float32
+                            | DataType::Float64
+                            | DataType::FixedSizeBinary(_)
                     )
                 {
                     continue;
@@ -1600,7 +1830,7 @@ mod tests {
                             } else {
                                 assert_eq!(
                                     received, *original_bytes,
-                                    "ordinary path should avoid speculative I/O"
+                                    "ordinary path should avoid speculative I/O: {dtype:?}, {codec:?}, {group_rows}, dense={dense}, {estimate:?}, {overhead:?}"
                                 );
                             }
                         } else {

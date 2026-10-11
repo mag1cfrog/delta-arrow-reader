@@ -1,0 +1,313 @@
+{
+  "format": "intra-page-decimal-comparison-v1",
+  "artifact_root": "/home/hanbo/repo/selective-read-types-451",
+  "samples_sha256": "2bc5ac19d80900ac28fccb7d6f433a1c37d36328ca5e84f2dae84602ed2831d5",
+  "method": {
+    "primary_metric": "first fully consumed query after initialization, planning included",
+    "network": {
+      "latency_ms": 200,
+      "jitter_ms": 20,
+      "shared_mbps": 150,
+      "seed": "0"
+    },
+    "fast_network": {
+      "latency_ms": 1,
+      "jitter_ms": 0,
+      "shared_mbps": 1000
+    },
+    "reader_logical_cpus": 8,
+    "process_memory_bytes": 8589934592,
+    "initial_pairs_per_case": 3,
+    "additional_pairs": {
+      "final/extra-pairs/plan.json": {
+        "reason": "Investigate higher whole-process peak RSS in all three paired final observations: large raw-Zstd precision-20 (baseline median 158.75 MiB, candidate 216.71 MiB), and retained 90-column spread-out (baseline about 452.5 MiB, candidate 488.9 MiB). Query times and I/O do not show matching growth; previous campaign and fast controls had the opposite RSS direction. Keep all samples and add two alternating pairs per case before deciding whether this is repeatable.",
+        "cases": [
+          "zstd-decimal20",
+          "90-spread",
+          "zstd-decimal38",
+          "snappy-decimal20",
+          "dense-decimal38",
+          "local-decimal38"
+        ],
+        "additional_pairs_per_case": 2,
+        "final_build_sha256": "c0b408549b498cdc33e7cf20a9544c0da9f94a4786be016b14e629da47b4f0ef",
+        "production_changes": false,
+        "additional_reasons": {
+          "zstd-decimal38": "All three second-query pairs are 1-10 ms slower, although median change is only 0.02%; retain two more pairs under the declared gate.",
+          "snappy-decimal20": "All three first-query pairs are 1.8-4 ms slower, and peak-RSS median is 14.8% higher. Snappy still has identical I/O and no new eligibility. Check two more pairs to distinguish reproducible growth from scheduling and allocator variation.",
+          "dense-decimal38": "All three second queries are slower (two by about 35 ms, one by 1 ms; median +0.55%), while first-query median is faster by the same absolute amount. Dense no-predicate path is unchanged; check two extra pairs.",
+          "local-decimal38": "First-query median +3.55% (1.3 ms) with all three pairs higher; second queries are faster, CPU totals identical, query I/O identical. Add two pairs for this local fallback control."
+        }
+      }
+    },
+    "counter_scopes": {
+      "first_query_parquet_bytes": "first query Parquet bodies",
+      "peak_rss_bytes": "whole process",
+      "process_cpu_seconds": "whole process",
+      "session_http_bytes": "whole session, including initialization and both queries"
+    },
+    "validation": "Separate exact comparisons against independent Arrow references; all validation observations retained.",
+    "cache": "Fresh processes; OS and MinIO caches reused."
+  },
+  "builds": {
+    "baseline": {
+      "reader_git_commit": "304acea9f48910ba2ab05e78561e7dcfe8ebf732",
+      "reader_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_hashes_sha256": "bfe7b6b60c5578f7f3af3c410c42de82d2af64a44fa315ad7b70c4ca3decb7bc",
+      "lockfile_sha256": "d53855cfdce00c9e8ecee9acec60daa8e4c4f745a6deadc7ff65e6e2aebca5c2",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+      "rustflags": null,
+      "numeric_driver_sha256": "46cc3fd3d304f67b309b8e9226a4488649d8b7d574696cf6e2c539ce0fa4a18e",
+      "executables_sha256": {
+        "selective-read-dar": "90a0e0ca3780a40e1d58da1312c51571bb416d0d189e39a1163290a7647cf75a",
+        "numeric-pages": "44860d9019ad63bea1cebc8579acf4f8b6f59469e2f21725fb9331060dbe996b"
+      },
+      "raw_build_record": "baseline/build.json"
+    },
+    "before-probe-fix": {
+      "reader_git_commit": "304acea9f48910ba2ab05e78561e7dcfe8ebf732",
+      "reader_patch_sha256": "881291931ce0815210fdf9a3b0dc834346e6b6cb4de7de5ab8447bf269bc7146",
+      "source_hashes_sha256": "3a8b65f41f95e6ae0686369de03201dacd1950b933df9944f8a8a38e595444d0",
+      "lockfile_sha256": "d53855cfdce00c9e8ecee9acec60daa8e4c4f745a6deadc7ff65e6e2aebca5c2",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+      "rustflags": null,
+      "numeric_driver_sha256": "46cc3fd3d304f67b309b8e9226a4488649d8b7d574696cf6e2c539ce0fa4a18e",
+      "executables_sha256": {
+        "selective-read-dar": "ae6900429f3e3e5e5f29a7b3822018c1c0379778374dce381db580a36ef18772",
+        "numeric-pages": "2e7760b7d583e0c61f77440e25f1db1e264abd4be90f01416b878af9b479aa4e"
+      },
+      "raw_build_record": "candidate-before-probe-fix/build.json"
+    },
+    "final": {
+      "reader_git_commit": "304acea9f48910ba2ab05e78561e7dcfe8ebf732",
+      "reader_patch_sha256": "5b246eaff6e63ef4e8a86df46beffccd22a78cde45ff7bb87f3bcd77e8cc8aec",
+      "source_hashes_sha256": "c88851417db5f261885dfd930d5e7ba63894685dab3f145560517101934b7853",
+      "lockfile_sha256": "d53855cfdce00c9e8ecee9acec60daa8e4c4f745a6deadc7ff65e6e2aebca5c2",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+      "rustflags": null,
+      "numeric_driver_sha256": "46cc3fd3d304f67b309b8e9226a4488649d8b7d574696cf6e2c539ce0fa4a18e",
+      "executables_sha256": {
+        "selective-read-dar": "c0b408549b498cdc33e7cf20a9544c0da9f94a4786be016b14e629da47b4f0ef",
+        "numeric-pages": "c9b406b251a83e5451c9fba7dcc48f53d1ec3024ef65cc76794b185f85fe55ab"
+      },
+      "raw_build_record": "candidate/build.json"
+    }
+  },
+  "main_update": {
+    "branch_head": "d3b8eed081a288c22672c22d5ee70fd21a27f105",
+    "measured_base": "304acea9f48910ba2ab05e78561e7dcfe8ebf732",
+    "changed_upstream_files": [
+      ".github/workflows/pypi-build.yml",
+      "xtask/tests/ci.rs"
+    ],
+    "reader_sources_match_measured_build": true
+  },
+  "same_binary_control": {
+    "reason": "Five retained 90-column spread-out pairs still have higher candidate peak RSS (median +8%, 452.5 to488.9MiB), with query times unchanged. The table has no FIXED_LEN_BYTE_ARRAY columns. Zstd20 median RSS remains +11% after five pairs, while Zstd38 and both fast-Zstd controls have lower candidate RSS. Earlier baseline observations span the candidate ranges. Measure the baseline against itself to quantify process-RSS variability without a code change.",
+    "cases": [
+      "90-spread-aa",
+      "zstd-decimal20-aa"
+    ],
+    "pairs": 3,
+    "binaries": "The exact preserved baseline executable on both sides; no rebuilt binary or reader setting change.",
+    "separate_from_final_comparison": true,
+    "retain_all_observations": true
+  },
+  "fixtures": {
+    "decimal-fixture": {
+      "manifest_sha256": "bb2e1a66e086c148c67300263e54bd45b961eed6cdab2675a4f766d16fc0402f",
+      "files": [
+        {
+          "bytes": 85467228,
+          "path": "part-0.parquet",
+          "sha256": "303f7f4c3e7f09d1d915a5238972856e21962de9c25af90c39ae1c209f4cabd9"
+        },
+        {
+          "bytes": 85474690,
+          "path": "part-1.parquet",
+          "sha256": "e30d49a6534c931d322d4332be948e3e1b12ff3828ef8aa201796039ba3364ab"
+        }
+      ],
+      "format": "numeric-page-fixture-v1",
+      "generator_sha256": "e5bd8d5b4b36683c17095184b542f60e7d6b24d0563a16da28ecf4429c8ae75f",
+      "log_sha256": "0eb6b69310924cbab5fdd97e7d16c62364a0ff13c124ce99db4c9d50a4644581",
+      "pyarrow": "25.0.1",
+      "references": {
+        "decimal20": {
+          "path": "decimal20.arrow",
+          "rows": 129,
+          "sha256": "e13cd6e3454f1682d5d1a90d62248490b2ad8d35434995615e33da73c669d30c"
+        },
+        "decimal38": {
+          "path": "decimal38.arrow",
+          "rows": 129,
+          "sha256": "b7665769a9bcac6df87cad3bf66e6e75234fb10f57c4e9e2facb138e7a6714a7"
+        }
+      }
+    },
+    "decimal-snappy-fixture": {
+      "manifest_sha256": "1d984fb9e3e89516a7f8577d7150c892a12a1dad28e74b6ee28e372e173d5e19",
+      "files": [
+        {
+          "bytes": 81376201,
+          "path": "part-0.parquet",
+          "sha256": "ec3c44feac2150d8c06ad104a6e88dc56f7fd561feee27c3e7d8b47c5ba263f4"
+        },
+        {
+          "bytes": 81383670,
+          "path": "part-1.parquet",
+          "sha256": "dc74047fc88604830806342181bfc71c379e4d1ed3e9b4a662276ae80be6fffc"
+        }
+      ],
+      "format": "numeric-page-fixture-v1",
+      "generator_sha256": "e5bd8d5b4b36683c17095184b542f60e7d6b24d0563a16da28ecf4429c8ae75f",
+      "log_sha256": "42d72be1d242bc262ee116381e64dbe3abd9583925460a07c40d544a150daa28",
+      "pyarrow": "25.0.1",
+      "references": {
+        "decimal20": {
+          "path": "decimal20.arrow",
+          "rows": 129,
+          "sha256": "e13cd6e3454f1682d5d1a90d62248490b2ad8d35434995615e33da73c669d30c"
+        },
+        "decimal38": {
+          "path": "decimal38.arrow",
+          "rows": 129,
+          "sha256": "b7665769a9bcac6df87cad3bf66e6e75234fb10f57c4e9e2facb138e7a6714a7"
+        }
+      },
+      "control": "SNAPPY codec, same rows and schema",
+      "source_fixture_sha256": "bb2e1a66e086c148c67300263e54bd45b961eed6cdab2675a4f766d16fc0402f",
+      "control_driver_sha256": "a563ed81d9a1c47fe086b8c4e65c5e00489472cf9c9a21c124d081bfd85dcebc"
+    },
+    "decimal-zstd-fixture": {
+      "manifest_sha256": "8eb6b162335cd8e120274de866da2b2ee343abf223be2689071f37e62db4aa33",
+      "files": [
+        {
+          "bytes": 79711229,
+          "path": "part-0.parquet",
+          "sha256": "4e6d3040bb5f47405a8548ad3ea1d0847dbdd8a188e32ba7961d318aa0f68b6c"
+        },
+        {
+          "bytes": 79718038,
+          "path": "part-1.parquet",
+          "sha256": "9163cbb7db077d82a998c54bc2601237afd36c446e1f312a4353df23cdde2859"
+        }
+      ],
+      "format": "numeric-page-fixture-v1",
+      "generator_sha256": "e5bd8d5b4b36683c17095184b542f60e7d6b24d0563a16da28ecf4429c8ae75f",
+      "log_sha256": "d8b32ef5e6590909538c80708261a683e178da452f4debad12ff6252a1c60f74",
+      "pyarrow": "25.0.1",
+      "references": {
+        "decimal20": {
+          "path": "decimal20.arrow",
+          "rows": 129,
+          "sha256": "e13cd6e3454f1682d5d1a90d62248490b2ad8d35434995615e33da73c669d30c"
+        },
+        "decimal38": {
+          "path": "decimal38.arrow",
+          "rows": 129,
+          "sha256": "b7665769a9bcac6df87cad3bf66e6e75234fb10f57c4e9e2facb138e7a6714a7"
+        }
+      },
+      "control": "ZSTD codec, same rows and schema",
+      "source_fixture_sha256": "bb2e1a66e086c148c67300263e54bd45b961eed6cdab2675a4f766d16fc0402f",
+      "control_driver_sha256": "7036f912db7d93b6154391b86915e0ecca1030e3c1aa4001436a84e27820a119"
+    }
+  },
+  "retained_cases": {
+    "416-grouped": {
+      "case_id": "production.q2.localized.dv",
+      "fixture_manifest_sha256": "fcc353f6a5ab5d9d85d2e46a969391b7a9102fb899ac2415a136a6226dafdba9",
+      "snapshot_version": 1,
+      "source_request_sha256": "17abf1806ad7d5c19d6fb134a37b2f379466abfd3b82422d52653dc5e826a0fc",
+      "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605"
+    },
+    "416-spread": {
+      "case_id": "production.q2.scattered.dv",
+      "fixture_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "snapshot_version": 1,
+      "source_request_sha256": "ef5f4b30c1fbf0a62c8c7f034744e30b0f6cd3faa8c07d2ac5bb233f9f703afe",
+      "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605"
+    },
+    "90-grouped": {
+      "case_id": "production.q4.localized.dv",
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "snapshot_version": 1,
+      "source_request_sha256": "786014a77a89a04d79212f11306d25aa2d9879dc46dea1d1cf18b70ac9b9c568",
+      "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea"
+    },
+    "90-spread": {
+      "case_id": "production.q4.scattered.dv",
+      "fixture_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "snapshot_version": 1,
+      "source_request_sha256": "37e9ff8518b6235cdbc064b23a4b0f787a508ea06d32322ff710902918ffd025",
+      "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea"
+    }
+  },
+  "experiments_sha256": {
+    "acceptance/416-grouped/primary/experiment.json": "90f904d1e829781249791a74e7a06289496c885b6231e39c6d46d3d47d6a22cb",
+    "acceptance/416-spread/primary/experiment.json": "b0f2d284373cdffc6b30c49760fd34d71c68bc554a5cf6d12a29eacfab03d112",
+    "acceptance/90-grouped/primary/experiment.json": "63cc5a714a76e1dfcffda63f2aa03fb96a1a8a0fb6d362de5d4115418586ea35",
+    "acceptance/90-spread/primary/experiment.json": "8541a720dc611cf433f1807cff011ca43734218711ba1a464ebd65d15c08be00",
+    "decimals/primary-decimal20/experiment.json": "94f21dd32641a33c23cf50bb9696c485e9326139d0192ab0a8acefedd5602e39",
+    "decimals/primary-decimal38/experiment.json": "8b633b97b15407f5b743f8c506eaf8681baaf469789a9375056a4765fcf6f7ae",
+    "decimals/dense-decimal20/experiment.json": "6e4577002638c960781940fe383f5e83118f01c6215beaa5ebd7488932481a49",
+    "decimals/snappy-decimal20/experiment.json": "505231741796f8df09561785465d8b5989379f3729bb58f58fb781164a67db3d",
+    "decimals/local-decimal20/experiment.json": "68579f48aa26d5d1b33e10fddf7fb2bac75ffe971d234e31f24052813803e2ae",
+    "decimals/dense-decimal38/experiment.json": "afb7093cff0a2760bccb04b09af07e3a92f037260974dc1d3c97d4d9db4db8c3",
+    "decimals/snappy-decimal38/experiment.json": "e584b47be32393cf1b76731b743515ad2b5ef242ba88fa95e6bc3fc9f9091baf",
+    "decimals/local-decimal38/experiment.json": "3c85884b245047720b04020b216dda8e777f430cbdbcbf6d721aea0dcb3b70b6",
+    "decimals/fast-decimal20/experiment.json": "1b5f9814afd9f1cf0fe81105515c8f0551a8d00d538f801ec0575a81d41e4417",
+    "decimals/fast-decimal38/experiment.json": "9092dddadd2dbb950e4016eb3a6ee840a787f384e915541a45bd3a963658a877",
+    "zstd/zstd-decimal20/experiment.json": "0034b67c7ceedc15ef7192e08ba1ec99106d4afd4ba7f798c05f3fc2035285cf",
+    "zstd/zstd-decimal38/experiment.json": "497023b601c71d64dc722770af9a4b4f21e9131bad23b778474a29aa9ee24f9c",
+    "final/acceptance/416-grouped/primary/experiment.json": "f2c08ed48f74dc81aa3cbf91bf44d12b9733843f26342e099c057b113b8ba0ee",
+    "final/acceptance/416-spread/primary/experiment.json": "226556cd6a4a122c12174b91b8e3e250cfa9263990a7e6a6b2d575f5ff821836",
+    "final/acceptance/90-grouped/primary/experiment.json": "9581cc15948f71f80b303e61aeba4b3396a2926d63cfa427460d607a02117139",
+    "final/acceptance/90-spread/primary/experiment.json": "7822a33bf17d6dca05c847c3c397fb9c7f721af6997a463b66ba6a323d8e7104",
+    "final/decimals/primary-decimal20/experiment.json": "c6b646720bb0f19ee7fcf89371b6e8fc6fb63b6b979027f1457a5973a2cf1daa",
+    "final/decimals/primary-decimal38/experiment.json": "c541131b86a1546df4cc46546f608ddf06043e648444581241e22cfd764dec3a",
+    "final/decimals/dense-decimal20/experiment.json": "f9cfbbb2a3acae2193e372a1a8308454e7525d098fc7559fa6382d7bcbae1eba",
+    "final/decimals/snappy-decimal20/experiment.json": "6a4760045ea643275d6d79e9fbb59a5057a9b5211786534c7547cedc703dc19d",
+    "final/decimals/local-decimal20/experiment.json": "d3b9bde4ae056c0fe01cc4ccaccf9e09ebe3845e4f357020a216b17ee801b57c",
+    "final/decimals/dense-decimal38/experiment.json": "4612c33f419908771823424245bc01c1a081ae888cd29c03fd8a17f9aaaf67ef",
+    "final/decimals/snappy-decimal38/experiment.json": "394c1280079eb6113e53f15387c4af487287b034890997ebf78802193c39be5a",
+    "final/decimals/local-decimal38/experiment.json": "9bd5faae58bfe94c209598bb0dbe2d60540173a29c3754d175f490db1e966e1e",
+    "final/decimals/fast-decimal20/experiment.json": "06f77d91aadf8558fbc22e57f258dfb208b2790d683a9fac5d42ece3dea9a997",
+    "final/decimals/fast-decimal38/experiment.json": "7d0286bb32f135a60e5d9e952158a01191facd64b2f8d0c6e06bd1d4dc567b79",
+    "final/zstd/zstd-decimal20/experiment.json": "309154cb6a4153fc8760fed2507d45b64375040e3ad695823cd6d968310743e7",
+    "final/zstd/zstd-decimal38/experiment.json": "e9b47c99dd865363030bddf4aff60869797b08321fc922075b1f0b6d39509f0d",
+    "final/zstd/fast-zstd-decimal20/experiment.json": "ae26f016faec064505066ce835a30de997cd385d07fe1e7aeb19c491a2480fc5",
+    "final/zstd/fast-zstd-decimal38/experiment.json": "cb386b06f75b1e117da78db1abfc4845619fd3cd164393a33101de6168cb6f64",
+    "final/extra-pairs/acceptance/90-spread/primary/experiment.json": "3a56027a866c77d6b2f6b6df17db937ed0ff9b13ce639df6d050a14e6a6e7a84",
+    "final/extra-pairs/decimals/zstd-decimal20/experiment.json": "de05a927a7dbd72ea707a77ca13d2ac672a96647aa8c2d584ee11b045968101b",
+    "final/extra-pairs/decimals/zstd-decimal38/experiment.json": "6bb8df652cb9ab7fcb632ca9d7f04d1bd16d6898a854205a001271ce098c007e",
+    "final/extra-pairs/decimals/snappy-decimal20/experiment.json": "5e9ba5dbe27037413ddcd2b54c88b2ea4dbe846ccc2942398c1d2dee7fadb5e4",
+    "final/extra-pairs/decimals/dense-decimal38/experiment.json": "0ee0213ade636876d28a663a9122cfa7c71abdf06aa049d87bf96c931a2b7bb6",
+    "final/extra-pairs/decimals/local-decimal38/experiment.json": "59d30e4b010d52b76e3edc49b6cc9b923ef5a435a297d659bdb999a1a3becf20",
+    "final/aa/acceptance/90-spread-aa/primary/experiment.json": "e44f423a1f32d5ff44c907e496727daa6c874751d6898c88e618f37744a9eb26",
+    "final/aa/decimals/zstd-decimal20-aa/experiment.json": "40fbb86e0724f2f0b89f58992abcb8c5eb63929048e70c60f032ba3d52b355a3"
+  },
+  "scripts_sha256": {
+    "final/run_acceptance.py": "2732f256814d5dd56031ec8973999d616e59d652f95891960f2c5d76ce391536",
+    "final/run_decimals.py": "f22850dd521967f5a3faecd21a51bb2118b9ac0e0339b5f5d48c122373acf483",
+    "final/run_zstd.py": "3251c726e67cccf36d05c07b92c59629b427013d0906faaed5d0dc53edc6d246",
+    "final/collect_results.py": "5e361aa9ec0c052cc0b2f13cb87fd1e2d0ba23eb7d681f90554e082720b1a1ef",
+    "final/run_resource_followup.py": "ed1ca22f3a7155e651df175e566911ff51c7593d9bb4de7b74e55de2590dd43e",
+    "final/run_remaining_controls.py": "882a2bfa05676cf9589939324edc78672a2488b1d00684013958d5e213cefd34",
+    "final/extra-pairs/numeric-extra-pairs.py": "fa5a3ea327e34977f4bb292be2359df27e48e6bc47e0483e7f2349eef1d42a24",
+    "final/run_memory_control.py": "928997d7dceb4a56db1d5d70ea049d48760a88cf26adda5b9deff3326ba429f9",
+    "final/aa/collect_results.py": "5e361aa9ec0c052cc0b2f13cb87fd1e2d0ba23eb7d681f90554e082720b1a1ef",
+    "startup.py": "ed7f35294f2b47910eba9439c37896b5e86f88c95e3701afa1d486dae2a5964a",
+    "build_remaining.py": "e6fb3d1a22d20c5552720311f165f608a995b70b5f9ca3760797cd818caa60a3",
+    "write_final_report.py": "f9fb93b1edd69b0c273771458ea5637e748e9cc71d36afdeab56d7a3c48aa435"
+  },
+  "earlier_observations": {
+    "campaign": "before-probe-fix",
+    "cases": 16,
+    "planned_extra_pairs": "extra-pairs-plan.json",
+    "plan_status": "Not executed. The probe-cost fix required a fresh comparison; all original observations remain in the CSV.",
+    "preparation_failure": "startup-failure-416-grouped",
+    "failure_scope": "MinIO bucket creation returned 503 before any validation or timing sample. A bounded preparation-only retry was used afterward."
+  }
+}

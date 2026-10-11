@@ -14,8 +14,10 @@ async fn run() -> Result<()> {
     if args.len() != 5 {
         return Err("TABLE_URI TYPE (sparse|dense) NEW_OUTPUT_DIRECTORY".into());
     }
-    if !matches!(args[2].as_str(), "int32" | "int64" | "float" | "double")
-        || !matches!(args[3].as_str(), "sparse" | "dense")
+    if !matches!(
+        args[2].as_str(),
+        "int32" | "int64" | "float" | "double" | "decimal20" | "decimal38"
+    ) || !matches!(args[3].as_str(), "sparse" | "dense")
     {
         return Err("unknown type or selection".into());
     }

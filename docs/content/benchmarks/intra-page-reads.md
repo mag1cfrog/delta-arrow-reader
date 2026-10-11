@@ -52,11 +52,13 @@ Predicate columns retain complete data because Parquet may cache their decoded
 batches.
 
 Eligible pages are flat PLAIN V1 pages with offset indexes and physical types
-INT32, INT64, FLOAT or DOUBLE. Nullable and required columns are supported. The
-file's physical type and definition levels determine byte offsets; the normal
-decoder handles dates, timestamps, decimals and supported type widening. Data
-must be uncompressed or held in a single Zstd frame of raw blocks, without page
-or frame checksums. Unsupported pages go through ordinary reads. Malformed supported
+INT32, INT64, FLOAT, DOUBLE or FIXED_LEN_BYTE_ARRAY. Nullable and required columns
+are supported. The file's physical type and definition levels determine byte
+offsets; the normal reader handles dates, timestamps, decimals and supported type widening.
+Fixed-length decimal widths come from the Parquet schema; the optimization does
+not add new Delta type mappings. Data must be uncompressed or held in a single
+Zstd frame of raw blocks, without page or frame checksums. Unsupported pages go
+through ordinary reads. Malformed supported
 structures return errors; the standard decoder handles errors in fallback
 formats. These checks cannot detect arbitrary value corruption in files that
 have no integrity checks.
@@ -73,6 +75,10 @@ prove that null information extends beyond the header prefix. The initial
 estimate then budgets for another request. Row count alone does not establish
 this: even a million-row page can encode its null levels as a short RLE run.
 When metadata cannot settle this, bounded probes inspect the actual layout.
+For raw Zstd, page size gives a minimum number of block headers to read in
+sequence. Those rounds are included before probing; plans exceeding the probe
+limit use ordinary reads. The [decimal measurements](intra-page-decimal-types.md)
+include large-page controls for this fallback.
 
 The model takes the larger of processing and transport costs because they overlap.
 Repeated samples use a median; broad jitter can still lower the estimated capacity.
