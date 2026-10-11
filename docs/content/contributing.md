@@ -59,11 +59,11 @@ The isolated Python check imports the installed wheel without adding the current
 directory to its import path. Default Cargo commands still select the core crate;
 use `cargo check -p delta-arrow-reader-python` to check the binding crate directly.
 
-To check a wheel's filename and metadata before installation, pass its expected
-version and platform tag explicitly:
+To check a wheel's filename and metadata before installation, run `cargo xtask`
+from the repository root with the expected version and platform tag:
 
 ```console
-python crates/delta-arrow-reader-python/tests/check_wheel.py \
+cargo xtask check-python-wheel \
   /path/to/delta_arrow_reader-0.6.2-cp310-abi3-manylinux_2_28_x86_64.whl \
   --expected-version 0.6.2 --platform-tag manylinux_2_28_x86_64
 ```
@@ -177,12 +177,12 @@ workflow result and this output before treating the artifacts as a complete
 validated set. A failed run may still contain individual platform artifacts.
 
 Download artifacts from the Actions run page. To download and check the full
-set locally, use the expected package version for that run:
+set locally, run these commands from the repository root with the expected
+package version for that run:
 
 ```console
 gh run download RUN_ID --pattern 'delta-arrow-reader-*-wheel' --dir wheel-artifacts
-python crates/delta-arrow-reader-python/tests/check_wheel.py wheel-artifacts \
-  --artifact-set --expected-version 0.6.2
+cargo xtask check-python-wheels wheel-artifacts --expected-version 0.6.2
 ```
 
 The workflow produces build artifacts only. For publisher setup, TestPyPI

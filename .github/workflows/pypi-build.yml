@@ -230,9 +230,11 @@ jobs:
             --wheel-dir dist unrepaired-dist/*.whl
           delocate-listdeps --all dist/*.whl
       - name: Inspect wheel metadata
+        env:
+          RUSTC_WRAPPER: ""
         run: |
           git diff --exit-code -- Cargo.lock
-          python crates/delta-arrow-reader-python/tests/check_wheel.py dist/*.whl \
+          cargo xtask check-python-wheel dist/*.whl \
             --expected-version "$EXPECTED_VERSION" --platform-tag '${{ matrix.platform-tag }}'
       - name: Inspect Linux native dependencies
         if: runner.os == 'Linux'
@@ -287,9 +289,15 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.source-ref }}
-      - uses: actions/setup-python@v6
+      - name: Read Rust version
+        id: rust-version
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          python-version: '3.10'
+          toolchain: ${{ steps.rust-version.outputs.version }}
       - uses: actions/download-artifact@v6
         with:
           pattern: delta-arrow-reader-*-wheel
@@ -297,6 +305,5 @@ jobs:
       - name: Check complete artifact set
         id: verify
         run: |
-          python crates/delta-arrow-reader-python/tests/check_wheel.py wheel-artifacts \
-            --artifact-set --expected-version "$EXPECTED_VERSION"
+          cargo xtask check-python-wheels wheel-artifacts --expected-version "$EXPECTED_VERSION"
           echo "validated=true" >> "$GITHUB_OUTPUT"

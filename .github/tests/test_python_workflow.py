@@ -2,7 +2,6 @@ import itertools
 import os
 from pathlib import Path
 import shlex
-import shutil
 import subprocess
 import tempfile
 import unittest
@@ -128,19 +127,17 @@ class PythonWorkflowTests(unittest.TestCase):
     def test_incomplete_artifacts_cannot_reach_upload_directory(self):
         with tempfile.TemporaryDirectory(prefix="python-upload-test-") as temporary:
             directory = Path(temporary)
-            for source in (
-                Path("crates/delta-arrow-reader-python/tests/check_wheel.py"),
-                Path(".github/scripts/prepare_python_upload.py"),
-            ):
-                (directory / source.parent).mkdir(parents=True)
-                shutil.copyfile(WORKFLOW.parents[2] / source, directory / source)
             (directory / "wheel-artifacts").mkdir()
             for target in ("testpypi", "pypi"):
                 with self.subTest(target=target):
                     steps = self.jobs[f"publish-{target}"]["steps"]
                     stage = next(step for step in steps if step.get("id") == "stage")
+                    script = stage["run"].replace(
+                        ".github/scripts/prepare_python_upload.py",
+                        shlex.quote(str(WORKFLOW.parents[2] / ".github/scripts/prepare_python_upload.py")),
+                    )
                     result = subprocess.run(
-                        ["bash", "-e", "-o", "pipefail", "-c", stage["run"]],
+                        ["bash", "-e", "-o", "pipefail", "-c", script],
                         cwd=directory, capture_output=True, text=True,
                         env={
                             **os.environ, "EXPECTED_VERSION": "1.2.3",

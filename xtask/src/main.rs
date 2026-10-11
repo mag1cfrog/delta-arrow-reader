@@ -2,12 +2,14 @@ use std::{
     env,
     error::Error,
     fs, io,
+    path::Path,
     process::{Command, Stdio},
 };
 
 use serde::Deserialize;
 
 mod python_release;
+mod python_wheels;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -128,13 +130,34 @@ fn prune_ci_caches() -> Result<()> {
 
 fn main() -> Result<()> {
     let args: Vec<_> = env::args().skip(1).collect();
+    let args: Vec<_> = args.iter().map(String::as_str).collect();
     match args.as_slice() {
-        [task] if task == "check-cache-writes" => check_cache_writes(),
-        [task] if task == "prune-ci-caches" => prune_ci_caches(),
-        [task] if task == "prepare-python-release" => python_release::prepare_release(),
-        _ => Err(
-            "usage: cargo xtask <check-cache-writes|prune-ci-caches|prepare-python-release>".into(),
-        ),
+        ["check-cache-writes"] => check_cache_writes(),
+        ["prune-ci-caches"] => prune_ci_caches(),
+        ["prepare-python-release"] => python_release::prepare_release(),
+        [
+            "check-python-wheel",
+            path,
+            "--expected-version",
+            version,
+            "--platform-tag",
+            platform,
+        ] => python_wheels::check_wheel(Path::new(path), version, platform),
+        [
+            "check-python-wheels",
+            directory,
+            "--expected-version",
+            version,
+        ] => python_wheels::check_wheel_set(Path::new(directory), version),
+        _ => Err(concat!(
+            "usage: cargo xtask <task>\n",
+            "  check-cache-writes\n",
+            "  prune-ci-caches\n",
+            "  prepare-python-release\n",
+            "  check-python-wheel <path> --expected-version <version> --platform-tag <tag>\n",
+            "  check-python-wheels <directory> --expected-version <version>",
+        )
+        .into()),
     }
 }
 

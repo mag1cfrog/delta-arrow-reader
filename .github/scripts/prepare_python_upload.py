@@ -8,17 +8,13 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
-import sys
 from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 
 INDEX_URLS = {"testpypi": "https://test.pypi.org", "pypi": "https://pypi.org"}
-WHEEL_CHECK = (
-    Path(__file__).resolve().parents[2]
-    / "crates/delta-arrow-reader-python/tests/check_wheel.py"
-)
+XTASK_MANIFEST = Path(__file__).resolve().parents[2] / "xtask/Cargo.toml"
 
 
 def published_files(index, version):
@@ -59,8 +55,8 @@ def published_files(index, version):
 
 def stage_upload(artifacts, version, index, destination):
     result = subprocess.run(
-        [sys.executable, str(WHEEL_CHECK), str(artifacts),
-         "--artifact-set", "--expected-version", version],
+        ["cargo", "run", "--quiet", "--locked", "--manifest-path", str(XTASK_MANIFEST),
+         "--", "check-python-wheels", str(artifacts), "--expected-version", version],
         capture_output=True, text=True,
     )
     if result.returncode != 0:
