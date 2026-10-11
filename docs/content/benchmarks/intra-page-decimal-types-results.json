@@ -1,7 +1,7 @@
 {
   "format": "intra-page-decimal-comparison-v1",
   "artifact_root": "/home/hanbo/repo/selective-read-types-451",
-  "samples_sha256": "66c59c64f82d719eb07a15c32443fdff82c06c70b5e56b0d15b5080033114691",
+  "samples_sha256": "2bc5ac19d80900ac28fccb7d6f433a1c37d36328ca5e84f2dae84602ed2831d5",
   "method": {
     "primary_metric": "first fully consumed query after initialization, planning included",
     "network": {
@@ -300,7 +300,7 @@
     "final/aa/collect_results.py": "5e361aa9ec0c052cc0b2f13cb87fd1e2d0ba23eb7d681f90554e082720b1a1ef",
     "startup.py": "ed7f35294f2b47910eba9439c37896b5e86f88c95e3701afa1d486dae2a5964a",
     "build_remaining.py": "e6fb3d1a22d20c5552720311f165f608a995b70b5f9ca3760797cd818caa60a3",
-    "write_final_report.py": "829057f4e4c2aa8e95d537a855884f070e154023422899004afbe4077ae8aeac"
+    "write_final_report.py": "f9fb93b1edd69b0c273771458ea5637e748e9cc71d36afdeab56d7a3c48aa435"
   },
   "earlier_observations": {
     "campaign": "before-probe-fix",
