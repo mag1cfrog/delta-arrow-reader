@@ -19,7 +19,7 @@ MAX_SECONDS = {"q2": 80, "q4": 200}
 
 
 def load_medians():
-    source = ROOT / "crates/delta-arrow-reader/docs/public/benchmarks/selective-read-current-timings.csv"
+    source = ROOT / "crates/delta-arrow-reader-core/docs/public/benchmarks/selective-read-current-timings.csv"
     with source.open(newline="") as stream:
         rows = list(csv.DictReader(stream))
     samples = {}
@@ -93,7 +93,7 @@ def main():
     args = parser.parse_args()
     values = load_medians()
     for theme in README_THEMES:
-        target = ROOT / f"crates/delta-arrow-reader/docs/public/assets/selective-read-readme-{theme}.svg"
+        target = ROOT / f"crates/delta-arrow-reader-core/docs/public/assets/selective-read-readme-{theme}.svg"
         rendered = render(theme, values)
         if args.check:
             assert target.read_text() == rendered, target

@@ -135,7 +135,7 @@ fn predicate_cases() -> Vec<(&'static str, Value, DeltaPredicate)> {
 #[test]
 fn filtered_scans_match_native_predicates() -> Result<(), Box<dyn std::error::Error>> {
     let corpus = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../delta-arrow-reader/tests/reader/fixtures/external_writer/corpus");
+        .join("../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus");
     let predicate_file = PredicateFile::new()?;
     let cases = predicate_cases();
     let runtime = tokio::runtime::Builder::new_current_thread()

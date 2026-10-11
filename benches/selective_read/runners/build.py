@@ -16,14 +16,14 @@ TARGET = "x86_64-unknown-linux-gnu"
 
 
 def sources():
-    paths = [ROOT / name for name in ("Cargo.toml", "Cargo.lock", "README.md", "crates/delta-arrow-reader/Cargo.toml",
+    paths = [ROOT / name for name in ("Cargo.toml", "Cargo.lock", "README.md", "crates/delta-arrow-reader-core/Cargo.toml",
              "benches/selective_read/oracle.py", "benches/selective_read/rust-toolchain.toml",
              "docs/content/benchmarks/selective-read-protocol.md",
              "docs/content/benchmarks/selective-read-large-workloads.md",
              "docs/content/benchmarks/selective-read-sampling.md",
              "docs/content/benchmarks/selective-read-production-workloads.md",
              "docs/content/benchmarks/selective-read-spark-matrix.md")]
-    paths += [path for base in (ROOT / "crates/delta-arrow-reader/src", HERE) for path in base.rglob("*")
+    paths += [path for base in (ROOT / "crates/delta-arrow-reader-core/src", HERE) for path in base.rglob("*")
               if path.is_file() and path.suffix in (".rs", ".toml", ".lock", ".py")]
     return {str(path.relative_to(ROOT)): digest(path) for path in sorted(paths)}
 

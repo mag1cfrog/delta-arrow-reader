@@ -48,7 +48,7 @@ fn assert_certificate_error(error: &(dyn Error + 'static)) {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "run with python3 crates/delta-arrow-reader/tests/reader/https.py; requires a local TLS server and test CA"]
+#[ignore = "run with python3 crates/delta-arrow-reader-core/tests/reader/https.py; requires a local TLS server and test CA"]
 async fn verified_storage_paths() -> TestResult {
     let endpoint = std::env::var("DAR_TLS_ENDPOINT")?;
     let directory = std::env::var("DAR_TLS_DIRECTORY")?;

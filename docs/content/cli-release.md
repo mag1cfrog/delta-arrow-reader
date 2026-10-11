@@ -3,7 +3,7 @@
 The CLI publisher copies the binary archives and OCI images already tested on
 the release PR. It cannot rebuild them. The CLI's `vX.Y.Z` tag and executable
 version match the Rust workspace version; the CLI crate stays unpublished on
-crates.io. See [installation](../../crates/delta-arrow-reader/docs/public/installation.md#cli-binaries-and-container-images)
+crates.io. See [installation](../../crates/delta-arrow-reader-core/docs/public/installation.md#cli-binaries-and-container-images)
 for the supported Linux runtimes and user commands.
 
 ## Approve the release PR

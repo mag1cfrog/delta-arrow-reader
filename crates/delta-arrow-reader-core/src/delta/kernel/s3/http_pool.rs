@@ -696,7 +696,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "run with python3 crates/delta-arrow-reader/tests/reader/https.py; requires isolated trust settings and local TLS servers"]
+    #[ignore = "run with python3 crates/delta-arrow-reader-core/tests/reader/https.py; requires isolated trust settings and local TLS servers"]
     async fn http_without_roots_preserves_https_verification() {
         let empty_roots = std::env::var("DAR_TLS_EMPTY_ROOTS").unwrap() == "true";
         let server = server().await;

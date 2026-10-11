@@ -183,20 +183,20 @@ def main():
     for label, source in binaries.items():
         binaries[label] = Path(shutil.copy2(source, root / "bin" / label))
     repo = Path(__file__).resolve().parent.parent
-    for relative in ("Cargo.toml", "Cargo.lock", "crates/delta-arrow-reader/Cargo.toml",
-                     "crates/delta-arrow-reader/benches/scan_scheduling.rs", "benches/scan_scheduling.py",
-                     "benches/test_scan_scheduling.py", "benches/run_order.py", "crates/delta-arrow-reader/benches/range_planning/controlled_http.rs",
-                     "crates/delta-arrow-reader/tests/scan_scheduling_benchmark_harness.rs"):
+    for relative in ("Cargo.toml", "Cargo.lock", "crates/delta-arrow-reader-core/Cargo.toml",
+                     "crates/delta-arrow-reader-core/benches/scan_scheduling.rs", "benches/scan_scheduling.py",
+                     "benches/test_scan_scheduling.py", "benches/run_order.py", "crates/delta-arrow-reader-core/benches/range_planning/controlled_http.rs",
+                     "crates/delta-arrow-reader-core/tests/scan_scheduling_benchmark_harness.rs"):
         destination = root / "source" / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(repo / relative, destination)
     metadata = {
         "schema_version": 1, "started_at": datetime.now(timezone.utc).isoformat(),
         "command": sys.argv, "git_head": revision(repo),
-        "production_source_sha256": tree_hash(repo / "crates/delta-arrow-reader/src"),
+        "production_source_sha256": tree_hash(repo / "crates/delta-arrow-reader-core/src"),
         "cargo_lock_sha256": file_hash(repo / "Cargo.lock"),
-        "harness_sha256": file_hash(repo / "crates/delta-arrow-reader/benches/scan_scheduling.rs"),
-        "controlled_http_sha256": file_hash(repo / "crates/delta-arrow-reader/benches/range_planning/controlled_http.rs"),
+        "harness_sha256": file_hash(repo / "crates/delta-arrow-reader-core/benches/scan_scheduling.rs"),
+        "controlled_http_sha256": file_hash(repo / "crates/delta-arrow-reader-core/benches/range_planning/controlled_http.rs"),
         "runner_sha256": file_hash(Path(__file__)),
         "platform": platform.platform(), "python": platform.python_version(),
         "cpu_affinity": sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,

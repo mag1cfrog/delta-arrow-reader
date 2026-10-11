@@ -16,12 +16,12 @@ Contributor instructions and development records are kept in this repository:
 
 ## Site content
 
-Edit the Markdown in `crates/delta-arrow-reader/docs/public/` and the navigation
-in `crates/delta-arrow-reader/docs/mkdocs.yml`.
+Edit the Markdown in `crates/delta-arrow-reader-core/docs/public/` and the navigation
+in `crates/delta-arrow-reader-core/docs/mkdocs.yml`.
 Keep benchmark results under Performance. Setup instructions, execution
 contracts, capacity checks, and issue histories belong in repository docs.
 
-`crates/delta-arrow-reader/docs/public/` is the only directory published by the
+`crates/delta-arrow-reader-core/docs/public/` is the only directory published by the
 site build. Keep repository-only material in `docs/content/`, where existing benchmark documents
 retain their paths. Some are hashed inputs to reader builds, so preserve their
 bytes when reproducing recorded runs. Removing a page from navigation alone
@@ -31,5 +31,5 @@ Build the site with the same strict check used by CI:
 
 ```console
 python -m pip install -r docs/requirements.txt
-python -m zensical build --strict -f crates/delta-arrow-reader/docs/mkdocs.yml
+python -m zensical build --strict -f crates/delta-arrow-reader-core/docs/mkdocs.yml
 ```

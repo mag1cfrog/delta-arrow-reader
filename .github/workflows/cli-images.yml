@@ -197,7 +197,7 @@ jobs:
           docker tag "$CLI_IMAGE_ID" "$CLI_IMAGE"
           docker build --platform "linux/$CLI_ARCHITECTURE" \
             --build-arg "DAR_IMAGE=$CLI_IMAGE" --tag "$GO_IMAGE" examples/go-cli
-          cli_fixture="$GITHUB_WORKSPACE/crates/delta-arrow-reader/tests/reader/fixtures/external_writer/corpus/partitioned/table"
+          cli_fixture="$GITHUB_WORKSPACE/crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned/table"
           docker run --rm --read-only --network=none --cap-drop=ALL \
             --security-opt=no-new-privileges --security-opt=label=disable \
             --mount "type=bind,src=$cli_fixture,dst=/table,readonly" \

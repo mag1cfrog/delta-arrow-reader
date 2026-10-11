@@ -108,7 +108,7 @@ impl ProcessFixture<'_> {
     pub(super) fn check_http_metadata_only(&self) -> Result<()> {
         let table = self
             .repository
-            .join("crates/delta-arrow-reader/tests/reader/fixtures/external_writer/corpus/deletion_vectors/table");
+            .join("crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/deletion_vectors/table");
         let mut files = BTreeMap::new();
         for name in [COMMIT_FILE_NAME, "00000000000000000001.json"] {
             let path = table.join("_delta_log").join(name);

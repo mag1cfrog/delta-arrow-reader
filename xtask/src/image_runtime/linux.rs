@@ -48,7 +48,7 @@ pub(super) fn run(args: TestImageArgs) -> Result<()> {
     let image = image_id(&inspection.stdout, args.architecture)?;
     let corpus = args
         .repository
-        .join("crates/delta-arrow-reader/tests/reader/fixtures/external_writer/corpus");
+        .join("crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus");
     let corpus = fs::canonicalize(&corpus).context(FileSnafu { path: &corpus })?;
     let directory = tempfile::Builder::new()
         .prefix("dar-image-check-")

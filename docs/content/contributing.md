@@ -1,17 +1,20 @@
 # Development
 
 This page is for contributors working on Delta Arrow Reader itself. Applications
-that use the crate can start with the [installation guide](../../crates/delta-arrow-reader/docs/public/installation.md).
+that use the crate can start with the [installation guide](../../crates/delta-arrow-reader-core/docs/public/installation.md).
 
 ## Repository layout
 
 The root `Cargo.toml` defines the workspace. Each product lives under `crates/`:
 
-- `delta-arrow-reader/` contains the Rust library, its tests, Rust benchmarks,
+- `delta-arrow-reader-core/` contains the Rust library, its tests, Rust benchmarks,
   and public documentation.
 - `delta-arrow-reader-cli/` contains the `dar` command and its release tooling.
 - `delta-arrow-reader-python/` contains the Python extension, `pyproject.toml`,
   type stub, and Python tests.
+
+The core crate is published as `delta-arrow-reader` and imported in Rust as
+`delta_arrow_reader`.
 
 Shared benchmark tools remain in `benches/`, contributor documentation in `docs/`,
 and repository automation in `xtask/`.
@@ -57,7 +60,7 @@ for approval and artifact details.
 ## Build the Python package locally
 
 For source installation and a table reading example, see the
-[Python installation guide](../../crates/delta-arrow-reader/docs/public/installation.md#python).
+[Python installation guide](../../crates/delta-arrow-reader-core/docs/public/installation.md#python).
 
 To build and test the wheel directly, run these commands from the repository
 root on Linux or macOS:
@@ -275,9 +278,9 @@ TestPyPI rehearsal, stable releases, and upload recovery, see
 
 ## Work on the documentation
 
-The Markdown files in `crates/delta-arrow-reader/docs/public/` are the source
+The Markdown files in `crates/delta-arrow-reader-core/docs/public/` are the source
 for the documentation site. The guides listed in
-`crates/delta-arrow-reader/src/guides.rs` are also included in the generated Rust
+`crates/delta-arrow-reader-core/src/guides.rs` are also included in the generated Rust
 documentation.
 
 Use absolute links between shared pages. Mark runnable Rust examples as
@@ -288,6 +291,6 @@ Install the documentation dependencies, then build or serve the site:
 
 ```console
 python -m pip install -r docs/requirements.txt
-python -m zensical build --strict -f crates/delta-arrow-reader/docs/mkdocs.yml
-python -m zensical serve -f crates/delta-arrow-reader/docs/mkdocs.yml
+python -m zensical build --strict -f crates/delta-arrow-reader-core/docs/mkdocs.yml
+python -m zensical serve -f crates/delta-arrow-reader-core/docs/mkdocs.yml
 ```
