@@ -19,6 +19,7 @@ use crate::{
     command::run_with_timeout,
     error::{ArrowSnafu, FileSnafu, InvalidInputSnafu, JsonSnafu, Result},
     platform::Architecture,
+    process::run_process_tests,
 };
 
 #[derive(Args)]
@@ -65,18 +66,15 @@ impl TestArchiveArgs {
             .join("tests/reader/fixtures/external_writer/corpus/partitioned/expected.arrow");
         check_smoke_output(&self.smoke_output, &expected)?;
 
-        let tests = repository.join("crates/delta-arrow-reader-cli/tests");
-        for script in ["process.py", "scan.py"] {
-            let mut command = Command::new("python3");
-            command.arg(tests.join(script)).arg(&binary);
-            if script == "process.py" {
-                command.arg(&self.identity.version);
-            }
-            run_with_timeout(
-                command.current_dir(&self.smoke_output).stdin(Stdio::null()),
-                Duration::from_secs(600),
-            )?;
-        }
+        run_process_tests(&binary, &self.identity.version, &repository)?;
+        run_with_timeout(
+            Command::new("python3")
+                .arg(repository.join("crates/delta-arrow-reader-cli/tests/scan.py"))
+                .arg(&binary)
+                .current_dir(&self.smoke_output)
+                .stdin(Stdio::null()),
+            Duration::from_secs(600),
+        )?;
         verify_platform(&self.directory, &self.identity, self.architecture)?;
         ensure!(
             file_sha256(&binary)? == target.dar_sha256,

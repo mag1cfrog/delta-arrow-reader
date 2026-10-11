@@ -6,6 +6,7 @@ mod command;
 mod error;
 mod notices;
 mod platform;
+mod process;
 mod repository;
 
 use clap::{Parser, Subcommand};
@@ -40,6 +41,8 @@ enum CliTask {
     CheckBinary(binary::CheckBinaryArgs),
     /// Run runtime acceptance tests against an extracted CLI archive.
     TestArchive(acceptance::TestArchiveArgs),
+    /// Check CLI arguments, inspection, output failures, and process lifecycle on Linux.
+    TestProcess(process::TestProcessArgs),
     /// Collect dependency redistribution text for one CLI target.
     Notices(notices::NoticeArgs),
     /// Package, extract, assemble, or verify CLI binary archives.
@@ -66,6 +69,9 @@ fn main() -> Result<()> {
         } => args.run(),
         Task::Cli {
             command: CliTask::TestArchive(args),
+        } => args.run(),
+        Task::Cli {
+            command: CliTask::TestProcess(args),
         } => args.run(),
         Task::Cli {
             command: CliTask::Notices(args),

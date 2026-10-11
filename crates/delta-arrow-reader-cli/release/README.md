@@ -3,7 +3,9 @@
 These tools build and validate the Linux CLI archives. Builds, ELF checks,
 archive operations, dependency notice collection, and archive acceptance run
 through `cargo xtask`, a Cargo alias for the repository's private Rust maintenance
-crate. The process and scan test suites use Python 3.11 or newer and PyArrow.
+crate. Process checks run through `xtask cli test-process`, which also runs the
+Python process tests. The Python harnesses require Python 3.11 or newer, and
+the scan suite requires PyArrow.
 
 ## Run the CI build
 
@@ -147,9 +149,19 @@ prerequisites installed (`build-essential`, OpenSSL, Python, and the PyArrow
 version used by CLI CI), run them against that same binary:
 
 ```sh
-python3 crates/delta-arrow-reader-cli/tests/process.py /path/to/dar "$version"
+cargo xtask cli test-process /path/to/dar --expected-version "$version" --repository .
 python3 crates/delta-arrow-reader-cli/tests/scan.py /path/to/dar
 ```
+
+`test-process` requires Linux. It checks help, version, inspection, historical
+snapshots, diagnostics, and thread failures in Rust, then runs the argument,
+HTTP, pipe, and signal checks in `process.py`. Each test uses an isolated temporary
+directory, and each CLI invocation has a timeout. CI runs this command separately
+from `cargo test -p delta-arrow-reader-cli`.
+
+In a runtime container without Cargo, use `/tools/xtask cli test-process` with
+`--repository /checks`. The source checkout supplies fixtures and the C fault
+library, which the command compiles with `cc`.
 
 ## Build and test a complete platform archive locally
 
@@ -193,10 +205,10 @@ The script records runtime package versions and checks version, inspection, and
 scan output before adding test tools. It then installs the test prerequisites
 and runs `xtask cli test-archive`. This command verifies the archive and extracted
 file permissions, checks the executable's hash and ABI, and validates the saved
-inspection and Arrow IPC output. It then runs `process.py` and `scan.py` using
-`python3` from `PATH`, which the script sets to the PyArrow virtual environment.
-Those tests cover external-writer fixtures, filtering and execution
-options, pipes, partial failures, signals, redaction, and trusted/untrusted HTTPS
+inspection and Arrow IPC output. It then runs the process checks and `scan.py`.
+Python tests use `python3` from `PATH`, which the script sets to the PyArrow
+virtual environment. Those tests cover external-writer fixtures, filtering and
+execution options, pipes, partial failures, signals, redaction, and trusted/untrusted HTTPS
 certificates. The archive and executable hashes are checked again afterward.
 CI uses these same commands for both architectures; see the workflow for the
 complete container invocations.

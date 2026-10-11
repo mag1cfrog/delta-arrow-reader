@@ -256,6 +256,10 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
       - run: cargo build --locked -p delta-arrow-reader-cli
       - run: cargo test --locked -p delta-arrow-reader-cli
+      - name: Check CLI process behavior
+        env:
+          CLI_VERSION: ${{ needs.changes.outputs.package_version }}
+        run: cargo xtask cli test-process target/debug/dar --expected-version "$CLI_VERSION" --repository .
       - run: cargo clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings
       - name: Check IPC interoperability and scan process lifecycle
         run: |
