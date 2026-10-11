@@ -1074,6 +1074,13 @@ fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<(
     assert_eq!(retry["if"], "steps.cache-writes.outcome == 'failure'");
 
     let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    for variable in ["CARGO_PROFILE_DEV_DEBUG", "AWS_LC_SYS_USE_SYSTEM"] {
+        assert!(ci["env"][variable].is_string(), "{variable}");
+        assert_eq!(
+            ci["env"][variable], warmer["jobs"]["core"]["env"][variable],
+            "{variable} must match for compiled dependency reuse"
+        );
+    }
     for job in ["checks", "tooling-checks", "python-package", "cli-checks"] {
         let commands = ci["jobs"][job]["steps"]
             .as_array()
@@ -1136,7 +1143,7 @@ fn prune_deletes_by_id_and_stops_on_command_or_schema_errors() -> Result<()> {
         &gh,
         r#"#!/bin/sh
 case "$*" in
-  'api --paginate --slurp repos/owner/repo/actions/caches?key=v0-rust-core-ci-targets-Windows_NT-x64-&ref=refs/heads/main&per_page=100')
+  'api --paginate --slurp repos/owner/repo/actions/caches?key=v0-rust-core-ci-targets-'*'&ref=refs/heads/main&per_page=100')
     [ "$FAIL_LIST" != true ] || exit 9
     printf '%s' "$CACHE_PAGES" ;;
   'api --method DELETE repos/owner/repo/actions/caches/'*)
@@ -1147,12 +1154,22 @@ esac
 "#,
     )?;
     fs::set_permissions(&gh, fs::Permissions::from_mode(0o755))?;
-    let cache = |id| {
-        json!({"id": id, "key": format!("v0-rust-core-ci-targets-Windows_NT-x64-{id}"),
+    let cache = |id, platform| {
+        json!({"id": id, "key": format!("v0-rust-core-ci-targets-{platform}-{id}"),
         "ref": "refs/heads/main", "last_accessed_at": format!("2026-10-{id:02}T00:00:00Z")})
     };
-    let pages =
-        json!([{"actions_caches": [cache(4), cache(3)]}, {"actions_caches": [cache(2), cache(1)]}]);
+    let pages = json!([
+        {"actions_caches": [
+            cache(14, "Linux-x64"), cache(13, "Linux-x64"),
+            cache(24, "Darwin-arm64"), cache(23, "Darwin-arm64"),
+            cache(4, "Windows_NT-x64"), cache(3, "Windows_NT-x64"),
+        ]},
+        {"actions_caches": [
+            cache(12, "Linux-x64"), cache(11, "Linux-x64"),
+            cache(22, "Darwin-arm64"), cache(21, "Darwin-arm64"),
+            cache(2, "Windows_NT-x64"), cache(1, "Windows_NT-x64"),
+        ]},
+    ]);
     let log = directory.join("deletions");
     let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
     command
@@ -1166,7 +1183,9 @@ esac
     assert!(command.output()?.status.success());
     assert_eq!(
         fs::read_to_string(&log)?,
-        "repos/owner/repo/actions/caches/2\nrepos/owner/repo/actions/caches/1\n"
+        "repos/owner/repo/actions/caches/12\nrepos/owner/repo/actions/caches/11\n\
+         repos/owner/repo/actions/caches/22\nrepos/owner/repo/actions/caches/21\n\
+         repos/owner/repo/actions/caches/2\nrepos/owner/repo/actions/caches/1\n"
     );
     fs::write(&log, "")?;
     assert!(
@@ -1178,7 +1197,7 @@ esac
     );
     assert_eq!(
         fs::read_to_string(&log)?,
-        "repos/owner/repo/actions/caches/2\n"
+        "repos/owner/repo/actions/caches/12\n"
     );
     fs::write(&log, "")?;
     assert!(!command.env("FAIL_LIST", "true").output()?.status.success());

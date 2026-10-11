@@ -59,7 +59,7 @@ enum Task {
     CheckCacheWrites,
     /// Summarize sccache read failures without printing request details.
     ReportCacheReads,
-    /// Keep the two most recently used Windows core CI caches.
+    /// Keep the two most recently used core CI target caches per platform.
     PruneCiCaches,
     /// Prepare release-plz configuration for the current shared release baseline.
     PrepareReleasePrConfig { destination: PathBuf },
@@ -237,7 +237,11 @@ impl CliTask {
     }
 }
 
-const CACHE_PREFIX: &str = "v0-rust-core-ci-targets-Windows_NT-x64-";
+const TARGET_CACHE_PREFIXES: [&str; 3] = [
+    "v0-rust-core-ci-targets-Linux-x64-",
+    "v0-rust-core-ci-targets-Darwin-arm64-",
+    "v0-rust-core-ci-targets-Windows_NT-x64-",
+];
 const CACHE_REF: &str = "refs/heads/main";
 
 #[derive(Deserialize)]
@@ -338,11 +342,11 @@ fn report_cache_reads() -> Result<()> {
     Ok(())
 }
 
-fn stale_caches(pages: Vec<CachePage>) -> Vec<Cache> {
+fn stale_caches(pages: Vec<CachePage>, prefix: &str) -> Vec<Cache> {
     let mut caches: Vec<_> = pages
         .into_iter()
         .flat_map(|page| page.actions_caches)
-        .filter(|cache| cache.r#ref == CACHE_REF && cache.key.starts_with(CACHE_PREFIX))
+        .filter(|cache| cache.r#ref == CACHE_REF && cache.key.starts_with(prefix))
         .collect();
     caches.sort_by(|a, b| b.last_accessed_at.cmp(&a.last_accessed_at));
     caches.into_iter().skip(2).collect()
@@ -350,26 +354,28 @@ fn stale_caches(pages: Vec<CachePage>) -> Vec<Cache> {
 
 fn prune_ci_caches() -> Result<()> {
     let endpoint = format!("repos/{}/actions/caches", env::var("GH_REPO")?);
-    let pages = serde_json::from_slice(&run(
-        "gh",
-        &[
-            "api",
-            "--paginate",
-            "--slurp",
-            &format!("{endpoint}?key={CACHE_PREFIX}&ref={CACHE_REF}&per_page=100"),
-        ],
-    )?)?;
-    for cache in stale_caches(pages) {
-        println!("Deleting superseded Windows target cache: {}", cache.key);
-        run(
+    for prefix in TARGET_CACHE_PREFIXES {
+        let pages = serde_json::from_slice(&run(
             "gh",
             &[
                 "api",
-                "--method",
-                "DELETE",
-                &format!("{endpoint}/{}", cache.id),
+                "--paginate",
+                "--slurp",
+                &format!("{endpoint}?key={prefix}&ref={CACHE_REF}&per_page=100"),
             ],
-        )?;
+        )?)?;
+        for cache in stale_caches(pages, prefix) {
+            println!("Deleting superseded CI target cache: {}", cache.key);
+            run(
+                "gh",
+                &[
+                    "api",
+                    "--method",
+                    "DELETE",
+                    &format!("{endpoint}/{}", cache.id),
+                ],
+            )?;
+        }
     }
     Ok(())
 }
@@ -378,10 +384,12 @@ fn prune_ci_caches() -> Result<()> {
 mod cache_tests {
     use super::*;
 
+    const WINDOWS_CACHE_PREFIX: &str = "v0-rust-core-ci-targets-Windows_NT-x64-";
+
     fn cache(id: u64) -> Cache {
         Cache {
             id,
-            key: format!("{CACHE_PREFIX}{id}"),
+            key: format!("{WINDOWS_CACHE_PREFIX}{id}"),
             r#ref: CACHE_REF.into(),
             last_accessed_at: format!("2026-10-{id:02}T00:00:00Z"),
         }
@@ -391,6 +399,10 @@ mod cache_tests {
     fn retains_two_recently_used_caches_across_pages_and_preserves_other_families_and_refs() {
         let mut other_family = cache(5);
         other_family.key = "sccache-other".into();
+        let other_platform = Cache {
+            key: "v0-rust-core-ci-targets-Linux-x64-7".into(),
+            ..cache(7)
+        };
         let mut other_ref = cache(6);
         other_ref.r#ref = "refs/pull/1/merge".into();
         let pages = vec![
@@ -398,11 +410,11 @@ mod cache_tests {
                 actions_caches: vec![cache(3), cache(1), other_family],
             },
             CachePage {
-                actions_caches: vec![cache(4), cache(2), other_ref],
+                actions_caches: vec![cache(4), cache(2), other_ref, other_platform],
             },
         ];
         assert_eq!(
-            stale_caches(pages)
+            stale_caches(pages, WINDOWS_CACHE_PREFIX)
                 .iter()
                 .map(|cache| cache.id)
                 .collect::<Vec<_>>(),
@@ -410,9 +422,12 @@ mod cache_tests {
         );
         for count in 0..=2 {
             assert!(
-                stale_caches(vec![CachePage {
-                    actions_caches: (1..=count).map(cache).collect()
-                }])
+                stale_caches(
+                    vec![CachePage {
+                        actions_caches: (1..=count).map(cache).collect()
+                    }],
+                    WINDOWS_CACHE_PREFIX
+                )
                 .is_empty()
             );
         }
@@ -426,7 +441,7 @@ mod cache_tests {
             actions_caches: vec![reused, cache(2), cache(3), cache(4)],
         }];
         assert_eq!(
-            stale_caches(pages)
+            stale_caches(pages, WINDOWS_CACHE_PREFIX)
                 .iter()
                 .map(|cache| cache.id)
                 .collect::<Vec<_>>(),
