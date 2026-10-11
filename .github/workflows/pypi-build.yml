@@ -170,7 +170,7 @@ jobs:
             export UV_CONSTRAINT=/tmp/sccache-constraints.txt
             export SCCACHE_ERROR_LOG=/tmp/sccache.log
             if [ "$SCCACHE_GHA_RW_MODE" = "READ_WRITE" ]; then
-              trap 'RUSTC_WRAPPER= cargo run --locked --manifest-path "$GITHUB_WORKSPACE/xtask/Cargo.toml" -- check-cache-writes' EXIT
+              trap 'RUSTC_WRAPPER= cargo run --locked --manifest-path "$GITHUB_WORKSPACE/xtask/Cargo.toml" --target-dir /tmp/dar-xtask-target -- check-cache-writes' EXIT
             fi
           args: >-
             --locked --release --out ${{ runner.os == 'Linux' && '../dist' || matrix.wheel-dir }} --target-dir target
