@@ -37,6 +37,7 @@
     ".cargo/**",
     ".github/path-filters.json",
     ".github/workflows/ci.yml",
+    ".github/workflows/benchmark-fixtures.yml",
     ".github/workflows/cache-warm.yml",
     ".github/workflows/cli-build.yml",
     ".github/workflows/pypi-build.yml",
@@ -83,7 +84,8 @@
   "selective_read": [
     ".cargo/**",
     ".github/path-filters.json",
-    ".github/workflows/ci.yml",
+    ".github/workflows/benchmark-fixtures.yml",
+    "clippy.toml",
     "benches/selective_read/**",
     "docs/content/benchmarks/selective-read-protocol.md",
     "docs/content/benchmarks/selective-read-production-shapes.md",

@@ -204,7 +204,7 @@ jobs:
       - name: Check CI workflows
         uses: docker://rhysd/actionlint:1.7.12
         with:
-          args: .github/workflows/ci.yml .github/workflows/cli-build.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml
+          args: .github/workflows/ci.yml .github/workflows/cli-build.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml .github/workflows/benchmark-fixtures.yml
       - run: cargo fmt --package xtask -- --check
       - name: Test CI workflows, Python, and cache tasks
         run: |
@@ -287,62 +287,7 @@ jobs:
     name: Public Fixture Smoke
     needs: changes
     if: needs.changes.outputs.selective_read == 'true'
-    runs-on: ubuntu-latest
-    env:
-      CARGO_TARGET_DIR: ${{ github.workspace }}/target/selective-read
-      RUSTFLAGS: -C target-cpu=x86-64
-      PYTHONDONTWRITEBYTECODE: '1'
-    defaults:
-      run:
-        working-directory: benches/selective_read
-
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: '1.98.1'
-          components: clippy, rustfmt
-      - name: Cache Cargo registry
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: benches/selective_read -> ../../target/selective-read
-          shared-key: selective-read-fixtures
-          cache-targets: false
-          save-if: false
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.10
-      - run: cargo fmt -- --check
-      - run: cargo clippy --release --locked --all-targets -j8 -- -D warnings
-      - run: cargo test --release --locked -j8
-      - name: Check fixture generator limits and executable replacement
-        run: |
-          cargo build --release --locked -j8
-          python3 - <<'PY'
-          import hashlib, json, os, shutil, subprocess
-          from pathlib import Path
-
-          probe = Path(os.environ["RUNNER_TEMP"]) / "fixture-cli"
-          shutil.copyfile(Path(os.environ["CARGO_TARGET_DIR"]) / "release/selective-read-fixtures", probe)
-          probe.chmod(0o755)
-          with probe.open("rb") as source:
-              expected_hash = hashlib.file_digest(source, "sha256").hexdigest()
-          output = probe.with_name("selective-read-smoke")
-          process = subprocess.Popen([str(probe), "--profile", "smoke", "--sort-memory-mib", "16", "--output", str(output)])
-          probe.unlink()  # Simulate a rebuild removing the running executable's old pathname.
-          assert process.wait() == 0
-          manifest = json.loads((output / "manifest.json").read_text())
-          assert manifest["status"] == "complete"
-          assert manifest["generator"]["executable_sha256"] == expected_hash
-          PY
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.14.6'
-      - name: Validate independent oracle and public query results
-        env:
-          SELECTIVE_READ_FIXTURES: ${{ runner.temp }}/selective-read-smoke
-        run: |
-          python -m pip install --require-hashes -r oracle-requirements.txt
-          python -m unittest -v test_oracle
+    uses: ./.github/workflows/benchmark-fixtures.yml
 
   ci:
     name: CI

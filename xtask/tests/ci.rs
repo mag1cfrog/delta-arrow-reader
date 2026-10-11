@@ -176,6 +176,79 @@ fn tooling_changes_run_separate_required_checks() -> Result<()> {
 }
 
 #[test]
+fn benchmark_checks_exclude_unrelated_ci_changes() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
+    for (path, expected) in [
+        (".github/workflows/ci.yml", false),
+        (".github/workflows/cli-build.yml", false),
+        (".github/workflows/pypi-build.yml", false),
+        (".github/workflows/benchmark-fixtures.yml", true),
+        (".github/path-filters.json", true),
+        (".cargo/config.toml", true),
+        ("clippy.toml", true),
+        ("benches/selective_read/Cargo.toml", true),
+        ("benches/selective_read/Cargo.lock", true),
+        ("benches/selective_read/src/fixtures.rs", true),
+        ("benches/selective_read/oracle.py", true),
+        ("src/reader/options.rs", false),
+        ("xtask/src/main.rs", false),
+    ] {
+        assert_eq!(
+            filter_matches(&filters, "selective_read", path)?,
+            expected,
+            "{path}"
+        );
+    }
+    let workflow = ".github/workflows/benchmark-fixtures.yml";
+    assert!(filter_matches(&filters, "tooling", workflow)?);
+    for name in ["code", "python"] {
+        assert!(!filter_matches(&filters, name, workflow)?, "{name}");
+    }
+
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    let jobs = &ci["jobs"];
+    assert_eq!(
+        jobs["changes"]["outputs"]["selective_read"],
+        "${{ steps.filter.outputs.selective_read }}"
+    );
+    let caller = &jobs["selective-read-fixtures"];
+    assert_eq!(caller["needs"], "changes");
+    assert_eq!(
+        caller["if"],
+        "needs.changes.outputs.selective_read == 'true'"
+    );
+    assert_eq!(caller["uses"], format!("./{workflow}"));
+    assert!(
+        jobs["ci"]["needs"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("selective-read-fixtures"))
+    );
+    let lint = jobs["tooling-checks"]["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|step| step["name"] == "Check CI workflows")
+        .unwrap();
+    assert!(
+        lint["with"]["args"]
+            .as_str()
+            .unwrap()
+            .split_whitespace()
+            .any(|argument| argument == workflow)
+    );
+    let warmer: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
+    assert!(
+        warmer["on"]["push"]["paths"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(workflow))
+    );
+    Ok(())
+}
+
+#[test]
 fn standalone_docs_skip_rust_checks() -> Result<()> {
     let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
     for path in [
@@ -407,10 +480,12 @@ fn wheel_cache_warming_requires_manual_dispatch() -> Result<()> {
 
 #[test]
 fn benchmark_cache_warming_matches_pr_builds() -> Result<()> {
-    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    let benchmark: Value = serde_yaml_ng::from_str(include_str!(
+        "../../.github/workflows/benchmark-fixtures.yml"
+    ))?;
     let warmer: Value =
         serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
-    let check = &ci["jobs"]["selective-read-fixtures"];
+    let check = &benchmark["jobs"]["fixtures"];
     let warm = &warmer["jobs"]["selective-read-fixtures"];
 
     assert_eq!(warm["runs-on"], check["runs-on"]);
@@ -462,7 +537,10 @@ fn benchmark_cache_warming_matches_pr_builds() -> Result<()> {
         }
     }
     assert_eq!(warm["env"]["SCCACHE_GHA_RW_MODE"], "READ_WRITE");
-    assert_eq!(ci["env"]["SCCACHE_GHA_RW_MODE"], "READ_ONLY");
+    assert_eq!(benchmark["on"], json!({"workflow_call": null}));
+    assert_eq!(benchmark["env"]["SCCACHE_GHA_ENABLED"], "true");
+    assert_eq!(benchmark["env"]["SCCACHE_GHA_RW_MODE"], "READ_ONLY");
+    assert_eq!(benchmark["env"]["RUSTC_WRAPPER"], "sccache");
     assert_eq!(warm["needs"], "core");
     assert!(
         warmer["jobs"]["wheels"]["needs"]

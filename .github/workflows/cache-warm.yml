@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/cache-warm.yml"
       - ".github/workflows/ci.yml"
+      - ".github/workflows/benchmark-fixtures.yml"
       - ".github/workflows/pypi-build.yml"
       - ".github/path-filters.json"
       - "xtask/**"
