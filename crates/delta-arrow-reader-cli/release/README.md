@@ -39,25 +39,26 @@ platform jobs install and use that exact patch release.
 Release-plz PRs targeting main must pass this workflow before merging. CI
 identifies them by the release bot's identity and a `release-plz-` branch in this
 repository. When ready to validate a release, open its CI run, choose **Review
-deployments**, select `cli-release-checks`, and click **Approve and deploy**.
-Approval starts **Release CLI binaries**, which builds the PR's merge candidate
-at its exact commit SHA and workspace version. The required `CI` check waits for
-approval and the complete validated artifact set. New PR commits cancel the old
-CI run and require a new approval and build.
+deployments**, select `release-checks`, and click **Approve and deploy**.
+This approval starts **Release CLI binaries** and the Python wheel checks in
+parallel. Both build the PR's merge candidate at its exact commit SHA and
+workspace version. The required `CI` check waits for approval and complete
+validation of both artifact sets. New PR commits cancel the old CI run and require a new
+approval and build.
 
-Feature PRs skip both CLI release jobs. They still run the small workflow tests
-alongside the shared xtask checks for Python and cache tasks. CLI unit tests,
+Feature PRs skip release approval and builds. They still run the small workflow
+tests alongside the shared xtask checks for Python and cache tasks. CLI unit tests,
 native builds, and runtime acceptance run only for approved release PRs or an
 explicit manual build. To run the builder manually during development, select
 **Build CLI binaries** in Actions and supply the commit as `source-ref` and its
 version as `expected-version`. The successful job summary links the complete
 artifact set.
 
-Configure `cli-release-checks` in **Settings > Environments** with the maintainer
+Configure `release-checks` in **Settings > Environments** with the maintainer
 as a required reviewer, administrator bypass disabled, and self-review allowed
 so the maintainer can approve a run they restart. Allow the deployment branch
 pattern `refs/pull/*/merge`. This environment needs no secrets or publishing
-permissions; it approves only the release PR's builds and tests.
+permissions; it approves the release PR's CLI and Python builds and tests.
 
 The workflow runs only when dispatched manually or called by another workflow.
 It reports `validated=true` only after source checks, both builds, all six runtime

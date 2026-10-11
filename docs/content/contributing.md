@@ -119,15 +119,26 @@ checks. Changes confined to CLI implementation, benchmarks, or `docs/` skip them
 
 The job runs Clippy, the Rust runtime ownership tests, and the full Python suite
 on Linux with Python 3.10 and PyArrow 18.0.0. It uses `maturin develop --locked`
-to install a debug build in a virtual environment. Pull requests do not build
-the three release wheels.
+to install a debug build in a virtual environment. Feature pull requests do not
+build the three release wheels.
+
+Release-plz pull requests targeting main also require three-platform wheel
+validation. CI identifies them by the release bot's identity and a
+`release-plz-` branch in this repository. `Approve release checks` waits for
+approval through the `release-checks` environment. One approval starts the
+Python wheel and CLI checks in parallel. The required `CI` check succeeds only
+after approval and complete validation of both artifact sets, in addition to
+the usual checks. Feature PRs skip these release jobs. A new PR revision cancels
+the previous run and requires a new approval.
 
 ## Build Python wheels in CI
 
-The `Python release` workflow calls `.github/workflows/pypi-build.yml` to build
-Linux x86_64, Windows x86_64, and macOS arm64 wheels. This runs for releases and
-manual builds, including TestPyPI rehearsals. To check packaging before a release,
-follow [Build without uploading](python-releases.md#build-without-uploading).
+Release PR checks and manual build or TestPyPI runs of `Python release` call
+`.github/workflows/pypi-build.yml` to build Linux x86_64, Windows x86_64, and macOS
+arm64 wheels. PyPI publication reuses the release PR's validated wheels after
+checking that their source tree matches the release tag. To check packaging
+manually before a release, follow
+[Build without uploading](python-releases.md#build-without-uploading).
 Callers of the reusable workflow supply two required inputs:
 
 - `source-ref`: the full commit SHA to check out and build.
@@ -172,13 +183,13 @@ ignored by default. After installing that version, run the PR CI task tests with
 cargo test --locked --package xtask --bin xtask cache_tests::
 cargo test --locked --package xtask \
   --test ci --test cli_workflow --test python_release --test python_upload --test python_wheels \
-  --test python_workflow --test release_plz -- --include-ignored
+  --test python_wheel_reuse --test python_workflow --test release_plz -- --include-ignored
 ```
 
-These PR checks cover workflow behavior, Python, and cache tasks. Release-plz PRs
-also wait for approval through `cli-release-checks` before calling
-`.github/workflows/cli-build.yml`. The required `CI` check then requires CLI unit
-tests, release-tool tests, and archive acceptance to pass. Feature PRs skip those
+These PR checks cover workflow behavior, Python, and cache tasks. On release-plz
+PRs, the shared `release-checks` approval also starts
+`.github/workflows/cli-build.yml`. The `CI` check passes only after CLI unit
+tests, release-tool tests, and archive acceptance succeed. Feature PRs skip those
 release jobs. The builder's native build test runs in Debian 12 on both supported
 architectures, and its archive tests run in parallel on Debian 12, Ubuntu 24.04,
 and Fedora 44. **Build CLI binaries** also supports manual runs with an explicit
@@ -204,10 +215,23 @@ macOS 12.0 itself.
 The `Validate wheel artifact set` job requires all platform builds to pass,
 then downloads the three artifacts from the same workflow run. It rejects
 missing or unexpected artifacts, requires exactly one wheel per artifact,
-and checks each wheel's version and tags again. Only then does the reusable
-workflow return `validated: 'true'`. Callers must require both a successful
-workflow result and this output before treating the artifacts as a complete
-validated set. A failed run may still contain individual platform artifacts.
+and checks each wheel's version and tags again. For release PRs, it then saves
+the complete set as `python-wheels-<git-tree>-<run-id>-<run-attempt>`, preserving
+the three platform directories. The Git tree identifies the checked-out files
+even when a squash merge changes the commit SHA. This artifact is retained for
+90 days, and reruns save a separate copy. A failed upload fails the check.
+Only after these steps does the reusable workflow return `validated: 'true'`.
+Callers must require both a successful workflow result and this output before
+treating the artifacts as a complete validated set. A failed run may still
+contain individual platform artifacts.
+
+PyPI preparation uses `cargo xtask reuse-python-wheels` to locate the merged
+release PR and requires its latest CI run to have succeeded. It requires a bundle
+for the same Git tree, verifies the archive's SHA256 from GitHub, and checks all
+three wheels. The upload job downloads that exact artifact ID and verifies the
+same SHA256 again. Missing, expired, or mismatched bundles stop publication. These commands
+require `gh` and `GH_TOKEN`; the preparation job has read access to Actions and
+pull requests, and the PyPI upload job has read access to Actions.
 
 Download artifacts from the Actions run page. To download and check the full
 set locally, run these commands from the repository root with the expected
@@ -218,8 +242,8 @@ gh run download RUN_ID --pattern 'delta-arrow-reader-*-wheel' --dir wheel-artifa
 cargo xtask check-python-artifacts wheel-artifacts --expected-version 0.6.2
 ```
 
-The workflow produces build artifacts only. For publisher setup, TestPyPI
-rehearsal, stable releases, and upload recovery, see
+The reusable wheel workflow produces build artifacts only. For publisher setup,
+TestPyPI rehearsal, stable releases, and upload recovery, see
 [Publish Python wheels](python-releases.md).
 
 ## Work on the documentation

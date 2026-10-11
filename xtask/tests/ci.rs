@@ -6,7 +6,7 @@ use std::{
     fs,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Output},
 };
 
 use serde_json::{Value, json};
@@ -99,12 +99,32 @@ fn python_filter_covers_inputs_without_cli_benchmarks_or_docs() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn summary_requires_python_only_when_requested() -> Result<()> {
+fn check_ci_results(values: &[(&str, &str)]) -> Result<Output> {
     let script = workflow_script(
         include_str!("../../.github/workflows/ci.yml"),
         "Check results",
     );
+    let mut rest = script.as_str();
+    let mut rendered = String::new();
+    while let Some((before, after)) = rest.split_once("${{ needs.") {
+        let (key, after) = after.split_once(" }}").unwrap();
+        rendered.push_str(before);
+        rendered.push_str(
+            values
+                .iter()
+                .find(|(name, _)| *name == key)
+                .map_or("success", |(_, value)| *value),
+        );
+        rest = after;
+    }
+    rendered.push_str(rest);
+    Ok(Command::new("bash")
+        .args(["-e", "-c", &rendered])
+        .output()?)
+}
+
+#[test]
+fn summary_requires_python_only_when_requested() -> Result<()> {
     for code in ["true", "false"] {
         for python in ["true", "false"] {
             for package in ["success", "failure", "skipped", "cancelled"] {
@@ -112,25 +132,10 @@ fn summary_requires_python_only_when_requested() -> Result<()> {
                     ("changes.outputs.code", code),
                     ("changes.outputs.python", python),
                     ("changes.outputs.selective_read", "false"),
+                    ("changes.outputs.release_pr", "false"),
                     ("python-package.result", package),
                 ];
-                let mut rest = script.as_str();
-                let mut rendered = String::new();
-                while let Some((before, after)) = rest.split_once("${{ needs.") {
-                    let (key, after) = after.split_once(" }}").unwrap();
-                    rendered.push_str(before);
-                    rendered.push_str(
-                        values
-                            .iter()
-                            .find(|(name, _)| *name == key)
-                            .map_or("success", |(_, value)| *value),
-                    );
-                    rest = after;
-                }
-                rendered.push_str(rest);
-                let output = Command::new("bash")
-                    .args(["-e", "-c", &rendered])
-                    .output()?;
+                let output = check_ci_results(&values)?;
                 let expected = python != "true" || package == "success";
                 assert_eq!(
                     output.status.success(),
@@ -144,15 +149,80 @@ fn summary_requires_python_only_when_requested() -> Result<()> {
 }
 
 #[test]
-fn development_workflows_do_not_automatically_build_release_wheels() -> Result<()> {
+fn release_pr_requires_approved_and_validated_wheels() -> Result<()> {
+    for code in ["true", "false"] {
+        for release_pr in ["true", "false"] {
+            for approval in ["success", "failure", "skipped", "cancelled"] {
+                for wheels in ["success", "failure", "skipped", "cancelled"] {
+                    for validated in ["true", "false", ""] {
+                        let output = check_ci_results(&[
+                            ("changes.outputs.code", code),
+                            ("changes.outputs.python", "true"),
+                            ("changes.outputs.selective_read", "false"),
+                            ("changes.outputs.release_pr", release_pr),
+                            ("release-approval.result", approval),
+                            ("release-wheels.result", wheels),
+                            ("release-wheels.outputs.validated", validated),
+                            ("release-cli.outputs.validated", "true"),
+                        ])?;
+                        let expected = release_pr != "true"
+                            || approval == "success" && wheels == "success" && validated == "true";
+                        assert_eq!(
+                            output.status.success(),
+                            expected,
+                            "code={code}, release_pr={release_pr}, approval={approval}, wheels={wheels}, validated={validated}: {output:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn release_wheel_builds_share_approval_with_cli() -> Result<()> {
     let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
-    assert!(
-        ci["jobs"]
-            .as_object()
-            .unwrap()
-            .values()
-            .all(|job| job["uses"] != "./.github/workflows/pypi-build.yml")
+    let jobs = &ci["jobs"];
+    let approvals: Vec<_> = jobs
+        .as_object()
+        .unwrap()
+        .iter()
+        .filter(|(_, job)| !job["environment"].is_null())
+        .map(|(name, _)| name.as_str())
+        .collect();
+    assert_eq!(approvals, ["release-approval"]);
+    assert_eq!(jobs["release-approval"]["environment"], "release-checks");
+    assert_eq!(jobs["release-approval"]["needs"], "changes");
+    for name in ["release-approval", "release-wheels", "release-cli"] {
+        assert_eq!(
+            jobs[name]["if"],
+            "needs.changes.outputs.release_pr == 'true'"
+        );
+        assert!(
+            jobs["ci"]["needs"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(name))
+        );
+    }
+    let wheels = &jobs["release-wheels"];
+    assert_eq!(wheels["uses"], "./.github/workflows/pypi-build.yml");
+    for name in ["release-wheels", "release-cli"] {
+        assert_eq!(jobs[name]["needs"], json!(["changes", "release-approval"]));
+    }
+    assert_eq!(
+        wheels["with"],
+        json!({
+            "source-ref": "${{ github.sha }}",
+            "expected-version": "${{ needs.changes.outputs.package_version }}",
+        })
     );
+    Ok(())
+}
+
+#[test]
+fn wheel_cache_warming_requires_manual_dispatch() -> Result<()> {
     let warmer: Value =
         serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
     assert_eq!(
