@@ -192,7 +192,7 @@ impl MeteredParquetObjectStore {
         self
     }
 
-    async fn get_metered(
+    async fn get_with_metrics(
         &self,
         location: &Path,
         options: GetOptions,
@@ -216,7 +216,11 @@ impl MeteredParquetObjectStore {
             ))
             .await?;
         if should_meter_payload {
-            Ok(meter_get_result(result, self.metrics.clone(), active_read))
+            Ok(track_response_body(
+                result,
+                self.metrics.clone(),
+                active_read,
+            ))
         } else {
             Ok(result)
         }
@@ -247,7 +251,7 @@ impl MeteredParquetObjectStore {
         let request_started = Instant::now();
         // The surrounding range plan already tracks activity for these requests.
         let result = self
-            .get_metered(location, GetOptions::new().with_range(Some(range)), None)
+            .get_with_metrics(location, GetOptions::new().with_range(Some(range)), None)
             .await?;
         let payload_started = Instant::now();
         let bytes = result.bytes().await?;
@@ -802,7 +806,7 @@ impl ObjectStore for MeteredParquetObjectStore {
 
     async fn get_opts(&self, location: &Path, options: GetOptions) -> Result<GetResult> {
         let active_read = (!options.head).then(|| self.range_read_estimator.start_read());
-        self.get_metered(location, options, active_read).await
+        self.get_with_metrics(location, options, active_read).await
     }
 
     async fn get_ranges(&self, location: &Path, ranges: &[Range<u64>]) -> Result<Vec<Bytes>> {
@@ -908,7 +912,7 @@ impl ObjectStore for MeteredParquetObjectStore {
     }
 }
 
-fn meter_get_result(
+fn track_response_body(
     result: GetResult,
     metrics: DeltaScanMetrics,
     mut active_read: Option<ActiveRead>,

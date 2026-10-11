@@ -44,12 +44,12 @@ use crate::{
 
 const TRACING_TARGET: &str = "delta_arrow_reader::datafusion";
 
-enum PlannedProviderScan {
-    Ready(Arc<dyn ExecutionPlan>, usize),
-    NeedsNetworkWarmup(Box<PendingProviderScan>),
+enum ScanPreparation {
+    Ready(Arc<dyn ExecutionPlan>),
+    NeedsNetworkWarmup(Box<ExecutionPlanInputs>),
 }
 
-struct PendingProviderScan {
+struct ExecutionPlanInputs {
     reader_plan: DeltaScanPlan,
     datafusion_plan: DataFusionScanPlan,
     exact_row_predicate: Option<DeltaKernelPredicate>,
@@ -171,7 +171,7 @@ impl DeltaTableProvider {
         projection: Option<&[usize]>,
         filters: &[Expr],
         limit: Option<usize>,
-    ) -> Result<PlannedProviderScan, DeltaReaderError> {
+    ) -> Result<ScanPreparation, DeltaReaderError> {
         let _planning = tracing::debug_span!(
             target: "delta_arrow_reader::profile",
             "Delta scan planning"
@@ -271,25 +271,24 @@ impl DeltaTableProvider {
                 .table
                 .network_warmup_pending(self.options.execution_options)
         {
-            return Ok(PlannedProviderScan::NeedsNetworkWarmup(Box::new(
-                PendingProviderScan {
+            return Ok(ScanPreparation::NeedsNetworkWarmup(Box::new(
+                ExecutionPlanInputs {
                     reader_plan,
                     datafusion_plan,
                     exact_row_predicate,
                 },
             )));
         }
-        let (plan, partition_count) =
-            self.finish_plan(reader_plan, datafusion_plan, exact_row_predicate);
-        Ok(PlannedProviderScan::Ready(plan, partition_count))
+        let plan = self.build_execution_plan(reader_plan, datafusion_plan, exact_row_predicate);
+        Ok(ScanPreparation::Ready(plan))
     }
 
-    fn finish_plan(
+    fn build_execution_plan(
         &self,
         reader_plan: DeltaScanPlan,
         datafusion_plan: DataFusionScanPlan,
         exact_row_predicate: Option<DeltaKernelPredicate>,
-    ) -> (Arc<dyn ExecutionPlan>, usize) {
+    ) -> Arc<dyn ExecutionPlan> {
         let _setup = tracing::debug_span!(
             target: "delta_arrow_reader::profile",
             "Delta scan execution setup"
@@ -300,16 +299,14 @@ impl DeltaTableProvider {
             reader_plan.metrics.clone(),
             self.options.use_arrow_view_types,
         );
-        let plan = create_datafusion_execution_plan(
+        create_datafusion_execution_plan(
             reader_plan,
             datafusion_plan,
             exact_row_predicate,
             self.table.range_read_estimator(),
             metrics,
             self.options.intra_file_repartitioning,
-        );
-        let partition_count = plan.properties().output_partitioning().partition_count();
-        (plan, partition_count)
+        )
     }
 }
 
@@ -409,9 +406,9 @@ impl TableProvider for DeltaTableProvider {
         .and_then(|result| result);
 
         let result = match result {
-            Ok(PlannedProviderScan::Ready(plan, partition_count)) => Ok((plan, partition_count)),
-            Ok(PlannedProviderScan::NeedsNetworkWarmup(pending)) => {
-                let PendingProviderScan {
+            Ok(ScanPreparation::Ready(plan)) => Ok(plan),
+            Ok(ScanPreparation::NeedsNetworkWarmup(pending)) => {
+                let ExecutionPlanInputs {
                     reader_plan,
                     datafusion_plan,
                     exact_row_predicate,
@@ -423,7 +420,11 @@ impl TableProvider for DeltaTableProvider {
                 tokio::task::spawn_blocking(move || {
                     tracing::dispatcher::with_default(&dispatch, || {
                         span.in_scope(|| {
-                            provider.finish_plan(reader_plan, datafusion_plan, exact_row_predicate)
+                            provider.build_execution_plan(
+                                reader_plan,
+                                datafusion_plan,
+                                exact_row_predicate,
+                            )
                         })
                     })
                 })
@@ -437,12 +438,12 @@ impl TableProvider for DeltaTableProvider {
         };
 
         match result {
-            Ok((plan, partition_count)) => {
+            Ok(plan) => {
                 tracing::debug!(
                     target: TRACING_TARGET,
                     event = "provider_scan.planned",
                     snapshot_version = self.table.version(),
-                    partition_count,
+                    partition_count = plan.properties().output_partitioning().partition_count(),
                     backend = ?self.options.execution_options.parquet_backend(),
                     outcome = "planned"
                 );
