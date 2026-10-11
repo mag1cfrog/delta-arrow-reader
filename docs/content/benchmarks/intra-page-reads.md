@@ -195,8 +195,12 @@ includes metadata loading and network calibration. Query durations exclude
 initialization. Label the second query separately. Compute combined durations
 within each session before taking medians.
 The `network_warmup` diagnostic records completion, timeout or failure and the
-measured profile. Incomplete profiles are discarded. Later uncontended reads
-update the estimates, so initialization does not lock in a strategy.
+measured profile. It reports `phase="initialization"` or `phase="recovery"`.
+Incomplete profiles are discarded. After an incomplete initialization attempt,
+the first eligible query makes one bounded recovery attempt during planning;
+concurrent queries share it, and its time remains inside that query's clock.
+Later uncontended reads update a complete profile, so initialization does not
+lock in a strategy.
 
 Use `--local-table /path/to/table` for a local control. Remote runs record the
 proxy's exact latency, jitter, shared bandwidth and seed. Change profiles with

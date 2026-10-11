@@ -62,6 +62,14 @@ Timed-out, failed or insufficient samples are discarded without failing table
 loading. Sampling can still add cost when later queries use ordinary reads.
 A zero duration skips sampling.
 
+If network sampling starts but does not finish, the table keeps one recovery
+attempt. The first later filtered scan that can use partial-page reads runs that
+attempt while building its plan. Concurrent scans share the attempt. It uses the
+same time and I/O limits as initialization. If it also fails or is cancelled,
+later scans keep using ordinary reads without trying again. A scan that disables
+partial-page reads, selects another backend or uses an explicit range policy does
+not consume the pending attempt. `WarmupMode::None` never schedules recovery.
+
 Network warmup applies to the Direct backend's automatic range policy on
 supported `s3://` and `s3a://` stores. Custom HTTP settings, system proxies,
 S3 Express and other storage schemes retain ordinary reads. Explicit `Network`
@@ -73,6 +81,9 @@ Partial-page reads are enabled by default but require a complete measured
 profile and predicted savings above 10%. Unsupported layouts, insufficient
 evidence and predicted losing cases use ordinary reads. Measure initialization
 separately from queries and include it when evaluating total application time.
+The `network_warmup` diagnostic reports `phase="initialization"` or
+`phase="recovery"`. Recovery time belongs to the scan build that runs it,
+rather than table initialization.
 `load_snapshot` never performs warmup; `Automatic` and `None` both preserve its
 metadata-only behavior. Converting that snapshot with `into_table` also leaves
 warmup undone; use `load_table` when you want automatic preparation.

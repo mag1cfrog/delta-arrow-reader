@@ -25,20 +25,35 @@ use snafu::ResultExt;
 
 use self::{
     execution::create_datafusion_execution_plan,
-    planning::{FilterCapabilities, plan_datafusion_filters, plan_datafusion_scan},
+    planning::{
+        DataFusionScanPlan, FilterCapabilities, plan_datafusion_filters, plan_datafusion_scan,
+    },
 };
 
 use crate::{
     DeltaReaderError, DeltaScanExecutionOptions, DeltaTable, ParquetReaderBackend,
-    delta::kernel::kernel_pruning_predicate,
+    delta::kernel::{DeltaKernelPredicate, kernel_pruning_predicate},
     error::ScanPlanningSnafu,
     reader::{
-        planning::{DeltaScanPartitionTargetOptions, build_physical_row_predicate, plan_scan},
+        planning::{
+            DeltaScanPartitionTargetOptions, DeltaScanPlan, build_physical_row_predicate, plan_scan,
+        },
         transform::schema_with_view_types,
     },
 };
 
 const TRACING_TARGET: &str = "delta_arrow_reader::datafusion";
+
+enum PlannedProviderScan {
+    Ready(Arc<dyn ExecutionPlan>, usize),
+    NeedsNetworkWarmup(Box<PendingProviderScan>),
+}
+
+struct PendingProviderScan {
+    reader_plan: DeltaScanPlan,
+    datafusion_plan: DataFusionScanPlan,
+    exact_row_predicate: Option<DeltaKernelPredicate>,
+}
 
 /// DataFusion-specific scan settings for one provider.
 #[must_use = "scan options do nothing unless passed to a provider"]
@@ -155,7 +170,8 @@ impl DeltaTableProvider {
         session_target_partitions: usize,
         projection: Option<&[usize]>,
         filters: &[Expr],
-    ) -> Result<(Arc<dyn ExecutionPlan>, usize), DeltaReaderError> {
+        limit: Option<usize>,
+    ) -> Result<PlannedProviderScan, DeltaReaderError> {
         let _planning = tracing::debug_span!(
             target: "delta_arrow_reader::profile",
             "Delta scan planning"
@@ -248,28 +264,52 @@ impl DeltaTableProvider {
             &partition_columns,
             self.options.use_arrow_view_types,
         );
-        let plan = {
-            let _setup = tracing::debug_span!(
-                target: "delta_arrow_reader::profile",
-                "Delta scan execution setup"
-            )
-            .entered();
-            let metrics = ScanMetrics::new(
-                self.registration_name.clone(),
-                reader_plan.metrics.clone(),
-                self.options.use_arrow_view_types,
-            );
-            create_datafusion_execution_plan(
-                reader_plan,
-                datafusion_plan,
-                exact_row_predicate,
-                Arc::clone(&self.table.range_read_estimator),
-                metrics,
-                self.options.intra_file_repartitioning,
-            )
-        };
+        if limit != Some(0)
+            && exact_row_predicate.is_some()
+            && !reader_plan.partitions.is_empty()
+            && self
+                .table
+                .network_warmup_pending(self.options.execution_options)
+        {
+            return Ok(PlannedProviderScan::NeedsNetworkWarmup(Box::new(
+                PendingProviderScan {
+                    reader_plan,
+                    datafusion_plan,
+                    exact_row_predicate,
+                },
+            )));
+        }
+        let (plan, partition_count) =
+            self.finish_plan(reader_plan, datafusion_plan, exact_row_predicate);
+        Ok(PlannedProviderScan::Ready(plan, partition_count))
+    }
+
+    fn finish_plan(
+        &self,
+        reader_plan: DeltaScanPlan,
+        datafusion_plan: DataFusionScanPlan,
+        exact_row_predicate: Option<DeltaKernelPredicate>,
+    ) -> (Arc<dyn ExecutionPlan>, usize) {
+        let _setup = tracing::debug_span!(
+            target: "delta_arrow_reader::profile",
+            "Delta scan execution setup"
+        )
+        .entered();
+        let metrics = ScanMetrics::new(
+            self.registration_name.clone(),
+            reader_plan.metrics.clone(),
+            self.options.use_arrow_view_types,
+        );
+        let plan = create_datafusion_execution_plan(
+            reader_plan,
+            datafusion_plan,
+            exact_row_predicate,
+            self.table.range_read_estimator(),
+            metrics,
+            self.options.intra_file_repartitioning,
+        );
         let partition_count = plan.properties().output_partitioning().partition_count();
-        Ok((plan, partition_count))
+        (plan, partition_count)
     }
 }
 
@@ -337,7 +377,7 @@ impl TableProvider for DeltaTableProvider {
         state: &dyn Session,
         projection: Option<&Vec<usize>>,
         filters: &[Expr],
-        _limit: Option<usize>,
+        limit: Option<usize>,
     ) -> DataFusionResult<Arc<dyn ExecutionPlan>> {
         let session_target_partitions = state.config().target_partitions();
         let provider = self.clone();
@@ -347,10 +387,17 @@ impl TableProvider for DeltaTableProvider {
         // the caller's subscriber and parent span onto the blocking pool.
         let dispatch = tracing::dispatcher::get_default(Clone::clone);
         let span = tracing::Span::current();
+        let planning_dispatch = dispatch.clone();
+        let planning_span = span.clone();
         let result = tokio::task::spawn_blocking(move || {
-            tracing::dispatcher::with_default(&dispatch, || {
-                span.in_scope(|| {
-                    provider.plan(session_target_partitions, projection.as_deref(), &filters)
+            tracing::dispatcher::with_default(&planning_dispatch, || {
+                planning_span.in_scope(|| {
+                    provider.plan(
+                        session_target_partitions,
+                        projection.as_deref(),
+                        &filters,
+                        limit,
+                    )
                 })
             })
         })
@@ -360,6 +407,34 @@ impl TableProvider for DeltaTableProvider {
             reason: "datafusion_scan_planning_task_failed",
         })
         .and_then(|result| result);
+
+        let result = match result {
+            Ok(PlannedProviderScan::Ready(plan, partition_count)) => Ok((plan, partition_count)),
+            Ok(PlannedProviderScan::NeedsNetworkWarmup(pending)) => {
+                let PendingProviderScan {
+                    reader_plan,
+                    datafusion_plan,
+                    exact_row_predicate,
+                } = *pending;
+                self.table
+                    .recover_network_warmup(self.options.execution_options)
+                    .await;
+                let provider = self.clone();
+                tokio::task::spawn_blocking(move || {
+                    tracing::dispatcher::with_default(&dispatch, || {
+                        span.in_scope(|| {
+                            provider.finish_plan(reader_plan, datafusion_plan, exact_row_predicate)
+                        })
+                    })
+                })
+                .await
+                .boxed()
+                .context(ScanPlanningSnafu {
+                    reason: "datafusion_scan_execution_setup_task_failed",
+                })
+            }
+            Err(error) => Err(error),
+        };
 
         match result {
             Ok((plan, partition_count)) => {

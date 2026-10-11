@@ -1156,13 +1156,14 @@ mod tests {
         ));
         let native = table.scan().build().await?;
         let refreshed = table.refresh().await?;
+        let refreshed_estimator = refreshed.range_read_estimator();
         assert!(Arc::ptr_eq(
             &first.range_read_estimator,
             &native.range_read_estimator
         ));
         assert!(Arc::ptr_eq(
             &first.range_read_estimator,
-            &refreshed.range_read_estimator
+            &refreshed_estimator
         ));
         assert!(Arc::ptr_eq(
             &first.range_read_estimator,
