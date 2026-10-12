@@ -155,7 +155,7 @@ jobs:
         if: runner.os != 'Linux'
         run: |
           rustup component add rust-docs
-          RUSTC_WRAPPER= cargo install --locked --features cli \
+          RUSTC_WRAPPER="" cargo install --locked --features cli \
             --version '${{ steps.versions.outputs.cargo-about-version }}' cargo-about
           cargo xtask build-python-wheel --prepare-only \
             --project-directory crates/delta-arrow-reader-python \
@@ -186,7 +186,7 @@ jobs:
             export SCCACHE_ERROR_LOG=/tmp/sccache.log
             # Preparation runs before the action installs sccache for Maturin.
             uv tool install 'sccache>=0.10.0'
-            RUSTC_WRAPPER= cargo install --locked --features cli \
+            RUSTC_WRAPPER="" cargo install --locked --features cli \
               --version '${{ steps.versions.outputs.cargo-about-version }}' cargo-about
             if [ "$SCCACHE_GHA_RW_MODE" = "READ_WRITE" ]; then
               trap 'RUSTC_WRAPPER= cargo run --locked --manifest-path "$GITHUB_WORKSPACE/xtask/Cargo.toml" --target-dir /tmp/dar-xtask-target -- check-cache-writes' EXIT
