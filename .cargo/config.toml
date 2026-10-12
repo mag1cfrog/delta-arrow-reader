@@ -1,2 +1,6 @@
 [alias]
 xtask = "run --locked --package xtask --"
+
+# Speed up dependency-heavy tests in both CI and cache warming.
+[profile.dev.package."*"]
+opt-level = 1

@@ -681,22 +681,13 @@ fn datafusion_predicate(predicate: &DeltaPredicate) -> datafusion::logical_expr:
 }
 
 #[cfg(feature = "datafusion")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn floating_statistics_public_datafusion_matches_arrow_with_both_view_settings() -> TestResult
-{
+async fn assert_datafusion_floating_statistics(stats: EnabledStatistics) -> TestResult {
     use crate::datafusion::{DeltaTableProvider, ScanOptions};
     use datafusion::prelude::{SessionConfig, SessionContext};
     let mut failures = Vec::new();
     let mut checked = 0;
     for (source, target) in TYPES {
-        for (stats, count_mode) in [
-            EnabledStatistics::Chunk,
-            EnabledStatistics::Page,
-            EnabledStatistics::None,
-        ]
-        .into_iter()
-        .flat_map(|stats| ["missing", "recorded", "mixed"].map(|mode| (stats, mode)))
-        {
+        for count_mode in ["missing", "recorded", "mixed"] {
             let fixture = Fixture::new(&source, &target, stats)?.with_counts(count_mode)?;
             let (_root, table) = fixture.table().await?;
             let values = unfiltered_values(&table, &fixture).await?;
@@ -742,7 +733,28 @@ async fn floating_statistics_public_datafusion_matches_arrow_with_both_view_sett
             .collect::<Vec<_>>()
             .join("\n")
     );
-    assert_eq!(checked, 6_048, "DataFusion predicate coverage");
-    eprintln!("floating statistics: {checked} public DataFusion scans");
+    assert_eq!(
+        checked, 2_016,
+        "DataFusion predicate coverage per statistics mode"
+    );
+    eprintln!("floating statistics: {checked} public DataFusion scans with {stats:?} statistics");
     Ok(())
+}
+
+#[cfg(feature = "datafusion")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn floating_statistics_public_datafusion_chunk_statistics() -> TestResult {
+    assert_datafusion_floating_statistics(EnabledStatistics::Chunk).await
+}
+
+#[cfg(feature = "datafusion")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn floating_statistics_public_datafusion_page_statistics() -> TestResult {
+    assert_datafusion_floating_statistics(EnabledStatistics::Page).await
+}
+
+#[cfg(feature = "datafusion")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn floating_statistics_public_datafusion_no_statistics() -> TestResult {
+    assert_datafusion_floating_statistics(EnabledStatistics::None).await
 }
