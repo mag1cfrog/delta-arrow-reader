@@ -269,6 +269,7 @@ jobs:
             "$RUNNER_TEMP/python310/${{ runner.os == 'Windows' && 'Scripts/delta-arrow-reader.exe' || 'bin/delta-arrow-reader' }}" \
             --platform-tag '${{ matrix.platform-tag }}'
       - uses: actions/setup-python@v6
+        id: python314
         with:
           python-version: '3.14'
       - name: Test installed wheel on Python 3.14 and current PyArrow
@@ -304,6 +305,30 @@ jobs:
                   -s /acceptance/crates/delta-arrow-reader-python/tests -k installed
               done
             '
+      - name: Test wheel with uv tool and uvx
+        working-directory: ${{ runner.temp }}
+        env:
+          UV_PYTHON: ${{ steps.python314.outputs.python-path }}
+          UV_PYTHON_DOWNLOADS: never
+          UV_NO_BUILD: 'true'
+        run: |
+          python -m pip install --only-binary=:all: 'uv==0.10.0'
+          tools="$(mktemp -d "$RUNNER_TEMP/wheel-tools.XXXXXX")"
+          export UV_TOOL_DIR="$tools/environments"
+          export UV_TOOL_BIN_DIR="$tools/bin"
+          export UV_CACHE_DIR="$tools/cache"
+          python -m uv tool install --no-config "$GITHUB_WORKSPACE"/dist/*.whl
+          "$UV_TOOL_DIR/delta-arrow-reader/${{ matrix.venv-python }}" -I -m unittest discover \
+            -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" -k installed
+          tool_version="$("$UV_TOOL_BIN_DIR/delta-arrow-reader${{ runner.os == 'Windows' && '.exe' || '' }}" --version)"
+          test "$tool_version" = "delta-arrow-reader $EXPECTED_VERSION"
+          # uv tool run is uvx; --isolated ignores the persistent tool above.
+          python -m uv tool run --no-config --isolated --from "$GITHUB_WORKSPACE"/dist/*.whl \
+            python -I -m unittest discover \
+            -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" -k installed
+          uvx_version="$(python -m uv tool run --no-config --isolated \
+            --from "$GITHUB_WORKSPACE"/dist/*.whl delta-arrow-reader --version)"
+          test "$uvx_version" = "delta-arrow-reader $EXPECTED_VERSION"
       - name: Upload validated wheel
         if: ${{ !inputs.cache-only }}
         uses: actions/upload-artifact@v6

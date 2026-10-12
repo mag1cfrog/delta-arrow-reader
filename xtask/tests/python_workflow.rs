@@ -661,6 +661,154 @@ fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Resul
 }
 
 #[test]
+fn tool_acceptance_checks_both_environments_before_upload() -> Result<()> {
+    let builder: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;
+    let build = &builder["jobs"]["build"];
+    let steps = build["steps"].as_array().unwrap();
+    let position = |name| steps.iter().position(|step| step["name"] == name).unwrap();
+    let tool_position = position("Test wheel with uv tool and uvx");
+    assert!(position("Test installed wheel on Python 3.14 and current PyArrow") < tool_position);
+    assert!(tool_position < position("Upload validated wheel"));
+    let tool = &steps[tool_position];
+    assert!(tool["if"].is_null());
+    assert!(tool["continue-on-error"].is_null());
+    assert_eq!(tool["working-directory"], "${{ runner.temp }}");
+    assert_eq!(
+        tool["env"],
+        json!({
+            "UV_PYTHON": "${{ steps.python314.outputs.python-path }}",
+            "UV_PYTHON_DOWNLOADS": "never",
+            "UV_NO_BUILD": "true",
+        })
+    );
+    let setup = steps.iter().find(|step| step["id"] == "python314").unwrap();
+    assert_eq!(setup["uses"], "actions/setup-python@v6");
+    assert_eq!(setup["with"]["python-version"], "3.14");
+    let fixture = WheelFixture::new("tool-installation")?;
+    let workspace = fixture.directory.join("source checkout");
+    let runner_temp = fixture.directory.join("runner temp");
+    fs::create_dir_all(workspace.join("dist"))?;
+    fs::create_dir(&runner_temp)?;
+    let wheel = workspace.join("dist/test wheel.whl");
+    fs::write(&wheel, "fixture")?;
+    let calls = fixture.directory.join("calls");
+    let mocks = r#"
+        record() {
+            printf '%s|' "$@" >> "$CALLS"
+            printf '\n' >> "$CALLS"
+            [ "$FAIL_STAGE" != "$1" ] || return 9
+        }
+        python() {
+            case "$*" in
+                '-m pip install '*) record setup "$@" ;;
+                '-m uv tool install '*)
+                    record install "$@"
+                    test "$UV_TOOL_DIR" = "$tools/environments"
+                    test "$UV_TOOL_BIN_DIR" = "$tools/bin"
+                    test "$UV_CACHE_DIR" = "$tools/cache" ;;
+                *'python -I -m unittest '*) record uvx-tests "$@" ;;
+                *'delta-arrow-reader --version')
+                    record uvx-version "$@" || return 9
+                    printf 'delta-arrow-reader %s\n' "$UVX_VERSION" ;;
+                *) return 99 ;;
+            esac
+        }
+        tool_python() { record tool-tests "$@"; }
+        tool_cli() {
+            record tool-version "$@" || return 9
+            printf 'delta-arrow-reader %s\n' "$TOOL_VERSION"
+        }
+    "#;
+    for platform in build["strategy"]["matrix"]["include"].as_array().unwrap() {
+        let python = platform["venv-python"].as_str().unwrap();
+        let suffix = if platform["os"] == "windows-2022" {
+            ".exe"
+        } else {
+            ""
+        };
+        let script = tool["run"]
+            .as_str()
+            .unwrap()
+            .replace("${{ matrix.venv-python }}", python)
+            .replace("${{ runner.os == 'Windows' && '.exe' || '' }}", suffix)
+            .replace(
+                &format!("\"$UV_TOOL_DIR/delta-arrow-reader/{python}\""),
+                "tool_python",
+            )
+            .replace(
+                &format!("\"$UV_TOOL_BIN_DIR/delta-arrow-reader{suffix}\""),
+                "tool_cli",
+            );
+        for failure in [
+            "",
+            "setup",
+            "install",
+            "tool-tests",
+            "tool-version",
+            "uvx-tests",
+            "uvx-version",
+            "wrong-tool-version",
+            "wrong-uvx-version",
+        ] {
+            fs::write(&calls, "")?;
+            let output = Command::new("bash")
+                .args(["-e", "-o", "pipefail", "-c", &format!("{mocks}\n{script}")])
+                .current_dir(&runner_temp)
+                .env("GITHUB_WORKSPACE", &workspace)
+                .env("RUNNER_TEMP", &runner_temp)
+                .env("EXPECTED_VERSION", "1.2.3")
+                .env("CALLS", &calls)
+                .env("FAIL_STAGE", failure)
+                .env(
+                    "TOOL_VERSION",
+                    if failure == "wrong-tool-version" {
+                        "stale"
+                    } else {
+                        "1.2.3"
+                    },
+                )
+                .env(
+                    "UVX_VERSION",
+                    if failure == "wrong-uvx-version" {
+                        "stale"
+                    } else {
+                        "1.2.3"
+                    },
+                )
+                .output()?;
+            assert_eq!(
+                output.status.success(),
+                failure.is_empty(),
+                "{platform}, {failure}: {output:?}"
+            );
+            if failure.is_empty() {
+                let calls = fs::read_to_string(&calls)?;
+                let wheel = wheel.display();
+                let tests = workspace.join("crates/delta-arrow-reader-python/tests");
+                let tests = tests.display();
+                assert_eq!(
+                    calls.lines().collect::<Vec<_>>(),
+                    [
+                        "setup|-m|pip|install|--only-binary=:all:|uv==0.10.0|".to_owned(),
+                        format!("install|-m|uv|tool|install|--no-config|{wheel}|"),
+                        format!("tool-tests|-I|-m|unittest|discover|-s|{tests}|-k|installed|"),
+                        "tool-version|--version|".to_owned(),
+                        format!(
+                            "uvx-tests|-m|uv|tool|run|--no-config|--isolated|--from|{wheel}|python|-I|-m|unittest|discover|-s|{tests}|-k|installed|"
+                        ),
+                        format!(
+                            "uvx-version|-m|uv|tool|run|--no-config|--isolated|--from|{wheel}|delta-arrow-reader|--version|"
+                        ),
+                    ]
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn builder_reports_validation_only_after_successful_builds_and_complete_artifacts() -> Result<()> {
     let builder: Value =
         serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;
