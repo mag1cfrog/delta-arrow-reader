@@ -169,19 +169,21 @@ reader. These checks also run in the full Python suite.
 
 Python packaging configuration and the type stub live in
 `crates/delta-arrow-reader-python/`. Package the binding, its local Rust
-dependencies, and the workspace lockfile:
+dependencies, native build tools, and the workspace lockfile:
 
 ```console
-maturin sdist --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out target/python-sdist
+python -m pip install 'build>=1.2,<2'
+python -m build --sdist --outdir target/python-sdist crates/delta-arrow-reader-python
 ```
 
 Track new source files before packaging.
 
-The source archive contains the binding and core crates. Before building an
-extracted archive with `--locked`, run `cargo update --workspace --offline` in
-the extracted directory. This removes entries for omitted workspace members
-while retaining the locked registry versions. CI first checks that the archive
-contains the original workspace lockfile, then performs this pruning.
+The PEP 517 backend delegates package metadata and source selection to Maturin,
+then calls `cargo xtask complete-python-sdist` to add the CLI and xtask sources.
+The archive retains the original workspace manifest and lockfile, so an extracted
+archive builds with `--locked` without pruning dependencies. Building the archive
+requires Rust and Cargo, but does not build the native CLI. Use the command above
+to include these build tools; invoking `maturin sdist` directly bypasses the backend.
 
 The binding's runtime owner lives in `crates/delta-arrow-reader-python/src/runtime.rs`.
 Table loading, scan planning, and batch reads use its `wait` method, which releases

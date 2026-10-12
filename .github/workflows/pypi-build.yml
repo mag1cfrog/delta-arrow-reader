@@ -141,13 +141,12 @@ jobs:
       - name: Prepare Linux source from sdist
         if: runner.os == 'Linux'
         run: |
-          python -m pip install 'maturin==1.14.1'
-          maturin sdist --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out "$RUNNER_TEMP/python-sdist"
+          python -m pip install 'maturin==1.14.1' 'build>=1.2,<2'
+          python -m build --sdist --no-isolation --outdir "$RUNNER_TEMP/python-sdist" crates/delta-arrow-reader-python
           mkdir .python-sdist-source
           tar -xzf "$RUNNER_TEMP"/python-sdist/*.tar.gz -C .python-sdist-source --strip-components=1
           cmp Cargo.lock .python-sdist-source/Cargo.lock
-          # shortcut: Maturin retains omitted workspace members in Cargo.lock; remove when its sdist lockfile matches the packaged workspace.
-          cargo update --workspace --offline --manifest-path .python-sdist-source/Cargo.toml
+          cmp Cargo.toml .python-sdist-source/Cargo.toml
           cp .python-sdist-source/Cargo.lock "$RUNNER_TEMP/python-sdist/Cargo.lock"
       - name: Build wheel
         id: wheel-build

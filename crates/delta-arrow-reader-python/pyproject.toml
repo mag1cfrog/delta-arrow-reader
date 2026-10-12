@@ -1,6 +1,7 @@
 [build-system]
 requires = ["maturin>=1.14,<2"]
-build-backend = "maturin"
+build-backend = "build_backend"
+backend-path = ["."]
 
 [project]
 name = "delta-arrow-reader"
@@ -20,6 +21,7 @@ bindings = "pyo3"
 manifest-path = "Cargo.toml"
 # Keep auto-detected package files beside the sdist's root pyproject.toml.
 include = [
+    { path = "build_backend.py", format = "sdist" },
     { path = "delta_arrow_reader.pyi", format = "sdist" },
     { path = "NOTICE", format = "sdist" },
 ]

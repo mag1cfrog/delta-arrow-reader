@@ -225,6 +225,7 @@ jobs:
           cargo test --locked --package xtask --bin xtask cache_tests::
           cargo test --locked --package xtask --bin xtask validation_record::
           cargo test --locked --package xtask --bin xtask python_cli::
+          cargo test --locked --package xtask --bin xtask python_sdist::
           cargo test --locked --package xtask --test cli_release_plan --test cli_release_assets --test cli_release_images \
             --test cli_release_request --test cli_release_notes --test cli_release_workflow
           cargo test --locked --package xtask \
@@ -274,6 +275,7 @@ jobs:
         run: cargo test --locked -p delta-arrow-reader-python
       - name: Test Python API
         run: |
+          python -I -m unittest discover -s crates/delta-arrow-reader-python/build_tests
           python -m venv "$RUNNER_TEMP/python-tests"
           source "$RUNNER_TEMP/python-tests/bin/activate"
           python -m pip install 'maturin==1.14.1' 'pyarrow==18.0.0'
