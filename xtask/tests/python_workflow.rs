@@ -525,6 +525,142 @@ fn every_wheel_cli_is_audited_after_installation_and_before_upload() -> Result<(
 }
 
 #[test]
+fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Result<()> {
+    let builder: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;
+    let build = &builder["jobs"]["build"];
+    let steps = build["steps"].as_array().unwrap();
+    let position = |name| steps.iter().position(|step| step["name"] == name).unwrap();
+    let runtime_position = position("Test installed wheel on glibc 2.28");
+    assert!(position("Test installed wheel on Python 3.14 and current PyArrow") < runtime_position);
+    assert!(runtime_position < position("Upload validated wheel"));
+    let runtime = &steps[runtime_position];
+    assert_eq!(runtime["if"], "runner.os == 'Linux'");
+    assert!(runtime["continue-on-error"].is_null());
+    assert_eq!(
+        steps[position("Build wheel")]["with"]["container"],
+        "${{ runner.os == 'Linux' && env.MANYLINUX_IMAGE || '' }}"
+    );
+    let image = build["env"]["MANYLINUX_IMAGE"].as_str().unwrap();
+    assert!(image.starts_with("quay.io/pypa/manylinux_2_28_x86_64@sha256:"));
+    let fixture = WheelFixture::new("glibc-runtime")?;
+    let workspace = fixture.directory.join("source checkout");
+    let script = runtime["run"].as_str().unwrap();
+    let mut container_script = String::new();
+    for status in [0, 9] {
+        let output = Command::new("bash")
+            .args([
+                "-e",
+                "-o",
+                "pipefail",
+                "-c",
+                &format!("docker() {{ printf '%s\\0' \"$@\"; return {status}; }}\n{script}"),
+            ])
+            .env("GITHUB_WORKSPACE", &workspace)
+            .env("MANYLINUX_IMAGE", image)
+            .output()?;
+        assert_eq!(output.status.code(), Some(status), "{output:?}");
+        let stdout = String::from_utf8(output.stdout)?;
+        let arguments: Vec<_> = stdout.trim_end_matches('\0').split('\0').collect();
+        assert_eq!(
+            &arguments[..9],
+            [
+                "run",
+                "--rm",
+                "--workdir",
+                "/tmp",
+                "--env",
+                "PATH=/usr/bin:/bin",
+                "--env",
+                "LD_LIBRARY_PATH=",
+                "--volume",
+            ]
+        );
+        assert_eq!(
+            arguments[9],
+            format!("{}/dist:/wheels:ro", workspace.display())
+        );
+        for (index, path) in [
+            (10, "crates/delta-arrow-reader-python/tests"),
+            (
+                12,
+                "crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned",
+            ),
+        ] {
+            assert_eq!(arguments[index], "--volume");
+            assert_eq!(
+                arguments[index + 1],
+                format!("{}/{path}:/acceptance/{path}:ro", workspace.display())
+            );
+        }
+        assert_eq!(
+            &arguments[14..20],
+            ["--entrypoint", "/bin/bash", image, "-euo", "pipefail", "-c"]
+        );
+        assert_eq!(arguments.len(), 21);
+        container_script = arguments[20].to_owned();
+    }
+    // Keep the actual shell control flow while replacing the container's interpreters.
+    let script = container_script
+        .replace(
+            "/opt/python/cp$version-cp$version/bin/python",
+            "base_python",
+        )
+        .replace("/tmp/python$version/bin/python", "installed_python");
+    for (glibc, failure) in [
+        ("2.28", ""),
+        ("2.39", ""),
+        ("2.28", "pip"),
+        ("2.28", "unittest"),
+    ] {
+        let output = Command::new("bash")
+            .args([
+                "-euo",
+                "pipefail",
+                "-c",
+                &format!(
+                    r#"
+                    getconf() {{ printf 'glibc %s\n' "$GLIBC"; }}
+                    base_python() {{ printf 'create %s\n' "$version"; }}
+                    installed_python() {{
+                        printf '%s %s\n' "$version" "$*"
+                        if [ -n "$FAILURE" ] && [[ "$*" == *"$FAILURE"* ]]; then return 7; fi
+                    }}
+                    {script}
+                "#
+                ),
+            ])
+            .env("GLIBC", glibc)
+            .env("FAILURE", failure)
+            .output()?;
+        assert_eq!(
+            output.status.success(),
+            glibc == "2.28" && failure.is_empty(),
+            "{output:?}"
+        );
+        let stdout = String::from_utf8(output.stdout)?;
+        if output.status.success() {
+            assert_eq!(
+                stdout.lines().collect::<Vec<_>>(),
+                [
+                    "create 310",
+                    "310 -m pip install --only-binary=:all: /wheels/*.whl pyarrow==18.0.0",
+                    "310 -I -m unittest discover -s /acceptance/crates/delta-arrow-reader-python/tests -k installed",
+                    "create 314",
+                    "314 -m pip install --only-binary=:all: /wheels/*.whl",
+                    "314 -I -m unittest discover -s /acceptance/crates/delta-arrow-reader-python/tests -k installed",
+                ]
+            );
+        } else if glibc != "2.28" {
+            assert!(stdout.is_empty(), "{stdout}");
+        } else {
+            assert!(!stdout.contains("314"), "{stdout}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn builder_reports_validation_only_after_successful_builds_and_complete_artifacts() -> Result<()> {
     let builder: Value =
         serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;

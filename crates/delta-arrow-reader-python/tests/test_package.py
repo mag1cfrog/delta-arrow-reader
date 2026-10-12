@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import sys
 import sysconfig
 import tempfile
 import unittest
@@ -60,11 +61,22 @@ class InstalledCliTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix="secret installed CLI ")
         self.addCleanup(temporary.cleanup)
         self.directory = Path(temporary.name)
+        self.environment = {
+            key: value for key, value in os.environ.items()
+            if not key.startswith(("LD_", "DYLD_"))
+        }
+        if os.name == "nt":
+            windows = Path(os.environ["SystemRoot"])
+            # CPython supplies the supported MSVC runtime, without build-tool DLLs.
+            paths = (windows / "System32", windows, Path(sys.base_prefix))
+            self.environment["PATH"] = os.pathsep.join(map(str, paths))
+        else:
+            self.environment["PATH"] = "/usr/bin:/bin"
 
     def run_cli(self, *arguments):
         return subprocess.run(
             [str(self.executable), *map(str, arguments)],
-            cwd=self.directory, stdin=subprocess.DEVNULL,
+            cwd=self.directory, env=self.environment, stdin=subprocess.DEVNULL,
             capture_output=True, timeout=30,
         )
 
@@ -154,7 +166,7 @@ class InstalledCliTests(unittest.TestCase):
                 with os.fdopen(writer, "wb") as stdout:
                     result = subprocess.run(
                         [str(self.executable), *map(str, arguments)],
-                        cwd=self.directory, stdin=subprocess.DEVNULL,
+                        cwd=self.directory, env=self.environment, stdin=subprocess.DEVNULL,
                         stdout=stdout, stderr=subprocess.PIPE, timeout=30,
                     )
                 self.assertEqual(result.returncode, 3, result.stderr)
@@ -188,7 +200,7 @@ class InstalledCliTests(unittest.TestCase):
             with self.subTest(signal=termination_signal), ThreadPoolExecutor(max_workers=1) as pool:
                 child = subprocess.Popen(
                     [str(self.executable), "scan", str(table)],
-                    cwd=self.directory, stdin=subprocess.DEVNULL,
+                    cwd=self.directory, env=self.environment, stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 )
                 try:
