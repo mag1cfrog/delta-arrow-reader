@@ -109,6 +109,9 @@ jobs:
           rust_version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
           test -n "$rust_version"
           echo "rust-version=$rust_version" >> "$GITHUB_OUTPUT"
+          about_version="$(sed -n 's/^cargo-about-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$about_version"
+          echo "cargo-about-version=$about_version" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.versions.outputs.rust-version }}
@@ -141,14 +144,22 @@ jobs:
       - name: Prepare Linux source from sdist
         if: runner.os == 'Linux'
         run: |
-          python -m pip install 'maturin==1.14.1'
-          maturin sdist --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out "$RUNNER_TEMP/python-sdist"
+          python -m pip install 'maturin==1.14.1' 'build>=1.2,<2'
+          python -m build --sdist --no-isolation --outdir "$RUNNER_TEMP/python-sdist" crates/delta-arrow-reader-python
           mkdir .python-sdist-source
           tar -xzf "$RUNNER_TEMP"/python-sdist/*.tar.gz -C .python-sdist-source --strip-components=1
           cmp Cargo.lock .python-sdist-source/Cargo.lock
-          # shortcut: Maturin retains omitted workspace members in Cargo.lock; remove when its sdist lockfile matches the packaged workspace.
-          cargo update --workspace --offline --manifest-path .python-sdist-source/Cargo.toml
+          cmp Cargo.toml .python-sdist-source/Cargo.toml
           cp .python-sdist-source/Cargo.lock "$RUNNER_TEMP/python-sdist/Cargo.lock"
+      - name: Prepare native wheel data
+        if: runner.os != 'Linux'
+        run: |
+          rustup component add rust-docs
+          RUSTC_WRAPPER="" cargo install --locked --features cli \
+            --version '${{ steps.versions.outputs.cargo-about-version }}' cargo-about
+          cargo xtask build-python-wheel --prepare-only \
+            --project-directory crates/delta-arrow-reader-python \
+            --target '${{ matrix.target }}' --profile release --target-dir "$PWD/target"
       - name: Build wheel
         id: wheel-build
         continue-on-error: ${{ inputs.cache-only && runner.os == 'Linux' }}
@@ -158,6 +169,7 @@ jobs:
           command: build
           maturin-version: v1.14.1
           rust-toolchain: ${{ steps.versions.outputs.rust-version }}
+          rustup-components: rust-docs
           # Native Windows builds need RUSTFLAGS on host build scripts and proc macros too.
           target: ${{ runner.os != 'Windows' && matrix.target || '' }}
           container: ${{ runner.os == 'Linux' && 'quay.io/pypa/manylinux_2_28_x86_64@sha256:4131ddd7acb9c6c966af02fe7e71edc51e078c2d41f475966697676430bfa2ae' || '' }}
@@ -172,9 +184,15 @@ jobs:
             printf 'sccache==0.16.0\n' > /tmp/sccache-constraints.txt
             export UV_CONSTRAINT=/tmp/sccache-constraints.txt
             export SCCACHE_ERROR_LOG=/tmp/sccache.log
+            # Preparation runs before the action installs sccache for Maturin.
+            uv tool install 'sccache>=0.10.0'
+            RUSTC_WRAPPER="" cargo install --locked --features cli \
+              --version '${{ steps.versions.outputs.cargo-about-version }}' cargo-about
             if [ "$SCCACHE_GHA_RW_MODE" = "READ_WRITE" ]; then
               trap 'RUSTC_WRAPPER= cargo run --locked --manifest-path "$GITHUB_WORKSPACE/xtask/Cargo.toml" --target-dir /tmp/dar-xtask-target -- check-cache-writes' EXIT
             fi
+            cargo xtask build-python-wheel --prepare-only --project-directory . \
+              --target '${{ matrix.target }}' --profile release --target-dir "$PWD/target"
           args: >-
             --locked --release --out ${{ runner.os == 'Linux' && '../dist' || matrix.wheel-dir }} --target-dir target
             --manifest-path crates/delta-arrow-reader-python/Cargo.toml

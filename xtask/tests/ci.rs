@@ -81,8 +81,12 @@ fn python_filter_excludes_unrelated_sources_and_tools() -> Result<()> {
         ("LICENSE", true),
         (".cargo/config.toml", true),
         ("xtask/Cargo.toml", true),
-        ("xtask/src/main.rs", false),
+        ("xtask/src/main.rs", true),
         ("xtask/Cargo.lock", false),
+        ("xtask/src/python_wheel_build.rs", true),
+        ("xtask/src/python_cli/tests.rs", true),
+        ("xtask/src/notices.rs", true),
+        ("crates/delta-arrow-reader-cli/release/about.toml", true),
         (".github/workflows/cache-warm.yml", true),
         (".github/workflows/pypi-build.yml", true),
         (".github/workflows/pypi.yml", true),
@@ -96,7 +100,7 @@ fn python_filter_excludes_unrelated_sources_and_tools() -> Result<()> {
         ("xtask/tests/python_workflow.rs", false),
         ("xtask/tests/release_plz.rs", false),
         ("release-plz.toml", true),
-        ("crates/delta-arrow-reader-cli/src/main.rs", false),
+        ("crates/delta-arrow-reader-cli/src/main.rs", true),
         ("crates/delta-arrow-reader-cli/tests/scan.py", false),
         ("benches/selective_read/src/main.rs", false),
         (
@@ -164,7 +168,11 @@ fn cli_sources_run_separate_required_checks() -> Result<()> {
         "crates/delta-arrow-reader-cli/tests/predicates/mod.rs",
     ] {
         assert!(filter_matches(&filters, "cli", path)?, "{path}");
-        for name in ["code", "python", "tooling", "selective_read"] {
+        assert_eq!(
+            filter_matches(&filters, "python", path)?,
+            path.contains("/src/")
+        );
+        for name in ["code", "tooling", "selective_read"] {
             assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
         }
     }
@@ -264,9 +272,11 @@ fn tooling_changes_run_separate_required_checks() -> Result<()> {
         "examples/go-cli/scan_test.go",
     ] {
         assert!(filter_matches(&filters, "tooling", path)?, "{path}");
-        for name in ["code", "python"] {
-            assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
-        }
+        assert!(!filter_matches(&filters, "code", path)?, "{path}");
+        assert_eq!(
+            filter_matches(&filters, "python", path)?,
+            path == "xtask/src/main.rs"
+        );
     }
     for path in [
         "Cargo.toml",

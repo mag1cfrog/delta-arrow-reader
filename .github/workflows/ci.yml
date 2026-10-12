@@ -225,11 +225,13 @@ jobs:
           cargo test --locked --package xtask --bin xtask cache_tests::
           cargo test --locked --package xtask --bin xtask validation_record::
           cargo test --locked --package xtask --bin xtask python_cli::
+          cargo test --locked --package xtask --bin xtask python_sdist::
+          cargo test --locked --package xtask --bin xtask python_wheel_build::
           cargo test --locked --package xtask --test cli_release_plan --test cli_release_assets --test cli_release_images \
             --test cli_release_request --test cli_release_notes --test cli_release_workflow
           cargo test --locked --package xtask \
             --test ci --test cli_workflow --test cli_images_workflow --test cli_validation_workflow --test cli_release_selection --test images --test python_release --test python_upload --test python_wheels \
-            --test python_wheel_reuse --test python_workflow --test release_plz -- --include-ignored
+            --test python_wheel_reuse --test python_workflow --test python_build --test release_plz -- --include-ignored
       - name: Report cache read failures
         continue-on-error: true
         run: cargo xtask report-cache-reads
@@ -272,12 +274,21 @@ jobs:
         run: cargo clippy --locked -p delta-arrow-reader-python --all-targets -- -D warnings
       - name: Test Python runtime ownership
         run: cargo test --locked -p delta-arrow-reader-python
+      - name: Install Python wheel notice tools
+        run: |
+          rustup component add rust-docs
+          about_version="$(sed -n 's/^cargo-about-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$about_version"
+          cargo install --locked --features cli --version "$about_version" cargo-about
+        env:
+          RUSTC_WRAPPER: ""
       - name: Test Python API
         run: |
+          python -I -m unittest discover -s crates/delta-arrow-reader-python/build_tests
           python -m venv "$RUNNER_TEMP/python-tests"
           source "$RUNNER_TEMP/python-tests/bin/activate"
           python -m pip install 'maturin==1.14.1' 'pyarrow==18.0.0'
-          maturin develop --locked --manifest-path crates/delta-arrow-reader-python/Cargo.toml
+          python -m pip install --no-build-isolation --no-deps --editable crates/delta-arrow-reader-python
           python -I -m unittest discover -s crates/delta-arrow-reader-python/tests
 
   cli-checks:

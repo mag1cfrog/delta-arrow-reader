@@ -368,7 +368,7 @@ fn incomplete_artifacts_cannot_reach_the_upload_directory() -> Result<()> {
 }
 
 #[test]
-fn linux_sdist_lockfile_checks_allow_pruning_but_reject_drift() -> Result<()> {
+fn linux_sdist_checks_preserve_the_workspace_and_reject_lockfile_drift() -> Result<()> {
     let builder: Value =
         serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;
     let steps = builder["jobs"]["build"]["steps"].as_array().unwrap();
@@ -380,18 +380,21 @@ fn linux_sdist_lockfile_checks_allow_pruning_but_reject_drift() -> Result<()> {
     let fixture = WheelFixture::new("sdist-lockfile")?;
     let directory = &fixture.directory;
     let original_lock = "version = 4\n\n[[package]]\nname = \"kept\"\nversion = \"0.1.0\"\n\n\
-                         [[package]]\nname = \"omitted\"\nversion = \"0.1.0\"\n";
+                         [[package]]\nname = \"tools\"\nversion = \"0.1.0\"\n";
+    let workspace = "[workspace]\nmembers = [\"kept\", \"tools\"]\nresolver = \"3\"\n";
     for (path, contents) in [
-        (
-            "Cargo.toml",
-            "[workspace]\nmembers = [\"kept\"]\nresolver = \"3\"\n",
-        ),
+        ("Cargo.toml", workspace),
         ("Cargo.lock", original_lock),
         (
             "kept/Cargo.toml",
             "[package]\nname = \"kept\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
         ),
         ("kept/src/lib.rs", ""),
+        (
+            "tools/Cargo.toml",
+            "[package]\nname = \"tools\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        ),
+        ("tools/src/main.rs", "fn main() {}"),
     ] {
         let path = directory.join("source").join(path);
         fs::create_dir_all(path.parent().unwrap())?;
@@ -407,7 +410,7 @@ fn linux_sdist_lockfile_checks_allow_pruning_but_reject_drift() -> Result<()> {
         .arg("source")
         .output()?;
     assert!(output.status.success(), "{output:?}");
-    // Use a local archive and real Cargo pruning; skip package installation and wheel tools.
+    // Exercise the workflow's comparisons against a local source archive.
     let mut prepare = Command::new("bash");
     prepare
         .args([
@@ -416,7 +419,7 @@ fn linux_sdist_lockfile_checks_allow_pruning_but_reject_drift() -> Result<()> {
             "pipefail",
             "-c",
             &format!(
-                "python() {{ :; }}\nmaturin() {{ :; }}\n{}",
+                "python() {{ :; }}\n{}",
                 script("Prepare Linux source from sdist")
             ),
         ])
@@ -426,6 +429,10 @@ fn linux_sdist_lockfile_checks_allow_pruning_but_reject_drift() -> Result<()> {
     assert!(!prepare.output()?.status.success());
     fs::remove_dir_all(directory.join(".python-sdist-source"))?;
     fs::write(directory.join("Cargo.lock"), original_lock)?;
+    fs::write(directory.join("Cargo.toml"), "different workspace members")?;
+    assert!(!prepare.output()?.status.success());
+    fs::remove_dir_all(directory.join(".python-sdist-source"))?;
+    fs::write(directory.join("Cargo.toml"), workspace)?;
     let output = prepare.output()?;
     assert!(output.status.success(), "{output:?}");
     assert_eq!(
@@ -433,10 +440,15 @@ fn linux_sdist_lockfile_checks_allow_pruning_but_reject_drift() -> Result<()> {
         original_lock
     );
     let lockfile = directory.join(".python-sdist-source/Cargo.lock");
-    assert!(!fs::read_to_string(&lockfile)?.contains("omitted"));
+    assert_eq!(fs::read_to_string(&lockfile)?, original_lock);
+    let metadata = Command::new("cargo")
+        .args(["metadata", "--locked", "--offline", "--format-version", "1"])
+        .current_dir(directory.join(".python-sdist-source"))
+        .output()?;
+    assert!(metadata.status.success(), "{metadata:?}");
     for changed in [false, true] {
         if changed {
-            fs::write(&lockfile, original_lock)?;
+            fs::write(&lockfile, "changed lockfile")?;
         }
         let output = Command::new("bash")
             .args([

@@ -1,15 +1,36 @@
 use std::{
-    fs,
+    env, fs,
     path::{Path, PathBuf},
+    process::Command,
 };
 
 use serde::Deserialize;
 use snafu::ResultExt;
 
-use crate::error::{FileSnafu, Result, TomlSnafu};
+use crate::command::command_output;
+use crate::error::{FileSnafu, InvalidInputSnafu, Result, TomlSnafu};
 
 pub(crate) fn repository_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
+}
+
+pub(crate) fn cargo_workspace_root(directory: &Path) -> Result<PathBuf> {
+    // Shared target caches can contain an xtask compiled in a different source directory.
+    let manifest = command_output(
+        Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+            .current_dir(directory)
+            .args(["locate-project", "--workspace", "--message-format", "plain"]),
+    )?;
+    Path::new(manifest.trim())
+        .parent()
+        .filter(|parent| parent.is_absolute())
+        .map(Path::to_path_buf)
+        .ok_or_else(|| {
+            InvalidInputSnafu {
+                message: "Cargo did not return an absolute workspace manifest",
+            }
+            .build()
+        })
 }
 
 pub(crate) fn read_toml<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {

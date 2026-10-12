@@ -126,9 +126,12 @@ root on Linux or macOS:
 ```console
 python3 -m venv target/python-venv
 . target/python-venv/bin/activate
-python -m pip install 'maturin>=1.14,<2'
-maturin build --locked --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out target/python-wheels
+rustup component add rust-docs
+cargo install --locked --features cli --version 0.9.2 cargo-about
+python -m pip install 'build>=1.2,<2'
+python -m build --wheel --outdir target/python-wheels crates/delta-arrow-reader-python
 python -m pip install --force-reinstall target/python-wheels/*.whl
+delta-arrow-reader --version
 python -I -m unittest discover -s crates/delta-arrow-reader-python/tests
 cargo test --locked -p delta-arrow-reader-python
 ```
@@ -136,6 +139,36 @@ cargo test --locked -p delta-arrow-reader-python
 The isolated Python check imports the installed wheel without adding the current
 directory to its import path. Default Cargo commands still select the core crate;
 use `cargo check -p delta-arrow-reader-python` to check the binding crate directly.
+
+Use the Rust version declared in the workspace manifest, including its latest
+patch release. Source builds need `curl`, `cargo-about` at the version declared
+under `workspace.metadata.cli-release`, and that toolchain's `rust-docs` component
+to collect dependency notices. Installing a completed wheel needs none of these
+build tools.
+
+The backend builds the native `delta-arrow-reader` command and dependency notices
+before Maturin assembles the wheel. Both native components use the same Cargo
+profile and target. Normal builds use `release`; editable installs use `dev`:
+
+```console
+python -m pip install --editable crates/delta-arrow-reader-python
+```
+
+Reinstall after changing Rust code. Build settings can be passed through pip's
+`--config-settings` or build's `--config-setting`, for example
+`--config-setting 'build-args=--profile dev --jobs 4'`. Supported Maturin arguments
+are `--profile` (`dev` or `release`), `--target`, `--target-dir`, `--jobs`,
+`--interpreter`, `--compatibility`, `--auditwheel`, `--strip`, `--locked`,
+`--offline`, and `--frozen`. Cargo network restrictions do not disable notice
+downloads. Other build arguments are rejected. Native source builds support the
+same three targets as the release wheels; cross-compilation is not supported.
+macOS defaults to deployment target 12.0, with `MACOSX_DEPLOYMENT_TARGET` applying
+to both components.
+
+Use the backend commands above for local builds. Direct `maturin build` and
+`maturin develop` bypass native preparation. The release workflow calls
+`cargo xtask build-python-wheel --prepare-only` before its Maturin action so it
+can retain the pinned manylinux container and existing wheel repair steps.
 
 To check a wheel's filename and metadata before installation, run `cargo xtask`
 from the repository root with the expected version and platform tag:
@@ -161,27 +194,31 @@ python -I -m unittest discover \
   -k installed
 ```
 
-This selects the package metadata check and a local Arrow stream read.
+This selects package metadata, native CLI, and local Arrow stream checks.
 The stream check covers both Python entrypoints and both Parquet backends,
 selects columns and filters rows, and closes the reader before consuming all results.
 It uses the checked-in Spark fixture and checks batch values after closing the
 reader. These checks also run in the full Python suite.
+The CLI check reads the same fixture through `inspect` and a projected, limited
+`scan`, then decodes the Arrow IPC stream with PyArrow.
 
 Python packaging configuration and the type stub live in
 `crates/delta-arrow-reader-python/`. Package the binding, its local Rust
-dependencies, and the workspace lockfile:
+dependencies, native build tools, and the workspace lockfile:
 
 ```console
-maturin sdist --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out target/python-sdist
+python -m pip install 'build>=1.2,<2'
+python -m build --sdist --outdir target/python-sdist crates/delta-arrow-reader-python
 ```
 
 Track new source files before packaging.
 
-The source archive contains the binding and core crates. Before building an
-extracted archive with `--locked`, run `cargo update --workspace --offline` in
-the extracted directory. This removes entries for omitted workspace members
-while retaining the locked registry versions. CI first checks that the archive
-contains the original workspace lockfile, then performs this pruning.
+The PEP 517 backend delegates package metadata and source selection to Maturin,
+then calls `cargo xtask complete-python-sdist` to add the CLI and xtask sources.
+The archive retains the original workspace manifest and lockfile, so an extracted
+archive builds with `--locked` without pruning dependencies. Building the archive
+requires Rust and Cargo, but does not build the native CLI. Use the command above
+to include these build tools; invoking `maturin sdist` directly bypasses the backend.
 
 The binding's runtime owner lives in `crates/delta-arrow-reader-python/src/runtime.rs`.
 Table loading, scan planning, and batch reads use its `wait` method, which releases
@@ -201,13 +238,13 @@ another Python thread can run during these waits.
 
 Pull request CI runs the `Python Package` job for changes covered by
 the Python filter in `.github/path-filters.json`. Shared Rust code, binding code,
-Python test fixtures, workspace manifests, and package metadata trigger these
-checks. Changes confined to CLI implementation, benchmarks, or `docs/` skip them.
+Python test fixtures, workspace manifests, package metadata, CLI source, and
+native packaging tools trigger these checks. Unrelated release tools, benchmarks,
+and `docs/` skip them.
 
 The job runs Clippy, the Rust runtime ownership tests, and the full Python suite
-on Linux with Python 3.10 and PyArrow 18.0.0. It uses `maturin develop --locked`
-with the binding crate's manifest to install a debug build in a virtual
-environment. Feature pull requests do not
+on Linux with Python 3.10 and PyArrow 18.0.0. It uses the PEP 517 backend's editable
+install to build both the extension and CLI in a virtual environment. Feature pull requests do not
 build the three release wheels.
 
 Release-plz pull requests targeting main also require three-platform wheel

@@ -14,7 +14,9 @@ mod platform;
 mod process;
 mod python_cli;
 mod python_release;
+mod python_sdist;
 mod python_upload;
+mod python_wheel_build;
 mod python_wheel_reuse;
 mod python_wheels;
 mod release_assets;
@@ -68,6 +70,13 @@ enum Task {
     CheckPythonReleaseRequest,
     /// Build and stage the native executable for Python wheel packaging.
     StagePythonCli(python_cli::StagePythonCliArgs),
+    /// Prepare the native CLI and notices, then assemble the combined Python wheel.
+    BuildPythonWheel(python_wheel_build::BuildPythonWheelArgs),
+    /// Include the native build tools and original workspace in a Maturin sdist.
+    CompletePythonSdist {
+        source: PathBuf,
+        destination: PathBuf,
+    },
     /// Retrieve validated wheels from the merged release PR.
     ReusePythonWheels {
         destination: PathBuf,
@@ -84,7 +93,7 @@ enum Task {
         #[arg(long)]
         sha256: String,
     },
-    /// Validate one Python wheel's filename and metadata.
+    /// Validate one Python wheel's metadata, installation layout, and file hashes.
     CheckPythonWheel {
         path: PathBuf,
         #[arg(long)]
@@ -178,6 +187,11 @@ fn run_task(task: Task) -> Result<()> {
         Task::PrepareReleasePrConfig { destination } => release_plz::prepare_config(&destination),
         Task::CheckPythonReleaseRequest => python_release::validate_release_request(),
         Task::StagePythonCli(args) => args.run().map_err(Into::into),
+        Task::BuildPythonWheel(args) => args.run().map_err(Into::into),
+        Task::CompletePythonSdist {
+            source,
+            destination,
+        } => python_sdist::complete(&source, &destination).map_err(Into::into),
         Task::ReusePythonWheels {
             destination,
             expected_version,
@@ -197,7 +211,7 @@ fn run_task(task: Task) -> Result<()> {
             path,
             expected_version,
             platform_tag,
-        } => python_wheels::check_wheel_metadata(&path, &expected_version, &platform_tag),
+        } => python_wheels::check_wheel(&path, &expected_version, &platform_tag),
         Task::CheckPythonArtifacts {
             directory,
             expected_version,
