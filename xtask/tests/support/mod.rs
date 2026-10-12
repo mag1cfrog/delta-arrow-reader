@@ -6,8 +6,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use flate2::{Compression, write::DeflateEncoder};
 use rawzip::{CompressionMethod, ZipArchiveWriter, path::EntryPath};
+use sha2::{Digest, Sha256};
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -36,7 +38,7 @@ impl WheelFixture {
             let artifact = directory.join(format!("delta-arrow-reader-{platform}-wheel"));
             fs::create_dir_all(&artifact)?;
             let path = artifact.join(wheel_filename(tag));
-            write_zip(&path, &metadata_files(tag), true)?;
+            write_wheel(&path, &wheel_files(tag), true)?;
             paths.push(path);
         }
         Ok((directory, paths))
@@ -53,23 +55,81 @@ pub fn wheel_filename(tag: &str) -> String {
     format!("delta_arrow_reader-1.2.3-cp310-abi3-{tag}.whl")
 }
 
-pub fn metadata_files(tag: &str) -> Vec<(String, String)> {
+pub fn wheel_files(tag: &str) -> Vec<(String, Vec<u8>)> {
+    let (extension, command, signature): (&str, &str, &[u8]) = match tag {
+        "win_amd64" => ("pyd", "delta-arrow-reader.exe", b"MZfixture"),
+        "macosx_12_0_arm64" => ("abi3.so", "delta-arrow-reader", b"\xcf\xfa\xed\xfefixture"),
+        _ => ("abi3.so", "delta-arrow-reader", b"\x7fELFfixture"),
+    };
     vec![
         (
             "delta_arrow_reader-1.2.3.dist-info/METADATA".into(),
-            "Metadata-Version: 2.4\nName: delta-arrow-reader\nVersion: 1.2.3\n".into(),
+            b"Metadata-Version: 2.4\nName: delta-arrow-reader\nVersion: 1.2.3\n".to_vec(),
         ),
         (
             "delta_arrow_reader-1.2.3.dist-info/WHEEL".into(),
-            format!("Wheel-Version: 1.0\nRoot-Is-Purelib: false\nTag: cp310-abi3-{tag}\n"),
+            format!("Wheel-Version: 1.0\nRoot-Is-Purelib: false\nTag: cp310-abi3-{tag}\n").into_bytes(),
         ),
+        ("delta_arrow_reader/__init__.py".into(), b"# fixture\n".to_vec()),
+        ("delta_arrow_reader/__init__.pyi".into(), b"# fixture\n".to_vec()),
+        ("delta_arrow_reader/py.typed".into(), Vec::new()),
+        (format!("delta_arrow_reader/delta_arrow_reader.{extension}"), signature.to_vec()),
+        (format!("delta_arrow_reader-1.2.3.data/scripts/{command}"), signature.to_vec()),
+        ("delta_arrow_reader-1.2.3.dist-info/licenses/LICENSE".into(), b"license\n".to_vec()),
+        ("delta_arrow_reader-1.2.3.dist-info/licenses/NOTICE".into(), b"notice\n".to_vec()),
+        ("delta_arrow_reader-1.2.3.data/data/share/delta-arrow-reader/python-THIRD_PARTY_NOTICES.txt".into(), b"Python notices\n".to_vec()),
+        ("delta_arrow_reader-1.2.3.data/data/share/delta-arrow-reader/cli-THIRD_PARTY_NOTICES.txt".into(), b"CLI notices\n".to_vec()),
     ]
+}
+
+pub fn record_contents(files: &[(String, Vec<u8>)]) -> Result<Vec<u8>> {
+    let mut writer = csv::Writer::from_writer(Vec::new());
+    for (name, contents) in files.iter().filter(|(name, _)| !name.ends_with('/')) {
+        writer.write_record([
+            name,
+            &format!(
+                "sha256={}",
+                URL_SAFE_NO_PAD.encode(Sha256::digest(contents))
+            ),
+            &contents.len().to_string(),
+        ])?;
+    }
+    writer.write_record(["delta_arrow_reader-1.2.3.dist-info/RECORD", "", ""])?;
+    Ok(writer.into_inner()?)
+}
+
+pub fn write_wheel(path: &Path, files: &[(String, Vec<u8>)], compressed: bool) -> Result<()> {
+    let mut files = files.to_vec();
+    if !files.iter().any(|(name, _)| name.ends_with("/RECORD")) {
+        files.push((
+            "delta_arrow_reader-1.2.3.dist-info/RECORD".into(),
+            record_contents(&files)?,
+        ));
+    }
+    write_zip(path, &files, compressed)
 }
 
 pub fn write_zip(
     path: &Path,
     files: &[(String, impl AsRef<[u8]>)],
     compressed: bool,
+) -> Result<()> {
+    write_zip_with_permissions(path, files, compressed, |name| {
+        if name.ends_with('/') {
+            0o040755
+        } else if name.ends_with("/delta-arrow-reader") {
+            0o755
+        } else {
+            0o644
+        }
+    })
+}
+
+pub fn write_zip_with_permissions(
+    path: &Path,
+    files: &[(String, impl AsRef<[u8]>)],
+    compressed: bool,
+    permissions: impl Fn(&str) -> u32,
 ) -> Result<()> {
     let mut archive = ZipArchiveWriter::new(fs::File::create(path)?);
     for (name, contents) in files {
@@ -81,6 +141,7 @@ pub fn write_zip(
         let (mut entry, config) = archive
             .new_file(EntryPath::verbatim(name.as_bytes()))
             .compression_method(method)
+            .unix_permissions(permissions(name))
             .start()?;
         let descriptor = if compressed {
             let encoder = DeflateEncoder::new(&mut entry, Compression::default());

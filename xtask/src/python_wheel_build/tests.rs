@@ -83,6 +83,65 @@ fn cargo_options_keep_paths_as_arguments_and_resolve_from_the_project() {
 }
 
 #[test]
+fn wheel_copy_preserves_hard_linked_source() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("built.whl");
+    let destination = temp.path().join("output.whl");
+    fs::write(&source, b"complete wheel").unwrap();
+    fs::hard_link(&source, &destination).unwrap();
+
+    copy_wheel(&source, &destination).unwrap();
+
+    assert_eq!(fs::read(&source).unwrap(), b"complete wheel");
+    assert_eq!(fs::read(&destination).unwrap(), b"complete wheel");
+    assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+}
+
+#[cfg(unix)]
+#[test]
+fn wheel_copy_preserves_source_in_symlinked_directory() {
+    let temp = tempfile::tempdir().unwrap();
+    let output = temp.path().join("output");
+    fs::create_dir(&output).unwrap();
+    let alias = temp.path().join("alias");
+    std::os::unix::fs::symlink(&output, &alias).unwrap();
+    let source = alias.join("built.whl");
+    let destination = output.join("built.whl");
+    fs::write(&source, b"complete wheel").unwrap();
+
+    copy_wheel(&source, &destination).unwrap();
+
+    assert_eq!(fs::read(&source).unwrap(), b"complete wheel");
+    assert_eq!(fs::read(&destination).unwrap(), b"complete wheel");
+    assert_eq!(fs::read_dir(output).unwrap().count(), 1);
+}
+
+#[test]
+fn wheel_copy_replaces_output_only_after_success() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("built.whl");
+    let destination = temp.path().join("output.whl");
+    fs::write(&destination, b"previous wheel").unwrap();
+
+    assert!(copy_wheel(&source, &destination).is_err());
+    assert_eq!(fs::read(&destination).unwrap(), b"previous wheel");
+    assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+
+    fs::write(&source, b"complete wheel").unwrap();
+    let directory = temp.path().join("directory.whl");
+    fs::create_dir(&directory).unwrap();
+    fs::write(directory.join("keep"), b"untouched").unwrap();
+    assert!(copy_wheel(&source, &directory).is_err());
+    assert_eq!(fs::read(directory.join("keep")).unwrap(), b"untouched");
+    assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 3);
+
+    copy_wheel(&source, &destination).unwrap();
+    assert_eq!(fs::read(&source).unwrap(), b"complete wheel");
+    assert_eq!(fs::read(&destination).unwrap(), b"complete wheel");
+    assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 3);
+}
+
+#[test]
 fn stale_data_is_removed_and_symlinks_are_rejected() {
     let temp = tempfile::tempdir().unwrap();
     let data = temp.path().join(WHEEL_DATA);

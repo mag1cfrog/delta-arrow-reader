@@ -86,6 +86,7 @@ case "$1" in
     printf '%s\n' "$@" > "$TEST_ROOT/cargo-arguments"
     cat "$TEST_ROOT/cargo-artifact.json" ;;
   about)
+    [ "$CARGO_NET_OFFLINE" = "$EXPECTED_CARGO_NET_OFFLINE" ] || exit 44
     if [ "$2" = --version ]; then
       printf 'cargo-about {about_version}\n'
     else
@@ -115,7 +116,15 @@ printf '%s/assembled.whl\n' "$TEST_ROOT"
             .chain(env::split_paths(&env::var_os("PATH").unwrap_or_default())),
     )?;
 
-    for failure in ["build", "notices", "maturin", "none"] {
+    for (failure, network_flag, inherited_offline) in [
+        ("build", None, "false"),
+        ("notices", None, "false"),
+        ("maturin", None, "false"),
+        ("none", None, "false"),
+        ("none", Some("--offline"), "false"),
+        ("none", Some("--frozen"), "false"),
+        ("none", None, "true"),
+    ] {
         let data = root.join("delta_arrow_reader.data");
         fs::create_dir_all(data.join("scripts"))?;
         fs::write(
@@ -132,6 +141,7 @@ printf '%s/assembled.whl\n' "$TEST_ROOT"
                 "--target-dir",
                 "build outputs",
             ])
+            .args(network_flag)
             .arg("--project-directory")
             .arg(root)
             .arg("--wheel-directory")
@@ -142,12 +152,17 @@ printf '%s/assembled.whl\n' "$TEST_ROOT"
             .env("TEST_ROOT", root)
             .env("TEST_WORKSPACE", repository)
             .env("FAIL_STAGE", failure)
+            .env("CARGO_NET_OFFLINE", inherited_offline)
+            .env(
+                "EXPECTED_CARGO_NET_OFFLINE",
+                network_flag.map_or(inherited_offline, |_| "true"),
+            )
             .env_remove("CARGO_BUILD_TARGET")
             .output()?;
         assert_eq!(
             output.status.success(),
             failure == "none",
-            "{failure}: {output:?}"
+            "{failure}, {network_flag:?}, {inherited_offline}: {output:?}"
         );
         assert!(!data.exists(), "{failure} retained installable data");
         assert_eq!(
@@ -165,18 +180,30 @@ printf '%s/assembled.whl\n' "$TEST_ROOT"
                 .to_string_lossy()
                 .starts_with(".python-wheel-")
         }));
+        if failure == "none" {
+            let cargo = fs::read_to_string(root.join("cargo-arguments"))?;
+            let maturin = fs::read_to_string(root.join("maturin-arguments"))?;
+            for arguments in [&cargo, &maturin] {
+                assert!(arguments.contains("--profile\nrelease\n"));
+                assert!(arguments.contains("--target\nx86_64-unknown-linux-gnu\n"));
+                assert!(arguments.contains(&format!(
+                    "--target-dir\n{}\n",
+                    root.join("build outputs").display()
+                )));
+                for flag in ["--offline", "--frozen"] {
+                    assert_eq!(
+                        arguments.lines().any(|argument| argument == flag),
+                        network_flag == Some(flag)
+                    );
+                }
+            }
+            assert!(maturin.contains("--editable\n"));
+            assert_eq!(
+                fs::read(output_directory.join("assembled.whl"))?,
+                b"test wheel"
+            );
+        }
     }
-    let cargo = fs::read_to_string(root.join("cargo-arguments"))?;
-    let maturin = fs::read_to_string(root.join("maturin-arguments"))?;
-    for arguments in [&cargo, &maturin] {
-        assert!(arguments.contains("--profile\nrelease\n"));
-        assert!(arguments.contains("--target\nx86_64-unknown-linux-gnu\n"));
-        assert!(arguments.contains(&format!(
-            "--target-dir\n{}\n",
-            root.join("build outputs").display()
-        )));
-    }
-    assert!(maturin.contains("--editable\n"));
     Ok(())
 }
 

@@ -1,11 +1,14 @@
 use std::{
+    collections::{BTreeMap, BTreeSet},
     fs,
-    io::Read,
+    io::{self, Read},
     path::{Path, PathBuf},
 };
 
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use flate2::read::DeflateDecoder;
 use rawzip::{CompressionMethod, ZipArchive};
+use sha2::{Digest, Sha256};
 
 use crate::Result;
 
@@ -18,83 +21,226 @@ pub(crate) const ARTIFACT_PLATFORM_TAGS: [(&str, &str); 3] = [
     ("delta-arrow-reader-macos-arm64-wheel", "macosx_12_0_arm64"),
 ];
 
-pub fn check_wheel_metadata(path: &Path, version: &str, platform_tag: &str) -> Result<()> {
+pub fn check_wheel(path: &Path, version: &str, platform_tag: &str) -> Result<()> {
     let wheel_tag = format!("cp310-abi3-{platform_tag}");
     let filename = format!("delta_arrow_reader-{version}-{wheel_tag}.whl");
     if path.file_name().and_then(|name| name.to_str()) != Some(&filename) {
         return Err(format!("expected wheel {filename:?}, got {}", path.display()).into());
     }
-
+    let (extension_suffix, cli_suffix, native_signature): (&str, &str, &[u8]) = match platform_tag {
+        "manylinux_2_28_x86_64" | "linux_x86_64" => ("abi3.so", "", b"\x7fELF"),
+        "macosx_12_0_arm64" => ("abi3.so", "", b"\xcf\xfa\xed\xfe"),
+        "win_amd64" => ("pyd", ".exe", b"MZ"),
+        _ => return Err(format!("unsupported wheel platform: {platform_tag}").into()),
+    };
+    let dist_info = format!("delta_arrow_reader-{version}.dist-info");
+    let data = format!("delta_arrow_reader-{version}.data");
+    let cli = format!("{data}/scripts/delta-arrow-reader{cli_suffix}");
+    let extension = format!("delta_arrow_reader/delta_arrow_reader.{extension_suffix}");
+    let metadata_path = format!("{dist_info}/METADATA");
+    let wheel_path = format!("{dist_info}/WHEEL");
+    let record_path = format!("{dist_info}/RECORD");
+    let required = [
+        metadata_path.clone(),
+        wheel_path.clone(),
+        record_path.clone(),
+        format!("{dist_info}/licenses/LICENSE"),
+        format!("{dist_info}/licenses/NOTICE"),
+        "delta_arrow_reader/__init__.py".into(),
+        "delta_arrow_reader/__init__.pyi".into(),
+        "delta_arrow_reader/py.typed".into(),
+        extension.clone(),
+        cli.clone(),
+        format!("{data}/data/share/delta-arrow-reader/python-THIRD_PARTY_NOTICES.txt"),
+        format!("{data}/data/share/delta-arrow-reader/cli-THIRD_PARTY_NOTICES.txt"),
+    ];
     let mut buffer = vec![0; rawzip::RECOMMENDED_BUFFER_SIZE];
     let mut header_buffer = vec![0; rawzip::RECOMMENDED_BUFFER_SIZE];
     let archive = ZipArchive::from_file(fs::File::open(path)?, &mut buffer)?;
-    for (name, expected_headers) in [
-        (
-            "METADATA",
-            [("Name", "delta-arrow-reader"), ("Version", version)],
-        ),
-        (
-            "WHEEL",
-            [("Root-Is-Purelib", "false"), ("Tag", wheel_tag.as_str())],
-        ),
-    ] {
-        let expected_path = format!("delta_arrow_reader-{version}.dist-info/{name}");
-        let suffix = format!(".dist-info/{name}").to_ascii_lowercase();
-        let mut contents = None;
-        let mut count = 0;
-        let mut entries = archive.entries(&mut buffer);
-        // Inspect every record so duplicate metadata names cannot be hidden by a map.
-        while let Some(entry) = entries.next_entry()? {
-            count += 1;
-            let member = entry.file_path();
-            // Reject names installers can normalize onto another file, including on Windows.
-            if member.try_normalize()?.as_str().as_bytes() != member.as_bytes()
-                || member
-                    .as_bytes()
-                    .iter()
-                    .any(|byte| byte.is_ascii_control() || b"<>:\"|?*".contains(byte))
-                || member
-                    .as_bytes()
-                    .split(|byte| *byte == b'/')
-                    .any(|part| part.ends_with(b".") || part.ends_with(b" "))
-            {
-                return Err("ambiguous ZIP member name".into());
-            }
-            // Case variants can alias the same metadata on Windows and macOS.
-            if !member
-                .as_bytes()
-                .to_ascii_lowercase()
-                .ends_with(suffix.as_bytes())
-            {
-                continue;
-            }
-            if contents.is_some() || member.as_bytes() != expected_path.as_bytes() {
-                return Err(format!("expected exactly one {expected_path:?}").into());
-            }
-            let local = archive.get_entry(entry.wayfinder())?;
-            let header = local.local_header(&mut header_buffer)?;
-            if header.file_path().as_bytes() != member.as_bytes()
-                || header.compression_method() != entry.compression_method()
-            {
-                return Err(format!("ZIP local header does not match {expected_path}").into());
-            }
-            if entry.flags().is_encrypted() || header.flags().is_encrypted() {
-                return Err(format!("encrypted wheel metadata: {expected_path}").into());
-            }
-            let reader: Box<dyn Read + '_> = match entry.compression_method() {
-                CompressionMethod::STORE => Box::new(local.reader()),
-                CompressionMethod::DEFLATE => Box::new(DeflateDecoder::new(local.reader())),
-                method => return Err(format!("unsupported wheel compression: {method}").into()),
-            };
-            let mut text = String::new();
-            local.verifying_reader(reader).read_to_string(&mut text)?;
-            contents = Some(text);
+    let mut records = BTreeMap::new();
+    let mut metadata = BTreeMap::new();
+    let mut names = BTreeSet::new();
+    let mut directories = Vec::new();
+    let mut count = 0;
+    let mut entries = archive.entries(&mut buffer);
+    // Inspect every record before insertion so duplicate or aliased names cannot be hidden.
+    while let Some(entry) = entries.next_entry()? {
+        count += 1;
+        let member = entry.file_path();
+        let normalized = member.try_normalize()?;
+        let name = normalized.as_str();
+        if name.as_bytes() != member.as_bytes()
+            || name
+                .bytes()
+                .any(|byte| byte.is_ascii_control() || b"<>:\"|?*".contains(&byte))
+            || name.split('/').any(|part| part.ends_with(['.', ' ']))
+        {
+            return Err("ambiguous ZIP member name".into());
         }
-        if count != archive.entries_hint() {
-            return Err("ZIP central directory entry count does not match".into());
+        if !names.insert(name.trim_end_matches('/').to_ascii_lowercase()) {
+            return Err(format!("duplicate or aliased ZIP member: {name}").into());
         }
-        let contents = contents.ok_or_else(|| format!("expected exactly one {expected_path:?}"))?;
-        check_headers(name, &contents, &expected_headers)?;
+        let is_directory = entry.is_dir();
+        if entry.mode().value() & 0o170000 != if is_directory { 0o040000 } else { 0o100000 } {
+            return Err(format!("wheel member must be a regular file or directory: {name}").into());
+        }
+        let allowed = is_directory
+            || required.iter().any(|path| path == name)
+            || (name.starts_with(&format!("{dist_info}/sboms/")) && name.ends_with(".json"))
+            || (platform_tag == "win_amd64" && name == format!("{dist_info}/DELVEWHEEL"))
+            || is_bundled_library(name, platform_tag);
+        if !allowed {
+            return Err(format!("unexpected wheel member: {name}").into());
+        }
+        if name == cli && cli_suffix.is_empty() && entry.mode().permissions() & 0o111 != 0o111 {
+            return Err(format!("CLI must be executable by every user: {name}").into());
+        }
+        let local = archive.get_entry(entry.wayfinder())?;
+        let header = local.local_header(&mut header_buffer)?;
+        if header.file_path().as_bytes() != member.as_bytes()
+            || header.compression_method() != entry.compression_method()
+        {
+            return Err(format!("ZIP local header does not match {name}").into());
+        }
+        if entry.flags().is_encrypted() || header.flags().is_encrypted() {
+            return Err(format!("encrypted wheel member: {name}").into());
+        }
+        let reader: Box<dyn Read + '_> = match entry.compression_method() {
+            CompressionMethod::STORE => Box::new(local.reader()),
+            CompressionMethod::DEFLATE => Box::new(DeflateDecoder::new(local.reader())),
+            method => return Err(format!("unsupported wheel compression: {method}").into()),
+        };
+        let mut reader = local.verifying_reader(reader);
+        let mut hash = Sha256::new();
+        let size = if name == metadata_path || name == wheel_path || name == record_path {
+            let mut contents = String::new();
+            // Bound buffered metadata; native payloads are hashed without retaining them in memory.
+            const MAX_METADATA_BYTES: u64 = 16 * 1024 * 1024;
+            reader
+                .by_ref()
+                .take(MAX_METADATA_BYTES + 1)
+                .read_to_string(&mut contents)?;
+            if contents.len() as u64 > MAX_METADATA_BYTES {
+                return Err(format!("wheel metadata exceeds 16 MiB: {name}").into());
+            }
+            hash.update(contents.as_bytes());
+            let size = contents.len() as u64;
+            metadata.insert(name.to_owned(), contents);
+            size
+        } else {
+            let mut prefix_size = 0;
+            if name == cli || name == extension {
+                let mut prefix = vec![0; native_signature.len()];
+                reader.read_exact(&mut prefix)?;
+                if prefix != native_signature {
+                    return Err(format!("expected native {platform_tag} payload: {name}").into());
+                }
+                hash.update(&prefix);
+                prefix_size = prefix.len() as u64;
+            }
+            prefix_size + io::copy(&mut reader, &mut hash)?
+        };
+        if is_directory {
+            if size != 0 {
+                return Err(format!("nonempty ZIP directory: {name}").into());
+            }
+            directories.push(name.to_owned());
+        } else {
+            if size == 0 && name != "delta_arrow_reader/py.typed" {
+                return Err(format!("empty wheel file: {name}").into());
+            }
+            records.insert(
+                name.to_owned(),
+                (URL_SAFE_NO_PAD.encode(hash.finalize()), size),
+            );
+        }
+    }
+    if count != archive.entries_hint() {
+        return Err("ZIP central directory entry count does not match".into());
+    }
+    for name in &required {
+        if !records.contains_key(name) {
+            return Err(format!("missing required wheel file: {name}").into());
+        }
+    }
+    for directory in directories {
+        if !records.keys().any(|name| name.starts_with(&directory)) {
+            return Err(format!("unexpected wheel directory: {directory}").into());
+        }
+    }
+    check_headers(
+        "METADATA",
+        &metadata[&metadata_path],
+        &[("Name", "delta-arrow-reader"), ("Version", version)],
+    )?;
+    check_headers(
+        "WHEEL",
+        &metadata[&wheel_path],
+        &[("Root-Is-Purelib", "false"), ("Tag", &wheel_tag)],
+    )?;
+    check_record(&metadata[&record_path], &record_path, records)
+}
+
+fn is_bundled_library(name: &str, platform_tag: &str) -> bool {
+    // Preserve the dependency directories emitted by Maturin and the existing repair tools.
+    let prefixes: &[&str] = if platform_tag.starts_with("macosx_") {
+        &["delta_arrow_reader.dylibs/", "delta_arrow_reader/.dylibs/"]
+    } else {
+        &["delta_arrow_reader.libs/"]
+    };
+    let Some(filename) = prefixes.iter().find_map(|prefix| name.strip_prefix(prefix)) else {
+        return false;
+    };
+    if filename.contains('/') {
+        return false;
+    }
+    match platform_tag {
+        "win_amd64" => filename.to_ascii_lowercase().ends_with(".dll"),
+        "macosx_12_0_arm64" => filename.ends_with(".dylib"),
+        _ => {
+            filename.ends_with(".so")
+                || filename.split_once(".so.").is_some_and(|(_, suffix)| {
+                    !suffix.is_empty()
+                        && suffix
+                            .bytes()
+                            .all(|byte| byte.is_ascii_digit() || byte == b'.')
+                })
+        }
+    }
+}
+
+fn check_record(
+    contents: &str,
+    record_path: &str,
+    mut files: BTreeMap<String, (String, u64)>,
+) -> Result<()> {
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .from_reader(contents.as_bytes());
+    for row in reader.records() {
+        let row = row?;
+        if row.len() != 3 {
+            return Err("RECORD: expected path, hash, and size".into());
+        }
+        let name = &row[0];
+        let (hash, size) = files
+            .remove(name)
+            .ok_or_else(|| format!("RECORD: duplicate or unknown path: {name}"))?;
+        let matches = if name == record_path {
+            row[1].is_empty() && row[2].is_empty()
+        } else {
+            row[1] == format!("sha256={hash}") && row[2] == size.to_string()
+        };
+        if !matches {
+            return Err(format!("RECORD: incorrect hash or size for {name}").into());
+        }
+    }
+    if !files.is_empty() {
+        return Err(format!(
+            "RECORD: missing files: {:?}",
+            files.keys().collect::<Vec<_>>()
+        )
+        .into());
     }
     Ok(())
 }
@@ -155,7 +301,7 @@ pub fn check_wheel_artifacts(directory: &Path, version: &str) -> Result<Vec<Path
             )
             .into());
         }
-        check_wheel_metadata(&paths[0], version, platform)?;
+        check_wheel(&paths[0], version, platform)?;
         wheels.extend(paths);
     }
     Ok(wheels)

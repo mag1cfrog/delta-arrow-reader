@@ -62,7 +62,7 @@ pub(crate) struct BuildPythonWheelArgs {
     /// Disable Cargo network access.
     #[arg(long)]
     offline: bool,
-    /// Require Cargo.lock and the Cargo cache to remain unchanged.
+    /// Require Cargo.lock to remain unchanged and disable Cargo network access.
     #[arg(long)]
     frozen: bool,
     /// Maturin platform compatibility tag.
@@ -141,7 +141,12 @@ impl BuildPythonWheelArgs {
         stage_cli(staged.path(), &target, || {
             build_cli(&repository, &target, profile, &cargo_arguments)
         })?;
-        stage_notices(&repository, staged.path(), &target)?;
+        stage_notices(
+            &repository,
+            staged.path(),
+            &target,
+            self.offline || self.frozen,
+        )?;
         fs::rename(staged.path(), &data).context(FileSnafu { path: &data })?;
         if self.prepare_only {
             eprintln!("Prepared Python wheel data in {}", data.display());
@@ -257,10 +262,22 @@ impl BuildPythonWheelArgs {
         let filename = wheel.file_name().unwrap();
         let destination = output_directory.join(filename);
         if wheel != destination {
-            fs::copy(wheel, &destination).context(FileSnafu { path: &destination })?;
+            copy_wheel(wheel, &destination)?;
         }
         Ok(filename.to_string_lossy().into_owned())
     }
+}
+
+fn copy_wheel(source: &Path, destination: &Path) -> Result<()> {
+    // Copy before replacing the destination, which may alias the source.
+    let temporary = tempfile::NamedTempFile::new_in(destination.parent().unwrap())
+        .context(FileSnafu { path: destination })?;
+    fs::copy(source, temporary.path()).context(FileSnafu { path: source })?;
+    temporary
+        .persist(destination)
+        .map_err(|error| error.error)
+        .context(FileSnafu { path: destination })?;
+    Ok(())
 }
 
 fn tool_command(program: &str, repository: &Path) -> Command {
@@ -270,7 +287,7 @@ fn tool_command(program: &str, repository: &Path) -> Command {
     command
 }
 
-fn stage_notices(repository: &Path, data: &Path, target: &str) -> Result<()> {
+fn stage_notices(repository: &Path, data: &Path, target: &str, offline: bool) -> Result<()> {
     let destination = data.join("data/share/delta-arrow-reader");
     fs::create_dir_all(&destination).context(FileSnafu { path: &destination })?;
     for package in ["python", "cli"] {
@@ -278,7 +295,14 @@ fn stage_notices(repository: &Path, data: &Path, target: &str) -> Result<()> {
             repository,
             &repository.join(format!("crates/delta-arrow-reader-{package}/Cargo.toml")),
             target,
-            |program| tool_command(program, repository),
+            |program| {
+                let mut command = tool_command(program, repository);
+                // Keep license downloads enabled while Cargo resolves dependencies offline.
+                if offline {
+                    command.env("CARGO_NET_OFFLINE", "true");
+                }
+                command
+            },
         )?;
         let path = destination.join(format!("{package}-THIRD_PARTY_NOTICES.txt"));
         fs::write(&path, text).context(FileSnafu { path: &path })?;

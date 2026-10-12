@@ -93,7 +93,7 @@ enum Task {
         #[arg(long)]
         sha256: String,
     },
-    /// Validate one Python wheel's filename and metadata.
+    /// Validate one Python wheel's metadata, installation layout, and file hashes.
     CheckPythonWheel {
         path: PathBuf,
         #[arg(long)]
@@ -211,7 +211,7 @@ fn run_task(task: Task) -> Result<()> {
             path,
             expected_version,
             platform_tag,
-        } => python_wheels::check_wheel_metadata(&path, &expected_version, &platform_tag),
+        } => python_wheels::check_wheel(&path, &expected_version, &platform_tag),
         Task::CheckPythonArtifacts {
             directory,
             expected_version,

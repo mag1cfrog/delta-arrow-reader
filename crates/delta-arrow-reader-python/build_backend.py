@@ -21,11 +21,12 @@ def _xtask_command(task, *arguments):
     workspace = Path(
         subprocess.check_output(
             [cargo, "locate-project", "--workspace", "--message-format", "plain"],
-            text=True,
+            encoding="utf-8",
         ).strip()
     ).parent
+    cargo_arguments = [flag for flag in ("--offline", "--frozen") if flag in arguments]
     return [
-        cargo, "run", "--locked", "--manifest-path",
+        cargo, "run", "--locked", *cargo_arguments, "--manifest-path",
         str(workspace / "xtask" / "Cargo.toml"), "--", task, *arguments,
     ]
 
@@ -56,7 +57,7 @@ def _build_wheel(wheel_directory, config_settings, metadata_directory, editable)
         arguments.append("--editable")
     arguments.extend(maturin.get_maturin_pep517_args(config_settings))
     return subprocess.check_output(
-        _xtask_command("build-python-wheel", *arguments), text=True
+        _xtask_command("build-python-wheel", *arguments), encoding="utf-8"
     ).strip()
 
 

@@ -116,7 +116,57 @@ class BackendTests(unittest.TestCase):
                 ])
                 self.assertEqual("--editable" in command, editable)
                 self.assertEqual(command[-4:], settings["maturin.build-args"])
-                self.assertEqual(output.call_args.kwargs, {"text": True})
+                self.assertEqual(output.call_args.kwargs, {"encoding": "utf-8"})
+
+    def test_network_restrictions_apply_before_bootstrapping_native_tools(self):
+        for flag in ("--offline", "--frozen"):
+            self.maturin.get_maturin_pep517_args.return_value = [flag]
+            for hook in (self.backend.build_wheel, self.backend.build_editable):
+                with self.subTest(flag=flag, hook=hook.__name__), patch.object(
+                    self.backend.subprocess, "check_output",
+                    side_effect=[
+                        "/source/Cargo.toml\n",
+                        subprocess.CalledProcessError(1, ["cargo", "run"]),
+                    ],
+                ) as output:
+                    with self.assertRaises(subprocess.CalledProcessError):
+                        hook("output")
+                    command = output.call_args.args[0]
+                    separator = command.index("--")
+                    self.assertIn("--locked", command[:separator])
+                    self.assertIn(flag, command[:separator])
+                    self.assertIn(flag, command[separator + 1:])
+                    self.assertEqual(output.call_count, 2)
+        self.maturin.build_wheel.assert_not_called()
+        self.maturin.build_editable.assert_not_called()
+
+    def test_cargo_workspace_path_uses_utf8_under_a_legacy_locale(self):
+        check_output = subprocess.check_output
+        popen = subprocess.Popen
+        with tempfile.TemporaryDirectory(prefix="caf\u00e9 workspace ") as temporary:
+            workspace = Path(temporary)
+
+            def cargo_output(command, **kwargs):
+                return check_output([
+                    self.backend.sys.executable, "-c",
+                    "import sys; sys.stdout.buffer.write(sys.argv[1].encode('utf-8'))",
+                    str(workspace / "Cargo.toml") + "\n",
+                ], **kwargs)
+
+            def legacy_locale(*args, **kwargs):
+                if kwargs.get("text") and kwargs.get("encoding") is None:
+                    kwargs["encoding"] = "cp1252"
+                return popen(*args, **kwargs)
+
+            with (
+                patch.object(subprocess, "check_output", side_effect=cargo_output),
+                patch.object(subprocess, "Popen", side_effect=legacy_locale),
+            ):
+                command = self.backend._xtask_command("build-python-wheel")
+            self.assertEqual(
+                command[command.index("--manifest-path") + 1],
+                str(workspace / "xtask" / "Cargo.toml"),
+            )
 
     def test_native_wheel_failure_propagates_without_calling_library_only_build(self):
         self.maturin.get_maturin_pep517_args.return_value = []
