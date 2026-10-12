@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 mod support;
-use support::{Result, WheelFixture, write_zip};
+use support::{PLATFORMS, Result, WheelFixture, wheel_files, write_wheel, write_zip};
 
 const REPOSITORY: &str = "mag1cfrog/delta-arrow-reader";
 
@@ -460,6 +460,31 @@ fn validates_wheel_contents_before_emitting_artifact_identity() -> Result<()> {
     fixture.files[0].1 = b"not a wheel".to_vec();
     fixture.write_bundle(true)?;
     fixture.assert_rejected(fixture.command("reuse-python-wheels")?.output()?, "")?;
+    Ok(())
+}
+
+#[test]
+fn a_matching_bundle_digest_cannot_authorize_a_wheel_without_its_cli() -> Result<()> {
+    for (index, (platform, tag)) in PLATFORMS.into_iter().enumerate() {
+        for task in ["reuse-python-wheels", "download-python-wheels"] {
+            let mut fixture = ReuseFixture::new(&format!("missing-cli-{platform}-{task}"))?;
+            let path = fixture
+                .wheels
+                .directory
+                .join("wheel-artifacts")
+                .join(&fixture.files[index].0);
+            let mut files = wheel_files(tag);
+            files.retain(|(name, _)| !name.contains(".data/scripts/"));
+            write_wheel(&path, &files, true)?;
+            fixture.files[index].1 = fs::read(path)?;
+            // Match the new bundle's SHA256 so only the missing payload can reject it.
+            fixture.write_bundle(true)?;
+            fixture.assert_rejected(
+                fixture.command(task)?.output()?,
+                "missing required wheel file: delta_arrow_reader-1.2.3.data/scripts/delta-arrow-reader",
+            )?;
+        }
+    }
     Ok(())
 }
 

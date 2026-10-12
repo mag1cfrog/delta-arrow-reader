@@ -5,7 +5,7 @@ use std::{collections::BTreeSet, fs, path::Path, process::Command};
 use serde_json::{Value, json};
 
 mod support;
-use support::{Result, WheelFixture};
+use support::{PLATFORMS, Result, WheelFixture, wheel_files, write_wheel};
 
 fn workflow() -> Value {
     serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi.yml")).unwrap()
@@ -891,6 +891,48 @@ fn builder_reports_validation_only_after_successful_builds_and_complete_artifact
                 }
             );
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn wheels_without_a_cli_cannot_complete_release_validation() -> Result<()> {
+    let builder: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;
+    let steps = builder["jobs"]["validate"]["steps"].as_array().unwrap();
+    let verify = steps.iter().find(|step| step["id"] == "verify").unwrap();
+    let complete = steps.iter().find(|step| step["id"] == "complete").unwrap();
+    let script = format!(
+        "{}\n{}\n{}",
+        steps[0]["run"].as_str().unwrap(),
+        verify["run"].as_str().unwrap(),
+        complete["run"].as_str().unwrap()
+    )
+    .replace("cargo xtask", "\"$XTASK_BINARY\"");
+    for (index, (platform, tag)) in PLATFORMS.into_iter().enumerate() {
+        let fixture = WheelFixture::new(&format!("validation-missing-cli-{platform}"))?;
+        let (_, wheels) = fixture.create_artifacts()?;
+        let mut files = wheel_files(tag);
+        files.retain(|(name, _)| !name.contains(".data/scripts/"));
+        write_wheel(&wheels[index], &files, true)?;
+        let output_file = fixture.directory.join("outputs");
+        fs::write(&output_file, "existing=kept\n")?;
+        let output = Command::new("bash")
+            .args(["-e", "-o", "pipefail", "-c", &script])
+            .current_dir(&fixture.directory)
+            .env("XTASK_BINARY", env!("CARGO_BIN_EXE_xtask"))
+            .env("EXPECTED_VERSION", "1.2.3")
+            .env("BUILD_RESULT", "success")
+            .env("GITHUB_OUTPUT", &output_file)
+            .output()?;
+        assert!(!output.status.success(), "{platform}: {output:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(
+                "missing required wheel file: delta_arrow_reader-1.2.3.data/scripts/delta-arrow-reader"
+            ),
+            "{output:?}"
+        );
+        assert_eq!(fs::read_to_string(output_file)?, "existing=kept\n");
     }
     Ok(())
 }
