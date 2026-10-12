@@ -474,6 +474,57 @@ fn linux_sdist_checks_preserve_the_workspace_and_reject_lockfile_drift() -> Resu
 }
 
 #[test]
+fn every_wheel_cli_is_audited_after_installation_and_before_upload() -> Result<()> {
+    let builder: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;
+    let build = &builder["jobs"]["build"];
+    let steps = build["steps"].as_array().unwrap();
+    let position = |name| steps.iter().position(|step| step["name"] == name).unwrap();
+    let audit_position = position("Audit installed wheel CLI");
+    assert!(position("Inspect wheel metadata") < audit_position);
+    assert!(position("Test installed wheel on Python 3.10 and PyArrow 18.0.0") < audit_position);
+    assert!(audit_position < position("Upload validated wheel"));
+    let audit = &steps[audit_position];
+    assert!(audit["if"].is_null());
+    assert!(audit["continue-on-error"].is_null());
+    let fixture = WheelFixture::new("installed-cli-audit")?;
+    let runner_temp = fixture.directory.join("runner temp");
+    for platform in build["strategy"]["matrix"]["include"].as_array().unwrap() {
+        let windows = platform["os"] == "windows-2022";
+        let cli = if windows {
+            "Scripts/delta-arrow-reader.exe"
+        } else {
+            "bin/delta-arrow-reader"
+        };
+        let script = audit["run"].as_str().unwrap()
+            .replace("${{ runner.os == 'Windows' && 'Scripts/delta-arrow-reader.exe' || 'bin/delta-arrow-reader' }}", cli)
+            .replace("${{ matrix.platform-tag }}", platform["platform-tag"].as_str().unwrap());
+        for exit_status in [0, 9] {
+            let script =
+                format!("cargo() {{ printf '%s\\n' \"$@\"; return {exit_status}; }}\n{script}");
+            let output = Command::new("bash")
+                .args(["-e", "-o", "pipefail", "-c", &script])
+                .env("RUNNER_TEMP", &runner_temp)
+                .output()?;
+            assert_eq!(output.status.success(), exit_status == 0, "{output:?}");
+            assert_eq!(
+                String::from_utf8(output.stdout)?
+                    .lines()
+                    .collect::<Vec<_>>(),
+                [
+                    "xtask",
+                    "audit-python-cli",
+                    runner_temp.join("python310").join(cli).to_str().unwrap(),
+                    "--platform-tag",
+                    platform["platform-tag"].as_str().unwrap(),
+                ]
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn builder_reports_validation_only_after_successful_builds_and_complete_artifacts() -> Result<()> {
     let builder: Value =
         serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;

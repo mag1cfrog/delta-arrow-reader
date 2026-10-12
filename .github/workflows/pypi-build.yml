@@ -260,6 +260,13 @@ jobs:
             "$GITHUB_WORKSPACE"/dist/*.whl 'pyarrow==18.0.0'
           python310/${{ matrix.venv-python }} -I -m unittest discover \
             -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" ${{ matrix.test-args }}
+      - name: Audit installed wheel CLI
+        env:
+          RUSTC_WRAPPER: ""
+        run: |
+          cargo xtask audit-python-cli \
+            "$RUNNER_TEMP/python310/${{ runner.os == 'Windows' && 'Scripts/delta-arrow-reader.exe' || 'bin/delta-arrow-reader' }}" \
+            --platform-tag '${{ matrix.platform-tag }}'
       - uses: actions/setup-python@v6
         with:
           python-version: '3.14'
