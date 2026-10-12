@@ -8,6 +8,10 @@ permissions:
   pull-requests: read
 
 env:
+  # Keep file and line information in backtraces while reducing build artifacts.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  # Keep Python's pkg-config path from invalidating the bundled AWS-LC build.
+  AWS_LC_SYS_USE_SYSTEM: "0"
   SCCACHE_GHA_ENABLED: "true"
   SCCACHE_GHA_RW_MODE: READ_ONLY
   RUSTC_WRAPPER: sccache
@@ -76,11 +80,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
-      - name: Cache Cargo registry
+      - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: core-ci-targets
+          cache-targets: true
+          cache-bin: false
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
@@ -116,11 +121,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
-      - name: Cache Cargo registry
+      - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ${{ matrix.os == 'windows-2022' && 'core-ci-targets' || 'core-ci' }}
-          cache-targets: ${{ matrix.os == 'windows-2022' }}
+          shared-key: core-ci-targets
+          cache-targets: true
+          cache-bin: false
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
@@ -152,11 +158,12 @@ jobs:
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
           components: clippy, rustfmt
-      - name: Cache Cargo registry
+      - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: core-ci-targets
+          cache-targets: true
+          cache-bin: false
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
@@ -178,6 +185,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.tooling == 'true'
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_LOG: sccache::cache::cache=warn
+      SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
 
     steps:
       - uses: actions/checkout@v5
@@ -191,11 +201,12 @@ jobs:
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
           components: clippy, rustfmt
-      - name: Cache Cargo registry
+      - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: core-ci-targets
+          cache-targets: true
+          cache-bin: false
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
@@ -218,6 +229,11 @@ jobs:
           cargo test --locked --package xtask \
             --test ci --test cli_workflow --test cli_images_workflow --test cli_validation_workflow --test cli_release_selection --test images --test python_release --test python_upload --test python_wheels \
             --test python_wheel_reuse --test python_workflow --test release_plz -- --include-ignored
+      - name: Report cache read failures
+        continue-on-error: true
+        run: cargo xtask report-cache-reads
+        env:
+          RUSTC_WRAPPER: ""
       - run: git diff --check
 
   python-package:
@@ -242,11 +258,12 @@ jobs:
           toolchain: ${{ steps.rust-version.outputs.version }}
           components: clippy, rustfmt
       - run: cargo fmt --package delta-arrow-reader-python -- --check
-      - name: Cache Cargo registry
+      - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: core-ci-targets
+          cache-targets: true
+          cache-bin: false
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
@@ -281,11 +298,12 @@ jobs:
           toolchain: ${{ steps.rust-version.outputs.version }}
           components: clippy, rustfmt
       - run: cargo fmt --package delta-arrow-reader-cli -- --check
-      - name: Cache Cargo registry
+      - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: core-ci-targets
+          cache-targets: true
+          cache-bin: false
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
