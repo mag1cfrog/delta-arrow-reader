@@ -3,12 +3,11 @@
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 import maturin
 from maturin import (
-    build_editable,
-    build_wheel,
     get_requires_for_build_editable,
     get_requires_for_build_sdist,
     get_requires_for_build_wheel,
@@ -17,7 +16,7 @@ from maturin import (
 )
 
 
-def build_sdist(sdist_directory, config_settings=None):
+def _xtask_command(task, *arguments):
     cargo = os.environ.get("CARGO", "cargo")
     workspace = Path(
         subprocess.check_output(
@@ -25,20 +24,45 @@ def build_sdist(sdist_directory, config_settings=None):
             text=True,
         ).strip()
     ).parent
+    return [
+        cargo, "run", "--locked", "--manifest-path",
+        str(workspace / "xtask" / "Cargo.toml"), "--", task, *arguments,
+    ]
+
+
+def build_sdist(sdist_directory, config_settings=None):
     with tempfile.TemporaryDirectory(prefix="python-sdist-") as temporary:
         filename = maturin.build_sdist(temporary, config_settings)
         subprocess.run(
-            [
-                cargo,
-                "run",
-                "--locked",
-                "--manifest-path",
-                str(workspace / "xtask" / "Cargo.toml"),
-                "--",
+            _xtask_command(
                 "complete-python-sdist",
                 str(Path(temporary) / filename),
                 str(Path(sdist_directory).resolve() / filename),
-            ],
+            ),
             check=True,
         )
     return filename
+
+
+def _build_wheel(wheel_directory, config_settings, metadata_directory, editable):
+    arguments = [
+        "--project-directory", str(Path.cwd()),
+        "--wheel-directory", str(Path(wheel_directory).resolve()),
+        "--python", sys.executable,
+    ]
+    if metadata_directory is not None:
+        arguments.extend(["--metadata-directory", str(Path(metadata_directory).resolve())])
+    if editable:
+        arguments.append("--editable")
+    arguments.extend(maturin.get_maturin_pep517_args(config_settings))
+    return subprocess.check_output(
+        _xtask_command("build-python-wheel", *arguments), text=True
+    ).strip()
+
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    return _build_wheel(wheel_directory, config_settings, metadata_directory, False)
+
+
+def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
+    return _build_wheel(wheel_directory, config_settings, metadata_directory, True)

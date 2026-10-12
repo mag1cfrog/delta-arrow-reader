@@ -16,6 +16,7 @@ mod python_cli;
 mod python_release;
 mod python_sdist;
 mod python_upload;
+mod python_wheel_build;
 mod python_wheel_reuse;
 mod python_wheels;
 mod release_assets;
@@ -69,6 +70,8 @@ enum Task {
     CheckPythonReleaseRequest,
     /// Build and stage the native executable for Python wheel packaging.
     StagePythonCli(python_cli::StagePythonCliArgs),
+    /// Prepare the native CLI and notices, then assemble the combined Python wheel.
+    BuildPythonWheel(python_wheel_build::BuildPythonWheelArgs),
     /// Include the native build tools and original workspace in a Maturin sdist.
     CompletePythonSdist {
         source: PathBuf,
@@ -184,6 +187,7 @@ fn run_task(task: Task) -> Result<()> {
         Task::PrepareReleasePrConfig { destination } => release_plz::prepare_config(&destination),
         Task::CheckPythonReleaseRequest => python_release::validate_release_request(),
         Task::StagePythonCli(args) => args.run().map_err(Into::into),
+        Task::BuildPythonWheel(args) => args.run().map_err(Into::into),
         Task::CompletePythonSdist {
             source,
             destination,

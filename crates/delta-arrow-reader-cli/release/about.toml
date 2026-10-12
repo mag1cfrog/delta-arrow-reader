@@ -7,3 +7,13 @@ accepted = [
     "Zlib",
 ]
 ignore-dev-dependencies = true
+
+[target-lexicon]
+accepted = ["Apache-2.0 WITH LLVM-exception"]
+
+# The binding keeps its license outside its crate for Maturin's license metadata.
+[delta-arrow-reader-python.clarify]
+license = "Apache-2.0"
+[[delta-arrow-reader-python.clarify.files]]
+path = "../../LICENSE"
+checksum = "b009e2ca7df3cebefbacf792b52e4d8d6f5e1e340b14a9290cf49bb1143d58ac"

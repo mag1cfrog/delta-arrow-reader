@@ -4,7 +4,13 @@ Read Delta Lake tables as PyArrow record batches with the Rust Delta Arrow Reade
 
 ```console
 python -m pip install delta-arrow-reader
+delta-arrow-reader --help
 ```
+
+The same package includes the native `delta-arrow-reader` command. To install
+it in a separate tool environment, use `uv tool install delta-arrow-reader` or
+run `uvx delta-arrow-reader --help`. Tool environments do not install the Python
+API into your project's environment.
 
 ```python
 from delta_arrow_reader import DeltaTable

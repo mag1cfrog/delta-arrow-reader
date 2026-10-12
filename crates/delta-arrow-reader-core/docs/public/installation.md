@@ -173,19 +173,28 @@ full path to the extracted wheel, keeping its original filename:
 ```console
 python -m pip install --only-binary=:all: "/path/to/wheel.whl"
 python -I -c "import delta_arrow_reader; print(delta_arrow_reader.__version__)"
+delta-arrow-reader --version
 ```
 
 This installs the wheel and a compatible PyArrow wheel without compiling from
 source. Rust and native build tools are not needed for wheel installation.
+The same package installs the native `delta-arrow-reader` command alongside
+the Python API. For a separate CLI environment, use `uv tool install /path/to/wheel.whl`
+or `uvx --from /path/to/wheel.whl delta-arrow-reader --help` with the wheel's full
+filename. A uv tool environment does not add the Python API to your project's
+environment.
 
 ### Build from source
 
-Use Python 3.10 or newer and Rust 1.94 or newer to install from source. From the
-repository root, run these commands on Linux or macOS:
+Use Python 3.10 or newer and Rust 1.94.x to install from source. Source builds also
+need `curl`, `cargo-about`, and Rust's license documentation. From the repository
+root, run these commands on Linux x86_64 or macOS arm64:
 
 ```console
 python3 -m venv target/python-venv
 . target/python-venv/bin/activate
+rustup component add rust-docs
+cargo install --locked --features cli --version 0.9.2 cargo-about
 python -m pip install ./crates/delta-arrow-reader-python
 ```
 

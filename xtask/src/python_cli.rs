@@ -1,5 +1,7 @@
 use std::{
-    env, fs,
+    env,
+    ffi::OsString,
+    fs,
     path::{Path, PathBuf},
     process::Command,
     time::Duration,
@@ -37,43 +39,61 @@ impl StagePythonCliArgs {
     pub(crate) fn run(self) -> Result<()> {
         let repository = repository_root();
         let executable = stage_cli(&self.destination, &self.target, || {
-            self.build_cli(&repository)
+            build_cli(&repository, &self.target, &self.profile, &[])
         })?;
         eprintln!("Staged {}", executable.display());
         Ok(())
     }
+}
 
-    fn build_cli(&self, repository: &Path) -> Result<(PathBuf, String)> {
-        let manifest: WorkspaceManifest = read_toml(&repository.join("Cargo.toml"))?;
-        let compiler = command_output(
-            Command::new(env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))
-                .arg("-vV")
-                .current_dir(repository),
-        )?;
-        compiler_release(&compiler, &manifest.workspace.package.rust_version)?;
-        check_native_target(&self.target, compiler_field(&compiler, "host")?)?;
-        let output = command_output(
-            Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
-                .current_dir(repository)
-                .args([
-                    "build",
-                    "--locked",
-                    "--package",
-                    "delta-arrow-reader-cli",
-                    "--bin",
-                    "dar",
-                    "--target",
-                    &self.target,
-                    "--profile",
-                    &self.profile,
-                    "--message-format=json-render-diagnostics",
-                ]),
-        )?;
-        Ok((
-            built_executable(&output)?,
-            manifest.workspace.package.version,
-        ))
+pub(crate) fn build_cli(
+    repository: &Path,
+    target: &str,
+    profile: &str,
+    cargo_arguments: &[OsString],
+) -> Result<(PathBuf, String)> {
+    let manifest: WorkspaceManifest = read_toml(&repository.join("Cargo.toml"))?;
+    let compiler = command_output(
+        Command::new(env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))
+            .arg("-vV")
+            .current_dir(repository),
+    )?;
+    compiler_release(&compiler, &manifest.workspace.package.rust_version)?;
+    check_native_target(target, compiler_field(&compiler, "host")?)?;
+    let mut command = Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
+    if let Some(deployment) = macos_deployment_target(target) {
+        command.env("MACOSX_DEPLOYMENT_TARGET", deployment);
     }
+    let output = command_output(
+        command
+            .current_dir(repository)
+            .args([
+                "build",
+                "--locked",
+                "--package",
+                "delta-arrow-reader-cli",
+                "--bin",
+                "dar",
+                "--target",
+                target,
+                "--profile",
+                profile,
+                "--message-format=json-render-diagnostics",
+            ])
+            .args(cargo_arguments),
+    )?;
+    Ok((
+        built_executable(&output)?,
+        manifest.workspace.package.version,
+    ))
+}
+
+pub(crate) fn macos_deployment_target(target: &str) -> Option<OsString> {
+    (target == "aarch64-apple-darwin").then(|| {
+        env::var_os("MACOSX_DEPLOYMENT_TARGET")
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "12.0".into())
+    })
 }
 
 fn executable_name(target: &str) -> Result<&'static str> {
@@ -146,7 +166,7 @@ fn built_executable(output: &str) -> Result<PathBuf> {
     })
 }
 
-fn stage_cli(
+pub(crate) fn stage_cli(
     destination: &Path,
     target: &str,
     build: impl FnOnce() -> Result<(PathBuf, String)>,

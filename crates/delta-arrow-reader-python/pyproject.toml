@@ -19,9 +19,20 @@ Issues = "https://github.com/mag1cfrog/delta-arrow-reader/issues"
 [tool.maturin]
 bindings = "pyo3"
 manifest-path = "Cargo.toml"
+profile = "release"
+editable-profile = "dev"
+# Maturin auto-detects delta_arrow_reader.data after xtask prepares it.
+exclude = [
+    { path = "**/delta_arrow_reader.data/**", format = "sdist" },
+    { path = "**/.python-wheel-*/**", format = "sdist" },
+    { path = "**/.python-cli-*/**", format = "sdist" },
+]
 # Keep auto-detected package files beside the sdist's root pyproject.toml.
 include = [
     { path = "build_backend.py", format = "sdist" },
     { path = "delta_arrow_reader.pyi", format = "sdist" },
     { path = "NOTICE", format = "sdist" },
 ]
+
+[tool.maturin.target.aarch64-apple-darwin]
+macos-deployment-target = "12.0"

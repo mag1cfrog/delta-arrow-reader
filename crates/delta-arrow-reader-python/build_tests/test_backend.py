@@ -19,6 +19,7 @@ class BackendTests(unittest.TestCase):
             "get_requires_for_build_editable",
             "prepare_metadata_for_build_wheel",
             "prepare_metadata_for_build_editable",
+            "get_maturin_pep517_args",
         ):
             setattr(self.maturin, name, Mock())
         path = Path(__file__).resolve().parents[1] / "build_backend.py"
@@ -90,6 +91,43 @@ class BackendTests(unittest.TestCase):
             "metadata"
         )
         run.assert_not_called()
+
+    def test_wheel_hooks_forward_frontend_paths_and_maturin_arguments(self):
+        filename = "delta_arrow_reader-1.2.3-cp310-abi3-linux_x86_64.whl"
+        settings = {"maturin.build-args": ["--profile", "dev", "--target-dir", "build output"]}
+        self.maturin.get_maturin_pep517_args.return_value = settings["maturin.build-args"]
+        for editable in (False, True):
+            with self.subTest(editable=editable), patch.object(
+                self.backend.subprocess, "check_output",
+                side_effect=["/source with spaces/Cargo.toml\n", filename + "\n"],
+            ) as output:
+                hook = self.backend.build_editable if editable else self.backend.build_wheel
+                self.assertEqual(hook("wheel output", settings, "prepared metadata"), filename)
+                command = output.call_args.args[0]
+                self.assertEqual(command[1:7], [
+                    "run", "--locked", "--manifest-path",
+                    "/source with spaces/xtask/Cargo.toml", "--", "build-python-wheel",
+                ])
+                self.assertEqual(command[7:15], [
+                    "--project-directory", str(Path.cwd()),
+                    "--wheel-directory", str(Path("wheel output").resolve()),
+                    "--python", self.backend.sys.executable,
+                    "--metadata-directory", str(Path("prepared metadata").resolve()),
+                ])
+                self.assertEqual("--editable" in command, editable)
+                self.assertEqual(command[-4:], settings["maturin.build-args"])
+                self.assertEqual(output.call_args.kwargs, {"text": True})
+
+    def test_native_wheel_failure_propagates_without_calling_library_only_build(self):
+        self.maturin.get_maturin_pep517_args.return_value = []
+        with patch.object(
+            self.backend.subprocess, "check_output",
+            side_effect=["/source/Cargo.toml\n", subprocess.CalledProcessError(1, ["cargo"])],
+        ):
+            with self.assertRaises(subprocess.CalledProcessError):
+                self.backend.build_wheel("output")
+        self.maturin.build_wheel.assert_not_called()
+        self.maturin.build_editable.assert_not_called()
 
 
 if __name__ == "__main__":

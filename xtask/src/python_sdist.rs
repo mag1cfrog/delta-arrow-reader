@@ -11,11 +11,11 @@ use tar::{Archive, Builder, HeaderMode};
 
 use crate::{
     error::{FileSnafu, InvalidInputSnafu, IoSnafu, Result},
-    repository::{WorkspaceManifest, read_toml, repository_root},
+    repository::{WorkspaceManifest, cargo_workspace_root, read_toml},
 };
 
 pub(crate) fn complete(source: &Path, destination: &Path) -> Result<()> {
-    complete_workspace_sdist(&repository_root(), source, destination)
+    complete_workspace_sdist(&cargo_workspace_root(Path::new("."))?, source, destination)
 }
 
 fn complete_workspace_sdist(repository: &Path, source: &Path, destination: &Path) -> Result<()> {
