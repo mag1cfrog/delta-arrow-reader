@@ -113,7 +113,9 @@ a baseline ARMv8-A CPU. Both require glibc 2.36 or newer, libgcc, and CA
 certificates for HTTPS. The same Debian 12 builds are tested on Debian 12,
 Ubuntu 24.04, and Fedora 44. Install `libc6`, `libgcc-s1`, and `ca-certificates`
 on Debian/Ubuntu, or `glibc`, `libgcc`, and `ca-certificates` on Fedora. Alpine's
-musl runtime, `scratch`, macOS, and Windows have no official CLI release binary.
+musl runtime, `scratch`, macOS, and Windows have no official standalone CLI
+release binary. The [Python wheels](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python)
+include a CLI for their own supported platforms, with a separate runtime baseline.
 
 The public container includes those runtime dependencies. It runs `dar` as a
 command and exits; it does not host an HTTP service. Pin the version:
@@ -136,7 +138,9 @@ image must provide the same glibc, libgcc, and certificate dependencies.
 ## Python
 
 The Python package loads Delta snapshots, exposes their versions and Arrow
-schemas, and streams rows through PyArrow. The package is not published on PyPI yet.
+schemas, and streams rows through PyArrow. The same wheel installs the native
+`delta-arrow-reader` CLI alongside the Python API. It does not install a `dar`
+alias. The package is not published on PyPI yet.
 
 ### Install a CI wheel
 
@@ -148,18 +152,23 @@ The wheel builder targets these systems:
 | Windows x86_64 | `win_amd64` |
 | macOS arm64, macOS 12.0 or newer | `macosx_12_0_arm64` |
 
-Intel Macs (macOS x86_64) have no official wheels or CI coverage. Source builds
-on Intel Macs are untested and unsupported.
+These targets apply to both the Python extension and bundled CLI. Linux arm64,
+Intel Macs, Windows arm64, and musl systems have no official wheels or wheel CI
+coverage. Source builds on Intel Macs are untested and unsupported. The wheel's
+Linux baseline is glibc 2.28; the standalone `dar` archives require glibc 2.36.
 
 Each platform has one `cp310-abi3` wheel. A successful build tests that same
 wheel on CPython 3.10 with PyArrow 18.0.0 and CPython 3.14 with the current
 compatible PyArrow release. Intermediate Python versions are not separately
 tested. Free-threaded CPython, PyPy, and other platform targets are not covered.
 
-Linux runs the full Python test suite. Windows and macOS run the installed
-package and Arrow stream smoke checks. Windows checks run on Windows Server
-2022. The macOS deployment target is 12.0, but runtime checks use newer macOS
-runners. Your Python and PyArrow distributions must also support your OS.
+All three platforms check the installed package, Python Arrow streams, and CLI
+behavior, including scan output, errors, closed stdout, and process termination.
+Linux also runs the full Python suite and repeats the installed checks in a fresh
+glibc 2.28 container. Windows checks run on Windows Server 2022 and use the
+CPython/MSVC runtime libraries. The macOS deployment target is 12.0, but runtime
+checks use newer macOS runners. Your Python and PyArrow distributions must also
+support your OS.
 
 Choose a run where all Python wheel jobs passed, including
 `Validate wheel artifact set`. Download the artifact for your platform and
@@ -178,11 +187,35 @@ delta-arrow-reader --version
 
 This installs the wheel and a compatible PyArrow wheel without compiling from
 source. Rust and native build tools are not needed for wheel installation.
-The same package installs the native `delta-arrow-reader` command alongside
-the Python API. For a separate CLI environment, use `uv tool install /path/to/wheel.whl`
-or `uvx --from /path/to/wheel.whl delta-arrow-reader --help` with the wheel's full
-filename. A uv tool environment does not add the Python API to your project's
-environment.
+
+To keep the CLI in a separate environment, install it with uv tool:
+
+```console
+uv tool install --no-build "/path/to/wheel.whl"
+delta-arrow-reader --version
+```
+
+If uv reports that its executable directory is missing from `PATH`, run
+`uv tool update-shell` and restart your shell. To run without a persistent tool
+installation, use uvx:
+
+```console
+uvx --no-build --from "/path/to/wheel.whl" delta-arrow-reader --help
+```
+
+Both commands use the wheel's full path and original filename. These tool
+environments do not add the Python API to your project's environment. They still
+install the Python extension, native CLI, and PyArrow, so they use more disk
+space than the standalone Linux archive. Keep the tool environment and its Python
+installation available when invoking the command.
+
+After a combined version is published on PyPI, you can install it by name with
+`python -m pip install --only-binary=:all: delta-arrow-reader`,
+`uv tool install --no-build delta-arrow-reader`, or
+`uvx --no-build delta-arrow-reader --help`. The package and command both use
+`delta-arrow-reader`, with no `-cli` suffix. See the
+[CLI guide](https://mag1cfrog.github.io/delta-arrow-reader/cli/) for `inspect` and
+`scan` examples; substitute `delta-arrow-reader` for `dar` in those commands.
 
 ### Build from source
 

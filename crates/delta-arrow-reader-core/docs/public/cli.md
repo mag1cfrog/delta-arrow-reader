@@ -8,6 +8,34 @@ scan protocol can still be inspected if its snapshot and schema can be loaded.
 `dar scan` reads one snapshot and writes its rows as an Arrow IPC stream. Use
 it with redirected stdout or a subprocess pipe.
 
+## Use the CLI from a Python wheel
+
+The `delta-arrow-reader` Python package includes a native command with the same
+name. Install a validated CI wheel with pip to get the Python API and CLI in one
+environment, or use uv tool/uvx for a separate tool environment. Follow the
+[Python installation instructions](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python)
+for download and installation commands; PyPI publication is planned.
+
+The wheels support Linux x86_64 with glibc 2.28 or newer, Windows x86_64, and
+macOS arm64 with macOS 12.0 or newer. They require CPython 3.10 or newer and
+install PyArrow even when you only need the CLI. The installation guide lists
+the tested Python versions and runtime requirements. No Rust toolchain is needed
+to install a wheel.
+
+Use the full command name for wheel installations:
+
+```sh
+delta-arrow-reader --version
+delta-arrow-reader inspect /data/orders
+delta-arrow-reader scan --column id --limit 100 /data/orders > sample.arrow
+```
+
+The examples below use the standalone name `dar`. Substitute
+`delta-arrow-reader` when using a wheel. Both commands accept the same arguments
+and have the same output and exit statuses; wheels do not install a `dar` alias.
+The Linux archives and containers below have their own platform and runtime
+requirements.
+
 ## Use a Linux binary
 
 CLI releases provide validated archives for these platforms:

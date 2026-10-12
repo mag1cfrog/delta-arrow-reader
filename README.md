@@ -41,7 +41,9 @@ cargo add tokio --features macros,rt-multi-thread
 ```
 
 For Python, [install a CI wheel or build from source to read tables with PyArrow](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python).
-PyPI publishing is planned.
+The same package includes the native `delta-arrow-reader` CLI. Install the wheel
+with pip for both the API and command, or use uv tool/uvx for a separate CLI
+environment. PyPI publishing is planned.
 
 For Go and other languages, [install a version-pinned `dar` binary or container](https://mag1cfrog.github.io/delta-arrow-reader/installation/#cli-binaries-and-container-images).
 The [CLI](https://mag1cfrog.github.io/delta-arrow-reader/cli/) returns snapshot

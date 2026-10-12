@@ -1,9 +1,12 @@
 # Publish Python wheels
 
-This guide is for maintainers releasing `delta-arrow-reader`. Complete the
+This guide is for maintainers releasing `delta-arrow-reader` wheels containing
+both the Python API and native CLI. Complete the
 [first-release checklist in #101](https://github.com/mag1cfrog/delta-arrow-reader/issues/101)
 before the first PyPI publication, including TestPyPI rehearsal and maintainer
-authorization. Merging the publishing workflow does not complete that checklist.
+authorization. Track the first public combined-package installation checks in
+#101 and the [CLI parent issue #428](https://github.com/mag1cfrog/delta-arrow-reader/issues/428).
+Merging the publishing workflow does not complete that checklist.
 
 The commands use a Linux or macOS shell and an authenticated GitHub CLI. Replace
 `X.Y.Z` with the exact stable version in the selected commit's root `Cargo.toml`.
@@ -74,8 +77,11 @@ and validates all three wheels without running either upload job. Require
 `Require validated wheels` to pass; individual platform artifacts can exist even
 when the complete build failed. The
 [wheel build guide](contributing.md#build-python-wheels-in-ci) describes the
-platform artifacts and installed-package checks. Save the passing run URL in
-#101's checklist.
+platform artifacts and installed checks. Save the passing run URL and source
+commit in #101's checklist. For each platform, record the wheel filename and
+SHA256, artifact ID, Python and PyArrow versions, and results for pip, uv tool,
+and uvx. The checks must use the final repaired wheel, including its native CLI.
+This build-only rehearsal does not authorize PyPI publication.
 
 ## Rehearse on TestPyPI
 
@@ -115,14 +121,16 @@ import delta_arrow_reader
 assert version("delta-arrow-reader") == delta_arrow_reader.__version__ == sys.argv[1]
 print(delta_arrow_reader.__version__)
 PY
+test "$(delta-arrow-reader --version)" = "delta-arrow-reader $PYTHON_RELEASE_VERSION"
 python -I -m unittest discover \
   -s "$PYTHON_RELEASE_REPO/crates/delta-arrow-reader-python/tests" -k installed
 ```
 
-The existing smoke checks cover package metadata and Arrow stream reads through
-both Python entrypoints and both Parquet backends, including filters and early
-close. Record the exact version, source commit, workflow URL, TestPyPI version
-URL, and the installation and smoke results in #101.
+The installed checks cover package metadata, Python Arrow streams, and the
+native CLI's version, scan results, diagnostics, closed stdout, and process
+termination. They use the executable installed in this environment. Record the
+exact version, source commit, workflow URL, TestPyPI version URL, wheel hashes,
+and installation results in #101.
 
 ## Publish a stable release
 
@@ -139,10 +147,13 @@ Automatic release PRs require the repository variable
 `RELEASE_PLZ_PR_ENABLED=true`. Review the version, lockfile, and changelog in that
 PR. When ready to validate the release, open its CI run, choose
 `Review deployments`, select `release-checks`, and click `Approve and deploy`.
-This starts the three Python wheel builds and the CLI checks in parallel,
-without uploading to a package index. The required `CI` check waits for
-successful approval and complete validation of both artifact sets. New commits
-to the PR require a new approval and build.
+This starts the three combined Python/CLI wheel builds and the separate
+standalone CLI checks in parallel, without uploading to a package index.
+The required `CI` check waits for successful approval and complete validation of
+both artifact sets. Each wheel must pass the Python API and bundled CLI checks,
+including pip, uv tool, and uvx acceptance. A failed, skipped, or cancelled
+platform cannot produce a validated set. New commits to the PR require a new
+approval and build.
 The complete wheel bundle is retained for 90 days. Confirm it is still available
 before merging; if it has expired, update the open release PR and approve a new
 CI run first.
@@ -153,8 +164,9 @@ A stable published release starts `pypi.yml`, which verifies the tag and commit
 and retrieves the merged release PR's validated wheel bundle. It requires that
 PR's latest CI run to have succeeded, matches the Git tree to the release tag,
 and verifies the bundle's SHA256 and all three wheels. It then requests the
-`pypi-release` environment. This path does not build wheels. Missing, expired,
-or mismatched artifacts stop publication without a fallback build.
+`pypi-release` environment. This path uploads the same final wheel bytes; it does
+not build, repair, repackage, or repeat the installed acceptance suites. Missing,
+expired, or mismatched artifacts stop publication without a fallback build.
 Drafts, prereleases, and unrelated tags cannot upload.
 
 If the automatic Python run did not start, a maintainer can dispatch it manually
@@ -170,9 +182,38 @@ gh workflow run pypi.yml --repo mag1cfrog/delta-arrow-reader \
 Manual PyPI publication requires the matching version tag; a branch is rejected.
 It uses the same release PR artifact checks as automatic publication.
 If an upload already started, use the recovery steps below instead of starting
-a new run. After publication, repeat the installation and smoke check in a
+a new run. After publication, repeat the installation and acceptance checks in a
 fresh environment, changing the reader's index URL to `https://pypi.org/simple/`.
 Record the PyPI version URL and results in #101 before closing its checklist.
+Also verify the exact public version with uv tool and uvx in separate tool
+environments. Pin the package as `delta-arrow-reader==X.Y.Z` for uv tool, and
+use `uvx --no-build --isolated --from delta-arrow-reader==X.Y.Z delta-arrow-reader --version`
+for uvx. Both must expose `delta-arrow-reader`; neither installs the Python API
+into a consumer's project environment. Use the
+[installation guide](../../crates/delta-arrow-reader-core/docs/public/installation.md#python)
+for the commands and record the tested platform and Python version.
+
+### Check artifact selection without publishing
+
+For an existing release tag whose commit belongs to a merged release-plz PR,
+the selection command can download and validate the retained bundle without
+uploading. Run it from a clean checkout of that tag with authenticated `gh`
+access to the repository's Actions and pull requests. Set
+`PYTHON_RELEASE_VERSION` to the tag's exact version:
+
+```console
+PYTHON_ARTIFACT_CHECK="$(mktemp -d)"
+GITHUB_REPOSITORY=mag1cfrog/delta-arrow-reader \
+GITHUB_OUTPUT="$PYTHON_ARTIFACT_CHECK/identity" \
+  cargo xtask reuse-python-wheels "$PYTHON_ARTIFACT_CHECK/wheel-artifacts" \
+    --expected-version "$PYTHON_RELEASE_VERSION"
+cat "$PYTHON_ARTIFACT_CHECK/identity"
+```
+
+Record the returned `artifact-id` and `artifact-sha256`, the CI run URL, and
+individual wheel hashes. A build-only run does not create a merged release PR
+or its retained bundle, so it cannot satisfy this selection check. Do not merge
+a release PR or publish a package solely to make the rehearsal pass.
 
 ## Recover an interrupted upload
 
@@ -199,10 +240,12 @@ The artifacts must still exist and be unexpired.
 The upload job validates all three wheels again and compares the index's
 published filenames and SHA256 hashes with those artifacts. It stages only
 missing files; if every file already matches, the job succeeds without another
-upload. It rejects unexpected or yanked files, hash mismatches, malformed index
-responses, and network failures. Uploads to the same index and version run one
-at a time, and `skip-existing` stays disabled.
+upload. A wheel without its CLI or dependency notices is rejected before the
+index is contacted. It rejects unexpected or yanked files, hash mismatches,
+malformed index responses, and network failures. Uploads to the same index and
+version run one at a time, and `skip-existing` stays disabled.
 
 Stop on a hash mismatch or if the original artifacts are unavailable. Corrected
-binaries need a new shared version and tag. Do not overwrite released files,
-move the release tag, or bypass the hash checks.
+binaries need a new shared version and tag. This includes adding a CLI to a
+version already published with library-only wheels. Do not overwrite released
+files, move the release tag, or bypass the hash checks.
