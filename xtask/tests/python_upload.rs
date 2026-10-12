@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 mod support;
-use support::{PLATFORMS, Result, WheelFixture};
+use support::{PLATFORMS, Result, WheelFixture, wheel_files, write_wheel};
 
 const EXISTING_OUTPUT: &str = "existing=kept\n";
 
@@ -278,6 +278,24 @@ fn invalid_local_inputs_stop_before_contacting_the_index() -> Result<()> {
     fs::remove_file(&upload.wheel_paths[0])?;
     upload.assert_rejected(upload.command("pypi").output()?, "expected one wheel")?;
     assert!(!upload.fixture.directory.join("curl-arguments").exists());
+    Ok(())
+}
+
+#[test]
+fn wheels_without_a_cli_cannot_reach_either_package_index() -> Result<()> {
+    for (position, (platform, tag)) in PLATFORMS.into_iter().enumerate() {
+        for index in ["pypi", "testpypi"] {
+            let upload = UploadFixture::new(&format!("upload-missing-cli-{platform}-{index}"))?;
+            let mut files = wheel_files(tag);
+            files.retain(|(name, _)| !name.contains(".data/scripts/"));
+            write_wheel(&upload.wheel_paths[position], &files, true)?;
+            upload.assert_rejected(
+                upload.command(index).output()?,
+                "missing required wheel file: delta_arrow_reader-1.2.3.data/scripts/delta-arrow-reader",
+            )?;
+            assert!(!upload.fixture.directory.join("curl-arguments").exists());
+        }
+    }
     Ok(())
 }
 

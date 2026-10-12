@@ -13,6 +13,7 @@ mod notices;
 mod platform;
 mod process;
 mod python_cli;
+mod python_cli_audit;
 mod python_release;
 mod python_sdist;
 mod python_upload;
@@ -101,6 +102,8 @@ enum Task {
         #[arg(long)]
         platform_tag: String,
     },
+    /// Audit an installed wheel CLI's native dependencies and platform baseline.
+    AuditPythonCli(python_cli_audit::AuditPythonCliArgs),
     /// Validate the complete set of Python wheel artifacts.
     CheckPythonArtifacts {
         directory: PathBuf,
@@ -212,6 +215,7 @@ fn run_task(task: Task) -> Result<()> {
             expected_version,
             platform_tag,
         } => python_wheels::check_wheel(&path, &expected_version, &platform_tag),
+        Task::AuditPythonCli(args) => args.run().map_err(Into::into),
         Task::CheckPythonArtifacts {
             directory,
             expected_version,

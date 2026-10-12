@@ -26,6 +26,29 @@ pub(crate) const MIN_GLIBC: &str = "2.36";
 pub(crate) const RUNTIME_PACKAGES: [&str; 3] = ["ca-certificates", "libc6", "libgcc-s1"];
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 
+#[derive(Clone, Copy)]
+pub(crate) enum ElfBaseline {
+    Standalone,
+    PythonWheel,
+}
+
+impl ElfBaseline {
+    fn glibc_version(self) -> &'static str {
+        match self {
+            Self::Standalone => MIN_GLIBC,
+            Self::PythonWheel => "2.28",
+        }
+    }
+
+    fn separate_glibc_libraries(self) -> &'static [&'static str] {
+        match self {
+            Self::Standalone => &[],
+            // These libraries were merged into libc after the wheel's baseline.
+            Self::PythonWheel => &["libdl.so.2", "libpthread.so.0", "librt.so.1"],
+        }
+    }
+}
+
 #[derive(Args)]
 pub(crate) struct CheckBinaryArgs {
     binary: PathBuf,
@@ -94,7 +117,7 @@ impl Architecture {
     }
 }
 
-fn inspection_command_output(command: &mut Command) -> Result<String> {
+pub(crate) fn inspection_command_output(command: &mut Command) -> Result<String> {
     let output = output_with_timeout(command, COMMAND_TIMEOUT)?;
     let program = command.get_program().to_string_lossy();
     ensure!(
@@ -248,7 +271,11 @@ fn parse_glibc_version(version: &str) -> Result<Vec<u64>> {
         })
 }
 
-fn check_readelf_output(output: &str, architecture: Architecture) -> Result<ElfMetadata> {
+fn check_readelf_output(
+    output: &str,
+    architecture: Architecture,
+    baseline: ElfBaseline,
+) -> Result<ElfMetadata> {
     let interpreter = architecture.interpreter();
     ensure!(
         captures(r"\[Requesting program interpreter: (.+)\]", output)? == [interpreter],
@@ -273,9 +300,10 @@ fn check_readelf_output(output: &str, architecture: Architecture) -> Result<ElfM
     let supported = ["libc.so.6", "libm.so.6", "libgcc_s.so.1", loader];
     ensure!(
         dependencies.iter().any(|name| name == "libc.so.6")
-            && dependencies
-                .iter()
-                .all(|name| supported.contains(&name.as_str())),
+            && dependencies.iter().all(|name| {
+                supported.contains(&name.as_str())
+                    || baseline.separate_glibc_libraries().contains(&name.as_str())
+            }),
         InvalidInputSnafu {
             message: format!("libraries outside the supported runtime: {dependencies:?}")
         }
@@ -295,12 +323,13 @@ fn check_readelf_output(output: &str, architecture: Architecture) -> Result<ElfM
         .map(u64::to_string)
         .collect::<Vec<_>>()
         .join(".");
-    let mut supported_glibc = parse_glibc_version(MIN_GLIBC)?;
+    let glibc_baseline = baseline.glibc_version();
+    let mut supported_glibc = parse_glibc_version(glibc_baseline)?;
     supported_glibc.resize(3, 0);
     ensure!(
         maximum <= supported_glibc,
         InvalidInputSnafu {
-            message: format!("binary requires GLIBC_{max_glibc}, above {MIN_GLIBC}")
+            message: format!("binary requires GLIBC_{max_glibc}, above {glibc_baseline}")
         }
     );
     ensure!(
@@ -318,7 +347,11 @@ fn check_readelf_output(output: &str, architecture: Architecture) -> Result<ElfM
     })
 }
 
-pub(crate) fn inspect_elf(binary: &Path, architecture: Architecture) -> Result<BinaryMetadata> {
+pub(crate) fn inspect_elf(
+    binary: &Path,
+    architecture: Architecture,
+    baseline: ElfBaseline,
+) -> Result<BinaryMetadata> {
     ensure!(
         cfg!(unix),
         InvalidInputSnafu {
@@ -361,7 +394,7 @@ pub(crate) fn inspect_elf(binary: &Path, architecture: Architecture) -> Result<B
     Ok(BinaryMetadata {
         architecture,
         rust_target: architecture.rust_target(),
-        elf: check_readelf_output(&output, architecture)?,
+        elf: check_readelf_output(&output, architecture, baseline)?,
         dar_sha256: file_sha256(binary)?,
     })
 }
@@ -383,7 +416,7 @@ fn inspect_and_execute_binary(
     expected_sha256: &str,
 ) -> Result<BinaryMetadata> {
     let binary = std::path::absolute(binary).context(FileSnafu { path: binary })?;
-    let metadata = inspect_elf(&binary, architecture)?;
+    let metadata = inspect_elf(&binary, architecture, ElfBaseline::Standalone)?;
     ensure!(
         metadata.dar_sha256 == expected_sha256,
         InvalidInputSnafu {

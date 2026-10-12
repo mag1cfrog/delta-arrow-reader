@@ -181,10 +181,11 @@ cargo xtask check-python-wheel \
 
 Use the version and platform tag required by your build. The check compares the
 filename with the wheel's `METADATA` and `WHEEL` records, including the expected
-package name, version, and `cp310-abi3` tag. The installed-package check below
-covers the native module, type files, licenses, and dependencies.
+package name, version, and `cp310-abi3` tag. It also requires the native CLI and
+dependency notices, and verifies the wheel's `RECORD` hashes. The installed
+checks below exercise both native components.
 
-For a small installed-wheel smoke check, run the following from a directory
+For the installed-wheel acceptance checks, run the following from a directory
 outside the checkout, using the environment where the wheel is installed.
 Replace the test directory with its absolute path:
 
@@ -199,8 +200,13 @@ The stream check covers both Python entrypoints and both Parquet backends,
 selects columns and filters rows, and closes the reader before consuming all results.
 It uses the checked-in Spark fixture and checks batch values after closing the
 reader. These checks also run in the full Python suite.
-The CLI check reads the same fixture through `inspect` and a projected, limited
-`scan`, then decodes the Arrow IPC stream with PyArrow.
+The CLI checks resolve the executable from that Python environment's scripts
+directory. They cover help, the exact package version, snapshot inspection,
+projection and row limits, and a complete Arrow IPC stream with matching values.
+They also check redacted errors, empty stdout on input failures, status 3 for a
+closed stdout pipe, and termination of a scan blocked on stdout. Unix checks
+exercise SIGINT and SIGTERM; Windows checks terminate the process. Each child
+has a timeout and runs outside the checkout without build-tool library paths.
 
 Python packaging configuration and the type stub live in
 `crates/delta-arrow-reader-python/`. Package the binding, its local Rust
@@ -269,16 +275,45 @@ Callers of the reusable workflow supply two required inputs:
 - `source-ref`: the full commit SHA to check out and build.
 - `expected-version`: the exact workspace package version, without a tag prefix.
 
-The build fails if the checked-out commit or package version differs from these
-inputs. It uses the repository's Rust version and lockfile, repairs the wheel
-with Maturin on Linux, delvewheel on Windows, or delocate on macOS, and checks
-its metadata and native dependencies. Each wheel is installed outside the
-checkout on Python 3.10 with PyArrow 18.0.0 and Python 3.14 with the current
-compatible PyArrow release. Linux runs the full Python suite; Windows and macOS
-run the installed-package and Arrow stream smoke checks described above.
+The three platform jobs run in parallel. The build fails if the checked-out
+commit or package version differs from these inputs. Both the Python extension
+and native CLI use the repository's Rust version, lockfile, target, and release
+profile. Linux builds both from an extracted sdist inside the pinned
+manylinux_2_28 container. Do not copy a standalone Debian-built `dar` into a
+wheel: that binary's glibc 2.36 requirement exceeds the wheel's glibc 2.28 baseline.
 
-The Linux wheel is built from an extracted sdist inside a pinned manylinux
-container.
+Maturin on Linux, delvewheel on Windows, or delocate on macOS repairs the wheel.
+The workflow checks the final wheel's metadata and extension dependencies, then
+installs it outside the checkout on Python 3.10 with PyArrow 18.0.0 and Python
+3.14 with the current compatible PyArrow release. Linux runs the full Python
+suite; Windows and macOS run all the installed-package, Python stream, and CLI
+checks described above.
+
+Wheel repair does not replace the separate audit of the CLI in `.data/scripts`.
+`cargo xtask audit-python-cli` checks the installed executable from the final
+wheel. Linux requires x86_64 ELF, permitted runtime libraries, and GLIBC symbol
+versions no newer than 2.28. macOS requires an arm64 executable with a deployment
+target no newer than 12.0, system library paths, and no rpath. Windows requires
+an x86_64 executable whose normal and delay-loaded imports use only supported
+system and CPython/MSVC runtime DLLs. To repeat the audit locally, use the
+installed executable's absolute path and the wheel's platform tag:
+
+```console
+cargo xtask audit-python-cli /absolute/path/to/venv/bin/delta-arrow-reader \
+  --platform-tag manylinux_2_28_x86_64
+```
+
+Linux repeats the installed checks with both Python versions in a fresh
+glibc 2.28 container. Only the final wheel, tests, and fixture are mounted into
+that container. CLI subprocesses have no `LD_*` or `DYLD_*` overrides and a
+restricted `PATH`; Windows keeps the system and CPython runtime directories.
+
+Each platform also installs the same final wheel through `uv tool install` and
+an isolated `uv tool run` environment, the command behind `uvx`. Both environments
+run the installed acceptance checks on Python 3.14, and both CLI commands
+must report the exact package version. These checks disable source builds and
+use temporary uv tool and cache directories. No repair, repackaging, or rebuild
+occurs between acceptance and artifact upload.
 
 After relevant main pushes, `.github/workflows/cache-warm.yml` warms core test
 caches, including the Python runtime tests on Linux, and retains the two most
@@ -324,7 +359,8 @@ and a local baseline without publishing packages.
 To populate caches after a toolchain or workflow change, run `Warm CI caches`
 manually on main. The first build for new compiler inputs can still be cold.
 
-Each platform job uploads its artifact after both Python checks pass:
+Each platform job uploads its final wheel only after the Python, CLI, native
+dependency, and uv checks pass:
 
 | Build environment | Artifact |
 | --- | --- |
@@ -340,8 +376,10 @@ macOS 12.0 itself.
 The `Validate wheel artifact set` job requires all platform builds to pass,
 then downloads the three artifacts from the same workflow run. It rejects
 missing or unexpected artifacts, requires exactly one wheel per artifact,
-and checks each wheel's version and tags again. For release PRs, it then saves
-the complete set as `python-wheels-<git-tree>-<run-id>-<run-attempt>`, preserving
+and checks each wheel's version, tags, CLI payload, notices, and `RECORD` again.
+A missing CLI fails validation even when the wheel and artifact hashes match.
+For release PRs, it saves the complete set as
+`python-wheels-<git-tree>-<run-id>-<run-attempt>`, preserving
 the three platform directories. The Git tree identifies the checked-out files
 even when a squash merge changes the commit SHA. This artifact is retained for
 90 days, and reruns save a separate copy. A failed upload fails the check.
@@ -354,8 +392,10 @@ PyPI preparation uses `cargo xtask reuse-python-wheels` to locate the merged
 release PR and requires its latest CI run to have succeeded. It requires a bundle
 for the same Git tree, verifies the archive's SHA256 from GitHub, and checks all
 three wheels. The upload job downloads that exact artifact ID and verifies the
-same SHA256 again. Missing, expired, or mismatched bundles stop publication. These commands
-require `gh` and `GH_TOKEN`; the preparation job has read access to Actions and
+same SHA256 again. Production uploads reuse these exact wheel bytes without
+rebuilding or repeating the installed acceptance suites. Missing, expired, or
+mismatched bundles stop publication. These commands require `gh` and `GH_TOKEN`;
+the preparation job has read access to Actions and
 pull requests, and the PyPI upload job has read access to Actions.
 
 Download artifacts from the Actions run page. To download and check the full

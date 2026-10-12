@@ -5,7 +5,7 @@ use std::{collections::BTreeSet, fs, path::Path, process::Command};
 use serde_json::{Value, json};
 
 mod support;
-use support::{Result, WheelFixture};
+use support::{PLATFORMS, Result, WheelFixture, wheel_files, write_wheel};
 
 fn workflow() -> Value {
     serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi.yml")).unwrap()
@@ -474,6 +474,341 @@ fn linux_sdist_checks_preserve_the_workspace_and_reject_lockfile_drift() -> Resu
 }
 
 #[test]
+fn every_wheel_cli_is_audited_after_installation_and_before_upload() -> Result<()> {
+    let builder: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;
+    let build = &builder["jobs"]["build"];
+    let steps = build["steps"].as_array().unwrap();
+    let position = |name| steps.iter().position(|step| step["name"] == name).unwrap();
+    let audit_position = position("Audit installed wheel CLI");
+    assert!(position("Inspect wheel metadata") < audit_position);
+    assert!(position("Test installed wheel on Python 3.10 and PyArrow 18.0.0") < audit_position);
+    assert!(audit_position < position("Upload validated wheel"));
+    let audit = &steps[audit_position];
+    assert!(audit["if"].is_null());
+    assert!(audit["continue-on-error"].is_null());
+    let fixture = WheelFixture::new("installed-cli-audit")?;
+    let runner_temp = fixture.directory.join("runner temp");
+    for platform in build["strategy"]["matrix"]["include"].as_array().unwrap() {
+        let windows = platform["os"] == "windows-2022";
+        let cli = if windows {
+            "Scripts/delta-arrow-reader.exe"
+        } else {
+            "bin/delta-arrow-reader"
+        };
+        let script = audit["run"].as_str().unwrap()
+            .replace("${{ runner.os == 'Windows' && 'Scripts/delta-arrow-reader.exe' || 'bin/delta-arrow-reader' }}", cli)
+            .replace("${{ matrix.platform-tag }}", platform["platform-tag"].as_str().unwrap());
+        for exit_status in [0, 9] {
+            let script =
+                format!("cargo() {{ printf '%s\\n' \"$@\"; return {exit_status}; }}\n{script}");
+            let output = Command::new("bash")
+                .args(["-e", "-o", "pipefail", "-c", &script])
+                .env("RUNNER_TEMP", &runner_temp)
+                .output()?;
+            assert_eq!(output.status.success(), exit_status == 0, "{output:?}");
+            assert_eq!(
+                String::from_utf8(output.stdout)?
+                    .lines()
+                    .collect::<Vec<_>>(),
+                [
+                    "xtask",
+                    "audit-python-cli",
+                    runner_temp.join("python310").join(cli).to_str().unwrap(),
+                    "--platform-tag",
+                    platform["platform-tag"].as_str().unwrap(),
+                ]
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Result<()> {
+    let builder: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;
+    let build = &builder["jobs"]["build"];
+    let steps = build["steps"].as_array().unwrap();
+    let position = |name| steps.iter().position(|step| step["name"] == name).unwrap();
+    let runtime_position = position("Test installed wheel on glibc 2.28");
+    assert!(position("Test installed wheel on Python 3.14 and current PyArrow") < runtime_position);
+    assert!(runtime_position < position("Upload validated wheel"));
+    let runtime = &steps[runtime_position];
+    assert_eq!(runtime["if"], "runner.os == 'Linux'");
+    assert!(runtime["continue-on-error"].is_null());
+    assert_eq!(
+        steps[position("Build wheel")]["with"]["container"],
+        "${{ runner.os == 'Linux' && env.MANYLINUX_IMAGE || '' }}"
+    );
+    let image = build["env"]["MANYLINUX_IMAGE"].as_str().unwrap();
+    assert!(image.starts_with("quay.io/pypa/manylinux_2_28_x86_64@sha256:"));
+    let fixture = WheelFixture::new("glibc-runtime")?;
+    let workspace = fixture.directory.join("source checkout");
+    let script = runtime["run"].as_str().unwrap();
+    let mut container_script = String::new();
+    for status in [0, 9] {
+        let output = Command::new("bash")
+            .args([
+                "-e",
+                "-o",
+                "pipefail",
+                "-c",
+                &format!("docker() {{ printf '%s\\0' \"$@\"; return {status}; }}\n{script}"),
+            ])
+            .env("GITHUB_WORKSPACE", &workspace)
+            .env("MANYLINUX_IMAGE", image)
+            .output()?;
+        assert_eq!(output.status.code(), Some(status), "{output:?}");
+        let stdout = String::from_utf8(output.stdout)?;
+        let arguments: Vec<_> = stdout.trim_end_matches('\0').split('\0').collect();
+        assert_eq!(
+            &arguments[..9],
+            [
+                "run",
+                "--rm",
+                "--workdir",
+                "/tmp",
+                "--env",
+                "PATH=/usr/bin:/bin",
+                "--env",
+                "LD_LIBRARY_PATH=",
+                "--volume",
+            ]
+        );
+        assert_eq!(
+            arguments[9],
+            format!("{}/dist:/wheels:ro", workspace.display())
+        );
+        for (index, path) in [
+            (10, "crates/delta-arrow-reader-python/tests"),
+            (
+                12,
+                "crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned",
+            ),
+        ] {
+            assert_eq!(arguments[index], "--volume");
+            assert_eq!(
+                arguments[index + 1],
+                format!("{}/{path}:/acceptance/{path}:ro", workspace.display())
+            );
+        }
+        assert_eq!(
+            &arguments[14..20],
+            ["--entrypoint", "/bin/bash", image, "-euo", "pipefail", "-c"]
+        );
+        assert_eq!(arguments.len(), 21);
+        container_script = arguments[20].to_owned();
+    }
+    // Keep the actual shell control flow while replacing the container's interpreters.
+    let script = container_script
+        .replace(
+            "/opt/python/cp$version-cp$version/bin/python",
+            "base_python",
+        )
+        .replace("/tmp/python$version/bin/python", "installed_python");
+    for (glibc, failure) in [
+        ("2.28", ""),
+        ("2.39", ""),
+        ("2.28", "pip"),
+        ("2.28", "unittest"),
+    ] {
+        let output = Command::new("bash")
+            .args([
+                "-euo",
+                "pipefail",
+                "-c",
+                &format!(
+                    r#"
+                    getconf() {{ printf 'glibc %s\n' "$GLIBC"; }}
+                    base_python() {{ printf 'create %s\n' "$version"; }}
+                    installed_python() {{
+                        printf '%s %s\n' "$version" "$*"
+                        if [ -n "$FAILURE" ] && [[ "$*" == *"$FAILURE"* ]]; then return 7; fi
+                    }}
+                    {script}
+                "#
+                ),
+            ])
+            .env("GLIBC", glibc)
+            .env("FAILURE", failure)
+            .output()?;
+        assert_eq!(
+            output.status.success(),
+            glibc == "2.28" && failure.is_empty(),
+            "{output:?}"
+        );
+        let stdout = String::from_utf8(output.stdout)?;
+        if output.status.success() {
+            assert_eq!(
+                stdout.lines().collect::<Vec<_>>(),
+                [
+                    "create 310",
+                    "310 -m pip install --only-binary=:all: /wheels/*.whl pyarrow==18.0.0",
+                    "310 -I -m unittest discover -s /acceptance/crates/delta-arrow-reader-python/tests -k installed",
+                    "create 314",
+                    "314 -m pip install --only-binary=:all: /wheels/*.whl",
+                    "314 -I -m unittest discover -s /acceptance/crates/delta-arrow-reader-python/tests -k installed",
+                ]
+            );
+        } else if glibc != "2.28" {
+            assert!(stdout.is_empty(), "{stdout}");
+        } else {
+            assert!(!stdout.contains("314"), "{stdout}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn tool_acceptance_checks_both_environments_before_upload() -> Result<()> {
+    let builder: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;
+    let build = &builder["jobs"]["build"];
+    let steps = build["steps"].as_array().unwrap();
+    let position = |name| steps.iter().position(|step| step["name"] == name).unwrap();
+    let tool_position = position("Test wheel with uv tool and uvx");
+    assert!(position("Test installed wheel on Python 3.14 and current PyArrow") < tool_position);
+    assert!(tool_position < position("Upload validated wheel"));
+    let tool = &steps[tool_position];
+    assert!(tool["if"].is_null());
+    assert!(tool["continue-on-error"].is_null());
+    assert_eq!(tool["working-directory"], "${{ runner.temp }}");
+    assert_eq!(
+        tool["env"],
+        json!({
+            "UV_PYTHON": "${{ steps.python314.outputs.python-path }}",
+            "UV_PYTHON_DOWNLOADS": "never",
+            "UV_NO_BUILD": "true",
+        })
+    );
+    let setup = steps.iter().find(|step| step["id"] == "python314").unwrap();
+    assert_eq!(setup["uses"], "actions/setup-python@v6");
+    assert_eq!(setup["with"]["python-version"], "3.14");
+    let fixture = WheelFixture::new("tool-installation")?;
+    let workspace = fixture.directory.join("source checkout");
+    let runner_temp = fixture.directory.join("runner temp");
+    fs::create_dir_all(workspace.join("dist"))?;
+    fs::create_dir(&runner_temp)?;
+    let wheel = workspace.join("dist/test wheel.whl");
+    fs::write(&wheel, "fixture")?;
+    let calls = fixture.directory.join("calls");
+    let mocks = r#"
+        record() {
+            printf '%s|' "$@" >> "$CALLS"
+            printf '\n' >> "$CALLS"
+            [ "$FAIL_STAGE" != "$1" ] || return 9
+        }
+        python() {
+            case "$*" in
+                '-m pip install '*) record setup "$@" ;;
+                '-m uv tool install '*)
+                    record install "$@"
+                    test "$UV_TOOL_DIR" = "$tools/environments"
+                    test "$UV_TOOL_BIN_DIR" = "$tools/bin"
+                    test "$UV_CACHE_DIR" = "$tools/cache" ;;
+                *'python -I -m unittest '*) record uvx-tests "$@" ;;
+                *'delta-arrow-reader --version')
+                    record uvx-version "$@" || return 9
+                    printf 'delta-arrow-reader %s\n' "$UVX_VERSION" ;;
+                *) return 99 ;;
+            esac
+        }
+        tool_python() { record tool-tests "$@"; }
+        tool_cli() {
+            record tool-version "$@" || return 9
+            printf 'delta-arrow-reader %s\n' "$TOOL_VERSION"
+        }
+    "#;
+    for platform in build["strategy"]["matrix"]["include"].as_array().unwrap() {
+        let python = platform["venv-python"].as_str().unwrap();
+        let suffix = if platform["os"] == "windows-2022" {
+            ".exe"
+        } else {
+            ""
+        };
+        let script = tool["run"]
+            .as_str()
+            .unwrap()
+            .replace("${{ matrix.venv-python }}", python)
+            .replace("${{ runner.os == 'Windows' && '.exe' || '' }}", suffix)
+            .replace(
+                &format!("\"$UV_TOOL_DIR/delta-arrow-reader/{python}\""),
+                "tool_python",
+            )
+            .replace(
+                &format!("\"$UV_TOOL_BIN_DIR/delta-arrow-reader{suffix}\""),
+                "tool_cli",
+            );
+        for failure in [
+            "",
+            "setup",
+            "install",
+            "tool-tests",
+            "tool-version",
+            "uvx-tests",
+            "uvx-version",
+            "wrong-tool-version",
+            "wrong-uvx-version",
+        ] {
+            fs::write(&calls, "")?;
+            let output = Command::new("bash")
+                .args(["-e", "-o", "pipefail", "-c", &format!("{mocks}\n{script}")])
+                .current_dir(&runner_temp)
+                .env("GITHUB_WORKSPACE", &workspace)
+                .env("RUNNER_TEMP", &runner_temp)
+                .env("EXPECTED_VERSION", "1.2.3")
+                .env("CALLS", &calls)
+                .env("FAIL_STAGE", failure)
+                .env(
+                    "TOOL_VERSION",
+                    if failure == "wrong-tool-version" {
+                        "stale"
+                    } else {
+                        "1.2.3"
+                    },
+                )
+                .env(
+                    "UVX_VERSION",
+                    if failure == "wrong-uvx-version" {
+                        "stale"
+                    } else {
+                        "1.2.3"
+                    },
+                )
+                .output()?;
+            assert_eq!(
+                output.status.success(),
+                failure.is_empty(),
+                "{platform}, {failure}: {output:?}"
+            );
+            if failure.is_empty() {
+                let calls = fs::read_to_string(&calls)?;
+                let wheel = wheel.display();
+                let tests = workspace.join("crates/delta-arrow-reader-python/tests");
+                let tests = tests.display();
+                assert_eq!(
+                    calls.lines().collect::<Vec<_>>(),
+                    [
+                        "setup|-m|pip|install|--only-binary=:all:|uv==0.10.0|".to_owned(),
+                        format!("install|-m|uv|tool|install|--no-config|{wheel}|"),
+                        format!("tool-tests|-I|-m|unittest|discover|-s|{tests}|-k|installed|"),
+                        "tool-version|--version|".to_owned(),
+                        format!(
+                            "uvx-tests|-m|uv|tool|run|--no-config|--isolated|--from|{wheel}|python|-I|-m|unittest|discover|-s|{tests}|-k|installed|"
+                        ),
+                        format!(
+                            "uvx-version|-m|uv|tool|run|--no-config|--isolated|--from|{wheel}|delta-arrow-reader|--version|"
+                        ),
+                    ]
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn builder_reports_validation_only_after_successful_builds_and_complete_artifacts() -> Result<()> {
     let builder: Value =
         serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;
@@ -556,6 +891,48 @@ fn builder_reports_validation_only_after_successful_builds_and_complete_artifact
                 }
             );
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn wheels_without_a_cli_cannot_complete_release_validation() -> Result<()> {
+    let builder: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;
+    let steps = builder["jobs"]["validate"]["steps"].as_array().unwrap();
+    let verify = steps.iter().find(|step| step["id"] == "verify").unwrap();
+    let complete = steps.iter().find(|step| step["id"] == "complete").unwrap();
+    let script = format!(
+        "{}\n{}\n{}",
+        steps[0]["run"].as_str().unwrap(),
+        verify["run"].as_str().unwrap(),
+        complete["run"].as_str().unwrap()
+    )
+    .replace("cargo xtask", "\"$XTASK_BINARY\"");
+    for (index, (platform, tag)) in PLATFORMS.into_iter().enumerate() {
+        let fixture = WheelFixture::new(&format!("validation-missing-cli-{platform}"))?;
+        let (_, wheels) = fixture.create_artifacts()?;
+        let mut files = wheel_files(tag);
+        files.retain(|(name, _)| !name.contains(".data/scripts/"));
+        write_wheel(&wheels[index], &files, true)?;
+        let output_file = fixture.directory.join("outputs");
+        fs::write(&output_file, "existing=kept\n")?;
+        let output = Command::new("bash")
+            .args(["-e", "-o", "pipefail", "-c", &script])
+            .current_dir(&fixture.directory)
+            .env("XTASK_BINARY", env!("CARGO_BIN_EXE_xtask"))
+            .env("EXPECTED_VERSION", "1.2.3")
+            .env("BUILD_RESULT", "success")
+            .env("GITHUB_OUTPUT", &output_file)
+            .output()?;
+        assert!(!output.status.success(), "{platform}: {output:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(
+                "missing required wheel file: delta_arrow_reader-1.2.3.data/scripts/delta-arrow-reader"
+            ),
+            "{output:?}"
+        );
+        assert_eq!(fs::read_to_string(output_file)?, "existing=kept\n");
     }
     Ok(())
 }

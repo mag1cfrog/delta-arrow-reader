@@ -17,7 +17,11 @@ fn supported_headers_and_runtime_requirements() -> TestResult {
         header[16..18].copy_from_slice(&3u16.to_le_bytes());
         header[18..20].copy_from_slice(&architecture.elf_machine().to_le_bytes());
         check_elf_header(&header, architecture)?;
-        let metadata = check_readelf_output(&readelf_output(architecture), architecture)?;
+        let metadata = check_readelf_output(
+            &readelf_output(architecture),
+            architecture,
+            ElfBaseline::Standalone,
+        )?;
         assert_eq!(metadata.interpreter, architecture.interpreter());
         assert_eq!(metadata.runtime_dependencies, ["libc.so.6"]);
         assert_eq!(metadata.max_glibc, "2.36");
@@ -56,7 +60,7 @@ fn unsafe_loader_paths_dependencies_and_symbol_requirements_fail() {
         format!("{original}Properties: x86 ISA needed: x86-64-v2"),
     ] {
         assert!(
-            check_readelf_output(&output, architecture).is_err(),
+            check_readelf_output(&output, architecture, ElfBaseline::Standalone).is_err(),
             "accepted {output}"
         );
     }
@@ -68,8 +72,43 @@ fn glibc_versions_are_compared_numerically() -> TestResult {
         check_readelf_output(
             &readelf_output(Architecture::Amd64).replace("2.36", version),
             Architecture::Amd64,
+            ElfBaseline::Standalone,
         )?;
     }
+    Ok(())
+}
+
+#[test]
+fn wheel_baseline_keeps_glibc_228_separate_from_standalone() -> TestResult {
+    let architecture = Architecture::Amd64;
+    let output = readelf_output(architecture).replace("GLIBC_2.36", "GLIBC_2.28");
+    let wheel = format!(
+        "{output}\n\
+        (NEEDED) Shared library: [libpthread.so.0]\n\
+        (NEEDED) Shared library: [libdl.so.2]\n\
+        (NEEDED) Shared library: [librt.so.1]\n"
+    );
+    check_readelf_output(&wheel, architecture, ElfBaseline::PythonWheel)?;
+    assert!(check_readelf_output(&wheel, architecture, ElfBaseline::Standalone).is_err());
+    for version in ["2.28.1", "2.29", "2.36", "PRIVATE"] {
+        let newer = output.replace("GLIBC_2.28", &format!("GLIBC_{version}"));
+        assert!(check_readelf_output(&newer, architecture, ElfBaseline::PythonWheel).is_err());
+    }
+    for library in ["libssl.so.3", "libstdc++.so.6", "/build/libpthread.so.0"] {
+        assert!(
+            check_readelf_output(
+                &wheel.replace("libpthread.so.0", library),
+                architecture,
+                ElfBaseline::PythonWheel,
+            )
+            .is_err()
+        );
+    }
+    check_readelf_output(
+        &readelf_output(architecture),
+        architecture,
+        ElfBaseline::Standalone,
+    )?;
     Ok(())
 }
 
@@ -233,12 +272,19 @@ mod executable {
         let fixture = Fixture::new()?;
         for mode in [0o644, 0o4755] {
             fs::set_permissions(&fixture.binary, fs::Permissions::from_mode(mode))?;
-            assert!(inspect_elf(&fixture.binary, fixture.architecture).is_err());
+            assert!(
+                inspect_elf(
+                    &fixture.binary,
+                    fixture.architecture,
+                    ElfBaseline::Standalone
+                )
+                .is_err()
+            );
         }
         fs::set_permissions(&fixture.binary, fs::Permissions::from_mode(0o755))?;
         let link = fixture.root.path().join("link");
         std::os::unix::fs::symlink(&fixture.binary, &link)?;
-        assert!(inspect_elf(&link, fixture.architecture).is_err());
+        assert!(inspect_elf(&link, fixture.architecture, ElfBaseline::Standalone).is_err());
         Ok(())
     }
 }
