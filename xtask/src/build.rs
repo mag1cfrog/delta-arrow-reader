@@ -261,7 +261,7 @@ pub(crate) fn check_source(repository: &Path, source_commit: &str) -> Result<()>
     Ok(())
 }
 
-fn compiler_field<'a>(output: &'a str, name: &str) -> Result<&'a str> {
+pub(crate) fn compiler_field<'a>(output: &'a str, name: &str) -> Result<&'a str> {
     output
         .lines()
         .filter_map(|line| line.split_once(": "))
@@ -274,7 +274,7 @@ fn compiler_field<'a>(output: &'a str, name: &str) -> Result<&'a str> {
         })
 }
 
-fn compiler_release(output: &str, declared: &str) -> Result<String> {
+pub(crate) fn compiler_release(output: &str, declared: &str) -> Result<String> {
     let expected: Vec<_> = declared.split('.').collect();
     ensure!(
         (2..=3).contains(&expected.len())

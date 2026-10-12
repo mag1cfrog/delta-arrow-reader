@@ -57,6 +57,64 @@ Feature PRs skip the CLI builds and acceptance suites. See the
 [CLI release tools](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-cli/release/README.md#validate-a-cli-release)
 for approval and artifact details.
 
+### Stage the CLI for Python wheel packaging
+
+Run `stage-python-cli` from the repository root using the workspace Rust
+toolchain. This prepares native wheel data for the packager; it does not build a
+wheel. For a local Linux development build:
+
+```console
+cargo +1.94.1 xtask stage-python-cli \
+  --target x86_64-unknown-linux-gnu --profile dev \
+  --destination target/python-cli
+target/python-cli/scripts/delta-arrow-reader --version
+```
+
+`--destination` and `--target` are required. The profile is `release` by default;
+use `--profile dev` for a faster local build. The three supported native targets
+and their output paths are:
+
+| Rust target | Path under `--destination` |
+| --- | --- |
+| `x86_64-unknown-linux-gnu` | `scripts/delta-arrow-reader` |
+| `aarch64-apple-darwin` | `scripts/delta-arrow-reader` |
+| `x86_64-pc-windows-msvc` | `scripts/delta-arrow-reader.exe` |
+
+The task builds the current checkout's `dar` target with `--locked`, inherits
+Cargo cache and compiler settings, and reads the executable path from Cargo's
+build output. It rejects cross compilation and checks the renamed executable's
+version before placing it in `scripts/`. Build diagnostics go to stderr.
+
+The two executable paths in the table are reserved for this task. Every run
+removes old files at both paths before building, so a failed build cannot leave
+an older payload ready for packaging. Other files are left in place. Destination
+and `scripts/` directory symlinks are rejected. Use a separate destination for
+each concurrent build, under the ignored `target/` directory or outside the
+checkout. Its parent must be writable and on the same filesystem. Verification
+uses a temporary sibling directory, so an interrupted run cannot leave temporary
+files inside wheel data. After verification, an atomic rename places the
+executable in `scripts/`.
+
+Generated executables must not be tracked or included in a source archive. The
+packager must require a successful staging run before consuming this wheel data
+directory.
+
+Release wheel builds must run staging inside the wheel build environment:
+manylinux 2.28 on Linux, macOS arm64 with `MACOSX_DEPLOYMENT_TARGET=12.0`, or
+Windows x86_64 MSVC. A successful build on a newer Linux host does not establish
+manylinux compatibility. Standalone GitHub/GHCR binaries keep their separate
+Debian 12 build environment.
+
+The focused tests run without building the reader. To also build and exercise
+the native Linux CLI against a checked-in table from outside the checkout, run:
+
+```console
+cargo +1.94.1 test --locked --package xtask --bin xtask python_cli::
+cargo +1.94.1 test --locked --package xtask --bin xtask \
+  python_cli::tests::native_cli_stages_and_reads_a_fixture_outside_the_checkout \
+  -- --ignored --exact
+```
+
 ## Build the Python package locally
 
 For source installation and a table reading example, see the

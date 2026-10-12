@@ -12,6 +12,7 @@ mod image_runtime;
 mod notices;
 mod platform;
 mod process;
+mod python_cli;
 mod python_release;
 mod python_upload;
 mod python_wheel_reuse;
@@ -65,6 +66,8 @@ enum Task {
     PrepareReleasePrConfig { destination: PathBuf },
     /// Validate a Python release event against the checked-out commit.
     CheckPythonReleaseRequest,
+    /// Build and stage the native executable for Python wheel packaging.
+    StagePythonCli(python_cli::StagePythonCliArgs),
     /// Retrieve validated wheels from the merged release PR.
     ReusePythonWheels {
         destination: PathBuf,
@@ -174,6 +177,7 @@ fn run_task(task: Task) -> Result<()> {
         Task::PruneCiCaches => prune_ci_caches(),
         Task::PrepareReleasePrConfig { destination } => release_plz::prepare_config(&destination),
         Task::CheckPythonReleaseRequest => python_release::validate_release_request(),
+        Task::StagePythonCli(args) => args.run().map_err(Into::into),
         Task::ReusePythonWheels {
             destination,
             expected_version,
