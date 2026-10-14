@@ -1061,12 +1061,17 @@ fn cache_read_report_counts_backend_failures_without_exposing_request_details() 
 #[test]
 fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<()> {
     let directory = test_dir("core-warm");
-    let cargo = directory.join("cargo");
-    fs::write(
-        &cargo,
-        "#!/bin/sh\nprintf '%s\\n' \"$*\"\n[ \"$*\" != \"$FAIL_CARGO_COMMAND\" ]\n",
-    )?;
-    fs::set_permissions(cargo, fs::Permissions::from_mode(0o755))?;
+    for tool in ["cargo", "python"] {
+        let path = directory.join(tool);
+        fs::write(
+            &path,
+            "#!/bin/sh\nprintf '%s\\n' \"$*\"\n[ \"$*\" != \"$FAIL_COMMAND\" ]\n",
+        )?;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755))?;
+    }
+    let venv = directory.join("python-tests/bin");
+    fs::create_dir_all(&venv)?;
+    fs::write(venv.join("activate"), "")?;
     let warmer: Value =
         serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
     let steps = warmer["jobs"]["core"]["steps"].as_array().unwrap();
@@ -1084,12 +1089,31 @@ fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<(
     assert_eq!(retry["if"], "steps.cache-writes.outcome == 'failure'");
 
     let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
-    for variable in ["CARGO_PROFILE_DEV_DEBUG", "AWS_LC_SYS_USE_SYSTEM"] {
+    for variable in [
+        "CARGO_PROFILE_DEV_DEBUG",
+        "AWS_LC_SYS_USE_SYSTEM",
+        "CI_TARGET_CACHE_VERSION",
+    ] {
         assert!(ci["env"][variable].is_string(), "{variable}");
         assert_eq!(
             ci["env"][variable], warmer["jobs"]["core"]["env"][variable],
             "{variable} must match for compiled dependency reuse"
         );
+    }
+    let cache = steps
+        .iter()
+        .find(|step| step["name"] == "Cache compiled dependencies")
+        .unwrap();
+    assert_eq!(cache["with"]["env-vars"], "CI_TARGET_CACHE_VERSION");
+    for job in ci["jobs"].as_object().unwrap().values() {
+        for step in job["steps"].as_array().into_iter().flatten() {
+            if step["with"]["shared-key"] == "core-ci-targets" {
+                for input in ["shared-key", "env-vars", "cache-targets", "cache-bin"] {
+                    assert_eq!(step["with"][input], cache["with"][input], "{input}");
+                }
+                assert_eq!(step["with"]["save-if"], false);
+            }
+        }
     }
     for job in ["checks", "tooling-checks", "python-package", "cli-checks"] {
         let commands = ci["jobs"][job]["steps"]
@@ -1123,6 +1147,7 @@ fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<(
                 "clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings",
                 "clippy --locked --package xtask --all-targets -- -D warnings",
                 "doc --locked --all-features --no-deps",
+                "-m pip install --verbose --no-build-isolation --no-deps --editable crates/delta-arrow-reader-python",
             ]);
         }
         for fail_at in 0..=commands.len() {
@@ -1130,7 +1155,8 @@ fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<(
                 .args(["-euc", script])
                 .env("PATH", &directory)
                 .env("RUNNER_OS", runner)
-                .env("FAIL_CARGO_COMMAND", commands.get(fail_at).unwrap_or(&""))
+                .env("RUNNER_TEMP", &directory)
+                .env("FAIL_COMMAND", commands.get(fail_at).unwrap_or(&""))
                 .output()?;
             assert_eq!(
                 output.status.success(),
@@ -1142,6 +1168,51 @@ fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<(
         }
     }
     fs::remove_dir_all(directory)?;
+    Ok(())
+}
+
+#[test]
+fn python_cache_warming_matches_the_editable_build() -> Result<()> {
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    let warmer: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
+    let check_steps = ci["jobs"]["python-package"]["steps"].as_array().unwrap();
+    let warm_steps = warmer["jobs"]["core"]["steps"].as_array().unwrap();
+    for action in ["actions/setup-python@v6", "taiki-e/install-action@v2"] {
+        let check = check_steps
+            .iter()
+            .find(|step| step["uses"] == action)
+            .unwrap();
+        let warm = warm_steps
+            .iter()
+            .find(|step| step["uses"] == action)
+            .unwrap();
+        assert!(check["with"].is_object());
+        assert_eq!(warm["with"], check["with"], "{action}");
+    }
+    let prepare = warm_steps
+        .iter()
+        .find(|step| step["name"] == "Prepare Python build environment")
+        .unwrap();
+    assert_eq!(prepare["if"], "runner.os == 'Linux'");
+    let commands: Vec<_> = warm_steps
+        .iter()
+        .filter(|step| {
+            step["name"] == "Prepare Python build environment" || step["name"] == "Warm core caches"
+        })
+        .filter_map(|step| step["run"].as_str())
+        .flat_map(str::lines)
+        .map(str::trim)
+        .collect();
+    let build = check_steps
+        .iter()
+        .find(|step| step["name"] == "Build Python package")
+        .unwrap()["run"]
+        .as_str()
+        .unwrap();
+    for command in build.lines() {
+        assert!(commands.contains(&command), "{command}");
+    }
     Ok(())
 }
 

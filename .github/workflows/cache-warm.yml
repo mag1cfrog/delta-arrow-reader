@@ -53,6 +53,7 @@ jobs:
     env:
       CARGO_PROFILE_DEV_DEBUG: line-tables-only
       AWS_LC_SYS_USE_SYSTEM: "0"
+      CI_TARGET_CACHE_VERSION: "2"
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_GHA_RW_MODE: READ_WRITE
       SCCACHE_LOG: sccache::server=debug
@@ -75,17 +76,20 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-      - name: Read Rust version
+      - name: Read Rust and cargo-about versions
         id: rust-version
         shell: bash
         run: |
           version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
           test -n "$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          about_version="$(sed -n 's/^cargo-about-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$about_version"
+          echo "cargo-about-version=$about_version" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
-          components: ${{ runner.os == 'Linux' && 'clippy' || '' }}
+          components: ${{ runner.os == 'Linux' && 'clippy,rust-docs' || '' }}
       - name: Cache Cargo registry
         uses: Swatinem/rust-cache@v2
         with:
@@ -95,6 +99,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
           cache-targets: true
           # This action saves first; keep Cargo available for the registry cache save.
           cache-bin: false
@@ -108,6 +113,18 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.10"
+      - name: Install cargo-about
+        if: runner.os == 'Linux'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@${{ steps.rust-version.outputs.cargo-about-version }}
+      - name: Prepare Python build environment
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          python -m venv "$RUNNER_TEMP/python-tests"
+          source "$RUNNER_TEMP/python-tests/bin/activate"
+          python -m pip install 'maturin==1.14.1' 'pyarrow==18.0.0'
       - name: Warm core caches
         shell: bash
         run: &warm-core-caches |
@@ -122,6 +139,8 @@ jobs:
             cargo clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings
             cargo clippy --locked --package xtask --all-targets -- -D warnings
             RUSTDOCFLAGS="-D warnings" cargo doc --locked --all-features --no-deps
+            source "$RUNNER_TEMP/python-tests/bin/activate"
+            python -m pip install --verbose --no-build-isolation --no-deps --editable crates/delta-arrow-reader-python
           fi
       - name: Check sccache writes
         id: cache-writes
