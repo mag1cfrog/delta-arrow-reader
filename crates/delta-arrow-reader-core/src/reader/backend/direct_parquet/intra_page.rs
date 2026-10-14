@@ -3,10 +3,23 @@
 //! The predicate records real file row numbers. Only non-predicate columns are
 //! eligible, after filtering. The normal decoder still owns row selection and DV
 //! positions; unread value payloads are zero-filled only where it will skip them.
+//!
+//! [`candidates`] checks which pages are eligible. The cost model supplies numeric
+//! estimates; [`fixed_budget`] and [`probe_budget`] use them to choose ranges and
+//! limit probing. This reader and [`probe_read`] parse page structures, download
+//! accepted ranges and fall back when needed.
 
+mod candidates;
 mod delta_length;
+mod fixed_budget;
 mod page;
+mod probe_budget;
 mod probe_read;
+
+#[cfg(test)]
+use fixed_budget::estimated_value_ranges;
+#[cfg(test)]
+pub(super) use probe_budget::{discovery_allowance, remaining_discovery_time};
 
 use std::{
     ops::Range,
@@ -27,25 +40,18 @@ use parquet::{
         arrow_reader::ArrowReaderOptions,
         async_reader::{AsyncFileReader, ParquetObjectReader},
     },
-    basic::{Compression, ConvertedType, Encoding, LogicalType, Type},
+    basic::Type,
     errors::{ParquetError, Result},
     file::metadata::ParquetMetaData,
 };
 use tokio::sync::Semaphore;
 
 use super::{
-    cost_model::{
-        TransportEstimate, bandwidth_delay_bytes, dependent_read_cost_bytes, duration_cost_bytes,
-        partial_read_cost_bytes, range_bytes, range_cost_bytes,
-    },
+    cost_model::TransportEstimate,
     metered_object_store::MeteredParquetObjectStore,
-    range_planning::{
-        DECISION_MARGIN_PERCENT, RANGE_READ_PERMITS, choose_bounded_range_plan, choose_range_plan,
-    },
+    range_planning::{DECISION_MARGIN_PERCENT, RANGE_READ_PERMITS},
 };
-use crate::reader::options::{
-    MAX_CONCURRENT_PARQUET_RANGE_READS, MAX_INTRA_PAGE_READ_BYTES, MAX_SHARED_RANGE_READS,
-};
+use fixed_budget::FixedReadBudget;
 use page::{Page, ProbeError, RangeCache, selected_value_ranges};
 
 // Hard safety ceilings, not byte or concurrency targets for individual reads.
@@ -157,133 +163,6 @@ impl IntraPageReader {
         })
     }
 
-    fn candidate_pages(&self, ranges: &[Range<u64>]) -> Option<(Vec<Page>, Vec<u64>)> {
-        if ranges.len() > MAX_REQUESTS
-            || ranges
-                .iter()
-                .any(|r| r.start > r.end || r.end > self.file_size)
-            || range_bytes(ranges) > MAX_INTRA_PAGE_READ_BYTES
-        {
-            return None;
-        }
-        let state = self
-            .selection
-            .as_ref()?
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let group_index = state.current_group?;
-        let group_rows = state.row_groups.get(group_index)?;
-        if state.limit_exceeded
-            || state.rows.is_empty()
-            || state.rows.len() as u64 >= (group_rows.end - group_rows.start).div_ceil(2)
-        {
-            return None;
-        }
-        let offset_indexes = self.metadata.offset_index()?.get(group_index)?;
-        let row_group = self.metadata.row_group(group_index);
-        let predicate_columns = state.predicate_columns.as_ref()?;
-        let mut pages = Vec::new();
-        for (column, chunk) in row_group.columns().iter().enumerate() {
-            let descriptor = chunk.column_descr();
-            let value_width = match descriptor.physical_type() {
-                Type::INT32 | Type::FLOAT => Some(4),
-                Type::INT64 | Type::DOUBLE => Some(8),
-                Type::FIXED_LEN_BYTE_ARRAY => Some(descriptor.type_length() as usize),
-                Type::BYTE_ARRAY
-                    if matches!(
-                        descriptor.logical_type_ref(),
-                        None | Some(LogicalType::String)
-                    ) && matches!(
-                        descriptor.converted_type(),
-                        ConvertedType::NONE | ConvertedType::UTF8
-                    ) && chunk.compression() == Compression::UNCOMPRESSED
-                        && chunk
-                            .encodings()
-                            .any(|encoding| encoding == Encoding::DELTA_LENGTH_BYTE_ARRAY) =>
-                {
-                    None
-                }
-                _ => continue,
-            };
-            if predicate_columns.leaf_included(column)
-                || descriptor.path().parts().len() != 1
-                || !matches!(descriptor.max_def_level(), 0 | 1)
-                || descriptor.max_rep_level() != 0
-                || chunk.dictionary_page_offset().is_some()
-                || !matches!(
-                    chunk.compression(),
-                    Compression::UNCOMPRESSED | Compression::ZSTD(_)
-                )
-            {
-                continue;
-            }
-            let group_row_count = group_rows.end - group_rows.start;
-            let non_null_rows = chunk
-                .statistics()
-                .and_then(|stats| stats.null_count_opt())
-                .and_then(|nulls| group_row_count.checked_sub(nulls))
-                .unwrap_or(group_row_count);
-            let locations = &offset_indexes.get(column)?.page_locations;
-            for (i, location) in locations.iter().enumerate() {
-                let offset = u64::try_from(location.offset).ok()?;
-                let length = u64::try_from(location.compressed_page_size).ok()?;
-                let range = offset..offset.checked_add(length)?;
-                if !ranges.contains(&range) {
-                    continue;
-                }
-                let first_row = u64::try_from(location.first_row_index).ok()?;
-                let end_row = locations
-                    .get(i + 1)
-                    .map_or(Some(group_rows.end - group_rows.start), |p| {
-                        u64::try_from(p.first_row_index).ok()
-                    })?;
-                let row_count = end_row.checked_sub(first_row)?;
-                if range.end > self.file_size
-                    || length == 0
-                    || length > page::MAX_PAGE_BYTES as u64
-                    || row_count == 0
-                    || row_count > page::MAX_PAGE_ROWS as u64
-                    || end_row > group_rows.end - group_rows.start
-                {
-                    return None;
-                }
-                // A raw Zstd frame cannot be smaller than its required PLAIN values.
-                // These pages need the ordinary decoder, so do not probe them.
-                if matches!(chunk.compression(), Compression::ZSTD(_))
-                    && descriptor.max_def_level() == 0
-                    && value_width.is_some_and(|width| length < row_count * width as u64)
-                {
-                    continue;
-                }
-                if value_width.is_none() {
-                    let first = group_rows.start + first_row;
-                    let selected = state.rows.partition_point(|row| *row < first + row_count)
-                        - state.rows.partition_point(|row| *row < first);
-                    if length < 1024 * 1024
-                        || length < row_count * 64
-                        || selected == 0
-                        || selected as u64 > row_count / 8
-                    {
-                        continue;
-                    }
-                }
-                pages.push(Page {
-                    range,
-                    first_file_row: group_rows.start + first_row,
-                    row_count: row_count as usize,
-                    max_value_count: row_count.min(non_null_rows) as usize,
-                    compression: chunk.compression(),
-                    value_width,
-                    nullable: descriptor.max_def_level() == 1,
-                });
-                if pages.len() > MAX_PAGES {
-                    return None;
-                }
-            }
-        }
-        (!pages.is_empty()).then(|| (pages, state.rows.clone()))
-    }
-
     async fn fetch_ranges(
         &self,
         requested_ranges: &[Range<u64>],
@@ -368,216 +247,34 @@ impl IntraPageReader {
         estimate: TransportEstimate,
         budget: &Semaphore,
     ) -> Result<Option<Vec<Bytes>>> {
-        let ordinary_plan = choose_range_plan(ranges, Some(estimate));
-        let ordinary_cost = range_cost_bytes(
-            &ordinary_plan.physical_ranges,
+        let Some(mut read_budget) = FixedReadBudget::new(
+            ranges,
+            pages,
+            selected_rows,
             estimate,
-            MAX_CONCURRENT_PARQUET_RANGE_READS,
-        );
-        // Unsupported output columns still require complete reads. Charge their
-        // known bytes before probing any candidate pages.
-        let ordinary_ranges: Vec<_> = ranges
-            .iter()
-            .filter(|range| !pages.iter().any(|page| page.range == **range))
-            .cloned()
-            .collect();
-        let ordinary_bytes = range_bytes(&ordinary_ranges);
-        // Never spend more bytes on probes and data than the original page request.
-        let byte_budget = range_bytes(ranges);
-        let trace = |phase,
-                     reason,
-                     cost: u128,
-                     bytes: u128,
-                     requests: usize,
-                     rounds: usize,
-                     concurrency: usize| {
-            tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
-                eligible = true, phase, fallback_reason = reason,
-                ordinary_predicted_cost_bytes = ordinary_cost,
-                partial_predicted_cost_bytes = cost,
-                planned_bytes = bytes, planned_requests = requests, probe_rounds = rounds,
-                concurrency_limit = concurrency,
-                "Partial-page read decision");
-        };
-        let Some(mut request_overhead_bytes) = self.store.request_overhead_bytes() else {
-            // Latency and bandwidth alone do not price thousands of small requests.
-            tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
-                eligible = true, fallback_reason = "insufficient_request_capacity_evidence",
-                "Partial-page read skipped");
-            return Ok(None);
-        };
-        let Some(mut values) = estimated_value_ranges(pages, selected_rows) else {
-            return Ok(None);
-        };
-        values.extend_from_slice(&ordinary_ranges);
-        // Compare both plans in shared-capacity units. Splitting bandwidth
-        // per file while keeping all request slots would underprice small reads.
-        let concurrency = MAX_SHARED_RANGE_READS;
-        let Some(plan) = choose_bounded_range_plan(
-            &values,
-            estimate,
-            concurrency,
-            byte_budget,
-            request_overhead_bytes,
+            self.store.request_overhead_bytes(),
         ) else {
             return Ok(None);
         };
-        let prefixes: Vec<_> = pages.iter().map(Page::prefix_range).collect();
-        // Charge dependent rounds separately; raw-block headers are found one at a time.
-        let mut extra_rounds = [(0_u128, 0_usize); MAX_PROBE_ROUNDS - 1];
-        for page in pages {
-            let Some(value_width) = page.value_width else {
-                return Ok(None);
-            };
-            let (rounds, size) = match page.compression {
-                Compression::ZSTD(_) => {
-                    let bytes_after_prefix =
-                        (page.range.end - page.range.start).saturating_sub(page::PAGE_PREFIX_BYTES);
-                    let minimum_blocks =
-                        bytes_after_prefix.div_ceil(page::MAX_ZSTD_BLOCK_BYTES as u64 + 3);
-                    // The prefix may already hold the first block's header.
-                    (minimum_blocks.saturating_sub(1) as usize, 3)
-                }
-                Compression::UNCOMPRESSED if page.nullable => {
-                    // A large nullable page can still have a tiny RLE stream.
-                    let structure_bytes = (page.range.end - page.range.start)
-                        .saturating_sub(page.max_value_count as u64 * value_width as u64);
-                    if structure_bytes <= page::PAGE_PREFIX_BYTES {
-                        continue;
-                    }
-                    (1, u128::from(structure_bytes))
-                }
-                _ => continue,
-            };
-            if rounds >= MAX_PROBE_ROUNDS {
-                tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
-                    eligible = true, fallback_reason = "probe_round_limit",
-                    minimum_probe_rounds = rounds + 1, "Partial-page read skipped");
-                return Ok(None);
-            }
-            for (bytes, requests) in &mut extra_rounds[..rounds] {
-                *bytes += size;
-                *requests += 1;
-            }
-        }
-        let extra_probe_bytes = extra_rounds.iter().map(|(bytes, _)| bytes).sum::<u128>();
-        let extra_probes = extra_rounds
-            .iter()
-            .map(|(_, requests)| requests)
-            .sum::<usize>();
-        let cost = dependent_read_cost_bytes(
-            [
-                (range_bytes(&plan), plan.len()),
-                (range_bytes(&prefixes), prefixes.len()),
-            ]
-            .into_iter()
-            .chain(extra_rounds),
-            estimate,
-            concurrency,
-            request_overhead_bytes,
-        );
-        if !partial_read_has_clear_savings(cost, ordinary_cost) {
-            trace(
-                "preflight",
-                "profile_predicts_no_savings",
-                cost,
-                range_bytes(&plan) + range_bytes(&prefixes) + extra_probe_bytes,
-                plan.len() + prefixes.len() + extra_probes,
-                0,
-                concurrency,
-            );
-            return Ok(None);
-        }
         let mut cache = RangeCache::default();
-        let mut request_count = 0;
-        let mut total_cost = 0_u128;
         let mut probing = true;
         let mut next_ranges = pages.iter().map(Page::prefix_range).collect::<Vec<_>>();
         // Up to MAX_PROBE_ROUNDS dependent probe rounds, followed by one data round.
         for round in 0..=MAX_PROBE_ROUNDS {
-            let phase = if probing { "probe" } else { "data" };
-            if probing && round == MAX_PROBE_ROUNDS {
-                trace(
-                    phase,
-                    "probe_round_limit",
-                    total_cost,
-                    cache.byte_len() as u128,
-                    request_count,
-                    round,
-                    0,
-                );
-                return Ok(None);
-            }
-            let probe_rounds = round + usize::from(probing);
-            let concurrency = MAX_SHARED_RANGE_READS;
-            let Some(read_ranges) = choose_bounded_range_plan(
-                &next_ranges,
-                estimate,
-                concurrency,
-                byte_budget.saturating_sub(cache.byte_len() as u128),
-                request_overhead_bytes,
-            ) else {
-                trace(
-                    phase,
-                    "byte_budget",
-                    total_cost,
-                    cache.byte_len() as u128,
-                    request_count,
-                    round,
-                    concurrency,
-                );
+            let Some((read_ranges, round_cost)) =
+                read_budget.plan_round(&next_ranges, cache.byte_len(), round, probing)
+            else {
                 return Ok(None);
             };
-            let round_requests = read_ranges.len();
-            request_count += round_requests;
-            let round_cost = partial_read_cost_bytes(
-                range_bytes(&read_ranges),
-                round_requests,
-                estimate,
-                concurrency,
-                request_overhead_bytes,
-            );
-            // Probes must leave room for at least one dependent data wave.
-            // Charge each round separately, even when it has just one request.
-            let predicted_cost = total_cost
-                .saturating_add(round_cost)
-                .saturating_add(if probing {
-                    ordinary_bytes.saturating_add(bandwidth_delay_bytes(estimate))
-                } else {
-                    0
-                });
-            let reason = if request_count > MAX_REQUESTS {
-                "request_budget"
-            } else if !partial_read_has_clear_savings(predicted_cost, ordinary_cost) {
-                "uncertain_savings"
-            } else {
-                "none"
-            };
-            trace(
-                phase,
-                reason,
-                predicted_cost,
-                cache.byte_len() as u128 + range_bytes(&read_ranges),
-                request_count,
-                probe_rounds,
-                concurrency,
-            );
-            if reason != "none" {
-                return Ok(None);
-            }
             let elapsed = self
                 .fetch_ranges(&next_ranges, read_ranges, &mut cache, budget)
                 .await?;
-            let observed_cost = elapsed.map(|elapsed| {
-                duration_cost_bytes(elapsed, estimate.shared_throughput_bytes_per_second)
-            });
-            // Waiting behind another plan is not extra work performed by this one.
-            total_cost = total_cost.saturating_add(observed_cost.unwrap_or(0).max(round_cost));
-            request_overhead_bytes =
-                request_overhead_bytes.max(self.store.request_overhead_bytes().unwrap_or(0));
-            tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
-                phase, observed_cost_bytes = observed_cost, request_overhead_bytes,
-                "Partial-page read round completed");
+            read_budget.record_read(
+                elapsed,
+                round_cost,
+                self.store.request_overhead_bytes(),
+                probing,
+            );
             if !probing {
                 return Ok(Some(
                     ranges
@@ -600,16 +297,8 @@ impl IntraPageReader {
                     Err(ProbeError::Unsupported) => probe_ranges.push(page.range.clone()),
                     Err(ProbeError::Invalid(reason)) => return Err(invalid_data(reason)),
                 }
-                if data_ranges.len() > MAX_REQUESTS {
-                    trace(
-                        "data",
-                        "request_budget",
-                        total_cost,
-                        cache.byte_len() as u128,
-                        request_count,
-                        probe_rounds,
-                        0,
-                    );
+                if !read_budget.allows_value_ranges(data_ranges.len(), cache.byte_len(), round + 1)
+                {
                     return Ok(None);
                 }
             }
@@ -617,7 +306,7 @@ impl IntraPageReader {
             next_ranges = if probing {
                 probe_ranges
             } else {
-                data_ranges.extend_from_slice(&ordinary_ranges);
+                data_ranges.extend_from_slice(&read_budget.ordinary_ranges);
                 data_ranges
             };
         }
@@ -644,29 +333,6 @@ fn invalid_data(reason: &str) -> ParquetError {
     ParquetError::General(format!("invalid intra-page data: {reason}"))
 }
 
-/// Approximate value positions for cost comparison only; these ranges never perform I/O.
-fn estimated_value_ranges(pages: &[Page], selected_rows: &[u64]) -> Option<Vec<Range<u64>>> {
-    let mut ranges = Vec::new();
-    for page in pages {
-        // Variable lengths need their own discovery budget, not uniform row offsets.
-        let value_width = page.value_width?;
-        let first = selected_rows.partition_point(|row| *row < page.first_file_row);
-        let end = page.first_file_row.checked_add(page.row_count as u64)?;
-        for row in selected_rows[first..].iter().take_while(|row| **row < end) {
-            // ponytail: assume evenly spread values; exact nullable/compressed offsets need probes.
-            let offset = u128::from(row - page.first_file_row)
-                * u128::from(page.range.end - page.range.start)
-                / page.row_count as u128;
-            let start = page.range.start + u64::try_from(offset).ok()?;
-            ranges.push(start..start.saturating_add(value_width as u64).min(page.range.end));
-            if ranges.len() > MAX_REQUESTS {
-                return None;
-            }
-        }
-    }
-    Some(ranges)
-}
-
 // Prefer ordinary reads unless the gain exceeds the planner's uncertainty margin.
 fn partial_read_has_clear_savings(partial_cost: u128, ordinary_cost: u128) -> bool {
     partial_cost.saturating_mul(100) < ordinary_cost.saturating_mul(100 - DECISION_MARGIN_PERCENT)
@@ -674,10 +340,11 @@ fn partial_read_has_clear_savings(partial_cost: u128, ordinary_cost: u128) -> bo
 
 #[cfg(test)]
 mod tests {
+    use super::super::cost_model::range_bytes;
     use super::*;
     use parquet::{
-        column::page::PageReader, file::serialized_reader::SerializedPageReader,
-        schema::types::ColumnDescPtr,
+        basic::Compression, column::page::PageReader,
+        file::serialized_reader::SerializedPageReader, schema::types::ColumnDescPtr,
     };
 
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;

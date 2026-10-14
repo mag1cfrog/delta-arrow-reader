@@ -3,7 +3,6 @@
 use std::{
     ops::Range,
     sync::{Arc, LazyLock},
-    time::Duration,
 };
 
 use bytes::Bytes;
@@ -14,20 +13,15 @@ use tokio::{
 };
 
 use super::super::{
-    cost_model::{
-        FallbackEstimator, FallbackPlan, TransportEstimate, partial_read_cost_bytes, range_bytes,
-        range_cost_bytes,
-    },
-    range_planning::{choose_bounded_range_plan_avoiding, choose_range_plan, merge_ranges},
+    cost_model::{FallbackEstimator, FallbackPlan, TransportEstimate, range_bytes},
+    range_planning::{choose_range_plan, merge_ranges},
 };
 use super::{
     IntraPageReader, MAX_PAGES, MAX_REQUESTS, MAX_SELECTED_ROWS, invalid_data,
     page::{MAX_PAGE_BYTES, MAX_PAGE_ROWS, Page, ProbeError, RangeCache, selected_value_ranges},
-    partial_read_has_clear_savings,
+    probe_budget::{discovery_deadline, payload_plan, remaining_discovery_time},
 };
-use crate::reader::options::{
-    MAX_CONCURRENT_PARQUET_RANGE_READS, MAX_INTRA_PAGE_READ_BYTES, MAX_SHARED_RANGE_READS,
-};
+use crate::reader::options::MAX_INTRA_PAGE_READ_BYTES;
 
 // Reserve MiB units before probing, without waiting behind other queries.
 static MEMORY_BUDGET: LazyLock<Arc<Semaphore>> = LazyLock::new(|| Arc::new(Semaphore::new(512)));
@@ -66,29 +60,7 @@ pub(super) async fn read(
             fallback_reason = "fallback_plan_limit", "Variable-length read skipped");
         return Ok(None);
     };
-    // An upper bound limits queueing before the numeric model supplies the actual allowance.
-    let upper_estimate = TransportEstimate {
-        request_latency: calibration
-            .ordinary_request_latencies
-            .iter()
-            .copied()
-            .max()
-            .unwrap_or_default(),
-        shared_throughput_bytes_per_second: calibration.bytes_per_second,
-    };
-    let Some(nanos) = range_cost_bytes(
-        plan.ordinary(),
-        upper_estimate,
-        MAX_CONCURRENT_PARQUET_RANGE_READS,
-    )
-    .checked_mul(1_000_000_000)
-    .map(|nanos| nanos / u128::from(calibration.bytes_per_second) / 20) else {
-        return Ok(None);
-    };
-    let Some(deadline) = u64::try_from(nanos)
-        .ok()
-        .and_then(|nanos| started.checked_add(Duration::from_nanos(nanos)))
-    else {
+    let Some(deadline) = discovery_deadline(plan.ordinary(), &calibration, started) else {
         return Ok(None);
     };
     let Some(read) = ProbeRead::start(
@@ -178,8 +150,7 @@ impl<'a> ProbeRead<'a> {
                 fallback_reason = "memory_limit", "Variable-length read skipped");
             return Ok(None);
         };
-        if costs
-            .remaining_allowance(plan.clone(), started, deadline)
+        if remaining_discovery_time(&costs, plan.clone(), started, deadline)
             .await
             .is_none()
         {
@@ -281,11 +252,14 @@ impl<'a> ProbeRead<'a> {
             let Some(plan) = self.plan.with_probe(&merge_ranges(&next_ranges, 0)) else {
                 return Ok(None);
             };
-            if self
-                .costs
-                .remaining_allowance(plan.clone(), self.decision_started, self.decision_deadline)
-                .await
-                .is_none()
+            if remaining_discovery_time(
+                &self.costs,
+                plan.clone(),
+                self.decision_started,
+                self.decision_deadline,
+            )
+            .await
+            .is_none()
             {
                 return Ok(None);
             }
@@ -307,21 +281,26 @@ impl<'a> ProbeRead<'a> {
                 .filter(|range| !pages.iter().any(|page| page.range == **range))
                 .cloned(),
         );
-        let Some(payload) = self.payload_plan(&values) else {
+        let calibration = self.costs.calibration();
+        let overhead = self
+            .reader
+            .store
+            .request_overhead_at_capacity(calibration.bytes_per_second);
+        let Some(payload) = payload_plan(&values, &self.plan, &self.cache, calibration, overhead)
+        else {
             tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
                 fallback_reason = "insufficient_remaining_savings", "Variable-length read falling back");
             return self.finish_fallback().await;
         };
         // Charge the final decode and the last observed probe before accepting payload I/O.
-        if self
-            .costs
-            .remaining_allowance(
-                self.plan.clone(),
-                self.decision_started,
-                self.decision_deadline,
-            )
-            .await
-            .is_none()
+        if remaining_discovery_time(
+            &self.costs,
+            self.plan.clone(),
+            self.decision_started,
+            self.decision_deadline,
+        )
+        .await
+        .is_none()
         {
             tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
                 fallback_reason = "completed_discovery_over_budget", "Variable-length read falling back");
@@ -337,51 +316,6 @@ impl<'a> ProbeRead<'a> {
                 .await?;
         }
         Ok(self.reconstruct())
-    }
-
-    fn payload_plan(&self, values: &[Range<u64>]) -> Option<Vec<Range<u64>>> {
-        let calibration = self.costs.calibration();
-        let mut latencies = calibration.partial_request_latencies.to_vec();
-        latencies.sort_unstable();
-        let estimate = TransportEstimate {
-            request_latency: *latencies.get(latencies.len() / 2)?,
-            shared_throughput_bytes_per_second: calibration.bytes_per_second,
-        };
-        let overhead = self
-            .reader
-            .store
-            .request_overhead_at_capacity(calibration.bytes_per_second)?;
-        let budget = (range_bytes(self.plan.ordinary()) * 3 / 4)
-            .checked_sub(self.cache.byte_len() as u128)?;
-        let missing = self.cache.missing_ranges(values);
-        let cached: Vec<_> = self
-            .cache
-            .entries
-            .iter()
-            .map(|(range, _)| range.clone())
-            .collect();
-        let payload = choose_bounded_range_plan_avoiding(
-            &missing,
-            &cached,
-            estimate,
-            MAX_SHARED_RANGE_READS,
-            budget,
-            overhead,
-        )?;
-        if payload.len() > MAX_REQUESTS {
-            return None;
-        }
-        let cost = |ranges: &[Range<u64>]| {
-            partial_read_cost_bytes(
-                range_bytes(ranges),
-                ranges.len(),
-                estimate,
-                MAX_SHARED_RANGE_READS,
-                overhead,
-            )
-        };
-        partial_read_has_clear_savings(cost(&payload), cost(self.plan.remaining()))
-            .then_some(payload)
     }
 
     fn reconstruct(self) -> Vec<Bytes> {

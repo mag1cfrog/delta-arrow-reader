@@ -36,11 +36,11 @@
 //! # Responsibilities and limits
 //!
 //! [`FallbackEstimator`] caches estimates for one set of network measurements
-//! and bounds simulation work across queries. Its discovery allowance charges
-//! time spent computing or waiting, including cache lookup. Invalid inputs,
-//! exceeded model limits or an exhausted allowance cause the caller to retain
-//! ordinary reading or finish the fallback. Estimates guide performance choices;
-//! they do not guarantee a particular query time.
+//! and bounds simulation work across queries. It returns durations, not permission
+//! to probe. The reader's budget policy charges decision time, reserves fallback
+//! and decides whether to proceed. Invalid inputs or exceeded model limits produce
+//! no estimate, so the reader retains ordinary reading or finishes the fallback.
+//! Estimates guide performance choices; they do not guarantee a particular query time.
 //!
 //! The readers supply network measurements and physical byte ranges, then use
 //! the estimates to choose a plan. Network profiling, format eligibility, page
@@ -52,7 +52,7 @@ mod fallback_estimator;
 mod range_cost;
 mod request_simulation;
 
-pub(super) use fallback_cost::FallbackPlan;
+pub(super) use fallback_cost::{FallbackCost, FallbackPlan};
 pub(super) use fallback_estimator::FallbackEstimator;
 pub(super) use range_cost::{
     TransportEstimate, bandwidth_delay_bytes, dependent_read_cost_bytes, duration_cost_bytes,
