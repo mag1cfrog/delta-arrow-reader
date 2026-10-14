@@ -133,7 +133,7 @@ raise `ValueError`.
 
 The default, `warmup="automatic"`, prepares supported S3 tables and profiles
 their network before querying. It uses a five-second sampling limit after
-metadata loading and schedules at most 24 MiB across 3,084 requests, excluding
+metadata loading and schedules at most 24.375 MiB across 3,180 requests, excluding
 store retries. Failed or incomplete network samples are discarded. Other stores
 remain lazy. See [network warmup](scan-planning.md#choose-a-warmup-mode).
 

@@ -17,7 +17,7 @@ them, see [scan planning](https://mag1cfrog.github.io/delta-arrow-reader/scan-pl
 | `prefetch_files_per_partition` | `2` | Future direct Parquet file streams prepared per partition. `0` is fully lazy. |
 | `parquet_metadata_size_hint_bytes` | `Some(65_536)` | Parquet footer bytes prefetched by the `Direct` backend. `None` disables the hint. |
 | `parquet_full_file_read_threshold_bytes` | `None` | Largest file the `Direct` backend may fetch once and buffer for local range reads. `None` disables full-file buffering. |
-| `experimental_intra_page_reads` | `false` | Allows partial reads of supported pages after a row predicate selects sparse output rows. Requires the `Direct` backend and the `Automatic` range-read policy. |
+| `experimental_intra_page_reads` | `true` | Allows partial reads of supported pages after a row predicate selects sparse output rows. Requires the `Direct` backend and the `Automatic` range-read policy. |
 
 The concurrency limits, output capacity, and enabled byte-size values must be
 greater than zero. Explicit concurrency limits and output capacity must also be
@@ -52,13 +52,19 @@ controls the provider's scans. A per-scan override disables partial reads for
 that scan; it cannot undo initialization already performed. Streaming does not
 require DataFusion.
 
-Supported pages are flat PLAIN V1 pages with offset indexes and physical types
-INT32, INT64, FLOAT, DOUBLE or FIXED_LEN_BYTE_ARRAY. Nullable and required columns
-are supported, including existing date, timestamp, decimal and type-widening conversions.
-Fixed-length decimal widths come from the Parquet schema. This optimization does
-not add new Delta type mappings, such as fixed-size binary to Delta binary.
-Data must be uncompressed or held in Zstd raw blocks without checksums. Other
-layouts and explicit range-read policy overrides use ordinary reads.
+Supported pages are flat V1 pages with offset indexes and no page checksum.
+Nullable and required columns are supported:
+
+- PLAIN INT32, INT64, FLOAT, DOUBLE and FIXED_LEN_BYTE_ARRAY pages can be
+  uncompressed or held in Zstd raw blocks without checksums. Existing date,
+  timestamp, decimal and type-widening conversions still apply. Fixed-length
+  decimal widths come from the Parquet schema; this adds no new Delta type mappings.
+- DELTA_LENGTH_BYTE_ARRAY pages can hold UTF-8 strings or binary values, but
+  must be uncompressed. The reader first discovers value lengths, then reads
+  selected payloads. It supports ordinary Arrow arrays and DataFusion view arrays.
+
+Nested columns, V2 pages, other encodings and explicit range-read policy
+overrides use ordinary reads. Zstd string and binary pages also retain ordinary reads.
 
 Fewer bytes can mean more requests. The reader uses latency, throughput and
 small-request cost to compare partial reads with complete pages,
@@ -71,6 +77,18 @@ the retry, and another failure leaves ordinary reads in place. Later uncontended
 reads can update a complete profile. Local scans use ordinary reads.
 Use [`WarmupMode::None`](../scan-planning.md#choose-a-warmup-mode) to skip profiling.
 Without a measured small-request cost, later queries also retain ordinary reads.
+
+Variable-length discovery has a separate budget: probes, decision work and a
+complete fallback together may add at most 5% to the modeled ordinary-read
+cost. The reader checks this before each dependent request round. Successful
+discovery must save at least 25% of the batch's bytes and more than 10% of its
+remaining read cost. On fallback it reuses downloaded prefixes. Malformed
+supported input returns an error. These modeled limits are not wall-time guarantees.
+
+Concurrent variable-length reads share a 512 MiB memory reservation, including
+cached data, length arrays and reconstructed pages. Arrow views retain their
+reservation while they hold those buffers, so other batches may use ordinary
+reads until that memory is released.
 
 Probes and selected data share the original page request's byte budget. Planned
 range requests share a process-wide ceiling of 512 concurrent reads. Each request
