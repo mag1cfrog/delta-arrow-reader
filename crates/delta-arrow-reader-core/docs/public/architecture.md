@@ -28,7 +28,7 @@ initialization or during each query.
 
 The default `Automatic` mode prepares supported S3 tables and also performs
 bounded network sampling. Other stores remain lazy. The table below separates
-metadata preparation from the additional [network profiling](scan-planning.md#choose-a-warmup-mode).
+metadata preparation from the additional [network profiling](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/#measure-the-connection-during-initialization).
 
 | Phase | No warmup | Query planning |
 | --- | --- | --- |
@@ -89,6 +89,10 @@ falls back to reading complete column chunks.
 
 Both optimizations are automatic for the `Direct` backend and behave the same
 through the streaming API and the DataFusion adapter.
+
+For supported pages, the reader can also fetch just the selected values inside
+a page. [Partial-page reads](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/) explains the layouts, network
+cost decision, configuration and measured tradeoffs.
 
 ### Floating-point row-group pruning
 

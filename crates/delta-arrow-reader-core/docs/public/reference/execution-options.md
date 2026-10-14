@@ -35,76 +35,10 @@ partial-page option do not change its data-file reader.
 
 ### Experimental partial-page reads
 
-Partial-page reads are enabled by default for eligible pages when the measured
-network profile predicts a benefit. To disable them:
-
-```rust
-use delta_arrow_reader::DeltaScanExecutionOptions;
-
-let options = DeltaScanExecutionOptions::new()
-    .with_experimental_intra_page_reads(false);
-```
-
-Pass `options` to `DeltaTableBuilder::with_execution_options` to disable both
-partial reads and automatic initialization profiling. Explicit warmup settings
-still apply. For DataFusion, also set `ScanOptions.execution_options`, which
-controls the provider's scans. A per-scan override disables partial reads for
-that scan; it cannot undo initialization already performed. Streaming does not
-require DataFusion.
-
-Supported pages are flat V1 pages with offset indexes and no page checksum.
-Nullable and required columns are supported:
-
-- PLAIN INT32, INT64, FLOAT, DOUBLE and FIXED_LEN_BYTE_ARRAY pages can be
-  uncompressed or held in Zstd raw blocks without checksums. Existing date,
-  timestamp, decimal and type-widening conversions still apply. Fixed-length
-  decimal widths come from the Parquet schema; this adds no new Delta type mappings.
-- DELTA_LENGTH_BYTE_ARRAY pages can hold UTF-8 strings or binary values, but
-  must be uncompressed. The reader first discovers value lengths, then reads
-  selected payloads. It supports ordinary Arrow arrays and DataFusion view arrays.
-
-Nested columns, V2 pages, other encodings and explicit range-read policy
-overrides use ordinary reads. Zstd string and binary pages also retain ordinary reads.
-
-Fewer bytes can mean more requests. The reader uses latency, throughput and
-small-request cost to compare partial reads with complete pages,
-including probes and dependent request rounds. Partial reads must save more than
-10% of the estimated cost. Missing evidence, dense selections or uncertain
-savings retain ordinary reads. Automatic S3 table warmup supplies the initial
-profile. If that attempt starts but does not finish, the first later eligible
-filtered scan retries it once while building its plan. Concurrent scans share
-the retry, and another failure leaves ordinary reads in place. Later uncontended
-reads can update a complete profile. Local scans use ordinary reads.
-Use [`WarmupMode::None`](../scan-planning.md#choose-a-warmup-mode) to skip profiling.
-Without a measured small-request cost, later queries also retain ordinary reads.
-
-Variable-length discovery has a separate budget: probes, decision work and a
-complete fallback together may add at most 5% to the modeled ordinary-read
-cost. The reader checks this before each dependent request round. Successful
-discovery must save at least 25% of the batch's bytes and more than 10% of its
-remaining read cost. On fallback it reuses downloaded prefixes. Invalid length
-metadata or invalid selected values return an error. These modeled limits are
-not wall-time guarantees.
-
-Mixed projections keep profitable fixed-width partial reads. The reader tries
-variable-length discovery when the fixed-width path declines the batch.
-
-Concurrent variable-length reads share a 512 MiB memory reservation, including
-cached data, length arrays and reconstructed pages. Arrow views retain their
-reservation while they hold those buffers, so other batches may use ordinary
-reads until that memory is released.
-
-Probes and selected data share the original page request's byte budget. Planned
-range requests share a process-wide ceiling of 512 concurrent reads. Each request
-waits for one slot and releases it when its response finishes, including retries.
-Ordinary plans retain their per-plan limit of 10. Fewer transferred bytes can
-increase request counts and CPU usage; the cost model does not guarantee a win
-on every network.
-
-S3 partial reads reuse connections through a separate HTTP pool with 64 shared
-connection-setup slots. Calibration uses the same client as partial reads.
-Unsupported network settings keep ordinary reads on the SDK client. See
-[network warmup](../scan-planning.md#choose-a-warmup-mode) for initialization costs.
+See [partial-page reads](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/) for supported layouts,
+the cost model, explicit enable/disable examples, profiling limits, tradeoffs
+and benchmark results. The table above lists the option's default; DataFusion's
+`execution_options` below controls each provider scan.
 
 ## DataFusion scan options
 

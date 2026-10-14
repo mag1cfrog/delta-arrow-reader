@@ -44,6 +44,7 @@ nav:
       - Architecture: architecture.md
       - Delta metadata lifecycle: delta-metadata-lifecycle.md
       - Scan planning: scan-planning.md
+      - Partial-page reads: partial-page-reads.md
       - Read scheduling: read-scheduling.md
   - Performance:
       - Overview: benchmarks.md

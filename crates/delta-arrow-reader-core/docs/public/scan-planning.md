@@ -36,60 +36,13 @@ to measure whether it reduces total time for your queries.
 To see how this initialization choice plays out across several queries, follow
 the [metadata warmup lifecycles](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/).
 
-Automatic S3 warmup measures latency, transfer speed and small-request costs
-with a five-second sampling limit. Select `WarmupMode::Network` explicitly to
-choose a different limit:
+The [partial-page guide](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/#measure-the-connection-during-initialization)
+explains how network sampling selects data files, shares its profile and recovers
+once after an incomplete attempt. It also covers supported stores, sampling
+limits, explicit configuration and the initialization cost.
 
-```no_run
-# use delta_arrow_reader::{DeltaTableBuilder, WarmupMode};
-# async fn example() -> Result<(), delta_arrow_reader::DeltaReaderError> {
-let table = DeltaTableBuilder::new("s3://bucket/table")
-    .with_warmup(WarmupMode::Network {
-        max_duration: std::time::Duration::from_secs(2),
-    })
-    .load_table()
-    .await?;
-# Ok(())
-# }
-```
-
-The time limit covers network sampling after metadata loading. Sampling uses
-up to three active files of at least 4 MiB each, found in the retained metadata.
-It schedules 24.375 MiB across 3,180 range requests; store retries can add traffic.
-Small batches are sampled separately from requests at the shared concurrency limit.
-Small requests run with replenished concurrency to measure sustained capacity.
-They do not replace the latency and bandwidth samples taken at lower concurrency.
-Timed-out, failed or insufficient samples are discarded without failing table
-loading. Sampling can still add cost when later queries use ordinary reads.
-A zero duration skips sampling.
-
-If network sampling starts but does not finish, the table keeps one recovery
-attempt. The first later filtered scan that can use partial-page reads runs that
-attempt while building its plan. Concurrent scans share the attempt. It uses the
-same time and I/O limits as initialization. If it also fails or is cancelled,
-later scans keep using ordinary reads without trying again. A scan that disables
-partial-page reads, selects another backend or uses an explicit range policy does
-not consume the pending attempt. `WarmupMode::None` never schedules recovery.
-Recovery shares the loaded table's range-read activity, so it rejects samples
-that overlap existing range reads, including reads using the previous profile.
-
-Network warmup applies to the Direct backend's automatic range policy on
-supported `s3://` and `s3a://` stores. Custom HTTP settings, system proxies,
-S3 Express and other storage schemes retain ordinary reads. Explicit `Network`
-on unsupported stores retains metadata warmup only; `Automatic` skips it.
-An applicable system proxy can reject sampling after metadata preparation.
-The profile stays in memory and is shared by scans, table clones and refreshed snapshots.
-Uncontended reads can update it when they meet the same sampling conditions.
-Partial-page reads are enabled by default but require a complete measured
-profile and predicted savings above 10%. Unsupported layouts, insufficient
-evidence and predicted losing cases use ordinary reads. Measure initialization
-separately from queries and include it when evaluating total application time.
-The `network_warmup` diagnostic reports `phase="initialization"` or
-`phase="recovery"`. Recovery time belongs to the scan build that runs it,
-rather than table initialization.
-`load_snapshot` never performs warmup; `Automatic` and `None` both preserve its
-metadata-only behavior. Converting that snapshot with `into_table` also leaves
-warmup undone; use `load_table` when you want automatic preparation.
+`load_snapshot` never performs warmup. Converting that snapshot with `into_table`
+also leaves warmup undone; use `load_table` for automatic preparation.
 
 ## Choose a partition target
 
