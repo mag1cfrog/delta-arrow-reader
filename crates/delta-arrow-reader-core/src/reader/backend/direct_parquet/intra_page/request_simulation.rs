@@ -6,8 +6,8 @@ use std::{cmp::Reverse, collections::BinaryHeap, time::Duration};
 use super::{MAX_REQUESTED_BYTES, MAX_SHARED_RANGE_READS};
 
 // Bound per-decision work; larger plans must retain ordinary reads.
-const MAX_MODELED_REQUESTS: usize = 2 * MAX_SHARED_RANGE_READS;
-const MAX_REQUEST_DELAY: Duration = Duration::from_secs(10);
+pub(super) const MAX_MODELED_REQUESTS: usize = 2 * MAX_SHARED_RANGE_READS;
+pub(super) const MAX_REQUEST_DELAY: Duration = Duration::from_secs(10);
 // Integer fractions keep nearly simultaneous completions from drifting apart over many rounds.
 const BYTE_UNITS: u128 = 1 << 48;
 

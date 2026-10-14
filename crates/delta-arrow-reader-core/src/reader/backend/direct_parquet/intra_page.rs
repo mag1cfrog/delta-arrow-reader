@@ -5,6 +5,8 @@
 //! positions; unread fixed-width values are zero-filled only where it will skip them.
 
 mod delta_length;
+#[cfg(test)]
+mod fallback_cost;
 mod page;
 #[cfg(test)]
 mod request_simulation;
