@@ -13,19 +13,21 @@ use tokio::{
     time::Instant,
 };
 
-use super::super::range_planning::{
-    MAX_SHARED_RANGE_READS, TransportEstimate, choose_bounded_range_plan_avoiding,
-    choose_range_plan, merge_ranges, partial_plan_cost, plan_score, range_bytes,
+use super::super::{
+    cost_model::{
+        FallbackEstimator, FallbackPlan, TransportEstimate, partial_read_cost_bytes, range_bytes,
+        range_cost_bytes,
+    },
+    range_planning::{choose_bounded_range_plan_avoiding, choose_range_plan, merge_ranges},
 };
 use super::{
-    CostEstimator, IntraPageReader, MAX_PAGES, MAX_REQUESTED_BYTES, MAX_REQUESTS,
-    MAX_SELECTED_ROWS,
-    fallback_cost::FallbackPlan,
-    invalid_data,
+    IntraPageReader, MAX_PAGES, MAX_REQUESTS, MAX_SELECTED_ROWS, invalid_data,
     page::{MAX_PAGE_BYTES, MAX_PAGE_ROWS, Page, ProbeError, RangeCache, selected_value_ranges},
     partial_read_has_clear_savings,
 };
-use crate::reader::options::MAX_CONCURRENT_PARQUET_RANGE_READS;
+use crate::reader::options::{
+    MAX_CONCURRENT_PARQUET_RANGE_READS, MAX_INTRA_PAGE_READ_BYTES, MAX_SHARED_RANGE_READS,
+};
 
 // Reserve MiB units before probing, without waiting behind other queries.
 static MEMORY_BUDGET: LazyLock<Arc<Semaphore>> = LazyLock::new(|| Arc::new(Semaphore::new(512)));
@@ -74,7 +76,7 @@ pub(super) async fn read(
             .unwrap_or_default(),
         shared_throughput_bytes_per_second: calibration.bytes_per_second,
     };
-    let Some(nanos) = plan_score(
+    let Some(nanos) = range_cost_bytes(
         plan.ordinary(),
         upper_estimate,
         MAX_CONCURRENT_PARQUET_RANGE_READS,
@@ -125,7 +127,7 @@ pub(super) struct ProbeRead<'a> {
     requested: Vec<Range<u64>>,
     plan: FallbackPlan,
     cache: RangeCache,
-    costs: Arc<CostEstimator>,
+    costs: Arc<FallbackEstimator>,
     memory: Arc<OwnedSemaphorePermit>,
     decision_started: Instant,
     decision_deadline: Instant,
@@ -161,11 +163,11 @@ impl<'a> ProbeRead<'a> {
                 .iter()
                 .map(|range| u128::from(range.end - range.start))
                 .sum::<u128>()
-                > MAX_REQUESTED_BYTES
+                > MAX_INTRA_PAGE_READ_BYTES
         {
             return Ok(None);
         }
-        let Some(costs) = reader.store.range_read_cost_estimator() else {
+        let Some(costs) = reader.store.fallback_cost_estimator() else {
             return Ok(None);
         };
         // Cache plus full reconstruction can coexist. Keep their reservation with the output.
@@ -370,7 +372,7 @@ impl<'a> ProbeRead<'a> {
             return None;
         }
         let cost = |ranges: &[Range<u64>]| {
-            partial_plan_cost(
+            partial_read_cost_bytes(
                 range_bytes(ranges),
                 ranges.len(),
                 estimate,

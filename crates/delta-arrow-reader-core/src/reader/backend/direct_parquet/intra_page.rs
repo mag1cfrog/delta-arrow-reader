@@ -4,14 +4,9 @@
 //! eligible, after filtering. The normal decoder still owns row selection and DV
 //! positions; unread value payloads are zero-filled only where it will skip them.
 
-mod cost_estimator;
 mod delta_length;
-mod fallback_cost;
 mod page;
 mod probe_read;
-mod request_simulation;
-
-pub(super) use cost_estimator::CostEstimator;
 
 use std::{
     ops::Range,
@@ -39,21 +34,24 @@ use parquet::{
 use tokio::sync::Semaphore;
 
 use super::{
+    cost_model::{
+        TransportEstimate, bandwidth_delay_bytes, dependent_read_cost_bytes, duration_cost_bytes,
+        partial_read_cost_bytes, range_bytes, range_cost_bytes,
+    },
     metered_object_store::MeteredParquetObjectStore,
     range_planning::{
-        DECISION_MARGIN_PERCENT, MAX_SHARED_RANGE_READS, RANGE_READ_PERMITS, TransportEstimate,
-        bandwidth_delay_bytes, choose_bounded_range_plan, choose_range_plan, partial_plan_cost,
-        plan_score, range_bytes,
+        DECISION_MARGIN_PERCENT, RANGE_READ_PERMITS, choose_bounded_range_plan, choose_range_plan,
     },
 };
-use crate::reader::options::MAX_CONCURRENT_PARQUET_RANGE_READS;
+use crate::reader::options::{
+    MAX_CONCURRENT_PARQUET_RANGE_READS, MAX_INTRA_PAGE_READ_BYTES, MAX_SHARED_RANGE_READS,
+};
 use page::{Page, ProbeError, RangeCache, selected_value_ranges};
 
 // Hard safety ceilings, not byte or concurrency targets for individual reads.
 const MAX_REQUESTS: usize = 32_768;
 const MAX_PAGES: usize = 4_096;
 const MAX_SELECTED_ROWS: usize = 8_192;
-const MAX_REQUESTED_BYTES: u128 = 128 * 1024 * 1024;
 const MAX_PROBE_ROUNDS: usize = 20;
 
 pub(super) type SharedSelection = Arc<Mutex<SelectedRows>>;
@@ -164,7 +162,7 @@ impl IntraPageReader {
             || ranges
                 .iter()
                 .any(|r| r.start > r.end || r.end > self.file_size)
-            || range_bytes(ranges) > MAX_REQUESTED_BYTES
+            || range_bytes(ranges) > MAX_INTRA_PAGE_READ_BYTES
         {
             return None;
         }
@@ -371,7 +369,7 @@ impl IntraPageReader {
         budget: &Semaphore,
     ) -> Result<Option<Vec<Bytes>>> {
         let ordinary_plan = choose_range_plan(ranges, Some(estimate));
-        let ordinary_cost = plan_score(
+        let ordinary_cost = range_cost_bytes(
             &ordinary_plan.physical_ranges,
             estimate,
             MAX_CONCURRENT_PARQUET_RANGE_READS,
@@ -467,30 +465,17 @@ impl IntraPageReader {
             .iter()
             .map(|(_, requests)| requests)
             .sum::<usize>();
-        let extra_probe_cost = extra_rounds.iter().fold(0_u128, |cost, (bytes, requests)| {
-            cost.saturating_add(partial_plan_cost(
-                *bytes,
-                *requests,
-                estimate,
-                concurrency,
-                request_overhead_bytes,
-            ))
-        });
-        let cost = partial_plan_cost(
-            range_bytes(&plan),
-            plan.len(),
+        let cost = dependent_read_cost_bytes(
+            [
+                (range_bytes(&plan), plan.len()),
+                (range_bytes(&prefixes), prefixes.len()),
+            ]
+            .into_iter()
+            .chain(extra_rounds),
             estimate,
             concurrency,
             request_overhead_bytes,
-        )
-        .saturating_add(partial_plan_cost(
-            range_bytes(&prefixes),
-            prefixes.len(),
-            estimate,
-            concurrency,
-            request_overhead_bytes,
-        ))
-        .saturating_add(extra_probe_cost);
+        );
         if !partial_read_has_clear_savings(cost, ordinary_cost) {
             trace(
                 "preflight",
@@ -545,7 +530,7 @@ impl IntraPageReader {
             };
             let round_requests = read_ranges.len();
             request_count += round_requests;
-            let round_cost = partial_plan_cost(
+            let round_cost = partial_read_cost_bytes(
                 range_bytes(&read_ranges),
                 round_requests,
                 estimate,
@@ -584,10 +569,7 @@ impl IntraPageReader {
                 .fetch_ranges(&next_ranges, read_ranges, &mut cache, budget)
                 .await?;
             let observed_cost = elapsed.map(|elapsed| {
-                elapsed
-                    .as_nanos()
-                    .saturating_mul(u128::from(estimate.shared_throughput_bytes_per_second))
-                    / 1_000_000_000
+                duration_cost_bytes(elapsed, estimate.shared_throughput_bytes_per_second)
             });
             // Waiting behind another plan is not extra work performed by this one.
             total_cost = total_cost.saturating_add(observed_cost.unwrap_or(0).max(round_cost));

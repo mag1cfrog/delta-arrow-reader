@@ -1,6 +1,7 @@
 //! Direct asynchronous Parquet data-file reader.
 
 mod compact_thrift;
+mod cost_model;
 mod intra_page;
 mod metadata_cache;
 mod metered_object_store;
@@ -1111,7 +1112,7 @@ pub(in crate::reader) mod tests {
             snapshot_version: 1,
             max_duration: Duration::from_secs(2),
             range_read_budget: Box::leak(Box::new(tokio::sync::Semaphore::new(
-                super::range_planning::MAX_SHARED_RANGE_READS,
+                crate::reader::options::MAX_SHARED_RANGE_READS,
             ))),
         };
         Ok((plan, store))
@@ -1209,7 +1210,7 @@ pub(in crate::reader) mod tests {
             }
             assert_eq!(
                 budget.available_permits(),
-                super::range_planning::MAX_SHARED_RANGE_READS
+                crate::reader::options::MAX_SHARED_RANGE_READS
             );
             let requests = store.range_call_count();
             state
@@ -1291,7 +1292,7 @@ pub(in crate::reader) mod tests {
             recovery.await;
             assert_eq!(
                 budget.available_permits(),
-                super::range_planning::MAX_SHARED_RANGE_READS
+                crate::reader::options::MAX_SHARED_RANGE_READS
             );
             assert!(
                 Arc::ptr_eq(&original_estimator, &state.estimator()),

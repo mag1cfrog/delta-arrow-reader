@@ -3,13 +3,12 @@
 
 use std::{cmp::Reverse, collections::BinaryHeap, ops::Range, time::Duration};
 
-use super::{
-    MAX_REQUESTED_BYTES, MAX_SHARED_RANGE_READS,
-    request_simulation::{MAX_MODELED_REQUESTS, MAX_REQUEST_DELAY, Request, plan_duration},
-};
+use super::request_simulation::{MAX_MODELED_REQUESTS, MAX_REQUEST_DELAY, Request, plan_duration};
 use crate::reader::{
     backend::direct_parquet::metered_object_store::{RangeReadCalibration, SMALL_READ_CONCURRENCY},
-    options::MAX_CONCURRENT_PARQUET_RANGE_READS,
+    options::{
+        MAX_CONCURRENT_PARQUET_RANGE_READS, MAX_INTRA_PAGE_READ_BYTES, MAX_SHARED_RANGE_READS,
+    },
 };
 
 pub(super) const TRIALS: usize = 1024;
@@ -19,7 +18,7 @@ const DRAW_STEP: u64 = 0x9e3779b97f4a7c15;
 /// Physical requests for the whole batch, including columns that cannot use partial reads.
 /// The fallback keeps every ordinary byte, including coalesced gaps, but never rereads a probe.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct FallbackPlan {
+pub(in super::super) struct FallbackPlan {
     ordinary: Vec<Range<u64>>,
     initial: ProbeRound,
     extensions: Vec<ProbeRound>,
@@ -34,7 +33,7 @@ struct ProbeRound {
 
 impl FallbackPlan {
     /// Each probe must fit inside one ordinary request; keep the executor's sorted request order.
-    pub(super) fn new(ordinary: &[Range<u64>], probes: &[Range<u64>]) -> Option<Self> {
+    pub(in super::super) fn new(ordinary: &[Range<u64>], probes: &[Range<u64>]) -> Option<Self> {
         let valid = |ranges: &[Range<u64>]| {
             !ranges.is_empty()
                 && ranges.len() <= MAX_MODELED_REQUESTS
@@ -47,7 +46,7 @@ impl FallbackPlan {
                 .iter()
                 .map(|r| u128::from(r.end - r.start))
                 .sum::<u128>()
-                > MAX_REQUESTED_BYTES
+                > MAX_INTRA_PAGE_READ_BYTES
         {
             return None;
         }
@@ -84,7 +83,7 @@ impl FallbackPlan {
     }
 
     /// Adds a dependent round using only unread bytes, and reserves the newly split fallback.
-    pub(super) fn with_probe(&self, ranges: &[Range<u64>]) -> Option<Self> {
+    pub(in super::super) fn with_probe(&self, ranges: &[Range<u64>]) -> Option<Self> {
         if self.extensions.len() + 1 >= MAX_PROBE_ROUNDS
             || ranges.len() > MAX_MODELED_REQUESTS
             || self.rounds().map(|round| round.ranges.len()).sum::<usize>() + ranges.len()
@@ -99,26 +98,26 @@ impl FallbackPlan {
         Some(next)
     }
 
-    pub(super) fn record_probe_time(&mut self, observed: Option<Duration>) {
+    pub(in super::super) fn record_probe_time(&mut self, observed: Option<Duration>) {
         self.extensions
             .last_mut()
             .unwrap_or(&mut self.initial)
             .observed = observed;
     }
 
-    pub(super) fn is_initial(&self) -> bool {
+    pub(in super::super) fn is_initial(&self) -> bool {
         self.extensions.is_empty()
     }
 
-    pub(super) fn ordinary(&self) -> &[Range<u64>] {
+    pub(in super::super) fn ordinary(&self) -> &[Range<u64>] {
         &self.ordinary
     }
 
-    pub(super) fn last_probe(&self) -> &[Range<u64>] {
+    pub(in super::super) fn last_probe(&self) -> &[Range<u64>] {
         &self.extensions.last().unwrap_or(&self.initial).ranges
     }
 
-    pub(super) fn remaining(&self) -> &[Range<u64>] {
+    pub(in super::super) fn remaining(&self) -> &[Range<u64>] {
         &self.remaining
     }
 
@@ -436,7 +435,7 @@ mod tests {
                 "{ordinary:?}, {probes:?}"
             );
         }
-        let limit = MAX_REQUESTED_BYTES as u64;
+        let limit = MAX_INTRA_PAGE_READ_BYTES as u64;
         assert!(FallbackPlan::new(&[0..limit], &[0..1]).is_some());
         assert!(FallbackPlan::new(&[0..limit + 1], &[0..1]).is_none());
         let ranges: Vec<_> = (0..MAX_MODELED_REQUESTS as u64 + 1)

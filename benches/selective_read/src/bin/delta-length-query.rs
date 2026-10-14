@@ -10,6 +10,7 @@ mod delta_length_reader;
 mod reader {
     pub mod options {
         pub const MAX_CONCURRENT_PARQUET_RANGE_READS: usize = 10;
+        pub const MAX_SHARED_RANGE_READS: usize = 512;
     }
 }
 

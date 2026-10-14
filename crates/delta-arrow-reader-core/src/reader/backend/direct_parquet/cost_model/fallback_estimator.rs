@@ -17,7 +17,7 @@ use crate::reader::backend::direct_parquet::metered_object_store::RangeReadCalib
 const CACHE_ENTRIES: usize = 128;
 static WORK_SLOT: LazyLock<Arc<Semaphore>> = LazyLock::new(|| Arc::new(Semaphore::new(1)));
 
-pub(in super::super) struct CostEstimator {
+pub(in super::super) struct FallbackEstimator {
     calibration: Arc<RangeReadCalibration>,
     workers: usize,
     work_slot: Arc<Semaphore>,
@@ -25,7 +25,7 @@ pub(in super::super) struct CostEstimator {
     cache: Mutex<VecDeque<(Arc<FallbackPlan>, FallbackCost)>>,
 }
 
-impl CostEstimator {
+impl FallbackEstimator {
     pub(in super::super) fn new(calibration: Arc<RangeReadCalibration>) -> Arc<Self> {
         tracing::trace!(target: "delta_arrow_reader::diagnostics::intra_page",
             bytes_per_second = calibration.bytes_per_second,
@@ -49,7 +49,7 @@ impl CostEstimator {
     /// Returns further discovery time after reserving all probe rounds and complete fallback.
     /// Charges all time since planning began, including queueing and cache lookup, to the allowance.
     /// A cancelled call leaves at most four finite jobs holding the slot until they finish.
-    pub(super) async fn remaining_allowance(
+    pub(in super::super) async fn remaining_allowance(
         self: &Arc<Self>,
         plan: FallbackPlan,
         started: Instant,
@@ -139,7 +139,7 @@ mod tests {
 
     use super::*;
 
-    fn estimator() -> Arc<CostEstimator> {
+    fn estimator() -> Arc<FallbackEstimator> {
         let calibration = Arc::new(RangeReadCalibration {
             bytes_per_second: 1,
             ordinary_request_latencies: vec![Duration::from_secs(1)].into(),
@@ -147,7 +147,7 @@ mod tests {
             partial_request_latencies: vec![Duration::from_millis(10)].into(),
             partial_request_durations: vec![Duration::from_millis(20)].into(),
         });
-        let mut estimator = CostEstimator::new(calibration);
+        let mut estimator = FallbackEstimator::new(calibration);
         let unique = Arc::get_mut(&mut estimator).unwrap();
         unique.workers = 4;
         unique.work_slot = Arc::new(Semaphore::new(1));
@@ -158,7 +158,7 @@ mod tests {
         FallbackPlan::new(&[offset..offset + 1000], &[offset..offset + 100]).unwrap()
     }
 
-    async fn allowance(estimator: &Arc<CostEstimator>, offset: u64) -> Option<Duration> {
+    async fn allowance(estimator: &Arc<FallbackEstimator>, offset: u64) -> Option<Duration> {
         let started = Instant::now();
         estimator
             .remaining_allowance(plan(offset), started, started + Duration::from_secs(5))
@@ -193,7 +193,7 @@ mod tests {
         release
     }
 
-    async fn wait_until_dispatched(estimator: &CostEstimator) {
+    async fn wait_until_dispatched(estimator: &FallbackEstimator) {
         tokio::time::timeout(Duration::from_secs(5), async {
             while estimator.work_slot.available_permits() != 0 {
                 tokio::task::yield_now().await;
@@ -290,8 +290,8 @@ mod tests {
     #[tokio::test]
     async fn separate_estimators_share_the_process_work_limit() {
         let profile = estimator().calibration.clone();
-        let first = CostEstimator::new(profile.clone());
-        let second = CostEstimator::new(profile);
+        let first = FallbackEstimator::new(profile.clone());
+        let second = FallbackEstimator::new(profile);
         let held = first.work_slot.acquire().await.unwrap();
         let started = Instant::now();
         assert!(

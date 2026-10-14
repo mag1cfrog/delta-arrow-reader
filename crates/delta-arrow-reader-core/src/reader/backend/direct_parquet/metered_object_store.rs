@@ -21,15 +21,20 @@ use tokio::sync::Semaphore;
 use tracing::Instrument;
 use url::Url;
 
-use super::intra_page::CostEstimator;
+use super::cost_model::{
+    FallbackEstimator, TransportEstimate, bandwidth_delay_bytes, duration_cost_bytes, range_bytes,
+    request_waves,
+};
 use super::range_planning::{
-    ChosenRangePlan, MAX_SHARED_RANGE_READS, RANGE_READ_PERMITS, RangePlanDecision,
-    TransportEstimate, bandwidth_delay_bytes, choose_range_plan, execute_range_plan, merge_ranges,
-    range_bytes, request_waves,
+    ChosenRangePlan, RANGE_READ_PERMITS, RangePlanDecision, choose_range_plan, execute_range_plan,
+    merge_ranges,
 };
 use crate::{
     DeltaScanMetrics,
-    reader::{ParquetRangeReadPolicy, options::MAX_CONCURRENT_PARQUET_RANGE_READS},
+    reader::{
+        ParquetRangeReadPolicy,
+        options::{MAX_CONCURRENT_PARQUET_RANGE_READS, MAX_SHARED_RANGE_READS},
+    },
 };
 
 const TRANSPORT_SAMPLE_WINDOW: usize = 9;
@@ -93,7 +98,7 @@ struct TransportSampleWindows {
     latencies: VecDeque<Duration>,
     throughputs: VecDeque<ThroughputSample>,
     request_overheads: VecDeque<Duration>,
-    cost_estimator: Option<Arc<CostEstimator>>,
+    fallback_estimator: Option<Arc<FallbackEstimator>>,
 }
 
 /// Immutable measurements from one complete initialization, before passive reads update the windows.
@@ -330,38 +335,36 @@ impl MeteredParquetObjectStore {
             return None;
         }
         overheads.sort_unstable();
-        Some(
-            overheads[overheads.len() / 2]
-                .as_nanos()
-                // Request processing is shared too; do not discount its cost per reader.
-                .saturating_mul(u128::from(capacity))
-                / 1_000_000_000,
-        )
+        // Request processing is shared too; do not discount its cost per reader.
+        Some(duration_cost_bytes(
+            overheads[overheads.len() / 2],
+            capacity,
+        ))
     }
 
     /// Returns matching bandwidth and request samples from the last fully sampled warmup.
     pub(super) fn range_read_calibration(&self) -> Option<Arc<RangeReadCalibration>> {
-        Some(Arc::clone(self.range_read_cost_estimator()?.calibration()))
+        Some(Arc::clone(self.fallback_cost_estimator()?.calibration()))
     }
 
     /// File readers share one cache per complete calibration; passive observations do not replace it.
-    pub(super) fn range_read_cost_estimator(&self) -> Option<Arc<CostEstimator>> {
+    pub(super) fn fallback_cost_estimator(&self) -> Option<Arc<FallbackEstimator>> {
         self.range_read_estimator
             .samples
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .cost_estimator
+            .fallback_estimator
             .clone()
     }
 
     #[cfg(test)]
     pub(super) fn seed_range_read_calibration(&self, calibration: RangeReadCalibration) {
-        let costs = CostEstimator::new(Arc::new(calibration));
+        let costs = FallbackEstimator::new(Arc::new(calibration));
         self.range_read_estimator
             .samples
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .cost_estimator = Some(costs);
+            .fallback_estimator = Some(costs);
     }
 
     /// Samples large transfers and small requests without decoding file contents.
@@ -406,13 +409,13 @@ impl MeteredParquetObjectStore {
         let loaded_reads = self
             .sample_partial_reads(files, 2 * MAX_SHARED_RANGE_READS, budget)
             .await?;
-        let cost_estimator = match (
+        let fallback_estimator = match (
             ordinary_request_latencies.len() == MIN_TRANSPORT_SAMPLES * 4,
             small_reads,
             loaded_reads,
         ) {
             (true, Some(small_reads), Some(loaded_reads)) => {
-                Some(CostEstimator::new(Arc::new(RangeReadCalibration {
+                Some(FallbackEstimator::new(Arc::new(RangeReadCalibration {
                     bytes_per_second: estimate.shared_throughput_bytes_per_second,
                     ordinary_request_latencies: ordinary_request_latencies.into(),
                     partial_request_latencies: loaded_reads.latencies,
@@ -428,8 +431,8 @@ impl MeteredParquetObjectStore {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         // Replace measurements and their cache together; incomplete warmup keeps the previous pair.
-        if let Some(cost_estimator) = cost_estimator {
-            samples.cost_estimator = Some(cost_estimator);
+        if let Some(fallback_estimator) = fallback_estimator {
+            samples.fallback_estimator = Some(fallback_estimator);
         }
         Ok(samples.request_overheads.len() >= MIN_TRANSPORT_SAMPLES)
     }
@@ -1328,7 +1331,7 @@ mod tests {
         })?;
         assert!(store.request_overhead_bytes().is_some());
         let calibration = store.range_read_calibration().unwrap();
-        let costs = store.range_read_cost_estimator().unwrap();
+        let costs = store.fallback_cost_estimator().unwrap();
         assert_eq!(
             calibration.bytes_per_second,
             estimate.shared_throughput_bytes_per_second
@@ -1389,7 +1392,7 @@ mod tests {
                 .samples
                 .lock()
                 .unwrap()
-                .cost_estimator
+                .fallback_estimator
                 .is_none()
         );
         let first = store.range_read_estimator.start_read();
@@ -1438,7 +1441,7 @@ mod tests {
         );
         assert!(Arc::ptr_eq(
             &costs,
-            &store.range_read_cost_estimator().unwrap()
+            &store.fallback_cost_estimator().unwrap()
         ));
         // Transport evidence alone is incomplete when all small-request
         // observations overlap another read and must be discarded.
@@ -1531,14 +1534,14 @@ mod tests {
         let second = reader();
         let budget = tokio::sync::Semaphore::new(super::MAX_SHARED_RANGE_READS);
         let files = [(path, size)];
-        assert!(first.range_read_cost_estimator().is_none());
+        assert!(first.fallback_cost_estimator().is_none());
         assert!(first.warmup(&files, &budget).await?);
-        let old_costs = first.range_read_cost_estimator().unwrap();
+        let old_costs = first.fallback_cost_estimator().unwrap();
         let old_calibration = first.range_read_calibration().unwrap();
         assert!(Arc::ptr_eq(old_costs.calibration(), &old_calibration));
         assert!(Arc::ptr_eq(
             &old_costs,
-            &second.range_read_cost_estimator().unwrap()
+            &second.fallback_cost_estimator().unwrap()
         ));
         let counts = first.metrics.snapshot();
         assert_eq!(counts.parquet_data_file_range_get_operations, Some(3_180));
@@ -1555,22 +1558,22 @@ mod tests {
         .unwrap();
         assert!(Arc::ptr_eq(
             &old_costs,
-            &second.range_read_cost_estimator().unwrap()
+            &second.fallback_cost_estimator().unwrap()
         ));
         drop(warming);
         assert!(ordinary.was_cancelled());
         assert!(Arc::ptr_eq(
             &old_costs,
-            &second.range_read_cost_estimator().unwrap()
+            &second.fallback_cost_estimator().unwrap()
         ));
         assert_eq!(budget.available_permits(), super::MAX_SHARED_RANGE_READS);
 
         assert!(first.warmup(&files, &budget).await?);
-        let new_costs = second.range_read_cost_estimator().unwrap();
+        let new_costs = second.fallback_cost_estimator().unwrap();
         assert!(!Arc::ptr_eq(&old_costs, &new_costs));
         assert!(Arc::ptr_eq(
             &new_costs,
-            &first.range_read_cost_estimator().unwrap()
+            &first.fallback_cost_estimator().unwrap()
         ));
         assert!(Arc::ptr_eq(
             new_costs.calibration(),
