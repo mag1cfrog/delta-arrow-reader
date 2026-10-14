@@ -1,5 +1,5 @@
 # These crate releases omit files from their source repository.
-# Each URL uses the commit recorded in the crate's .cargo_vcs_info.json.
+# URLs pin the crate's VCS revision, or a reviewed source commit plus archive checksum.
 
 [[files]]
 package = "alloc-stdlib"
@@ -36,3 +36,48 @@ package = "thrift"
 version = "0.17.0"
 url = "https://raw.githubusercontent.com/apache/thrift/60655d2de79e973b89fab52af82f9628d4843b0f/NOTICE"
 sha256 = "c2534e065069887565f871f0648b013a7e5f4a422809faf4ae3c590b7c0bf561"
+
+# These archives also omit VCS metadata. Their source files match Arrow 58.4.0
+# at the pinned commit; crate_checksum requires the exact reviewed Cargo.lock archive.
+
+[[files]]
+package = "parquet-variant"
+version = "58.4.0"
+crate_checksum = "3fc70e87931167a4a3fde2ee923023a0624367691e3fd503476a1084dda5a054"
+url = "https://raw.githubusercontent.com/apache/arrow-rs/0ff81c1215cc026a1de93ce3d2078df1ecba6f09/LICENSE.txt"
+sha256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+
+[[files]]
+package = "parquet-variant"
+version = "58.4.0"
+crate_checksum = "3fc70e87931167a4a3fde2ee923023a0624367691e3fd503476a1084dda5a054"
+url = "https://raw.githubusercontent.com/apache/arrow-rs/0ff81c1215cc026a1de93ce3d2078df1ecba6f09/NOTICE.txt"
+sha256 = "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6"
+
+[[files]]
+package = "parquet-variant-compute"
+version = "58.4.0"
+crate_checksum = "823a9ecee8fd83a68f7165ef13acc840c4d7ed995838ba99d4714b20a2b5e780"
+url = "https://raw.githubusercontent.com/apache/arrow-rs/0ff81c1215cc026a1de93ce3d2078df1ecba6f09/LICENSE.txt"
+sha256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+
+[[files]]
+package = "parquet-variant-compute"
+version = "58.4.0"
+crate_checksum = "823a9ecee8fd83a68f7165ef13acc840c4d7ed995838ba99d4714b20a2b5e780"
+url = "https://raw.githubusercontent.com/apache/arrow-rs/0ff81c1215cc026a1de93ce3d2078df1ecba6f09/NOTICE.txt"
+sha256 = "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6"
+
+[[files]]
+package = "parquet-variant-json"
+version = "58.4.0"
+crate_checksum = "6f37a91177e2dddb10333546952fcf2b7674b97ebd9449432f24b883d6ea8108"
+url = "https://raw.githubusercontent.com/apache/arrow-rs/0ff81c1215cc026a1de93ce3d2078df1ecba6f09/LICENSE.txt"
+sha256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+
+[[files]]
+package = "parquet-variant-json"
+version = "58.4.0"
+crate_checksum = "6f37a91177e2dddb10333546952fcf2b7674b97ebd9449432f24b883d6ea8108"
+url = "https://raw.githubusercontent.com/apache/arrow-rs/0ff81c1215cc026a1de93ce3d2078df1ecba6f09/NOTICE.txt"
+sha256 = "e5b198d7f809311723889814d99a92f808c69e89a847efa7a7b65270f5fdeae6"

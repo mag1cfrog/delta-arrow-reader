@@ -34,6 +34,11 @@ fn options() -> common::Result<ScanOptions> {
         Ok("auto") => true,
         _ => return Err("DAR_INTRA_PAGE_READS must be default, off or auto".into()),
     };
+    let view_types = match std::env::var("DAR_ARROW_VIEW_TYPES").as_deref() {
+        Err(std::env::VarError::NotPresent) | Ok("on") => true,
+        Ok("off") => false,
+        _ => return Err("DAR_ARROW_VIEW_TYPES must be on or off".into()),
+    };
     Ok(ScanOptions {
         execution_options: DeltaScanExecutionOptions::new()
             .with_parquet_backend(ParquetReaderBackend::Direct)
@@ -46,7 +51,7 @@ fn options() -> common::Result<ScanOptions> {
             .with_parquet_full_file_read_threshold_bytes(None)?,
         target_partitions: Some(8),
         intra_file_repartitioning: IntraFileRepartitioning::WhenBelowTarget,
-        use_arrow_view_types: true,
+        use_arrow_view_types: view_types,
     })
 }
 

@@ -83,6 +83,21 @@ struct ExtraNotice {
     version: String,
     url: String,
     sha256: String,
+    // Releases without VCS metadata must pin their reviewed registry archive instead.
+    crate_checksum: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct DependencyLock {
+    package: Vec<LockedDependency>,
+}
+
+#[derive(Deserialize)]
+struct LockedDependency {
+    name: String,
+    version: String,
+    source: Option<String>,
+    checksum: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -155,7 +170,13 @@ pub(crate) fn dependency_notices(
         subject: "cargo-about report",
     })?;
     let config: ExtraNoticesConfig = read_toml(&release.join("extra-notices.toml"))?;
-    let extra = collect_extra_notices(&report.crates, &config.files, download_notice)?;
+    let lock: DependencyLock = read_toml(&repository.join("Cargo.lock"))?;
+    let extra = collect_extra_notices(
+        &report.crates,
+        &lock.package,
+        &config.files,
+        download_notice,
+    )?;
     let sysroot = command_output(tool_command("rustc").args(["--print", "sysroot"]))?;
     render_notices(
         &report,
@@ -266,6 +287,7 @@ fn is_license_filename(name: &OsStr) -> bool {
 
 fn collect_extra_notices(
     packages: &[ResolvedCrate],
+    locked: &[LockedDependency],
     files: &[ExtraNotice],
     mut download: impl FnMut(&str) -> Result<String>,
 ) -> Result<ExtraNotices> {
@@ -298,13 +320,27 @@ fn collect_extra_notices(
             }
         );
         for package in &matching {
-            let source_path = package.manifest_path.with_file_name(".cargo_vcs_info.json");
-            let source: CrateSource =
-                serde_json::from_str(&read_notice(&source_path)?).context(JsonSnafu {
-                    subject: "crate source revision",
-                })?;
+            let source_matches = if let Some(checksum) = &entry.crate_checksum {
+                package.source.as_deref()
+                    == Some("registry+https://github.com/rust-lang/crates.io-index")
+                    && checksum.len() == 64
+                    && checksum.bytes().all(|c| c.is_ascii_hexdigit())
+                    && locked.iter().any(|item| {
+                        item.name == package.name
+                            && item.version == package.version
+                            && item.source == package.source
+                            && item.checksum.as_ref() == Some(checksum)
+                    })
+            } else {
+                let source_path = package.manifest_path.with_file_name(".cargo_vcs_info.json");
+                let source: CrateSource = serde_json::from_str(&read_notice(&source_path)?)
+                    .context(JsonSnafu {
+                        subject: "crate source revision",
+                    })?;
+                source.git.sha1 == parts[2]
+            };
             ensure!(
-                package.version == entry.version && source.git.sha1 == parts[2],
+                package.version == entry.version && source_matches,
                 InvalidInputSnafu {
                     message: format!(
                         "update extra-notices.toml for {} {}",

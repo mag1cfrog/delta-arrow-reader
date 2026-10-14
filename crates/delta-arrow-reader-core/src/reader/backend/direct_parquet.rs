@@ -173,6 +173,7 @@ impl NetworkWarmupPlan {
         };
         let counts = metrics.snapshot();
         let estimate = store.transport_estimate();
+        let calibration = store.range_read_calibration();
         tracing::debug!(target: "delta_arrow_reader::diagnostics::network_warmup",
             phase, status, elapsed_micros = started.elapsed().as_micros(),
             requests = counts.parquet_data_file_range_get_operations,
@@ -180,6 +181,11 @@ impl NetworkWarmupPlan {
             request_latency_micros = estimate.map(|value| value.request_latency.as_micros()),
             throughput_bytes_per_second = estimate.map(|value| value.shared_throughput_bytes_per_second),
             request_overhead_bytes = store.request_overhead_bytes(),
+            calibrated_throughput_bytes_per_second = calibration.as_ref().map(|value| value.bytes_per_second),
+            ordinary_request_latency_samples = calibration.as_ref().map(|value| value.ordinary_request_latencies.len()),
+            partial_request_latency_samples = calibration.as_ref().map(|value| value.partial_request_latencies.len()),
+            request_duration_samples = calibration.as_ref().map(|value| value.partial_request_durations.len()),
+            small_request_samples = calibration.as_ref().and_then(|value| value.small_reads.as_ref()).map(|value| value.latencies.len()),
             "Network warmup completed");
         // Incomplete calibration must not seed a partially measured network profile.
         (status == "complete").then_some(estimator)
@@ -1151,7 +1157,7 @@ pub(in crate::reader) mod tests {
         second.await;
 
         let requests_after_recovery = gated.range_call_count();
-        assert_eq!(requests_after_recovery, requests_after_timeout + 3_084);
+        assert_eq!(requests_after_recovery, requests_after_timeout + 3_180);
         let recovered = state.estimator();
         assert!(!Arc::ptr_eq(&original_estimator, &recovered));
         state
@@ -1167,6 +1173,14 @@ pub(in crate::reader) mod tests {
         .with_range_read_estimator(recovered);
         assert!(store.transport_estimate().is_some());
         assert!(store.request_overhead_bytes().is_some());
+        let calibration = store.range_read_calibration().unwrap();
+        assert_eq!(calibration.ordinary_request_latencies.len(), 12);
+        assert_eq!(calibration.partial_request_latencies.len(), 3_072);
+        assert_eq!(calibration.partial_request_durations.len(), 3_072);
+        assert_eq!(
+            calibration.small_reads.as_ref().unwrap().latencies.len(),
+            96
+        );
         Ok(())
     }
 
@@ -1573,6 +1587,10 @@ pub(in crate::reader) mod tests {
 
         pub(super) fn was_cancelled(&self) -> bool {
             self.cancelled.load(Ordering::Acquire)
+        }
+
+        pub(super) fn release_request(&self) {
+            self.release.add_permits(1);
         }
 
         pub(in crate::reader) fn range_call_count(&self) -> usize {

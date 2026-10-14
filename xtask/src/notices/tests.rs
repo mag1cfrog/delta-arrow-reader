@@ -64,6 +64,7 @@ impl Fixture {
                 "a".repeat(40)
             ),
             sha256: format!("{:x}", Sha256::digest(b"Original license\n")),
+            crate_checksum: None,
         };
         Ok(Self {
             root,
@@ -116,7 +117,7 @@ fn missing_original_files_require_a_verified_supplement() -> TestResult {
     let fixture = Fixture::new()?;
     fs::remove_file(fixture.root.path().join("dependency/NOTICE"))?;
     assert!(fixture.render().is_err());
-    let extra = collect_extra_notices(&fixture.report.crates, &[fixture.extra], |_| {
+    let extra = collect_extra_notices(&fixture.report.crates, &[], &[fixture.extra], |_| {
         Ok("Original license\n".into())
     })?;
     let text = render_notices(&fixture.report, &fixture.rust_docs, &extra, "0.9.2")?;
@@ -203,6 +204,7 @@ fn downloads_require_matching_content_version_and_source() -> TestResult {
         assert!(
             collect_extra_notices(
                 &fixture.report.crates,
+                &[],
                 std::slice::from_ref(&fixture.extra),
                 |_| Ok(text.into())
             )
@@ -211,7 +213,9 @@ fn downloads_require_matching_content_version_and_source() -> TestResult {
     }
     let mut empty = fixture.extra.clone();
     empty.sha256 = format!("{:x}", Sha256::digest(b" "));
-    assert!(collect_extra_notices(&fixture.report.crates, &[empty], |_| Ok(" ".into())).is_err());
+    assert!(
+        collect_extra_notices(&fixture.report.crates, &[], &[empty], |_| Ok(" ".into())).is_err()
+    );
     let mut entries = vec![];
     let mut entry = fixture.extra.clone();
     entry.version = "2.0.0".into();
@@ -229,7 +233,7 @@ fn downloads_require_matching_content_version_and_source() -> TestResult {
     }
     for entry in entries {
         let mut called = false;
-        let result = collect_extra_notices(&fixture.report.crates, &[entry], |_| {
+        let result = collect_extra_notices(&fixture.report.crates, &[], &[entry], |_| {
             called = true;
             Ok("Original license\n".into())
         });
@@ -237,12 +241,65 @@ fn downloads_require_matching_content_version_and_source() -> TestResult {
         assert!(!called);
     }
     let mut called = false;
-    let result = collect_extra_notices(&[], &[fixture.extra], |_| {
+    let result = collect_extra_notices(&[], &[], &[fixture.extra], |_| {
         called = true;
         Ok(String::new())
     })?;
     assert!(result.is_empty());
     assert!(!called);
+    Ok(())
+}
+
+#[test]
+fn archives_without_vcs_metadata_require_an_exact_registry_pin() -> TestResult {
+    let fixture = Fixture::new()?;
+    fs::remove_file(fixture.root.path().join("dependency/.cargo_vcs_info.json"))?;
+    fs::remove_file(fixture.root.path().join("dependency/NOTICE"))?;
+    assert!(
+        collect_extra_notices(
+            &fixture.report.crates,
+            &[],
+            std::slice::from_ref(&fixture.extra),
+            |_| panic!("missing source identity must fail before downloading")
+        )
+        .is_err()
+    );
+    let package = &fixture.report.crates[0].package;
+    let checksum = "c".repeat(64);
+    let locked = || LockedDependency {
+        name: package.name.clone(),
+        version: package.version.clone(),
+        source: package.source.clone(),
+        checksum: Some(checksum.clone()),
+    };
+    let entry = ExtraNotice {
+        crate_checksum: Some(checksum.clone()),
+        ..fixture.extra.clone()
+    };
+    for field in ["name", "version", "source", "checksum"] {
+        let mut wrong = locked();
+        match field {
+            "name" => wrong.name = "another-crate".into(),
+            "version" => wrong.version = "2.0.0".into(),
+            "source" => wrong.source = None,
+            "checksum" => wrong.checksum = Some("d".repeat(64)),
+            _ => unreachable!(),
+        }
+        assert!(
+            collect_extra_notices(
+                &fixture.report.crates,
+                &[wrong],
+                std::slice::from_ref(&entry),
+                |_| panic!("{field} mismatch must fail before downloading")
+            )
+            .is_err()
+        );
+    }
+    let extra = collect_extra_notices(&fixture.report.crates, &[locked()], &[entry], |_| {
+        Ok("Original license\n".into())
+    })?;
+    let text = render_notices(&fixture.report, &fixture.rust_docs, &extra, "0.9.2")?;
+    assert!(text.contains("Original license\n"));
     Ok(())
 }
 

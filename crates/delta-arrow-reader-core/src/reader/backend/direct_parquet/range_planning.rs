@@ -303,14 +303,45 @@ pub(super) fn choose_bounded_range_plan(
     byte_budget: u128,
     request_overhead_bytes: u128,
 ) -> Option<Vec<Range<u64>>> {
+    choose_bounded_range_plan_avoiding(
+        requested_ranges,
+        &[],
+        estimate,
+        concurrency,
+        byte_budget,
+        request_overhead_bytes,
+    )
+}
+
+/// Cached bytes are barriers: merging across them would download a probe a second time.
+pub(super) fn choose_bounded_range_plan_avoiding(
+    requested_ranges: &[Range<u64>],
+    cached_ranges: &[Range<u64>],
+    estimate: TransportEstimate,
+    concurrency: usize,
+    byte_budget: u128,
+    request_overhead_bytes: u128,
+) -> Option<Vec<Range<u64>>> {
     let exact = merge_ranges(requested_ranges, 0);
+    let cached = merge_ranges(cached_ranges, 0);
+    let overlaps_cache = |start, end| {
+        cached
+            .get(cached.partition_point(|range| range.end <= start))
+            .is_some_and(|range| range.start < end)
+    };
     let exact_bytes = range_bytes(&exact);
-    if exact_bytes > byte_budget || (concurrency == 0 && !exact.is_empty()) {
+    if exact_bytes > byte_budget
+        || (concurrency == 0 && !exact.is_empty())
+        || exact
+            .iter()
+            .any(|range| overlaps_cache(range.start, range.end))
+    {
         return None;
     }
     let mut gaps: Vec<_> = exact
         .windows(2)
         .enumerate()
+        .filter(|(_, ranges)| !overlaps_cache(ranges[0].end, ranges[1].start))
         .map(|(index, ranges)| (ranges[1].start - ranges[0].end, index))
         .collect();
     gaps.sort_unstable();
@@ -602,6 +633,36 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::single_range_in_vec_init,
+        reason = "These are physical byte ranges."
+    )]
+    fn bounded_merges_keep_cached_prefixes_out_of_the_physical_plan() {
+        use super::choose_bounded_range_plan_avoiding;
+        let requested = [0..10, 11..21, 23..33, 34..44];
+        let estimate = TransportEstimate {
+            request_latency: Duration::from_millis(100),
+            shared_throughput_bytes_per_second: 1_000,
+        };
+        assert_eq!(
+            choose_bounded_range_plan_avoiding(&requested, &[21..23], estimate, 512, 44, 100),
+            Some(vec![0..21, 23..44]),
+        );
+        assert_eq!(
+            choose_bounded_range_plan_avoiding(&requested, &[], estimate, 512, 44, 100),
+            Some(vec![0..44]),
+        );
+        assert_eq!(
+            choose_bounded_range_plan_avoiding(&requested, &[21..23], estimate, 512, 40, 100),
+            Some(requested.to_vec()),
+        );
+        assert!(
+            choose_bounded_range_plan_avoiding(&requested, &[9..12], estimate, 512, 44, 100)
+                .is_none()
+        );
+    }
+
+    #[test]
     fn bounded_planner_matches_exhaustive_small_plans() {
         use super::choose_bounded_range_plan;
         let requested = [200..210, 0..5, 13..23, 0..10, 80..90];
@@ -734,6 +795,51 @@ mod tests {
         }
         ranges.push(start..start + 100);
         ranges
+    }
+
+    #[tokio::test]
+    async fn refills_slots_without_waiting_for_an_earlier_request() -> Result<(), Infallible> {
+        use crate::reader::options::MAX_CONCURRENT_PARQUET_RANGE_READS;
+        use std::time::Duration;
+        use tokio::sync::Semaphore;
+
+        for concurrency in [
+            MAX_CONCURRENT_PARQUET_RANGE_READS,
+            super::MAX_SHARED_RANGE_READS,
+        ] {
+            let count = concurrency + 2;
+            let ranges: Vec<_> = (0..count as u64).map(|i| 2 * i..2 * i + 1).collect();
+            let last_start = ranges.last().unwrap().start;
+            let first = Semaphore::new(0);
+            let last = Semaphore::new(0);
+            let mut reading =
+                Box::pin(execute_range_plan(&ranges, &ranges, concurrency, |range| {
+                    let first = &first;
+                    let last = &last;
+                    async move {
+                        if range.start == 0 {
+                            first.acquire().await.unwrap().forget();
+                        }
+                        if range.start == last_start {
+                            last.add_permits(1);
+                        }
+                        Ok::<_, Infallible>(Bytes::from(vec![(range.start / 2) as u8]))
+                    }
+                }));
+            tokio::time::timeout(Duration::from_secs(5), async {
+                tokio::select! {
+                    _ = last.acquire() => {}
+                    result = &mut reading => panic!("plan finished with its first request blocked: {result:?}"),
+                }
+            }).await.expect("later requests reuse free slots");
+            first.add_permits(1);
+            let results = reading.await?;
+            assert_eq!(results.len(), count);
+            for (index, bytes) in results.iter().enumerate() {
+                assert_eq!(bytes.as_ref(), &[index as u8]);
+            }
+        }
+        Ok(())
     }
 
     #[tokio::test]
