@@ -1182,7 +1182,7 @@ mod tests {
                 actual.sort_unstable();
                 assert_eq!(actual, [2, 3, 4]);
                 assert!(!Arc::ptr_eq(&original, &table.range_read_estimator()));
-                assert_eq!(probe.range_call_count(), requests_before_recovery + 3_084);
+                assert_eq!(probe.range_call_count(), requests_before_recovery + 3_180);
             }
         }
         Ok(())

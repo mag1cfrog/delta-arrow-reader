@@ -249,6 +249,87 @@ fn add_dv(root: &RealParquetDeltaTable) -> TestResult {
     Ok(())
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+#[ignore = "requires the retained long-value DV fixture and a calibrated S3 endpoint"]
+async fn intra_page_delta_length_streaming_matches_independent_dv_oracle() -> TestResult {
+    use arrow::{
+        compute::{sort_to_indices, take_record_batch},
+        ipc::reader::StreamReader,
+    };
+    use delta_arrow_reader::DeltaStorageOptions;
+
+    let uri = std::env::var("DELTA_LENGTH_TABLE_URI")?;
+    let reference = std::env::var("DELTA_LENGTH_REFERENCE")?;
+    let selection = std::env::var("DELTA_LENGTH_SELECTION")?;
+    assert!(matches!(selection.as_str(), "grouped" | "scattered"));
+    let reference = StreamReader::try_new(fs::File::open(reference)?, None)?;
+    let schema = reference.schema();
+    let expected = concat_batches(&schema, &reference.collect::<Result<Vec<_>, _>>()?)?;
+    assert!(expected.num_rows() > 0);
+    let order = sort_to_indices(expected.column(0), None, None)?;
+    let expected = take_record_batch(&expected, &order)?;
+    let projection: Vec<_> = schema.fields().iter().map(|f| f.name().clone()).collect();
+
+    let mut storage = DeltaStorageOptions::new();
+    for (key, variable) in [
+        ("aws_access_key_id", "AWS_ACCESS_KEY_ID"),
+        ("aws_secret_access_key", "AWS_SECRET_ACCESS_KEY"),
+        ("aws_session_token", "AWS_SESSION_TOKEN"),
+        ("aws_region", "AWS_REGION"),
+        ("aws_endpoint", "AWS_ENDPOINT_URL"),
+        ("aws_allow_http", "AWS_ALLOW_HTTP"),
+    ] {
+        if let Ok(value) = std::env::var(variable) {
+            storage.insert(key.into(), value);
+        }
+    }
+    let mut bytes = Vec::new();
+    for enabled in [false, true] {
+        let options = DeltaScanExecutionOptions::new().with_experimental_intra_page_reads(enabled);
+        let table = DeltaTableBuilder::new(&uri)
+            .with_storage_options(storage.clone())
+            .with_execution_options(options)
+            .load_table()
+            .await?;
+        assert_eq!(table.version(), 0);
+        let scan = table
+            .scan()
+            .with_projection(projection.clone())
+            .with_target_partitions(8)?
+            .with_predicate(DeltaPredicate::Compare {
+                column: selection.clone(),
+                op: DeltaComparison::Eq,
+                value: DeltaScalar::Int32(1),
+            })
+            .with_execution_options(options)
+            .build()
+            .await?;
+        let stream = scan.into_stream();
+        let metrics = stream.metrics();
+        let batches = stream.try_collect::<Vec<_>>().await?;
+        for batch in &batches {
+            assert_eq!(batch.schema().fields(), schema.fields());
+        }
+        let actual = concat_batches(&schema, &batches)?;
+        let order = sort_to_indices(actual.column(0), None, None)?;
+        let actual = take_record_batch(&actual, &order)?;
+        assert_eq!(actual, expected, "partial reads enabled: {enabled}");
+        bytes.push(
+            metrics
+                .snapshot()
+                .parquet_data_file_bytes_received
+                .ok_or("missing Parquet byte count")?,
+        );
+    }
+    // A matching result alone could hide a missing profile or silent fallback.
+    assert!(
+        bytes[1] <= bytes[0] * 3 / 4,
+        "no variable-length partial I/O: {bytes:?}"
+    );
+    eprintln!("Streaming {selection}: ordinary/partial Parquet bytes {bytes:?}");
+    Ok(())
+}
+
 #[tokio::test]
 async fn intra_page_tracking_column_name_preserves_user_data() -> TestResult {
     // A user column can have the same name as the internal virtual row number,
