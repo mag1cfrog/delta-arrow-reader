@@ -1,0 +1,572 @@
+{
+  "artifact_root": "/home/hanbo/repo/selective-read-s3-422",
+  "binary_sha256": "a79af8b88cb29e999f4c1071f8b855602f73e941273b07b023e7fbf3d6df4010",
+  "client_location": "Los Angeles, USA",
+  "cost_assumptions": {
+    "assumptions": [
+      "S3 Standard in us-west-2; Internet egress to Los Angeles, USA.",
+      "No free allowance, credits, negotiated discounts, taxes, or transfer acceleration assumed.",
+      "Request counts are encoded HTTP/1 requests. LIST is charged at PUT tier; any unclassified metadata GET is explicitly reported.",
+      "Transfer estimates use advertised response body bytes, not an AWS invoice or packet capture.",
+      "Use 2**30 bytes per billing GB and a 30-day storage month for these illustrative estimates.",
+      "Full-table upload is inbound, separate from measured queries; seven days of storage is an illustration, lifecycle expiry is asynchronous."
+    ],
+    "currency": "USD",
+    "egress_USD_per_GiB": 0.09,
+    "put_list_USD": 5e-06,
+    "request_USD": 4e-07,
+    "retrieved_date": "2026-10-14",
+    "sources": [
+      {
+        "publication_date": "2026-10-12T23:11:02Z",
+        "snapshot": "aws-s3-us-west-2-pricing.json",
+        "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/current/us-west-2/index.json"
+      },
+      {
+        "publication_date": "2026-09-16T13:22:08Z",
+        "snapshot": "aws-transfer-us-west-2-pricing.json",
+        "url": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/current/us-west-2/index.json"
+      }
+    ],
+    "storage_USD_per_GiB_month": 0.023
+  },
+  "diagnostic_binary_sha256": "467feb6b53c2fe2fc1ee60b009454c08bdd9d058cabed7b555eaf0ca3f04605b",
+  "fixture_verification": [
+    {
+      "case": "production.q2.scattered.dv",
+      "objects": 262,
+      "paired_manifest_sha256": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+      "status": "all Parquet, DV and both Delta log versions match published bytes"
+    },
+    {
+      "case": "production.q4.scattered.dv",
+      "objects": 122,
+      "paired_manifest_sha256": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+      "status": "all Parquet, DV and both Delta log versions match published bytes"
+    }
+  ],
+  "limitations": [
+    "Three pairs on one Los Angeles client and one S3 region are descriptive observations, not a universal speedup guarantee.",
+    "One formal default initialization timed out and retried during the first query. That query includes recovery time.",
+    "FD polling can miss short peaks. Several production observer threads encountered PermissionError during process shutdown; raw journals and warnings are retained.",
+    "Detailed HTTP logs are from a separate instrumented build, never used for the reported timings. The 90-column diagnostic retained ordinary reads.",
+    "A launcher failed to select the Python environment before any reader started; the corrected launcher ran all declared samples."
+  ],
+  "metric_boundaries": {
+    "cache": "Fresh process for each session; one table reused by two sequential queries or four simultaneous validation queries; remote S3 cache uncontrolled.",
+    "sdk_retries": "Two transport retries in the production 416-column default validation; zero retry messages in timed sessions or the four instrumented sessions.",
+    "timing": "12 sessions, unchanged release binary; initialization, first and second complete queries recorded separately.",
+    "transport": "Four separate untimed sessions use a client/body logging wrapper. The wrapper does not change range decisions or limits, but logging and live network conditions can change measured profiles. These counters are not per-timing-sample counters.",
+    "validation": "16 exact exports from the timed production build, plus eight from the observation-only build. Every export has 894 rows."
+  },
+  "s3_region": "us-west-2",
+  "source_commit": "df3740e6b288fc07ad67fb9590f2d3739f29938a",
+  "source_verification": {
+    "all_match_main": true,
+    "diagnostic_changed_source": "crates/delta-arrow-reader-core/src/delta/kernel/s3.rs",
+    "patch_sha256": "70c132770c7111edf1d2e6bbbcfc7098c405757928b32e2af1f17084285fb35c",
+    "production_source_files": 90
+  },
+  "tables": {
+    "416": {
+      "concurrent": {
+        "exact_validation_queries": 4,
+        "sample": {
+          "case": "production.q2.scattered.dv",
+          "concurrent_queries": 4,
+          "fd_abort": false,
+          "host_build_processes": {},
+          "initialization_seconds": null,
+          "mode": "default",
+          "peak_rss_bytes": 904790016,
+          "peak_sampled_fds": 648,
+          "process_cpu_seconds": 10.650753,
+          "purpose": "validation",
+          "query_seconds": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "repetition": 0,
+          "rows": [
+            894,
+            894,
+            894,
+            894
+          ]
+        }
+      },
+      "default": {
+        "diagnostic_validation_queries": 2,
+        "exact_validation_queries": 2,
+        "illustrative_first_query_GET_and_egress_USD": 0.013099566212213039,
+        "timing": {
+          "first_query_seconds": {
+            "max": 7.537994754,
+            "median": 4.074024775,
+            "min": 2.636544027
+          },
+          "initialization_plus_first_query_seconds": {
+            "max": 13.775252067,
+            "median": 9.249228621,
+            "min": 6.399400076999999
+          },
+          "initialization_seconds": {
+            "max": 6.237257313,
+            "median": 5.175203846,
+            "min": 3.76285605
+          },
+          "process_cpu_seconds": {
+            "max": 8.233202,
+            "median": 7.265671,
+            "min": 2.911386
+          },
+          "second_query_seconds": {
+            "max": 4.556090538,
+            "median": 3.650175959,
+            "min": 3.616115112
+          }
+        },
+        "timing_peak_rss_bytes": 453468160,
+        "timing_peak_sampled_fds": 598,
+        "transport_diagnostic": {
+          "byte_boundary": "Response data frames actually delivered to the SDK, excluding HTTP headers, TLS/TCP overhead, and unread buffered data. Attributed to the initiating request phase.",
+          "calibrations": [
+            "2026-10-14T15:57:41.446538Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed phase=\"initialization\" status=\"complete\" elapsed_micros=3889118 requests=3180 bytes_received=25559040 request_latency_micros=95698 throughput_bytes_per_second=23847914 request_overhead_bytes=9029 calibrated_throughput_bytes_per_second=23847914 ordinary_request_latency_samples=12 partial_request_latency_samples=3072 request_duration_samples=3072 small_request_samples=96"
+          ],
+          "count_boundary": "SDK HTTP attempts, including retries and requests canceled while waiting. Inner reqwest/Hyper retry logs are counted separately; they can add wire requests.",
+          "decisions": {
+            "query_0": {
+              "\"data\":\"none\":true": 5,
+              "\"data\":?:?": 5,
+              "\"probe\":\"none\":true": 10,
+              "\"probe\":?:?": 10,
+              "?:\"selection_or_layout_ineligible\":false": 5
+            },
+            "query_1": {
+              "\"data\":\"none\":true": 5,
+              "\"data\":?:?": 5,
+              "\"probe\":\"none\":true": 10,
+              "\"probe\":?:?": 10,
+              "?:\"selection_or_layout_ineligible\":false": 5
+            }
+          },
+          "phases": {
+            "initialization": {
+              "bodies_dropped": 3184,
+              "canceled_before_response": 1,
+              "client_ordinary": 17,
+              "client_partial": 3168,
+              "consumed_body_bytes": 36133834,
+              "fully_consumed_sized_bodies": 3183,
+              "http_requests": 3185,
+              "http_responses": 3184,
+              "method_GET": 3184,
+              "method_LIST": 1,
+              "status_200": 4,
+              "status_206": 3180,
+              "tcp_attempts": 1143,
+              "tcp_connections": 1143,
+              "unsized_bodies": 1
+            },
+            "query_0": {
+              "bodies_dropped": 11149,
+              "client_ordinary": 37,
+              "client_partial": 11112,
+              "consumed_body_bytes": 103078812,
+              "fully_consumed_sized_bodies": 11149,
+              "http_requests": 11149,
+              "http_responses": 11149,
+              "method_GET": 11149,
+              "status_200": 7,
+              "status_206": 11142,
+              "tcp_attempts": 960,
+              "tcp_connections": 960
+            },
+            "query_1": {
+              "bodies_dropped": 11149,
+              "client_ordinary": 37,
+              "client_partial": 11112,
+              "consumed_body_bytes": 103078812,
+              "fully_consumed_sized_bodies": 11149,
+              "http_requests": 11149,
+              "http_responses": 11149,
+              "method_GET": 11149,
+              "status_200": 7,
+              "status_206": 11142,
+              "tcp_attempts": 788,
+              "tcp_connections": 788
+            }
+          },
+          "reuse_boundary": "HTTP/1.1 responses minus newly established TCP connections, across direct HTTPS S3 clients. Unused background connections make this a lower bound.",
+          "reuse_lower_bound": 22591,
+          "total": {
+            "bodies_dropped": 25482,
+            "canceled_before_response": 1,
+            "client_ordinary": 91,
+            "client_partial": 25392,
+            "consumed_body_bytes": 242291458,
+            "fully_consumed_sized_bodies": 25481,
+            "http_requests": 25483,
+            "http_responses": 25482,
+            "method_GET": 25482,
+            "method_LIST": 1,
+            "status_200": 18,
+            "status_206": 25464,
+            "tcp_attempts": 2891,
+            "tcp_connections": 2891,
+            "unsized_bodies": 1
+          }
+        }
+      },
+      "ordinary": {
+        "diagnostic_validation_queries": 2,
+        "exact_validation_queries": 2,
+        "illustrative_first_query_GET_and_egress_USD": 0.014514413739573956,
+        "timing": {
+          "first_query_seconds": {
+            "max": 9.489924845,
+            "median": 8.475121495,
+            "min": 5.512885588
+          },
+          "initialization_plus_first_query_seconds": {
+            "max": 10.606601085000001,
+            "median": 10.078661737,
+            "min": 6.603771194999999
+          },
+          "initialization_seconds": {
+            "max": 1.603540242,
+            "median": 1.11667624,
+            "min": 1.090885607
+          },
+          "process_cpu_seconds": {
+            "max": 2.34801,
+            "median": 2.249528,
+            "min": 1.906056
+          },
+          "second_query_seconds": {
+            "max": 7.667527077,
+            "median": 7.460052689,
+            "min": 5.214875528
+          }
+        },
+        "timing_peak_rss_bytes": 383807488,
+        "timing_peak_sampled_fds": 25,
+        "transport_diagnostic": {
+          "byte_boundary": "Response data frames actually delivered to the SDK, excluding HTTP headers, TLS/TCP overhead, and unread buffered data. Attributed to the initiating request phase.",
+          "calibrations": [],
+          "count_boundary": "SDK HTTP attempts, including retries and requests canceled while waiting. Inner reqwest/Hyper retry logs are counted separately; they can add wire requests.",
+          "decisions": {},
+          "phases": {
+            "initialization": {
+              "bodies_dropped": 4,
+              "canceled_before_response": 1,
+              "client_ordinary": 5,
+              "consumed_body_bytes": 10574794,
+              "fully_consumed_sized_bodies": 3,
+              "http_requests": 5,
+              "http_responses": 4,
+              "method_GET": 4,
+              "method_LIST": 1,
+              "status_200": 4,
+              "tcp_attempts": 3,
+              "tcp_connections": 3,
+              "unsized_bodies": 1
+            },
+            "query_0": {
+              "bodies_dropped": 48,
+              "client_ordinary": 48,
+              "consumed_body_bytes": 172934636,
+              "fully_consumed_sized_bodies": 48,
+              "http_requests": 48,
+              "http_responses": 48,
+              "method_GET": 48,
+              "status_200": 8,
+              "status_206": 40,
+              "tcp_attempts": 10,
+              "tcp_connections": 10
+            },
+            "query_1": {
+              "bodies_dropped": 48,
+              "client_ordinary": 48,
+              "consumed_body_bytes": 172934652,
+              "fully_consumed_sized_bodies": 48,
+              "http_requests": 48,
+              "http_responses": 48,
+              "method_GET": 48,
+              "status_200": 8,
+              "status_206": 40,
+              "tcp_attempts": 10,
+              "tcp_connections": 10
+            }
+          },
+          "reuse_boundary": "HTTP/1.1 responses minus newly established TCP connections, across direct HTTPS S3 clients. Unused background connections make this a lower bound.",
+          "reuse_lower_bound": 77,
+          "total": {
+            "bodies_dropped": 100,
+            "canceled_before_response": 1,
+            "client_ordinary": 101,
+            "consumed_body_bytes": 356444082,
+            "fully_consumed_sized_bodies": 99,
+            "http_requests": 101,
+            "http_responses": 100,
+            "method_GET": 100,
+            "method_LIST": 1,
+            "status_200": 20,
+            "status_206": 80,
+            "tcp_attempts": 23,
+            "tcp_connections": 23,
+            "unsized_bodies": 1
+          }
+        }
+      }
+    },
+    "90": {
+      "concurrent": {
+        "exact_validation_queries": 4,
+        "sample": {
+          "case": "production.q4.scattered.dv",
+          "concurrent_queries": 4,
+          "fd_abort": false,
+          "host_build_processes": {},
+          "initialization_seconds": null,
+          "mode": "default",
+          "peak_rss_bytes": 1309401088,
+          "peak_sampled_fds": 681,
+          "process_cpu_seconds": 14.87041,
+          "purpose": "validation",
+          "query_seconds": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "repetition": 0,
+          "rows": [
+            894,
+            894,
+            894,
+            894
+          ]
+        }
+      },
+      "default": {
+        "diagnostic_validation_queries": 2,
+        "exact_validation_queries": 2,
+        "illustrative_first_query_GET_and_egress_USD": 0.03338847664231956,
+        "timing": {
+          "first_query_seconds": {
+            "max": 4.571081748,
+            "median": 3.891096113,
+            "min": 3.815418587
+          },
+          "initialization_plus_first_query_seconds": {
+            "max": 8.136549144,
+            "median": 7.668822434,
+            "min": 6.902171181
+          },
+          "initialization_seconds": {
+            "max": 3.777726321,
+            "median": 3.565467396,
+            "min": 3.086752594
+          },
+          "process_cpu_seconds": {
+            "max": 8.639343,
+            "median": 8.392387,
+            "min": 7.842509
+          },
+          "second_query_seconds": {
+            "max": 4.440141584,
+            "median": 4.110619032,
+            "min": 3.721648095
+          }
+        },
+        "timing_peak_rss_bytes": 525627392,
+        "timing_peak_sampled_fds": 605,
+        "transport_diagnostic": {
+          "byte_boundary": "Response data frames actually delivered to the SDK, excluding HTTP headers, TLS/TCP overhead, and unread buffered data. Attributed to the initiating request phase.",
+          "calibrations": [
+            "2026-10-14T15:56:58.265432Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed phase=\"initialization\" status=\"complete\" elapsed_micros=4046335 requests=3180 bytes_received=25559040 request_latency_micros=136688 throughput_bytes_per_second=43174106 request_overhead_bytes=19174 calibrated_throughput_bytes_per_second=43174106 ordinary_request_latency_samples=12 partial_request_latency_samples=3072 request_duration_samples=3072 small_request_samples=96"
+          ],
+          "count_boundary": "SDK HTTP attempts, including retries and requests canceled while waiting. Inner reqwest/Hyper retry logs are counted separately; they can add wire requests.",
+          "decisions": {
+            "query_0": {
+              "\"preflight\":\"profile_predicts_no_savings\":true": 6,
+              "?:\"selection_or_layout_ineligible\":false": 6
+            },
+            "query_1": {
+              "\"preflight\":\"profile_predicts_no_savings\":true": 6,
+              "?:\"selection_or_layout_ineligible\":false": 6
+            }
+          },
+          "phases": {
+            "initialization": {
+              "bodies_dropped": 3184,
+              "canceled_before_response": 1,
+              "client_ordinary": 17,
+              "client_partial": 3168,
+              "consumed_body_bytes": 27013339,
+              "fully_consumed_sized_bodies": 3183,
+              "http_requests": 3185,
+              "http_responses": 3184,
+              "method_GET": 3184,
+              "method_LIST": 1,
+              "status_200": 4,
+              "status_206": 3180,
+              "tcp_attempts": 1242,
+              "tcp_connections": 1242,
+              "unsized_bodies": 1
+            },
+            "query_0": {
+              "bodies_dropped": 61,
+              "client_ordinary": 61,
+              "consumed_body_bytes": 398048939,
+              "fully_consumed_sized_bodies": 61,
+              "http_requests": 61,
+              "http_responses": 61,
+              "method_GET": 61,
+              "status_200": 7,
+              "status_206": 54,
+              "tcp_attempts": 20,
+              "tcp_connections": 20
+            },
+            "query_1": {
+              "bodies_dropped": 61,
+              "client_ordinary": 61,
+              "consumed_body_bytes": 398049001,
+              "fully_consumed_sized_bodies": 61,
+              "http_requests": 61,
+              "http_responses": 61,
+              "method_GET": 61,
+              "status_200": 7,
+              "status_206": 54,
+              "tcp_attempts": 10,
+              "tcp_connections": 10
+            }
+          },
+          "reuse_boundary": "HTTP/1.1 responses minus newly established TCP connections, across direct HTTPS S3 clients. Unused background connections make this a lower bound.",
+          "reuse_lower_bound": 2034,
+          "total": {
+            "bodies_dropped": 3306,
+            "canceled_before_response": 1,
+            "client_ordinary": 139,
+            "client_partial": 3168,
+            "consumed_body_bytes": 823111279,
+            "fully_consumed_sized_bodies": 3305,
+            "http_requests": 3307,
+            "http_responses": 3306,
+            "method_GET": 3306,
+            "method_LIST": 1,
+            "status_200": 18,
+            "status_206": 3288,
+            "tcp_attempts": 1272,
+            "tcp_connections": 1272,
+            "unsized_bodies": 1
+          }
+        }
+      },
+      "ordinary": {
+        "diagnostic_validation_queries": 2,
+        "exact_validation_queries": 2,
+        "illustrative_first_query_GET_and_egress_USD": 0.0333884815038234,
+        "timing": {
+          "first_query_seconds": {
+            "max": 16.691241043,
+            "median": 11.507652707,
+            "min": 9.634868362
+          },
+          "initialization_plus_first_query_seconds": {
+            "max": 17.440260887,
+            "median": 12.150205584,
+            "min": 10.442657516
+          },
+          "initialization_seconds": {
+            "max": 0.807789154,
+            "median": 0.749019844,
+            "min": 0.642552877
+          },
+          "process_cpu_seconds": {
+            "max": 4.637371,
+            "median": 3.739571,
+            "min": 3.25281
+          },
+          "second_query_seconds": {
+            "max": 16.392138147,
+            "median": 8.78129842,
+            "min": 7.986536637
+          }
+        },
+        "timing_peak_rss_bytes": 436641792,
+        "timing_peak_sampled_fds": 32,
+        "transport_diagnostic": {
+          "byte_boundary": "Response data frames actually delivered to the SDK, excluding HTTP headers, TLS/TCP overhead, and unread buffered data. Attributed to the initiating request phase.",
+          "calibrations": [],
+          "count_boundary": "SDK HTTP attempts, including retries and requests canceled while waiting. Inner reqwest/Hyper retry logs are counted separately; they can add wire requests.",
+          "decisions": {},
+          "phases": {
+            "initialization": {
+              "bodies_dropped": 4,
+              "canceled_before_response": 1,
+              "client_ordinary": 5,
+              "consumed_body_bytes": 1454299,
+              "fully_consumed_sized_bodies": 3,
+              "http_requests": 5,
+              "http_responses": 4,
+              "method_GET": 4,
+              "method_LIST": 1,
+              "status_200": 4,
+              "tcp_attempts": 3,
+              "tcp_connections": 3,
+              "unsized_bodies": 1
+            },
+            "query_0": {
+              "bodies_dropped": 61,
+              "client_ordinary": 61,
+              "consumed_body_bytes": 398048997,
+              "fully_consumed_sized_bodies": 61,
+              "http_requests": 61,
+              "http_responses": 61,
+              "method_GET": 61,
+              "status_200": 7,
+              "status_206": 54,
+              "tcp_attempts": 16,
+              "tcp_connections": 16
+            },
+            "query_1": {
+              "bodies_dropped": 61,
+              "client_ordinary": 61,
+              "consumed_body_bytes": 398048997,
+              "fully_consumed_sized_bodies": 61,
+              "http_requests": 61,
+              "http_responses": 61,
+              "method_GET": 61,
+              "status_200": 7,
+              "status_206": 54,
+              "tcp_attempts": 16,
+              "tcp_connections": 16
+            }
+          },
+          "reuse_boundary": "HTTP/1.1 responses minus newly established TCP connections, across direct HTTPS S3 clients. Unused background connections make this a lower bound.",
+          "reuse_lower_bound": 91,
+          "total": {
+            "bodies_dropped": 126,
+            "canceled_before_response": 1,
+            "client_ordinary": 127,
+            "consumed_body_bytes": 797552293,
+            "fully_consumed_sized_bodies": 125,
+            "http_requests": 127,
+            "http_responses": 126,
+            "method_GET": 126,
+            "method_LIST": 1,
+            "status_200": 18,
+            "status_206": 108,
+            "tcp_attempts": 35,
+            "tcp_connections": 35,
+            "unsized_bodies": 1
+          }
+        }
+      }
+    }
+  }
+}
