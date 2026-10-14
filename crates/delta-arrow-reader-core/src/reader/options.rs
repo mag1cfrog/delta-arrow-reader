@@ -126,14 +126,19 @@ impl DeltaScanExecutionOptions {
         self.experimental_intra_page_reads
     }
 
-    /// Enables experimental partial reads of flat PLAIN numeric pages.
+    /// Enables experimental partial reads of supported flat Parquet pages.
     ///
     /// Enabled by default. The direct reader uses predicate-derived row numbers to
-    /// read selected values from uncompressed pages or Zstd raw blocks without
-    /// checksums. Supports nullable and required INT32, INT64, FLOAT, DOUBLE and
-    /// FIXED_LEN_BYTE_ARRAY physical columns, including existing decimal
-    /// conversions. Fixed-length widths come from the Parquet schema. This does
-    /// not add new Delta type mappings, such as fixed-size binary to Delta binary.
+    /// read selected values from PLAIN numeric pages that are uncompressed or
+    /// held in Zstd raw blocks without checksums. Supports nullable and required
+    /// INT32, INT64, FLOAT, DOUBLE and FIXED_LEN_BYTE_ARRAY physical columns,
+    /// including existing decimal conversions. Fixed-length widths come from the
+    /// Parquet schema. This adds no new Delta type mappings, such as fixed-size
+    /// binary to Delta binary.
+    /// UTF-8 and binary columns also support uncompressed DELTA_LENGTH_BYTE_ARRAY
+    /// pages. All supported pages require V1 layout, offset indexes and no page checksum.
+    /// Variable-length discovery must fit a modeled fallback budget and shared memory
+    /// limits; fallback reuses downloaded prefixes.
     /// Unsupported layouts and bounded-work limits use ordinary reads.
     /// Explicit range-read policies other than `Automatic` disable this optimization.
     /// The Delta Kernel backend ignores this direct-reader option.

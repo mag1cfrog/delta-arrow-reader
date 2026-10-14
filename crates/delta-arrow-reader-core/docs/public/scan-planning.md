@@ -55,7 +55,8 @@ let table = DeltaTableBuilder::new("s3://bucket/table")
 
 The time limit covers network sampling after metadata loading. Sampling uses
 up to three active files of at least 4 MiB each, found in the retained metadata.
-It schedules 24 MiB across 3,084 range requests; store retries can add traffic.
+It schedules 24.375 MiB across 3,180 range requests; store retries can add traffic.
+Small batches are sampled separately from requests at the shared concurrency limit.
 Small requests run with replenished concurrency to measure sustained capacity.
 They do not replace the latency and bandwidth samples taken at lower concurrency.
 Timed-out, failed or insufficient samples are discarded without failing table

@@ -55,6 +55,7 @@ deletion-vector state as names in current explanations.
 ## Additional experiments
 
 - [Partial-page reads and network validation](../../docs/content/benchmarks/intra-page-reads.md)
+- [String and binary partial reads in the production reader](delta-length-reader.md)
 - [Predicates and projection width](../../docs/content/benchmarks/selective-read-matrix.md)
 - [File organization](../../docs/content/benchmarks/selective-read-files.md)
 - [Pruning inside files](../../docs/content/benchmarks/selective-read-within-file.md)
