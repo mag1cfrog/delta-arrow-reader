@@ -305,6 +305,11 @@ impl MeteredParquetObjectStore {
             .current_transport_estimate()
             .estimate?
             .shared_throughput_bytes_per_second;
+        self.request_overhead_at_capacity(capacity)
+    }
+
+    /// Uses the caller's bandwidth so a retained profile keeps consistent cost units.
+    pub(super) fn request_overhead_at_capacity(&self, capacity: u64) -> Option<u128> {
         let samples = self
             .range_read_estimator
             .samples

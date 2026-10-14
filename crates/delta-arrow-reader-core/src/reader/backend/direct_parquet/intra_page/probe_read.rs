@@ -1,19 +1,123 @@
 //! Executes probe rounds and complete fallback exactly as the cost model priced them.
 
-use std::{ops::Range, sync::Arc};
+use std::{
+    ops::Range,
+    sync::{Arc, LazyLock},
+    time::Duration,
+};
 
 use bytes::Bytes;
 use parquet::{basic::Compression, errors::Result};
-use tokio::{sync::Semaphore, time::Instant};
+use tokio::{
+    sync::{OwnedSemaphorePermit, Semaphore},
+    time::Instant,
+};
 
-use super::super::range_planning::merge_ranges;
+use super::super::range_planning::{
+    MAX_SHARED_RANGE_READS, TransportEstimate, choose_bounded_range_plan_avoiding,
+    choose_range_plan, merge_ranges, partial_plan_cost, plan_score, range_bytes,
+};
 use super::{
     CostEstimator, IntraPageReader, MAX_PAGES, MAX_REQUESTED_BYTES, MAX_REQUESTS,
     MAX_SELECTED_ROWS,
     fallback_cost::FallbackPlan,
     invalid_data,
     page::{MAX_PAGE_BYTES, MAX_PAGE_ROWS, Page, ProbeError, RangeCache, selected_value_ranges},
+    partial_read_has_clear_savings,
 };
+use crate::reader::options::MAX_CONCURRENT_PARQUET_RANGE_READS;
+
+// Reserve MiB units before probing, without waiting behind other queries.
+static MEMORY_BUDGET: LazyLock<Arc<Semaphore>> = LazyLock::new(|| Arc::new(Semaphore::new(512)));
+const MIB: u128 = 1024 * 1024;
+// One page is decoded at a time: lengths, nulls, prefix copies and bounded range metadata.
+const SCRATCH_BYTES: u128 = 16 * MIB;
+
+pub(super) async fn read(
+    reader: &IntraPageReader,
+    requested: &[Range<u64>],
+    pages: &[Page],
+    selected_rows: &[u64],
+    estimate: TransportEstimate,
+    request_budget: &Semaphore,
+) -> Result<Option<Vec<Bytes>>> {
+    let started = Instant::now();
+    let Some(calibration) = reader.store.range_read_calibration() else {
+        tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
+            fallback_reason = "missing_complete_calibration", "Variable-length read skipped");
+        return Ok(None);
+    };
+    if calibration.bytes_per_second == 0
+        || reader
+            .store
+            .request_overhead_at_capacity(calibration.bytes_per_second)
+            .is_none()
+    {
+        tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
+            fallback_reason = "missing_capacity_evidence", "Variable-length read skipped");
+        return Ok(None);
+    }
+    let ordinary = choose_range_plan(requested, Some(estimate));
+    let prefixes = merge_ranges(&pages.iter().map(Page::prefix_range).collect::<Vec<_>>(), 0);
+    let Some(plan) = FallbackPlan::new(&ordinary.physical_ranges, &prefixes) else {
+        tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
+            fallback_reason = "fallback_plan_limit", "Variable-length read skipped");
+        return Ok(None);
+    };
+    // An upper bound limits queueing before the numeric model supplies the actual allowance.
+    let upper_estimate = TransportEstimate {
+        request_latency: calibration
+            .ordinary_request_latencies
+            .iter()
+            .copied()
+            .max()
+            .unwrap_or_default(),
+        shared_throughput_bytes_per_second: calibration.bytes_per_second,
+    };
+    let Some(nanos) = plan_score(
+        plan.ordinary(),
+        upper_estimate,
+        MAX_CONCURRENT_PARQUET_RANGE_READS,
+    )
+    .checked_mul(1_000_000_000)
+    .map(|nanos| nanos / u128::from(calibration.bytes_per_second) / 20) else {
+        return Ok(None);
+    };
+    let Some(deadline) = u64::try_from(nanos)
+        .ok()
+        .and_then(|nanos| started.checked_add(Duration::from_nanos(nanos)))
+    else {
+        return Ok(None);
+    };
+    let Some(read) = ProbeRead::start(
+        reader,
+        &MEMORY_BUDGET,
+        request_budget,
+        requested,
+        plan,
+        started,
+        deadline,
+    )
+    .await?
+    else {
+        tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
+            fallback_reason = "initial_probe_refused", "Variable-length read skipped");
+        return Ok(None);
+    };
+    read.finish(pages, selected_rows).await.map(Some)
+}
+
+// View arrays can retain the reconstructed page after the reader has gone away.
+struct ReservedBytes {
+    bytes: Bytes,
+    _memory: Arc<OwnedSemaphorePermit>,
+}
+
+impl AsRef<[u8]> for ReservedBytes {
+    fn as_ref(&self) -> &[u8] {
+        &self.bytes
+    }
+}
 
 pub(super) struct ProbeRead<'a> {
     reader: &'a IntraPageReader,
@@ -22,21 +126,16 @@ pub(super) struct ProbeRead<'a> {
     plan: FallbackPlan,
     cache: RangeCache,
     costs: Arc<CostEstimator>,
+    memory: Arc<OwnedSemaphorePermit>,
     decision_started: Instant,
     decision_deadline: Instant,
 }
 
 impl<'a> ProbeRead<'a> {
     /// A refusal performs no I/O. Once probing starts, fallback must use this same reader and plan.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "The variable-length query entry point is the next implementation slice."
-        )
-    )]
     pub(super) async fn start(
         reader: &'a IntraPageReader,
+        memory_budget: &Arc<Semaphore>,
         request_budget: &'a Semaphore,
         requested: &[Range<u64>],
         plan: FallbackPlan,
@@ -69,6 +168,14 @@ impl<'a> ProbeRead<'a> {
         let Some(costs) = reader.store.range_read_cost_estimator() else {
             return Ok(None);
         };
+        // Cache plus full reconstruction can coexist. Keep their reservation with the output.
+        let units =
+            (range_bytes(ordinary) + range_bytes(requested) + SCRATCH_BYTES).div_ceil(MIB) as u32;
+        let Ok(memory) = memory_budget.clone().try_acquire_many_owned(units) else {
+            tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
+                fallback_reason = "memory_limit", "Variable-length read skipped");
+            return Ok(None);
+        };
         if costs
             .remaining_allowance(plan.clone(), started, deadline)
             .await
@@ -83,6 +190,7 @@ impl<'a> ProbeRead<'a> {
             plan,
             cache: RangeCache::default(),
             costs,
+            memory: Arc::new(memory),
             decision_started: started,
             decision_deadline: deadline,
         };
@@ -119,13 +227,6 @@ impl<'a> ProbeRead<'a> {
     }
 
     /// Finds selected value ranges without fetching their payloads. None leaves fallback ready.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "The variable-length query entry point is the next implementation slice."
-        )
-    )]
     pub(super) async fn discover(
         &mut self,
         pages: &[Page],
@@ -191,14 +292,109 @@ impl<'a> ProbeRead<'a> {
         }
     }
 
+    async fn finish(mut self, pages: &[Page], selected_rows: &[u64]) -> Result<Vec<Bytes>> {
+        let Some(mut values) = self.discover(pages, selected_rows).await? else {
+            tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
+                fallback_reason = "length_discovery_declined", "Variable-length read falling back");
+            return self.finish_fallback().await;
+        };
+        // Columns without a candidate page still need all their bytes.
+        values.extend(
+            self.requested
+                .iter()
+                .filter(|range| !pages.iter().any(|page| page.range == **range))
+                .cloned(),
+        );
+        let Some(payload) = self.payload_plan(&values) else {
+            tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
+                fallback_reason = "insufficient_remaining_savings", "Variable-length read falling back");
+            return self.finish_fallback().await;
+        };
+        // Charge the final decode and the last observed probe before accepting payload I/O.
+        if self
+            .costs
+            .remaining_allowance(
+                self.plan.clone(),
+                self.decision_started,
+                self.decision_deadline,
+            )
+            .await
+            .is_none()
+        {
+            tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
+                fallback_reason = "completed_discovery_over_budget", "Variable-length read falling back");
+            return self.finish_fallback().await;
+        }
+        tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
+            phase = "payload", cached_bytes = self.cache.byte_len(),
+            payload_bytes = %range_bytes(&payload), payload_requests = payload.len(),
+            ordinary_bytes = %range_bytes(self.plan.ordinary()), "Variable-length partial read accepted");
+        if !payload.is_empty() {
+            self.reader
+                .fetch_ranges(&values, payload, &mut self.cache, self.request_budget)
+                .await?;
+        }
+        Ok(self.reconstruct())
+    }
+
+    fn payload_plan(&self, values: &[Range<u64>]) -> Option<Vec<Range<u64>>> {
+        let calibration = self.costs.calibration();
+        let mut latencies = calibration.partial_request_latencies.to_vec();
+        latencies.sort_unstable();
+        let estimate = TransportEstimate {
+            request_latency: *latencies.get(latencies.len() / 2)?,
+            shared_throughput_bytes_per_second: calibration.bytes_per_second,
+        };
+        let overhead = self
+            .reader
+            .store
+            .request_overhead_at_capacity(calibration.bytes_per_second)?;
+        let budget = (range_bytes(self.plan.ordinary()) * 3 / 4)
+            .checked_sub(self.cache.byte_len() as u128)?;
+        let missing = self.cache.missing_ranges(values);
+        let cached: Vec<_> = self
+            .cache
+            .entries
+            .iter()
+            .map(|(range, _)| range.clone())
+            .collect();
+        let payload = choose_bounded_range_plan_avoiding(
+            &missing,
+            &cached,
+            estimate,
+            MAX_SHARED_RANGE_READS,
+            budget,
+            overhead,
+        )?;
+        if payload.len() > MAX_REQUESTS {
+            return None;
+        }
+        let cost = |ranges: &[Range<u64>]| {
+            partial_plan_cost(
+                range_bytes(ranges),
+                ranges.len(),
+                estimate,
+                MAX_SHARED_RANGE_READS,
+                overhead,
+            )
+        };
+        partial_read_has_clear_savings(cost(&payload), cost(self.plan.remaining()))
+            .then_some(payload)
+    }
+
+    fn reconstruct(self) -> Vec<Bytes> {
+        self.requested
+            .iter()
+            .map(|range| {
+                Bytes::from_owner(ReservedBytes {
+                    bytes: self.cache.read_with_zero_fill(range),
+                    _memory: Arc::clone(&self.memory),
+                })
+            })
+            .collect()
+    }
+
     /// Fetches only the modeled remainder, including ordinary columns and coalesced gaps.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "The variable-length query entry point is the next implementation slice."
-        )
-    )]
     pub(super) async fn finish_fallback(mut self) -> Result<Vec<Bytes>> {
         if !self.plan.remaining().is_empty() {
             self.reader
@@ -211,11 +407,7 @@ impl<'a> ProbeRead<'a> {
                 .await?;
         }
         // The validated plan covers every requested byte; reconstruction cannot fill a hole.
-        Ok(self
-            .requested
-            .iter()
-            .map(|range| self.cache.read_with_zero_fill(range))
-            .collect())
+        Ok(self.reconstruct())
     }
 }
 
@@ -258,6 +450,7 @@ mod tests {
         partial: Arc<GatedObjectStore>,
         ordinary: Arc<GatedObjectStore>,
         metrics: DeltaScanMetrics,
+        memory_budget: Arc<Semaphore>,
     }
 
     fn profile(bytes_per_second: u64) -> RangeReadCalibration {
@@ -312,6 +505,7 @@ mod tests {
             partial,
             ordinary,
             metrics,
+            memory_budget: Arc::new(Semaphore::new(512)),
         })
     }
 
@@ -321,8 +515,15 @@ mod tests {
         blocked_request: usize,
     ) -> TestResult<(Fixture, Page, Vec<Range<u64>>)> {
         let lengths: Vec<_> = (0..16384).map(|row| 64 + row * 7919 % 256).collect();
+        length_fixture_with_lengths(blocked_request, &lengths).await
+    }
+
+    async fn length_fixture_with_lengths(
+        blocked_request: usize,
+        lengths: &[i32],
+    ) -> TestResult<(Fixture, Page, Vec<Range<u64>>)> {
         let mut encoder = DeltaBitPackEncoder::<Int32Type>::new();
-        encoder.put(&lengths)?;
+        encoder.put(lengths)?;
         let mut body = encoder.flush_buffer()?.to_vec();
         let mut expected = Vec::new();
         for (row, length) in lengths.iter().enumerate() {
@@ -371,6 +572,7 @@ mod tests {
         let started = Instant::now();
         ProbeRead::start(
             &fixture.reader,
+            &fixture.memory_budget,
             budget,
             &[
                 page.range.clone(),
@@ -383,6 +585,164 @@ mod tests {
         )
         .await?
         .ok_or_else(|| "probe was declined".into())
+    }
+
+    #[tokio::test]
+    async fn payload_reads_keep_cached_values_ordinary_columns_and_memory_reservations()
+    -> TestResult {
+        let (fixture, page, expected) = length_fixture(0).await?;
+        fixture
+            .reader
+            .store
+            .seed_range_read_calibration(profile(1024));
+        fixture.reader.store.seed_request_overhead(Duration::ZERO);
+        let budget = Semaphore::new(2);
+        let read = start_lengths(&fixture, &page, &budget).await?;
+        let memory = Arc::downgrade(&read.memory);
+        let result = read.finish(std::slice::from_ref(&page), &SELECTED).await?;
+        for range in &expected {
+            assert_eq!(
+                &result[0][(range.start - page.range.start) as usize
+                    ..(range.end - page.range.start) as usize],
+                &fixture.bytes[range.start as usize..range.end as usize],
+            );
+        }
+        assert_eq!(result[1], fixture.bytes.slice(..page.range.start as usize));
+        assert_eq!(result[2], fixture.bytes.slice(page.range.end as usize..));
+        assert!(
+            fixture
+                .metrics
+                .snapshot()
+                .parquet_data_file_bytes_received
+                .unwrap()
+                < fixture.reader.file_size / 10
+        );
+        assert_eq!(fixture.ordinary.range_call_count(), 0);
+        let retained = result[0].slice(..100);
+        drop(result);
+        assert!(
+            memory.upgrade().is_some(),
+            "a retained page must keep its reservation"
+        );
+        drop(retained);
+        assert!(memory.upgrade().is_none());
+        assert_eq!(fixture.memory_budget.available_permits(), 512);
+        assert_eq!(budget.available_permits(), 2);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn selected_long_values_fall_back_without_downloading_a_prefix_twice() -> TestResult {
+        let mut lengths = vec![64; 16384];
+        lengths[16383] = 4 * 1024 * 1024;
+        let (fixture, page, _) = length_fixture_with_lengths(0, &lengths).await?;
+        fixture
+            .reader
+            .store
+            .seed_range_read_calibration(profile(1024));
+        fixture.reader.store.seed_request_overhead(Duration::ZERO);
+        let budget = Semaphore::new(2);
+        let result = start_lengths(&fixture, &page, &budget)
+            .await?
+            .finish(std::slice::from_ref(&page), &SELECTED)
+            .await?;
+        assert_eq!(
+            result[0],
+            fixture
+                .bytes
+                .slice(page.range.start as usize..page.range.end as usize)
+        );
+        assert_eq!(
+            fixture.metrics.snapshot().parquet_data_file_bytes_received,
+            Some(fixture.reader.file_size)
+        );
+        assert_eq!(fixture.ordinary.range_call_count(), 0);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn exhausted_memory_rejects_before_io_and_errors_release_the_reservation() -> TestResult {
+        let fixture = fixture(0).await?;
+        fixture
+            .reader
+            .store
+            .seed_range_read_calibration(profile(1024));
+        let held = fixture
+            .memory_budget
+            .clone()
+            .acquire_many_owned(512)
+            .await?;
+        let budget = Semaphore::new(2);
+        assert!(start(&fixture, &budget).await.is_err());
+        assert_eq!(fixture.partial.range_call_count(), 0);
+        drop(held);
+        let read = start(&fixture, &budget).await?;
+        let memory = Arc::downgrade(&read.memory);
+        fixture.partial.fail_range(4);
+        assert!(read.finish_fallback().await.is_err());
+        assert!(memory.upgrade().is_none());
+        assert_eq!(fixture.memory_budget.available_permits(), 512);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn payload_failure_is_an_error_and_releases_memory() -> TestResult {
+        let (fixture, page, _) = length_fixture(0).await?;
+        fixture
+            .reader
+            .store
+            .seed_range_read_calibration(profile(1024));
+        fixture.reader.store.seed_request_overhead(Duration::ZERO);
+        let budget = Semaphore::new(2);
+        let mut read = start_lengths(&fixture, &page, &budget).await?;
+        assert!(
+            read.discover(std::slice::from_ref(&page), &SELECTED)
+                .await?
+                .is_some()
+        );
+        let memory = Arc::downgrade(&read.memory);
+        fixture
+            .partial
+            .fail_range(fixture.partial.range_call_count() + 1);
+        let error = read
+            .finish(std::slice::from_ref(&page), &SELECTED)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("injected range failure"));
+        assert!(memory.upgrade().is_none());
+        assert_eq!(fixture.memory_budget.available_permits(), 512);
+        assert_eq!(budget.available_permits(), 2);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn completed_discovery_still_checks_the_final_decision_budget() -> TestResult {
+        let (fixture, page, _) = length_fixture(0).await?;
+        fixture
+            .reader
+            .store
+            .seed_range_read_calibration(profile(1024));
+        fixture.reader.store.seed_request_overhead(Duration::ZERO);
+        let budget = Semaphore::new(2);
+        let mut read = start_lengths(&fixture, &page, &budget).await?;
+        assert!(
+            read.discover(std::slice::from_ref(&page), &SELECTED)
+                .await?
+                .is_some()
+        );
+        read.decision_deadline = Instant::now();
+        let result = read.finish(std::slice::from_ref(&page), &SELECTED).await?;
+        assert_eq!(
+            result[0],
+            fixture
+                .bytes
+                .slice(page.range.start as usize..page.range.end as usize)
+        );
+        assert_eq!(
+            fixture.metrics.snapshot().parquet_data_file_bytes_received,
+            Some(fixture.reader.file_size)
+        );
+        Ok(())
     }
 
     #[tokio::test]
@@ -504,6 +864,7 @@ mod tests {
         let started = Instant::now();
         let mut read = ProbeRead::start(
             &fixture.reader,
+            &fixture.memory_budget,
             &budget,
             &requested,
             plan,
@@ -602,6 +963,7 @@ mod tests {
         let deadline = started + Duration::from_secs(5);
         let mut starting = Box::pin(ProbeRead::start(
             &fixture.reader,
+            &fixture.memory_budget,
             &budget,
             &requested,
             FallbackPlan::new(&requested, &[page.prefix_range()]).unwrap(),
@@ -683,6 +1045,7 @@ mod tests {
         let started = Instant::now();
         ProbeRead::start(
             &fixture.reader,
+            &fixture.memory_budget,
             budget,
             &requested(),
             plan(),
@@ -737,6 +1100,7 @@ mod tests {
         let started = Instant::now();
         let read = ProbeRead::start(
             &fixture.reader,
+            &fixture.memory_budget,
             &budget,
             &[100..200, 0..65536],
             FallbackPlan::new(&[0..65536], &[0..65536]).unwrap(),
@@ -792,6 +1156,7 @@ mod tests {
             assert!(
                 ProbeRead::start(
                     &fixture.reader,
+                    &fixture.memory_budget,
                     &budget,
                     &requested(),
                     plan(),
@@ -810,6 +1175,7 @@ mod tests {
         assert!(
             ProbeRead::start(
                 &fixture.reader,
+                &fixture.memory_budget,
                 &budget,
                 &requested(),
                 plan(),
@@ -831,6 +1197,7 @@ mod tests {
             assert!(
                 ProbeRead::start(
                     &fixture.reader,
+                    &fixture.memory_budget,
                     &budget,
                     &ranges,
                     plan(),
@@ -845,6 +1212,7 @@ mod tests {
         assert!(
             ProbeRead::start(
                 &fixture.reader,
+                &fixture.memory_budget,
                 &budget,
                 &[0..1],
                 FallbackPlan::new(&[0..65537], &[0..1]).unwrap(),
@@ -857,6 +1225,7 @@ mod tests {
         assert!(
             ProbeRead::start(
                 &fixture.reader,
+                &fixture.memory_budget,
                 &budget,
                 &requested(),
                 plan().with_probe(&[0..1]).unwrap(),
@@ -912,12 +1281,14 @@ mod tests {
                 .store
                 .seed_range_read_calibration(profile(1024));
             let partial = Arc::clone(&fixture.partial);
+            let memory_budget = Arc::clone(&fixture.memory_budget);
             let budget = Arc::new(Semaphore::new(2));
             let task_budget = Arc::clone(&budget);
             let task = tokio::spawn(async move {
                 let started = Instant::now();
                 ProbeRead::start(
                     &fixture.reader,
+                    &fixture.memory_budget,
                     &task_budget,
                     &requested(),
                     plan(),
@@ -933,6 +1304,7 @@ mod tests {
             task.abort();
             assert!(task.await.is_err_and(|error| error.is_cancelled()));
             assert!(partial.was_cancelled());
+            assert_eq!(memory_budget.available_permits(), 512);
             assert_eq!(budget.available_permits(), 2);
         }
         Ok(())

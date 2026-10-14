@@ -69,6 +69,35 @@ impl RangeCache {
         })
     }
 
+    /// Subtracts all downloaded bytes, including prefixes that end inside a selected value.
+    pub(super) fn missing_ranges(&self, requested: &[Range<u64>]) -> Vec<Range<u64>> {
+        let cached = super::super::range_planning::merge_ranges(
+            &self
+                .entries
+                .iter()
+                .map(|(range, _)| range.clone())
+                .collect::<Vec<_>>(),
+            0,
+        );
+        let mut missing = Vec::new();
+        for range in super::super::range_planning::merge_ranges(requested, 0) {
+            let mut start = range.start;
+            for covered in cached[cached.partition_point(|covered| covered.end <= start)..]
+                .iter()
+                .take_while(|covered| covered.start < range.end)
+            {
+                if start < covered.start {
+                    missing.push(start..covered.start);
+                }
+                start = covered.end.min(range.end);
+            }
+            if start < range.end {
+                missing.push(start..range.end);
+            }
+        }
+        missing
+    }
+
     fn read(&self, range: Range<u64>) -> Result<Bytes, ProbeError> {
         self.get(&range).ok_or(NeedBytes(range))
     }
@@ -909,5 +938,21 @@ mod tests {
         cache.entries.push((11..15, Bytes::from_static(b"bcde")));
         assert_eq!(cache.contiguous_prefix(10..17).as_ref(), b"abcdefg");
         assert!(cache.contiguous_prefix(0..10).is_empty());
+    }
+
+    #[test]
+    fn missing_ranges_preserve_partly_cached_values_and_ignore_duplicate_requests() {
+        let cache = RangeCache {
+            entries: vec![
+                (20..30, Bytes::from_static(&[2; 10])),
+                (10..20, Bytes::from_static(&[1; 10])),
+                (40..45, Bytes::from_static(&[3; 5])),
+            ],
+        };
+        assert_eq!(
+            cache.missing_ranges(&[25..50, 0..13, 15..28, 25..50]),
+            vec![0..10, 30..40, 45..50]
+        );
+        assert!(cache.missing_ranges(&[10..30, 41..44]).is_empty());
     }
 }
