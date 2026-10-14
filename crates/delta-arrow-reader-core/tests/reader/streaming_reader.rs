@@ -994,41 +994,6 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
         assert_eq!(zero_snapshot.file_tasks_started, 0);
         assert_eq!(zero_snapshot.scheduler_batches_emitted, 0);
 
-        let early_options = DeltaScanExecutionOptions::new()
-            .with_prefetch_files_per_partition(0)
-            .with_max_concurrent_file_reads_per_partition(1)?
-            .with_max_concurrent_file_reads_per_scan(Some(1))?
-            .with_output_buffer_batches_per_partition(1)?;
-        let early = table
-            .scan()
-            .with_target_partitions(1)?
-            .with_execution_options(early_options)
-            .with_limit(1)
-            .build()
-            .await?;
-        let (early_batches, early_metrics) = collect_scan(early).await?;
-        assert_eq!(ids(&early_batches), full_ids[..1]);
-        let early_snapshot = early_metrics.snapshot();
-        assert_eq!(early_snapshot.files_planned, 2);
-        assert_eq!(early_snapshot.file_tasks_started, 1);
-        assert_eq!(early_snapshot.file_tasks_completed, 0);
-        assert_eq!(early_snapshot.scheduler_batches_emitted, 1);
-        assert_eq!(early_snapshot.scheduler_rows_emitted, 2);
-        tokio::task::yield_now().await;
-        let after_yield = early_metrics.snapshot();
-        assert_eq!(
-            after_yield.file_tasks_started,
-            early_snapshot.file_tasks_started
-        );
-        assert_eq!(
-            after_yield.scheduler_batches_emitted,
-            early_snapshot.scheduler_batches_emitted
-        );
-        assert_eq!(
-            after_yield.scheduler_rows_emitted,
-            early_snapshot.scheduler_rows_emitted
-        );
-
         let error = match table.scan().with_target_partitions(0) {
             Ok(_) => panic!("zero partition target was accepted"),
             Err(error) => error,
@@ -1036,6 +1001,47 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
         assert_eq!(error.phase(), DeltaReaderPhase::Configuration);
         Ok::<_, Box<dyn Error>>(())
     })
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn limit_cancellation_preserves_partial_metrics() -> TestResult {
+    // One thread prevents the producer from filling the freed buffer before the consumer cancels.
+    let fixture = TestTable::two_versions("limit-metrics")?;
+    let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
+    let (full_batches, _) =
+        collect_scan(table.scan().with_target_partitions(1)?.build().await?).await?;
+    let options = DeltaScanExecutionOptions::new()
+        .with_prefetch_files_per_partition(0)
+        .with_max_concurrent_file_reads_per_partition(1)?
+        .with_max_concurrent_file_reads_per_scan(Some(1))?
+        .with_output_buffer_batches_per_partition(1)?;
+    let scan = table
+        .scan()
+        .with_target_partitions(1)?
+        .with_execution_options(options)
+        .with_limit(1)
+        .build()
+        .await?;
+    let (batches, metrics) = collect_scan(scan).await?;
+    assert_eq!(ids(&batches), ids(&full_batches)[..1]);
+    let snapshot = metrics.snapshot();
+    assert_eq!(snapshot.files_planned, 2);
+    assert_eq!(snapshot.file_tasks_started, 1);
+    assert_eq!(snapshot.file_tasks_completed, 0);
+    assert_eq!(snapshot.scheduler_batches_emitted, 1);
+    assert_eq!(snapshot.scheduler_rows_emitted, 2);
+    tokio::task::yield_now().await;
+    let after_yield = metrics.snapshot();
+    assert_eq!(after_yield.file_tasks_started, snapshot.file_tasks_started);
+    assert_eq!(
+        after_yield.scheduler_batches_emitted,
+        snapshot.scheduler_batches_emitted
+    );
+    assert_eq!(
+        after_yield.scheduler_rows_emitted,
+        snapshot.scheduler_rows_emitted
+    );
+    Ok(())
 }
 
 #[test]
