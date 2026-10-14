@@ -314,7 +314,7 @@ impl IntraPageReader {
         if self.selection.is_none() {
             return Ok(None);
         }
-        let Some((mut pages, selected_rows)) = self.candidate_pages(ranges) else {
+        let Some((pages, selected_rows)) = self.candidate_pages(ranges) else {
             tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
                 eligible = false, fallback_reason = "selection_or_layout_ineligible",
                 "Partial-page read skipped");
@@ -330,27 +330,36 @@ impl IntraPageReader {
                 "Partial-page read skipped");
             return Ok(None);
         };
-        if pages.iter().any(|page| page.value_width.is_none()) {
-            // Mixed batches price fixed-width and unsupported columns as ordinary reads.
-            pages.retain(|page| page.value_width.is_none());
-            return probe_read::read(
+        let (fixed, variable): (Vec<_>, Vec<_>) = pages
+            .into_iter()
+            .partition(|page| page.value_width.is_some());
+        // Preserve an existing profitable fixed-width path before trying length discovery.
+        if !fixed.is_empty()
+            && let Some(bytes) = self
+                .read_partial_pages(
+                    ranges,
+                    &fixed,
+                    &selected_rows,
+                    estimate,
+                    &RANGE_READ_PERMITS,
+                )
+                .await?
+        {
+            return Ok(Some(bytes));
+        }
+        if variable.is_empty() {
+            Ok(None)
+        } else {
+            probe_read::read(
                 self,
                 ranges,
-                &pages,
+                &variable,
                 &selected_rows,
                 estimate,
                 &RANGE_READ_PERMITS,
             )
-            .await;
+            .await
         }
-        self.read_partial_pages(
-            ranges,
-            &pages,
-            &selected_rows,
-            estimate,
-            &RANGE_READ_PERMITS,
-        )
-        .await
     }
 
     async fn read_partial_pages(
@@ -1558,6 +1567,142 @@ mod tests {
                     );
                 }
             }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn mixed_batches_preserve_profitable_fixed_width_reads() -> TestResult {
+        use super::super::{
+            metered_object_store::{MultiRangeReadStrategy, RangeReadCalibration},
+            tests::metrics,
+        };
+        use arrow::{
+            array::{Decimal128Array, StringArray},
+            datatypes::{DataType, Field, Schema},
+            record_batch::RecordBatch,
+        };
+        use object_store::{ObjectStoreExt, memory::InMemory};
+        use parquet::{
+            arrow::ArrowWriter,
+            basic::Encoding,
+            file::{
+                metadata::{PageIndexPolicy, ParquetMetaDataReader},
+                properties::WriterProperties,
+            },
+        };
+
+        let rows = 16_384;
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("fixed", DataType::Decimal128(38, 0), false),
+            Field::new("text", DataType::Utf8, false),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(
+                    Decimal128Array::from_iter_values(0..rows as i128)
+                        .with_precision_and_scale(38, 0)?,
+                ),
+                Arc::new(StringArray::from_iter_values(
+                    (0..rows).map(|_| "x".repeat(64)),
+                )),
+            ],
+        )?;
+        let properties = WriterProperties::builder()
+            .set_compression(Compression::UNCOMPRESSED)
+            .set_dictionary_enabled(false)
+            .set_column_encoding("text".into(), Encoding::DELTA_LENGTH_BYTE_ARRAY)
+            .set_offset_index_disabled(false)
+            .set_data_page_row_count_limit(rows)
+            .set_data_page_size_limit(page::MAX_PAGE_BYTES)
+            .set_write_batch_size(rows)
+            .build();
+        let mut writer = ArrowWriter::try_new(Vec::new(), schema, Some(properties))?;
+        writer.write(&batch)?;
+        let bytes = Bytes::from(writer.into_inner()?);
+        let metadata = Arc::new(
+            ParquetMetaDataReader::new()
+                .with_offset_index_policy(PageIndexPolicy::Required)
+                .parse_and_finish(&bytes)?,
+        );
+        let ranges: Vec<_> = metadata.offset_index().unwrap()[0]
+            .iter()
+            .map(|index| {
+                assert_eq!(index.page_locations.len(), 1);
+                let page = &index.page_locations[0];
+                page.offset as u64..(page.offset + i64::from(page.compressed_page_size)) as u64
+            })
+            .collect();
+        for partial_latency in [
+            None,
+            Some(Duration::from_secs(10)),
+            Some(Duration::from_millis(1)),
+        ] {
+            let memory = Arc::new(InMemory::new());
+            let path = Path::from("mixed.parquet");
+            memory.put(&path, bytes.clone().into()).await?;
+            let metrics = metrics();
+            let store = Arc::new(MeteredParquetObjectStore::new(
+                memory,
+                metrics.clone(),
+                MultiRangeReadStrategy::ChooseAutomatically,
+            ));
+            store.seed_transport_estimate(TransportEstimate {
+                request_latency: Duration::from_millis(1),
+                shared_throughput_bytes_per_second: 100_000,
+            });
+            store.seed_request_overhead(Duration::ZERO);
+            if let Some(partial_latency) = partial_latency {
+                store.seed_range_read_calibration(RangeReadCalibration {
+                    bytes_per_second: 100_000,
+                    ordinary_request_latencies: vec![Duration::from_millis(1)].into(),
+                    partial_request_latencies: vec![partial_latency].into(),
+                    partial_request_durations: vec![partial_latency].into(),
+                    small_reads: None,
+                });
+            }
+            let selection = Arc::new(Mutex::new(SelectedRows {
+                current_group: Some(0),
+                rows: vec![(rows - 1) as u64],
+                predicate_columns: Some(ProjectionMask::roots(
+                    metadata.file_metadata().schema_descr(),
+                    [],
+                )),
+                ..Default::default()
+            }));
+            let mut reader = IntraPageReader::new(
+                ParquetObjectReader::new(store.clone(), path.clone()),
+                metadata.clone(),
+                Some(selection),
+                bytes.len() as u64,
+                store,
+                path,
+            )?;
+            let (pages, _) = reader.candidate_pages(&ranges).unwrap();
+            assert_eq!(
+                pages
+                    .iter()
+                    .filter(|page| page.value_width.is_none())
+                    .count(),
+                1
+            );
+            let output = reader.read_ranges(ranges.clone()).await?;
+            let fixed = &ranges[0];
+            assert_eq!(
+                &output[0][output[0].len() - 16..],
+                &bytes[fixed.end as usize - 16..fixed.end as usize]
+            );
+            let text = &ranges[1];
+            assert_eq!(
+                output[1],
+                bytes.slice(text.start as usize..text.end as usize)
+            );
+            let received = metrics.snapshot().parquet_data_file_bytes_received.unwrap();
+            assert!(
+                u128::from(received) * 10 < range_bytes(&ranges) * 9,
+                "fixed-width savings were lost: partial_latency={partial_latency:?}, received={received}"
+            );
         }
         Ok(())
     }

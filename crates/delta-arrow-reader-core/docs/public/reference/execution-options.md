@@ -82,8 +82,12 @@ Variable-length discovery has a separate budget: probes, decision work and a
 complete fallback together may add at most 5% to the modeled ordinary-read
 cost. The reader checks this before each dependent request round. Successful
 discovery must save at least 25% of the batch's bytes and more than 10% of its
-remaining read cost. On fallback it reuses downloaded prefixes. Malformed
-supported input returns an error. These modeled limits are not wall-time guarantees.
+remaining read cost. On fallback it reuses downloaded prefixes. Invalid length
+metadata or invalid selected values return an error. These modeled limits are
+not wall-time guarantees.
+
+Mixed projections keep profitable fixed-width partial reads. The reader tries
+variable-length discovery when the fixed-width path declines the batch.
 
 Concurrent variable-length reads share a 512 MiB memory reservation, including
 cached data, length arrays and reconstructed pages. Arrow views retain their
