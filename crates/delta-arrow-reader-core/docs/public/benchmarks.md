@@ -18,12 +18,14 @@ layout, cache state, and storage latency affect the result.
 
 ## More reports
 
-The repeated-query report looks at reusing an open table. The other experiments
-isolate parts of Delta Arrow Reader's read path using small generated tables.
+The repeated-query report looks at reusing an open table. The partial-page guide
+covers real S3 and controlled MinIO measurements. The remaining experiments
+isolate parts of the read path using small generated tables.
 
 | Report | What it measures |
 | --- | --- |
 | [Repeated queries](benchmarks/eager-metadata.md) | Initialization, the first query, and a second query on the same open table. |
+| [Partial-page reads](partial-page-reads.md#benchmark-results) | Ordinary versus automatic reads on real S3, and the effects of supporting more page types on MinIO. |
 | [Predicate decoding](benchmarks/row-filter.md) | Decoding just the columns needed by a `WHERE` filter. |
 | [Page-index reads](benchmarks/page-index.md) | Skipping parts of a file when matching rows are stored close together. |
 | [Range planning](benchmarks/range-planning.md) | Trading fewer requests for more downloaded bytes under controlled latency and throughput. |

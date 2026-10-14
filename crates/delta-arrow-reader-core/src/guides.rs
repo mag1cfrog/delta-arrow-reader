@@ -27,6 +27,9 @@ pub mod concepts {
     #[doc = include_str!("../docs/public/scan-planning.md")]
     pub mod scan_planning {}
 
+    #[doc = include_str!("../docs/public/partial-page-reads.md")]
+    pub mod partial_page_reads {}
+
     #[doc = include_str!("../docs/public/read-scheduling.md")]
     pub mod read_scheduling {}
 }

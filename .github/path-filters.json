@@ -24,6 +24,7 @@
     "crates/delta-arrow-reader-core/docs/public/architecture.md",
     "crates/delta-arrow-reader-core/docs/public/delta-metadata-lifecycle.md",
     "crates/delta-arrow-reader-core/docs/public/scan-planning.md",
+    "crates/delta-arrow-reader-core/docs/public/partial-page-reads.md",
     "crates/delta-arrow-reader-core/docs/public/read-scheduling.md",
     "crates/delta-arrow-reader-core/docs/public/reference/execution-options.md",
     "crates/delta-arrow-reader-core/docs/public/reference/metrics.md",
