@@ -10,6 +10,9 @@ measurements below describe the defaults in effect at the time.
 The [partial-read transport checks](intra-page-connections.md) cover bounded
 connection setup, connection reuse, and public S3 fallback. They also retain the
 earlier measurements that ruled out opening a new connection for every request.
+The [native S3 follow-up](intra-page-native-s3.md) measures eligible queries
+from Los Angeles to us-west-2, including initialization, concurrent queries,
+request costs, and the limits of a small sample on a variable network.
 
 ## Run the portable checks
 

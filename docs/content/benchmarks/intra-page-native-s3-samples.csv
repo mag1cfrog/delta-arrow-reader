@@ -1,0 +1,13 @@
+columns,layout,mode,repetition,initialization_seconds,first_query_seconds,second_query_seconds,initialization_plus_first_query_seconds,process_cpu_seconds,peak_rss_bytes,peak_sampled_fds,record
+90,scattered + DV,ordinary,1,0.642552877,11.507652707,8.78129842,12.150205584,3.739571,364302336,32,production.q4.scattered.dv/ordinary-timing-0/observation.json
+90,scattered + DV,ordinary,2,0.749019844,16.691241043,16.392138147,17.440260887,4.637371,427343872,28,production.q4.scattered.dv/ordinary-timing-1/observation.json
+90,scattered + DV,ordinary,3,0.807789154,9.634868362,7.986536637,10.442657516,3.25281,436641792,32,production.q4.scattered.dv/ordinary-timing-2/observation.json
+90,scattered + DV,default,1,3.777726321,3.891096113,4.110619032,7.668822434,8.392387,504037376,604,production.q4.scattered.dv/default-timing-0/observation.json
+90,scattered + DV,default,2,3.565467396,4.571081748,4.440141584,8.136549144,8.639343,486440960,605,production.q4.scattered.dv/default-timing-1/observation.json
+90,scattered + DV,default,3,3.086752594,3.815418587,3.721648095,6.902171181,7.842509,525627392,605,production.q4.scattered.dv/default-timing-2/observation.json
+416,scattered + DV,ordinary,1,1.090885607,5.512885588,5.214875528,6.603771194999999,1.906056,348569600,23,production.q2.scattered.dv/ordinary-timing-0/observation.json
+416,scattered + DV,ordinary,2,1.603540242,8.475121495,7.667527077,10.078661737,2.34801,383807488,24,production.q2.scattered.dv/ordinary-timing-1/observation.json
+416,scattered + DV,ordinary,3,1.11667624,9.489924845,7.460052689,10.606601085000001,2.249528,346222592,25,production.q2.scattered.dv/ordinary-timing-2/observation.json
+416,scattered + DV,default,1,6.237257313,7.537994754,3.650175959,13.775252067,8.233202,453468160,594,production.q2.scattered.dv/default-timing-0/observation.json
+416,scattered + DV,default,2,5.175203846,4.074024775,3.616115112,9.249228621,7.265671,452825088,598,production.q2.scattered.dv/default-timing-1/observation.json
+416,scattered + DV,default,3,3.76285605,2.636544027,4.556090538,6.399400076999999,2.911386,387461120,378,production.q2.scattered.dv/default-timing-2/observation.json

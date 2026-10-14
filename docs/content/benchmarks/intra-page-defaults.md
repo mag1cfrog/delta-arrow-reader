@@ -62,7 +62,9 @@ All five exports matched the retained, previously validated reference. Each
 process opened six additional files successfully while its tables remained alive.
 This table's query is ineligible for partial-page reads. These checks cover
 native HTTPS, initialization, connection resources and fallback; eligible
-partial-page performance on real S3 remains unmeasured.
+partial-page performance on real S3 was unmeasured in this acceptance run.
+The [native S3 follow-up](intra-page-native-s3.md) now records eligible-query
+timings, exact results, connection reuse, request costs, and initialization limits.
 
 Five fresh Python processes used an isolated installation of the new wheel.
 The default constructor completed 24 MiB / 3,084 calibration reads. Explicit
