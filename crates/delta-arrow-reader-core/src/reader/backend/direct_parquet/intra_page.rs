@@ -8,6 +8,7 @@ mod cost_estimator;
 mod delta_length;
 mod fallback_cost;
 mod page;
+mod probe_read;
 mod request_simulation;
 
 pub(super) use cost_estimator::CostEstimator;

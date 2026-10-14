@@ -17,7 +17,7 @@ const DRAW_STEP: u64 = 0x9e3779b97f4a7c15;
 
 /// Physical requests for the whole batch, including columns that cannot use partial reads.
 /// The fallback keeps every ordinary byte, including coalesced gaps, but never rereads a probe.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct FallbackPlan {
     ordinary: Vec<Range<u64>>,
     probes: Vec<Range<u64>>,
@@ -76,6 +76,18 @@ impl FallbackPlan {
             probes: probes.to_vec(),
             remaining,
         })
+    }
+
+    pub(super) fn ordinary(&self) -> &[Range<u64>] {
+        &self.ordinary
+    }
+
+    pub(super) fn probes(&self) -> &[Range<u64>] {
+        &self.probes
+    }
+
+    pub(super) fn remaining(&self) -> &[Range<u64>] {
+        &self.remaining
     }
 }
 

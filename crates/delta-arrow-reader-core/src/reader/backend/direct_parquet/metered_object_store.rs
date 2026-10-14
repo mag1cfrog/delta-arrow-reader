@@ -339,6 +339,16 @@ impl MeteredParquetObjectStore {
             .clone()
     }
 
+    #[cfg(test)]
+    pub(super) fn seed_range_read_calibration(&self, calibration: RangeReadCalibration) {
+        let costs = CostEstimator::new(Arc::new(calibration));
+        self.range_read_estimator
+            .samples
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .cost_estimator = Some(costs);
+    }
+
     /// Samples large transfers and small requests without decoding file contents.
     pub(super) async fn warmup(&self, files: &[(Path, u64)], budget: &Semaphore) -> Result<bool> {
         if files.is_empty() {

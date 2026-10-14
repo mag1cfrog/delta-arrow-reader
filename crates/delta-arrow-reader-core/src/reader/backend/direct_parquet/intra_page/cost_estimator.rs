@@ -42,13 +42,6 @@ impl CostEstimator {
     /// Returns further discovery time after reserving the first probe and complete fallback.
     /// Charges all time since planning began, including queueing and cache lookup, to the allowance.
     /// A cancelled call leaves at most four finite jobs holding the slot until they finish.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "The delta-length read loop is the next implementation slice."
-        )
-    )]
     pub(super) async fn remaining_allowance(
         self: &Arc<Self>,
         plan: FallbackPlan,
