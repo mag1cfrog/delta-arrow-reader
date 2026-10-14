@@ -103,7 +103,7 @@ APIs.
 | Parquet metadata and data reads | Per query | Per query |
 
 The default `WarmupMode::Automatic` prepares supported S3 tables and also
-[profiles the network](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/#measure-the-connection-during-initialization). Choose `None` when
+[profiles the network](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/#measure-the-connection). Choose `None` when
 initialization time or retained metadata costs more than the expected reuse
 savings. No single query count is a reliable break-even point. The result depends on the
 table history, checkpoint shape, file count, available statistics, storage

@@ -36,7 +36,7 @@ to measure whether it reduces total time for your queries.
 To see how this initialization choice plays out across several queries, follow
 the [metadata warmup lifecycles](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/).
 
-The [partial-page guide](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/#measure-the-connection-during-initialization)
+The [partial-page guide](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/#measure-the-connection)
 explains how network sampling selects data files, shares its profile and recovers
 once after an incomplete attempt. It also covers supported stores, sampling
 limits, explicit configuration and the initialization cost.

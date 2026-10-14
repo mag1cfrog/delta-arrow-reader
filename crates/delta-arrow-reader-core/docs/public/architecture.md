@@ -28,7 +28,7 @@ initialization or during each query.
 
 The default `Automatic` mode prepares supported S3 tables and also performs
 bounded network sampling. Other stores remain lazy. The table below separates
-metadata preparation from the additional [network profiling](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/#measure-the-connection-during-initialization).
+metadata preparation from the additional [network profiling](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/#measure-the-connection).
 
 | Phase | No warmup | Query planning |
 | --- | --- | --- |

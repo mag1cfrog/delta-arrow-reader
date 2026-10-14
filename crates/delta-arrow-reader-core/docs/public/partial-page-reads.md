@@ -1,164 +1,125 @@
 ---
 title: Partial-page reads
-description: How the reader skips values inside Parquet pages, when it helps, how to control it, and measured results.
+description: Download less data for filtered queries, understand the costs, and choose when to use it.
 ---
 
 # Partial-page reads
 
-A query may need only a few rows from a Parquet page. Skipping whole files,
-row groups or pages cannot remove that page if it contains a match. Partial-page
-reads let Delta Arrow Reader fetch just the needed value ranges inside supported
-pages. This can save download time when matching rows are spread out.
+A query can return only a handful of rows and still download a lot of data.
+Partial-page reads help Delta Arrow Reader avoid downloading values your query
+does not need, even when those values sit next to ones it does need.
 
-The feature is enabled by default. The reader chooses it only when the file
-layout and measured connection costs justify the extra requests. It works with
-or without deletion vectors (DVs).
+This is **on by default** for supported S3 tables. The reader uses it when it
+expects a faster query and keeps normal reads otherwise. It changes how data is
+fetched, not which rows your query returns.
 
 ## How it works
 
-The Direct backend uses partial reads after evaluating a row predicate:
+Parquet stores each column's values in blocks called *pages*. Imagine a page
+holds 10,000 values, but your query only needs 10 of them. Reading the whole page
+would download many unwanted values. For supported file formats, the reader can
+request the parts containing those 10 values.
 
-1. File and row-group pruning remove data that cannot match.
-2. The row filter reads the predicate columns and records matching file rows.
-3. For the remaining output columns, the offset index locates pages containing
-   matches. The reader compares whole-page reads with requests for just the
-   selected values inside those pages.
-4. The normal Parquet decoder consumes the reconstructed buffers and applies row
-   selection. Original row positions remain intact for DV filtering.
+The reader does this in three steps:
 
-Predicate columns keep their normal reads. Both the streaming API and DataFusion
-use this path; a supported layout alone does not make an unfiltered scan eligible.
+1. Read the columns used by your filter to find matching rows.
+2. Locate those rows' values in the other columns you asked for.
+3. Compare the expected cost of reading whole pages with making smaller requests,
+   then use the cheaper option when the predicted saving is large enough.
 
-### Locate the selected values
+Numbers with a fixed size are easier to locate. Strings need extra work: the
+reader first checks their lengths to find where each value starts. Both use the
+same estimates of network speed and request cost.
 
-All supported pages are flat V1 pages with an offset index and no page checksum.
-Both required and nullable columns are supported. The offset index locates pages,
-not individual values inside them.
+Downloading less is not always faster. Each extra request has a cost, so the
+reader weighs the bytes it can skip against the number of requests it needs.
+If most values are needed, the connection is unsuitable, or the file format
+does not support this approach, it reads normally.
 
-| Values | Supported layout |
-| --- | --- |
-| Fixed-width numeric values | PLAIN INT32, INT64, FLOAT, DOUBLE or FIXED_LEN_BYTE_ARRAY; uncompressed or a single Zstd frame of raw blocks without checksums. |
-| Strings and binary | Uncompressed DELTA_LENGTH_BYTE_ARRAY; ordinary Arrow arrays and DataFusion view arrays are supported. |
+This works through both the streaming API and DataFusion. Columns used to
+filter rows keep their normal reads. Tables can have deletion vectors (DVs),
+which mark rows as deleted without rewriting the data files, or have no DVs.
 
-Fixed-width values use the physical width and null information to locate selected
-values. Decimal widths come from the Parquet schema. Existing date, timestamp,
-decimal and type-widening conversions still apply; this adds no new Delta type
-mappings. Strings and binary values need small reads to discover encoded lengths
-before their selected payloads can be located.
+### Measure the connection
 
-Zstd raw blocks store uncompressed bytes inside a Zstd frame. This does not allow
-arbitrary reads inside compressed blocks. Nested columns, V2 pages, dictionary
-encoding, unsupported codecs and Zstd string/binary pages use ordinary reads.
-Malformed supported structures return errors rather than silently losing values.
+Opening a supported S3 table includes test reads from existing data files to
+measure the connection. Later queries reuse those measurements, and suitable
+reads can update them as conditions change.
 
-### Decide whether fewer bytes are worth more requests
-
-Fixed-width and variable-length reads share one cost model. It compares bytes,
-request counts, latency, shared bandwidth and available concurrency. It includes
-request-handling costs and probe rounds that must wait for earlier results.
-Partial reads must save more than 10% of the estimated cost. Missing evidence,
-dense selections, work limits and uncertain savings keep ordinary reads.
-
-Variable-length values need an additional decision before their positions are
-known. The model simulates discovery followed by ordinary reading, using measured
-latency samples and shared bandwidth. Probes, decision work and a complete
-fallback must fit within a modeled 5% overhead budget. The reader checks that
-budget before each dependent round. After discovery, the partial plan must save
-at least 25% of the batch's bytes and more than 10% of its remaining read cost.
-Fallback reuses downloaded prefixes. These estimates are not wall-time guarantees.
-
-Mixed projections keep profitable fixed-width partial reads. Variable-length
-discovery runs when the fixed-width path declines the batch.
-
-### Measure the connection during initialization
-
-`WarmupMode::Automatic` prepares metadata and samples data-file ranges on
-supported S3 stores before the first query. The profile stays in memory and is
-shared by scans, table clones and refreshed snapshots. Later uncontended reads
-can update it, so initialization does not lock in one strategy.
-
-Sampling has a five-second limit after metadata loading. If it starts but does
-not finish, the first eligible filtered scan makes one bounded recovery attempt
-during planning. Concurrent scans share that attempt. If it fails or is cancelled,
-later scans use ordinary reads without another attempt. Recovery time belongs to
-the query that runs it.
+This network check has a five-second limit, separate from loading table metadata.
+If it starts but cannot finish, the first eligible query can try once more.
+Concurrent queries share that retry. Its time is part of that query; if it also
+fails, later queries keep normal reads without trying again.
 
 <details>
-<summary>Sampling and transport limits</summary>
+<summary>Supported file formats and decision thresholds</summary>
 
 <p>
-Sampling selects up to three active files of at least 4 MiB from retained
-metadata. It schedules at most 24.375 MiB across 3,180 range requests; store
-retries can add traffic. Small batches and sustained requests at shared
-concurrency are measured separately from latency and bandwidth samples.
-Failed, timed-out or insufficient samples are discarded without failing
-table loading. Recovery uses the same time and I/O limits and rejects samples
-that overlap range reads from the same loaded table.
+Pages must be flat V1 pages with an offset index and no page checksum. Both
+required and nullable columns work. An offset index locates pages, not individual
+values. Nested columns, V2 pages, dictionary encoding and unsupported compression
+use ordinary reads. Invalid supported structures return errors.
 </p>
 
 <p>
-Network warmup requires the Direct backend, the Automatic range policy and
-a supported <code>s3://</code> or <code>s3a://</code> transport. Custom HTTP settings, applicable
-system proxies, S3 Express, other stores and explicit range policies keep
-ordinary reads. Automatic warmup normally skips unsupported configurations;
-an applicable system proxy can reject sampling after metadata preparation.
-Explicit <code>Network</code> on unsupported stores retains metadata warmup only.
-Local and fully buffered files use ordinary reads.
+Fixed-width values support PLAIN INT32, INT64, FLOAT, DOUBLE and
+FIXED_LEN_BYTE_ARRAY, either uncompressed or in a single Zstd frame of raw blocks
+without checksums. Raw blocks contain uncompressed bytes; this is not arbitrary
+partial decompression. Value widths and null information locate the selected
+values. Existing date, timestamp, decimal and type-widening conversions apply;
+this adds no new Delta type mappings. Decimal widths come from the Parquet schema.
+Strings and binary require uncompressed DELTA_LENGTH_BYTE_ARRAY pages. Both
+ordinary Arrow arrays and DataFusion view arrays work; Zstd strings use normal reads.
 </p>
 
 <p>
-Planned ranges share a process-wide ceiling of 512 concurrent reads, with
-ordinary plans limited to 10 per plan. Partial reads and calibration reuse a
-separate S3 HTTP pool with 64 shared connection-setup slots. Requests release
-their read slots after the response finishes, including retries.
+The shared model includes bytes, latency, bandwidth, concurrency, request handling
+and reads that must wait for earlier results. Partial reads must save more than
+10% of estimated cost. Variable-length discovery simulates its extra reads plus a
+complete fallback, using measured latency samples. Discovery, decision work and
+fallback must fit within a modeled 5% overhead budget, checked before each round.
+After discovery, partial reads must save at least 25% of the batch's bytes and
+more than 10% of its remaining read cost. Fallback reuses downloaded prefixes.
+These estimates are not wall-time guarantees. Work limits or insufficient evidence
+keep ordinary reads. Mixed projections keep profitable fixed-width partial reads;
+variable-length discovery runs when that path declines the batch. The normal
+Parquet decoder still handles row selection, preserving original row positions
+for DV filtering.
 </p>
 
 </details>
 
 ## Enable or disable it
 
-These Rust settings explicitly select the defaults:
+You do not need extra configuration to enable it. To turn it off in Rust:
 
 ```no_run
-use delta_arrow_reader::{DeltaScanExecutionOptions, DeltaTableBuilder, WarmupMode};
+use delta_arrow_reader::{DeltaScanExecutionOptions, DeltaTableBuilder};
 
 #[tokio::main]
 async fn main() -> Result<(), delta_arrow_reader::DeltaReaderError> {
     let options = DeltaScanExecutionOptions::new()
-        .with_experimental_intra_page_reads(true);
+        .with_experimental_intra_page_reads(false);
     let table = DeltaTableBuilder::new("s3://bucket/table")
         .with_execution_options(options)
-        .with_warmup(WarmupMode::Automatic)
         .load_table()
         .await?;
     Ok(())
 }
 ```
 
-Use `false` instead of `true` to disable partial reads. Applied to the table
-builder, it also skips automatic warmup. Explicit warmup modes still apply:
-`WarmupMode::QueryPlanning` keeps metadata preparation without network sampling;
-`WarmupMode::None` skips both. Neither supplies the small-request cost needed
-for partial reads. Enabling the option permits a cost-based choice; it does not
-force partial reads on an unsuitable page or connection.
+Use `true` to explicitly allow it again. This allows the reader to choose; it
+never forces partial reads when they would be unsuitable.
 
-A streaming scan can override the option with
-`DeltaScanBuilder::with_execution_options`. DataFusion providers use their own
-`ScanOptions.execution_options`; pass the same options there to control their
-scans as well as table initialization. Disabling one scan cannot undo
-initialization already performed and does not consume pending recovery.
-Neither does a scan using another backend or an explicit range policy.
+Setting `false` on the table builder also skips the automatic connection check.
+Any explicit warmup choices still apply.
 
-To change the sampling limit, use
-`WarmupMode::Network { max_duration: std::time::Duration::from_secs(2) }`.
-Zero skips sampling. `load_snapshot` and conversion through `into_table` never
-perform warmup; use `load_table` for automatic preparation.
+DataFusion has its own `ScanOptions.execution_options`. Apply the same options
+there to control its queries as well as table loading.
 
 ### Python
 
-Python exposes the warmup choice, but currently has no independent partial-read
-switch. On a newly loaded table, use automatic warmup to permit partial reads,
-or metadata-only warmup to avoid network profiling and keep ordinary reads:
+Python uses `warmup`, without a separate partial-read switch:
 
 ```python
 from delta_arrow_reader import DeltaTable
@@ -167,72 +128,118 @@ automatic = DeltaTable("s3://bucket/table", warmup="automatic")
 ordinary = DeltaTable("s3://bucket/table", warmup="query_planning")
 ```
 
-Use `warmup="none"` to skip metadata preparation as well.
+`automatic` allows partial reads. `query_planning` prepares file metadata but
+skips the connection check, keeping normal reads. `none` skips both kinds of
+preparation.
 
 ## Tradeoffs
 
-Keeping a table open lets later queries reuse its profile. A short-lived
-application pays initialization for each new table, even when its query ends up
-using ordinary reads. Include that cost when measuring application latency.
+- Opening a table takes longer because of the connection check. Keeping the table
+  open lets later queries reuse that work. Count initialization when measuring
+  the total time of an application that opens a table for just one query.
+- Smaller reads can mean thousands of requests, more CPU work and higher S3
+  request charges. They can also use more memory while holding downloaded pieces
+  and preparing them for decoding.
+- The reader can start exploring a page and then decide to read it normally.
+  That exploration still costs time. Network changes can also make an estimate
+  wrong, so the optimization does not guarantee that every query is faster.
 
-Fewer downloaded bytes can require thousands of small requests, increasing CPU
-work and S3 request charges. A fast or changing network can make whole-page reads
-cheaper. Discovery followed by fallback also has a cost, even when it reuses
-every downloaded byte.
+<details>
+<summary>Profiling, resource limits and diagnostics</summary>
 
-Partial reads retain ranges and reconstruct page buffers, so downloading less
-does not guarantee lower memory use. Concurrent variable-length reads share a
-512 MiB reservation for cached data, lengths and reconstructed pages. Arrow view
-arrays retain their reservation while holding those buffers; other batches may
-use ordinary reads until memory is released. Probes and selected data also share
-the original request's byte budget.
+<p>
+In Rust, <code>WarmupMode::QueryPlanning</code> prepares file metadata without
+testing the network; <code>WarmupMode::None</code> skips both. Neither supplies
+the measurements needed for partial reads. A streaming scan can override options
+with <code>DeltaScanBuilder::with_execution_options</code>. Per-scan settings
+cannot undo initialization already performed.
+</p>
 
-To inspect a decision, enable the `delta_arrow_reader::diagnostics::intra_page`
-tracing target. It reports eligibility, cost estimates and fallback reasons.
-The `network_warmup` diagnostic distinguishes initialization from recovery.
-[Scan metrics](https://mag1cfrog.github.io/delta-arrow-reader/reference/metrics/)
-describe the byte and request counters.
+<p>
+Profiling selects up to three active files of at least 4 MiB, scheduling at most
+24.375 MiB across 3,180 requests; retries can add traffic. It separately measures
+latency, bandwidth and sustained small-request capacity. Failed or incomplete
+samples are discarded without failing table loading. The profile stays in memory
+and is shared by scans, table clones and refreshed snapshots. Reads that overlap
+other range reads from the same loaded table do not update it.
+</p>
+
+<p>
+Use <code>WarmupMode::Network { max_duration: std::time::Duration::from_secs(2) }</code>
+to change the sampling limit; zero skips sampling. Recovery has the same time and
+I/O limits. A failed or cancelled recovery is not retried. A scan that disables
+partial reads or uses another backend or an explicit range policy does not consume
+pending recovery. <code>load_snapshot</code> and <code>into_table</code> do no warmup;
+use <code>load_table</code> for automatic preparation.
+</p>
+
+<p>
+Profiling requires the Direct backend, Automatic range policy and a supported
+<code>s3://</code> or <code>s3a://</code> transport. Custom HTTP settings, applicable
+system proxies, S3 Express and other stores keep ordinary reads. Automatic warmup
+skips unsupported configurations, though a proxy can reject sampling after metadata
+preparation. Explicit Network mode on unsupported stores retains metadata warmup
+only. Local and fully buffered files use ordinary reads.
+</p>
+
+<p>
+Planned requests share 512 process-wide read slots; ordinary plans use at most 10
+per plan. Requests release their slots when responses finish, including retries.
+Partial reads and calibration share a separate S3 connection pool with 64
+connection-setup slots. Variable-length reads share a 512 MiB reservation for
+cached data, lengths and reconstructed pages. Arrow views hold their reservation
+until their buffers are released; other batches may use ordinary reads meanwhile.
+Probes and selected data share the original request's byte budget.
+</p>
+
+<p>
+The <code>delta_arrow_reader::diagnostics::intra_page</code> tracing target reports
+eligibility, estimates and fallback reasons. The <code>network_warmup</code>
+diagnostic distinguishes initialization from recovery. See the
+<a href="https://mag1cfrog.github.io/delta-arrow-reader/reference/metrics/">scan metrics</a>
+for byte and request counters.
+</p>
+
+</details>
 
 ## Benchmark results
 
-These comparisons time the first complete query after initialization, including
-planning and consuming all results. Initialization and second-query times are
-reported separately. Exact results were checked against independent references.
+### Real S3: with and without the optimization
 
-### Real S3: ordinary reads versus Automatic
+We tested two tables generated from TPC-H data, each with about 60 million rows
+and deletion vectors. Matching rows were scattered throughout the files. Tests
+ran from Los Angeles against S3 in Oregon, with no artificial network limits.
+Both modes used the same executable. Results matched independent references.
 
-From a Los Angeles client to S3 in Oregon (`us-west-2`), three alternating pairs
-on the same executable gave these medians. Both TPC-H-derived SF10 tables have
-about 60 million rows, spread-out matches and DVs. There was no artificial
-network delay or bandwidth limit.
-Ordinary disables partial reads and retains metadata warmup; Automatic uses the
-public defaults.
+These medians use three alternating pairs per table. Each run measures the first
+query after table initialization, including planning and reading every result.
 
-| Table | Ordinary query | Automatic query | Ordinary initialization + query | Automatic initialization + query |
-| --- | ---: | ---: | ---: | ---: |
-| 416 columns | 8.48 s | 4.07 s | 10.08 s | 9.25 s |
-| 90 columns | 11.51 s | 3.89 s | 12.15 s | 7.67 s |
+| Table | Partial reads disabled | Default (Automatic) |
+| --- | ---: | ---: |
+| 416 columns | 8.48 s | 4.07 s |
+| 90 columns | 11.51 s | 3.89 s |
 
-The combined columns use each session's sum before taking the median. One
-416-column Automatic run needed recovery during its query and was slower than
-its ordinary partner. All samples remain in the
-[S3 report](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/benchmarks/intra-page-native-s3.md),
-along with CPU, memory, request-cost observations and downloadable evidence.
-Three pairs on one client and region do not establish a universal speedup.
+Including initialization, the medians were 10.08 -> 9.25 s and 12.15 -> 7.67 s,
+using each run's total. The disabled mode still prepared file metadata. One
+416-column Automatic run needed a connection-check retry and was slower than
+its disabled counterpart. The
+[full S3 report](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/benchmarks/intra-page-native-s3.md)
+retains every sample and the resource costs. This is evidence for one client and
+region, not a promise for every network.
 
-### Controlled MinIO: extending support to more types
+### MinIO: support for more data types
 
-The [cumulative comparison](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/benchmarks/intra-page-types-cumulative.md)
-compares pre-extension `7b10a50` with `23713c0`, both using Automatic. Its primary
-profile adds 200 ms +/-20 ms latency and shared 150 Mbit/s bandwidth to local
-MinIO. Across the added fixtures, numeric and decimal query times fell 42%-76%,
-and long string/binary values took about 47% less time. These fixtures differ
-from the wide tables above.
+A separate comparison tested support for more data types, with Automatic enabled
+in both reader versions. The tests used local MinIO with 200 ms +/-20 ms delay
+and shared 150 Mbit/s bandwidth.
 
-The eight retained wide-table cases changed by -0.6% to +1.4%. Initialization
-cost about 0.64-0.80 seconds more, and some cases used more CPU or memory. The
-report retains all 36 comparisons, fallback controls and raw samples.
+On the added test tables, numeric and decimal query times fell 42%-76%, and long
+string/binary queries took about 47% less time. The eight existing wide-table
+cases changed by -0.6% to +1.4%. Initialization cost 0.64-0.80 seconds more, and
+some cases used more CPU or memory. The
+[cumulative report](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/benchmarks/intra-page-types-cumulative.md)
+contains all 36 comparisons and the raw samples.
 
-The [five-reader comparison](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/selective-read-results/) uses the
-controlled MinIO environment and already includes Automatic's earlier gains.
-Its timings and the real-S3 timings describe different network conditions.
+The [five-reader comparison](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/selective-read-results/)
+also uses controlled MinIO and includes the earlier Automatic gains. Compare
+results within the same environment; real S3 has different network conditions.
