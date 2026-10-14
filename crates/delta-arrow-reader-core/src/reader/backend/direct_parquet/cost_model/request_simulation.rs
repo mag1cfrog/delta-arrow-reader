@@ -3,7 +3,7 @@
 
 use std::{cmp::Reverse, collections::BinaryHeap, time::Duration};
 
-use super::{MAX_REQUESTED_BYTES, MAX_SHARED_RANGE_READS};
+use crate::reader::options::{MAX_INTRA_PAGE_READ_BYTES, MAX_SHARED_RANGE_READS};
 
 // Bound per-decision work; larger plans must retain ordinary reads.
 pub(super) const MAX_MODELED_REQUESTS: usize = 2 * MAX_SHARED_RANGE_READS;
@@ -32,7 +32,7 @@ pub(super) fn plan_duration(
         || requests
             .iter()
             .any(|r| r.bytes == 0 || r.delay > MAX_REQUEST_DELAY)
-        || requests.iter().map(|r| u128::from(r.bytes)).sum::<u128>() > MAX_REQUESTED_BYTES
+        || requests.iter().map(|r| u128::from(r.bytes)).sum::<u128>() > MAX_INTRA_PAGE_READ_BYTES
     {
         return None;
     }
@@ -280,7 +280,7 @@ mod tests {
     fn maximum_supported_plans_do_not_overflow_at_extreme_bandwidths() {
         let requests = vec![
             Request {
-                bytes: MAX_REQUESTED_BYTES as u64 / MAX_MODELED_REQUESTS as u64,
+                bytes: MAX_INTRA_PAGE_READ_BYTES as u64 / MAX_MODELED_REQUESTS as u64,
                 delay: MAX_REQUEST_DELAY,
             };
             MAX_MODELED_REQUESTS
@@ -289,7 +289,7 @@ mod tests {
             let wait = MAX_REQUEST_DELAY * MAX_MODELED_REQUESTS.div_ceil(concurrency) as u32;
             assert_eq!(
                 plan_duration(&requests, 1, concurrency),
-                Some(wait + Duration::from_secs(MAX_REQUESTED_BYTES as u64))
+                Some(wait + Duration::from_secs(MAX_INTRA_PAGE_READ_BYTES as u64))
             );
             assert_eq!(plan_duration(&requests, u64::MAX, concurrency), Some(wait));
         }
@@ -303,7 +303,7 @@ mod tests {
         };
         for (bytes, delay) in [
             (0, Duration::ZERO),
-            (MAX_REQUESTED_BYTES as u64 + 1, Duration::ZERO),
+            (MAX_INTRA_PAGE_READ_BYTES as u64 + 1, Duration::ZERO),
             (1, MAX_REQUEST_DELAY + Duration::from_nanos(1)),
         ] {
             assert!(plan_duration(&[Request { bytes, delay }], 100, 4).is_none());
@@ -315,7 +315,7 @@ mod tests {
         assert!(
             plan_duration(
                 &[Request {
-                    bytes: MAX_REQUESTED_BYTES as u64,
+                    bytes: MAX_INTRA_PAGE_READ_BYTES as u64,
                     ..request
                 }; 2],
                 100,

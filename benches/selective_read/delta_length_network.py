@@ -180,7 +180,8 @@ def measure(args):
         "binary_sha256": digest(args.binary), "driver_sha256": digest(Path(__file__)), "network": network.config(args.state),
         "source_sha256": {name: digest(Path(__file__).parent / name) for name in (
             "src/bin/delta-length-query.rs", "src/delta_length_reader.rs", "src/delta_length_profile.rs", "src/delta_length_cost.rs", "src/delta_length_simulation.rs", "src/delta_length.rs", "Cargo.lock", "storage.py",
-            "../../crates/delta-arrow-reader-core/src/reader/backend/direct_parquet/range_planning.rs")},
+            "../../crates/delta-arrow-reader-core/src/reader/backend/direct_parquet/range_planning.rs",
+            "../../crates/delta-arrow-reader-core/src/reader/backend/direct_parquet/cost_model/range_cost.rs")},
         "cost_profile": {"basis": "fixed diagnostic control", "values": args.profile_record} if args.cost_profile else
             "measured during each process initialization on the same client, including the request-duration distribution; incomplete measurements keep ordinary reads",
         "selection": args.selection, "pairs": 3, "primary_metric": "first fully consumed query including planning, predicate and DV",

@@ -3,21 +3,17 @@
 use std::{
     collections::VecDeque,
     sync::{Arc, LazyLock, Mutex},
-    time::Duration,
 };
 
-use tokio::{
-    sync::Semaphore,
-    time::{Instant, timeout_at},
-};
+use tokio::{sync::Semaphore, time::Instant};
 
 use super::fallback_cost::{FallbackCost, FallbackPlan, TRIALS, sample_costs};
-use crate::reader::backend::direct_parquet::metered_object_store::RangeReadCalibration;
+use crate::reader::backend::direct_parquet::network_profile::RangeReadCalibration;
 
 const CACHE_ENTRIES: usize = 128;
 static WORK_SLOT: LazyLock<Arc<Semaphore>> = LazyLock::new(|| Arc::new(Semaphore::new(1)));
 
-pub(in super::super) struct CostEstimator {
+pub(in super::super) struct FallbackEstimator {
     calibration: Arc<RangeReadCalibration>,
     workers: usize,
     work_slot: Arc<Semaphore>,
@@ -25,7 +21,7 @@ pub(in super::super) struct CostEstimator {
     cache: Mutex<VecDeque<(Arc<FallbackPlan>, FallbackCost)>>,
 }
 
-impl CostEstimator {
+impl FallbackEstimator {
     pub(in super::super) fn new(calibration: Arc<RangeReadCalibration>) -> Arc<Self> {
         tracing::trace!(target: "delta_arrow_reader::diagnostics::intra_page",
             bytes_per_second = calibration.bytes_per_second,
@@ -46,35 +42,6 @@ impl CostEstimator {
         &self.calibration
     }
 
-    /// Returns further discovery time after reserving all probe rounds and complete fallback.
-    /// Charges all time since planning began, including queueing and cache lookup, to the allowance.
-    /// A cancelled call leaves at most four finite jobs holding the slot until they finish.
-    pub(super) async fn remaining_allowance(
-        self: &Arc<Self>,
-        plan: FallbackPlan,
-        started: Instant,
-        deadline: Instant,
-    ) -> Option<Duration> {
-        let now = Instant::now();
-        if started > now || now >= deadline {
-            return None;
-        }
-        tracing::trace!(target: "delta_arrow_reader::diagnostics::intra_page",
-            ?plan, "Variable-length fallback plan");
-        let estimate = timeout_at(deadline, self.estimate(plan, deadline)).await;
-        let now = Instant::now();
-        tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
-            ?estimate, decision_micros = (now - started).as_micros() as u64,
-            deadline_micros = (deadline - started).as_micros() as u64,
-            "Variable-length fallback cost estimated");
-        let cost = estimate.ok()??;
-        let now = Instant::now();
-        if now >= deadline {
-            return None;
-        }
-        cost.remaining_allowance(now - started)
-    }
-
     fn cached(&self, plan: &FallbackPlan) -> Option<FallbackCost> {
         self.cache
             .lock()
@@ -83,7 +50,9 @@ impl CostEstimator {
             .find_map(|(key, cost)| (key.as_ref() == plan).then_some(*cost))
     }
 
-    async fn estimate(
+    /// Estimates numeric costs, reusing cached results for the same calibration and plan.
+    /// The caller bounds waiting; cancelled jobs retain capacity until they finish.
+    pub(in super::super) async fn estimate(
         self: &Arc<Self>,
         plan: FallbackPlan,
         deadline: Instant,
@@ -135,11 +104,14 @@ impl CostEstimator {
     reason = "These fixtures are lists of byte ranges, not lists of row numbers."
 )]
 mod tests {
-    use std::sync::mpsc;
+    use std::{sync::mpsc, time::Duration};
 
     use super::*;
+    use crate::reader::backend::direct_parquet::intra_page::{
+        discovery_allowance, remaining_discovery_time,
+    };
 
-    fn estimator() -> Arc<CostEstimator> {
+    fn estimator() -> Arc<FallbackEstimator> {
         let calibration = Arc::new(RangeReadCalibration {
             bytes_per_second: 1,
             ordinary_request_latencies: vec![Duration::from_secs(1)].into(),
@@ -147,7 +119,7 @@ mod tests {
             partial_request_latencies: vec![Duration::from_millis(10)].into(),
             partial_request_durations: vec![Duration::from_millis(20)].into(),
         });
-        let mut estimator = CostEstimator::new(calibration);
+        let mut estimator = FallbackEstimator::new(calibration);
         let unique = Arc::get_mut(&mut estimator).unwrap();
         unique.workers = 4;
         unique.work_slot = Arc::new(Semaphore::new(1));
@@ -158,11 +130,15 @@ mod tests {
         FallbackPlan::new(&[offset..offset + 1000], &[offset..offset + 100]).unwrap()
     }
 
-    async fn allowance(estimator: &Arc<CostEstimator>, offset: u64) -> Option<Duration> {
+    async fn allowance(estimator: &Arc<FallbackEstimator>, offset: u64) -> Option<Duration> {
         let started = Instant::now();
-        estimator
-            .remaining_allowance(plan(offset), started, started + Duration::from_secs(5))
-            .await
+        remaining_discovery_time(
+            estimator,
+            plan(offset),
+            started,
+            started + Duration::from_secs(5),
+        )
+        .await
     }
 
     #[tokio::test]
@@ -173,10 +149,14 @@ mod tests {
         observed.record_probe_time(Some(Duration::from_secs(200)));
         let started = Instant::now();
         assert!(
-            estimator
-                .remaining_allowance(observed.clone(), started, started + Duration::from_secs(5))
-                .await
-                .is_none()
+            remaining_discovery_time(
+                &estimator,
+                observed.clone(),
+                started,
+                started + Duration::from_secs(5)
+            )
+            .await
+            .is_none()
         );
         assert!(estimator.cached(&observed).is_some());
         assert!(allowance(&estimator, 0).await.is_some());
@@ -193,7 +173,7 @@ mod tests {
         release
     }
 
-    async fn wait_until_dispatched(estimator: &CostEstimator) {
+    async fn wait_until_dispatched(estimator: &FallbackEstimator) {
         tokio::time::timeout(Duration::from_secs(5), async {
             while estimator.work_slot.available_permits() != 0 {
                 tokio::task::yield_now().await;
@@ -216,42 +196,40 @@ mod tests {
         let _held = estimator.work_slot.acquire().await.unwrap();
         let before = Instant::now();
         let started = before - Duration::from_secs(10);
-        let actual = estimator
-            .remaining_allowance(plan(0), started, before + Duration::from_secs(5))
+        let actual = remaining_discovery_time(
+            &estimator,
+            plan(0),
+            started,
+            before + Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
+        assert!(actual <= discovery_allowance(expected, before - started).unwrap());
+        assert!(actual >= discovery_allowance(expected, Instant::now() - started).unwrap());
+        assert!(
+            remaining_discovery_time(
+                &estimator,
+                plan(0),
+                before - Duration::from_secs(60),
+                before + Duration::from_secs(5),
+            )
             .await
-            .unwrap();
-        assert!(actual <= expected.remaining_allowance(before - started).unwrap());
-        assert!(
-            actual
-                >= expected
-                    .remaining_allowance(Instant::now() - started)
-                    .unwrap()
+            .is_none()
         );
         assert!(
-            estimator
-                .remaining_allowance(
-                    plan(0),
-                    before - Duration::from_secs(60),
-                    before + Duration::from_secs(5),
-                )
+            remaining_discovery_time(&estimator, plan(0), before, before)
                 .await
                 .is_none()
         );
         assert!(
-            estimator
-                .remaining_allowance(plan(0), before, before)
-                .await
-                .is_none()
-        );
-        assert!(
-            estimator
-                .remaining_allowance(
-                    plan(0),
-                    before + Duration::from_secs(60),
-                    before + Duration::from_secs(120),
-                )
-                .await
-                .is_none()
+            remaining_discovery_time(
+                &estimator,
+                plan(0),
+                before + Duration::from_secs(60),
+                before + Duration::from_secs(120),
+            )
+            .await
+            .is_none()
         );
     }
 
@@ -278,10 +256,14 @@ mod tests {
         .unwrap();
         let started = Instant::now();
         assert!(
-            estimator
-                .remaining_allowance(plan(), started, started + Duration::from_secs(5))
-                .await
-                .is_none(),
+            remaining_discovery_time(
+                &estimator,
+                plan(),
+                started,
+                started + Duration::from_secs(5)
+            )
+            .await
+            .is_none(),
             "the complete fallback exceeds the allowance"
         );
         assert_eq!(estimator.cached(&plan()), Some(expected));
@@ -290,15 +272,19 @@ mod tests {
     #[tokio::test]
     async fn separate_estimators_share_the_process_work_limit() {
         let profile = estimator().calibration.clone();
-        let first = CostEstimator::new(profile.clone());
-        let second = CostEstimator::new(profile);
+        let first = FallbackEstimator::new(profile.clone());
+        let second = FallbackEstimator::new(profile);
         let held = first.work_slot.acquire().await.unwrap();
         let started = Instant::now();
         assert!(
-            second
-                .remaining_allowance(plan(0), started, started + Duration::from_millis(5))
-                .await
-                .is_none()
+            remaining_discovery_time(
+                &second,
+                plan(0),
+                started,
+                started + Duration::from_millis(5)
+            )
+            .await
+            .is_none()
         );
         assert!(second.cache.lock().unwrap().is_empty());
         drop(held);
@@ -323,10 +309,14 @@ mod tests {
         ] {
             let started = Instant::now();
             assert!(
-                estimator
-                    .remaining_allowance(plan, started, started + Duration::from_millis(5))
-                    .await
-                    .is_none()
+                remaining_discovery_time(
+                    estimator,
+                    plan,
+                    started,
+                    started + Duration::from_millis(5)
+                )
+                .await
+                .is_none()
             );
         }
         assert_eq!(first.cache.lock().unwrap().len(), 1);
@@ -385,10 +375,14 @@ mod tests {
             let release = occupy_blocking_thread().await;
             let started = Instant::now();
             assert!(
-                estimator
-                    .remaining_allowance(plan(0), started, started + Duration::from_millis(50))
-                    .await
-                    .is_none()
+                remaining_discovery_time(
+                    &estimator,
+                    plan(0),
+                    started,
+                    started + Duration::from_millis(50)
+                )
+                .await
+                .is_none()
             );
             assert_eq!(estimator.work_slot.available_permits(), 0);
             assert!(estimator.cache.lock().unwrap().is_empty());

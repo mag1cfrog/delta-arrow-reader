@@ -1,10 +1,12 @@
 //! Direct asynchronous Parquet data-file reader.
 
 mod compact_thrift;
+mod cost_model;
 mod intra_page;
 mod metadata_cache;
 mod metered_object_store;
 mod nan_counts;
+mod network_profile;
 mod range_planning;
 mod row_group_pruning;
 mod schema_alignment;
@@ -17,7 +19,6 @@ mod int96_tests;
 use std::{
     ops::Range,
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
 };
 
 use arrow::{
@@ -44,13 +45,12 @@ use snafu::ResultExt;
 use super::{data_file_error, file_location::resolve_data_file_path};
 
 pub(crate) use self::metadata_cache::ParquetMetadataCache;
-pub(crate) use self::metered_object_store::ParquetRangeReadEstimator;
+pub(in crate::reader) use self::network_profile::ParquetRangeReadState;
+pub(crate) use self::network_profile::{NetworkWarmupPlan, ParquetRangeReadEstimator};
 use self::{
     intra_page::{IntraPageReader, SelectedRows, SharedSelection},
     metadata_cache::CachedParquetMetadata,
-    metered_object_store::{
-        MeteredParquetObjectStore, MultiRangeReadStrategy, WARMUP_FILE_LIMIT, WARMUP_READ_BYTES,
-    },
+    metered_object_store::{MeteredParquetObjectStore, MultiRangeReadStrategy},
     nan_counts::NanCounts,
     row_group_pruning::pruned_row_groups,
     schema_alignment::{ParquetSchemaAlignment, build_schema_alignment},
@@ -59,7 +59,7 @@ use self::{
 const ORIGINAL_ROW_INDEX_COLUMN: &str = "__delta_arrow_reader_original_row_index";
 
 use crate::{
-    DeltaReaderError, DeltaScanExecutionOptions, DeltaScanMetrics, ParquetReaderBackend,
+    DeltaReaderError, DeltaScanExecutionOptions, DeltaScanMetrics,
     delta::kernel::{
         DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
         KernelScanSchemas,
@@ -67,7 +67,6 @@ use crate::{
     error::{CancelledSnafu, DataFileReadSnafu, PhysicalToLogicalTransformSnafu},
     reader::{
         deletion_vector::{DeletionVectorMasker, load_deletion_vector_masker},
-        metrics::DeltaScanMetricsConfig,
         planning::{DeltaScanFileTask, DeltaScanPlan},
         scheduling::{FileBatchStream, FileExecutor, FileReadPermit, ScanCancellation},
         transform::{
@@ -75,122 +74,6 @@ use crate::{
         },
     },
 };
-
-pub(crate) struct NetworkWarmupPlan {
-    object_store: Arc<dyn ObjectStore>,
-    partial_read_store: Arc<dyn ObjectStore>,
-    files: Vec<(Path, u64)>,
-    snapshot_version: u64,
-    max_duration: Duration,
-    range_read_budget: &'static tokio::sync::Semaphore,
-}
-
-impl NetworkWarmupPlan {
-    pub(crate) fn new(
-        snapshot: &crate::delta::snapshot::ArrowTableSnapshot,
-        options: DeltaScanExecutionOptions,
-        max_duration: Duration,
-    ) -> Option<Self> {
-        let context = snapshot.engine_context();
-        let strategy = MultiRangeReadStrategy::for_policy(
-            options.parquet_range_read_policy(),
-            context.table_url(),
-        );
-        if max_duration.is_zero()
-            || options.parquet_backend() != ParquetReaderBackend::Direct
-            || strategy != MultiRangeReadStrategy::ChooseAutomatically
-        {
-            return None;
-        }
-        let files = crate::delta::kernel::sample_data_files(
-            snapshot.eager_scan_metadata()?,
-            WARMUP_READ_BYTES,
-            WARMUP_FILE_LIMIT,
-        )
-        .into_iter()
-        .filter_map(|(path, size)| {
-            resolve_data_file_path(context.file_resolution_url(), &path)
-                .ok()
-                .map(|path| (path, size))
-        })
-        .collect::<Vec<_>>();
-        if files.is_empty() {
-            return None;
-        }
-        Some(Self {
-            object_store: context.object_store(),
-            partial_read_store: context.partial_read_store()?,
-            files,
-            snapshot_version: snapshot.version(),
-            max_duration,
-            range_read_budget: &range_planning::RANGE_READ_PERMITS,
-        })
-    }
-
-    pub(crate) fn supports_scan(options: DeltaScanExecutionOptions) -> bool {
-        options.experimental_intra_page_reads()
-            && options.parquet_backend() == ParquetReaderBackend::Direct
-            && options.parquet_range_read_policy()
-                == crate::reader::ParquetRangeReadPolicy::Automatic
-    }
-
-    pub(crate) async fn run(
-        &self,
-        phase: &'static str,
-        previous_estimator: &ParquetRangeReadEstimator,
-    ) -> Option<Arc<ParquetRangeReadEstimator>> {
-        let estimator = Arc::new(
-            previous_estimator
-                .for_network_warmup()
-                .with_partial_range_store(Arc::clone(&self.partial_read_store)),
-        );
-        let metrics = DeltaScanMetrics::new(DeltaScanMetricsConfig {
-            snapshot_version: self.snapshot_version,
-            parquet_backend: ParquetReaderBackend::Direct,
-            scan_partitions_planned: 0,
-            files_planned: self.files.len(),
-            add_actions_excluded_during_planning: None,
-            estimated_input_rows: None,
-            estimated_input_bytes: None,
-        });
-        let store = MeteredParquetObjectStore::new(
-            Arc::clone(&self.object_store),
-            metrics.clone(),
-            MultiRangeReadStrategy::ChooseAutomatically,
-        )
-        .with_range_read_estimator(Arc::clone(&estimator));
-        let started = Instant::now();
-        let outcome = tokio::time::timeout(
-            self.max_duration,
-            store.warmup(&self.files, self.range_read_budget),
-        )
-        .await;
-        let status = match outcome {
-            Ok(Ok(true)) => "complete",
-            Ok(Ok(false)) => "insufficient_samples",
-            Ok(Err(_)) => "read_failed",
-            Err(_) => "timeout",
-        };
-        let counts = metrics.snapshot();
-        let estimate = store.transport_estimate();
-        let calibration = store.range_read_calibration();
-        tracing::debug!(target: "delta_arrow_reader::diagnostics::network_warmup",
-            phase, status, elapsed_micros = started.elapsed().as_micros(),
-            requests = counts.parquet_data_file_range_get_operations,
-            bytes_received = counts.parquet_data_file_bytes_received,
-            request_latency_micros = estimate.map(|value| value.request_latency.as_micros()),
-            throughput_bytes_per_second = estimate.map(|value| value.shared_throughput_bytes_per_second),
-            request_overhead_bytes = store.request_overhead_bytes(),
-            calibrated_throughput_bytes_per_second = calibration.as_ref().map(|value| value.bytes_per_second),
-            ordinary_request_latency_samples = calibration.as_ref().map(|value| value.ordinary_request_latencies.len()),
-            partial_request_latency_samples = calibration.as_ref().map(|value| value.partial_request_latencies.len()),
-            request_duration_samples = calibration.as_ref().map(|value| value.partial_request_durations.len()),
-            small_request_samples = calibration.as_ref().and_then(|value| value.small_reads.as_ref()).map(|value| value.latencies.len()),
-            "Network warmup completed");
-        // Incomplete calibration must not seed a partially measured network profile.
-        (status == "complete").then_some(estimator)
-    }
-}
 
 struct DirectParquetReader {
     engine_context: Arc<DeltaKernelEngineContext>,
@@ -1111,7 +994,7 @@ pub(in crate::reader) mod tests {
             snapshot_version: 1,
             max_duration: Duration::from_secs(2),
             range_read_budget: Box::leak(Box::new(tokio::sync::Semaphore::new(
-                super::range_planning::MAX_SHARED_RANGE_READS,
+                crate::reader::options::MAX_SHARED_RANGE_READS,
             ))),
         };
         Ok((plan, store))
@@ -1209,7 +1092,7 @@ pub(in crate::reader) mod tests {
             }
             assert_eq!(
                 budget.available_permits(),
-                super::range_planning::MAX_SHARED_RANGE_READS
+                crate::reader::options::MAX_SHARED_RANGE_READS
             );
             let requests = store.range_call_count();
             state
@@ -1291,7 +1174,7 @@ pub(in crate::reader) mod tests {
             recovery.await;
             assert_eq!(
                 budget.available_permits(),
-                super::range_planning::MAX_SHARED_RANGE_READS
+                crate::reader::options::MAX_SHARED_RANGE_READS
             );
             assert!(
                 Arc::ptr_eq(&original_estimator, &state.estimator()),

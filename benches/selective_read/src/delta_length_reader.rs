@@ -26,13 +26,15 @@ use tokio::sync::Semaphore;
 #[path = "../../../crates/delta-arrow-reader-core/src/reader/backend/direct_parquet/compact_thrift.rs"]
 mod compact_thrift;
 #[allow(dead_code)]
+#[path = "../../../crates/delta-arrow-reader-core/src/reader/backend/direct_parquet/cost_model/range_cost.rs"]
+mod cost_model;
+#[allow(dead_code)]
 #[path = "../../../crates/delta-arrow-reader-core/src/reader/backend/direct_parquet/range_planning.rs"]
 mod range_planning;
 use super::delta_length;
 use compact_thrift::{invalid_metadata, read_field, read_i64};
-use range_planning::{
-    TransportEstimate, choose_bounded_range_plan, merge_ranges, partial_plan_cost, range_bytes,
-};
+use cost_model::{TransportEstimate, partial_read_cost_bytes, range_bytes};
+use range_planning::{choose_bounded_range_plan, merge_ranges};
 
 use cost::{CONCURRENCY, PREFIX_BYTES};
 
@@ -106,7 +108,7 @@ impl CostModel {
             None => self.request_overhead_bytes.saturating_mul(requests as u128),
         };
         // Capacity already includes request waiting and overlaps payload delivery.
-        Some(partial_plan_cost(bytes, requests, self.transport, CONCURRENCY, 0).max(capacity))
+        Some(partial_read_cost_bytes(bytes, requests, self.transport, CONCURRENCY, 0).max(capacity))
     }
 
     fn payload_ranges(

@@ -11,6 +11,10 @@ const DEFAULT_OUTPUT_BUFFER_BATCHES_PER_PARTITION: usize = 1;
 const DEFAULT_PREFETCH_FILES_PER_PARTITION: usize = 2;
 const DEFAULT_PARQUET_METADATA_SIZE_HINT_BYTES: usize = 64 * 1024;
 pub(crate) const MAX_CONCURRENT_PARQUET_RANGE_READS: usize = 10;
+// A process-wide ceiling, not a concurrency target for each file or scan.
+pub(crate) const MAX_SHARED_RANGE_READS: usize = 512;
+// Keep the estimator and partial-read execution within the same byte bound.
+pub(crate) const MAX_INTRA_PAGE_READ_BYTES: u128 = 128 * 1024 * 1024;
 
 /// Storage options forwarded to Delta object-store construction.
 pub type DeltaStorageOptions = BTreeMap<String, String>;

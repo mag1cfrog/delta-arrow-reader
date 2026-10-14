@@ -1,29 +1,21 @@
 //! Planning and execution helpers for Parquet byte-range reads.
 
-use std::{future::Future, ops::Range, time::Duration};
+use std::{future::Future, ops::Range};
 
 use bytes::Bytes;
 use futures_util::{StreamExt, TryStreamExt, stream};
 use tokio::sync::Semaphore;
 
-use crate::reader::options::MAX_CONCURRENT_PARQUET_RANGE_READS;
+use super::cost_model::{
+    TransportEstimate, partial_read_cost_bytes, range_bytes, range_cost_bytes, request_waves,
+};
+use crate::reader::options::{MAX_CONCURRENT_PARQUET_RANGE_READS, MAX_SHARED_RANGE_READS};
 
 const MAX_RANGE_READ_REQUESTS: usize = 64;
 const MAX_BYTE_AMPLIFICATION: u128 = 4;
 pub(super) const DECISION_MARGIN_PERCENT: u128 = 10;
 
-// A process-wide ceiling, not a concurrency target for each file or scan.
-pub(super) const MAX_SHARED_RANGE_READS: usize = 512;
 pub(super) static RANGE_READ_PERMITS: Semaphore = Semaphore::const_new(MAX_SHARED_RANGE_READS);
-
-/// Recent transport conditions used to compare physical range-read plans.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct TransportEstimate {
-    /// Typical time for a request to reach payload availability.
-    pub(super) request_latency: Duration,
-    /// Typical aggregate payload throughput across concurrent requests.
-    pub(super) shared_throughput_bytes_per_second: u64,
-}
 
 /// Why the automatic planner selected its physical range plan.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -153,7 +145,7 @@ pub(super) fn choose_range_plan(
         Some(estimate) => {
             let best_score = eligible_candidates
                 .iter()
-                .map(|plan| plan_score(plan, estimate, MAX_CONCURRENT_PARQUET_RANGE_READS))
+                .map(|plan| range_cost_bytes(plan, estimate, MAX_CONCURRENT_PARQUET_RANGE_READS))
                 .min()
                 .unwrap_or(0);
             let competitive_score =
@@ -161,7 +153,7 @@ pub(super) fn choose_range_plan(
             let plan = eligible_candidates
                 .iter()
                 .filter(|plan| {
-                    plan_score(plan, estimate, MAX_CONCURRENT_PARQUET_RANGE_READS)
+                    range_cost_bytes(plan, estimate, MAX_CONCURRENT_PARQUET_RANGE_READS)
                         <= competitive_score
                 })
                 .min_by_key(|plan| (range_bytes(plan), plan.len()))
@@ -176,10 +168,11 @@ pub(super) fn choose_range_plan(
         }
     };
     let planned_bytes = range_bytes(&physical_ranges);
-    let baseline_predicted_cost_bytes = transport_estimate
-        .map(|estimate| plan_score(baseline_plan, estimate, MAX_CONCURRENT_PARQUET_RANGE_READS));
+    let baseline_predicted_cost_bytes = transport_estimate.map(|estimate| {
+        range_cost_bytes(baseline_plan, estimate, MAX_CONCURRENT_PARQUET_RANGE_READS)
+    });
     let selected_predicted_cost_bytes = transport_estimate.map(|estimate| {
-        plan_score(
+        range_cost_bytes(
             &physical_ranges,
             estimate,
             MAX_CONCURRENT_PARQUET_RANGE_READS,
@@ -240,58 +233,6 @@ fn candidate_range_plans(
     candidates
 }
 
-/// Returns the bytes covered by a physical range plan.
-pub(super) fn range_bytes(plan: &[Range<u64>]) -> u128 {
-    plan.iter()
-        .map(|range| u128::from(range.end - range.start))
-        .sum()
-}
-
-/// Returns how many rounds of requests a plan needs at the given concurrency.
-pub(super) fn request_waves(request_count: usize, max_concurrent_reads: usize) -> usize {
-    request_count.div_ceil(max_concurrent_reads.max(1))
-}
-
-/// Scores a plan as transferred bytes plus one bandwidth-delay cost per request wave.
-pub(super) fn plan_score(
-    plan: &[Range<u64>],
-    estimate: TransportEstimate,
-    max_concurrent_reads: usize,
-) -> u128 {
-    let bandwidth_delay_bytes = bandwidth_delay_bytes(estimate);
-    range_bytes(plan).saturating_add(
-        (request_waves(plan.len(), max_concurrent_reads) as u128)
-            .saturating_mul(bandwidth_delay_bytes),
-    )
-}
-
-/// Scores pipelined partial reads in shared-bandwidth byte units.
-///
-/// Requests waiting for their first byte can overlap other responses. One
-/// request, one wave, or concurrency one still pays latency plus transfer time.
-pub(super) fn partial_plan_cost(
-    bytes: u128,
-    requests: usize,
-    estimate: TransportEstimate,
-    concurrency: usize,
-    request_overhead_bytes: u128,
-) -> u128 {
-    let latency = bandwidth_delay_bytes(estimate);
-    let waves = request_waves(requests, concurrency) as u128;
-    let latency_cost = latency.saturating_mul(waves);
-    // ponytail: approximate steady pipelining; unequal range sizes can reduce overlap.
-    let overlap = (bytes.saturating_mul(concurrency.saturating_sub(1) as u128)
-        / concurrency.max(1) as u128)
-        .min(latency_cost.saturating_sub(latency));
-    let transport_cost = bytes.saturating_add(latency_cost).saturating_sub(overlap);
-    // Request handling and transport run concurrently. Completion intervals
-    // already include small-response delivery, so adding the costs counts it twice.
-    let processing_cost = request_overhead_bytes
-        .saturating_mul(requests as u128)
-        .saturating_add(if requests == 0 { 0 } else { latency });
-    transport_cost.max(processing_cost)
-}
-
 /// Chooses a physical plan within a byte budget and concurrency limit.
 ///
 /// Merging the cheapest gaps minimizes bytes at each request count. Score those
@@ -347,7 +288,7 @@ pub(super) fn choose_bounded_range_plan_avoiding(
     gaps.sort_unstable();
     let mut bytes = exact_bytes;
     let cost = |bytes, count| {
-        partial_plan_cost(bytes, count, estimate, concurrency, request_overhead_bytes)
+        partial_read_cost_bytes(bytes, count, estimate, concurrency, request_overhead_bytes)
     };
     let mut best_cost = cost(bytes, exact.len());
     let mut merge_count = 0;
@@ -394,15 +335,6 @@ fn merge_smallest_gaps(
     plan
 }
 
-/// Returns the bytes transferable during one typical request-latency interval.
-pub(super) fn bandwidth_delay_bytes(estimate: TransportEstimate) -> u128 {
-    estimate
-        .request_latency
-        .as_nanos()
-        .saturating_mul(u128::from(estimate.shared_throughput_bytes_per_second))
-        / 1_000_000_000
-}
-
 /// Executes an already chosen physical plan and returns one result for each requested range.
 ///
 /// Physical reads run within the caller's concurrency limit. Results are sliced
@@ -447,11 +379,12 @@ where
 mod tests {
     use std::{convert::Infallible, ops::Range, time::Duration};
 
+    use super::super::cost_model::bandwidth_delay_bytes;
     use bytes::Bytes;
 
     use super::{
-        RangePlanDecision, TransportEstimate, bandwidth_delay_bytes, candidate_range_plans,
-        choose_range_plan, execute_range_plan, merge_ranges, plan_score, range_bytes,
+        RangePlanDecision, TransportEstimate, candidate_range_plans, choose_range_plan,
+        execute_range_plan, merge_ranges, range_bytes, range_cost_bytes,
     };
 
     #[test]
@@ -508,7 +441,11 @@ mod tests {
         assert_eq!(exact_plan.transport_estimate, Some(low_bandwidth));
         assert_eq!(
             exact_plan.baseline_predicted_cost_bytes,
-            Some(plan_score(&exact_plan.physical_ranges, low_bandwidth, 10))
+            Some(range_cost_bytes(
+                &exact_plan.physical_ranges,
+                low_bandwidth,
+                10
+            ))
         );
         assert_eq!(
             exact_plan.selected_predicted_cost_bytes,
@@ -545,25 +482,14 @@ mod tests {
             shared_throughput_bytes_per_second: 1_000,
         };
 
-        assert!(plan_score(exact_plan, estimate, 10) > plan_score(merged_plan, estimate, 10));
-        assert!(plan_score(exact_plan, estimate, 11) < plan_score(merged_plan, estimate, 11));
-    }
-
-    #[test]
-    fn partial_cost_accounts_for_overlap_without_hiding_serial_latency() {
-        use super::partial_plan_cost;
-        let estimate = TransportEstimate {
-            request_latency: Duration::from_millis(100),
-            shared_throughput_bytes_per_second: 1_000,
-        };
-        assert_eq!(partial_plan_cost(0, 0, estimate, 4, 0), 0);
-        assert_eq!(partial_plan_cost(400, 1, estimate, 4, 0), 500);
-        assert_eq!(partial_plan_cost(400, 4, estimate, 4, 0), 500);
-        assert_eq!(partial_plan_cost(400, 8, estimate, 1, 0), 1_200);
-        assert_eq!(partial_plan_cost(400, 8, estimate, 4, 0), 500);
-        assert_eq!(partial_plan_cost(4, 4, estimate, 2, 0), 202);
-        assert_eq!(partial_plan_cost(4, 4, estimate, 2, 10), 202);
-        assert_eq!(partial_plan_cost(4, 4, estimate, 2, 100), 500);
+        assert!(
+            range_cost_bytes(exact_plan, estimate, 10)
+                > range_cost_bytes(merged_plan, estimate, 10)
+        );
+        assert!(
+            range_cost_bytes(exact_plan, estimate, 11)
+                < range_cost_bytes(merged_plan, estimate, 11)
+        );
     }
 
     #[test]
@@ -701,7 +627,7 @@ mod tests {
                         overhead,
                     );
                     let score = |plan: &Vec<Range<u64>>| {
-                        super::partial_plan_cost(
+                        super::partial_read_cost_bytes(
                             range_bytes(plan),
                             plan.len(),
                             estimate,
@@ -799,14 +725,11 @@ mod tests {
 
     #[tokio::test]
     async fn refills_slots_without_waiting_for_an_earlier_request() -> Result<(), Infallible> {
-        use crate::reader::options::MAX_CONCURRENT_PARQUET_RANGE_READS;
+        use crate::reader::options::{MAX_CONCURRENT_PARQUET_RANGE_READS, MAX_SHARED_RANGE_READS};
         use std::time::Duration;
         use tokio::sync::Semaphore;
 
-        for concurrency in [
-            MAX_CONCURRENT_PARQUET_RANGE_READS,
-            super::MAX_SHARED_RANGE_READS,
-        ] {
+        for concurrency in [MAX_CONCURRENT_PARQUET_RANGE_READS, MAX_SHARED_RANGE_READS] {
             let count = concurrency + 2;
             let ranges: Vec<_> = (0..count as u64).map(|i| 2 * i..2 * i + 1).collect();
             let last_start = ranges.last().unwrap().start;
