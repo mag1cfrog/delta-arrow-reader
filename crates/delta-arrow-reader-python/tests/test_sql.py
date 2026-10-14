@@ -167,11 +167,29 @@ class SqlTests(unittest.TestCase):
                 self.assertNotIn("label", str(caught.exception))
         self.assertEqual(self.query("SELECT 42 AS answer"), [{"answer": 42}])
 
-    def test_schema_export_rejects_nul_alias_without_panicking(self):
-        with self.assertRaises(DeltaReaderError) as caught:
-            self.session.sql('SELECT 1 AS "secret\0alias"')
-        self.assertEqual(caught.exception.code, "schema_conversion")
-        self.assertNotIn("secret", str(caught.exception))
+    def test_schema_export_rejects_nul_names_and_timezones_without_panicking(self):
+        timestamp = 'Timestamp(Microsecond, Some("secret\0zone"))'
+        value = f"arrow_cast(NULL, '{timestamp}')"
+        for query in (
+            'SELECT 1 AS "secret\0alias"',
+            "SELECT named_struct('secret\0child', 1) AS value",
+            f"SELECT {value} AS value",
+            f"SELECT array_agg({value}) AS value",
+            f"SELECT named_struct('time', {value}) AS value",
+            f"SELECT arrow_cast(NULL, 'Dictionary(Int32, {timestamp})') AS value",
+        ):
+            with self.subTest(query=query):
+                with self.assertRaises(DeltaReaderError) as caught:
+                    self.session.sql(query)
+                self.assertEqual((caught.exception.phase, caught.exception.code),
+                                 ("schema", "schema_conversion"))
+                self.assertNotIn("secret", str(caught.exception))
+        with self.session.sql("""
+            SELECT arrow_cast(NULL, 'Timestamp(Microsecond, Some("UTC"))') AS value
+        """) as reader:
+            self.assertEqual(reader.schema.field("value").type, pa.timestamp("us", tz="UTC"))
+            self.assertEqual(reader.read_all().to_pylist(), [{"value": None}])
+        self.assertEqual(self.query("SELECT 'value\0data' AS value"), [{"value": "value\0data"}])
 
     def test_refresh_does_not_retarget_registered_or_planned_snapshots(self):
         location = self.corpus / "deletion_vectors/table"

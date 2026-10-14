@@ -12,7 +12,10 @@ use ::delta_arrow_reader::{
     DeltaSnapshotSelection, DeltaStorageOptions, DeltaTable as CoreDeltaTable, DeltaTableBuilder,
     WarmupMode,
 };
-use arrow::{datatypes::Schema, ffi::FFI_ArrowSchema};
+use arrow::{
+    datatypes::{DataType, Field, Schema},
+    ffi::FFI_ArrowSchema,
+};
 use pyo3::{
     exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
@@ -53,15 +56,39 @@ fn export_schema(py: Python<'_>, schema: &Schema) -> PyResult<FFI_ArrowSchema> {
             "schema_conversion",
         )
     };
-    // Arrow 58's FFI exporter panics on NUL bytes in field names.
+    // Arrow 58's FFI exporter panics on NUL bytes in names or timestamp timezones.
     if schema
-        .flattened_fields()
+        .fields()
         .iter()
-        .any(|field| field.name().contains('\0'))
+        .any(|field| field_contains_nul(field))
     {
         return Err(export_error());
     }
     FFI_ArrowSchema::try_from(schema).map_err(|_| export_error())
+}
+
+fn field_contains_nul(field: &Field) -> bool {
+    field.name().contains('\0') || type_contains_nul(field.data_type())
+}
+
+fn type_contains_nul(data_type: &DataType) -> bool {
+    use DataType::*;
+    match data_type {
+        Timestamp(_, Some(timezone)) => timezone.contains('\0'),
+        List(field)
+        | LargeList(field)
+        | ListView(field)
+        | LargeListView(field)
+        | FixedSizeList(field, _)
+        | Map(field, _) => field_contains_nul(field),
+        Struct(fields) => fields.iter().any(|field| field_contains_nul(field)),
+        Union(fields, _) => fields.iter().any(|(_, field)| field_contains_nul(field)),
+        Dictionary(key, value) => type_contains_nul(key) || type_contains_nul(value),
+        RunEndEncoded(run_ends, values) => {
+            field_contains_nul(run_ends) || field_contains_nul(values)
+        }
+        _ => false,
+    }
 }
 
 /// One immutable Delta snapshot, loaded from a string or os.PathLike[str].
