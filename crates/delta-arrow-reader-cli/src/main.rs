@@ -8,6 +8,7 @@ use std::{
     fmt,
     io::{self, IsTerminal, Write},
     num::NonZeroUsize,
+    path::Path,
     process::ExitCode,
     str::FromStr,
 };
@@ -23,7 +24,7 @@ use snafu::{ResultExt, Snafu, ensure};
 
 /// Read Delta Lake snapshots as JSON metadata or Arrow IPC streams.
 #[derive(Parser)]
-#[command(name = "dar", bin_name = "dar", version)]
+#[command(name = command_name(), bin_name = command_name(), version)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -141,6 +142,16 @@ impl Error {
     fn write_diagnostic(&self) {
         let mut stderr = io::stderr().lock();
         let _ = writeln!(stderr, "{}", self.diagnostic()).and_then(|()| stderr.flush());
+    }
+}
+
+fn command_name() -> &'static str {
+    let executable = std::env::args_os().next().unwrap_or_default();
+    match Path::new(&executable).file_name() {
+        Some(name) if name == "delta-arrow-reader" || name == "delta-arrow-reader.exe" => {
+            "delta-arrow-reader"
+        }
+        _ => "dar",
     }
 }
 

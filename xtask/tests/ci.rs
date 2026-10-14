@@ -61,25 +61,32 @@ fn filter_matches(filters: &Value, name: &str, path: &str) -> Result<bool> {
 fn python_filter_excludes_unrelated_sources_and_tools() -> Result<()> {
     let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
     for (path, expected) in [
-        ("src/reader/scan.rs", true),
+        ("crates/delta-arrow-reader-core/src/reader/scan.rs", true),
         ("Cargo.lock", true),
         ("Cargo.toml", true),
         ("crates/delta-arrow-reader-cli/Cargo.toml", true),
         ("crates/delta-arrow-reader-python/src/lib.rs", true),
         ("crates/delta-arrow-reader-python/tests/test_table.py", true),
-        ("tests/reader/https.py", true),
+        ("crates/delta-arrow-reader-core/tests/reader/https.py", true),
         (
-            "tests/reader/fixtures/external_writer/corpus/table/data.parquet",
+            "crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/table/data.parquet",
             true,
         ),
-        ("pyproject.toml", true),
-        ("delta_arrow_reader.pyi", true),
+        ("crates/delta-arrow-reader-python/pyproject.toml", true),
+        (
+            "crates/delta-arrow-reader-python/delta_arrow_reader.pyi",
+            true,
+        ),
         ("README.md", true),
         ("LICENSE", true),
         (".cargo/config.toml", true),
         ("xtask/Cargo.toml", true),
-        ("xtask/src/main.rs", false),
+        ("xtask/src/main.rs", true),
         ("xtask/Cargo.lock", false),
+        ("xtask/src/python_wheel_build.rs", true),
+        ("xtask/src/python_cli/tests.rs", true),
+        ("xtask/src/notices.rs", true),
+        ("crates/delta-arrow-reader-cli/release/about.toml", true),
         (".github/workflows/cache-warm.yml", true),
         (".github/workflows/pypi-build.yml", true),
         (".github/workflows/pypi.yml", true),
@@ -93,10 +100,13 @@ fn python_filter_excludes_unrelated_sources_and_tools() -> Result<()> {
         ("xtask/tests/python_workflow.rs", false),
         ("xtask/tests/release_plz.rs", false),
         ("release-plz.toml", true),
-        ("crates/delta-arrow-reader-cli/src/main.rs", false),
+        ("crates/delta-arrow-reader-cli/src/main.rs", true),
         ("crates/delta-arrow-reader-cli/tests/scan.py", false),
         ("benches/selective_read/src/main.rs", false),
-        ("tests/reader/direct.rs", false),
+        (
+            "crates/delta-arrow-reader-core/tests/reader/direct.rs",
+            false,
+        ),
         ("docs/content/contributing.md", false),
     ] {
         assert_eq!(
@@ -121,8 +131,8 @@ fn python_sources_skip_core_checks_without_losing_formatting() -> Result<()> {
     }
     for path in [
         "crates/delta-arrow-reader-python/Cargo.toml",
-        "pyproject.toml",
-        "delta_arrow_reader.pyi",
+        "crates/delta-arrow-reader-python/pyproject.toml",
+        "crates/delta-arrow-reader-python/delta_arrow_reader.pyi",
     ] {
         for name in ["code", "python"] {
             assert!(filter_matches(&filters, name, path)?, "{name}: {path}");
@@ -158,7 +168,11 @@ fn cli_sources_run_separate_required_checks() -> Result<()> {
         "crates/delta-arrow-reader-cli/tests/predicates/mod.rs",
     ] {
         assert!(filter_matches(&filters, "cli", path)?, "{path}");
-        for name in ["code", "python", "tooling", "selective_read"] {
+        assert_eq!(
+            filter_matches(&filters, "python", path)?,
+            path.contains("/src/")
+        );
+        for name in ["code", "tooling", "selective_read"] {
             assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
         }
     }
@@ -173,8 +187,8 @@ fn cli_sources_run_separate_required_checks() -> Result<()> {
         ".github/workflows/ci.yml",
         ".github/workflows/cache-warm.yml",
         "clippy.toml",
-        "src/reader/options.rs",
-        "tests/reader/fixtures/external_writer/corpus/table/data.parquet",
+        "crates/delta-arrow-reader-core/src/reader/options.rs",
+        "crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/table/data.parquet",
     ] {
         for name in ["code", "cli"] {
             assert!(filter_matches(&filters, name, path)?, "{name}: {path}");
@@ -184,9 +198,9 @@ fn cli_sources_run_separate_required_checks() -> Result<()> {
         "crates/delta-arrow-reader-python/src/lib.rs",
         "crates/delta-arrow-reader-python/tests/test_table.py",
         "xtask/src/main.rs",
-        "benches/page_index.rs",
+        "crates/delta-arrow-reader-core/benches/page_index.rs",
         "benches/selective_read/src/main.rs",
-        "tests/reader/direct.rs",
+        "crates/delta-arrow-reader-core/tests/reader/direct.rs",
         ".github/workflows/cli-build.yml",
     ] {
         assert!(!filter_matches(&filters, "cli", path)?, "{path}");
@@ -258,9 +272,11 @@ fn tooling_changes_run_separate_required_checks() -> Result<()> {
         "examples/go-cli/scan_test.go",
     ] {
         assert!(filter_matches(&filters, "tooling", path)?, "{path}");
-        for name in ["code", "python"] {
-            assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
-        }
+        assert!(!filter_matches(&filters, "code", path)?, "{path}");
+        assert_eq!(
+            filter_matches(&filters, "python", path)?,
+            path == "xtask/src/main.rs"
+        );
     }
     for path in [
         "Cargo.toml",
@@ -285,7 +301,10 @@ fn tooling_changes_run_separate_required_checks() -> Result<()> {
         ("clippy.toml", true),
         ("LICENSE", true),
         ("NOTICE", true),
-        ("src/reader/options.rs", false),
+        (
+            "crates/delta-arrow-reader-core/src/reader/options.rs",
+            false,
+        ),
         ("crates/delta-arrow-reader-python/src/lib.rs", false),
         ("crates/delta-arrow-reader-cli/src/main.rs", false),
         ("benches/selective_read/src/fixtures.rs", false),
@@ -331,7 +350,10 @@ fn benchmark_checks_exclude_unrelated_ci_changes() -> Result<()> {
         ("benches/selective_read/Cargo.lock", true),
         ("benches/selective_read/src/fixtures.rs", true),
         ("benches/selective_read/oracle.py", true),
-        ("src/reader/options.rs", false),
+        (
+            "crates/delta-arrow-reader-core/src/reader/options.rs",
+            false,
+        ),
         ("xtask/src/main.rs", false),
     ] {
         assert_eq!(
@@ -392,14 +414,17 @@ fn benchmark_checks_exclude_unrelated_ci_changes() -> Result<()> {
 #[test]
 fn core_filter_preserves_benchmark_targets_and_shared_inputs() -> Result<()> {
     let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
-    let manifest: toml::Value = toml::from_str(include_str!("../../Cargo.toml"))?;
+    let manifest: toml::Value = toml::from_str(include_str!(
+        "../../crates/delta-arrow-reader-core/Cargo.toml"
+    ))?;
     for target in manifest["bench"].as_array().unwrap() {
         let path = target["path"].as_str().unwrap();
-        assert!(filter_matches(&filters, "code", path)?, "{path}");
+        let path = format!("crates/delta-arrow-reader-core/{path}");
+        assert!(filter_matches(&filters, "code", &path)?, "{path}");
     }
     for path in [
-        "benches/range_planning/controlled_http.rs",
-        "benches/range_planning/plan_diagnostics.rs",
+        "crates/delta-arrow-reader-core/benches/range_planning/controlled_http.rs",
+        "crates/delta-arrow-reader-core/benches/range_planning/plan_diagnostics.rs",
         "benches/selective_read/src/control_rows.rs",
         "benches/scan_scheduling.py",
         "benches/test_scan_scheduling.py",
@@ -440,9 +465,9 @@ fn standalone_docs_skip_rust_checks() -> Result<()> {
     for path in [
         "docs/content/contributing.md",
         "docs/content/benchmarks/intra-page-reads.md",
-        "docs/public/python.md",
-        "docs/public/cli.md",
-        "docs/public/benchmarks/selective-read-results.md",
+        "crates/delta-arrow-reader-core/docs/public/python.md",
+        "crates/delta-arrow-reader-core/docs/public/cli.md",
+        "crates/delta-arrow-reader-core/docs/public/benchmarks/selective-read-results.md",
     ] {
         for name in ["code", "python", "cli", "tooling", "selective_read"] {
             assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
@@ -464,8 +489,7 @@ fn embedded_docs_trigger_their_rust_checks() -> Result<()> {
     let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
     let include = regex::Regex::new(r#"include_str!\("([^"]+\.md)"\)"#)?;
     for (source, filter) in [
-        ("src/lib.rs", "code"),
-        ("src/guides.rs", "code"),
+        ("crates/delta-arrow-reader-core/src/guides.rs", "code"),
         ("benches/selective_read/src/main.rs", "selective_read"),
         ("benches/selective_read/src/production.rs", "selective_read"),
         ("benches/selective_read/src/large.rs", "selective_read"),
@@ -620,6 +644,7 @@ fn release_pr_requires_approved_and_validated_wheels() -> Result<()> {
                             ("release-wheels.outputs.validated", validated),
                             ("release-cli.outputs.validated", "true"),
                             ("release-cli-images.outputs.validated", "true"),
+                            ("release-cli-record.outputs.validated", "true"),
                         ])?;
                         let expected = release_pr != "true"
                             || approval == "success" && wheels == "success" && validated == "true";
@@ -630,6 +655,54 @@ fn release_pr_requires_approved_and_validated_wheels() -> Result<()> {
                         );
                     }
                 }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn release_pr_requires_the_record_upload_and_matching_pr_identity() -> Result<()> {
+    for code in ["true", "false"] {
+        for release_pr in ["true", "false"] {
+            for (key, value, passes) in [
+                ("release-cli-record.result", "success", true),
+                ("release-cli-record.result", "failure", false),
+                ("release-cli-record.result", "cancelled", false),
+                ("release-cli-record.result", "skipped", false),
+                ("release-cli-record.result", "", false),
+                ("release-cli-record.outputs.validated", "false", false),
+                ("release-cli-record.outputs.validated", "", false),
+                ("release-cli-record.outputs.artifact-id", "", false),
+                ("release-cli-record.outputs.artifact-name", "", false),
+                ("release-cli-record.outputs.artifact-url", "", false),
+                ("release-cli-record.outputs.source-commit", "", false),
+                (
+                    "release-cli-record.outputs.source-commit",
+                    "different",
+                    false,
+                ),
+                ("release-cli-record.outputs.pr-head-sha", "", false),
+                ("release-cli-record.outputs.pr-head-sha", "different", false),
+                ("release-cli-record.outputs.version", "", false),
+                ("release-cli-record.outputs.version", "different", false),
+            ] {
+                let output = check_ci_results(&[
+                    (key, value),
+                    ("changes.outputs.code", code),
+                    ("changes.outputs.python", "false"),
+                    ("changes.outputs.selective_read", "false"),
+                    ("changes.outputs.release_pr", release_pr),
+                    ("release-cli.outputs.validated", "true"),
+                    ("release-cli-images.outputs.validated", "true"),
+                    ("release-cli-record.outputs.validated", "true"),
+                    ("release-wheels.outputs.validated", "true"),
+                ])?;
+                assert_eq!(
+                    output.status.success(),
+                    release_pr != "true" || passes,
+                    "code={code}, release={release_pr}, {key}={value:?}: {output:?}"
+                );
             }
         }
     }
@@ -943,6 +1016,49 @@ fn cache_retry_cleans_the_correct_target_and_restarts_native_sccache() -> Result
 }
 
 #[test]
+fn cache_read_report_counts_backend_failures_without_exposing_request_details() -> Result<()> {
+    let directory = test_dir("cache-reads");
+    let log = directory.join("sccache.log");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
+    command.arg("report-cache-reads");
+    assert!(
+        !command
+            .env_remove("SCCACHE_ERROR_LOG")
+            .output()?
+            .status
+            .success()
+    );
+    command.env("SCCACHE_ERROR_LOG", &log);
+    assert!(!command.output()?.status.success());
+
+    fs::write(&log, "")?;
+    let output = command.output()?;
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout)?,
+        "Remote cache read failures recorded: 0\n  RateLimited: 0\n  Other: 0\n"
+    );
+
+    fs::write(
+        &log,
+        b"[2026-10-11T20:00:00Z WARN  sccache::cache::cache] Got unexpected error: RateLimited (temporary) at read, context: { uri: https://example.invalid/cache?sig=secret, status: 429 }\r\n\
+          [2026-10-11T20:00:01Z WARN  sccache::cache::cache] Got unexpected error: Unexpected (temporary) at read, context: { status: 500 } => RateLimited\n\
+          [2026-10-11T20:00:02Z WARN  sccache::cache::cache] Got unexpected error: PermissionDenied (persistent) at read => \xff\n\
+          [2026-10-11T20:00:03Z DEBUG sccache::server] Error executing cache write: RateLimited\n\
+          [2026-10-11T20:00:04Z WARN  other] Got unexpected error: RateLimited\n",
+    )?;
+    let output = command.output()?;
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stdout)?,
+        "Remote cache read failures recorded: 3\n  RateLimited: 1\n  Other: 2\n"
+    );
+    fs::remove_dir_all(directory)?;
+    Ok(())
+}
+
+#[test]
 fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<()> {
     let directory = test_dir("core-warm");
     let cargo = directory.join("cargo");
@@ -968,6 +1084,13 @@ fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<(
     assert_eq!(retry["if"], "steps.cache-writes.outcome == 'failure'");
 
     let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    for variable in ["CARGO_PROFILE_DEV_DEBUG", "AWS_LC_SYS_USE_SYSTEM"] {
+        assert!(ci["env"][variable].is_string(), "{variable}");
+        assert_eq!(
+            ci["env"][variable], warmer["jobs"]["core"]["env"][variable],
+            "{variable} must match for compiled dependency reuse"
+        );
+    }
     for job in ["checks", "tooling-checks", "python-package", "cli-checks"] {
         let commands = ci["jobs"][job]["steps"]
             .as_array()
@@ -1030,7 +1153,7 @@ fn prune_deletes_by_id_and_stops_on_command_or_schema_errors() -> Result<()> {
         &gh,
         r#"#!/bin/sh
 case "$*" in
-  'api --paginate --slurp repos/owner/repo/actions/caches?key=v0-rust-core-ci-targets-Windows_NT-x64-&ref=refs/heads/main&per_page=100')
+  'api --paginate --slurp repos/owner/repo/actions/caches?key=v0-rust-core-ci-targets-'*'&ref=refs/heads/main&per_page=100')
     [ "$FAIL_LIST" != true ] || exit 9
     printf '%s' "$CACHE_PAGES" ;;
   'api --method DELETE repos/owner/repo/actions/caches/'*)
@@ -1041,12 +1164,22 @@ esac
 "#,
     )?;
     fs::set_permissions(&gh, fs::Permissions::from_mode(0o755))?;
-    let cache = |id| {
-        json!({"id": id, "key": format!("v0-rust-core-ci-targets-Windows_NT-x64-{id}"),
+    let cache = |id, platform| {
+        json!({"id": id, "key": format!("v0-rust-core-ci-targets-{platform}-{id}"),
         "ref": "refs/heads/main", "last_accessed_at": format!("2026-10-{id:02}T00:00:00Z")})
     };
-    let pages =
-        json!([{"actions_caches": [cache(4), cache(3)]}, {"actions_caches": [cache(2), cache(1)]}]);
+    let pages = json!([
+        {"actions_caches": [
+            cache(14, "Linux-x64"), cache(13, "Linux-x64"),
+            cache(24, "Darwin-arm64"), cache(23, "Darwin-arm64"),
+            cache(4, "Windows_NT-x64"), cache(3, "Windows_NT-x64"),
+        ]},
+        {"actions_caches": [
+            cache(12, "Linux-x64"), cache(11, "Linux-x64"),
+            cache(22, "Darwin-arm64"), cache(21, "Darwin-arm64"),
+            cache(2, "Windows_NT-x64"), cache(1, "Windows_NT-x64"),
+        ]},
+    ]);
     let log = directory.join("deletions");
     let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
     command
@@ -1060,7 +1193,9 @@ esac
     assert!(command.output()?.status.success());
     assert_eq!(
         fs::read_to_string(&log)?,
-        "repos/owner/repo/actions/caches/2\nrepos/owner/repo/actions/caches/1\n"
+        "repos/owner/repo/actions/caches/12\nrepos/owner/repo/actions/caches/11\n\
+         repos/owner/repo/actions/caches/22\nrepos/owner/repo/actions/caches/21\n\
+         repos/owner/repo/actions/caches/2\nrepos/owner/repo/actions/caches/1\n"
     );
     fs::write(&log, "")?;
     assert!(
@@ -1072,7 +1207,7 @@ esac
     );
     assert_eq!(
         fs::read_to_string(&log)?,
-        "repos/owner/repo/actions/caches/2\n"
+        "repos/owner/repo/actions/caches/12\n"
     );
     fs::write(&log, "")?;
     assert!(!command.env("FAIL_LIST", "true").output()?.status.success());

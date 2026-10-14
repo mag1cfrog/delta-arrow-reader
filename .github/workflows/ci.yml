@@ -8,6 +8,10 @@ permissions:
   pull-requests: read
 
 env:
+  # Keep file and line information in backtraces while reducing build artifacts.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  # Keep Python's pkg-config path from invalidating the bundled AWS-LC build.
+  AWS_LC_SYS_USE_SYSTEM: "0"
   SCCACHE_GHA_ENABLED: "true"
   SCCACHE_GHA_RW_MODE: READ_ONLY
   RUSTC_WRAPPER: sccache
@@ -27,6 +31,7 @@ jobs:
       cli: ${{ steps.filter.outputs.cli }}
       selective_read: ${{ steps.filter.outputs.selective_read }}
       package_version: ${{ steps.package-version.outputs.version }}
+      pr_head_sha: ${{ github.event.pull_request.head.sha }}
       release_pr: >-
         ${{ github.repository == 'mag1cfrog/delta-arrow-reader' &&
             github.event.pull_request.head.repo.full_name == github.repository &&
@@ -75,17 +80,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
-      - name: Cache Cargo registry
+      - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: core-ci-targets
+          cache-targets: true
+          cache-bin: false
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
       - run: cargo test --locked ${{ matrix.features }}
       - name: Verify HTTPS certificates and proxies
-        run: python3 tests/reader/https.py ${{ matrix.features }}
+        run: python3 crates/delta-arrow-reader-core/tests/reader/https.py ${{ matrix.features }}
 
   platform-tests:
     name: Platform Tests / ${{ matrix.name }}
@@ -115,11 +121,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
-      - name: Cache Cargo registry
+      - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ${{ matrix.os == 'windows-2022' && 'core-ci-targets' || 'core-ci' }}
-          cache-targets: ${{ matrix.os == 'windows-2022' }}
+          shared-key: core-ci-targets
+          cache-targets: true
+          cache-bin: false
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
@@ -151,11 +158,12 @@ jobs:
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
           components: clippy, rustfmt
-      - name: Cache Cargo registry
+      - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: core-ci-targets
+          cache-targets: true
+          cache-bin: false
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
@@ -177,6 +185,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.tooling == 'true'
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_LOG: sccache::cache::cache=warn
+      SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
 
     steps:
       - uses: actions/checkout@v5
@@ -190,11 +201,12 @@ jobs:
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
           components: clippy, rustfmt
-      - name: Cache Cargo registry
+      - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: core-ci-targets
+          cache-targets: true
+          cache-bin: false
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
@@ -205,15 +217,28 @@ jobs:
       - name: Check CI workflows
         uses: docker://rhysd/actionlint:1.7.12
         with:
-          args: .github/workflows/ci.yml .github/workflows/cli-build.yml .github/workflows/cli-images.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml .github/workflows/benchmark-fixtures.yml
+          args: .github/workflows/ci.yml .github/workflows/cli-build.yml .github/workflows/cli-images.yml .github/workflows/cli-release.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml .github/workflows/benchmark-fixtures.yml
       - run: cargo fmt --package xtask -- --check
       - name: Test CI workflows, Python, and cache tasks
         run: |
           cargo clippy --locked --package xtask --all-targets -- -D warnings
           cargo test --locked --package xtask --bin xtask cache_tests::
+          cargo test --locked --package xtask --bin xtask validation_record::
+          cargo test --locked --package xtask --bin xtask python_cli::
+          cargo test --locked --package xtask --bin xtask python_cli_audit::
+          cargo test --locked --package xtask --bin xtask binary::tests::
+          cargo test --locked --package xtask --bin xtask python_sdist::
+          cargo test --locked --package xtask --bin xtask python_wheel_build::
+          cargo test --locked --package xtask --test cli_release_plan --test cli_release_assets --test cli_release_images \
+            --test cli_release_request --test cli_release_notes --test cli_release_workflow
           cargo test --locked --package xtask \
-            --test ci --test cli_workflow --test cli_images_workflow --test images --test python_release --test python_upload --test python_wheels \
-            --test python_wheel_reuse --test python_workflow --test release_plz -- --include-ignored
+            --test ci --test cli_workflow --test cli_images_workflow --test cli_validation_workflow --test cli_release_selection --test images --test python_release --test python_upload --test python_wheels \
+            --test python_wheel_reuse --test python_workflow --test python_build --test release_plz -- --include-ignored
+      - name: Report cache read failures
+        continue-on-error: true
+        run: cargo xtask report-cache-reads
+        env:
+          RUSTC_WRAPPER: ""
       - run: git diff --check
 
   python-package:
@@ -238,11 +263,12 @@ jobs:
           toolchain: ${{ steps.rust-version.outputs.version }}
           components: clippy, rustfmt
       - run: cargo fmt --package delta-arrow-reader-python -- --check
-      - name: Cache Cargo registry
+      - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: core-ci-targets
+          cache-targets: true
+          cache-bin: false
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
@@ -250,12 +276,21 @@ jobs:
         run: cargo clippy --locked -p delta-arrow-reader-python --all-targets -- -D warnings
       - name: Test Python runtime ownership
         run: cargo test --locked -p delta-arrow-reader-python
+      - name: Install Python wheel notice tools
+        run: |
+          rustup component add rust-docs
+          about_version="$(sed -n 's/^cargo-about-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$about_version"
+          cargo install --locked --features cli --version "$about_version" cargo-about
+        env:
+          RUSTC_WRAPPER: ""
       - name: Test Python API
         run: |
+          python -I -m unittest discover -s crates/delta-arrow-reader-python/build_tests
           python -m venv "$RUNNER_TEMP/python-tests"
           source "$RUNNER_TEMP/python-tests/bin/activate"
           python -m pip install 'maturin==1.14.1' 'pyarrow==18.0.0'
-          maturin develop --locked
+          python -m pip install --no-build-isolation --no-deps --editable crates/delta-arrow-reader-python
           python -I -m unittest discover -s crates/delta-arrow-reader-python/tests
 
   cli-checks:
@@ -277,11 +312,12 @@ jobs:
           toolchain: ${{ steps.rust-version.outputs.version }}
           components: clippy, rustfmt
       - run: cargo fmt --package delta-arrow-reader-cli -- --check
-      - name: Cache Cargo registry
+      - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: core-ci-targets
+          cache-targets: true
+          cache-bin: false
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
@@ -333,6 +369,78 @@ jobs:
       expected-version: ${{ needs.release-cli.outputs.version }}
       rust-toolchain: ${{ needs.release-cli.outputs.rust-toolchain }}
 
+  release-cli-record:
+    name: Record validated CLI artifacts
+    needs: [changes, release-approval, release-cli, release-cli-images]
+    if: >-
+      needs.changes.outputs.release_pr == 'true' &&
+      needs.release-approval.result == 'success' &&
+      needs.release-cli.result == 'success' &&
+      needs.release-cli.outputs.validated == 'true' &&
+      needs.release-cli-images.result == 'success' &&
+      needs.release-cli-images.outputs.validated == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      validated: ${{ steps.complete.outputs.validated }}
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      artifact-name: ${{ steps.complete.outputs.artifact-name }}
+      artifact-url: ${{ steps.upload.outputs.artifact-url }}
+      source-commit: ${{ steps.record.outputs.source-commit }}
+      pr-head-sha: ${{ steps.record.outputs.pr-head-sha }}
+      version: ${{ steps.record.outputs.version }}
+    env:
+      CLI_RECORD_NAME: dar-cli-validation-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ needs.release-cli.outputs.rust-toolchain }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci
+          cache-targets: false
+          save-if: false
+      - uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Bind validated artifacts to the tested PR revision
+        id: record
+        env:
+          CLI_JOB_RESULTS: ${{ toJSON(needs) }}
+        shell: bash
+        run: |
+          printf '%s\n' "$CLI_JOB_RESULTS" > "$RUNNER_TEMP/cli-job-results.json"
+          cargo xtask cli record-validation "$RUNNER_TEMP/cli-validation.json" \
+            --event "$GITHUB_EVENT_PATH" --job-results "$RUNNER_TEMP/cli-job-results.json" \
+            --source-commit "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"
+          jq -r '"source-commit=\(.source_commit)", "pr-head-sha=\(.pull_request_head_sha)", "version=\(.version)"' \
+            "$RUNNER_TEMP/cli-validation.json" >> "$GITHUB_OUTPUT"
+      - name: Upload CLI validation record
+        id: upload
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.CLI_RECORD_NAME }}
+          path: ${{ runner.temp }}/cli-validation.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Require the uploaded record
+        id: complete
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        shell: bash
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          test -n "$ARTIFACT_URL"
+          echo 'validated=true' >> "$GITHUB_OUTPUT"
+          echo "artifact-name=$CLI_RECORD_NAME" >> "$GITHUB_OUTPUT"
+          echo "CLI validation record: [$CLI_RECORD_NAME]($ARTIFACT_URL)" >> "$GITHUB_STEP_SUMMARY"
+
   selective-read-fixtures:
     name: Public Fixture Smoke
     needs: changes
@@ -341,7 +449,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [changes, feature-tests, platform-tests, checks, tooling-checks, python-package, cli-checks, release-approval, release-wheels, release-cli, release-cli-images, selective-read-fixtures]
+    needs: [changes, feature-tests, platform-tests, checks, tooling-checks, python-package, cli-checks, release-approval, release-wheels, release-cli, release-cli-images, release-cli-record, selective-read-fixtures]
     if: always()
     runs-on: ubuntu-latest
 
@@ -392,6 +500,20 @@ jobs:
                [ -z "${{ needs.release-cli-images.outputs.version }}" ] || \
                [ "${{ needs.release-cli-images.outputs.version }}" != "${{ needs.release-cli.outputs.version }}" ]; then
               echo "Release CLI image validation or artifact handoff did not pass"
+              exit 1
+            fi
+            if [ "${{ needs.release-cli-record.result }}" != "success" ] || \
+               [ "${{ needs.release-cli-record.outputs.validated }}" != "true" ] || \
+               [ -z "${{ needs.release-cli-record.outputs.artifact-id }}" ] || \
+               [ -z "${{ needs.release-cli-record.outputs.artifact-name }}" ] || \
+               [ -z "${{ needs.release-cli-record.outputs.artifact-url }}" ] || \
+               [ -z "${{ needs.release-cli-record.outputs.source-commit }}" ] || \
+               [ "${{ needs.release-cli-record.outputs.source-commit }}" != "${{ needs.release-cli.outputs.source-commit }}" ] || \
+               [ -z "${{ needs.release-cli-record.outputs.pr-head-sha }}" ] || \
+               [ "${{ needs.release-cli-record.outputs.pr-head-sha }}" != "${{ needs.changes.outputs.pr_head_sha }}" ] || \
+               [ -z "${{ needs.release-cli-record.outputs.version }}" ] || \
+               [ "${{ needs.release-cli-record.outputs.version }}" != "${{ needs.release-cli.outputs.version }}" ]; then
+              echo "Release CLI validation record upload or PR identity did not pass"
               exit 1
             fi
             if [ "${{ needs.release-wheels.result }}" != "success" ] || \

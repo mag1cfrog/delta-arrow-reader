@@ -1,0 +1,2 @@
+# Keep the cargo-about clarification checksum stable across checkouts.
+/LICENSE text eol=lf

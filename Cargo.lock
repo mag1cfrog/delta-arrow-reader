@@ -1341,6 +1341,7 @@ dependencies = [
  "serde",
  "serde_json",
  "snafu",
+ "tempfile",
  "tokio",
 ]
 
@@ -4085,7 +4086,9 @@ dependencies = [
  "arrow-array",
  "arrow-ipc",
  "arrow-schema",
+ "base64 0.22.1",
  "clap",
+ "csv",
  "flate2",
  "http-body-util",
  "hyper",

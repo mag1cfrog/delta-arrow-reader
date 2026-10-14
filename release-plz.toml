@@ -4,6 +4,7 @@ git_release_name = "v{{ version }}"
 
 [[package]]
 name = "delta-arrow-reader"
+changelog_path = "CHANGELOG.md"
 changelog_include = ["delta-arrow-reader-python"]
 
 [[package]]

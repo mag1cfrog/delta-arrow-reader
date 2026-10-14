@@ -6,6 +6,9 @@ collection, and archive acceptance run through `cargo xtask`, a Cargo alias for
 the repository's private Rust maintenance crate. Process and scan checks run in
 Rust through `xtask cli test-process` and `xtask cli test-scan`.
 
+For approval, automatic publication, and recovery, follow the
+[CLI release runbook](../../../docs/content/cli-release.md).
+
 ## Validate a CLI release
 
 `.github/workflows/cli-build.yml` validates a CLI release candidate. It runs the
@@ -44,13 +47,16 @@ This approval starts **Release CLI binaries** and the Python wheel checks in
 parallel. Both build the PR's merge candidate at its exact commit SHA and
 workspace version. After binary validation, **Release CLI images and Go consumer**
 uses those binaries on native amd64 and arm64 runners in parallel, with the same
-approval. The required `CI` check waits for all three artifact sets. New PR
-commits cancel the old CI run and require a new approval and validation.
+approval. The required `CI` check waits for all three artifact sets and the
+separate CLI validation record. New PR commits cancel the old CI run and require
+a new approval and validation.
 
 Feature PRs skip release approval, builds, and image/Go acceptance. They still
 run the small workflow tests alongside the shared xtask checks for Python and
-cache tasks. CLI unit tests, native builds, and runtime acceptance run only for
-approved release PRs or an explicit manual build. To run the builder manually
+cache tasks when tooling files change. Changes to CLI source or its dependencies
+also run the separate CLI Source job with formatting, Clippy, and unit tests.
+Native builds and runtime acceptance run only for approved release PRs or an
+explicit manual build. To run the builder manually
 during development, select
 **Build CLI binaries** in Actions and supply the commit as `source-ref` and its
 version as `expected-version`. The successful job summary links the complete
@@ -74,6 +80,7 @@ The reusable workflow returns:
 | `validated` | `true` only after source checks, both builds, and all six runtime checks pass and the complete set is uploaded |
 | `source-commit`, `version`, `rust-toolchain` | Resolved source SHA, workspace version, and exact Rust release |
 | `artifact-id`, `artifact-name`, `artifact-url` | The complete set's immutable Actions ID, run-specific name, and download page |
+| `manifest-sha256` | SHA256 of the uploaded complete `cli-artifacts.json` |
 
 Consumers must depend on the successful job and require `validated == 'true'`.
 Within the same workflow run, download that exact artifact with
@@ -85,15 +92,16 @@ release from the workflow outputs. Intermediate platform archives and
 `dar-cli-tools-<source-sha>-<architecture>` artifacts support runtime checks.
 They are not complete, validated sets for downstream consumers.
 
-Actions retention settings apply. Missing, expired, incomplete, or mismatched
+CLI artifacts are retained for 90 days. Missing, expired, incomplete, or mismatched
 artifacts must stop downstream work. Rerun this builder for the explicit source
 commit to obtain a new validated set and reference. Container and release jobs
 must consume its existing archive bytes without rebuilding or repacking them.
 
-Release PR artifacts record the tested merge candidate's source SHA. A future
-publisher must verify that the release tag has the same source tree and version
-and preserve that build identity; the final merge commit can have a different
-SHA. Automatic CLI publication is tracked in issue #435.
+Release PR artifacts record the tested merge candidate's source SHA. The
+publisher verifies that the release tag has the same source tree and version
+and preserves that build identity; the final merge commit can have a different
+SHA. The [release runbook](../../../docs/content/cli-release.md) covers automatic
+publication, permissions, and recovery with the original validated artifacts.
 
 ## Validate CLI images in Actions
 
@@ -108,7 +116,12 @@ and `validated=true`. Native amd64 and arm64 jobs each build a CLI image, run it
 runtime acceptance, build and run the Go example, compare the copied executable
 and notices, and export/reimport the tested image as OCI. A final job verifies
 both platform artifacts, copies their archive bytes into a complete set, and
-uploads it. Feature PRs do not run these jobs, regardless of changed paths.
+uploads it. That final job also tests release planning with small OCI fixtures
+using real `skopeo` and `umoci`, then tests publication with `regctl` v0.9.2 and a
+disposable local registry. The registry test preserves both platform digests and
+the exact index bytes, and downloads both images to compare their executables
+with the binary archives. Feature PRs run the fast tests with tool substitutes;
+they do not run these image jobs, regardless of changed paths.
 
 The reusable workflow accepts these inputs:
 
@@ -140,21 +153,338 @@ gh workflow run cli-images.yml --ref main \
 The complete Actions artifact is named
 `dar-cli-images-<source-sha>-<run-id>-<attempt>` and contains the two OCI archives
 and `cli-images.json` described below. Intermediate platform uploads are not
-validated complete sets. Both binary and image uploads use the repository's
-default retention period; publication requires both sets to remain available.
+validated complete sets. Both binary and image uploads have a 90-day retention
+period; publication requires both sets to remain available.
 If either has expired, validate the requested source again.
 
 Outputs match the binary workflow: `validated`, `source-commit`, `version`,
-`rust-toolchain`, `artifact-id`, `artifact-name`, and `artifact-url`.
+`rust-toolchain`, `artifact-id`, `artifact-name`, `artifact-url`, and
+`manifest-sha256`. The manifest hash covers the uploaded complete `cli-images.json`.
 `validated=true` is emitted only after both native image/Go jobs pass and the
 complete upload returns an artifact ID and URL. Required `CI` also rejects
 failed, skipped, or canceled image jobs, missing outputs, and a source/version
 that differs from the binary job. The job summary links the complete artifact.
 
-This workflow has read-only permissions and publishes no registry tags.
-Issue #435 owns the publication record, final release/source-tree binding,
-GHCR authentication, and multi-platform index. Publication must preserve these
-OCI archives and their tested source labels.
+This workflow has read-only permissions and publishes no registry tags. The
+separate `cli-release.yml` publisher verifies the validation record and final
+release tree, then uploads the OCI images and a multi-platform index to GHCR.
+It preserves these OCI archives and their tested source labels.
+
+## Record validated CLI artifacts
+
+On approved release PRs, the **Record validated CLI artifacts** job follows both
+CLI workflows. It uses their immutable artifact IDs and manifest hashes, checks
+their successful results and matching source/version/toolchain, and writes
+`cli-validation.json`. The job checks out the tested merge candidate and requires
+its two parents to match the event's base and PR head commits. It reads the source
+tree from Git and the workspace version from that clean checkout.
+
+The record job compiles only xtask. It does not download the binary/image sets
+or repeat their acceptance checks. Each producer hashes its complete manifest
+after artifact upload and returns that hash only as part of a successful handoff.
+
+The schema-1 record contains:
+
+| Field | Meaning |
+| --- | --- |
+| `repository`, `pull_request`, `pull_request_head_sha` | Upstream release PR and its validated head revision |
+| `source_commit`, `source_tree`, `version` | Actual tested merge candidate, Git tree, and workspace version |
+| `run_id`, `run_attempt` | CI run and attempt that created the record |
+| `binary_artifact.id`, `binary_artifact.manifest_sha256` | Complete binary set's Actions ID and `cli-artifacts.json` hash |
+| `image_artifact.id`, `image_artifact.manifest_sha256` | Complete OCI set's Actions ID and `cli-images.json` hash |
+
+Existing manifests remain the source of per-file hashes and platform digests.
+The record does not modify them or replace the tested source SHA with a later
+release commit. Source-tree equality lets publication compare the tested merge
+candidate with a final squash or merge commit even when their SHAs differ.
+
+The upload is named `dar-cli-validation-<source-sha>-<run-id>-<attempt>`, contains
+only `cli-validation.json`, and is retained for 90 days, like the complete binary
+and image sets. It never overwrites an earlier record. Required `CI` rejects a
+failed, canceled, skipped, or missing record upload, missing upload outputs, and
+a record associated with a different source, PR head, or version. Ordinary
+feature PRs skip this job.
+
+To reproduce record creation from a CI checkout with the original event and
+the record job's serialized `needs` context:
+
+```sh
+cargo xtask cli record-validation "$RUNNER_TEMP/cli-validation.json" \
+  --event "$GITHUB_EVENT_PATH" --job-results "$RUNNER_TEMP/cli-job-results.json" \
+  --source-commit "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"
+```
+
+The output path must be new. The command checks the supplied event and results;
+it does not authenticate them against GitHub. Publication must verify the record
+against GitHub's PR, approval, run, job, and artifact metadata, then verify the
+retained files before writing to a release or registry. The following selection
+and planning commands perform that verification; a locally generated JSON
+record alone does not authorize release.
+
+## Select artifacts for an existing release
+
+`cargo xtask cli select-release-artifacts` checks the release and validation
+provenance through GitHub's API and writes a new local JSON report. Install and
+authenticate `gh` with read access to this repository's releases, PRs, Actions,
+and environments. The command downloads only the small validation record. It
+does not download the binary/image sets, execute their contents, or publish.
+
+Supply an existing published stable release tag:
+
+```sh
+cargo xtask cli select-release-artifacts selection.json --tag vX.Y.Z
+```
+
+Selection requires all of the following:
+
+- The tag resolves to a commit reachable from upstream `main`, contains the CLI,
+  and matches the workspace version. Drafts, prereleases, and non-version tags
+  are rejected. Lightweight and annotated tags are supported.
+- The commit belongs to one merged release-plz PR, identified by its bot author,
+  upstream head/base repositories, release branch prefix, and `main` target.
+- The validation comes from successful upstream `ci.yml` for that PR's merged
+  head revision. The tested source tree and version equal the release's, even
+  when the tested merge commit and final release commit have different SHAs.
+- GitHub reports successful change detection, approval, binary/image handoff,
+  record, and aggregate CI jobs, plus an approved `release-checks` review.
+  Partial reruns may reuse earlier successful producer jobs within the same
+  run and PR revision; each artifact must match its producer's actual attempt.
+- The record ZIP matches GitHub's SHA256 and size, contains only
+  `cli-validation.json`, and names complete binary/image artifacts owned by that
+  run and repository. All three artifacts must remain available and unexpired.
+
+The selector compares the record with GitHub metadata, including immutable
+repository, workflow, run, and artifact IDs. It reads the release manifests at
+the resolved commit, without fetching or relying on a surviving temporary PR
+merge commit. It checks the release and tag again before writing the report.
+
+If multiple eligible records remain, selection fails and lists their run and
+record artifact IDs. Select both explicitly to resolve the ambiguity:
+
+```sh
+cargo xtask cli select-release-artifacts selection.json --tag vX.Y.Z \
+  --run-id VALIDATION_RUN_ID --record-artifact-id RECORD_ARTIFACT_ID
+```
+
+Explicit selection applies the same checks. Missing artifacts stop selection;
+the command cannot rebuild them or fall back to current main. An API or download
+failure also stops selection, so an unavailable candidate cannot silently remove
+an ambiguity. The output path must be new.
+
+The report contains the release ID, tag, commit, tree, and version; the original
+validation record; and GitHub metadata for the three selected artifacts,
+including their ZIP SHA256 values. It is a provenance report, not an upload plan
+or publication authorization. Use `plan-release` below to download and verify the
+retained files. A publisher must recheck current release/artifact state before
+writing.
+
+## Prepare a read-only release plan
+
+`cargo xtask cli plan-release` repeats the provenance checks above, downloads the
+selected binary and OCI sets by immutable artifact ID, and verifies their full
+contents. Run it on Linux with authenticated `gh`, `skopeo`, and `umoci` on `PATH`.
+It needs only read access to GitHub. It does not access GHCR, upload release
+assets, build images, or execute the downloaded CLI.
+
+```sh
+cargo xtask cli plan-release target/cli-release-plan --tag vX.Y.Z
+```
+
+The output directory must be new and its parent must already exist. To select
+one validation record when more than one is eligible, provide both recovery IDs:
+
+```sh
+cargo xtask cli plan-release target/cli-release-plan --tag vX.Y.Z \
+  --run-id VALIDATION_RUN_ID --record-artifact-id RECORD_ARTIFACT_ID
+```
+
+Before writing a completed plan, the command checks:
+
+- Both ZIP downloads against GitHub's SHA256 and size, and their exact file
+  inventories. Unsafe paths, duplicate entries, and non-regular files fail.
+- Each manifest's SHA256 against the approved validation record. The binary
+  archives, notices, checksums, and both manifests must match the recorded
+  version and tested source commit, with the same Rust toolchain.
+- Each OCI archive's hash, platform manifest digest, configuration, and labels.
+  `skopeo` copies each image to a temporary local OCI layout while preserving its
+  digest. `umoci` unpacks it without running it. Its `dar`, `LICENSE`, and `NOTICE`
+  bytes and permissions must match the binary archive.
+- The release ID and tag commit again after verification.
+
+Downloads and verification use temporary directories. A failed check leaves no
+output directory. The command moves verified files into the new destination and
+writes `release-plan.json` last; a failed move may leave an incomplete directory,
+but never a completed plan. Existing output is never replaced.
+
+The completed directory contains:
+
+| Path | Contents |
+| --- | --- |
+| `binaries/` | The four original files: both GNU archives, `cli-artifacts.json`, and `SHA256SUMS` |
+| `images/` | Both original OCI archives and `cli-images.json` |
+| `image-index.json` | The OCI index bytes referencing the verified amd64 and arm64 platform digests |
+| `release-plan.json` | Schema-1 provenance, local paths, hashes, sizes, and intended publication destinations |
+
+The plan lists exactly four GitHub release assets and the versioned image
+`ghcr.io/mag1cfrog/delta-arrow-reader:vX.Y.Z`. Each platform also has its versioned
+`vX.Y.Z-linux-amd64` or `vX.Y.Z-linux-arm64` destination. There are no mutable
+`latest`, major, or minor aliases. The index's SHA256 covers its exact local bytes;
+the binary archives, OCI archives, and existing manifests are retained unchanged.
+On success the command prints the SHA256 of `release-plan.json`. Keep that hash
+as the trusted verification result when passing the directory to another job.
+
+This command prepares expected publication bytes and destinations. It does not
+inspect existing public assets or tags. The asset and image uploaders below
+check existing destinations. The automatic release workflow runs both in
+read-only rehearsal before passing the verified plan to its write jobs. Local
+plan JSON alone does not authorize publication.
+
+## Upload verified GitHub release assets
+
+`cargo xtask cli upload-release-assets` consumes the completed plan directory and
+its SHA256 from the trusted read-only verification step. Supply that hash as
+`verified_plan_sha256` below. When transferring the directory between jobs, pass
+the expected hash through the trusted job output; do not calculate a new expected
+hash from the received directory. This binds the upload to the files that passed
+the full binary/OCI verification.
+
+First rehearse with read-only GitHub credentials:
+
+```sh
+cargo xtask cli upload-release-assets target/cli-release-plan \
+  --plan-sha256 "$verified_plan_sha256" --dry-run
+```
+
+The command authenticates the recorded selection against current GitHub metadata
+again. It requires the original validation record and both artifact sets to remain
+available and unexpired. It checks the complete local inventories, file hashes,
+manifest hashes, and image index against the pinned plan. It does not execute
+downloaded binaries, run OCI tools, or rebuild anything.
+
+The rehearsal also lists existing release assets, downloads every matching file,
+and compares its size and SHA256 with the verified plan. It reports missing files
+without uploading. Conflicts fail the rehearsal, just as they fail an upload.
+
+To upload, authenticate `gh` with the same read access plus `contents: write` and
+omit `--dry-run`:
+
+```sh
+cargo xtask cli upload-release-assets target/cli-release-plan \
+  --plan-sha256 "$verified_plan_sha256"
+```
+
+Uploads use a private copy of the verified binary files and the immutable GitHub
+release ID. Before every write, the uploader checks all existing CLI assets and
+confirms that the release is still stable and its tag still resolves to the
+verified commit. Its behavior is:
+
+| Existing asset | Result |
+| --- | --- |
+| Missing | Upload the original verified bytes |
+| Same name and identical bytes | Reuse the existing asset |
+| Same name with different bytes, incomplete upload, or duplicate entries | Fail without replacing or deleting anything |
+
+Every new asset is downloaded and checked immediately. Within one invocation,
+each asset ID is downloaded once; later checks require it to remain present with
+matching metadata. Success requires all four assets and a final release/tag
+check. Rust/Python assets and the release title and body are preserved.
+
+An upload or download error fails the command. Earlier successful uploads remain
+in place. Retry with the same verified plan and retained validation set; matching
+files are reused. Missing validation artifacts or conflicting content stop the
+retry and require a new version if the original set cannot be recovered. A
+[GitHub upload failure](https://docs.github.com/en/rest/releases/assets#upload-a-release-asset)
+can leave a `starter` asset. This uploader treats that as incomplete content and
+does not delete it automatically.
+
+In GitHub Actions, writes are restricted to the upstream `cli-release.yml`
+workflow: a release event at the verified tag/commit, or a recovery dispatch from
+`main`. PR events and other workflow refs are rejected. The workflow separates
+verification, asset writes, package writes, public delivery checks, and notes
+completion. This command uploads the GitHub assets; the following commands
+handle GHCR.
+
+## Publish the verified CLI images
+
+Use the same completed plan directory and trusted plan SHA256 as the GitHub
+asset uploader. Install [regctl v0.9.2](https://github.com/regclient/regclient/releases/tag/v0.9.2).
+The validation workflow downloads this version and verifies its pinned SHA256.
+`regctl` handles registry authentication, OCI uploads, and downloads; xtask
+checks the release identity and content before each write.
+
+For a rehearsal, authenticate `regctl` with credentials that can read the target
+package, then run:
+
+```sh
+cargo xtask cli upload-release-images /path/to/release-plan \
+  --plan-sha256 "$cli_verified_plan_sha256" --dry-run
+```
+
+The command checks all three destinations before uploading anything. An existing
+reference must return the exact manifest bytes recorded in the plan. Only a
+registry HTTP 404 means that a reference is absent; authentication, network,
+rate-limit, and server errors stop the command. Removing `--dry-run` enables
+uploads and requires package write access:
+
+```sh
+cargo xtask cli upload-release-images /path/to/release-plan \
+  --plan-sha256 "$cli_verified_plan_sha256"
+```
+
+For version `X.Y.Z`, the destinations are:
+
+- `ghcr.io/mag1cfrog/delta-arrow-reader:vX.Y.Z-linux-amd64`
+- `ghcr.io/mag1cfrog/delta-arrow-reader:vX.Y.Z-linux-arm64`
+- `ghcr.io/mag1cfrog/delta-arrow-reader:vX.Y.Z`
+
+The uploader imports the original OCI archives without rebuilding. Both
+platform manifests must be present at their expected digests before it uploads
+the exact `image-index.json` bytes under the version tag. It copies its inputs
+into a private temporary directory and rechecks their hashes before the first
+registry request. It checks all three remote references again before each write
+and stops if existing content conflicts or a previously verified reference
+disappears. It creates no `latest`, major, or minor aliases.
+
+Retry a failed publication with the same retained plan and trusted hash.
+Identical remote content is reused, and only missing references are uploaded.
+The command never deletes or overwrites a conflicting reference. Expired or
+changed validation artifacts stop recovery. Use one publisher at a time for a
+release version: registry tag writes do not provide a transaction spanning
+the preceding reads. The release workflow must serialize publication and
+recovery for that version, and other tools must not write those tags concurrently.
+
+After upload, the command checks anonymous access to the index and both platform
+manifests. It uses an empty registry configuration with Docker credentials
+disabled, regardless of the publisher's login. A private package fails this
+check. GitHub creates new container packages as private, so the first publication
+may require the owner to open the container package's settings, change its
+visibility to **Public**, and rerun the same plan. This visibility change is a
+one-time setup; the uploader does not change it. See GitHub's
+[container registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
+and [package visibility settings](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility).
+
+Run the full download check in a separate job with no package write permission.
+It also needs `skopeo` and `umoci`, and GitHub read access to revalidate provenance:
+
+```sh
+cargo xtask cli verify-release-images /path/to/release-plan \
+  --plan-sha256 "$cli_verified_plan_sha256"
+```
+
+This downloads both images anonymously by their planned digests, checks the
+image configuration, and compares `dar`, `LICENSE`, and `NOTICE` with the verified
+binary archives, including file modes. It rechecks the public tags and release
+identity before reporting success. It does not execute the images or repeat
+the native, Go, or distribution acceptance tests.
+
+The automatic release workflow runs this check after downloading and verifying
+all four GitHub release files with `cli verify-release-assets`. Only then does
+`cli update-release-notes --status complete` mark the CLI section complete. The
+notes command preserves the title and text outside the CLI markers; it relies
+on its caller to run both delivery checks first. Before uploading any bytes,
+the workflow records the original validation selection with `--status pending`.
+The [runbook](../../../docs/content/cli-release.md) includes exact command order,
+manual recovery inputs, package visibility setup, and first-release evidence.
 
 ## Build on Debian 12
 
@@ -619,13 +949,22 @@ cargo test --locked --package xtask
 cargo clippy --locked --package xtask --all-targets -- -D warnings
 ```
 
-The CLI release workflow runs the CLI crate's unit tests and Clippy, plus the
+The CLI build workflow runs the CLI crate's unit tests and Clippy, plus the
 xtask unit tests and the `artifacts`, `notices`, `cli_workflow`,
-`cli_images_workflow`, and `images` integration tests. The small workflow and
+`cli_images_workflow`, and `images` integration tests. Record unit tests and the
+`cli_validation_workflow` checks also run in ordinary PR CI. The small workflow and
 `images` tests also run in ordinary PR CI. The image tests use a small compiled
 ELF fixture and stub container commands; they do not build containers or
 require Docker, Skopeo, or umoci.
 The native build test below runs separately in each Debian build job.
+
+Ordinary tooling CI also runs the `cli_release_selection`, `cli_release_plan`,
+`cli_release_assets`, `cli_release_images`, `cli_release_request`,
+`cli_release_notes`, and `cli_release_workflow` tests. They use controlled
+transport responses to check provenance, unchanged bytes, permission boundaries,
+partial failures, and retry behavior. The ignored real registry test runs in
+the approved image validation workflow. Publication itself runs no build or
+acceptance matrix.
 
 The unit tests require Git, a C compiler, `objcopy`, `readelf`, and `sha256sum`.
 They use synthetic archive payloads, license fixtures, and a small compiled ELF

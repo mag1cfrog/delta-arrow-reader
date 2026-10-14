@@ -2,7 +2,7 @@
 name = "xtask"
 version = "0.0.0"
 edition = "2024"
-rust-version = "1.94"
+rust-version.workspace = true
 license = "Apache-2.0"
 publish = false
 
@@ -10,7 +10,9 @@ publish = false
 arrow-array = "58.3.0"
 arrow-ipc = "58.3.0"
 arrow-schema = "58.3.0"
+base64 = "0.22"
 clap = { version = "4", default-features = false, features = ["derive", "std", "help", "usage"] }
+csv = "1"
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 rawzip = "0.5.2"
 regex = "1"

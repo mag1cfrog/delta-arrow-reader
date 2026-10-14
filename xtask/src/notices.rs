@@ -111,11 +111,32 @@ pub(crate) fn generate(repository: &Path, args: NoticeArgs) -> Result<()> {
     let toolchain = args
         .rust_toolchain
         .as_deref()
-        .unwrap_or(&manifest.package.rust_version);
+        .unwrap_or(&manifest.workspace.package.rust_version);
+    let text = dependency_notices(
+        repository,
+        &repository.join("crates/delta-arrow-reader-cli/Cargo.toml"),
+        args.architecture.rust_target(),
+        |program| {
+            let mut command = rustup_command(toolchain, args.architecture, repository);
+            command.arg(program);
+            command
+        },
+    )?;
+    write_notices(&args.output, &text)?;
+    eprintln!("Dependency notices written to {}", args.output.display());
+    Ok(())
+}
+
+pub(crate) fn dependency_notices(
+    repository: &Path,
+    package_manifest: &Path,
+    target: &str,
+    tool_command: impl Fn(&str) -> Command,
+) -> Result<String> {
+    let manifest: WorkspaceManifest = read_toml(&repository.join("Cargo.toml"))?;
     let about_version = &manifest.workspace.metadata.cli_release.cargo_about_version;
     let release = repository.join("crates/delta-arrow-reader-cli/release");
-    let mut command = rustup_command(toolchain, args.architecture, repository);
-    let version = command_output(command.args(["cargo", "about", "--version"]))?;
+    let version = command_output(tool_command("cargo").args(["about", "--version"]))?;
     ensure!(
         version.trim() == format!("cargo-about {about_version}"),
         InvalidInputSnafu {
@@ -123,43 +144,25 @@ pub(crate) fn generate(repository: &Path, args: NoticeArgs) -> Result<()> {
         }
     );
     let report = command_output(
-        rustup_command(toolchain, args.architecture, repository)
-            .args([
-                "cargo",
-                "about",
-                "generate",
-                "--locked",
-                "--fail",
-                "--manifest-path",
-            ])
-            .arg(repository.join("crates/delta-arrow-reader-cli/Cargo.toml"))
+        tool_command("cargo")
+            .args(["about", "generate", "--locked", "--fail", "--manifest-path"])
+            .arg(package_manifest)
             .arg("--config")
             .arg(release.join("about.toml"))
-            .args([
-                "--target",
-                args.architecture.rust_target(),
-                "--format",
-                "json",
-            ]),
+            .args(["--target", target, "--format", "json"]),
     )?;
     let report: LicenseReport = serde_json::from_str(&report).context(JsonSnafu {
         subject: "cargo-about report",
     })?;
     let config: ExtraNoticesConfig = read_toml(&release.join("extra-notices.toml"))?;
     let extra = collect_extra_notices(&report.crates, &config.files, download_notice)?;
-    let sysroot = command_output(
-        rustup_command(toolchain, args.architecture, repository)
-            .args(["rustc", "--print", "sysroot"]),
-    )?;
-    let text = render_notices(
+    let sysroot = command_output(tool_command("rustc").args(["--print", "sysroot"]))?;
+    render_notices(
         &report,
         &Path::new(sysroot.trim()).join("share/doc/rust"),
         &extra,
         about_version,
-    )?;
-    write_notices(&args.output, &text)?;
-    eprintln!("Dependency notices written to {}", args.output.display());
-    Ok(())
+    )
 }
 
 fn read_notice(path: &Path) -> Result<String> {
@@ -412,7 +415,7 @@ fn render_notices(
             ensure!(
                 matches!(
                     package.name.as_str(),
-                    "delta-arrow-reader" | "delta-arrow-reader-cli"
+                    "delta-arrow-reader" | "delta-arrow-reader-cli" | "delta-arrow-reader-python"
                 ),
                 InvalidInputSnafu {
                     message: format!("unreviewed local dependency: {}", package.name)

@@ -1,7 +1,24 @@
 # Development
 
 This page is for contributors working on Delta Arrow Reader itself. Applications
-that use the crate can start with the [installation guide](../public/installation.md).
+that use the crate can start with the [installation guide](../../crates/delta-arrow-reader-core/docs/public/installation.md).
+
+## Repository layout
+
+The root `Cargo.toml` defines the workspace. Each product lives under `crates/`:
+
+- `delta-arrow-reader-core/` contains the Rust library, its tests, Rust benchmarks,
+  and public documentation.
+- `delta-arrow-reader-cli/` contains the `dar` command and its release tooling.
+- `delta-arrow-reader-python/` contains the Python extension, `pyproject.toml`,
+  type stub, and Python tests.
+
+The core crate is published as `delta-arrow-reader` and imported in Rust as
+`delta_arrow_reader`.
+
+Shared benchmark tools remain in `benches/`, contributor documentation in `docs/`,
+and repository automation in `xtask/`.
+Run the commands below from the repository root.
 
 ## Run the local checks
 
@@ -40,10 +57,68 @@ Feature PRs skip the CLI builds and acceptance suites. See the
 [CLI release tools](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-cli/release/README.md#validate-a-cli-release)
 for approval and artifact details.
 
+### Stage the CLI for Python wheel packaging
+
+Run `stage-python-cli` from the repository root using the workspace Rust
+toolchain. This prepares native wheel data for the packager; it does not build a
+wheel. For a local Linux development build:
+
+```console
+cargo +1.94.1 xtask stage-python-cli \
+  --target x86_64-unknown-linux-gnu --profile dev \
+  --destination target/python-cli
+target/python-cli/scripts/delta-arrow-reader --version
+```
+
+`--destination` and `--target` are required. The profile is `release` by default;
+use `--profile dev` for a faster local build. The three supported native targets
+and their output paths are:
+
+| Rust target | Path under `--destination` |
+| --- | --- |
+| `x86_64-unknown-linux-gnu` | `scripts/delta-arrow-reader` |
+| `aarch64-apple-darwin` | `scripts/delta-arrow-reader` |
+| `x86_64-pc-windows-msvc` | `scripts/delta-arrow-reader.exe` |
+
+The task builds the current checkout's `dar` target with `--locked`, inherits
+Cargo cache and compiler settings, and reads the executable path from Cargo's
+build output. It rejects cross compilation and checks the renamed executable's
+version before placing it in `scripts/`. Build diagnostics go to stderr.
+
+The two executable paths in the table are reserved for this task. Every run
+removes old files at both paths before building, so a failed build cannot leave
+an older payload ready for packaging. Other files are left in place. Destination
+and `scripts/` directory symlinks are rejected. Use a separate destination for
+each concurrent build, under the ignored `target/` directory or outside the
+checkout. Its parent must be writable and on the same filesystem. Verification
+uses a temporary sibling directory, so an interrupted run cannot leave temporary
+files inside wheel data. After verification, an atomic rename places the
+executable in `scripts/`.
+
+Generated executables must not be tracked or included in a source archive. The
+packager must require a successful staging run before consuming this wheel data
+directory.
+
+Release wheel builds must run staging inside the wheel build environment:
+manylinux 2.28 on Linux, macOS arm64 with `MACOSX_DEPLOYMENT_TARGET=12.0`, or
+Windows x86_64 MSVC. A successful build on a newer Linux host does not establish
+manylinux compatibility. Standalone GitHub/GHCR binaries keep their separate
+Debian 12 build environment.
+
+The focused tests run without building the reader. To also build and exercise
+the native Linux CLI against a checked-in table from outside the checkout, run:
+
+```console
+cargo +1.94.1 test --locked --package xtask --bin xtask python_cli::
+cargo +1.94.1 test --locked --package xtask --bin xtask \
+  python_cli::tests::native_cli_stages_and_reads_a_fixture_outside_the_checkout \
+  -- --ignored --exact
+```
+
 ## Build the Python package locally
 
 For source installation and a table reading example, see the
-[Python installation guide](../public/installation.md#python).
+[Python installation guide](../../crates/delta-arrow-reader-core/docs/public/installation.md#python).
 
 To build and test the wheel directly, run these commands from the repository
 root on Linux or macOS:
@@ -51,9 +126,12 @@ root on Linux or macOS:
 ```console
 python3 -m venv target/python-venv
 . target/python-venv/bin/activate
-python -m pip install 'maturin>=1.14,<2'
-maturin build --locked --out target/python-wheels
+rustup component add rust-docs
+cargo install --locked --features cli --version 0.9.2 cargo-about
+python -m pip install 'build>=1.2,<2'
+python -m build --wheel --outdir target/python-wheels crates/delta-arrow-reader-python
 python -m pip install --force-reinstall target/python-wheels/*.whl
+delta-arrow-reader --version
 python -I -m unittest discover -s crates/delta-arrow-reader-python/tests
 cargo test --locked -p delta-arrow-reader-python
 ```
@@ -61,6 +139,36 @@ cargo test --locked -p delta-arrow-reader-python
 The isolated Python check imports the installed wheel without adding the current
 directory to its import path. Default Cargo commands still select the core crate;
 use `cargo check -p delta-arrow-reader-python` to check the binding crate directly.
+
+Use the Rust version declared in the workspace manifest, including its latest
+patch release. Source builds need `curl`, `cargo-about` at the version declared
+under `workspace.metadata.cli-release`, and that toolchain's `rust-docs` component
+to collect dependency notices. Installing a completed wheel needs none of these
+build tools.
+
+The backend builds the native `delta-arrow-reader` command and dependency notices
+before Maturin assembles the wheel. Both native components use the same Cargo
+profile and target. Normal builds use `release`; editable installs use `dev`:
+
+```console
+python -m pip install --editable crates/delta-arrow-reader-python
+```
+
+Reinstall after changing Rust code. Build settings can be passed through pip's
+`--config-settings` or build's `--config-setting`, for example
+`--config-setting 'build-args=--profile dev --jobs 4'`. Supported Maturin arguments
+are `--profile` (`dev` or `release`), `--target`, `--target-dir`, `--jobs`,
+`--interpreter`, `--compatibility`, `--auditwheel`, `--strip`, `--locked`,
+`--offline`, and `--frozen`. Cargo network restrictions do not disable notice
+downloads. Other build arguments are rejected. Native source builds support the
+same three targets as the release wheels; cross-compilation is not supported.
+macOS defaults to deployment target 12.0, with `MACOSX_DEPLOYMENT_TARGET` applying
+to both components.
+
+Use the backend commands above for local builds. Direct `maturin build` and
+`maturin develop` bypass native preparation. The release workflow calls
+`cargo xtask build-python-wheel --prepare-only` before its Maturin action so it
+can retain the pinned manylinux container and existing wheel repair steps.
 
 To check a wheel's filename and metadata before installation, run `cargo xtask`
 from the repository root with the expected version and platform tag:
@@ -73,10 +181,11 @@ cargo xtask check-python-wheel \
 
 Use the version and platform tag required by your build. The check compares the
 filename with the wheel's `METADATA` and `WHEEL` records, including the expected
-package name, version, and `cp310-abi3` tag. The installed-package check below
-covers the native module, type files, licenses, and dependencies.
+package name, version, and `cp310-abi3` tag. It also requires the native CLI and
+dependency notices, and verifies the wheel's `RECORD` hashes. The installed
+checks below exercise both native components.
 
-For a small installed-wheel smoke check, run the following from a directory
+For the installed-wheel acceptance checks, run the following from a directory
 outside the checkout, using the environment where the wheel is installed.
 Replace the test directory with its absolute path:
 
@@ -86,15 +195,36 @@ python -I -m unittest discover \
   -k installed
 ```
 
-This selects the package metadata check and a local Arrow stream read.
+This selects package metadata, native CLI, and local Arrow stream checks.
 The stream check covers both Python entrypoints and both Parquet backends,
 selects columns and filters rows, and closes the reader before consuming all results.
 It uses the checked-in Spark fixture and checks batch values after closing the
 reader. These checks also run in the full Python suite.
+The CLI checks resolve the executable from that Python environment's scripts
+directory. They cover help, the exact package version, snapshot inspection,
+projection and row limits, and a complete Arrow IPC stream with matching values.
+They also check redacted errors, empty stdout on input failures, status 3 for a
+closed stdout pipe, and termination of a scan blocked on stdout. Unix checks
+exercise SIGINT and SIGTERM; Windows checks terminate the process. Each child
+has a timeout and runs outside the checkout without build-tool library paths.
 
-Python packaging configuration and the type stub live at the repository root.
-Use `maturin sdist --out target/python-sdist` to package Git-tracked workspace
-files with their matching lockfile. Track new source files before packaging.
+Python packaging configuration and the type stub live in
+`crates/delta-arrow-reader-python/`. Package the binding, its local Rust
+dependencies, native build tools, and the workspace lockfile:
+
+```console
+python -m pip install 'build>=1.2,<2'
+python -m build --sdist --outdir target/python-sdist crates/delta-arrow-reader-python
+```
+
+Track new source files before packaging.
+
+The PEP 517 backend delegates package metadata and source selection to Maturin,
+then calls `cargo xtask complete-python-sdist` to add the CLI and xtask sources.
+The archive retains the original workspace manifest and lockfile, so an extracted
+archive builds with `--locked` without pruning dependencies. Building the archive
+requires Rust and Cargo, but does not build the native CLI. Use the command above
+to include these build tools; invoking `maturin sdist` directly bypasses the backend.
 
 The binding's runtime owner lives in `crates/delta-arrow-reader-python/src/runtime.rs`.
 Table loading, scan planning, and batch reads use its `wait` method, which releases
@@ -114,12 +244,13 @@ another Python thread can run during these waits.
 
 Pull request CI runs the `Python Package` job for changes covered by
 the Python filter in `.github/path-filters.json`. Shared Rust code, binding code,
-Python test fixtures, workspace manifests, and package metadata trigger these
-checks. Changes confined to CLI implementation, benchmarks, or `docs/` skip them.
+Python test fixtures, workspace manifests, package metadata, CLI source, and
+native packaging tools trigger these checks. Unrelated release tools, benchmarks,
+and `docs/` skip them.
 
 The job runs Clippy, the Rust runtime ownership tests, and the full Python suite
-on Linux with Python 3.10 and PyArrow 18.0.0. It uses `maturin develop --locked`
-to install a debug build in a virtual environment. Feature pull requests do not
+on Linux with Python 3.10 and PyArrow 18.0.0. It uses the PEP 517 backend's editable
+install to build both the extension and CLI in a virtual environment. Feature pull requests do not
 build the three release wheels.
 
 Release-plz pull requests targeting main also require three-platform wheel
@@ -144,16 +275,45 @@ Callers of the reusable workflow supply two required inputs:
 - `source-ref`: the full commit SHA to check out and build.
 - `expected-version`: the exact workspace package version, without a tag prefix.
 
-The build fails if the checked-out commit or package version differs from these
-inputs. It uses the repository's Rust version and lockfile, repairs the wheel
-with Maturin on Linux, delvewheel on Windows, or delocate on macOS, and checks
-its metadata and native dependencies. Each wheel is installed outside the
-checkout on Python 3.10 with PyArrow 18.0.0 and Python 3.14 with the current
-compatible PyArrow release. Linux runs the full Python suite; Windows and macOS
-run the installed-package and Arrow stream smoke checks described above.
+The three platform jobs run in parallel. The build fails if the checked-out
+commit or package version differs from these inputs. Both the Python extension
+and native CLI use the repository's Rust version, lockfile, target, and release
+profile. Linux builds both from an extracted sdist inside the pinned
+manylinux_2_28 container. Do not copy a standalone Debian-built `dar` into a
+wheel: that binary's glibc 2.36 requirement exceeds the wheel's glibc 2.28 baseline.
 
-The Linux wheel is built from an extracted sdist inside a pinned manylinux
-container.
+Maturin on Linux, delvewheel on Windows, or delocate on macOS repairs the wheel.
+The workflow checks the final wheel's metadata and extension dependencies, then
+installs it outside the checkout on Python 3.10 with PyArrow 18.0.0 and Python
+3.14 with the current compatible PyArrow release. Linux runs the full Python
+suite; Windows and macOS run all the installed-package, Python stream, and CLI
+checks described above.
+
+Wheel repair does not replace the separate audit of the CLI in `.data/scripts`.
+`cargo xtask audit-python-cli` checks the installed executable from the final
+wheel. Linux requires x86_64 ELF, permitted runtime libraries, and GLIBC symbol
+versions no newer than 2.28. macOS requires an arm64 executable with a deployment
+target no newer than 12.0, system library paths, and no rpath. Windows requires
+an x86_64 executable whose normal and delay-loaded imports use only supported
+system and CPython/MSVC runtime DLLs. To repeat the audit locally, use the
+installed executable's absolute path and the wheel's platform tag:
+
+```console
+cargo xtask audit-python-cli /absolute/path/to/venv/bin/delta-arrow-reader \
+  --platform-tag manylinux_2_28_x86_64
+```
+
+Linux repeats the installed checks with both Python versions in a fresh
+glibc 2.28 container. Only the final wheel, tests, and fixture are mounted into
+that container. CLI subprocesses have no `LD_*` or `DYLD_*` overrides and a
+restricted `PATH`; Windows keeps the system and CPython runtime directories.
+
+Each platform also installs the same final wheel through `uv tool install` and
+an isolated `uv tool run` environment, the command behind `uvx`. Both environments
+run the installed acceptance checks on Python 3.14, and both CLI commands
+must report the exact package version. These checks disable source builds and
+use temporary uv tool and cache directories. No repair, repackaging, or rebuild
+occurs between acceptance and artifact upload.
 
 After relevant main pushes, `.github/workflows/cache-warm.yml` warms core test
 caches, including the Python runtime tests on Linux, and retains the two most
@@ -199,7 +359,8 @@ and a local baseline without publishing packages.
 To populate caches after a toolchain or workflow change, run `Warm CI caches`
 manually on main. The first build for new compiler inputs can still be cold.
 
-Each platform job uploads its artifact after both Python checks pass:
+Each platform job uploads its final wheel only after the Python, CLI, native
+dependency, and uv checks pass:
 
 | Build environment | Artifact |
 | --- | --- |
@@ -215,8 +376,10 @@ macOS 12.0 itself.
 The `Validate wheel artifact set` job requires all platform builds to pass,
 then downloads the three artifacts from the same workflow run. It rejects
 missing or unexpected artifacts, requires exactly one wheel per artifact,
-and checks each wheel's version and tags again. For release PRs, it then saves
-the complete set as `python-wheels-<git-tree>-<run-id>-<run-attempt>`, preserving
+and checks each wheel's version, tags, CLI payload, notices, and `RECORD` again.
+A missing CLI fails validation even when the wheel and artifact hashes match.
+For release PRs, it saves the complete set as
+`python-wheels-<git-tree>-<run-id>-<run-attempt>`, preserving
 the three platform directories. The Git tree identifies the checked-out files
 even when a squash merge changes the commit SHA. This artifact is retained for
 90 days, and reruns save a separate copy. A failed upload fails the check.
@@ -229,8 +392,10 @@ PyPI preparation uses `cargo xtask reuse-python-wheels` to locate the merged
 release PR and requires its latest CI run to have succeeded. It requires a bundle
 for the same Git tree, verifies the archive's SHA256 from GitHub, and checks all
 three wheels. The upload job downloads that exact artifact ID and verifies the
-same SHA256 again. Missing, expired, or mismatched bundles stop publication. These commands
-require `gh` and `GH_TOKEN`; the preparation job has read access to Actions and
+same SHA256 again. Production uploads reuse these exact wheel bytes without
+rebuilding or repeating the installed acceptance suites. Missing, expired, or
+mismatched bundles stop publication. These commands require `gh` and `GH_TOKEN`;
+the preparation job has read access to Actions and
 pull requests, and the PyPI upload job has read access to Actions.
 
 Download artifacts from the Actions run page. To download and check the full
@@ -248,9 +413,10 @@ TestPyPI rehearsal, stable releases, and upload recovery, see
 
 ## Work on the documentation
 
-The Markdown files in `docs/public/` are the source for the documentation
-site. The guides listed in `src/guides.rs` are also included in the generated
-Rust documentation.
+The Markdown files in `crates/delta-arrow-reader-core/docs/public/` are the source
+for the documentation site. The guides listed in
+`crates/delta-arrow-reader-core/src/guides.rs` are also included in the generated Rust
+documentation.
 
 Use absolute links between shared pages. Mark runnable Rust examples as
 `no_run`, and mark incomplete snippets as `ignore`, so both documentation
@@ -260,6 +426,6 @@ Install the documentation dependencies, then build or serve the site:
 
 ```console
 python -m pip install -r docs/requirements.txt
-python -m zensical build --strict -f docs/mkdocs.yml
-python -m zensical serve -f docs/mkdocs.yml
+python -m zensical build --strict -f crates/delta-arrow-reader-core/docs/mkdocs.yml
+python -m zensical serve -f crates/delta-arrow-reader-core/docs/mkdocs.yml
 ```

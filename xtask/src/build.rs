@@ -102,12 +102,12 @@ impl PrepareArgs {
         }
         let compiler = command_output(Command::new("rustup").args([
             "run",
-            &manifest.package.rust_version,
+            &manifest.workspace.package.rust_version,
             "rustc",
             "--version",
             "--verbose",
         ]))?;
-        let release = compiler_release(&compiler, &manifest.package.rust_version)?;
+        let release = compiler_release(&compiler, &manifest.workspace.package.rust_version)?;
         let identity = BuildIdentity {
             version: manifest.workspace.package.version,
             source_commit: self.source_commit,
@@ -219,14 +219,14 @@ fn print_json(value: &impl Serialize) -> Result<()> {
     Ok(())
 }
 
-fn is_full_commit_sha(commit: &str) -> bool {
+pub(crate) fn is_full_commit_sha(commit: &str) -> bool {
     commit.len() == 40
         && commit
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
-fn check_source(repository: &Path, source_commit: &str) -> Result<()> {
+pub(crate) fn check_source(repository: &Path, source_commit: &str) -> Result<()> {
     ensure!(
         is_full_commit_sha(source_commit),
         InvalidInputSnafu {
@@ -261,7 +261,7 @@ fn check_source(repository: &Path, source_commit: &str) -> Result<()> {
     Ok(())
 }
 
-fn compiler_field<'a>(output: &'a str, name: &str) -> Result<&'a str> {
+pub(crate) fn compiler_field<'a>(output: &'a str, name: &str) -> Result<&'a str> {
     output
         .lines()
         .filter_map(|line| line.split_once(": "))
@@ -274,7 +274,7 @@ fn compiler_field<'a>(output: &'a str, name: &str) -> Result<&'a str> {
         })
 }
 
-fn compiler_release(output: &str, declared: &str) -> Result<String> {
+pub(crate) fn compiler_release(output: &str, declared: &str) -> Result<String> {
     let expected: Vec<_> = declared.split('.').collect();
     ensure!(
         (2..=3).contains(&expected.len())
@@ -302,7 +302,7 @@ fn build_binary(repository: &Path, args: &BuildArgs) -> Result<BuildMetadata> {
     let toolchain = args
         .rust_toolchain
         .as_deref()
-        .unwrap_or(&manifest.package.rust_version);
+        .unwrap_or(&manifest.workspace.package.rust_version);
     let compiler = command_output(
         rustup_command(toolchain, args.architecture, repository).args([
             "rustc",
@@ -320,7 +320,7 @@ fn build_binary(repository: &Path, args: &BuildArgs) -> Result<BuildMetadata> {
     let identity = BuildIdentity {
         version: manifest.workspace.package.version,
         source_commit: args.source_commit.clone(),
-        rust_toolchain: compiler_release(&compiler, &manifest.package.rust_version)?,
+        rust_toolchain: compiler_release(&compiler, &manifest.workspace.package.rust_version)?,
     };
     identity.validate()?;
     let target_dir = std::path::absolute(&args.target_dir).context(FileSnafu {
@@ -375,22 +375,24 @@ fn build_binary(repository: &Path, args: &BuildArgs) -> Result<BuildMetadata> {
     Ok(metadata)
 }
 
+pub(crate) fn is_stable_version(version: &str) -> bool {
+    is_numeric_version(version)
+        && version
+            .split('.')
+            .all(|part| part == "0" || !part.starts_with('0'))
+}
+
+fn is_numeric_version(version: &str) -> bool {
+    version.split('.').count() == 3
+        && version
+            .split('.')
+            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
 impl BuildIdentity {
     pub(crate) fn validate(&self) -> Result<()> {
-        let numeric_version = |version: &str, allow_leading_zero: bool| {
-            version.split('.').count() == 3
-                && version.split('.').all(|part| {
-                    !part.is_empty()
-                        && part.bytes().all(|byte| byte.is_ascii_digit())
-                        && (allow_leading_zero || part == "0" || !part.starts_with('0'))
-                })
-        };
         for (name, value, valid) in [
-            (
-                "version",
-                &self.version,
-                numeric_version(&self.version, false),
-            ),
+            ("version", &self.version, is_stable_version(&self.version)),
             (
                 "source commit",
                 &self.source_commit,
@@ -399,7 +401,7 @@ impl BuildIdentity {
             (
                 "Rust toolchain",
                 &self.rust_toolchain,
-                numeric_version(&self.rust_toolchain, true),
+                is_numeric_version(&self.rust_toolchain),
             ),
         ] {
             ensure!(

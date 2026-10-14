@@ -1,7 +1,17 @@
 use std::{fs, path::Path, process::Command};
 
 mod support;
-use support::{PLATFORMS, Result, WheelFixture, metadata_files, wheel_filename, write_zip};
+use support::{
+    PLATFORMS, Result, WheelFixture, record_contents, wheel_filename, wheel_files, write_wheel,
+    write_zip, write_zip_with_permissions,
+};
+
+fn replace_text(contents: &mut Vec<u8>, from: &str, to: &str) {
+    *contents = String::from_utf8(contents.clone())
+        .unwrap()
+        .replace(from, to)
+        .into_bytes();
+}
 
 fn check(
     path: &Path,
@@ -39,15 +49,16 @@ fn accepts_stored_and_deflated_wheels_for_all_platforms() -> Result<()> {
     for (_, tag) in PLATFORMS {
         let path = fixture.directory.join(wheel_filename(tag));
         for compressed in [false, true] {
-            write_zip(&path, &metadata_files(tag), compressed)?;
+            write_wheel(&path, &wheel_files(tag), compressed)?;
             check(&path, "1.2.3", Some(tag), Ok(()))?;
         }
-        let mut files = metadata_files(tag);
-        files[0].1 = files[0].1.replace("Name:", "nAmE:").replace('\n', "\r\n");
-        files[0]
-            .1
-            .push_str("Description: first line\r\n continued\r\n\r\nName: text in the body\r\n");
-        write_zip(&path, &files, true)?;
+        let mut files = wheel_files(tag);
+        replace_text(&mut files[0].1, "Name:", "nAmE:");
+        replace_text(&mut files[0].1, "\n", "\r\n");
+        files[0].1.extend_from_slice(
+            b"Description: first line\r\n continued\r\n\r\nName: text in the body\r\n",
+        );
+        write_wheel(&path, &files, true)?;
         check(&path, "1.2.3", Some(tag), Ok(()))?;
     }
     Ok(())
@@ -67,7 +78,7 @@ fn rejects_wrong_wheel_filenames() -> Result<()> {
         let path = fixture
             .directory
             .join(wheel_filename(tag).replace(old, new));
-        write_zip(&path, &metadata_files(tag), false)?;
+        write_wheel(&path, &wheel_files(tag), false)?;
         check(&path, "1.2.3", Some(tag), Err("expected wheel"))?;
     }
     Ok(())
@@ -99,9 +110,9 @@ fn rejects_inconsistent_missing_duplicate_and_folded_headers() -> Result<()> {
             "Tag: cp310-abi3-manylinux_2_28_x86_64\nTag: cp310-abi3-win_amd64\n",
         ),
     ] {
-        let mut files = metadata_files(tag);
-        files[member].1 = files[member].1.replace(original, replacement);
-        write_zip(&path, &files, true)?;
+        let mut files = wheel_files(tag);
+        replace_text(&mut files[member].1, original, replacement);
+        write_wheel(&path, &files, true)?;
         check(&path, "1.2.3", Some(tag), Err("expected one"))?;
     }
     Ok(())
@@ -114,7 +125,7 @@ fn rejects_missing_foreign_and_duplicate_metadata_entries() -> Result<()> {
     let path = fixture.directory.join(wheel_filename(tag));
     for member in 0..2 {
         for problem in ["missing", "foreign", "duplicate", "nested"] {
-            let mut files = metadata_files(tag);
+            let mut files = wheel_files(tag);
             match problem {
                 "missing" => {
                     files.remove(member);
@@ -127,17 +138,22 @@ fn rejects_missing_foreign_and_duplicate_metadata_entries() -> Result<()> {
                 "nested" => files[member].0 = format!("nested/{}", files[member].0),
                 _ => unreachable!(),
             }
-            write_zip(&path, &files, false)?;
-            check(&path, "1.2.3", Some(tag), Err("expected exactly one"))?;
+            write_wheel(&path, &files, false)?;
+            let message = match problem {
+                "missing" => "missing required wheel file",
+                "duplicate" => "duplicate or aliased ZIP member",
+                _ => "unexpected wheel member",
+            };
+            check(&path, "1.2.3", Some(tag), Err(message))?;
         }
     }
     for name in [
         "delta_arrow_reader-1.2.3.dist-info/METADATA\0shadow",
         "delta_arrow_reader-1.2.3.dist-info\\METADATA",
     ] {
-        let mut files = metadata_files(tag);
+        let mut files = wheel_files(tag);
         files.push((name.into(), files[0].1.clone()));
-        write_zip(&path, &files, false)?;
+        write_wheel(&path, &files, false)?;
         check(&path, "1.2.3", Some(tag), Err("ambiguous ZIP member name"))?;
     }
     Ok(())
@@ -161,9 +177,9 @@ fn rejects_metadata_paths_that_installers_can_alias() -> Result<()> {
         "delta_arrow_reader-1.2.3.dist-info/./WHEEL",
         "delta_arrow_reader-1.2.3.dist-info/wheel",
     ] {
-        let mut files = metadata_files(tag);
-        files.push((alias.into(), "shadow metadata".into()));
-        write_zip(&path, &files, false)?;
+        let mut files = wheel_files(tag);
+        files.push((alias.into(), b"shadow metadata".to_vec()));
+        write_wheel(&path, &files, false)?;
         check(&path, "1.2.3", Some(tag), Err("Error"))?;
     }
     Ok(())
@@ -176,7 +192,7 @@ fn rejects_invalid_archives_and_metadata_with_a_bad_crc() -> Result<()> {
     let path = fixture.directory.join(wheel_filename(tag));
     fs::write(&path, "not a ZIP archive")?;
     check(&path, "1.2.3", Some(tag), Err("Error"))?;
-    write_zip(&path, &metadata_files(tag), false)?;
+    write_wheel(&path, &wheel_files(tag), false)?;
     let mut bytes = fs::read(&path)?;
     let position = bytes
         .windows(b"Name: delta-arrow-reader".len())
@@ -186,7 +202,7 @@ fn rejects_invalid_archives_and_metadata_with_a_bad_crc() -> Result<()> {
     fs::write(&path, bytes)?;
     check(&path, "1.2.3", Some(tag), Err("Invalid checksum"))?;
 
-    write_zip(&path, &metadata_files(tag), false)?;
+    write_wheel(&path, &wheel_files(tag), false)?;
     let mut bytes = fs::read(&path)?;
     let name = b"delta_arrow_reader-1.2.3.dist-info/METADATA";
     let position = bytes
@@ -234,13 +250,337 @@ fn requires_exactly_one_valid_wheel_from_each_platform() -> Result<()> {
     fs::rename(wrong_platform, path)?;
     check(&directory, "1.2.4", None, Err("expected wheel"))?;
 
-    let mut files = metadata_files(PLATFORMS[0].1);
-    files[0].1 = files[0].1.replace("1.2.3", "1.2.4");
-    write_zip(path, &files, true)?;
+    let mut files = wheel_files(PLATFORMS[0].1);
+    replace_text(&mut files[0].1, "1.2.3", "1.2.4");
+    write_wheel(path, &files, true)?;
     check(
         &directory,
         "1.2.3",
         None,
         Err("METADATA: expected one Version"),
     )
+}
+
+#[test]
+fn requires_all_installed_files_and_rejects_duplicates() -> Result<()> {
+    let fixture = WheelFixture::new("payload-files")?;
+    for (_, tag) in PLATFORMS {
+        let path = fixture.directory.join(wheel_filename(tag));
+        let complete = wheel_files(tag);
+        for index in 2..complete.len() {
+            let mut files = complete.clone();
+            files.remove(index);
+            write_wheel(&path, &files, true)?;
+            check(
+                &path,
+                "1.2.3",
+                Some(tag),
+                Err("missing required wheel file"),
+            )?;
+
+            let mut files = complete.clone();
+            files.push(files[index].clone());
+            write_wheel(&path, &files, true)?;
+            check(
+                &path,
+                "1.2.3",
+                Some(tag),
+                Err("duplicate or aliased ZIP member"),
+            )?;
+        }
+        write_zip(&path, &complete, false)?;
+        check(
+            &path,
+            "1.2.3",
+            Some(tag),
+            Err("missing required wheel file"),
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn rejects_wrong_cli_names_and_installation_paths() -> Result<()> {
+    let fixture = WheelFixture::new("cli-layout")?;
+    for (_, tag) in PLATFORMS {
+        let path = fixture.directory.join(wheel_filename(tag));
+        for name in [
+            "delta_arrow_reader-1.2.3.data/scripts/dar",
+            "delta_arrow_reader-1.2.3.data/scripts/delta-arrow-reader.py",
+            "delta_arrow_reader-1.2.3.data/scripts/nested/delta-arrow-reader",
+            "delta_arrow_reader.data/scripts/delta-arrow-reader",
+            "delta_arrow_reader-1.2.4.data/scripts/delta-arrow-reader",
+            "delta_arrow_reader-1.2.3.data/purelib/delta_arrow_reader/__init__.py",
+            "delta_arrow_reader/delta-arrow-reader",
+            "delta-arrow-reader",
+            "/home/builder/delta-arrow-reader",
+            "C:\\build\\delta-arrow-reader.exe",
+            if tag == "win_amd64" {
+                "delta_arrow_reader-1.2.3.data/scripts/delta-arrow-reader"
+            } else {
+                "delta_arrow_reader-1.2.3.data/scripts/delta-arrow-reader.exe"
+            },
+        ] {
+            let mut files = wheel_files(tag);
+            let cli = files
+                .iter_mut()
+                .find(|(name, _)| name.contains("/scripts/"))
+                .unwrap();
+            cli.0 = name.into();
+            write_wheel(&path, &files, true)?;
+            check(&path, "1.2.3", Some(tag), Err("Error"))?;
+        }
+        for extra in [
+            "delta_arrow_reader-1.2.3.data/scripts/unrelated",
+            "delta_arrow_reader-1.2.3.dist-info/entry_points.txt",
+            "delta_arrow_reader.libs/another-program.exe",
+        ] {
+            let mut files = wheel_files(tag);
+            files.push((extra.into(), b"extra program".to_vec()));
+            write_wheel(&path, &files, false)?;
+            check(&path, "1.2.3", Some(tag), Err("unexpected wheel member"))?;
+        }
+        let mut files = wheel_files(tag);
+        let (name, contents) = files
+            .iter()
+            .find(|(name, _)| name.contains("/scripts/"))
+            .unwrap();
+        files.push((name.to_uppercase(), contents.clone()));
+        write_wheel(&path, &files, true)?;
+        check(
+            &path,
+            "1.2.3",
+            Some(tag),
+            Err("duplicate or aliased ZIP member"),
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn requires_native_payloads_and_unix_cli_permissions() -> Result<()> {
+    let fixture = WheelFixture::new("native-payload")?;
+    for (_, tag) in PLATFORMS {
+        let path = fixture.directory.join(wheel_filename(tag));
+        for member in ["/scripts/", "/delta_arrow_reader."] {
+            for contents in [b"#!python\npass\n".as_slice(), b"wrong binary format", b"M"] {
+                let mut files = wheel_files(tag);
+                files
+                    .iter_mut()
+                    .find(|(name, _)| name.contains(member))
+                    .unwrap()
+                    .1 = contents.to_vec();
+                write_wheel(&path, &files, false)?;
+                check(&path, "1.2.3", Some(tag), Err("Error"))?;
+            }
+        }
+        let mut files = wheel_files(tag);
+        files.push((
+            "delta_arrow_reader-1.2.3.dist-info/RECORD".into(),
+            record_contents(&files)?,
+        ));
+        for (mode, message) in [
+            (0o644, "CLI must be executable"),
+            (0o744, "CLI must be executable"),
+            (0o120755, "must be a regular file"),
+            (0o040755, "must be a regular file"),
+        ] {
+            write_zip_with_permissions(&path, &files, false, |name| {
+                if name.contains("/scripts/") {
+                    mode
+                } else {
+                    0o644
+                }
+            })?;
+            let expected = if tag == "win_amd64" && mode < 0o1000 {
+                Ok(())
+            } else {
+                Err(message)
+            };
+            check(&path, "1.2.3", Some(tag), expected)?;
+        }
+        for suffix in [
+            "__init__.pyi",
+            "THIRD_PARTY_NOTICES.txt",
+            "licenses/LICENSE",
+        ] {
+            let mut files = wheel_files(tag);
+            files
+                .iter_mut()
+                .find(|(name, _)| name.ends_with(suffix))
+                .unwrap()
+                .1
+                .clear();
+            write_wheel(&path, &files, false)?;
+            check(&path, "1.2.3", Some(tag), Err("empty wheel file"))?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn accepts_repair_libraries_sboms_directories_and_quoted_record_paths() -> Result<()> {
+    let fixture = WheelFixture::new("repair-layout")?;
+    for (_, tag) in PLATFORMS {
+        let path = fixture.directory.join(wheel_filename(tag));
+        let mut files = wheel_files(tag);
+        let libraries = match tag {
+            "win_amd64" => vec![
+                "delta_arrow_reader.libs/dependency.dll",
+                "delta_arrow_reader-1.2.3.dist-info/DELVEWHEEL",
+            ],
+            "macosx_12_0_arm64" => vec![
+                "delta_arrow_reader.dylibs/libdependency.dylib",
+                "delta_arrow_reader/.dylibs/libother.dylib",
+            ],
+            _ => vec![
+                "delta_arrow_reader.libs/libdependency.so.1",
+                "delta_arrow_reader.libs/libother.so",
+            ],
+        };
+        for name in libraries {
+            files.push((name.into(), b"repair fixture".to_vec()));
+        }
+        files.push((
+            "delta_arrow_reader-1.2.3.dist-info/sboms/extension,cli.json".into(),
+            b"{}".to_vec(),
+        ));
+        files.push(("delta_arrow_reader/".into(), Vec::new()));
+        files.push(("delta_arrow_reader-1.2.3.data/scripts/".into(), Vec::new()));
+        write_wheel(&path, &files, true)?;
+        check(&path, "1.2.3", Some(tag), Ok(()))?;
+
+        files.push(("unrelated/".into(), Vec::new()));
+        write_wheel(&path, &files, true)?;
+        check(&path, "1.2.3", Some(tag), Err("unexpected wheel directory"))?;
+        files.pop();
+        files.last_mut().unwrap().1.push(0);
+        write_wheel(&path, &files, true)?;
+        check(&path, "1.2.3", Some(tag), Err("nonempty ZIP directory"))?;
+    }
+    Ok(())
+}
+
+#[test]
+fn record_must_cover_every_file_once_with_exact_hashes_and_sizes() -> Result<()> {
+    let fixture = WheelFixture::new("record-integrity")?;
+    let tag = PLATFORMS[0].1;
+    let path = fixture.directory.join(wheel_filename(tag));
+    let files = wheel_files(tag);
+    let record = String::from_utf8(record_contents(&files)?)?;
+    let first = record.lines().next().unwrap();
+    let record_path = "delta_arrow_reader-1.2.3.dist-info/RECORD";
+    for (contents, message) in [
+        (
+            record.replacen("sha256=", "md5=", 1),
+            "incorrect hash or size",
+        ),
+        (
+            record.replacen("sha256=", "sha256=wrong", 1),
+            "incorrect hash or size",
+        ),
+        (
+            record.replacen(first, &format!("{},sha256=,0", files[0].0), 1),
+            "incorrect hash or size",
+        ),
+        (
+            record.replacen(
+                first,
+                &format!("{},{}", first.rsplit_once(',').unwrap().0, 999),
+                1,
+            ),
+            "incorrect hash or size",
+        ),
+        (
+            record.replacen(first, &format!("{},,", files[0].0), 1),
+            "incorrect hash or size",
+        ),
+        (
+            record.replacen(&format!("{first}\n"), "", 1),
+            "missing files",
+        ),
+        (format!("{record}{first}\n"), "duplicate or unknown path"),
+        (
+            format!("{record}missing-file,,\n"),
+            "duplicate or unknown path",
+        ),
+        (
+            record.replacen(&files[0].0, &format!("/{}", files[0].0), 1),
+            "duplicate or unknown path",
+        ),
+        (
+            record.replace(&format!("{record_path},,\n"), ""),
+            "missing files",
+        ),
+        (
+            record.replace(
+                &format!("{record_path},,"),
+                &format!("{record_path},sha256=unexpected,1"),
+            ),
+            "incorrect hash or size",
+        ),
+        (
+            record.replacen(first, "too,few", 1),
+            "expected path, hash, and size",
+        ),
+    ] {
+        let mut files = files.clone();
+        files.push((record_path.into(), contents.into_bytes()));
+        write_wheel(&path, &files, true)?;
+        check(&path, "1.2.3", Some(tag), Err(message))?;
+    }
+    // ZIP CRC remains valid, but RECORD must catch a payload replaced after hashing.
+    let mut files = files;
+    files.push((record_path.into(), record.into_bytes()));
+    files
+        .iter_mut()
+        .find(|(name, _)| name.contains("/scripts/"))
+        .unwrap()
+        .1
+        .push(1);
+    write_wheel(&path, &files, false)?;
+    check(&path, "1.2.3", Some(tag), Err("incorrect hash or size"))
+}
+
+#[test]
+fn rejects_corrupt_native_bytes_and_conflicting_zip_headers() -> Result<()> {
+    let fixture = WheelFixture::new("native-corruption")?;
+    let tag = PLATFORMS[0].1;
+    let path = fixture.directory.join(wheel_filename(tag));
+    let cli = "delta_arrow_reader-1.2.3.data/scripts/delta-arrow-reader";
+    write_wheel(&path, &wheel_files(tag), false)?;
+    let original = fs::read(&path)?;
+    let archive = rawzip::ZipArchive::from_slice(&original)?;
+    let mut entries = archive.entries();
+    let (local, central) = loop {
+        let entry = entries.next_entry()?.unwrap();
+        if entry.file_path().as_bytes() == cli.as_bytes() {
+            break (
+                entry.local_header_offset() as usize,
+                entry.central_directory_offset() as usize,
+            );
+        }
+    };
+    let extra_length = u16::from_le_bytes(original[local + 28..local + 30].try_into()?) as usize;
+    for (offset, value, message) in [
+        (
+            local + 30 + cli.len() + extra_length + 5,
+            b'X',
+            "Invalid checksum",
+        ),
+        (local + 30, b'x', "ZIP local header does not match"),
+        (local + 6, original[local + 6] | 1, "encrypted wheel member"),
+        (
+            central + 8,
+            original[central + 8] | 1,
+            "encrypted wheel member",
+        ),
+        (local + 8, 8, "ZIP local header does not match"),
+    ] {
+        let mut bytes = original.clone();
+        bytes[offset] = value;
+        fs::write(&path, bytes)?;
+        check(&path, "1.2.3", Some(tag), Err(message))?;
+    }
+    Ok(())
 }

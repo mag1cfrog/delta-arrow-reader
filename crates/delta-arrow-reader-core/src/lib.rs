@@ -1,0 +1,48 @@
+#![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", env!("CARGO_PKG_README")))]
+#![cfg_attr(test, allow(clippy::panic))]
+
+mod delta;
+mod error;
+mod reader;
+
+pub mod guides;
+
+#[cfg(feature = "datafusion")]
+pub use reader::datafusion;
+
+pub use delta::DeltaProtocol;
+pub use error::{DeltaReaderError, DeltaReaderPhase};
+pub use futures_util::TryStreamExt;
+#[doc(hidden)]
+pub mod diagnostics {
+    pub mod parquet_range_planning {
+        pub use crate::reader::{
+            ParquetRangePlanningDiagnosticSnapshot as Snapshot, ParquetRangeReadPolicy as Policy,
+        };
+
+        /// Returns internal measurements used by the range-planning benchmark.
+        pub fn snapshot(metrics: &crate::DeltaScanMetrics) -> Snapshot {
+            metrics.parquet_range_planning_diagnostic_snapshot()
+        }
+    }
+
+    pub mod partition_target {
+        pub use crate::reader::partition_target::{
+            DeltaScanPartitionTargetDiagnosticInput as Input,
+            DeltaScanPartitionTargetDiagnosticOutput as Output,
+            DeltaScanPartitionTargetDiagnosticSource as Source,
+            DeltaScanPartitionTargetLocalEnvironmentDiagnostic as LocalEnvironment,
+            DeltaScanPartitionTargetLocalUnixFileDescriptorLimitStatus as UnixFileDescriptorLimitStatus,
+            delta_scan_partition_target_local_environment_diagnostic as collect_local_environment,
+            derive_delta_scan_partition_target_diagnostic as derive,
+        };
+    }
+}
+pub use reader::{
+    DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaScalar, DeltaScan, DeltaScanBuilder,
+    DeltaScanExecutionOptions, DeltaScanMetrics, DeltaScanMetricsSnapshot, DeltaSnapshotSelection,
+    DeltaStorageOptions, DeltaTable, DeltaTableBuilder, DeltaTableSnapshot, ParquetReaderBackend,
+    WarmupMode,
+};
+/// The crate version.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");

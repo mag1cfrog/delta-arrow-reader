@@ -13,7 +13,7 @@ import pyarrow.parquet as pq
 import check as shared_check
 import run
 
-CORPUS = Path(__file__).resolve().parents[3] / "tests/reader/fixtures/external_writer/corpus"
+CORPUS = Path(__file__).resolve().parents[3] / "crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus"
 
 
 def check_cli(check, description, native_probes=None):

@@ -1,4 +1,8 @@
 /target/
 /xtask/target/
 /docs/.site/
+/crates/delta-arrow-reader-core/docs/.site/
 __pycache__/
+delta_arrow_reader.data/
+.python-wheel-*/
+.python-cli-*/

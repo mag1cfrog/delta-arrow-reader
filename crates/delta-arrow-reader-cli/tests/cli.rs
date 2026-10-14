@@ -19,9 +19,84 @@ use delta_arrow_reader::{DeltaSnapshotSelection, DeltaTableBuilder, TryStreamExt
 use serde_json::Value;
 
 #[test]
+fn executable_names_preserve_help_version_and_redacted_errors()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::Builder::new()
+        .prefix("secret cli directory ")
+        .tempdir()?;
+    for (filename, command_name) in [
+        ("dar", "dar"),
+        ("delta-arrow-reader", "delta-arrow-reader"),
+        ("secret-command", "dar"),
+        ("delta-arrow-reader.secret", "dar"),
+    ] {
+        let executable = directory
+            .path()
+            .join(format!("{filename}{}", std::env::consts::EXE_SUFFIX));
+        // Concurrent Unix forks can inherit a copied executable's open write handle.
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_dar"), &executable)?;
+        #[cfg(not(unix))]
+        fs::copy(env!("CARGO_BIN_EXE_dar"), &executable)?;
+        for flag in ["--version", "-V"] {
+            let output = run_with_timeout(
+                Command::new(&executable)
+                    .current_dir(directory.path())
+                    .arg(flag),
+            )?;
+            assert!(output.status.success(), "{output:?}");
+            assert!(output.stderr.is_empty());
+            assert_eq!(
+                output.stdout,
+                format!("{command_name} {}\n", env!("CARGO_PKG_VERSION")).as_bytes()
+            );
+        }
+        for (args, subcommand) in [
+            (vec!["--help"], ""),
+            (vec!["-h"], ""),
+            (vec!["inspect", "--help"], " inspect"),
+            (vec!["help", "inspect"], " inspect"),
+            (vec!["scan", "--help"], " scan"),
+            (
+                vec!["scan", "--storage-options-file", "secret-missing", "--help"],
+                " scan",
+            ),
+        ] {
+            let output = run_with_timeout(
+                Command::new(&executable)
+                    .current_dir(directory.path())
+                    .args(args),
+            )?;
+            assert!(output.status.success(), "{output:?}");
+            assert!(output.stderr.is_empty());
+            let help = String::from_utf8(output.stdout)?;
+            assert!(help.contains(&format!("Usage: {command_name}{subcommand} ")));
+            assert!(!help.contains("secret"), "{help}");
+        }
+        let output = run_with_timeout(
+            Command::new(&executable)
+                .current_dir(directory.path())
+                .arg("--secret-argument"),
+        )?;
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        assert_eq!(
+            serde_json::from_slice::<Value>(&output.stderr)?,
+            serde_json::json!({
+                "phase": "configuration",
+                "code": "invalid_cli_argument",
+                "message": "Invalid command-line arguments.",
+            })
+        );
+        fs::remove_file(executable)?;
+    }
+    Ok(())
+}
+
+#[test]
 fn external_writer_schemas_round_trip() -> Result<(), Box<dyn std::error::Error>> {
     let corpus = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/reader/fixtures/external_writer/corpus");
+        .join("../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus");
     for (name, version) in [
         ("partitioned", "0"),
         ("nested_mapping", "1"),
@@ -70,7 +145,7 @@ fn external_writer_schemas_round_trip() -> Result<(), Box<dyn std::error::Error>
 #[test]
 fn scans_match_core_for_projection_limits_and_versions() -> Result<(), Box<dyn std::error::Error>> {
     let corpus = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/reader/fixtures/external_writer/corpus");
+        .join("../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus");
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;

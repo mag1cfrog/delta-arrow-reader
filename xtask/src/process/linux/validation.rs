@@ -374,7 +374,7 @@ impl ProcessFixture<'_> {
     pub(super) fn check_execution_options_size_and_literal_dash(&self) -> Result<()> {
         let table = self
             .repository
-            .join("tests/reader/fixtures/external_writer/corpus/partitioned/table");
+            .join("crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned/table");
         let boundary = padded_json(b"{}", JSON_SIZE_LIMIT);
         for content in [b"{}".as_slice(), &boundary] {
             let path = self.write_input_file(content)?;
@@ -441,7 +441,7 @@ impl ProcessFixture<'_> {
     pub(super) fn check_predicate_size_and_literal_dash(&self) -> Result<()> {
         let table = self
             .repository
-            .join("tests/reader/fixtures/external_writer/corpus/partitioned/table");
+            .join("crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned/table");
         let boundary = padded_json(TRUE_PREDICATE.as_bytes(), JSON_SIZE_LIMIT);
         for content in [TRUE_PREDICATE.as_bytes(), &boundary] {
             let path = self.write_input_file(content)?;

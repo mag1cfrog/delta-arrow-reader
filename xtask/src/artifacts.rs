@@ -19,7 +19,7 @@ use crate::{
     platform::Architecture,
 };
 
-const MANIFEST: &str = "cli-artifacts.json";
+pub(crate) const MANIFEST: &str = "cli-artifacts.json";
 pub(crate) const MEMBERS: [(&str, u32); 3] =
     [("dar", 0o755), ("LICENSE", 0o644), ("NOTICE", 0o644)];
 const LICENSE: &[u8] = include_bytes!("../../LICENSE");
@@ -82,7 +82,7 @@ pub(crate) struct ArtifactManifest {
     schema_version: u32,
     version: String,
     source_commit: String,
-    rust_toolchain: String,
+    pub(crate) rust_toolchain: String,
     pub(crate) targets: Vec<ArtifactTarget>,
 }
 
@@ -172,12 +172,8 @@ impl BuildIdentity {
     }
 }
 
-fn archive_name(identity: &BuildIdentity, architecture: Architecture) -> String {
-    format!(
-        "dar-v{}-linux-{}-gnu.tar.gz",
-        identity.version,
-        architecture.name()
-    )
+pub(crate) fn archive_name(version: &str, architecture: Architecture) -> String {
+    format!("dar-v{}-linux-{}-gnu.tar.gz", version, architecture.name())
 }
 
 fn reader_sha256(mut reader: impl Read) -> io::Result<String> {
@@ -355,7 +351,7 @@ fn describe_archive(
     dependencies: &[String],
 ) -> Result<ArtifactTarget> {
     check_runtime_dependencies(dependencies)?;
-    let filename = archive_name(identity, architecture);
+    let filename = archive_name(&identity.version, architecture);
     let path = directory.join(&filename);
     require_regular_file(&path)?;
     let mut archive = Archive::new(MultiGzDecoder::new(
@@ -524,7 +520,7 @@ pub(crate) fn package(
     })?;
     let notice = [NOTICE, b"\n", &notices].concat();
     create_directory(directory)?;
-    let path = directory.join(archive_name(identity, architecture));
+    let path = directory.join(archive_name(&identity.version, architecture));
     let output = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -582,7 +578,10 @@ pub(crate) fn verify_platform(
 ) -> Result<ArtifactManifest> {
     check_files(
         directory,
-        &[archive_name(identity, architecture), MANIFEST.into()],
+        &[
+            archive_name(&identity.version, architecture),
+            MANIFEST.into(),
+        ],
     )?;
     check_manifest(directory, identity, &[architecture])
 }
@@ -658,7 +657,7 @@ pub(crate) fn extract_verified_archive(
 fn checksum_text(directory: &Path, identity: &BuildIdentity) -> Result<String> {
     let mut names: Vec<_> = Architecture::ALL
         .into_iter()
-        .map(|arch| archive_name(identity, arch))
+        .map(|arch| archive_name(&identity.version, arch))
         .collect();
     names.push(MANIFEST.into());
     let mut text = String::new();
@@ -707,7 +706,7 @@ fn assemble(inputs: &Path, directory: &Path, identity: &BuildIdentity) -> Result
 pub(crate) fn verify(directory: &Path, identity: &BuildIdentity) -> Result<ArtifactManifest> {
     let mut names: Vec<_> = Architecture::ALL
         .into_iter()
-        .map(|arch| archive_name(identity, arch))
+        .map(|arch| archive_name(&identity.version, arch))
         .collect();
     names.extend([MANIFEST.into(), "SHA256SUMS".into()]);
     check_files(directory, &names)?;

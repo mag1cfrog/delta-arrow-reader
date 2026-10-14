@@ -78,6 +78,7 @@ jobs:
       SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
       RUSTC_WRAPPER: ${{ matrix.manylinux == 'off' && 'sccache' || '' }}
       MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos-deployment-target }}
+      MANYLINUX_IMAGE: quay.io/pypa/manylinux_2_28_x86_64@sha256:4131ddd7acb9c6c966af02fe7e71edc51e078c2d41f475966697676430bfa2ae
 
     steps:
       - uses: actions/checkout@v5
@@ -109,6 +110,9 @@ jobs:
           rust_version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
           test -n "$rust_version"
           echo "rust-version=$rust_version" >> "$GITHUB_OUTPUT"
+          about_version="$(sed -n 's/^cargo-about-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$about_version"
+          echo "cargo-about-version=$about_version" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.versions.outputs.rust-version }}
@@ -141,11 +145,22 @@ jobs:
       - name: Prepare Linux source from sdist
         if: runner.os == 'Linux'
         run: |
-          python -m pip install 'maturin==1.14.1'
-          maturin sdist --manifest-path crates/delta-arrow-reader-python/Cargo.toml --out "$RUNNER_TEMP/python-sdist"
+          python -m pip install 'maturin==1.14.1' 'build>=1.2,<2'
+          python -m build --sdist --no-isolation --outdir "$RUNNER_TEMP/python-sdist" crates/delta-arrow-reader-python
           mkdir .python-sdist-source
           tar -xzf "$RUNNER_TEMP"/python-sdist/*.tar.gz -C .python-sdist-source --strip-components=1
           cmp Cargo.lock .python-sdist-source/Cargo.lock
+          cmp Cargo.toml .python-sdist-source/Cargo.toml
+          cp .python-sdist-source/Cargo.lock "$RUNNER_TEMP/python-sdist/Cargo.lock"
+      - name: Prepare native wheel data
+        if: runner.os != 'Linux'
+        run: |
+          rustup component add rust-docs
+          RUSTC_WRAPPER="" cargo install --locked --features cli \
+            --version '${{ steps.versions.outputs.cargo-about-version }}' cargo-about
+          cargo xtask build-python-wheel --prepare-only \
+            --project-directory crates/delta-arrow-reader-python \
+            --target '${{ matrix.target }}' --profile release --target-dir "$PWD/target"
       - name: Build wheel
         id: wheel-build
         continue-on-error: ${{ inputs.cache-only && runner.os == 'Linux' }}
@@ -155,9 +170,10 @@ jobs:
           command: build
           maturin-version: v1.14.1
           rust-toolchain: ${{ steps.versions.outputs.rust-version }}
+          rustup-components: rust-docs
           # Native Windows builds need RUSTFLAGS on host build scripts and proc macros too.
           target: ${{ runner.os != 'Windows' && matrix.target || '' }}
-          container: ${{ runner.os == 'Linux' && 'quay.io/pypa/manylinux_2_28_x86_64@sha256:4131ddd7acb9c6c966af02fe7e71edc51e078c2d41f475966697676430bfa2ae' || '' }}
+          container: ${{ runner.os == 'Linux' && env.MANYLINUX_IMAGE || '' }}
           manylinux: ${{ matrix.manylinux }}
           sccache: ${{ runner.os == 'Linux' }}
           docker-options: >-
@@ -169,9 +185,15 @@ jobs:
             printf 'sccache==0.16.0\n' > /tmp/sccache-constraints.txt
             export UV_CONSTRAINT=/tmp/sccache-constraints.txt
             export SCCACHE_ERROR_LOG=/tmp/sccache.log
+            # Preparation runs before the action installs sccache for Maturin.
+            uv tool install 'sccache>=0.10.0'
+            RUSTC_WRAPPER="" cargo install --locked --features cli \
+              --version '${{ steps.versions.outputs.cargo-about-version }}' cargo-about
             if [ "$SCCACHE_GHA_RW_MODE" = "READ_WRITE" ]; then
               trap 'RUSTC_WRAPPER= cargo run --locked --manifest-path "$GITHUB_WORKSPACE/xtask/Cargo.toml" --target-dir /tmp/dar-xtask-target -- check-cache-writes' EXIT
             fi
+            cargo xtask build-python-wheel --prepare-only --project-directory . \
+              --target '${{ matrix.target }}' --profile release --target-dir "$PWD/target"
           args: >-
             --locked --release --out ${{ runner.os == 'Linux' && '../dist' || matrix.wheel-dir }} --target-dir target
             --manifest-path crates/delta-arrow-reader-python/Cargo.toml
@@ -228,7 +250,7 @@ jobs:
       - name: Inspect Linux native dependencies
         if: runner.os == 'Linux'
         run: |
-          cmp Cargo.lock .python-sdist-source/Cargo.lock
+          cmp "$RUNNER_TEMP/python-sdist/Cargo.lock" .python-sdist-source/Cargo.lock
           python -m pip install --only-binary=:all: auditwheel
           auditwheel show dist/*.whl
       - name: Test installed wheel on Python 3.10 and PyArrow 18.0.0
@@ -239,7 +261,15 @@ jobs:
             "$GITHUB_WORKSPACE"/dist/*.whl 'pyarrow==18.0.0'
           python310/${{ matrix.venv-python }} -I -m unittest discover \
             -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" ${{ matrix.test-args }}
+      - name: Audit installed wheel CLI
+        env:
+          RUSTC_WRAPPER: ""
+        run: |
+          cargo xtask audit-python-cli \
+            "$RUNNER_TEMP/python310/${{ runner.os == 'Windows' && 'Scripts/delta-arrow-reader.exe' || 'bin/delta-arrow-reader' }}" \
+            --platform-tag '${{ matrix.platform-tag }}'
       - uses: actions/setup-python@v6
+        id: python314
         with:
           python-version: '3.14'
       - name: Test installed wheel on Python 3.14 and current PyArrow
@@ -250,6 +280,55 @@ jobs:
             "$GITHUB_WORKSPACE"/dist/*.whl
           python314/${{ matrix.venv-python }} -I -m unittest discover \
             -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" ${{ matrix.test-args }}
+      - name: Test installed wheel on glibc 2.28
+        if: runner.os == 'Linux'
+        run: |
+          python_tests=crates/delta-arrow-reader-python/tests
+          fixture=crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned
+          # Start a fresh container with only the final wheel, tests, and fixture.
+          docker run --rm --workdir /tmp \
+            --env PATH=/usr/bin:/bin --env LD_LIBRARY_PATH= \
+            --volume "$GITHUB_WORKSPACE/dist:/wheels:ro" \
+            --volume "$GITHUB_WORKSPACE/$python_tests:/acceptance/$python_tests:ro" \
+            --volume "$GITHUB_WORKSPACE/$fixture:/acceptance/$fixture:ro" \
+            --entrypoint /bin/bash "$MANYLINUX_IMAGE" -euo pipefail -c '
+              test "$(getconf GNU_LIBC_VERSION)" = "glibc 2.28"
+              for version in 310 314; do
+                /opt/python/cp$version-cp$version/bin/python -m venv /tmp/python$version
+                dependencies=()
+                if [ "$version" = 310 ]; then
+                  dependencies+=(pyarrow==18.0.0)
+                fi
+                /tmp/python$version/bin/python -m pip install --only-binary=:all: \
+                  /wheels/*.whl "${dependencies[@]}"
+                /tmp/python$version/bin/python -I -m unittest discover \
+                  -s /acceptance/crates/delta-arrow-reader-python/tests -k installed
+              done
+            '
+      - name: Test wheel with uv tool and uvx
+        working-directory: ${{ runner.temp }}
+        env:
+          UV_PYTHON: ${{ steps.python314.outputs.python-path }}
+          UV_PYTHON_DOWNLOADS: never
+          UV_NO_BUILD: 'true'
+        run: |
+          python -m pip install --only-binary=:all: 'uv==0.10.0'
+          tools="$(mktemp -d "$RUNNER_TEMP/wheel-tools.XXXXXX")"
+          export UV_TOOL_DIR="$tools/environments"
+          export UV_TOOL_BIN_DIR="$tools/bin"
+          export UV_CACHE_DIR="$tools/cache"
+          python -m uv tool install --no-config "$GITHUB_WORKSPACE"/dist/*.whl
+          "$UV_TOOL_DIR/delta-arrow-reader/${{ matrix.venv-python }}" -I -m unittest discover \
+            -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" -k installed
+          tool_version="$("$UV_TOOL_BIN_DIR/delta-arrow-reader${{ runner.os == 'Windows' && '.exe' || '' }}" --version)"
+          test "$tool_version" = "delta-arrow-reader $EXPECTED_VERSION"
+          # uv tool run is uvx; --isolated ignores the persistent tool above.
+          python -m uv tool run --no-config --isolated --from "$GITHUB_WORKSPACE"/dist/*.whl \
+            python -I -m unittest discover \
+            -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" -k installed
+          uvx_version="$(python -m uv tool run --no-config --isolated \
+            --from "$GITHUB_WORKSPACE"/dist/*.whl delta-arrow-reader --version)"
+          test "$uvx_version" = "delta-arrow-reader $EXPECTED_VERSION"
       - name: Upload validated wheel
         if: ${{ !inputs.cache-only }}
         uses: actions/upload-artifact@v6

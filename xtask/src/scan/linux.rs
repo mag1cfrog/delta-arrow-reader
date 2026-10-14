@@ -108,7 +108,9 @@ pub(super) fn run(binary: &Path, repository: &Path) -> Result<()> {
             })?;
         check(&ScanFixture {
             binary,
-            corpus: repository.join("tests/reader/fixtures/external_writer/corpus"),
+            corpus: repository.join(
+                "crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus",
+            ),
             fault_library: &fault_library,
             directory,
         })?;

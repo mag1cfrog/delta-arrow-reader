@@ -5,7 +5,7 @@ use snafu::{ResultExt, ensure};
 
 use crate::{
     artifacts,
-    binary::inspect_elf,
+    binary::{ElfBaseline, inspect_elf},
     build::BuildIdentity,
     command::run_command,
     error::{FileSnafu, InvalidInputSnafu, IoSnafu, Result},
@@ -61,7 +61,11 @@ impl BuildImageArgs {
             })?;
         let context = temporary.path().join("context");
         artifacts::extract_verified_archive(&self.directory, &context, target)?;
-        let metadata = inspect_elf(&context.join("dar"), self.architecture)?;
+        let metadata = inspect_elf(
+            &context.join("dar"),
+            self.architecture,
+            ElfBaseline::Standalone,
+        )?;
         ensure!(
             metadata.dar_sha256 == target.dar_sha256
                 && metadata.elf.runtime_dependencies == target.runtime_dependencies,

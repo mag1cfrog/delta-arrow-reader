@@ -20,7 +20,7 @@ use crate::{
     platform::Architecture,
 };
 
-const MANIFEST: &str = "cli-images.json";
+pub(crate) const MANIFEST: &str = "cli-images.json";
 
 #[derive(Subcommand)]
 pub(crate) enum ImageArtifactTask {
@@ -65,25 +65,25 @@ pub(crate) struct ImageArtifactInput {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct ImageManifest {
+pub(crate) struct ImageManifest {
     schema_version: u32,
     version: String,
     source_commit: String,
     rust_toolchain: String,
     base_image: String,
-    targets: Vec<ImageTarget>,
+    pub(crate) targets: Vec<ImageTarget>,
 }
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct ImageTarget {
+pub(crate) struct ImageTarget {
     os: String,
-    architecture: Architecture,
+    pub(crate) architecture: Architecture,
     binary_archive_sha256: String,
     dar_sha256: String,
-    archive: String,
-    archive_sha256: String,
-    manifest_digest: String,
+    pub(crate) archive: String,
+    pub(crate) archive_sha256: String,
+    pub(crate) manifest_digest: String,
     configuration: Value,
 }
 
@@ -142,7 +142,7 @@ fn export_image(
     )?;
     let archive = input
         .directory
-        .join(archive_name(&input.identity, binary.architecture));
+        .join(archive_name(&input.identity.version, binary.architecture));
     run_command(
         Command::new("skopeo")
             .args(["copy", "--format", "oci"])
@@ -213,15 +213,11 @@ fn binary_target(
         })
 }
 
-fn archive_name(identity: &BuildIdentity, architecture: Architecture) -> String {
-    format!(
-        "dar-v{}-linux-{}.oci.tar",
-        identity.version,
-        architecture.name()
-    )
+pub(crate) fn archive_name(version: &str, architecture: Architecture) -> String {
+    format!("dar-v{}-linux-{}.oci.tar", version, architecture.name())
 }
 
-fn transport_path(path: &Path) -> Result<&str> {
+pub(crate) fn transport_path(path: &Path) -> Result<&str> {
     path.to_str()
         .filter(|path| !path.contains(':'))
         .ok_or_else(|| {
@@ -253,6 +249,24 @@ fn write_manifest(
     Ok(manifest)
 }
 
+pub(crate) fn verify_complete(
+    directory: &Path,
+    binary_artifacts: &Path,
+    identity: &BuildIdentity,
+    binaries: &ArtifactManifest,
+) -> Result<ImageManifest> {
+    verify(
+        directory,
+        &ImageArtifactInput {
+            directory: directory.into(),
+            binary_artifacts: binary_artifacts.into(),
+            identity: identity.clone(),
+        },
+        binaries,
+        &Architecture::ALL,
+    )
+}
+
 fn verify(
     directory: &Path,
     input: &ImageArtifactInput,
@@ -263,7 +277,7 @@ fn verify(
     names.extend(
         architectures
             .iter()
-            .map(|architecture| archive_name(&input.identity, *architecture)),
+            .map(|architecture| archive_name(&input.identity.version, *architecture)),
     );
     artifacts::check_files(directory, &names)?;
     let path = directory.join(MANIFEST);
@@ -291,7 +305,7 @@ fn verify(
     );
     for (target, architecture) in manifest.targets.iter().zip(architectures) {
         let binary = binary_target(binaries, *architecture)?;
-        let name = archive_name(&input.identity, *architecture);
+        let name = archive_name(&input.identity.version, *architecture);
         ensure!(
             target.architecture == *architecture
                 && target.archive == name
@@ -311,12 +325,36 @@ fn verify(
     Ok(manifest)
 }
 
+pub(crate) fn verify_downloaded_image(
+    directory: &Path,
+    binary_artifacts: &Path,
+    identity: &BuildIdentity,
+    binaries: &ArtifactManifest,
+    architecture: Architecture,
+    manifest_digest: &str,
+) -> Result<()> {
+    let input = ImageArtifactInput {
+        directory: directory.into(),
+        binary_artifacts: binary_artifacts.into(),
+        identity: identity.clone(),
+    };
+    let observed = describe_image(directory, &input, binary_target(binaries, architecture)?)?;
+    // Exporting changes the outer tar file, while the OCI manifest and its blobs stay identical.
+    ensure!(
+        observed.manifest_digest == manifest_digest,
+        InvalidInputSnafu {
+            message: "downloaded image has a different platform manifest digest"
+        }
+    );
+    Ok(())
+}
+
 fn describe_image(
     directory: &Path,
     input: &ImageArtifactInput,
     binary: &ArtifactTarget,
 ) -> Result<ImageTarget> {
-    let archive = archive_name(&input.identity, binary.architecture);
+    let archive = archive_name(&input.identity.version, binary.architecture);
     let path = directory.join(&archive);
     artifacts::require_regular_file(&path)?;
     let archive_sha256 = artifacts::file_sha256(&path)?;

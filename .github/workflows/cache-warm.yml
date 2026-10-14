@@ -18,9 +18,9 @@ on:
       - "crates/*/Cargo.toml"
       - "crates/delta-arrow-reader-python/**"
       - "crates/delta-arrow-reader-cli/**"
-      - "pyproject.toml"
-      - "src/**"
-      - "tests/**"
+      - "crates/delta-arrow-reader-core/src/**"
+      - "crates/delta-arrow-reader-core/tests/**"
+      - "crates/delta-arrow-reader-core/benches/**"
       - "benches/**"
 
 permissions:
@@ -51,6 +51,8 @@ jobs:
     needs: prepare
     runs-on: ${{ matrix.os }}
     env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      AWS_LC_SYS_USE_SYSTEM: "0"
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_GHA_RW_MODE: READ_WRITE
       SCCACHE_LOG: sccache::server=debug
@@ -87,8 +89,15 @@ jobs:
       - name: Cache Cargo registry
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ${{ matrix.os == 'windows-2022' && 'core-ci-targets' || 'core-ci' }}
-          cache-targets: ${{ matrix.os == 'windows-2022' }}
+          shared-key: core-ci
+          cache-targets: false
+      - name: Cache compiled dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci-targets
+          cache-targets: true
+          # This action saves first; keep Cargo available for the registry cache save.
+          cache-bin: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
       - name: Verify Rust host
@@ -140,7 +149,7 @@ jobs:
           RUSTC_WRAPPER: ""
 
   prune:
-    name: Retain two Windows target caches
+    name: Retain two target caches per platform
     needs: core
     runs-on: ubuntu-latest
     permissions:

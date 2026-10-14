@@ -12,13 +12,24 @@ mod image_runtime;
 mod notices;
 mod platform;
 mod process;
+mod python_cli;
+mod python_cli_audit;
 mod python_release;
+mod python_sdist;
 mod python_upload;
+mod python_wheel_build;
 mod python_wheel_reuse;
 mod python_wheels;
+mod release_assets;
+mod release_images;
+mod release_notes;
+mod release_plan;
 mod release_plz;
+mod release_request;
+mod release_selection;
 mod repository;
 mod scan;
+mod validation_record;
 
 use std::{
     env,
@@ -50,12 +61,23 @@ enum Task {
     },
     /// Check sccache write failures against its error log.
     CheckCacheWrites,
-    /// Keep the two most recently used Windows core CI caches.
+    /// Summarize sccache read failures without printing request details.
+    ReportCacheReads,
+    /// Keep the two most recently used core CI target caches per platform.
     PruneCiCaches,
     /// Prepare release-plz configuration for the current shared release baseline.
     PrepareReleasePrConfig { destination: PathBuf },
     /// Validate a Python release event against the checked-out commit.
     CheckPythonReleaseRequest,
+    /// Build and stage the native executable for Python wheel packaging.
+    StagePythonCli(python_cli::StagePythonCliArgs),
+    /// Prepare the native CLI and notices, then assemble the combined Python wheel.
+    BuildPythonWheel(python_wheel_build::BuildPythonWheelArgs),
+    /// Include the native build tools and original workspace in a Maturin sdist.
+    CompletePythonSdist {
+        source: PathBuf,
+        destination: PathBuf,
+    },
     /// Retrieve validated wheels from the merged release PR.
     ReusePythonWheels {
         destination: PathBuf,
@@ -72,7 +94,7 @@ enum Task {
         #[arg(long)]
         sha256: String,
     },
-    /// Validate one Python wheel's filename and metadata.
+    /// Validate one Python wheel's metadata, installation layout, and file hashes.
     CheckPythonWheel {
         path: PathBuf,
         #[arg(long)]
@@ -80,6 +102,8 @@ enum Task {
         #[arg(long)]
         platform_tag: String,
     },
+    /// Audit an installed wheel CLI's native dependencies and platform baseline.
+    AuditPythonCli(python_cli_audit::AuditPythonCliArgs),
     /// Validate the complete set of Python wheel artifacts.
     CheckPythonArtifacts {
         directory: PathBuf,
@@ -114,6 +138,24 @@ enum CliTask {
     TestArchive(acceptance::TestArchiveArgs),
     /// Check a local container's read-only execution, TLS, IPC, and process lifecycle.
     TestImage(image_runtime::TestImageArgs),
+    /// Record an approved release PR's validated binary and image artifact identities.
+    RecordValidation(validation_record::RecordValidationArgs),
+    /// Select release PR artifacts using GitHub provenance, without publishing.
+    SelectReleaseArtifacts(release_selection::SelectReleaseArtifactsArgs),
+    /// Download and verify release artifacts and write a local publication plan.
+    PlanRelease(release_plan::PlanReleaseArgs),
+    /// Validate the Actions release event and select its original validation record.
+    CheckReleaseRequest,
+    /// Upload or reuse the exact GitHub release assets from a verified publication plan.
+    UploadReleaseAssets(release_assets::UploadReleaseAssetsArgs),
+    /// Require all four GitHub assets and verify their downloaded bytes against the plan.
+    VerifyReleaseAssets(release_assets::VerifyReleaseAssetsArgs),
+    /// Publish or reuse the verified CLI image platforms and version index on GHCR.
+    UploadReleaseImages(release_images::UploadReleaseImagesArgs),
+    /// Download published CLI images anonymously and verify their binary contents.
+    VerifyReleaseImages(release_images::VerifyReleaseImagesArgs),
+    /// Update only the CLI release section and record the selected validation identity.
+    UpdateReleaseNotes(release_notes::UpdateReleaseNotesArgs),
     /// Check CLI arguments, inspection, output failures, and process lifecycle on Linux.
     TestProcess(process::TestProcessArgs),
     /// Check Arrow IPC output and scan process lifecycle on Linux.
@@ -143,9 +185,16 @@ fn run_task(task: Task) -> Result<()> {
     match task {
         Task::Cli { command } => command.run().map_err(Into::into),
         Task::CheckCacheWrites => check_cache_writes(),
+        Task::ReportCacheReads => report_cache_reads(),
         Task::PruneCiCaches => prune_ci_caches(),
         Task::PrepareReleasePrConfig { destination } => release_plz::prepare_config(&destination),
         Task::CheckPythonReleaseRequest => python_release::validate_release_request(),
+        Task::StagePythonCli(args) => args.run().map_err(Into::into),
+        Task::BuildPythonWheel(args) => args.run().map_err(Into::into),
+        Task::CompletePythonSdist {
+            source,
+            destination,
+        } => python_sdist::complete(&source, &destination).map_err(Into::into),
         Task::ReusePythonWheels {
             destination,
             expected_version,
@@ -165,7 +214,8 @@ fn run_task(task: Task) -> Result<()> {
             path,
             expected_version,
             platform_tag,
-        } => python_wheels::check_wheel_metadata(&path, &expected_version, &platform_tag),
+        } => python_wheels::check_wheel(&path, &expected_version, &platform_tag),
+        Task::AuditPythonCli(args) => args.run().map_err(Into::into),
         Task::CheckPythonArtifacts {
             directory,
             expected_version,
@@ -191,6 +241,15 @@ impl CliTask {
             Self::CheckBinary(args) => args.run(),
             Self::TestArchive(args) => args.run(),
             Self::TestImage(args) => args.run(),
+            Self::RecordValidation(args) => args.run(),
+            Self::SelectReleaseArtifacts(args) => args.run(),
+            Self::PlanRelease(args) => args.run(),
+            Self::CheckReleaseRequest => release_request::check_release_request(),
+            Self::UploadReleaseAssets(args) => args.run(),
+            Self::VerifyReleaseAssets(args) => args.run(),
+            Self::UploadReleaseImages(args) => args.run(),
+            Self::VerifyReleaseImages(args) => args.run(),
+            Self::UpdateReleaseNotes(args) => args.run(),
             Self::TestProcess(args) => args.run(),
             Self::TestScan(args) => args.run(),
             Self::Notices(args) => notices::run(args),
@@ -200,7 +259,11 @@ impl CliTask {
     }
 }
 
-const CACHE_PREFIX: &str = "v0-rust-core-ci-targets-Windows_NT-x64-";
+const TARGET_CACHE_PREFIXES: [&str; 3] = [
+    "v0-rust-core-ci-targets-Linux-x64-",
+    "v0-rust-core-ci-targets-Darwin-arm64-",
+    "v0-rust-core-ci-targets-Windows_NT-x64-",
+];
 const CACHE_REF: &str = "refs/heads/main";
 
 #[derive(Deserialize)]
@@ -279,11 +342,33 @@ fn check_cache_writes() -> Result<()> {
     check_writes(&stats.stats, &String::from_utf8_lossy(&log))
 }
 
-fn stale_caches(pages: Vec<CachePage>) -> Vec<Cache> {
+fn report_cache_reads() -> Result<()> {
+    let log = fs::read(env::var_os("SCCACHE_ERROR_LOG").ok_or("SCCACHE_ERROR_LOG is required")?)?;
+    let mut failures = 0;
+    let mut rate_limits = 0;
+    // shortcut: sccache 0.18 counts these failures as misses; update this parser if its log format changes.
+    for line in String::from_utf8_lossy(&log).lines() {
+        let Some((_, error)) = line.split_once("sccache::cache::cache] Got unexpected error: ")
+        else {
+            continue;
+        };
+        failures += 1;
+        if error.split_whitespace().next() == Some("RateLimited") {
+            rate_limits += 1;
+        }
+    }
+    println!(
+        "Remote cache read failures recorded: {failures}\n  RateLimited: {rate_limits}\n  Other: {}",
+        failures - rate_limits
+    );
+    Ok(())
+}
+
+fn stale_caches(pages: Vec<CachePage>, prefix: &str) -> Vec<Cache> {
     let mut caches: Vec<_> = pages
         .into_iter()
         .flat_map(|page| page.actions_caches)
-        .filter(|cache| cache.r#ref == CACHE_REF && cache.key.starts_with(CACHE_PREFIX))
+        .filter(|cache| cache.r#ref == CACHE_REF && cache.key.starts_with(prefix))
         .collect();
     caches.sort_by(|a, b| b.last_accessed_at.cmp(&a.last_accessed_at));
     caches.into_iter().skip(2).collect()
@@ -291,26 +376,28 @@ fn stale_caches(pages: Vec<CachePage>) -> Vec<Cache> {
 
 fn prune_ci_caches() -> Result<()> {
     let endpoint = format!("repos/{}/actions/caches", env::var("GH_REPO")?);
-    let pages = serde_json::from_slice(&run(
-        "gh",
-        &[
-            "api",
-            "--paginate",
-            "--slurp",
-            &format!("{endpoint}?key={CACHE_PREFIX}&ref={CACHE_REF}&per_page=100"),
-        ],
-    )?)?;
-    for cache in stale_caches(pages) {
-        println!("Deleting superseded Windows target cache: {}", cache.key);
-        run(
+    for prefix in TARGET_CACHE_PREFIXES {
+        let pages = serde_json::from_slice(&run(
             "gh",
             &[
                 "api",
-                "--method",
-                "DELETE",
-                &format!("{endpoint}/{}", cache.id),
+                "--paginate",
+                "--slurp",
+                &format!("{endpoint}?key={prefix}&ref={CACHE_REF}&per_page=100"),
             ],
-        )?;
+        )?)?;
+        for cache in stale_caches(pages, prefix) {
+            println!("Deleting superseded CI target cache: {}", cache.key);
+            run(
+                "gh",
+                &[
+                    "api",
+                    "--method",
+                    "DELETE",
+                    &format!("{endpoint}/{}", cache.id),
+                ],
+            )?;
+        }
     }
     Ok(())
 }
@@ -319,10 +406,12 @@ fn prune_ci_caches() -> Result<()> {
 mod cache_tests {
     use super::*;
 
+    const WINDOWS_CACHE_PREFIX: &str = "v0-rust-core-ci-targets-Windows_NT-x64-";
+
     fn cache(id: u64) -> Cache {
         Cache {
             id,
-            key: format!("{CACHE_PREFIX}{id}"),
+            key: format!("{WINDOWS_CACHE_PREFIX}{id}"),
             r#ref: CACHE_REF.into(),
             last_accessed_at: format!("2026-10-{id:02}T00:00:00Z"),
         }
@@ -332,6 +421,10 @@ mod cache_tests {
     fn retains_two_recently_used_caches_across_pages_and_preserves_other_families_and_refs() {
         let mut other_family = cache(5);
         other_family.key = "sccache-other".into();
+        let other_platform = Cache {
+            key: "v0-rust-core-ci-targets-Linux-x64-7".into(),
+            ..cache(7)
+        };
         let mut other_ref = cache(6);
         other_ref.r#ref = "refs/pull/1/merge".into();
         let pages = vec![
@@ -339,11 +432,11 @@ mod cache_tests {
                 actions_caches: vec![cache(3), cache(1), other_family],
             },
             CachePage {
-                actions_caches: vec![cache(4), cache(2), other_ref],
+                actions_caches: vec![cache(4), cache(2), other_ref, other_platform],
             },
         ];
         assert_eq!(
-            stale_caches(pages)
+            stale_caches(pages, WINDOWS_CACHE_PREFIX)
                 .iter()
                 .map(|cache| cache.id)
                 .collect::<Vec<_>>(),
@@ -351,9 +444,12 @@ mod cache_tests {
         );
         for count in 0..=2 {
             assert!(
-                stale_caches(vec![CachePage {
-                    actions_caches: (1..=count).map(cache).collect()
-                }])
+                stale_caches(
+                    vec![CachePage {
+                        actions_caches: (1..=count).map(cache).collect()
+                    }],
+                    WINDOWS_CACHE_PREFIX
+                )
                 .is_empty()
             );
         }
@@ -367,7 +463,7 @@ mod cache_tests {
             actions_caches: vec![reused, cache(2), cache(3), cache(4)],
         }];
         assert_eq!(
-            stale_caches(pages)
+            stale_caches(pages, WINDOWS_CACHE_PREFIX)
                 .iter()
                 .map(|cache| cache.id)
                 .collect::<Vec<_>>(),
