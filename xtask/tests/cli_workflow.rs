@@ -1,11 +1,158 @@
 #![cfg(unix)]
 
-use std::{error::Error, fs, process::Command};
+use std::{error::Error, fs, os::unix::fs::PermissionsExt, path::Path, process::Command};
 
 use serde_json::{Value, json};
 
 fn workflow() -> Value {
     serde_yaml_ng::from_str(include_str!("../../.github/workflows/cli-build.yml")).unwrap()
+}
+
+#[test]
+fn prepare_uses_the_installed_patch_toolchain_and_checks_its_release() -> Result<(), Box<dyn Error>>
+{
+    let temporary = tempfile::tempdir()?;
+    for (name, script) in [
+        (
+            "git",
+            "#!/bin/sh\ncase \"$*\" in\n'rev-parse HEAD') printf '%s\\n' \"$SOURCE_COMMIT\";;\n'status --porcelain --untracked-files=all') ;;\n*) exit 1;;\nesac\n",
+        ),
+        (
+            "rustup",
+            "#!/bin/sh\n[ \"$*\" = \"run $INSTALLED_TOOLCHAIN rustc --version --verbose\" ] || { echo 'toolchain is not installed' >&2; exit 1; }\nprintf 'release: %s\\n' \"$COMPILER_RELEASE\"\n",
+        ),
+    ] {
+        let path = temporary.path().join(name);
+        fs::write(&path, script)?;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755))?;
+    }
+    let manifest: toml::Value = toml::from_str(include_str!("../../Cargo.toml"))?;
+    let declared = manifest["workspace"]["package"]["rust-version"]
+        .as_str()
+        .unwrap();
+    let installed = if declared.split('.').count() == 2 {
+        format!("{declared}.1")
+    } else {
+        declared.to_owned()
+    };
+    let (minor, patch) = installed.rsplit_once('.').unwrap();
+    let other_patch = format!("{minor}.{}", patch.parse::<u32>()? + 1);
+    let source = "a".repeat(40);
+    for (requested, reported, success) in [
+        (None, installed.as_str(), declared == installed),
+        (Some(installed.as_str()), installed.as_str(), true),
+        (Some("1.0.0"), installed.as_str(), false),
+        (Some(installed.as_str()), "1.0.0", false),
+        (Some(installed.as_str()), other_patch.as_str(), false),
+    ] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
+        command.args(["cli", "prepare", "--source-commit", &source]);
+        if let Some(toolchain) = requested {
+            command.args(["--rust-toolchain", toolchain]);
+        }
+        let output = command
+            .env("PATH", temporary.path())
+            .env("SOURCE_COMMIT", &source)
+            .env("INSTALLED_TOOLCHAIN", &installed)
+            .env("COMPILER_RELEASE", reported)
+            .output()?;
+        assert_eq!(
+            output.status.success(),
+            success,
+            "{requested:?}: {output:?}"
+        );
+        if success {
+            let identity: Value = serde_json::from_slice(&output.stdout)?;
+            assert_eq!(identity["rust-toolchain"], installed);
+            assert_eq!(identity["source-commit"], source);
+        } else {
+            assert!(
+                output.stdout.is_empty(),
+                "must not report an invalid identity"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn debian_build_uses_the_restored_target_and_prebuilt_notice_tool() -> Result<(), Box<dyn Error>> {
+    let workflow = workflow();
+    let job = &workflow["jobs"]["build"];
+    let steps = job["steps"].as_array().unwrap();
+    let cache = steps
+        .iter()
+        .find(|step| step["uses"] == "Swatinem/rust-cache@v2")
+        .unwrap();
+    assert_eq!(cache["with"]["workspaces"], ". -> target/cli-debian");
+    assert!(
+        cache["with"]["shared-key"]
+            .as_str()
+            .unwrap()
+            .contains("needs.prepare.outputs.image")
+    );
+    assert_eq!(cache["with"]["cache-bin"], false);
+    let script = steps
+        .iter()
+        .find(|step| step["name"] == "Build and package in pinned Debian 12")
+        .unwrap()["run"]
+        .as_str()
+        .unwrap();
+    let temporary = tempfile::tempdir()?;
+    let bin = temporary.path().join("bin");
+    fs::create_dir(&bin)?;
+    for (name, script) in [
+        ("cargo-about", "#!/bin/sh\nexit 0\n"),
+        (
+            "docker",
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$DOCKER_ARGS\"\nexit \"$DOCKER_EXIT\"\n",
+        ),
+    ] {
+        let path = bin.join(name);
+        fs::write(&path, script)?;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755))?;
+    }
+    let arguments = temporary.path().join("docker-args");
+    for exit in [0, 7] {
+        let output = Command::new("bash")
+            .args(["-euo", "pipefail", "-c", script])
+            .current_dir(temporary.path())
+            .env(
+                "PATH",
+                std::env::join_paths([bin.as_path(), Path::new("/usr/bin"), Path::new("/bin")])?,
+            )
+            .env("RUNNER_TEMP", temporary.path())
+            .env("GITHUB_WORKSPACE", temporary.path())
+            .env("CARGO_HOME", temporary.path().join("cargo"))
+            .env("RUSTUP_HOME", temporary.path().join("rustup"))
+            .env("CLI_ARCHITECTURE", "amd64")
+            .env("CLI_IMAGE", "debian-fixture")
+            .env("DOCKER_ARGS", &arguments)
+            .env("DOCKER_EXIT", exit.to_string())
+            .output()?;
+        assert_eq!(output.status.code(), Some(exit), "{output:?}");
+        let arguments = fs::read_to_string(&arguments)?;
+        for mount in [
+            format!(
+                "{}/target/cli-debian:/build/target",
+                temporary.path().display()
+            ),
+            format!(
+                "{}/cargo/registry:/cargo/registry",
+                temporary.path().display()
+            ),
+            format!("{}/cargo/git:/cargo/git", temporary.path().display()),
+            format!(
+                "{}/cargo-about:/usr/local/bin/cargo-about:ro",
+                bin.display()
+            ),
+        ] {
+            assert!(arguments.lines().any(|line| line == mount), "{mount}");
+        }
+        assert!(arguments.contains("--package xtask --bin xtask"));
+        assert!(!arguments.contains("cargo install"));
+    }
+    Ok(())
 }
 
 #[test]

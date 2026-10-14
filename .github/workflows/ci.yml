@@ -414,8 +414,10 @@ jobs:
           toolchain: ${{ needs.release-cli.outputs.rust-toolchain }}
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
+          cache-targets: true
+          cache-bin: false
           save-if: false
       - uses: mozilla-actions/sccache-action@v0.0.10
       - name: Bind validated artifacts to the tested PR revision

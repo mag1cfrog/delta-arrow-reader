@@ -56,6 +56,14 @@ defaults:
   run:
     shell: bash
 
+env:
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  AWS_LC_SYS_USE_SYSTEM: "0"
+  CI_TARGET_CACHE_VERSION: "2"
+  SCCACHE_GHA_ENABLED: "true"
+  SCCACHE_GHA_RW_MODE: READ_ONLY
+  RUSTC_WRAPPER: sccache
+
 jobs:
   prepare:
     name: Check source and toolchain
@@ -81,6 +89,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
+      - name: Restore compiled dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
+          cache-targets: true
+          cache-bin: false
+          save-if: false
+      - uses: mozilla-actions/sccache-action@v0.0.10
       - name: Validate source and resolve exact build identity
         id: prepare
         env:
@@ -96,10 +113,6 @@ jobs:
     needs: prepare
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    env:
-      SCCACHE_GHA_ENABLED: 'true'
-      SCCACHE_GHA_RW_MODE: READ_ONLY
-      RUSTC_WRAPPER: sccache
     steps:
       - uses: actions/checkout@v5
         with:
@@ -109,16 +122,20 @@ jobs:
         with:
           toolchain: ${{ needs.prepare.outputs.rust-toolchain }}
           components: clippy
-      - name: Cache Cargo registry
+      - name: Restore compiled dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
+          cache-targets: true
+          cache-bin: false
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
       - name: Lint CLI and release tools
-        run: cargo clippy --locked -p delta-arrow-reader-cli -p xtask --all-targets -- -D warnings
+        run: |
+          cargo clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings
+          cargo clippy --locked --package xtask --all-targets -- -D warnings
       - name: Test CLI source
         run: cargo test --locked -p delta-arrow-reader-cli
       - name: Test CLI release tools
@@ -143,9 +160,9 @@ jobs:
       CLI_SOURCE_COMMIT: ${{ needs.prepare.outputs.source-commit }}
       CLI_VERSION: ${{ needs.prepare.outputs.version }}
       CLI_RUST_TOOLCHAIN: ${{ needs.prepare.outputs.rust-toolchain }}
-      CLI_ABOUT_VERSION: ${{ needs.prepare.outputs.about-version }}
       CLI_ARCHITECTURE: ${{ matrix.architecture }}
       CLI_IMAGE: ${{ needs.prepare.outputs.image }}
+      RUSTC_WRAPPER: ""
     steps:
       - uses: actions/checkout@v5
         with:
@@ -154,31 +171,47 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ needs.prepare.outputs.rust-toolchain }}
+      - name: Cache Debian build dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cli-debian-${{ matrix.architecture }}-${{ needs.prepare.outputs.image }}
+          workspaces: . -> target/cli-debian
+          cache-targets: true
+          cache-bin: false
+          # PR caches stay scoped to the merge ref; arbitrary sources cannot seed main.
+          save-if: ${{ github.event_name == 'pull_request' || (github.ref == 'refs/heads/main' && inputs.source-ref == github.sha) }}
+      - name: Install cargo-about
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@${{ needs.prepare.outputs.about-version }}
       - name: Build and package in pinned Debian 12
         run: |
-          mkdir "$RUNNER_TEMP/cli-build" "$RUNNER_TEMP/cli-cargo"
           cli_cargo_home="${CARGO_HOME:-$HOME/.cargo}"
           cli_rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
+          mkdir -p "$RUNNER_TEMP/cli-build" "$RUNNER_TEMP/cli-cargo" \
+            "$cli_cargo_home/registry" "$cli_cargo_home/git" target/cli-debian
           docker run --rm --platform "linux/$CLI_ARCHITECTURE" \
             --volume "$GITHUB_WORKSPACE:/source:ro" \
             --volume "$RUNNER_TEMP/cli-build:/build" \
+            --volume "$GITHUB_WORKSPACE/target/cli-debian:/build/target" \
             --volume "$RUNNER_TEMP/cli-cargo:/cargo" \
+            --volume "$cli_cargo_home/registry:/cargo/registry" \
+            --volume "$cli_cargo_home/git:/cargo/git" \
             --volume "$cli_cargo_home/bin:/rustup-bin:ro" \
             --volume "$cli_rustup_home:/rustup:ro" \
+            --volume "$(command -v cargo-about):/usr/local/bin/cargo-about:ro" \
             --workdir /source --env CARGO_HOME=/cargo --env RUSTUP_HOME=/rustup \
             --env PATH=/rustup-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
             --env CARGO_BUILD_JOBS=4 \
+            --env CARGO_PROFILE_DEV_DEBUG --env CARGO_INCREMENTAL \
             --env CLI_SOURCE_COMMIT --env CLI_VERSION --env CLI_RUST_TOOLCHAIN \
-            --env CLI_ABOUT_VERSION --env CLI_ARCHITECTURE \
+            --env CLI_ARCHITECTURE \
             "$CLI_IMAGE" bash -euo pipefail -c '
               apt-get update
               apt-get install -y --no-install-recommends \
                 build-essential binutils ca-certificates curl git pkg-config
               git config --global --add safe.directory /source
-              rustup run "$CLI_RUST_TOOLCHAIN" cargo install --locked --features cli \
-                --version "$CLI_ABOUT_VERSION" cargo-about
-              export PATH="/cargo/bin:$PATH"
-              rustup run "$CLI_RUST_TOOLCHAIN" cargo test --locked --package xtask \
+              rustup run "$CLI_RUST_TOOLCHAIN" cargo test --locked --package xtask --bin xtask \
                 --target-dir /build/target native_build_preserves_metadata_and_rejects_source_changes \
                 -- --ignored
               rustup run "$CLI_RUST_TOOLCHAIN" cargo run --locked --package xtask \
@@ -189,6 +222,14 @@ jobs:
               install -m 755 /build/target/debug/xtask /build/xtask
               strip --strip-debug /build/xtask
             '
+      - name: Restore cache ownership after the container build
+        if: always()
+        run: |
+          for directory in target/cli-debian "${CARGO_HOME:-$HOME/.cargo}/registry" "${CARGO_HOME:-$HOME/.cargo}/git"; do
+            if [ -d "$directory" ]; then
+              sudo chown -R "$(id -u):$(id -g)" "$directory"
+            fi
+          done
       - name: Upload platform archive
         uses: actions/upload-artifact@v6
         with:
@@ -309,6 +350,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ needs.prepare.outputs.rust-toolchain }}
+      - name: Restore compiled dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
+          cache-targets: true
+          cache-bin: false
+          save-if: false
+      - uses: mozilla-actions/sccache-action@v0.0.10
       - name: Assemble the original archives and check both identities
         run: |
           cargo xtask cli artifacts assemble \

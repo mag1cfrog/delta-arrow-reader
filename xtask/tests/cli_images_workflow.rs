@@ -166,6 +166,14 @@ fn artifact_downloads_never_fall_back_to_a_name_ref_or_partial_binary_set() {
     )["run"]
         .as_str()
         .unwrap();
+    assert!(
+        prepare
+            .split("jq -e")
+            .next()
+            .unwrap()
+            .contains("--rust-toolchain \"$CLI_RUST_TOOLCHAIN\""),
+        "prepare must use the installed patch toolchain before checking its identity"
+    );
     for required in [
         "cli prepare --source-commit \"$CLI_SOURCE_COMMIT\"",
         "--expected-version \"$CLI_VERSION\"",
