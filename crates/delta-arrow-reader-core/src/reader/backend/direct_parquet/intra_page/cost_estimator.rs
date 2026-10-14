@@ -39,7 +39,7 @@ impl CostEstimator {
         &self.calibration
     }
 
-    /// Returns further discovery time after reserving the first probe and complete fallback.
+    /// Returns further discovery time after reserving all probe rounds and complete fallback.
     /// Charges all time since planning began, including queueing and cache lookup, to the allowance.
     /// A cancelled call leaves at most four finite jobs holding the slot until they finish.
     pub(super) async fn remaining_allowance(
@@ -149,6 +149,23 @@ mod tests {
         estimator
             .remaining_allowance(plan(offset), started, started + Duration::from_secs(5))
             .await
+    }
+
+    #[tokio::test]
+    async fn completed_probe_timings_cannot_reuse_an_unobserved_budget() {
+        let estimator = estimator();
+        assert!(allowance(&estimator, 0).await.is_some());
+        let mut observed = plan(0);
+        observed.record_probe_time(Some(Duration::from_secs(200)));
+        let started = Instant::now();
+        assert!(
+            estimator
+                .remaining_allowance(observed.clone(), started, started + Duration::from_secs(5))
+                .await
+                .is_none()
+        );
+        assert!(estimator.cached(&observed).is_some());
+        assert!(allowance(&estimator, 0).await.is_some());
     }
 
     async fn occupy_blocking_thread() -> mpsc::Sender<()> {

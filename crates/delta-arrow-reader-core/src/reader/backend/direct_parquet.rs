@@ -1584,6 +1584,10 @@ pub(in crate::reader) mod tests {
             self.cancelled.load(Ordering::Acquire)
         }
 
+        pub(super) fn release_request(&self) {
+            self.release.add_permits(1);
+        }
+
         pub(in crate::reader) fn range_call_count(&self) -> usize {
             self.range_calls.load(Ordering::Acquire)
         }

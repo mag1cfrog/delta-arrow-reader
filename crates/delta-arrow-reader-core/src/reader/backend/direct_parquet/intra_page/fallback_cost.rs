@@ -1,5 +1,5 @@
-//! Cost of one probe round followed by reading every remaining byte.
-//! Both rounds use the partial-read client and wait for the preceding round to finish.
+//! Cost of dependent probe rounds followed by reading every remaining byte.
+//! Each round uses the partial-read client and waits for the preceding round to finish.
 
 use std::{cmp::Reverse, collections::BinaryHeap, ops::Range, time::Duration};
 
@@ -13,6 +13,7 @@ use crate::reader::{
 };
 
 pub(super) const TRIALS: usize = 1024;
+const MAX_PROBE_ROUNDS: usize = 9;
 const DRAW_STEP: u64 = 0x9e3779b97f4a7c15;
 
 /// Physical requests for the whole batch, including columns that cannot use partial reads.
@@ -20,19 +21,19 @@ const DRAW_STEP: u64 = 0x9e3779b97f4a7c15;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct FallbackPlan {
     ordinary: Vec<Range<u64>>,
-    probes: Vec<Range<u64>>,
+    initial: ProbeRound,
+    extensions: Vec<ProbeRound>,
     remaining: Vec<Range<u64>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ProbeRound {
+    ranges: Vec<Range<u64>>,
+    observed: Option<Duration>,
 }
 
 impl FallbackPlan {
     /// Each probe must fit inside one ordinary request; keep the executor's sorted request order.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "The delta-length read loop is the next implementation slice."
-        )
-    )]
     pub(super) fn new(ordinary: &[Range<u64>], probes: &[Range<u64>]) -> Option<Self> {
         let valid = |ranges: &[Range<u64>]| {
             !ranges.is_empty()
@@ -73,21 +74,56 @@ impl FallbackPlan {
         }
         Some(Self {
             ordinary: ordinary.to_vec(),
-            probes: probes.to_vec(),
+            initial: ProbeRound {
+                ranges: probes.to_vec(),
+                observed: None,
+            },
+            extensions: Vec::new(),
             remaining,
         })
+    }
+
+    /// Adds a dependent round using only unread bytes, and reserves the newly split fallback.
+    pub(super) fn with_probe(&self, ranges: &[Range<u64>]) -> Option<Self> {
+        if self.extensions.len() + 1 >= MAX_PROBE_ROUNDS
+            || ranges.len() > MAX_MODELED_REQUESTS
+            || self.rounds().map(|round| round.ranges.len()).sum::<usize>() + ranges.len()
+                > MAX_MODELED_REQUESTS
+        {
+            return None;
+        }
+        let added = Self::new(&self.remaining, ranges)?;
+        let mut next = self.clone();
+        next.extensions.push(added.initial);
+        next.remaining = added.remaining;
+        Some(next)
+    }
+
+    pub(super) fn record_probe_time(&mut self, observed: Option<Duration>) {
+        self.extensions
+            .last_mut()
+            .unwrap_or(&mut self.initial)
+            .observed = observed;
+    }
+
+    pub(super) fn is_initial(&self) -> bool {
+        self.extensions.is_empty()
     }
 
     pub(super) fn ordinary(&self) -> &[Range<u64>] {
         &self.ordinary
     }
 
-    pub(super) fn probes(&self) -> &[Range<u64>] {
-        &self.probes
+    pub(super) fn last_probe(&self) -> &[Range<u64>] {
+        &self.extensions.last().unwrap_or(&self.initial).ranges
     }
 
     pub(super) fn remaining(&self) -> &[Range<u64>] {
         &self.remaining
+    }
+
+    fn rounds(&self) -> impl Iterator<Item = &ProbeRound> {
+        std::iter::once(&self.initial).chain(&self.extensions)
     }
 }
 
@@ -143,7 +179,7 @@ pub(super) fn sample_costs(
             .collect::<Vec<_>>()
     };
     let mut ordinary_requests = requests(&plan.ordinary);
-    let mut probe_requests = requests(&plan.probes);
+    let mut probe_requests: Vec<_> = plan.rounds().map(|round| requests(&round.ranges)).collect();
     let mut remaining_requests = requests(&plan.remaining);
     trials
         .map(|trial| {
@@ -162,12 +198,21 @@ pub(super) fn sample_costs(
                 &ordinary_latencies,
                 MAX_CONCURRENT_PARQUET_RANGE_READS,
             )?;
-            let probes = transport_time(
-                &mut probe_requests,
-                &plan.probes,
-                &partial_latencies,
-                MAX_SHARED_RANGE_READS,
-            )?;
+            let mut probes = Duration::ZERO;
+            for (round, requests) in plan.rounds().zip(&mut probe_requests) {
+                let transport = transport_time(
+                    requests,
+                    &round.ranges,
+                    &partial_latencies,
+                    MAX_SHARED_RANGE_READS,
+                )?;
+                let capacity = request_capacity_time(&round.ranges, &partial_durations, trial)?;
+                // Slow uncontended reads spend budget; fast samples never erase modeled work.
+                let duration = transport
+                    .max(capacity)
+                    .max(round.observed.unwrap_or_default());
+                probes = probes.checked_add(duration)?;
+            }
             let remaining = transport_time(
                 &mut remaining_requests,
                 &plan.remaining,
@@ -176,11 +221,6 @@ pub(super) fn sample_costs(
             )?;
             // Complete small-request timings include body delivery. Use a capacity floor,
             // not another delay added to the transport simulation.
-            let probes = probes.max(request_capacity_time(
-                &plan.probes,
-                &partial_durations,
-                trial,
-            )?);
             let remaining = remaining.max(request_capacity_time(
                 &plan.remaining,
                 &partial_durations,
@@ -256,7 +296,7 @@ impl FallbackCost {
         Some(Self { ordinary, extra })
     }
 
-    /// Budget for additional discovery, with the first probe and complete fallback already reserved.
+    /// Budget for further discovery, with every planned probe and complete fallback reserved.
     /// Decision time includes computation and waiting for a worker, even when the estimate is cached.
     pub(super) fn remaining_allowance(&self, decision_elapsed: Duration) -> Option<Duration> {
         (self.ordinary / 20)
@@ -308,8 +348,8 @@ mod tests {
                 .filter(|range| range.contains(&byte))
                 .count();
             let fallback = plan
-                .probes
-                .iter()
+                .rounds()
+                .flat_map(|round| &round.ranges)
                 .chain(&plan.remaining)
                 .filter(|range| range.contains(&byte))
                 .count();
@@ -403,6 +443,45 @@ mod tests {
                 .is_none()
         );
         assert!(expected.remaining_allowance(Duration::MAX).is_none());
+    }
+
+    #[test]
+    fn additional_probes_reserve_split_fallback_and_keep_observed_work() {
+        let profile = calibration(10, 30, 1000);
+        let mut first = FallbackPlan::new(&[0..1000], &[0..100]).unwrap();
+        let next = first.with_probe(&[400..500]).unwrap();
+        assert_eq!(next.remaining(), &[100..400, 500..1000]);
+        assert_eq!(first.remaining(), &[100..1000]);
+        assert_eq!(next.last_probe(), &[400..500]);
+        // Each extra round adds another 30 ms, even though no byte is fetched twice.
+        assert_eq!(cost(&profile, &next).extra, Duration::from_millis(80));
+        first.record_probe_time(Some(Duration::from_secs(2)));
+        let slow = first.with_probe(&[400..500]).unwrap();
+        assert_eq!(cost(&profile, &slow).extra, Duration::from_millis(1950));
+        first.record_probe_time(Some(Duration::ZERO));
+        assert_eq!(
+            cost(&profile, &first.with_probe(&[400..500]).unwrap()),
+            cost(&profile, &next)
+        );
+    }
+
+    #[test]
+    fn additional_probes_require_progress_and_bound_total_requests_and_rounds() {
+        let initial = FallbackPlan::new(&[0..1000], &[0..100]).unwrap();
+        for ranges in [vec![], vec![100..100], vec![50..150], vec![900..1001]] {
+            assert!(initial.with_probe(&ranges).is_none());
+        }
+        let mut plan = initial;
+        for round in 1..MAX_PROBE_ROUNDS {
+            let start = 100 * round as u64;
+            plan = plan.with_probe(&[start..start + 100]).unwrap();
+        }
+        assert!(plan.with_probe(&[900..1000]).is_none());
+        let probes: Vec<_> = (0..MAX_MODELED_REQUESTS as u64)
+            .map(|i| 2 * i..2 * i + 1)
+            .collect();
+        let plan = FallbackPlan::new(&[0..2 * MAX_MODELED_REQUESTS as u64], &probes).unwrap();
+        assert!(plan.with_probe(&[1..2]).is_none());
     }
 
     #[test]
