@@ -26,7 +26,7 @@ pub use predicate::{DeltaComparison, DeltaPredicate, DeltaScalar};
 use std::{
     fmt,
     pin::Pin,
-    sync::{Arc, RwLock},
+    sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
@@ -39,7 +39,9 @@ use futures_util::Stream;
 use snafu::ResultExt;
 
 use self::{
-    backend::direct_parquet::{NetworkWarmupPlan, ParquetRangeReadEstimator},
+    backend::direct_parquet::{
+        NetworkWarmupPlan, ParquetRangeReadEstimator, ParquetRangeReadState,
+    },
     planning::{
         DeltaScanPartitionTargetOptions, DeltaScanPlan, build_physical_row_predicate, plan_scan,
     },
@@ -374,58 +376,6 @@ pub struct DeltaTable {
     snapshot: Arc<ArrowTableSnapshot>,
     execution_options: DeltaScanExecutionOptions,
     range_read_state: Arc<ParquetRangeReadState>,
-}
-
-#[derive(Default)]
-struct ParquetRangeReadState {
-    estimator: RwLock<Arc<ParquetRangeReadEstimator>>,
-    recovery: tokio::sync::Mutex<Option<NetworkWarmupPlan>>,
-}
-
-impl ParquetRangeReadState {
-    fn estimator(&self) -> Arc<ParquetRangeReadEstimator> {
-        Arc::clone(
-            &self
-                .estimator
-                .read()
-                .unwrap_or_else(std::sync::PoisonError::into_inner),
-        )
-    }
-
-    fn set_estimator(&self, estimator: Arc<ParquetRangeReadEstimator>) {
-        *self
-            .estimator
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = estimator;
-    }
-
-    async fn defer_network_warmup(&self, plan: NetworkWarmupPlan) {
-        *self.recovery.lock().await = Some(plan);
-    }
-
-    #[cfg(feature = "datafusion")]
-    fn network_warmup_pending(&self, options: DeltaScanExecutionOptions) -> bool {
-        NetworkWarmupPlan::supports_scan(options)
-            && self
-                .recovery
-                .try_lock()
-                // A locked state may be publishing another query's recovered estimator.
-                .map_or(true, |pending| pending.is_some())
-    }
-
-    async fn recover_network_warmup(&self, options: DeltaScanExecutionOptions) {
-        if !NetworkWarmupPlan::supports_scan(options) {
-            return;
-        }
-        let mut pending = self.recovery.lock().await;
-        let Some(plan) = pending.take() else {
-            return;
-        };
-        // Keep the lock through the attempt so concurrent scans share its result.
-        if let Some(estimator) = plan.run("recovery", &self.estimator()).await {
-            self.set_estimator(estimator);
-        }
-    }
 }
 
 impl DeltaTable {

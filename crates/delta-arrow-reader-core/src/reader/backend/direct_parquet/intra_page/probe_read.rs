@@ -436,10 +436,8 @@ mod tests {
     use crate::{
         DeltaScanMetrics,
         reader::backend::direct_parquet::{
-            metered_object_store::{
-                MeteredParquetObjectStore, MultiRangeReadStrategy, ParquetRangeReadEstimator,
-                RangeReadCalibration,
-            },
+            metered_object_store::{MeteredParquetObjectStore, MultiRangeReadStrategy},
+            network_profile::{ParquetRangeReadEstimator, RangeReadCalibration},
             tests::{GateRequest, GatedObjectStore, metrics},
         },
     };

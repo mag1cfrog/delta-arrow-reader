@@ -1556,7 +1556,7 @@ mod tests {
     #[tokio::test]
     async fn mixed_batches_preserve_profitable_fixed_width_reads() -> TestResult {
         use super::super::{
-            metered_object_store::{MultiRangeReadStrategy, RangeReadCalibration},
+            metered_object_store::MultiRangeReadStrategy, network_profile::RangeReadCalibration,
             tests::metrics,
         };
         use arrow::{
@@ -1723,9 +1723,8 @@ mod tests {
     #[tokio::test]
     async fn variable_length_queries_preserve_values_nulls_and_physical_rows() -> TestResult {
         use super::super::{
-            arrow_reader_options,
-            metered_object_store::{MultiRangeReadStrategy, RangeReadCalibration},
-            tests::metrics,
+            arrow_reader_options, metered_object_store::MultiRangeReadStrategy,
+            network_profile::RangeReadCalibration, tests::metrics,
         };
         use arrow::{
             array::{BinaryArray, StringArray},

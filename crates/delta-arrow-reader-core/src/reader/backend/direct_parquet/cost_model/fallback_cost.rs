@@ -5,7 +5,7 @@ use std::{cmp::Reverse, collections::BinaryHeap, ops::Range, time::Duration};
 
 use super::request_simulation::{MAX_MODELED_REQUESTS, MAX_REQUEST_DELAY, Request, plan_duration};
 use crate::reader::{
-    backend::direct_parquet::metered_object_store::{RangeReadCalibration, SMALL_READ_CONCURRENCY},
+    backend::direct_parquet::network_profile::{RangeReadCalibration, SMALL_READ_CONCURRENCY},
     options::{
         MAX_CONCURRENT_PARQUET_RANGE_READS, MAX_INTRA_PAGE_READ_BYTES, MAX_SHARED_RANGE_READS,
     },
@@ -327,7 +327,7 @@ impl FallbackCost {
 )]
 mod tests {
     use super::*;
-    use crate::reader::backend::direct_parquet::metered_object_store::PartialReadTimings;
+    use crate::reader::backend::direct_parquet::network_profile::PartialReadTimings;
 
     fn calibration(
         ordinary_ms: u64,

@@ -12,7 +12,7 @@ use tokio::{
 };
 
 use super::fallback_cost::{FallbackCost, FallbackPlan, TRIALS, sample_costs};
-use crate::reader::backend::direct_parquet::metered_object_store::RangeReadCalibration;
+use crate::reader::backend::direct_parquet::network_profile::RangeReadCalibration;
 
 const CACHE_ENTRIES: usize = 128;
 static WORK_SLOT: LazyLock<Arc<Semaphore>> = LazyLock::new(|| Arc::new(Semaphore::new(1)));
