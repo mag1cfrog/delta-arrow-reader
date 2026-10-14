@@ -737,6 +737,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn refills_slots_without_waiting_for_an_earlier_request() -> Result<(), Infallible> {
+        use crate::reader::options::MAX_CONCURRENT_PARQUET_RANGE_READS;
+        use std::time::Duration;
+        use tokio::sync::Semaphore;
+
+        for concurrency in [
+            MAX_CONCURRENT_PARQUET_RANGE_READS,
+            super::MAX_SHARED_RANGE_READS,
+        ] {
+            let count = concurrency + 2;
+            let ranges: Vec<_> = (0..count as u64).map(|i| 2 * i..2 * i + 1).collect();
+            let last_start = ranges.last().unwrap().start;
+            let first = Semaphore::new(0);
+            let last = Semaphore::new(0);
+            let mut reading =
+                Box::pin(execute_range_plan(&ranges, &ranges, concurrency, |range| {
+                    let first = &first;
+                    let last = &last;
+                    async move {
+                        if range.start == 0 {
+                            first.acquire().await.unwrap().forget();
+                        }
+                        if range.start == last_start {
+                            last.add_permits(1);
+                        }
+                        Ok::<_, Infallible>(Bytes::from(vec![(range.start / 2) as u8]))
+                    }
+                }));
+            tokio::time::timeout(Duration::from_secs(5), async {
+                tokio::select! {
+                    _ = last.acquire() => {}
+                    result = &mut reading => panic!("plan finished with its first request blocked: {result:?}"),
+                }
+            }).await.expect("later requests reuse free slots");
+            first.add_permits(1);
+            let results = reading.await?;
+            assert_eq!(results.len(), count);
+            for (index, bytes) in results.iter().enumerate() {
+                assert_eq!(bytes.as_ref(), &[index as u8]);
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn restores_unsorted_overlapping_duplicate_and_empty_requests() -> Result<(), Infallible>
     {
         let requested_ranges = [10..14, 0..4, 2..6, 10..14, 6..6];

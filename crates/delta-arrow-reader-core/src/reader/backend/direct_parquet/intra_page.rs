@@ -6,6 +6,8 @@
 
 mod delta_length;
 mod page;
+#[cfg(test)]
+mod request_simulation;
 
 use std::{
     ops::Range,
