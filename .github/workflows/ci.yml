@@ -12,6 +12,8 @@ env:
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
   # Keep Python's pkg-config path from invalidating the bundled AWS-LC build.
   AWS_LC_SYS_USE_SYSTEM: "0"
+  # Bump when cache warming adds build variants without dependency changes.
+  CI_TARGET_CACHE_VERSION: "2"
   SCCACHE_GHA_ENABLED: "true"
   SCCACHE_GHA_RW_MODE: READ_ONLY
   RUSTC_WRAPPER: sccache
@@ -84,6 +86,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
           cache-targets: true
           cache-bin: false
           save-if: false
@@ -125,6 +128,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
           cache-targets: true
           cache-bin: false
           save-if: false
@@ -162,6 +166,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
           cache-targets: true
           cache-bin: false
           save-if: false
@@ -205,6 +210,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
           cache-targets: true
           cache-bin: false
           save-if: false
@@ -252,21 +258,25 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.10'
-      - name: Read Rust version
+      - name: Read Rust and cargo-about versions
         id: rust-version
         run: |
           version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
           test -n "$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          about_version="$(sed -n 's/^cargo-about-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$about_version"
+          echo "cargo-about-version=$about_version" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
-          components: clippy, rustfmt
+          components: clippy, rustfmt, rust-docs
       - run: cargo fmt --package delta-arrow-reader-python -- --check
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
           cache-targets: true
           cache-bin: false
           save-if: false
@@ -276,22 +286,21 @@ jobs:
         run: cargo clippy --locked -p delta-arrow-reader-python --all-targets -- -D warnings
       - name: Test Python runtime ownership
         run: cargo test --locked -p delta-arrow-reader-python
-      - name: Install Python wheel notice tools
+      - name: Install cargo-about
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@${{ steps.rust-version.outputs.cargo-about-version }}
+      - name: Test Python build backend
+        run: python -I -m unittest discover -s crates/delta-arrow-reader-python/build_tests
+      - name: Build Python package
         run: |
-          rustup component add rust-docs
-          about_version="$(sed -n 's/^cargo-about-version = "\(.*\)"/\1/p' Cargo.toml)"
-          test -n "$about_version"
-          cargo install --locked --features cli --version "$about_version" cargo-about
-        env:
-          RUSTC_WRAPPER: ""
-      - name: Test Python API
-        run: |
-          python -I -m unittest discover -s crates/delta-arrow-reader-python/build_tests
           python -m venv "$RUNNER_TEMP/python-tests"
           source "$RUNNER_TEMP/python-tests/bin/activate"
           python -m pip install 'maturin==1.14.1' 'pyarrow==18.0.0'
-          python -m pip install --no-build-isolation --no-deps --editable crates/delta-arrow-reader-python
-          python -I -m unittest discover -s crates/delta-arrow-reader-python/tests
+          python -m pip install --verbose --no-build-isolation --no-deps --editable crates/delta-arrow-reader-python
+      - name: Test Python API
+        run: |
+          "$RUNNER_TEMP/python-tests/bin/python" -I -m unittest discover -s crates/delta-arrow-reader-python/tests
 
   cli-checks:
     name: CLI Source
@@ -316,6 +325,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
           cache-targets: true
           cache-bin: false
           save-if: false
