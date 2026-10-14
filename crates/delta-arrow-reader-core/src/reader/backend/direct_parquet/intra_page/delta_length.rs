@@ -8,7 +8,7 @@ use parquet::{
 
 use super::page::{MAX_PAGE_BYTES, MAX_PAGE_ROWS};
 
-const MAX_LENGTH_BYTES: usize = 1024 * 1024;
+pub(super) const MAX_PREFIX_BYTES: usize = 1024 * 1024;
 const MAX_BLOCK_VALUES: u64 = 32_768;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -36,7 +36,7 @@ pub(super) fn decode_lengths(
     if prefix.len() > total_bytes {
         return Err(Invalid("prefix exceeds value area"));
     }
-    if prefix.len() > MAX_LENGTH_BYTES {
+    if prefix.len() > MAX_PREFIX_BYTES {
         return Err(Unsupported);
     }
     // Writers may omit the value stream entirely when every row is null.
@@ -45,7 +45,7 @@ pub(super) fn decode_lengths(
     }
     let end = length_stream_end(&prefix, value_count).map_err(|error| match error {
         NeedBytes(end) if end > total_bytes => Invalid("truncated length stream"),
-        NeedBytes(end) if end > MAX_LENGTH_BYTES => Unsupported,
+        NeedBytes(end) if end > MAX_PREFIX_BYTES => Unsupported,
         error => error,
     })?;
 
@@ -263,8 +263,8 @@ mod tests {
         let mut block = vec![0, 32, 32, 32, 32];
         block.resize(5 + 128 * 4, 0);
         let total = prefix.len() + (MAX_PAGE_ROWS - 1).div_ceil(128) * block.len();
-        while prefix.len() < MAX_LENGTH_BYTES {
-            prefix.extend_from_slice(&block[..block.len().min(MAX_LENGTH_BYTES - prefix.len())]);
+        while prefix.len() < MAX_PREFIX_BYTES {
+            prefix.extend_from_slice(&block[..block.len().min(MAX_PREFIX_BYTES - prefix.len())]);
         }
         assert_eq!(
             decode_lengths(prefix.into(), MAX_PAGE_ROWS, total),
@@ -295,7 +295,7 @@ mod tests {
             Err(Unsupported)
         );
         assert_eq!(
-            decode_lengths(vec![0; MAX_LENGTH_BYTES + 1].into(), 1, MAX_PAGE_BYTES),
+            decode_lengths(vec![0; MAX_PREFIX_BYTES + 1].into(), 1, MAX_PAGE_BYTES),
             Err(Unsupported)
         );
         assert!(matches!(

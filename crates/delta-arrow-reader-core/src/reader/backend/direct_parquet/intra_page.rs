@@ -4,11 +4,8 @@
 //! eligible, after filtering. The normal decoder still owns row selection and DV
 //! positions; unread fixed-width values are zero-filled only where it will skip them.
 
-mod page;
-
-// Validate length decoding before connecting variable-length discovery to query I/O.
-#[cfg(test)]
 mod delta_length;
+mod page;
 
 use std::{
     ops::Range,
@@ -246,7 +243,7 @@ impl IntraPageReader {
                     row_count: row_count as usize,
                     max_value_count: row_count.min(non_null_rows) as usize,
                     compression: chunk.compression(),
-                    value_width,
+                    value_width: Some(value_width),
                     nullable: descriptor.max_def_level() == 1,
                 });
                 if pages.len() > MAX_PAGES {
@@ -373,15 +370,13 @@ impl IntraPageReader {
         ) else {
             return Ok(None);
         };
-        let prefixes: Vec<_> = pages
-            .iter()
-            .map(|page| {
-                page.range.start..(page.range.start + page::PAGE_PREFIX_BYTES).min(page.range.end)
-            })
-            .collect();
+        let prefixes: Vec<_> = pages.iter().map(Page::prefix_range).collect();
         // Charge dependent rounds separately; raw-block headers are found one at a time.
         let mut extra_rounds = [(0_u128, 0_usize); MAX_PROBE_ROUNDS - 1];
         for page in pages {
+            let Some(value_width) = page.value_width else {
+                return Ok(None);
+            };
             let (rounds, size) = match page.compression {
                 Compression::ZSTD(_) => {
                     let bytes_after_prefix =
@@ -394,7 +389,7 @@ impl IntraPageReader {
                 Compression::UNCOMPRESSED if page.nullable => {
                     // A large nullable page can still have a tiny RLE stream.
                     let structure_bytes = (page.range.end - page.range.start)
-                        .saturating_sub(page.max_value_count as u64 * page.value_width as u64);
+                        .saturating_sub(page.max_value_count as u64 * value_width as u64);
                     if structure_bytes <= page::PAGE_PREFIX_BYTES {
                         continue;
                     }
@@ -458,10 +453,7 @@ impl IntraPageReader {
         let mut request_count = 0;
         let mut total_cost = 0_u128;
         let mut probing = true;
-        let mut next_ranges = pages
-            .iter()
-            .map(|p| p.range.start..(p.range.start + page::PAGE_PREFIX_BYTES).min(p.range.end))
-            .collect::<Vec<_>>();
+        let mut next_ranges = pages.iter().map(Page::prefix_range).collect::<Vec<_>>();
         // Up to MAX_PROBE_ROUNDS dependent probe rounds, followed by one data round.
         for round in 0..=MAX_PROBE_ROUNDS {
             let phase = if probing { "probe" } else { "data" };
@@ -620,6 +612,8 @@ fn invalid_data(reason: &str) -> ParquetError {
 fn estimated_value_ranges(pages: &[Page], selected_rows: &[u64]) -> Option<Vec<Range<u64>>> {
     let mut ranges = Vec::new();
     for page in pages {
+        // Variable lengths need their own discovery budget, not uniform row offsets.
+        let value_width = page.value_width?;
         let first = selected_rows.partition_point(|row| *row < page.first_file_row);
         let end = page.first_file_row.checked_add(page.row_count as u64)?;
         for row in selected_rows[first..].iter().take_while(|row| **row < end) {
@@ -628,12 +622,7 @@ fn estimated_value_ranges(pages: &[Page], selected_rows: &[u64]) -> Option<Vec<R
                 * u128::from(page.range.end - page.range.start)
                 / page.row_count as u128;
             let start = page.range.start + u64::try_from(offset).ok()?;
-            ranges.push(
-                start
-                    ..start
-                        .saturating_add(page.value_width as u64)
-                        .min(page.range.end),
-            );
+            ranges.push(start..start.saturating_add(value_width as u64).min(page.range.end));
             if ranges.len() > MAX_REQUESTS {
                 return None;
             }
@@ -658,12 +647,28 @@ mod tests {
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
     // Use Parquet's independent Thrift writer only to construct format controls.
-    #[allow(deprecated)]
     fn encode_page(
         body: &[u8],
         decoded_size: usize,
         rows: usize,
         crc: Option<i32>,
+    ) -> TestResult<Bytes> {
+        encode_page_with_encoding(
+            body,
+            decoded_size,
+            rows,
+            crc,
+            parquet::basic::Encoding::PLAIN,
+        )
+    }
+
+    #[allow(deprecated)]
+    pub(super) fn encode_page_with_encoding(
+        body: &[u8],
+        decoded_size: usize,
+        rows: usize,
+        crc: Option<i32>,
+        encoding: parquet::basic::Encoding,
     ) -> TestResult<Bytes> {
         use parquet::{
             format::{DataPageHeader, Encoding as WireEncoding, PageHeader, PageType},
@@ -676,7 +681,7 @@ mod tests {
             crc,
             data_page_header: Some(DataPageHeader::new(
                 rows.try_into()?,
-                WireEncoding::PLAIN,
+                WireEncoding(encoding as i32),
                 WireEncoding::RLE,
                 WireEncoding::RLE,
                 None,
@@ -795,7 +800,7 @@ mod tests {
                 first_file_row: 0,
                 row_count: rows,
                 max_value_count: rows,
-                value_width: width,
+                value_width: Some(width),
                 nullable: false,
                 compression: Compression::ZSTD(Default::default()),
             };
@@ -866,7 +871,7 @@ mod tests {
             first_file_row: 0,
             row_count: expected.len(),
             max_value_count: expected.len(),
-            value_width: 8,
+            value_width: Some(8),
             nullable: true,
             compression: Compression::UNCOMPRESSED,
         };
@@ -922,7 +927,7 @@ mod tests {
                 first_file_row: 0,
                 row_count: 2_000,
                 max_value_count: 2_000,
-                value_width: 8,
+                value_width: Some(8),
                 nullable: true,
                 compression: Compression::ZSTD(Default::default()),
             };
@@ -956,7 +961,7 @@ mod tests {
             first_file_row: 50,
             row_count: 20_000,
             max_value_count: 20_000,
-            value_width: 8,
+            value_width: Some(8),
             nullable: true,
             compression: Compression::ZSTD(Default::default()),
         };
@@ -1167,7 +1172,7 @@ mod tests {
                 first_file_row: 0,
                 row_count: rows,
                 max_value_count: rows,
-                value_width: 9,
+                value_width: Some(9),
                 nullable: false,
                 compression: Compression::ZSTD(Default::default()),
             };
@@ -1222,7 +1227,7 @@ mod tests {
                 first_file_row: 0,
                 row_count: 1,
                 max_value_count: 1,
-                value_width: 8,
+                value_width: Some(8),
                 nullable: true,
                 compression: Compression::UNCOMPRESSED,
             };
@@ -1245,7 +1250,7 @@ mod tests {
             first_file_row: 0,
             row_count: 1,
             max_value_count: 1,
-            value_width: 8,
+            value_width: Some(8),
             nullable: true,
             compression: Compression::ZSTD(Default::default()),
         };
@@ -1282,7 +1287,7 @@ mod tests {
                         first_file_row: 10,
                         row_count: 3,
                         max_value_count: 3,
-                        value_width,
+                        value_width: Some(value_width),
                         nullable,
                         compression: Compression::UNCOMPRESSED,
                     };
@@ -1302,7 +1307,7 @@ mod tests {
                         );
                         for invalid_page in [
                             Page {
-                                value_width: usize::MAX,
+                                value_width: Some(usize::MAX),
                                 range: page.range.clone(),
                                 ..page
                             },
