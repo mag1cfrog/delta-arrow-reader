@@ -26,6 +26,13 @@ pub(super) struct FallbackPlan {
 
 impl FallbackPlan {
     /// Each probe must fit inside one ordinary request; keep the executor's sorted request order.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "The delta-length read loop is the next implementation slice."
+        )
+    )]
     pub(super) fn new(ordinary: &[Range<u64>], probes: &[Range<u64>]) -> Option<Self> {
         let valid = |ranges: &[Range<u64>]| {
             !ranges.is_empty()

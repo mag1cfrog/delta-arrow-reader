@@ -21,6 +21,7 @@ use tokio::sync::Semaphore;
 use tracing::Instrument;
 use url::Url;
 
+use super::intra_page::CostEstimator;
 use super::range_planning::{
     ChosenRangePlan, MAX_SHARED_RANGE_READS, RANGE_READ_PERMITS, RangePlanDecision,
     TransportEstimate, bandwidth_delay_bytes, choose_range_plan, execute_range_plan, merge_ranges,
@@ -92,7 +93,7 @@ struct TransportSampleWindows {
     latencies: VecDeque<Duration>,
     throughputs: VecDeque<ThroughputSample>,
     request_overheads: VecDeque<Duration>,
-    calibration: Option<Arc<RangeReadCalibration>>,
+    cost_estimator: Option<Arc<CostEstimator>>,
 }
 
 /// Immutable measurements from one complete initialization, before passive reads update the windows.
@@ -325,11 +326,16 @@ impl MeteredParquetObjectStore {
 
     /// Returns matching bandwidth and request samples from the last fully sampled warmup.
     pub(super) fn range_read_calibration(&self) -> Option<Arc<RangeReadCalibration>> {
+        Some(Arc::clone(self.range_read_cost_estimator()?.calibration()))
+    }
+
+    /// File readers share one cache per complete calibration; passive observations do not replace it.
+    pub(super) fn range_read_cost_estimator(&self) -> Option<Arc<CostEstimator>> {
         self.range_read_estimator
             .samples
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .calibration
+            .cost_estimator
             .clone()
     }
 
@@ -398,21 +404,24 @@ impl MeteredParquetObjectStore {
                 }));
             }
         }
+        let cost_estimator = (ordinary_request_latencies.len() == MIN_TRANSPORT_SAMPLES * 4
+            && request_durations.len() == sample_count)
+            .then(|| {
+                CostEstimator::new(Arc::new(RangeReadCalibration {
+                    bytes_per_second: estimate.shared_throughput_bytes_per_second,
+                    ordinary_request_latencies: ordinary_request_latencies.into(),
+                    partial_request_latencies: request_latencies.into(),
+                    partial_request_durations: request_durations.into(),
+                }))
+            });
         let mut samples = self
             .range_read_estimator
             .samples
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        // Publish only complete calibration; interrupted rounds must not seed the cost model.
-        if ordinary_request_latencies.len() == MIN_TRANSPORT_SAMPLES * 4
-            && request_durations.len() == sample_count
-        {
-            samples.calibration = Some(Arc::new(RangeReadCalibration {
-                bytes_per_second: estimate.shared_throughput_bytes_per_second,
-                ordinary_request_latencies: ordinary_request_latencies.into(),
-                partial_request_latencies: request_latencies.into(),
-                partial_request_durations: request_durations.into(),
-            }));
+        // Replace measurements and their cache together; incomplete warmup keeps the previous pair.
+        if let Some(cost_estimator) = cost_estimator {
+            samples.cost_estimator = Some(cost_estimator);
         }
         Ok(samples.request_overheads.len() >= MIN_TRANSPORT_SAMPLES)
     }
@@ -1267,6 +1276,7 @@ mod tests {
         })?;
         assert!(store.request_overhead_bytes().is_some());
         let calibration = store.range_read_calibration().unwrap();
+        let costs = store.range_read_cost_estimator().unwrap();
         assert_eq!(
             calibration.bytes_per_second,
             estimate.shared_throughput_bytes_per_second
@@ -1304,7 +1314,14 @@ mod tests {
         let overhead = store.request_overhead_bytes().unwrap();
         let next_profile = store.range_read_estimator.for_network_warmup();
         assert!(next_profile.current_transport_estimate().estimate.is_none());
-        assert!(next_profile.samples.lock().unwrap().calibration.is_none());
+        assert!(
+            next_profile
+                .samples
+                .lock()
+                .unwrap()
+                .cost_estimator
+                .is_none()
+        );
         let first = store.range_read_estimator.start_read();
         let second = next_profile.start_read();
         let shared = store.transport_estimate().unwrap();
@@ -1349,6 +1366,10 @@ mod tests {
             store.range_read_calibration().unwrap().bytes_per_second,
             estimate.shared_throughput_bytes_per_second
         );
+        assert!(Arc::ptr_eq(
+            &costs,
+            &store.range_read_cost_estimator().unwrap()
+        ));
         // Transport evidence alone is incomplete when all small-request
         // observations overlap another read and must be discarded.
         let contended = MeteredParquetObjectStore::new(
@@ -1402,6 +1423,95 @@ mod tests {
             &calibration,
             &store.range_read_calibration().unwrap()
         ));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cost_cache_follows_complete_calibration() -> Result<()> {
+        use super::super::tests::{GateRequest, GatedObjectStore};
+
+        let memory = Arc::new(InMemory::new());
+        let path = Path::from("data.parquet");
+        let size = super::WARMUP_READ_BYTES;
+        memory.put(&path, vec![0; size as usize].into()).await?;
+        let remote: Arc<dyn ObjectStore> = Arc::new(ThrottledStore::new(
+            memory,
+            ThrottleConfig {
+                wait_get_per_call: Duration::from_millis(1),
+                wait_get_per_byte: Duration::from_nanos(20),
+                ..Default::default()
+            },
+        ));
+        // Hold the first ordinary request of the second warmup so readers can observe it.
+        let ordinary = GatedObjectStore::new(remote.clone(), GateRequest::Range(13));
+        let estimator = Arc::new(
+            ParquetRangeReadEstimator::default()
+                .for_network_warmup()
+                .with_partial_range_store(remote),
+        );
+        let reader = || {
+            MeteredParquetObjectStore::new(
+                ordinary.clone(),
+                direct_metrics(),
+                MultiRangeReadStrategy::ChooseAutomatically,
+            )
+            .with_range_read_estimator(Arc::clone(&estimator))
+        };
+        let first = reader();
+        let second = reader();
+        let budget = tokio::sync::Semaphore::new(super::MAX_SHARED_RANGE_READS);
+        let files = [(path, size)];
+        assert!(first.range_read_cost_estimator().is_none());
+        assert!(first.warmup(&files, &budget).await?);
+        let old_costs = first.range_read_cost_estimator().unwrap();
+        let old_calibration = first.range_read_calibration().unwrap();
+        assert!(Arc::ptr_eq(old_costs.calibration(), &old_calibration));
+        assert!(Arc::ptr_eq(
+            &old_costs,
+            &second.range_read_cost_estimator().unwrap()
+        ));
+        let counts = first.metrics.snapshot();
+        assert_eq!(counts.parquet_data_file_range_get_operations, Some(3_084));
+        assert_eq!(counts.parquet_data_file_bytes_received, Some(25_165_824));
+
+        let mut warming = Box::pin(first.warmup(&files, &budget));
+        tokio::time::timeout(Duration::from_secs(5), async {
+            tokio::select! {
+                _ = ordinary.wait_started() => {}
+                result = &mut warming => panic!("warmup finished before cancellation: {result:?}"),
+            }
+        })
+        .await
+        .unwrap();
+        assert!(Arc::ptr_eq(
+            &old_costs,
+            &second.range_read_cost_estimator().unwrap()
+        ));
+        drop(warming);
+        assert!(ordinary.was_cancelled());
+        assert!(Arc::ptr_eq(
+            &old_costs,
+            &second.range_read_cost_estimator().unwrap()
+        ));
+        assert_eq!(budget.available_permits(), super::MAX_SHARED_RANGE_READS);
+
+        assert!(first.warmup(&files, &budget).await?);
+        let new_costs = second.range_read_cost_estimator().unwrap();
+        assert!(!Arc::ptr_eq(&old_costs, &new_costs));
+        assert!(Arc::ptr_eq(
+            &new_costs,
+            &first.range_read_cost_estimator().unwrap()
+        ));
+        assert!(Arc::ptr_eq(
+            new_costs.calibration(),
+            &second.range_read_calibration().unwrap()
+        ));
+        assert!(!Arc::ptr_eq(new_costs.calibration(), &old_calibration));
+        assert!(Arc::ptr_eq(old_costs.calibration(), &old_calibration));
+        // Holding old measurements alone must not keep their discarded result cache alive.
+        let released = Arc::downgrade(&old_costs);
+        drop(old_costs);
+        assert!(released.upgrade().is_none());
         Ok(())
     }
 

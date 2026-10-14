@@ -17,7 +17,7 @@ use crate::reader::backend::direct_parquet::metered_object_store::RangeReadCalib
 const CACHE_ENTRIES: usize = 128;
 static WORK_SLOT: LazyLock<Arc<Semaphore>> = LazyLock::new(|| Arc::new(Semaphore::new(1)));
 
-pub(super) struct CostEstimator {
+pub(in super::super) struct CostEstimator {
     calibration: Arc<RangeReadCalibration>,
     workers: usize,
     work_slot: Arc<Semaphore>,
@@ -26,7 +26,7 @@ pub(super) struct CostEstimator {
 }
 
 impl CostEstimator {
-    pub(super) fn new(calibration: Arc<RangeReadCalibration>) -> Arc<Self> {
+    pub(in super::super) fn new(calibration: Arc<RangeReadCalibration>) -> Arc<Self> {
         Arc::new(Self {
             calibration,
             workers: std::thread::available_parallelism().map_or(1, |count| count.get().min(4)),
@@ -35,9 +35,20 @@ impl CostEstimator {
         })
     }
 
+    pub(in super::super) fn calibration(&self) -> &Arc<RangeReadCalibration> {
+        &self.calibration
+    }
+
     /// Returns further discovery time after reserving the first probe and complete fallback.
     /// Charges all time since planning began, including queueing and cache lookup, to the allowance.
     /// A cancelled call leaves at most four finite jobs holding the slot until they finish.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "The delta-length read loop is the next implementation slice."
+        )
+    )]
     pub(super) async fn remaining_allowance(
         self: &Arc<Self>,
         plan: FallbackPlan,

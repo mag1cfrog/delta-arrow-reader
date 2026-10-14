@@ -4,14 +4,13 @@
 //! eligible, after filtering. The normal decoder still owns row selection and DV
 //! positions; unread fixed-width values are zero-filled only where it will skip them.
 
-#[cfg(test)]
 mod cost_estimator;
 mod delta_length;
-#[cfg(test)]
 mod fallback_cost;
 mod page;
-#[cfg(test)]
 mod request_simulation;
+
+pub(super) use cost_estimator::CostEstimator;
 
 use std::{
     ops::Range,
