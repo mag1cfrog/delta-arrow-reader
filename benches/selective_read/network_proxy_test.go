@@ -180,3 +180,45 @@ func TestNetworkProxy(t *testing.T) {
 	}
 	control(true, false)
 }
+
+func TestHighBandwidthFewStreams(t *testing.T) {
+	body := bytes.Repeat([]byte("x"), 8*1024*1024)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeContent(w, r, "file", time.Unix(0, 0), bytes.NewReader(body))
+	}))
+	defer upstream.Close()
+	target, _ := url.Parse(upstream.URL)
+	for _, count := range []int{1, 2, 4} {
+		t.Run(fmt.Sprint(count), func(t *testing.T) {
+			server := httptest.NewServer(newProxy(target, profile{LatencyMS: 1, Mbps: 1000, Seed: "test"}))
+			defer server.Close()
+			client := server.Client()
+			client.Timeout = 5 * time.Second
+			started := time.Now()
+			var wg sync.WaitGroup
+			for i := 0; i < count; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					resp, err := client.Get(server.URL + "/selective-read/test.parquet")
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					defer resp.Body.Close()
+					n, err := io.Copy(io.Discard, resp.Body)
+					if err != nil || n != int64(len(body)) {
+						t.Errorf("transfer: %d %v", n, err)
+					}
+				}()
+			}
+			wg.Wait()
+			elapsed := time.Since(started)
+			expected := time.Duration(int64(count*len(body)) * 8000 / 1000)
+			if elapsed < expected-4*time.Millisecond || elapsed > expected*3/2+20*time.Millisecond {
+				t.Fatalf("%d streams: got %v, expected near %v", count, elapsed, expected)
+			}
+			t.Logf("%d streams: %v, expected %v", count, elapsed, expected)
+		})
+	}
+}

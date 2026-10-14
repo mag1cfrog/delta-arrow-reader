@@ -77,9 +77,10 @@ func (l *limiter) take(ctx context.Context, bytes int) error {
 	}
 	l.mu.Lock()
 	now := time.Now()
-	// Keep timer overshoot from lowering sustained throughput. Catch-up is
-	// bounded to one chunk, so idle time cannot accumulate a large burst.
-	if l.next.Before(now.Add(-time.Duration(chunkBytes * 8000 / l.mbps))) {
+	// Allow timer overshoot even when a chunk takes less than one scheduler tick.
+	// Idle time still cannot accumulate credit.
+	catchUp := max(time.Duration(chunkBytes*8000/l.mbps), 2*time.Millisecond)
+	if l.next.Before(now.Add(-catchUp)) {
 		l.next = now
 	}
 	l.next = l.next.Add(time.Duration(int64(bytes) * 8000 / l.mbps))
