@@ -2,7 +2,7 @@
 //! This records block types, not decoded offsets inside compressed blocks.
 
 #[allow(dead_code)]
-#[path = "../../../src/reader/backend/direct_parquet/compact_thrift.rs"]
+#[path = "../../../crates/delta-arrow-reader-core/src/reader/backend/direct_parquet/compact_thrift.rs"]
 mod compact_thrift;
 
 use serde_json::{Value, json};

@@ -201,11 +201,12 @@ fn main() -> Result<()> {
         .then(|| fs::read(&args[6]))
         .transpose()?;
     let mut profile = profile.as_deref().map(serde_json::from_slice).transpose()?;
+    // Fixed profiles also start compute workers, which belong to initialization.
+    let started = Instant::now();
     let mut cost_model = profile.as_ref().map(CostModel::new).transpose()?;
     // The shared resource-limit launcher expects the output directory last.
     let output = Path::new(args.last().unwrap());
     fs::create_dir(output)?;
-    let started = Instant::now();
     let url = Url::parse(&args[1])?;
     let store: Arc<dyn ObjectStore> = if url.scheme() == "s3" {
         Arc::new(

@@ -20,12 +20,28 @@ import storage
 from storage import digest, save
 
 CASES = {"long": 16384, "short": 65536, "selected-long": 8192,
-    "selected-long-batch": 65536, "length-heavy": 262144}
+    "selected-long-batch": 65536, "length-heavy": 262144,
+    "mixed-bad-first": 65536, "mixed-alternating": 65536}
+
+
+def value_size(case, row, column, rng):
+    if case.startswith("mixed-"):
+        page = row // 8192
+        skewed = page < 4 if case == "mixed-bad-first" else (page + column) % 2 == 0
+        return (524288 if row % 997 == 0 else row % 2) if skewed else 512 + rng.randrange(64)
+    if case == "long":
+        return 1536 + rng.randrange(1024)
+    if case == "short":
+        return 8 + rng.randrange(56)
+    if case in ("selected-long", "selected-long-batch"):
+        return 262144 if row % 997 == 0 else row % 2
+    return rng.randrange(2)
 
 
 def generate(output, case, binary, compression="NONE"):
     output.mkdir()
     rows = CASES[case]
+    page_target = (8 if case.startswith("mixed-") else 4) * 1024**2
     fields = [pa.field("row_id", pa.int64(), False), pa.field("grouped", pa.int32(), False), pa.field("scattered", pa.int32(), False)]
     fields += [pa.field(f"payload_{i}", pa.string() if i % 4 < 2 else pa.binary(), i % 2 == 1) for i in range(8)]
     schema = pa.schema(fields)
@@ -46,8 +62,7 @@ def generate(output, case, binary, compression="NONE"):
             rng = random.Random(452 + 16 * file + i)
             values = []
             for row in range(rows):
-                size = (1536 + rng.randrange(1024) if case == "long" else 8 + rng.randrange(56) if case == "short"
-                    else (262144 if row % 997 == 0 else row % 2) if case in ("selected-long", "selected-long-batch") else rng.randrange(2))
+                size = value_size(case, row, i, rng)
                 value = rng.randbytes(size)
                 if pa.types.is_string(field.type):
                     value = value[:size // 2].hex() + ("\u00e9" if size > 2 else "")
@@ -58,7 +73,7 @@ def generate(output, case, binary, compression="NONE"):
         pq.write_table(table, path, row_group_size=rows // 2, compression=compression,
             compression_level=3 if compression == "zstd" else None, use_dictionary=False,
             column_encoding={field.name: "DELTA_LENGTH_BYTE_ARRAY" for field in fields[3:]},
-            data_page_version="1.0", data_page_size=4 * 1024**2, max_rows_per_page=8192, write_page_index=True)
+            data_page_version="1.0", data_page_size=page_target, max_rows_per_page=8192, write_page_index=True)
         layouts.append({"file": path.name, **json.loads(subprocess.check_output(
             [str(binary), "inspect", str(path)], text=True))})
         dv_id = uuid.uuid5(uuid.NAMESPACE_URL, f"delta-length-452/{case}/{file}")
@@ -87,7 +102,7 @@ def generate(output, case, binary, compression="NONE"):
         refs[shape] = {"path": path.name, "rows": table.num_rows, "sha256": digest(path)}
     save(output / "manifest.json", {"format": "delta-length-network-v1", "case": case, "rows_per_file": rows,
         "compression": compression, "compression_level": 3 if compression == "zstd" else None,
-        "columns": 8, "seed": 452, "row_group_rows": rows // 2, "page_target_bytes": 4 * 1024**2, "page_row_limit": 8192,
+        "columns": 8, "seed": 452, "row_group_rows": rows // 2, "page_target_bytes": page_target, "page_row_limit": 8192,
         "pyarrow": pa.__version__, "generator_sha256": digest(Path(__file__)), "dv_writer_sha256": digest(binary),
         "objects": objects, "references": refs, "layout": layouts})
 
@@ -164,13 +179,13 @@ def measure(args):
     save(args.output / "experiment.json", {"fixture_sha256": digest(args.fixture / "manifest.json"),
         "binary_sha256": digest(args.binary), "driver_sha256": digest(Path(__file__)), "network": network.config(args.state),
         "source_sha256": {name: digest(Path(__file__).parent / name) for name in (
-            "src/bin/delta-length-query.rs", "src/delta_length_reader.rs", "src/delta_length_profile.rs", "src/delta_length.rs", "Cargo.lock", "storage.py",
-            "../../src/reader/backend/direct_parquet/range_planning.rs")},
+            "src/bin/delta-length-query.rs", "src/delta_length_reader.rs", "src/delta_length_profile.rs", "src/delta_length_cost.rs", "src/delta_length_simulation.rs", "src/delta_length.rs", "Cargo.lock", "storage.py",
+            "../../crates/delta-arrow-reader-core/src/reader/backend/direct_parquet/range_planning.rs")},
         "cost_profile": {"basis": "fixed diagnostic control", "values": args.profile_record} if args.cost_profile else
-            "measured during each process initialization on the same client, including request capacity; incomplete measurements keep ordinary reads",
+            "measured during each process initialization on the same client, including the request-duration distribution; incomplete measurements keep ordinary reads",
         "selection": args.selection, "pairs": 3, "primary_metric": "first fully consumed query including planning, predicate and DV",
         "acceptance": "all three pairs improve beyond the larger within-mode range; investigate >5% median or consistent smaller regressions",
-        "policy": "uncompressed flat V1; >=1 MiB pages; <=1/8 selected rows; >=64 bytes/row; discovery <=10% modeled ordinary batch cost; >=25% byte saving and >10% modeled remaining-read saving after discovery"})
+        "policy": "uncompressed flat V1; >=1 MiB pages; <=1/8 selected rows; >=64 bytes/row; complete failed-discovery fallback <=105% modeled ordinary batch cost; >=25% byte saving and >10% modeled remaining-read saving after discovery"})
     try:
         with storage.exclusive(args.state):
             storage.verify_server(args.state)

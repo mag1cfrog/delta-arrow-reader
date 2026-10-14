@@ -1,14 +1,44 @@
 //! Bounded measurements on the experiment's own client and 32-request limit.
 
-use super::{CONCURRENCY, CostModel, TransportEstimate, invalid};
+use super::{CONCURRENCY, CostModel, TransportEstimate, cost::Estimator, invalid};
 use futures_util::{StreamExt, TryStreamExt, stream};
 use object_store::{GetOptions, ObjectStore, path::Path};
 use parquet::errors::Result;
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 
-const LARGE_BYTES: u64 = 4 * 1024 * 1024;
+const LARGE_BYTES: u64 = CONCURRENCY as u64 * 1024 * 1024;
 const SMALL_BYTES: u64 = 4096;
+
+fn sample_duration(seed: &mut u64, durations: &[u64]) -> u64 {
+    // Fixed SplitMix64 draws keep this diagnostic reproducible without a new dependency.
+    *seed = seed.wrapping_add(0x9e3779b97f4a7c15);
+    let mut value = *seed;
+    value = (value ^ (value >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+    value = (value ^ (value >> 27)).wrapping_mul(0x94d049bb133111eb);
+    value ^= value >> 31;
+    durations[(value % durations.len() as u64) as usize]
+}
+
+fn request_batch_costs(durations: &[u64]) -> Vec<u64> {
+    let mut seed = 452;
+    let mut outcomes: Vec<_> = (0..65).map(|_| Vec::with_capacity(1024)).collect();
+    for _ in 0..1024 {
+        let mut slots = [0_u64; CONCURRENCY];
+        for outcome in &mut outcomes[1..] {
+            let slot = slots.iter_mut().min().unwrap();
+            *slot += sample_duration(&mut seed, durations);
+            outcome.push(*slots.iter().max().unwrap());
+        }
+    }
+    // Shared draws make every simulated curve monotone in its request count.
+    let mut costs = vec![0];
+    for outcome in &mut outcomes[1..] {
+        outcome.sort_unstable();
+        costs.push((outcome[511] + outcome[512]) / 2);
+    }
+    costs
+}
 
 struct ReadTiming {
     started: Instant,
@@ -63,14 +93,19 @@ async fn measure(
     let mut latencies = Vec::new();
     let mut throughputs = Vec::new();
     let mut intervals = Vec::new();
+    let mut durations = Vec::new();
     for phase in 0..6 {
         if phase == 3 && throughputs.len() < 3 {
             return Ok(None);
         }
         let (path, size) = files[phase % files.len()];
         let large = phase < 3;
-        let count = if large { 4 } else { 2 * CONCURRENCY };
-        let bytes = if large { LARGE_BYTES / 4 } else { SMALL_BYTES };
+        let count = if large { CONCURRENCY } else { 2 * CONCURRENCY };
+        let bytes = if large {
+            LARGE_BYTES / CONCURRENCY as u64
+        } else {
+            SMALL_BYTES
+        };
         let ranges: Vec<_> = (0..count)
             .map(|i| {
                 let start = if large {
@@ -105,22 +140,35 @@ async fn measure(
             .await?;
         let elapsed = started.elapsed();
         let (latency, delivery, interval) = summarize(&mut reads);
+        let request_durations_ns: Vec<_> = if large {
+            Vec::new()
+        } else {
+            reads
+                .iter()
+                .map(|read| (read.finished - read.started).as_nanos() as u64)
+                .collect()
+        };
         let throughput = (large && delivery >= Duration::from_millis(10))
             .then(|| (u128::from(LARGE_BYTES) * 1_000_000_000 / delivery.as_nanos()) as u64);
         samples.push(json!({"phase":if large {"transfer"} else {"request_capacity"},
             "file":path.as_ref(),"requests":count,"bytes":bytes * count as u64,"elapsed_ns":elapsed.as_nanos(),
             "request_latency_ns":latency.as_nanos(),"delivery_ns":delivery.as_nanos(),
-            "throughput_bytes_per_second":throughput,"request_interval_ns":interval.map(|d| d.as_nanos())}));
+            "throughput_bytes_per_second":throughput,"request_interval_ns":interval.map(|d| d.as_nanos()),
+            "request_durations_ns":request_durations_ns}));
+        durations.extend(request_durations_ns);
         if large {
-            latencies.push(latency);
             throughputs.extend(throughput);
+        } else {
+            // Large transfers include queueing that does not describe a prefix request.
+            latencies.push(latency);
         }
         intervals.extend(interval);
     }
     latencies.sort_unstable();
     throughputs.sort_unstable();
     intervals.sort_unstable();
-    let throughput = throughputs[1];
+    // Price ordinary reads at an observed fast rate so a slow sample grants no extra probe budget.
+    let throughput = throughputs[2];
     if throughput == 0 || intervals.len() != 3 {
         return Ok(None);
     }
@@ -130,6 +178,11 @@ async fn measure(
             shared_throughput_bytes_per_second: throughput,
         },
         request_overhead_bytes: intervals[1].as_nanos() * u128::from(throughput) / 1_000_000_000,
+        request_batch_costs_ns: Some(request_batch_costs(&durations).into()),
+        fallback_estimator: Some(
+            Estimator::new(throughput, durations)
+                .ok_or_else(|| invalid("request durations outside experiment bounds"))?,
+        ),
     }))
 }
 
@@ -147,17 +200,38 @@ pub async fn calibrate(
         Ok(Err(error)) => (None, "read_failed", Some(error.to_string())),
         Err(_) => (None, "timeout", None),
     };
-    let record = json!({"basis":"measured on the query client; three transfer and three replenished-request samples",
+    let record = json!({"basis":"fastest of three 32-request transfer throughputs; request-duration resampling from three small-request phases on the same client",
         "status":status,"seconds":started.elapsed().as_secs_f64(),"samples":samples,"error":error,
-        "request_latency_ns":model.map(|m| m.transport.request_latency.as_nanos()),
-        "throughput_bytes_per_second":model.map(|m| m.transport.shared_throughput_bytes_per_second),
-        "request_overhead_bytes":model.map(|m| m.request_overhead_bytes),"request_concurrency":CONCURRENCY});
+        "request_latency_ns":model.as_ref().map(|m| m.transport.request_latency.as_nanos()),
+        "throughput_bytes_per_second":model.as_ref().map(|m| m.transport.shared_throughput_bytes_per_second),
+        "request_overhead_bytes":model.as_ref().map(|m| m.request_overhead_bytes),
+        "request_batch_costs_ns":model.as_ref().and_then(|m| m.request_batch_costs_ns.as_deref()),
+        "fallback_estimator":"paired-1024-with-response-charge",
+        "request_concurrency":CONCURRENCY});
     (model, record)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn batch_costs_include_tail_requests_and_replenishment() {
+        let equal = request_batch_costs(&[200; 192]);
+        assert_eq!(
+            equal,
+            (0..=64)
+                .map(|n: u64| n.div_ceil(32) * 200)
+                .collect::<Vec<_>>()
+        );
+        let mut durations = [1; 192];
+        durations[..12].fill(100);
+        let costs = request_batch_costs(&durations);
+        assert_eq!(costs[1], 1);
+        assert_eq!(costs[32], 100);
+        assert!((100..=200).contains(&costs[64]));
+        assert!(costs.windows(2).all(|pair| pair[0] <= pair[1]));
+    }
 
     #[test]
     fn measure_overlapping_delivery_and_replenished_capacity() {

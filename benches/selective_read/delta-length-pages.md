@@ -1,61 +1,148 @@
-# Delta-length decoder experiment
+# Delta-length partial-read experiment
 
-This isolated experiment for [#452](https://github.com/mag1cfrog/delta-arrow-reader/issues/452)
-checks whether discovering lengths and fetching selected string/binary values
-is cheaper than reading complete pages. It includes a local decoder proof and
-a Delta query driver using the existing network harness. Production execution
-and the published README benchmarks are unchanged.
+This isolated [#452](https://github.com/mag1cfrog/delta-arrow-reader/issues/452)
+experiment tests whether reading encoded value lengths first can avoid enough
+string/binary payload to make a complete Delta query faster. Production
+execution, public defaults, CI workflows and published README results are
+unchanged.
 
 ## Decision
 
-The integration candidate for
-[#453](https://github.com/mag1cfrog/delta-arrow-reader/issues/453) is flat,
-uncompressed V1 DELTA_LENGTH_BYTE_ARRAY string and binary pages. #452 remains
-under review while the fixed-profile follow-up below examines fast-network
-fallback costs. These costs belong to this experiment's acceptance, before
-production integration begins.
-On the slow network profile, measured-cost reads reduced the long-value
-scattered query from 30.095 to 5.316 seconds and the grouped query from 29.799
-to 4.539 seconds. Query downloads fell from 499.461 to 1.887 MB and from
-493.156 to 2.950 MB, respectively. Both skewed-value controls rejected discovery
-before I/O and retained the ordinary byte and request counts.
+Proceed to [#453](https://github.com/mag1cfrog/delta-arrow-reader/issues/453)
+after PR #475 is reviewed and merged. Start with flat, uncompressed V1
+DELTA_LENGTH_BYTE_ARRAY pages. The experiment shows repeatable query and I/O
+benefits, with a known cost when discovery finds that selected values occupy
+most of a page. Keep that losing control in production acceptance.
 
-The slow-network gains justify continuing the experiment. Production
-integration remains blocked on the fast fallback regression below. The
-prototype uses a different client and a 32-request limit. Fast-network
-results are subsecond diagnostics; some skewed runs still probe and fall back.
-Keeping a full-page response open removed the extra fallback request, but
-increased transferred bytes and connection counts in the beneficial cases. That
-replacement was tested and rejected; bounded prefix requests remain in place.
-Keep Zstd on ordinary reads in #453: sequential block discovery alone was
-slower than downloading complete columns in the measured layout. The
-[integration requirements](#handoff-to-453) below define the remaining gates.
+Retain the current 5% modeled fallback allowance. It charges the observed
+decision response plus the modeled extra cost of discovery followed by a full
+read. It does not promise zero overhead or a 5% wall-time limit. The controlled
+slow-network losing case costs 650-666 ms extra, or 3.74%-3.83%, in every pair;
+the model predicts 656-658 ms. This is understood exploration cost, not an
+unexplained estimator regression.
 
-## Evidence
+There is no universal 1 ms estimator target. The goal is complete-query benefit
+with bounded discovery work. The current estimator runs 1,024 paired trials
+from the measured request-duration distribution, uses up to four reusable
+workers with one shared computation permit, and caches results within each
+immutable profile. Runtime AVX-512 selection has a scalar fallback. Time spent
+waiting for or computing a decision counts against its query budget.
 
-The separate `delta-length-452-d9c0d6a.tar.gz` asset in the
-[benchmark evidence release](https://github.com/mag1cfrog/delta-arrow-reader/releases/tag/selective-read-benchmarks-2026-10-07)
-retains the source patch, raw samples, initialization measurements, request
-traces, resource records, fixture identities and earlier attempts. Its measured
-runtime sources match commit `d9c0d6a`. The published README results are a
-different campaign and remain unchanged.
+A 4% allowance avoided the controlled losing probes but discarded useful reads
+on smaller pages, costing 5.839-5.849 seconds in all three pairs. Lookahead and
+response-retention alternatives did not solve the fallback problem without
+other losses. Further simulator micro-optimization did not give a repeatable
+query benefit. The archived history records those alternatives and their
+failures; they are not part of the candidate.
 
-```sh
-gh release download selective-read-benchmarks-2026-10-07 \
-  --repo mag1cfrog/delta-arrow-reader \
-  --pattern 'delta-length-452-d9c0d6a.tar.gz*' \
-  --pattern 'delta-length-452-REPRODUCE.md'
-sha256sum --check delta-length-452-d9c0d6a.tar.gz.sha256
-```
+## Query results
 
-The accompanying reproduction guide replays the timing and I/O summaries from
-the recorded samples. Bulk fixtures, independent oracle files and exported
-result arrays are excluded from this archive; their hashes and successful
-comparison records are retained. To recheck actual values, regenerate the
-deterministic inputs and run the correctness checks below. Offline summary
-replay does not repeat those value comparisons.
-That archive covers the measured-profile campaign. The later fixed-profile
-controls below are retained separately pending review and publication.
+These are medians of three alternating pairs, excluding initialization and
+including scan planning, metadata, predicates, real DVs, discovery, payload
+reads and complete decoding. Each invocation has a fresh client and automatic
+calibration. There is no warmup query or hidden repeated execution.
+
+| Network | Layout | Ordinary | Experimental |
+| --- | --- | ---: | ---: |
+| 200 ms +/-20 ms, paced 150 Mbit/s | Long values | 30.118 s | 5.290 s |
+| Same controlled network | Selected long values carry most bytes | 17.374 s | 18.034 s |
+| Same controlled network | Mixed pages, losing pages first | 31.532 s | 20.775 s |
+| Same controlled network | Alternating useful/losing pages | 31.507 s | 19.802 s |
+| Real S3, us-west-2 | Long values | 10.314 s | 1.560 s |
+| Real S3, us-west-2 | Selected long values carry most bytes | 6.534 s | 6.284 s |
+
+All three S3 long-value pairs improve by 82.31%-85.85%; their 7.256-9.003-second
+savings exceed the larger within-mode range of 1.671 seconds. Reader data bytes
+fall from 499,312,716 to 1,738,727, with 105 partial pages and requests increasing
+from 113 to 353. The four cost decisions together take 7.47-7.79 ms, already
+included in query time.
+
+The S3 losing control still performs 128 probes and then reads every complete
+page, reusing each prefix. Data bytes remain 258,186,888 and requests increase
+from 148 to 276. Paired query changes are -12.82%, -5.84% and +2.85%. Its lower
+median establishes neither a failed-probe speedup nor a regression bound.
+Decision responses total 4.13-5.49 ms. Controlled-network measurements isolate
+the consistent 650-666 ms discovery penalty more clearly.
+
+The final controlled campaign has 48 timings and 16 independent value/null
+checks across four layouts and two networks. Its 1 ms/10,000 Mbit/s control is
+a subsecond diagnostic: admission varies near the budget boundary, so there is
+no stable fast-network gain claim. The S3 campaign adds 12 timings and eight
+exact checks on two existing tables in one region. All 84 profiles complete;
+no timing pair in these two campaigns is excluded or replaced. S3 initialization
+ranges from 2.943 to 4.113 seconds and is reported separately.
+
+Both campaigns use eight logical CPUs, 8 GiB memory, zero swap and 32 shared
+request permits. Reader byte counters exclude metadata, calibration and
+protocol overhead. Proxy captures additionally cover query metadata and DVs.
+CPU time and peak RSS are process-wide, including initialization and, for
+validation runs, IPC export. IPC export and exact comparison are outside the
+query timer. Full records preserve these separate measurement boundaries.
+
+This compares two paths in one experimental executable. The prototype uses a
+different client and request limit from production. These results do not
+establish production performance, performance in other S3 regions, or new
+README timings.
+
+## Supported layout and safety limits
+
+The initial scope is flat required/nullable BYTE_ARRAY containing UTF-8 or
+binary values, V1 DELTA_LENGTH_BYTE_ARRAY encoding, no compression, an offset
+index and no page checksum. Nested columns, V2 pages, other encodings and Zstd
+remain ordinary reads. The Zstd raw-block investigation is retained in the
+earlier evidence; its sequential discovery cost did not justify integration.
+
+Parquet 58.4.0 exposes `DeltaBitPackDecoder<Int32Type>` and its consumed-byte
+offset through the optional `experimental` feature. No fork or dependency patch
+is needed. This feature also enables `variant_experimental` and three
+`parquet-variant*` packages. It is confined to the isolated fixture workspace;
+production integration must account for that unstable API and dependency cost.
+
+Before invoking the dependency, the parser checks non-null/value counts,
+encoded block structure, lengths, payload bounds and progress. It rejects
+negative lengths, truncation and inconsistent payloads. Limits are 8 MiB per
+page, 1,048,576 rows, 1 MiB structural discovery, nine chunks including any
+cached prefix, a 32,768-value block and 8,192 selected ranges. Existing prefix
+bytes count toward every bound. All null and length bytes remain intact; only
+unselected payload bytes are zeroed in buffers used with the exact row selection.
+No table is rewritten.
+
+Candidates must be 1-8 MiB, average at least 64 stored bytes per row, and select
+at most one-eighth of the rows. Discovery starts with 8 KiB. Sparse rows alone
+do not imply sparse payload. The whole requested batch, including ordinary
+columns and dependent requests, must fit the modeled fallback budget. Each
+extension is charged before I/O. Partial reads then require at least 25% total
+byte savings and more than 10% modeled remaining-read savings. Unsupported or
+unaffordable reads reuse any fetched prefix and read the remaining bytes.
+Malformed supported input returns an error.
+
+## Reproduce and inspect the evidence
+
+The [final evidence guide](https://github.com/mag1cfrog/delta-arrow-reader/releases/download/selective-read-benchmarks-2026-10-07/delta-length-452-final-REPRODUCE.md)
+explains how to download and verify the supplement and replay the final timing
+and I/O summaries offline. It includes measured sources, plans, raw records,
+resource receipts, failed attempts, selected diagnostic campaigns and the full
+experiment history. The earlier `delta-length-452-d9c0d6a.tar.gz` asset remains
+available in the same release for the initial decoder and layout controls.
+
+Bulk fixtures, independent oracle arrays, exported result arrays, executables
+and credentials are excluded. Successful exact-check receipts and hashes are
+retained; offline summary replay does not repeat value comparisons. Regenerate
+the deterministic fixtures below to recheck values. Private bucket identifiers
+are redacted in public copies, with original and published file hashes recorded.
+The original local evidence remains unchanged.
+
+The measured runtime predates the final crate-path update and relocation of the
+experimental cost planner into benchmark code. Function bodies and reader logic
+are unchanged. The supplement retains that measured source separately from the
+reviewed source, with a relocation check. After synchronization with main, 11
+decoder/inspection tests, 47 query/planner/calibration/estimator tests, Clippy,
+rustfmt, the Python probe test and eight local exact array/view checks pass.
+Those local checks exercise both successful partial reads and post-probe
+fallback; their execution times are not performance evidence.
+
+No shared production code changes in the final diff, so #452 does not require a
+new four-query README regression run. That gate remains mandatory in #453.
 
 ## Run the proof
 
@@ -86,44 +173,6 @@ the Utf8View/BinaryView array types used by DataFusion. Expected values come fro
 the original input batch, before Parquet encoding. The program checks values,
 nulls and row IDs, then records the fixture, source and lockfile hashes.
 
-## What the byte counts mean
-
-The prototype fetches a growing prefix containing null definitions and encoded
-lengths. It then fetches selected payload ranges not already in that prefix.
-`results.json` retains each page's structural bytes, prefix bytes, selected
-payload bytes, discovery rounds and payload request count.
-
-These are page-body counts, not query I/O measurements. The verifier reads full
-files to inspect their layout and prepare the cleared copies. Footer reads,
-page headers, predicate columns, network latency and decoding costs are outside
-these counts. The experiment does not time this local verification.
-
-## Decoder API and bounds
-
-Parquet 58.4.0 exposes `DeltaBitPackDecoder<Int32Type>` and its consumed-byte
-offset through the `experimental` feature. The Arrow byte-array decoder's
-constructor is private, but this experiment does not need it. Normal Arrow
-readers decode the completed buffers. No fork or dependency patch is needed.
-
-The feature also enables `variant_experimental` and three `parquet-variant*`
-packages. Parquet's experimental feature is opt-in within the isolated fixture
-workspace; the production crate and ordinary fixture builds do not enable it.
-The inspector also enables the fixture workspace's existing optional `thrift`
-dependency to locate compressed page bodies. Any production proposal must
-account for the extra dependencies and the unstable decoder API.
-
-Before calling the dependency, the parser checks the encoded count against the
-page's non-null value count and scans the block structure. It rejects negative
-lengths, truncated structures, inconsistent payload sizes and short reads.
-It preserves every null and length byte. Only unselected value payloads are
-cleared. The current experiment caps each page at 8 MiB and 1,048,576 rows,
-structural discovery at 1 MiB and nine fetches, block size at 32,768 values,
-and selected ranges at 8,192. Unsupported layouts and exhausted budgets require
-ordinary-read fallback; the verifier fails instead of hiding such a case.
-The caller can supply an already fetched body prefix. The parser checks its size
-and examines all of it before requesting more bytes. A supplied prefix counts
-as the first discovery chunk, so reuse does not bypass the byte or fetch limits.
-
 ## Run the network experiment
 
 Use the pinned PyArrow environment and MinIO/proxy setup in
@@ -141,8 +190,8 @@ python delta_length_network.py generate --case long \
   --output "$experiment_root/long"
 ```
 
-The cases are `long`, `short`, `selected-long`, `selected-long-batch` and
-`length-heavy`. Each
+The cases are `long`, `short`, `selected-long`, `selected-long-batch`,
+`length-heavy`, `mixed-bad-first` and `mixed-alternating`. Each
 contains two unpartitioned Delta files, a real DV per file, eight required or
 nullable UTF-8/binary payload columns, and `row_id`, `grouped` and `scattered`
 columns. `grouped = 1` selects eight adjacent rows per 2,048; `scattered = 1`
@@ -152,6 +201,9 @@ Parquet encoding and saved as compressed Arrow IPC.
 `selected-long-batch` keeps the selected-long value-length rule but increases
 rows per file from 8,192 to 65,536 and rows per group from 4,096 to 32,768.
 This lets discovery pass the initial cost gate and tests the later fallback.
+The mixed cases use 65,536 rows per file and an 8 MiB page target, with the
+8,192-row limit defining page boundaries. Their value distributions and
+verified layouts are described in the feedback experiment below.
 
 Generation also runs `delta-length-pages inspect FILE` against every Parquet
 file. The manifest records actual page sizes, row counts, structural byte counts,
@@ -201,671 +253,13 @@ uses a fresh process with eight logical CPUs, an 8 GiB memory cap and at most
 repeated execution is hidden inside a sample. Use new output directories for
 each run. Input and reference hashes are verified once outside timing.
 
-## Measurement and decision boundaries
-
-Both modes use the same executable, Parquet decoder, projection and row
-selection. Delta Kernel loads snapshot version 0 and the actual DVs. The driver
-reads the predicate column, applies the DV, and fully consumes the selected
-payload. This measures the experimental transport against ordinary Parquet
-reads, not the production Delta Arrow Reader planner or a competing engine.
-
-Initialization includes loading the snapshot, creating the runtime and measuring
-the network profile. The supervisor captures initialization I/O, resets proxy
-counters, and releases the query.
-Query time includes scan planning, Parquet metadata, predicate/DV reads, length
-discovery, payload I/O and decoding. IPC export and result comparison are outside
-that timer. `process_resources` contains whole-process user CPU seconds, system
-CPU seconds and peak RSS in KiB; it includes initialization and, for validation
-runs, IPC export. It is not query-only CPU time.
-
-Proxy captures include every query response body, including metadata and DVs.
-Reader counters cover data ranges only and distinguish prefix discovery from
-payload reads. `logical_prefix_chunks` counts chunks for pages whose length
-discovery completed, including the supplied cached prefix. `discovery_requests`
-also counts probes that failed to complete length discovery. The header and all
-discovered length/null bytes remain intact. Unread
-payload bytes exist only as zeroes in the in-memory buffer used with the exact
-row selection; no modified table is written.
-
-The initial predeclared policy considered flat, uncompressed V1 BYTE_ARRAY pages of
-1-8 MiB, at least 64 bytes per row, and at most one-eighth selected rows. After
-bounded length discovery it required at least 25% byte savings. Other pages
-used ordinary reads; fallback reused already fetched bytes. This static filter
-did not price latency or request processing. Rejecting a page after discovery
-could still cost an extra network round trip.
-
-The declared slow profile is 200 ms latency, uniform +/-20 ms jitter and shared
-paced 150 Mbit/s. The fast control is 1 ms, no jitter and 10,000 Mbit/s. Long
-values use grouped, scattered and dense selections on the slow profile; short,
-selected-long and length-heavy cases use scattered selections. The fast profile
-checks long, selected-long and length-heavy scattered selections. Every case
-retains four correctness runs and six timing runs.
-
-Before timing, the campaign requires every pair to improve by more than the
-larger within-mode range for a repeatable gain. A median regression above 5%,
-or a consistent smaller regression, needs investigation. `experiment.json`
-records those criteria, identities and the active profile before querying;
-per-run files retain observations and failures. A lower median alone is not
-sufficient evidence.
-
-## Cost-model experiment
-
-The current driver includes the production `range_planning.rs` source and uses
-its cost and bounded range-planning helpers. Production source stays unchanged.
-The experiment keeps its existing 32-request limit; it does not adopt the
-production reader's complete scheduling or calibration implementation.
-
-Before fetching page prefixes, the driver limits discovery to 10% of the
-modeled cost of reading the requested batch normally. This includes ordinary
-columns in that batch. It prices every dependent discovery round separately,
-reserves the initial prefixes together, and checks the shared budget before
-fetching any further prefix. If the first round costs too much, the driver
-issues the original reads without probing. If later discovery exhausts the
-budget, it falls back and reuses the prefix already downloaded.
-
-After locating selected values, the same planner can merge their ranges. The
-driver requires at least 25% total byte savings and more than 10% modeled
-remaining-read savings. The discovery budget limits speculative work before
-value sizes are known; it is not a 10% wall-time guarantee or an acceptable
-regression budget. The experiment still investigates regressions under the
-criteria above.
-
-By default, `delta_length_network.py run` passes `auto` to both modes. Each process
-measures transport during initialization using the same client and concurrency
-limit as its query. Three plans each fetch four concurrent 1 MiB ranges. Payload
-intervals that overlap count once; a throughput sample needs at least 10 ms of
-delivery time. Three further plans each replenish 64 small, 4 KiB reads across
-32 slots. The central half of completion times estimates sustained request
-capacity without treating one jittered burst as a steady rate. The model uses
-the median latency, throughput and request interval from these plans.
-
-Calibration has a ten-second deadline. A complete run requests 12.75 MiB in
-204 ranges, excluding Delta metadata and retries. Missing samples, failed reads
-or timeout leave the profile unavailable and experimental queries use ordinary
-reads. Both modes perform the same calibration; its time, samples and I/O are
-recorded separately from the first query. A fast link can fail the minimum
-delivery-duration requirement, in which case the driver does not guess its
-bandwidth. Proxy settings describe the test environment but do not enter the
-query cost model.
-
-These measurement rules follow the production estimator, but run at the
-prototype's 32-request limit on its existing SDK client. Production uses a
-different partial-read transport and a larger shared concurrency limit. #453
-must reuse production calibration and validate its actual scheduling; the
-prototype's measured profile cannot simply be carried across.
-
-For a diagnostic with identical available cost inputs in every run, pass
-`--cost-profile /absolute/path/to/profile.json` to the Python runner. It copies
-that JSON into the output directory and verifies each reader used those values.
-This bypasses calibration and is recorded as a fixed diagnostic control; its
-initialization times and results must stay separate from automatic-policy runs.
-
-For direct invocations, optional `auto` or a cost-profile JSON path goes
-immediately before the output directory. `auto` requires S3. Manual profiles
-retain the integer `latency_ms`, `mbps` and `request_overhead_bytes` fields for
-controlled checks. Without a profile, experimental mode uses ordinary reads.
-The query record includes the supplied or measured profile and counts pages
-rejected before probing and additional probes stopped by the budget. Source
-hashes and all per-process measurements are saved with each experiment.
-
-The earlier campaigns below supplied the proxy's bandwidth cap, maximum latency
-including jitter and zero request-processing cost. Their observations remain
-separate from the measured-profile follow-up.
-
-## Uncompressed observations, 2026-10-11
-
-The initial nine-case matrix completed all 36 full-result checks and 54 timing
-runs. Slow-profile medians below are query-only seconds. Each cell lists ordinary
-then experimental reads; MB means 1,000,000 bytes at the proxy response-body
-boundary, including query metadata and DVs.
-
-| Case and selection | Seconds | Downloaded MB | Requests |
-| --- | ---: | ---: | ---: |
-| long, scattered | 30.119 / 6.014 | 499.461 / 1.888 | 122 / 411 |
-| long, grouped | 29.806 / 5.361 | 493.156 / 2.951 | 119 / 296 |
-| long, dense | 29.572 / 29.575 | 499.330 / 499.330 | 118 / 118 |
-| short, scattered | 5.461 / 5.463 | 37.873 / 37.873 | 157 / 157 |
-| selected-long, scattered | 5.269 / 5.730 | 33.858 / 33.858 | 49 / 73 |
-| length-heavy, scattered | 7.220 / 7.235 | 8.218 / 8.218 | 589 / 589 |
-
-The long fixture contains about 500 MB in two approximately 250 MB Parquet
-files. Its actual payload pages hold 1,024-3,072 rows and occupy 2.10-6.31 MB.
-The grouped and scattered gains exceeded within-mode timing ranges in all three
-pairs. They required at most two dependent discovery rounds per page. Slow
-initialization medians were 0.618-0.650 seconds and are excluded from the table.
-
-Dense, short and length-heavy controls used the same bytes and requests in both
-modes. Their small time differences do not establish a benefit. The selected-long
-control exposed an 8.7% regression: 24 candidate pages were rejected after
-reading their lengths, adding 24 requests without saving bytes. Reusing each
-prefix avoided duplicate downloads but could not remove the extra latency.
-Row selectivity alone is therefore insufficient for an integration decision.
-
-For scattered long values, timing-run median process CPU fell from 1.91 to
-0.48 seconds; peak RSS was 150.2 versus 153.0 MiB. For grouped long values, CPU
-was 2.10 versus 0.43 seconds, with peak RSS 146.0 versus 155.3 MiB. The prototype
-still reconstructs full-size page buffers, so memory does not fall in proportion
-to downloaded bytes.
-
-The fast controls completed below one second and are overhead diagnostics,
-not a basis for a speedup claim. They exposed avoidable row-selection work on
-pages already excluded by size. The reader now checks type and size first;
-no eligibility threshold changed. The original matrix and executable are retained
-separately from the subsequent fast-profile checks of this reorder. The slow
-numbers above belong to the original matrix, not a rerun of the revised binary.
-The three follow-up cases passed all 12 full-result checks with identical
-download counts, request counts and reader metrics. Their ordinary/experimental
-medians were 0.721/0.394 seconds for long values, 0.165/0.181 for selected-long
-values and 0.270/0.271 for length-heavy values. These short samples remain
-diagnostics; the selected-long case still has no I/O benefit.
-
-The first in-process campaign could not start the fast proxy after inheriting
-the observer's CPU affinity. No fast sample had started. A fresh process resumed
-only the declared fast cases; the failure log and resume record are retained.
-Use the separate CLI invocations above when changing profiles.
-
-These results support continued feasibility work on wide values. The follow-ups
-below examine unsuccessful discovery and actual Zstd layouts before a production
-proposal for #453.
-
-## Cost-model follow-up, 2026-10-11
-
-The bounded-discovery version completed 24 full-result network checks and 36
-timing runs using the same fixtures. Three alternating pairs produced these
-slow-profile medians; times exclude initialization and include query planning,
-predicate/DV reads, discovery and full consumption.
-
-| Case and selection | Ordinary seconds | Experimental seconds | Downloaded MB | Requests |
-| --- | ---: | ---: | ---: | ---: |
-| long, scattered | 30.093 | 6.044 | 499.461 / 1.888 | 122 / 411 |
-| long, grouped | 29.805 | 5.350 | 493.156 / 2.951 | 119 / 296 |
-| selected-long, scattered | 5.267 | 5.267 | 33.858 / 33.858 | 49 / 49 |
-
-Both long-value gains exceeded the larger within-mode timing range in every
-pair. Their bytes, requests and partial-page counts matched the static-policy
-experiment. The selected-long case rejected all 24 candidate pages before
-discovery. It removed the former 24 extra requests and retained exactly the
-ordinary bytes and request count. This demonstrates rejection for that fixture;
-it does not establish that all skewed variable-length layouts avoid probing.
-
-Slow initialization medians were 0.618-0.643 seconds. Timing-run process CPU
-medians were 1.55/0.48 seconds for scattered values, 2.01/0.42 for grouped values,
-and 0.19/0.18 for selected-long values. Maximum process RSS was 151.2/162.0 MiB,
-145.9/153.8 MiB, and 41.9/42.7 MiB respectively. Full-size reconstruction buffers
-remain necessary in this prototype.
-
-Fast-control medians were 0.709/0.389 seconds for long values, 0.175/0.164 for
-selected-long values, and 0.286/0.300 for length-heavy pages. The latter two
-transferred identical bytes with identical request counts. Their pairwise
-differences changed sign and were smaller than the within-mode ranges; these
-subsecond observations do not establish a speedup or a repeatable regression.
-They also do not establish a production performance guarantee.
-
-Twenty local full-result checks covered dense, short, length-heavy and
-missing-profile fallback, plus deliberately exhausted discovery budgets, in both
-array formats and modes. A synthetic 500 ms cost profile stopped 49 second-round
-probes on the long fixture, reused their first prefixes, and returned the exact
-expected values. This local check validates fallback, not network performance.
-All other local controls used identical data bytes and requests in both modes.
-
-The first campaign attempt failed in the shared launcher after one ordinary
-validation: the cost-profile argument had displaced the required final output
-directory argument. The corrected campaign kept the output directory last.
-No timing sample had run; the failed attempt and its successful validation are
-retained separately. After exact comparisons passed, duplicate IPC outputs were
-removed with a receipt, recovering 40.0 GB. Fixtures, references, every sample,
-failure, resource record and network trace remain available.
-
-## Zstd layout survey, 2026-10-11
-
-The same four inputs were written with PyArrow 25.0.1, Zstd level 3, V1 pages
-and DELTA_LENGTH_BYTE_ARRAY. Their original-input oracle hashes matched the
-uncompressed fixtures for all three selections. Only compression changed.
-
-| Case | Payload pages | Entirely raw pages | Raw blocks | Compressed blocks |
-| --- | ---: | ---: | ---: | ---: |
-| long | 105 | 52 | 1,935 | 1,939 |
-| short | 128 | 64 | 160 | 192 |
-| selected-long | 32 | 0 | 1,534 | 160 |
-| length-heavy | 512 | 0 | 0 | 512 |
-
-No RLE blocks appeared. Every entirely raw page belonged to a binary column.
-For long values, the 52 binary pages contained 16-49 raw blocks each. Their
-249.351 MB of decoded bodies occupied 249.358 MB including page/frame headers.
-The 53 UTF-8 pages used compressed blocks throughout: 249.566 MB of decoded
-bodies occupied 131.587 MB. These results describe the generated random binary
-and hex-text values, not all binary or string columns.
-
-Selected-long binary pages mixed raw blocks with a compressed block. Their
-65-129 blocks per page also show why page size alone is not a discovery-cost
-estimate. Zstd block headers give stored sizes; the decoded size of a compressed
-block is not available from that header. A raw block inside a mixed frame does
-not establish a cheap mapping from decoded value offsets to file offsets.
-See [RFC 8878, block types](https://www.rfc-editor.org/rfc/rfc8878.html#section-3.1.1.2.2).
-
-Twenty local full-result checks covered grouped and scattered long values and
-scattered selections for the other three cases. Both ordinary and experimental
-modes returned the original-input values, nulls and live row IDs in ordinary
-and view arrays. The query executable was the unchanged cost-model binary.
-With the same explicit cost profile, experimental mode rejected every Zstd
-column before discovery and used exactly the ordinary data bytes and requests.
-This validates the current fallback, not a Zstd partial-read speedup. No network
-timings were collected for this survey.
-
-The first survey attempt stopped because its evidence writer tried to replace
-an existing checkpoint. The second completed the long/short controls, then hit
-the offline inspector's 128-block limit on a valid 129-block page. The final
-inspector allows up to 8,192 blocks within its 8 MiB decoded-page limit; production
-limits are unchanged. All failed attempts and completed checks were retained.
-The final survey rechecked the reused long/short layouts, then completed all
-declared controls. Verified duplicate IPC outputs were removed after comparison.
-
-The inspector and length-parser unit tests pass, as does Clippy for all targets.
-The original local decoder proof still passes all 20 cases. Regenerating the
-default uncompressed short fixture produced the same object and oracle hashes.
-Raw layout alone is insufficient to recommend enabling the optimization. The
-following diagnostic measures block-header discovery before adding length/value
-mapping and reconstruction to the query driver.
-
-## Raw-block discovery cost, 2026-10-11
-
-[delta_length_zstd_probe.py](delta_length_zstd_probe.py) compares downloading all
-eight payload columns with discovering only the raw binary pages' block headers.
-It uses the same long-value Zstd fixture and processes its four row groups in
-order, as the isolated query driver does. Within each group, requests run with
-32 workers. Both modes use the existing curl/SigV4 client through the paced
-proxy. The measured process had eight reader CPUs, an 8 GiB memory limit and
-no swap, enforced by `storage.reader_prefix`.
-
-This is an optimistic discovery diagnostic, not a query benchmark. Offline
-inspection supplies eligible pages and Parquet header lengths. Each page's first
-8 KiB request contains its frame header; subsequent block positions are computed
-from the headers actually returned over the network. The diagnostic does not
-use the offline block offsets to schedule requests. It omits length discovery,
-selected-value reads, reconstruction, predicates, DVs and result decoding.
-
-Three alternating pairs on each profile produced these medians:
-
-| Profile | Complete payload reads, seconds | Raw-header discovery only, seconds |
-| --- | ---: | ---: |
-| 200 ms +/-20 ms, shared 150 Mbit/s | 21.143 | 39.436 |
-| 1 ms, shared 10,000 Mbit/s | 1.151 | 2.368 |
-
-Every pair favored complete reads by more than the larger within-mode timing
-range. Complete reads used 32 requests and 380,945,504 bytes. Header discovery
-used 1,935 requests and 431,633 bytes. Every complete response matched its local
-column hash; every discovered header matched the independently inspected layout.
-All 12 samples and request traces were retained, with no failures or retries.
-The slow proxy passed the existing latency, pacing and cancellation calibration.
-
-The four groups' longest header chains require 48, 42, 49 and 49 requests.
-With the slow profile's minimum 180 ms delay, those 188 dependent rounds alone
-need at least 33.84 seconds under this scheduling. The traces recorded 37.984
-seconds of injected delay on those critical paths. This already exceeds the
-measured complete reads, before adding selected payloads or decoding. More
-workers cannot overlap dependent requests within a page.
-
-Curl starts a process and connection per request. Its overhead is included in
-both modes and dominates the fast control; that control does not predict a
-pooled Rust client's performance. Slow-profile median client CPU was 2.032
-seconds for complete reads and 11.235 seconds for headers. Whole-process peak RSS
-was about 513 MiB, a cumulative high-water mark rather than a mode comparison.
-The slow-profile latency floor establishes the limitation independently of
-curl's process overhead.
-
-The sequential header strategy is unsuitable for this measured layout and
-schedule. Keep these Zstd columns on ordinary reads in the initial #453 proposal.
-This does not rule out other page geometry or a different discovery schedule.
-The production fixed-width planner already estimates dependent Zstd rounds
-before probing; variable-length integration must preserve that check. The
-diagnostic bypasses the cost gate deliberately to measure the rejected work.
-
-## Larger skewed batches, 2026-10-11
-
-The uncompressed `selected-long-batch` table occupies 258.7 MB. Its 128 payload
-pages each contain 8,192 rows and occupy 1.58-2.37 MB. After DVs, the scattered
-predicate selects 130 of 129,798 live rows, but those rows contain 99.905% of the
-live payload bytes. The query executable and cost policy are unchanged from the
-cost-model follow-up above. Three alternating pairs produced these medians:
-
-| Profile | Ordinary seconds | Experimental seconds | Query requests |
-| --- | ---: | ---: | ---: |
-| 200 ms +/-20 ms, shared 150 Mbit/s | 17.379 | 18.012 | 157 / 285 |
-| 1 ms, shared 10,000 Mbit/s | 0.574 | 0.610 | 157 / 349 |
-
-Both modes downloaded exactly 258,201,068 bytes per query. All 128 candidate
-pages passed the initial cost gate, then fell back. Slow-profile discovery made
-128 first-prefix requests; the budget refused 64 further requests. Fast-profile
-discovery made 192 requests across at most two dependent rounds per page.
-The eight full-result checks passed for both modes and array forms. Traces
-confirmed that fallback reused prefixes without repeating or omitting page bytes.
-All 12 timing samples and the failed preflight source-hash check were retained;
-that failed attempt stopped before starting storage or taking any sample.
-
-The slow regression was 3.65%. Every pair lost 0.621-0.651 seconds, exceeding the
-0.055-second within-mode range. This is a repeatable cost of unsuccessful
-discovery, not a zero-cost rejection. The fast median increased 6.20%; all pairs
-lost time, but only one difference exceeded the within-mode range. Those
-subsecond measurements require investigation rather than a precise slowdown
-claim. Timing-run process CPU medians were 1.25/1.26 seconds on the slow profile
-and 0.52/0.61 on the fast profile. Maximum process RSS was 196.9/212.7 MiB and
-195.9/222.0 MiB, respectively. These resource figures include initialization.
-
-Trace analysis found an avoidable request in the prototype. Every page's length
-and null information fits in the first 8 KiB response. After removing its
-25-byte Parquet header, the transport caches 8,167 body bytes. The parser starts
-with a separate 4 KiB buffer; growing it to 8 KiB asks the transport for another
-25 bytes even when the cached prefix already contains the complete structure.
-The slow budget rejected these 64 extensions, while the fast profile permitted
-them. The follow-up below tests letting the parser examine all cached bytes
-before requesting more. The initial probe still has a cost when the lengths
-reveal that the selected values contain almost all of the payload.
-
-## Cached-prefix reuse, 2026-10-11
-
-The parser now starts with the body bytes already fetched alongside the page
-header. It requests only extensions beyond that prefix. Regression checks cover
-a complete cached length stream, an incomplete prefix that needs more bytes,
-and supplied prefixes exceeding the page or discovery limit. The initial prefix
-still counts toward the nine-chunk limit and the transport's cost budget.
-
-The repeated network matrix passed 24 full-result checks and completed 36 timing
-runs, using the same fixtures and three alternating pairs per case. Slow means
-200 ms +/-20 ms with shared 150 Mbit/s; fast means 1 ms with shared 10,000 Mbit/s.
-
-| Profile and case | Ordinary seconds | Experimental seconds |
-| --- | ---: | ---: |
-| Slow, long scattered | 30.113 | 5.330 |
-| Slow, long grouped | 29.803 | 4.565 |
-| Slow, selected-long scattered | 5.269 | 5.269 |
-| Slow, selected-long-batch scattered | 17.366 | 18.017 |
-| Fast, long scattered | 0.728 | 0.369 |
-| Fast, selected-long-batch scattered | 0.553 | 0.576 |
-
-The slow long-value queries retain gains exceeding the timing spread in all
-pairs. Their experimental medians were 6.044 and 5.350 seconds before the fix.
-Query requests fell from 411 to 362 for scattered matches and from 296 to 247
-for grouped matches. Discovery now uses one round per page in both cases.
-Transferred bytes changed only slightly: this fix removes dependent requests,
-while the existing partial reads provide the byte savings.
-
-For larger skewed batches, both profiles now use 128 initial probes and no
-extensions. Fast query requests fell from 349 to 285; slow requests remained
-285 because the old budget already refused the extensions. Traces in both array
-formats verify that every page is covered once by its prefix and remaining
-suffix, with no gaps, repeated bytes or 25-byte extension requests.
-Ordinary reads use 157 requests and the same 258,201,068 bytes. Initial discovery
-still costs time: all slow pairs lost 0.647-0.664 seconds, beyond a 0.024-second
-within-mode range. All fast pairs also lost time, by 0.023-0.033 seconds versus a
-0.021-second range. These short fast samples are diagnostics, not a general
-slowdown estimate. The smaller selected-long case still rejects discovery
-before I/O and uses exactly the ordinary 49 requests and 33,858,108 bytes.
-
-For the larger skewed batch, ordinary/experimental process CPU medians were
-1.24/1.36 seconds on the slow profile and 0.50/0.56 on the fast profile. Maximum
-process RSS was 194.6/222.6 MiB and 194.2/231.6 MiB, respectively. The first
-probe and full-page reconstruction still have costs after this fix.
-
-The parser, planner and budget unit tests, Clippy and the 20-case local decoder
-proof passed. Twenty local full-result controls also passed. The first local
-control script stopped at an obsolete expectation: its synthetic 500 ms profile
-previously rejected redundant extensions. With reuse, all 105 long-value pages
-complete discovery from the initial prefix. The updated control requires that
-behavior and exact values in both array formats. Both attempts are retained.
-Verified duplicate IPC outputs were removed after comparison; samples, traces,
-resource records, fixtures and independent oracles remain available.
-
-## Measured-profile follow-up, 2026-10-11
-
-The driver now measures latency, throughput and request capacity on its own
-client during initialization. Cost thresholds, fixtures and query timing
-boundaries are unchanged. The six-case matrix passed 24 full-result checks and
-completed 36 timing runs. All 40 slow-profile initializations completed
-calibration. Measured latency was 206-210 ms, throughput 18.68-18.75 MB/s, and
-request cost 119,657-123,449 byte-equivalent units. That last figure prices
-request capacity; it is not additional downloaded data.
-
-| Profile and case | Ordinary seconds | Experimental seconds |
-| --- | ---: | ---: |
-| Slow, long scattered | 30.095 | 5.316 |
-| Slow, long grouped | 29.799 | 4.539 |
-| Slow, selected-long scattered | 5.270 | 5.269 |
-| Slow, selected-long-batch scattered | 17.353 | 17.368 |
-| Fast, long scattered | 0.731 | 0.718 |
-| Fast, selected-long-batch scattered | 0.566 | 0.564 |
-
-Both slow long-value cases retained gains beyond within-mode spread in every
-pair. Their query bytes and requests are unchanged from the cached-prefix
-follow-up. Both slow selected-long cases now reject discovery before I/O.
-The larger case rejects all 128 candidate pages and uses exactly the ordinary
-157 requests and 258,201,068 bytes, instead of 285 requests. Its paired extra
-time was 12-17 ms against a 16 ms within-mode range. This removes the previous
-repeatable 0.65-second discovery penalty; it does not establish zero overhead.
-The smaller case retains the ordinary 49 requests and 33,858,108 bytes.
-
-Four untimed local controls isolate the changed decision. With latency fixed
-at 207 ms and bandwidth at 149 Mbit/s, changing only request cost from zero to
-122,367 byte-equivalent units changes the larger skewed case from 128 probes
-and fallbacks to zero probes. The positive long-value case still reads 105 pages
-partially under both profiles. All four results match the independent input
-oracle. No layout or selectivity threshold was changed to obtain this result.
-
-The fast results do not establish a gain. Nine of 20 initializations lacked
-three transfers with at least 10 ms of delivery time and returned no profile.
-All five experimental long-value runs used ordinary reads, with the same
-122 requests and 499,461,298 bytes as their controls. The larger skewed case
-used 157 requests when calibration was incomplete, but 285 in its two runs
-with complete profiles. Those two runs still probed and fell back; measured
-calibration does not eliminate unsuccessful discovery under every condition.
-Both fast timing comparisons stayed within the observed spread. Their medians
-mix available and unavailable profiles and are not speedup claims.
-
-Slow calibration took 2.555-2.576 seconds; total initialization took
-3.361-3.416 seconds. Fast initialization took 0.062-0.202 seconds. These costs
-are reported separately from the first fully consumed query. For slow
-scattered/grouped long values, ordinary/experimental process CPU medians were
-1.64/0.50 and 2.02/0.50 seconds. Peak RSS remained below 151 MiB. The larger
-slow skewed case used 1.08/1.35 CPU seconds and peaked at 196.8/198.1 MiB.
-These process resource counts include calibration, so they cannot isolate
-query-only CPU overhead.
-
-All 24 query-binary unit tests and Clippy passed, including measurement checks
-for overlapping transfers, sustained request capacity and unavailable profiles.
-Samples, initialization captures, query traces and source hashes are retained;
-verified duplicate IPC outputs were removed after comparison. Production
-source and the published README benchmarks remain unchanged.
-
-## Fixed-profile fallback follow-up, 2026-10-11
-
-The measured fast matrix mixed available and unavailable profiles. In
-particular, all five experimental long-value runs lacked a profile, while two
-skewed-value runs issued 128 probes and then fell back. Its pooled medians could
-not establish how the active policy performed on the fast link.
-
-Two further campaigns hold cost inputs fixed using the first complete
-experimental fast-profile record: latency rounded up to 5 ms, bandwidth down
-to 1,804 Mbit/s, and request cost 62,692 byte-equivalent units. The network
-remains 1 ms and 10,000 Mbit/s. Each campaign has three alternating pairs and
-independent ordinary/view-array correctness checks for both modes. These are
-controlled subsecond diagnostics, not new automatic-policy timing claims.
-
-The first campaign exposed consistent paired extra time in the skewed case.
-Code review also found that `range` copied a completed page into another
-full-size buffer even when it was the only piece of the requested range.
-The second campaign returns that existing buffer directly. No cost threshold,
-fixture, row selection or I/O plan changed.
-
-| Campaign and case | Ordinary seconds | Experimental seconds | Paired experimental extra time |
-| --- | ---: | ---: | ---: |
-| Before buffer reuse, long scattered | 0.698 | 0.397 | -306, -352, -298 ms |
-| Before buffer reuse, selected-long-batch | 0.555 | 0.574 | +30, +17, +18 ms |
-| With buffer reuse, long scattered | 0.720 | 0.165 | -503, -558, -524 ms |
-| With buffer reuse, selected-long-batch | 0.574 | 0.576 | +17, +2, +5 ms |
-
-All 16 full-result checks and 24 timing runs completed. The long case exercised
-105 partial pages in every experimental run, retaining 1,887,309 query bytes
-and 362 requests versus ordinary reads' 499,461,298 bytes and 122 requests.
-Experimental process CPU medians were 0.36 seconds before buffer reuse and
-0.09 afterwards. These were separate campaigns; the paired controls and raw
-samples are retained rather than attributing every timing change to the edit.
-
-The skewed case still issued 128 probes and fell back on all 128 pages. Both
-modes transferred 258,201,068 bytes, with 157 ordinary requests and 285
-experimental requests. Prefixes were reused, so probes added requests without
-duplicate downloads. The observed median excess was 3.27% before buffer reuse
-and 0.34% afterwards. In the latter campaign, all paired differences were
-positive but smaller than the 34.7 ms within-mode range. Process CPU medians
-were 0.53/0.56 seconds and peak RSS 193.8/232.1 MiB for ordinary/experimental.
-This does not establish zero overhead or a completed no-regression check.
-
-Preflight admits these probes because their modeled cost fits the discovery
-budget. Only after decoding lengths does it learn that selected values occupy
-most payload bytes. Page size, row count and selected-row count alone do not
-reveal that distribution. The remaining request, parsing and reconstruction
-cost must be evaluated here, with complete profiles kept separate from missing
-profiles. #453 repeats the settled policy on production transport; it does not
-replace this experiment's responsibility to explain and bound losing cases.
-
-### Streamed fallback and request control
-
-Further inspection found a second full-tail copy in fallback: `get_range`
-collected the response, then `finish_page` copied it into the prefix buffer.
-The candidate now appends response chunks directly to that buffer, under the
-same request permit. It checks the returned range and body length before
-returning a complete page. Chunked responses, truncated objects, failed reads
-and cancellation have focused tests. Query values and I/O plans are unchanged.
-
-Separate userspace CPU sampling, at 997 Hz, found length discovery in roughly
-1%-2% of the skewed query's samples; memory copying accounted for about half.
-Three alternating before/after profiles measured median estimated userspace
-CPU of 204/185 ms. Copying accounted for about 107/80 ms of those samples.
-These are coarse whole-process CPU estimates, including initialization, not
-query wall-time stages. They exclude kernel CPU and are not timing samples.
-
-The uninstrumented fast control still regressed. After the first three pairs
-were noisy, two further pairs were declared and retained with the originals.
-The added pairs used a fresh server with the same fixed profile, fixture and
-resource settings. All five pairs give ordinary/experimental medians of
-0.544/0.583 seconds, a 7.11% increase. Paired experimental extra times were
-+58, +14, -20, +38 and +61 ms. Maximum RSS was 232.1 MiB in the preceding
-campaign and 208.4 MiB across these five candidate timings; the alternating
-CPU-profile control also showed lower memory use. Reduced copying does not resolve the
-query-time regression. Both modes still transfer 258,201,068 bytes, with
-157 ordinary requests versus 285 experimental requests, including 128 probes
-followed by 128 fallbacks.
-
-The beneficial long-value control retained 105 partial pages, 1,887,309 bytes
-and 362 requests in every experimental run. Its three ordinary/experimental
-timing medians were 0.755/0.184 seconds. All paired improvements exceeded the
-larger within-mode range. This buffer change does not alter the partial-read
-path; these results check that the existing benefit remains.
-
-One further diagnostic fetched each full page in a single request, then ran
-the same length discovery. On the skewed fixture it decoded the same 513,392
-length/null bytes and located the same 253,756,360 selected payload bytes.
-Both modes used 157 requests and 258,201,068 bytes. Ordinary/control medians
-were 0.566/0.547 seconds, with paired differences of -6, -39 and -26 ms,
-all within the 56 ms ordinary range. This does not establish a speedup. Along
-with CPU sampling, it points to split requests and buffer handling as the
-remaining cost, rather than length decoding alone. This control deliberately
-downloads every page; it is not a selective-read implementation or a proposed
-fix.
-
-All 20 additional full-result comparisons passed, including ordinary and view
-arrays. The local evidence is retained in `fallback-cpu-profile-v1`,
-`fixed-fast-control-v3`, `fallback-final-fast-controls` and
-`read-once-fast-control`. The last campaign completed all comparisons and
-timings, then failed while trying to overwrite an exclusive-create metadata
-file. Its original record and failure remain; `experiment.runtime.json`
-corrects the diagnostic source identity, and `postprocess-recovery.json`
-records verification and cleanup. No query was rerun or discarded to repair
-that bookkeeping error.
-
-The fast fallback gate remains open. The current preflight limits modeled
-probe cost but cannot infer selected-value sizes from page size and row count.
-Tightening a threshold to reject this fixture would not explain the loss or
-establish a general fix. Any replacement must retain the positive case and
-measure actual requests, transferred bytes and fallback costs. In particular,
-the following control tests whether keeping one response open can avoid the
-extra fallback request without losing the partial-read benefit.
-
-### Retaining the page response
-
-This candidate requested a complete page, inspected the initial response
-chunks, and continued that same response if discovery required fallback.
-On a profitable page, it dropped the response before requesting selected
-payload ranges. It reused consumed prefix bytes and released the request
-permit before scheduling those ranges. Parser limits, cost thresholds,
-fixtures, query selections and resource limits stayed the same.
-
-Each case compared ordinary reads, the bounded-prefix candidate at `c044099`,
-and the retained-response candidate, with three alternating triples and
-independent ordinary/view-array checks for all three. Fast cost inputs were
-unchanged from the fixed-profile follow-up. Slow cost inputs came from the
-first complete measured slow profile, rounded to 210 ms, 149 Mbit/s and
-122,265 byte-equivalent request cost. The actual networks remained 1 ms with
-10,000 Mbit/s and 200 ms +/-20 ms with shared paced 150 Mbit/s. These fixed
-inputs isolate request handling; they do not establish automatic-policy gains.
-
-The table reports median query seconds, excluding initialization:
-
-| Network and case | Ordinary | Bounded prefix | Retained response |
-| --- | ---: | ---: | ---: |
-| Fast, selected-long-batch scattered | 0.560 | 0.595 | 0.549 |
-| Fast, long scattered | 0.743 | 0.180 | 0.252 |
-| Slow, long scattered | 30.100 | 5.269 | 5.376 |
-| Slow, long grouped | 29.792 | 4.457 | 4.626 |
-
-The skewed control returned to the ordinary timing range, with the same
-258,201,068 proxy bytes and 157 requests instead of 285. It still decoded
-lengths and fell back on all 128 pages. Its paired differences from ordinary
-were -29, -2 and -25 ms, within the 33 ms ordinary range; this is not a speedup
-claim.
-
-The profitable cases regressed against bounded prefixes in every pair.
-Fast scattered reads were 39.93% slower by median, with paired extra times of
-72, 30 and 123 ms. Slow scattered/grouped medians increased 2.04%/3.79%, with
-paired extra times of 143/106/104 ms and 144/169/182 ms. Those slow-network
-differences exceeded either candidate's within-mode range. Both strategies
-still partially read the same 105 scattered or 102 grouped pages.
-
-Fast scattered proxy bytes rose from 1.887 MB to 15.977-59.083 MB, although
-the reader consumed only 2.130-2.171 MB of data chunks. Slow scattered bytes
-rose from 1.887 to 4.831-4.896 MB; grouped bytes rose from 2.950 to
-5.501-5.569 MB. MB here means decimal megabytes. Proxy counts are accepted
-client-facing response writes, including data sent ahead of application
-consumption. They are not a TCP packet capture or proof that every accepted
-byte reached the client before cancellation.
-
-Untimed correctness traces now record the client endpoint for each request.
-The retained-response scattered runs used 137 distinct endpoints, versus 32
-with bounded prefixes, and left 105 incomplete responses. Grouped runs used
-133 versus 32 endpoints and left 102 incomplete responses. Bounded-prefix
-and ordinary runs had no incomplete responses. The proxy shapes request
-delay and shared bandwidth; it does not model remote TCP/TLS connection setup,
-so these results cannot establish the full reconnection cost on S3.
-
-All 24 declared full-result checks and 36 timings completed. The candidate's
-29 query/parser/planner tests passed, including interrupted and malformed
-response bodies. Both campaigns shut down their services. Local evidence in
-`retained-response-fast-v2` and `retained-response-slow-v2` retains all samples,
-traces, build identities and cleanup receipts. `retained-response-analysis.json`
-cross-checks trace counts and paired results. `retained-response-v1-source`
-retains both source versions, their patch and the restoration record; the
-candidate executable is retained separately. The initial `fast-v1` attempt
-passed one ordinary value check before a postprocessing typo stopped it.
-Its script, failure and output remain; it produced no timing samples.
-
-The retained-response replacement is rejected and removed from the candidate.
-The bounded-prefix implementation and both buffer-copy fixes remain, along
-with connection tracing for future diagnostics. This resolves the transport
-hypothesis, not the fast fallback regression. Page size and row count still
-cannot reveal which selected values hold most payload bytes. A further policy
-experiment must limit unsuccessful discovery without depending on that hidden
-distribution, preserve the beneficial cases, and include mixed profitable and
-unprofitable pages. #452 remains open and #453 remains blocked.
-
 ## Handoff to #453
+
+Use the current policy and the documented failed-discovery tradeoff as the
+integration baseline after #475 is reviewed and merged. There is no fixed 1 ms
+requirement. The allowance is 5% of modeled ordinary-read cost, superseding the
+issue's historical 10% wording. It is not a wall-time guarantee or, by itself, an
+accepted measured regression limit.
 
 Start with flat required or nullable BYTE_ARRAY columns representing UTF-8 or
 binary values, V1 DELTA_LENGTH_BYTE_ARRAY encoding, no compression, an offset
@@ -887,11 +281,13 @@ Production cost selection must cover the whole requested batch, including
 ordinary columns. Price request capacity and each dependent discovery round
 using the existing production profile and shared concurrency. Reject an
 unaffordable initial probe before I/O; charge subsequent discovery before
-another read. The experiment's limits are 10% of modeled ordinary-read cost
-for discovery, at least 25% total byte savings and more than 10% modeled
+another read. The experiment requires full discovery-plus-fallback cost within
+105% of ordinary reads, at least 25% total byte savings and more than 10% modeled
 remaining-read savings. Preserve production's accounting of both modeled and
 observed work; a modeled budget is not a wall-time guarantee. Variable lengths
 must not use the fixed-width planner's uniform row-offset estimate.
+Before falling back, evaluate bounded merges with the same cost formula used
+to approve payload reads.
 
 Keep missing-profile and explicit opt-out paths on ordinary reads. When a
 later probe discovers unsupported layout, exhausted budget or insufficient
@@ -904,8 +300,9 @@ buffers; per-page bounds alone do not bound aggregate memory.
 Before enabling the new path, repeat the beneficial and losing cases with the
 actual production client, calibration and scheduling. Require actual partial
 I/O in the positive cases and record every preflight rejection or later
-fallback. In particular, rejection of the slow skewed case at concurrency 32
-is not a promise about production's larger request allowance. Retain exact
+fallback. The slow selected-long case now permits a measured full fallback at
+concurrency 32; this does not establish its cost under production's larger
+request allowance. Retain exact
 value/null comparisons, real DVs, ordinary arrays, DataFusion view arrays,
 malformed-input checks and failure/cancellation coverage.
 
