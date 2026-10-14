@@ -173,6 +173,7 @@ impl NetworkWarmupPlan {
         };
         let counts = metrics.snapshot();
         let estimate = store.transport_estimate();
+        let calibration = store.range_read_calibration();
         tracing::debug!(target: "delta_arrow_reader::diagnostics::network_warmup",
             phase, status, elapsed_micros = started.elapsed().as_micros(),
             requests = counts.parquet_data_file_range_get_operations,
@@ -180,7 +181,10 @@ impl NetworkWarmupPlan {
             request_latency_micros = estimate.map(|value| value.request_latency.as_micros()),
             throughput_bytes_per_second = estimate.map(|value| value.shared_throughput_bytes_per_second),
             request_overhead_bytes = store.request_overhead_bytes(),
-            request_duration_samples = store.calibrated_request_durations().map(|samples| samples.len()),
+            calibrated_throughput_bytes_per_second = calibration.as_ref().map(|value| value.bytes_per_second),
+            ordinary_request_latency_samples = calibration.as_ref().map(|value| value.ordinary_request_latencies.len()),
+            partial_request_latency_samples = calibration.as_ref().map(|value| value.partial_request_latencies.len()),
+            request_duration_samples = calibration.as_ref().map(|value| value.partial_request_durations.len()),
             "Network warmup completed");
         // Incomplete calibration must not seed a partially measured network profile.
         (status == "complete").then_some(estimator)
@@ -1168,7 +1172,10 @@ pub(in crate::reader) mod tests {
         .with_range_read_estimator(recovered);
         assert!(store.transport_estimate().is_some());
         assert!(store.request_overhead_bytes().is_some());
-        assert_eq!(store.calibrated_request_durations().unwrap().len(), 3_072);
+        let calibration = store.range_read_calibration().unwrap();
+        assert_eq!(calibration.ordinary_request_latencies.len(), 12);
+        assert_eq!(calibration.partial_request_latencies.len(), 3_072);
+        assert_eq!(calibration.partial_request_durations.len(), 3_072);
         Ok(())
     }
 
