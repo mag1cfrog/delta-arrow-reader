@@ -27,6 +27,13 @@ pub(in super::super) struct CostEstimator {
 
 impl CostEstimator {
     pub(in super::super) fn new(calibration: Arc<RangeReadCalibration>) -> Arc<Self> {
+        tracing::trace!(target: "delta_arrow_reader::diagnostics::intra_page",
+            bytes_per_second = calibration.bytes_per_second,
+            ordinary_latencies = ?calibration.ordinary_request_latencies,
+            partial_latencies = ?calibration.partial_request_latencies,
+            partial_durations = ?calibration.partial_request_durations,
+            small_reads = ?calibration.small_reads,
+            "Variable-length cost calibration");
         Arc::new(Self {
             calibration,
             workers: std::thread::available_parallelism().map_or(1, |count| count.get().min(4)),
@@ -52,9 +59,15 @@ impl CostEstimator {
         if started > now || now >= deadline {
             return None;
         }
-        let cost = timeout_at(deadline, self.estimate(plan, deadline))
-            .await
-            .ok()??;
+        tracing::trace!(target: "delta_arrow_reader::diagnostics::intra_page",
+            ?plan, "Variable-length fallback plan");
+        let estimate = timeout_at(deadline, self.estimate(plan, deadline)).await;
+        let now = Instant::now();
+        tracing::debug!(target: "delta_arrow_reader::diagnostics::intra_page",
+            ?estimate, decision_micros = (now - started).as_micros() as u64,
+            deadline_micros = (deadline - started).as_micros() as u64,
+            "Variable-length fallback cost estimated");
+        let cost = estimate.ok()??;
         let now = Instant::now();
         if now >= deadline {
             return None;
@@ -130,6 +143,7 @@ mod tests {
         let calibration = Arc::new(RangeReadCalibration {
             bytes_per_second: 1,
             ordinary_request_latencies: vec![Duration::from_secs(1)].into(),
+            small_reads: None,
             partial_request_latencies: vec![Duration::from_millis(10)].into(),
             partial_request_durations: vec![Duration::from_millis(20)].into(),
         });
@@ -247,6 +261,7 @@ mod tests {
         Arc::get_mut(&mut estimator).unwrap().calibration = Arc::new(RangeReadCalibration {
             bytes_per_second: 18_750_000,
             ordinary_request_latencies: [5, 20, 400].map(Duration::from_millis).into(),
+            small_reads: None,
             partial_request_latencies: [8, 30, 900].map(Duration::from_millis).into(),
             partial_request_durations: [4008, 4030, 4900].map(Duration::from_millis).into(),
         });

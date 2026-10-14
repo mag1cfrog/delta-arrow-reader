@@ -185,6 +185,7 @@ impl NetworkWarmupPlan {
             ordinary_request_latency_samples = calibration.as_ref().map(|value| value.ordinary_request_latencies.len()),
             partial_request_latency_samples = calibration.as_ref().map(|value| value.partial_request_latencies.len()),
             request_duration_samples = calibration.as_ref().map(|value| value.partial_request_durations.len()),
+            small_request_samples = calibration.as_ref().and_then(|value| value.small_reads.as_ref()).map(|value| value.latencies.len()),
             "Network warmup completed");
         // Incomplete calibration must not seed a partially measured network profile.
         (status == "complete").then_some(estimator)
@@ -1156,7 +1157,7 @@ pub(in crate::reader) mod tests {
         second.await;
 
         let requests_after_recovery = gated.range_call_count();
-        assert_eq!(requests_after_recovery, requests_after_timeout + 3_084);
+        assert_eq!(requests_after_recovery, requests_after_timeout + 3_180);
         let recovered = state.estimator();
         assert!(!Arc::ptr_eq(&original_estimator, &recovered));
         state
@@ -1176,6 +1177,10 @@ pub(in crate::reader) mod tests {
         assert_eq!(calibration.ordinary_request_latencies.len(), 12);
         assert_eq!(calibration.partial_request_latencies.len(), 3_072);
         assert_eq!(calibration.partial_request_durations.len(), 3_072);
+        assert_eq!(
+            calibration.small_reads.as_ref().unwrap().latencies.len(),
+            96
+        );
         Ok(())
     }
 

@@ -457,6 +457,7 @@ mod tests {
         RangeReadCalibration {
             bytes_per_second,
             ordinary_request_latencies: vec![Duration::from_millis(10)].into(),
+            small_reads: None,
             partial_request_latencies: vec![Duration::from_millis(100)].into(),
             partial_request_durations: vec![Duration::from_millis(100)].into(),
         }

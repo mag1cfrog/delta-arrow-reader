@@ -8,7 +8,7 @@ use super::{
     request_simulation::{MAX_MODELED_REQUESTS, MAX_REQUEST_DELAY, Request, plan_duration},
 };
 use crate::reader::{
-    backend::direct_parquet::metered_object_store::RangeReadCalibration,
+    backend::direct_parquet::metered_object_store::{RangeReadCalibration, SMALL_READ_CONCURRENCY},
     options::MAX_CONCURRENT_PARQUET_RANGE_READS,
 };
 
@@ -141,24 +141,30 @@ pub(super) fn sample_costs(
     plan: &FallbackPlan,
     trials: Range<usize>,
 ) -> Option<Vec<TrialCost>> {
+    let valid_timings = |latencies: &[Duration], durations: &[Duration]| {
+        !latencies.is_empty()
+            && latencies.len() == durations.len()
+            && latencies
+                .iter()
+                .zip(durations)
+                .all(|(latency, duration)| latency <= duration && *duration <= MAX_REQUEST_DELAY)
+    };
     if trials.is_empty()
         || trials.end > TRIALS
         || calibration.bytes_per_second == 0
         || calibration.ordinary_request_latencies.is_empty()
-        || calibration.partial_request_latencies.is_empty()
-        || calibration.partial_request_latencies.len()
-            != calibration.partial_request_durations.len()
+        || !valid_timings(
+            &calibration.partial_request_latencies,
+            &calibration.partial_request_durations,
+        )
+        || calibration
+            .small_reads
+            .as_ref()
+            .is_some_and(|samples| !valid_timings(&samples.latencies, &samples.durations))
         || calibration
             .ordinary_request_latencies
             .iter()
-            .chain(calibration.partial_request_latencies.iter())
-            .chain(calibration.partial_request_durations.iter())
             .any(|delay| *delay > MAX_REQUEST_DELAY)
-        || calibration
-            .partial_request_latencies
-            .iter()
-            .zip(&calibration.partial_request_durations)
-            .any(|(latency, duration)| latency > duration)
     {
         return None;
     }
@@ -169,6 +175,21 @@ pub(super) fn sample_costs(
     ordinary_latencies.sort_unstable();
     partial_latencies.sort_unstable();
     partial_durations.sort_unstable();
+    let mut small_reads = calibration.small_reads.clone();
+    if let Some(samples) = &mut small_reads {
+        samples.latencies.sort_unstable();
+        samples.durations.sort_unstable();
+    }
+    let partial_samples = |count| {
+        if let Some(samples) = small_reads
+            .as_ref()
+            .filter(|_| count <= SMALL_READ_CONCURRENCY)
+        {
+            (&*samples.latencies, &*samples.durations)
+        } else {
+            (&*partial_latencies, &*partial_durations)
+        }
+    };
     let requests = |ranges: &[Range<u64>]| {
         ranges
             .iter()
@@ -200,32 +221,27 @@ pub(super) fn sample_costs(
             )?;
             let mut probes = Duration::ZERO;
             for (round, requests) in plan.rounds().zip(&mut probe_requests) {
-                let transport = transport_time(
-                    requests,
-                    &round.ranges,
-                    &partial_latencies,
-                    MAX_SHARED_RANGE_READS,
-                )?;
-                let capacity = request_capacity_time(&round.ranges, &partial_durations, trial)?;
+                let (latencies, durations) = partial_samples(round.ranges.len());
+                let transport =
+                    transport_time(requests, &round.ranges, latencies, MAX_SHARED_RANGE_READS)?;
+                let capacity = request_capacity_time(&round.ranges, durations, trial)?;
                 // Slow uncontended reads spend budget; fast samples never erase modeled work.
                 let duration = transport
                     .max(capacity)
                     .max(round.observed.unwrap_or_default());
                 probes = probes.checked_add(duration)?;
             }
+            let (latencies, durations) = partial_samples(plan.remaining.len());
             let remaining = transport_time(
                 &mut remaining_requests,
                 &plan.remaining,
-                &partial_latencies,
+                latencies,
                 MAX_SHARED_RANGE_READS,
             )?;
             // Complete small-request timings include body delivery. Use a capacity floor,
             // not another delay added to the transport simulation.
-            let remaining = remaining.max(request_capacity_time(
-                &plan.remaining,
-                &partial_durations,
-                trial,
-            )?);
+            let remaining =
+                remaining.max(request_capacity_time(&plan.remaining, durations, trial)?);
             Some(TrialCost {
                 ordinary,
                 extra_nanos: probes.checked_add(remaining)?.as_nanos() as i128
@@ -312,6 +328,7 @@ impl FallbackCost {
 )]
 mod tests {
     use super::*;
+    use crate::reader::backend::direct_parquet::metered_object_store::PartialReadTimings;
 
     fn calibration(
         ordinary_ms: u64,
@@ -321,6 +338,7 @@ mod tests {
         RangeReadCalibration {
             bytes_per_second,
             ordinary_request_latencies: vec![Duration::from_millis(ordinary_ms)].into(),
+            small_reads: None,
             partial_request_latencies: vec![Duration::from_millis(partial_ms)].into(),
             partial_request_durations: vec![
                 Duration::from_millis(partial_ms) + Duration::from_millis(1),
@@ -331,6 +349,33 @@ mod tests {
 
     fn cost(calibration: &RangeReadCalibration, plan: &FallbackPlan) -> FallbackCost {
         FallbackCost::from_trials(sample_costs(calibration, plan, 0..TRIALS).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn small_batch_timings_do_not_discount_large_fallbacks() {
+        let mut profile = calibration(200, 350, 1_000_000);
+        let probes: Vec<_> = (0..33).map(|i| i * 200_000..i * 200_000 + 8192).collect();
+        let plan = FallbackPlan::new(&[0..8_000_000], &probes[..32]).unwrap();
+        let loaded = cost(&profile, &plan);
+        assert_eq!(loaded.extra, Duration::from_millis(500));
+        assert!(loaded.remaining_allowance(Duration::ZERO).is_none());
+
+        profile.small_reads = Some(PartialReadTimings {
+            latencies: vec![Duration::from_millis(200)].into(),
+            durations: vec![Duration::from_millis(200)].into(),
+        });
+        let small = cost(&profile, &plan);
+        assert_eq!(small.extra, Duration::from_millis(200));
+        assert!(small.remaining_allowance(Duration::ZERO).is_some());
+        let larger = FallbackPlan::new(&[0..8_000_000], &probes).unwrap();
+        assert_eq!(cost(&profile, &larger), loaded);
+
+        // Both probes fit the small profile, but their combined fallback has 33 requests.
+        let extended = plan.with_probe(&probes[32..]).unwrap();
+        assert_eq!(cost(&profile, &extended).extra, Duration::from_millis(550));
+        let samples = profile.small_reads.as_mut().unwrap();
+        samples.durations = vec![Duration::from_millis(199)].into();
+        assert!(sample_costs(&profile, &plan, 0..TRIALS).is_none());
     }
 
     #[test]
@@ -605,6 +650,7 @@ mod tests {
         let profile = RangeReadCalibration {
             bytes_per_second: 18_750_000,
             ordinary_request_latencies: [5, 20, 400].map(Duration::from_millis).into(),
+            small_reads: None,
             partial_request_latencies: [8, 30, 900].map(Duration::from_millis).into(),
             partial_request_durations: [4008, 4030, 4900].map(Duration::from_millis).into(),
         };
@@ -630,6 +676,7 @@ mod tests {
         let profile = RangeReadCalibration {
             bytes_per_second: 18_750_000,
             ordinary_request_latencies: [5, 20, 400].map(Duration::from_millis).into(),
+            small_reads: None,
             partial_request_latencies: [400, 20, 5, 5, 400, 20].map(Duration::from_millis).into(),
             partial_request_durations: [400, 20, 5, 5, 400, 20].map(Duration::from_millis).into(),
         };
