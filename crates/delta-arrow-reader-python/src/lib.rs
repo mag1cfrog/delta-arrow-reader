@@ -3,6 +3,7 @@
 mod filters;
 mod options;
 mod runtime;
+mod session;
 mod stream;
 
 use std::sync::Arc;
@@ -20,6 +21,7 @@ use pyo3::{
 
 use crate::options::ScanExecutionOptions;
 use crate::runtime::Runtime;
+use crate::session::Session;
 use crate::stream::RecordBatchStream;
 
 pyo3::create_exception!(
@@ -292,20 +294,15 @@ impl DeltaTable {
         target_partitions: Option<&Bound<'_, PyInt>>,
         execution_options: Option<PyRef<'_, ScanExecutionOptions>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let stream = Py::new(
+        self.scan(
             py,
-            self.scan(
-                py,
-                columns,
-                filters,
-                limit,
-                target_partitions,
-                execution_options,
-            )?,
-        )?;
-        py.import("pyarrow")?
-            .getattr("RecordBatchReader")?
-            .call_method1("from_stream", (stream,))
+            columns,
+            filters,
+            limit,
+            target_partitions,
+            execution_options,
+        )?
+        .into_reader(py)
     }
 
     fn __repr__(&self) -> String {
@@ -324,6 +321,7 @@ fn delta_arrow_reader(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<DeltaTable>()?;
     module.add_class::<RecordBatchStream>()?;
     module.add_class::<ScanExecutionOptions>()?;
+    module.add_class::<Session>()?;
     module.add(
         "DeltaReaderError",
         module.py().get_type::<DeltaReaderError>(),
@@ -336,6 +334,7 @@ fn delta_arrow_reader(module: &Bound<'_, PyModule>) -> PyResult<()> {
             "DeltaReaderError",
             "RecordBatchStream",
             "ScanExecutionOptions",
+            "Session",
         ],
     )
 }

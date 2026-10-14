@@ -12,7 +12,7 @@ import unittest
 
 import pyarrow as pa
 
-from delta_arrow_reader import DeltaTable
+from delta_arrow_reader import DeltaTable, Session
 
 
 def interrupt_loading():
@@ -96,7 +96,7 @@ def interrupt_planning():
         print("interrupted", flush=True)
 
 
-def interrupt_reading():
+def interrupt_reading(*, sql=False):
     http, directory = http_fixture()
     disconnected = threading.Event()
     requests = []
@@ -107,7 +107,7 @@ def interrupt_reading():
                 return super().do_GET()
             requests.append(self.path)
             # This Python thread can run only if the batch read releases the GIL.
-            print("reading", flush=True)
+            print("sql-reading" if sql else "reading", flush=True)
             self.wait_for_disconnect(disconnected)
 
     with http.serve(partial(Storage, directory=str(directory))) as server:
@@ -115,7 +115,13 @@ def interrupt_reading():
             f"http://127.0.0.1:{server.server_port}/",
             storage_options={"allow_http": "true"},
         )
-        with table.to_reader() as reader:
+        if sql:
+            session = Session()
+            session.register_table("events", table)
+            reader = session.sql("SELECT * FROM events")
+        else:
+            reader = table.to_reader()
+        with reader:
             for _ in range(2):
                 try:
                     reader.read_next_batch()
@@ -128,6 +134,9 @@ def interrupt_reading():
                     raise AssertionError("batch read completed without a signal error")
             assert disconnected.wait(10), "interruption left the HTTP read pending"
             assert len(requests) == 1, requests
+        if sql:
+            with session.sql("SELECT 42 AS answer") as reader:
+                assert reader.read_all().to_pydict() == {"answer": [42]}
         print("interrupted", flush=True)
 
 
@@ -143,6 +152,10 @@ class RuntimeTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "posix", "requires POSIX subprocess SIGINT")
     def test_batch_read_releases_gil_and_cancels_on_sigint(self):
         self.assert_interrupted("reading")
+
+    @unittest.skipUnless(os.name == "posix", "requires POSIX subprocess SIGINT")
+    def test_sql_read_releases_gil_and_cancels_on_sigint(self):
+        self.assert_interrupted("sql-reading")
 
     def assert_interrupted(self, phase):
         with subprocess.Popen(
@@ -170,5 +183,7 @@ if __name__ == "__main__":
         interrupt_planning()
     elif sys.argv[1:] == ["--interrupt-reading"]:
         interrupt_reading()
+    elif sys.argv[1:] == ["--interrupt-sql-reading"]:
+        interrupt_reading(sql=True)
     else:
         unittest.main()

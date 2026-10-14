@@ -284,8 +284,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           python_tests=crates/delta-arrow-reader-python/tests
-          fixture=crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned
-          # Start a fresh container with only the final wheel, tests, and fixture.
+          fixture=crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus
+          # Start a fresh container with only the final wheel, tests, and fixtures.
           docker run --rm --workdir /tmp \
             --env PATH=/usr/bin:/bin --env LD_LIBRARY_PATH= \
             --volume "$GITHUB_WORKSPACE/dist:/wheels:ro" \
