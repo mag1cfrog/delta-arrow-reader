@@ -6,6 +6,10 @@
 
 mod page;
 
+// Validate length decoding before connecting variable-length discovery to query I/O.
+#[cfg(test)]
+mod delta_length;
+
 use std::{
     ops::Range,
     sync::{Arc, Mutex},
