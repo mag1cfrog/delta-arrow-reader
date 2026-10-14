@@ -210,7 +210,7 @@ fn sample_duration(trial: usize, offset: u64, samples: &[Duration]) -> Duration 
     samples[index as usize]
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct FallbackCost {
     ordinary: Duration,
     extra: Duration,
