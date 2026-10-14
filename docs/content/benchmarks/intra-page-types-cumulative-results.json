@@ -1,0 +1,139 @@
+{
+  "format": "cumulative-partial-page-report-v1",
+  "issue": 449,
+  "status": "report_review_pending",
+  "comparison_count": 36,
+  "timed_invocations": 272,
+  "exact_result_checks": "passed",
+  "primary_metric": "First fully consumed query after initialization, including planning; no preceding warmup query.",
+  "other_metrics": "Initialization and query 2 are separate. CPU and RSS cover the process; timed HTTP counters cover the session. Validation query I/O is separate.",
+  "default_policies": {
+    "warmup": "Automatic",
+    "experimental_intra_page_reads": true
+  },
+  "builds": {
+    "baseline": {
+      "revision": "7b10a504230a7bb683b0478e4f92b2d9612b67f8",
+      "reader_sha256": "3091eef49556a2ac3787845720dd64e9ebf64c6889f1c5528d159eed9006b3f3",
+      "numeric_reader_sha256": "4b86006418f22f8f926e2fd06203c4a3ab6e70c1b26cc239bb1a0046ffcbb549",
+      "numeric_driver_sha256": "46cc3fd3d304f67b309b8e9226a4488649d8b7d574696cf6e2c539ce0fa4a18e",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+      "rustflags": "-C target-cpu=x86-64",
+      "target": "x86_64-unknown-linux-gnu",
+      "build_record_in_archive": "evidence/baseline-build/build.json"
+    },
+    "candidate": {
+      "revision": "23713c0afa489e4ae93c7ec922845bbac1c299ec",
+      "reader_sha256": "a6206af9fe951efb97a2c572df36d7d1d402120eada9156800ca07cd9d7d4d04",
+      "numeric_reader_sha256": "a700cb5136124e6bfa6b6ea4e0fc104b602ba8b7a977b393b4ea7dd7e4b83497",
+      "numeric_driver_sha256": "46cc3fd3d304f67b309b8e9226a4488649d8b7d574696cf6e2c539ce0fa4a18e",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+      "rustflags": "-C target-cpu=x86-64",
+      "target": "x86_64-unknown-linux-gnu",
+      "build_record_in_archive": "evidence/candidate-build/build.json"
+    }
+  },
+  "baseline_rebuild": "Pinned pre-series commit rebuilt with locked dependencies and identical compiler/flags; historical executable was no longer local. Same current numeric driver copied into the baseline, without reader changes.",
+  "resources": {
+    "reader_cpus": [
+      0,
+      1,
+      2,
+      3,
+      8,
+      9,
+      10,
+      11
+    ],
+    "memory_bytes": 8589934592,
+    "swap_bytes": 0
+  },
+  "profiles": {
+    "slow": {
+      "latency_ms": 200,
+      "jitter_ms": 20,
+      "shared_mbps": 150
+    },
+    "fast1g": {
+      "latency_ms": 1,
+      "jitter_ms": 0,
+      "shared_mbps": 1000
+    },
+    "fast500m": {
+      "latency_ms": 1,
+      "jitter_ms": 0,
+      "shared_mbps": 500
+    },
+    "no-profile": {
+      "latency_ms": 1,
+      "jitter_ms": 0,
+      "shared_mbps": 10000
+    }
+  },
+  "network_seed": "delta-length-453",
+  "client": {
+    "location": "Los Angeles",
+    "cpu": "AMD Ryzen 7 8845HS",
+    "storage": "Local MinIO with paced HTTP proxy; local numeric controls use filesystem paths."
+  },
+  "regression_plan_sha256": "338ba828a4070a9a3cc914fd7112c6277cec33a490be5569324f7a803397244c",
+  "wide_fixture_manifest_sha256": {
+    "production.q2.localized.dv": "fcc353f6a5ab5d9d85d2e46a969391b7a9102fb899ac2415a136a6226dafdba9",
+    "production.q4.localized.dv": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834",
+    "production.q2.scattered.dv": "efb7fb33fad87c10e6b4b34b893f3c46142dd85e5f4f6fae7df3536feaac58bd",
+    "production.q4.scattered.dv": "868baee33083cd3cc6dd60aa3197b282afe49b6edeb4efe0565f6d57903b6834"
+  },
+  "other_fixture_manifest_sha256": {
+    "decimal-fixture": "bb2e1a66e086c148c67300263e54bd45b961eed6cdab2675a4f766d16fc0402f",
+    "decimal-fixture-snappy": "15849414d82ffc7331923cf21ed71dba73862e6d10b3307fb1963a2e1db7d8c3",
+    "decimal-fixture-zstd": "9db75b355391f15f2bbc1124ab5afa940a03cea16a48c532e72e8fb7569f5a60",
+    "numeric-fixture": "cb6fc2189c69f8735cfb606e3a9ab7e8faf448fd830e050c8f45abbb7dcd3e3d",
+    "numeric-fixture-snappy": "952a6740ac55b398cac1144ba110c2d9c5dee66dfec705e908d0cb6bd65a0267",
+    "long-v2": "9d8d10335f175376ad92f12eaa9f4ae88b906385c89d978b42e404d6e063c7aa",
+    "mixed-alternating-v2": "722448b5a756594440a77d601213ffc02f453ddc43f308064b6f134ecbbf0a7f",
+    "selected-long-batch-v1": "a11dedaf2ad6fe8beb1c405c4d82098a510d1ce0c128f096b4195652336b1b02",
+    "short-v2": "d9018b09a238dd4246d0cfa481b1750d88e0458172c719024dee239e83b07fd0",
+    "length-heavy-v2": "74f29199d39857422c69905d980bdfed7b934ddcc024b1869c54e0dba9954e78"
+  },
+  "no_dv_snapshots": "Version 0 of the original paired DV tables. Only metadata UUID differs from the original no-DV logs; Add actions, schema, protocol and statistics match.",
+  "historical_case_ids": {
+    "q2": "416 columns",
+    "q4": "90 columns",
+    "localized": "Grouped matches",
+    "scattered": "Spread-out matches",
+    "dv": "Deletion vectors enabled"
+  },
+  "samples_sha256": "93b26d2c795b2705634f8b45728a2a3a93d5a2a8876688ed557337673f34d148",
+  "artifacts": [
+    {
+      "name": "intra-page-types-cumulative-2026-10-14.tar.gz",
+      "bytes": 77128982,
+      "sha256": "40942789b003e3992707f3f2cf260accfd51926b7ca35d93c200e9dadffbd42e",
+      "url": "https://github.com/mag1cfrog/delta-arrow-reader/releases/download/selective-read-benchmarks-2026-10-07/intra-page-types-cumulative-2026-10-14.tar.gz"
+    },
+    {
+      "name": "intra-page-types-cumulative-2026-10-14-REPRODUCE.md",
+      "bytes": 7250,
+      "sha256": "c3dd5929374af74838b649f0f5531bdddb1e0b5009d5cbad706fce44bb4b4009",
+      "url": "https://github.com/mag1cfrog/delta-arrow-reader/releases/download/selective-read-benchmarks-2026-10-07/intra-page-types-cumulative-2026-10-14-REPRODUCE.md"
+    }
+  ],
+  "checksum_file": "https://github.com/mag1cfrog/delta-arrow-reader/releases/download/selective-read-benchmarks-2026-10-07/intra-page-types-cumulative-2026-10-14.sha256",
+  "archive_summary": "evidence/regression-summary.json",
+  "archive_assessment": "evidence/acceptance.json",
+  "offline_audit": {
+    "status": "passed",
+    "verified_files": 4279,
+    "comparisons": 36,
+    "timed_invocations": 272,
+    "limits": "Verifies retained hashes, defaults, certificates, timings, I/O and resources. Does not repeat Arrow value comparisons or rerun queries."
+  },
+  "negative_audit_check": "Altering a first-query time was rejected against its raw record.",
+  "limits": [
+    "Single client and controlled local MinIO profiles, not fresh native S3 evidence.",
+    "Three or five alternating pairs; no statistical-significance claim.",
+    "Whole-process resource observations include initialization and two queries.",
+    "Separate validation I/O does not describe every untraced timing plan.",
+    "Offline replay audits certificates and records, not omitted Arrow arrays."
+  ]
+}

@@ -8,6 +8,7 @@ Contributor instructions and development records are kept in this repository:
 - [Local checks and documentation builds](content/contributing.md)
 - [Benchmark setup and reproduction](../benches/selective_read/README.md)
 - [Lazy and eager metadata comparison](content/benchmarks/eager-metadata.md)
+- [Cumulative partial-page comparison](content/benchmarks/intra-page-types-cumulative.md)
 - [CLI release approval, publication, and recovery](content/cli-release.md)
 - [Project direction and language support](content/project-direction.md)
 - [Frozen Spark SQL experiment](content/spark-sql-experiment.md)
