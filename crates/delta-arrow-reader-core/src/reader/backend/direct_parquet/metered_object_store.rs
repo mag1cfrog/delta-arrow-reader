@@ -92,6 +92,7 @@ struct TransportSampleWindows {
     latencies: VecDeque<Duration>,
     throughputs: VecDeque<ThroughputSample>,
     request_overheads: VecDeque<Duration>,
+    calibrated_request_durations: Option<Arc<[Duration]>>,
 }
 
 #[derive(Default)]
@@ -131,6 +132,7 @@ struct RangeReadTiming {
     elapsed: Duration,
     can_sample: bool,
     request_interval: Option<Duration>,
+    completed_reads: Vec<CompletedRangeRead>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -310,6 +312,17 @@ impl MeteredParquetObjectStore {
         )
     }
 
+    /// Complete small-request durations from the last fully sampled warmup.
+    /// Includes response-body delivery, but excludes waiting for a local request slot.
+    pub(super) fn calibrated_request_durations(&self) -> Option<Arc<[Duration]>> {
+        self.range_read_estimator
+            .samples
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .calibrated_request_durations
+            .clone()
+    }
+
     /// Samples large transfers and small requests without decoding file contents.
     pub(super) async fn warmup(&self, files: &[(Path, u64)], budget: &Semaphore) -> Result<bool> {
         if files.is_empty() {
@@ -336,6 +349,8 @@ impl MeteredParquetObjectStore {
         if self.transport_estimate().is_none() {
             return Ok(false);
         }
+        let sample_count = MIN_TRANSPORT_SAMPLES * 2 * MAX_SHARED_RANGE_READS;
+        let mut request_durations = Vec::with_capacity(sample_count);
         for (path, size) in files.iter().cycle().take(MIN_TRANSPORT_SAMPLES) {
             // Replenish the request slots instead of measuring one burst, whose
             // completion spacing can mostly reflect latency jitter.
@@ -346,17 +361,26 @@ impl MeteredParquetObjectStore {
                     start..start + SMALL_REQUEST_BYTES
                 })
                 .collect();
-            self.read_partial_ranges(path, &ranges, &ranges, budget)
+            let (_, timing) = self
+                .read_partial_ranges_with_timing(path, &ranges, &ranges, budget)
                 .await?;
+            if timing.request_interval.is_some() {
+                request_durations.extend(timing.completed_reads.iter().map(|read| {
+                    read.request_latency
+                        + read.payload_finished.duration_since(read.payload_started)
+                }));
+            }
         }
-        Ok(self
+        let mut samples = self
             .range_read_estimator
             .samples
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .request_overheads
-            .len()
-            >= MIN_TRANSPORT_SAMPLES)
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // Publish only complete calibration; interrupted rounds must not seed the cost model.
+        if request_durations.len() == sample_count {
+            samples.calibrated_request_durations = Some(request_durations.into());
+        }
+        Ok(samples.request_overheads.len() >= MIN_TRANSPORT_SAMPLES)
     }
 
     pub(super) fn transport_estimate(&self) -> Option<TransportEstimate> {
@@ -450,6 +474,19 @@ impl MeteredParquetObjectStore {
         physical_ranges: &[Range<u64>],
         budget: &Semaphore,
     ) -> Result<(Vec<Bytes>, Option<Duration>)> {
+        let (bytes, timing) = self
+            .read_partial_ranges_with_timing(location, requested_ranges, physical_ranges, budget)
+            .await?;
+        Ok((bytes, timing.can_sample.then_some(timing.elapsed)))
+    }
+
+    async fn read_partial_ranges_with_timing(
+        &self,
+        location: &Path,
+        requested_ranges: &[Range<u64>],
+        physical_ranges: &[Range<u64>],
+        budget: &Semaphore,
+    ) -> Result<(Vec<Bytes>, RangeReadTiming)> {
         let store = Self {
             inner: Arc::clone(
                 self.range_read_estimator
@@ -493,7 +530,7 @@ impl MeteredParquetObjectStore {
             }
             samples.request_overheads.push_back(overhead);
         }
-        Ok((bytes, timing.can_sample.then_some(timing.elapsed)))
+        Ok((bytes, timing))
     }
 
     /// Each request acquires shared capacity independently, so a slow request
@@ -523,7 +560,7 @@ impl MeteredParquetObjectStore {
         })
         .await?;
         let observed_plan_time = plan_started.elapsed();
-        let completed = completed_reads
+        let mut completed = completed_reads
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let queued = completed.iter().any(|read| read.queued);
@@ -549,6 +586,7 @@ impl MeteredParquetObjectStore {
                 elapsed: observed_plan_time,
                 can_sample,
                 request_interval,
+                completed_reads: std::mem::take(&mut completed),
             },
         ))
     }
@@ -1159,6 +1197,7 @@ mod tests {
         ));
         assert!(!store.warmup(&[], &budget).await?);
         assert!(!store.warmup(&[(path.clone(), 1)], &budget).await?);
+        assert!(store.calibrated_request_durations().is_none());
         let files = [(path.clone(), size as u64)];
         assert!(store.warmup(&files, &budget).await?);
         let counts = store.metrics.snapshot();
@@ -1172,11 +1211,26 @@ mod tests {
             source: "missing warmup estimate".into(),
         })?;
         assert!(store.request_overhead_bytes().is_some());
+        let durations = store.calibrated_request_durations().unwrap();
+        assert_eq!(durations.len(), 3 * 2 * super::MAX_SHARED_RANGE_READS);
+        assert!(
+            durations
+                .iter()
+                .all(|duration| *duration >= Duration::from_millis(1))
+        );
         // Planning and request overhead both use shared capacity, regardless of
         // how many files are reading. Overlapping plans cannot recalibrate it.
         let overhead = store.request_overhead_bytes().unwrap();
         let next_profile = store.range_read_estimator.for_network_warmup();
         assert!(next_profile.current_transport_estimate().estimate.is_none());
+        assert!(
+            next_profile
+                .samples
+                .lock()
+                .unwrap()
+                .calibrated_request_durations
+                .is_none()
+        );
         let first = store.range_read_estimator.start_read();
         let second = next_profile.start_read();
         let shared = store.transport_estimate().unwrap();
@@ -1201,6 +1255,14 @@ mod tests {
         assert!(store.range_read_estimator.start_read().can_sample());
         assert!(next_profile.start_read().can_sample());
         assert_eq!(store.transport_estimate(), Some(estimate));
+        let ranges = vec![0..4096; 2 * super::MAX_SHARED_RANGE_READS];
+        store
+            .read_partial_ranges(&path, &ranges, &ranges, &budget)
+            .await?;
+        assert!(Arc::ptr_eq(
+            &durations,
+            &store.calibrated_request_durations().unwrap()
+        ));
         // Transport evidence alone is incomplete when all small-request
         // observations overlap another read and must be discarded.
         let contended = MeteredParquetObjectStore::new(
@@ -1215,6 +1277,7 @@ mod tests {
         let _peer = contended.range_read_estimator.start_read();
         assert!(!contended.warmup(&files, &budget).await?);
         assert!(contended.request_overhead_bytes().is_none());
+        assert!(contended.calibrated_request_durations().is_none());
         // Cancelling a stalled warmup must not leave a usable partial profile.
         let stalled = MeteredParquetObjectStore::new(
             Arc::new(ThrottledStore::new(
@@ -1233,6 +1296,7 @@ mod tests {
                 .is_err()
         );
         assert!(stalled.transport_estimate().is_none());
+        assert!(stalled.calibrated_request_durations().is_none());
         assert_eq!(
             stalled
                 .range_read_estimator
@@ -1248,6 +1312,81 @@ mod tests {
                 .await
                 .is_err()
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn interrupted_warmup_discards_completed_request_samples() -> Result<()> {
+        use super::super::tests::{GateRequest, GatedObjectStore};
+
+        let memory = Arc::new(InMemory::new());
+        let path = Path::from("data.parquet");
+        let size = super::WARMUP_READ_BYTES;
+        memory.put(&path, vec![0; size as usize].into()).await?;
+        for fail in [false, true] {
+            let third_round_start = 4 * super::MAX_SHARED_RANGE_READS + 1;
+            let partial_store = GatedObjectStore::new(
+                memory.clone(),
+                GateRequest::Range(if fail { 0 } else { third_round_start }),
+            );
+            if fail {
+                partial_store.fail_range(third_round_start);
+            }
+            let store = MeteredParquetObjectStore::new(
+                memory.clone(),
+                direct_metrics(),
+                MultiRangeReadStrategy::ChooseAutomatically,
+            )
+            .with_range_read_estimator(Arc::new(
+                ParquetRangeReadEstimator::default()
+                    .for_network_warmup()
+                    .with_partial_range_store(partial_store.clone()),
+            ));
+            store.seed_transport_estimate(TransportEstimate {
+                request_latency: Duration::from_millis(200),
+                shared_throughput_bytes_per_second: 20 * 1024 * 1024,
+            });
+            let budget = tokio::sync::Semaphore::new(super::MAX_SHARED_RANGE_READS);
+            let files = [(path.clone(), size)];
+            let mut warming = Box::pin(store.warmup(&files, &budget));
+            tokio::time::timeout(Duration::from_secs(5), async {
+                if fail {
+                    assert!(warming.as_mut().await.is_err());
+                } else {
+                    tokio::select! {
+                        _ = partial_store.wait_started() => {}
+                        result = &mut warming => panic!("warmup finished before cancellation: {result:?}"),
+                    }
+                }
+            })
+            .await
+            .expect("warmup reaches the third small-request round");
+            drop(warming);
+            if !fail {
+                assert!(partial_store.was_cancelled());
+            }
+            assert_eq!(
+                store
+                    .range_read_estimator
+                    .samples
+                    .lock()
+                    .unwrap()
+                    .request_overheads
+                    .len(),
+                2
+            );
+            assert!(store.calibrated_request_durations().is_none());
+            assert_eq!(budget.available_permits(), super::MAX_SHARED_RANGE_READS);
+            assert_eq!(
+                store
+                    .range_read_estimator
+                    .activity
+                    .lock()
+                    .unwrap()
+                    .active_reads,
+                0
+            );
+        }
         Ok(())
     }
 

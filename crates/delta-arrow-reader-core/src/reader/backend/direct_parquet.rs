@@ -180,6 +180,7 @@ impl NetworkWarmupPlan {
             request_latency_micros = estimate.map(|value| value.request_latency.as_micros()),
             throughput_bytes_per_second = estimate.map(|value| value.shared_throughput_bytes_per_second),
             request_overhead_bytes = store.request_overhead_bytes(),
+            request_duration_samples = store.calibrated_request_durations().map(|samples| samples.len()),
             "Network warmup completed");
         // Incomplete calibration must not seed a partially measured network profile.
         (status == "complete").then_some(estimator)
@@ -1167,6 +1168,7 @@ pub(in crate::reader) mod tests {
         .with_range_read_estimator(recovered);
         assert!(store.transport_estimate().is_some());
         assert!(store.request_overhead_bytes().is_some());
+        assert_eq!(store.calibrated_request_durations().unwrap().len(), 3_072);
         Ok(())
     }
 
