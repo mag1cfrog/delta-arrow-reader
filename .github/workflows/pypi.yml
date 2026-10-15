@@ -22,6 +22,14 @@ on:
 permissions:
   contents: read
 
+env:
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  AWS_LC_SYS_USE_SYSTEM: "0"
+  CI_TARGET_CACHE_VERSION: "2"
+  SCCACHE_GHA_ENABLED: "true"
+  SCCACHE_GHA_RW_MODE: READ_ONLY
+  RUSTC_WRAPPER: sccache
+
 jobs:
   prepare:
     name: Validate release request and prepare wheels
@@ -51,6 +59,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
+      - name: Restore compiled dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
+          cache-targets: true
+          cache-bin: false
+          save-if: false
+      - uses: mozilla-actions/sccache-action@v0.0.10
       - name: Check event, commit, tag, and version
         id: request
         run: cargo xtask check-python-release-request
@@ -142,6 +159,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
+      - name: Restore compiled dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
+          cache-targets: true
+          cache-bin: false
+          save-if: false
+      - uses: mozilla-actions/sccache-action@v0.0.10
       - uses: actions/download-artifact@v6
         with:
           pattern: delta-arrow-reader-*-wheel
@@ -197,6 +223,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
+      - name: Restore compiled dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
+          cache-targets: true
+          cache-bin: false
+          save-if: false
+      - uses: mozilla-actions/sccache-action@v0.0.10
       - name: Download verified release PR wheels
         env:
           GH_TOKEN: ${{ github.token }}

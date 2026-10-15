@@ -751,6 +751,133 @@ fn release_wheel_builds_share_approval_with_cli() -> Result<()> {
 }
 
 #[test]
+fn release_helpers_match_the_main_dependency_cache() -> Result<()> {
+    let warmer: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
+    let core = &warmer["jobs"]["core"];
+    let cache = core["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|step| step["with"]["shared-key"] == "core-ci-targets")
+        .unwrap();
+    for source in [
+        include_str!("../../.github/workflows/cli-build.yml"),
+        include_str!("../../.github/workflows/cli-images.yml"),
+        include_str!("../../.github/workflows/cli-release.yml"),
+        include_str!("../../.github/workflows/pypi-build.yml"),
+        include_str!("../../.github/workflows/pypi.yml"),
+        include_str!("../../.github/workflows/release-plz.yml"),
+    ] {
+        let workflow: Value = serde_yaml_ng::from_str(source)?;
+        let mut readers = 0;
+        for job in workflow["jobs"].as_object().unwrap().values() {
+            let Some(steps) = job["steps"].as_array() else {
+                continue;
+            };
+            for (index, step) in steps.iter().enumerate() {
+                if step["with"]["shared-key"] != "core-ci-targets" {
+                    continue;
+                }
+                readers += 1;
+                for input in ["env-vars", "cache-targets", "cache-bin"] {
+                    assert_eq!(step["with"][input], cache["with"][input], "{input}");
+                }
+                for variable in [
+                    "CARGO_PROFILE_DEV_DEBUG",
+                    "AWS_LC_SYS_USE_SYSTEM",
+                    "CI_TARGET_CACHE_VERSION",
+                    "RUSTC_WRAPPER",
+                ] {
+                    let value = job["env"]
+                        .get(variable)
+                        .unwrap_or(&workflow["env"][variable]);
+                    assert_eq!(value, &core["env"][variable], "{variable}");
+                }
+                assert!(step["with"]["workspaces"].is_null());
+                assert!(
+                    steps[..index].iter().all(|earlier| {
+                        !earlier["run"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .contains("CARGO_TARGET_DIR=")
+                    }),
+                    "changing the target path before restoration prevents main cache hits"
+                );
+            }
+        }
+        assert!(
+            readers > 0,
+            "{} has no compiled cache readers",
+            workflow["name"]
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn auxiliary_builds_keep_restored_dependencies_outside_checkout() -> Result<()> {
+    for (workflow, job, step) in [
+        (
+            include_str!("../../.github/workflows/cli-release.yml"),
+            "prepare",
+            "Preserve compiled dependencies across checkout changes",
+        ),
+        (
+            include_str!("../../.github/workflows/release-plz.yml"),
+            "release-pr",
+            "Configure Cargo target",
+        ),
+    ] {
+        let workflow: Value = serde_yaml_ng::from_str(workflow)?;
+        let script = workflow["jobs"][job]["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["name"] == step)
+            .unwrap()["run"]
+            .as_str()
+            .unwrap();
+        for restored in [false, true] {
+            let temporary = tempfile::tempdir()?;
+            let workspace = temporary.path().join("source");
+            let runner = temporary.path().join("runner");
+            fs::create_dir(&workspace)?;
+            fs::create_dir(&runner)?;
+            if restored {
+                fs::create_dir(workspace.join("target"))?;
+                fs::write(workspace.join("target/dependency"), "cached dependency")?;
+            }
+            let output_file = temporary.path().join("environment");
+            let output = Command::new("bash")
+                .args(["-euo", "pipefail", "-c", script])
+                .current_dir(&workspace)
+                .env("RUNNER_TEMP", &runner)
+                .env("GITHUB_ENV", &output_file)
+                .output()?;
+            assert!(output.status.success(), "{output:?}");
+            let environment = fs::read_to_string(output_file)?;
+            let target = Path::new(
+                environment
+                    .trim()
+                    .strip_prefix("CARGO_TARGET_DIR=")
+                    .unwrap(),
+            );
+            assert!(target.starts_with(&runner));
+            assert!(target.is_dir());
+            fs::remove_dir_all(&workspace)?;
+            if restored {
+                assert_eq!(
+                    fs::read_to_string(target.join("dependency"))?,
+                    "cached dependency"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn wheel_cache_warming_requires_manual_dispatch() -> Result<()> {
     let warmer: Value =
         serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;

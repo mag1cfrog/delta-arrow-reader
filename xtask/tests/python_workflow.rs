@@ -368,6 +368,83 @@ fn incomplete_artifacts_cannot_reach_the_upload_directory() -> Result<()> {
 }
 
 #[test]
+fn wheel_builds_reuse_dependencies_without_reusing_validation() -> Result<()> {
+    let workflow: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;
+    let steps = workflow["jobs"]["build"]["steps"].as_array().unwrap();
+    let cache_index = steps
+        .iter()
+        .position(|step| step["name"] == "Cache wheel build dependencies")
+        .unwrap();
+    let cache = &steps[cache_index]["with"];
+    assert_eq!(cache["cache-targets"], true);
+    assert_eq!(cache["cache-bin"], false);
+    assert!(cache["cache-workspace-crates"].is_null());
+    assert!(
+        cache["shared-key"]
+            .as_str()
+            .unwrap()
+            .contains("env.MANYLINUX_IMAGE")
+    );
+    assert!(
+        cache["shared-key"]
+            .as_str()
+            .unwrap()
+            .contains("matrix.platform-tag")
+    );
+    assert_eq!(cache["env-vars"], "MACOSX_DEPLOYMENT_TARGET");
+    assert_eq!(
+        cache["workspaces"],
+        "${{ runner.os == 'Linux' && '.python-sdist-source' || '.' }} -> target"
+    );
+    assert_eq!(
+        cache["save-if"],
+        "${{ inputs.cache-only || github.event_name == 'pull_request' || (github.ref == 'refs/heads/main' && inputs.source-ref == github.sha) }}"
+    );
+    assert!(
+        steps[..cache_index]
+            .iter()
+            .any(|step| step["name"] == "Prepare Linux source from sdist")
+    );
+    for step in steps {
+        assert!(
+            !step["if"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("cache-hit"),
+            "a dependency cache hit must not skip building or testing the current source"
+        );
+    }
+    let install = steps
+        .iter()
+        .find(|step| step["name"] == "Install cargo-about")
+        .unwrap();
+    assert_eq!(install["uses"], "taiki-e/install-action@v2");
+    assert_eq!(
+        install["with"]["tool"],
+        "cargo-about@${{ steps.versions.outputs.cargo-about-version }}"
+    );
+    let build = steps
+        .iter()
+        .find(|step| step["id"] == "wheel-build")
+        .unwrap();
+    assert!(
+        build["with"]["docker-options"]
+            .as_str()
+            .unwrap()
+            .contains("/python-build-tools:/opt/dar-tools:ro")
+    );
+    assert!(
+        build["with"]["before-script-linux"]
+            .as_str()
+            .unwrap()
+            .contains("export PATH=\"/opt/dar-tools:$PATH\"")
+    );
+    assert!(!include_str!("../../.github/workflows/pypi-build.yml").contains("cargo install"));
+    Ok(())
+}
+
+#[test]
 fn linux_sdist_checks_preserve_the_workspace_and_reject_lockfile_drift() -> Result<()> {
     let builder: Value =
         serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;

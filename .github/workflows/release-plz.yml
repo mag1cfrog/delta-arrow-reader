@@ -10,6 +10,9 @@ permissions:
   contents: read
 
 env:
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  AWS_LC_SYS_USE_SYSTEM: "0"
+  CI_TARGET_CACHE_VERSION: "2"
   SCCACHE_GHA_RW_MODE: READ_ONLY
 
 jobs:
@@ -58,15 +61,20 @@ jobs:
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
 
-      - name: Configure Cargo target
-        run: echo "CARGO_TARGET_DIR=${RUNNER_TEMP}/release-plz-target" >> "$GITHUB_ENV"
-
-      - name: Cache Cargo registry
+      - name: Restore compiled dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
+          cache-targets: true
+          cache-bin: false
           save-if: false
+
+      - name: Configure Cargo target
+        run: |
+          mkdir -p target
+          mv target "$RUNNER_TEMP/release-plz-target"
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/release-plz-target" >> "$GITHUB_ENV"
 
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
@@ -133,15 +141,20 @@ jobs:
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
 
-      - name: Configure Cargo target
-        run: echo "CARGO_TARGET_DIR=${RUNNER_TEMP}/release-plz-target" >> "$GITHUB_ENV"
-
-      - name: Cache Cargo registry
+      - name: Restore compiled dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
+          cache-targets: true
+          cache-bin: false
           save-if: false
+
+      - name: Configure Cargo target
+        run: |
+          mkdir -p target
+          mv target "$RUNNER_TEMP/release-plz-target"
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/release-plz-target" >> "$GITHUB_ENV"
 
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10

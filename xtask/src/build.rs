@@ -42,6 +42,9 @@ pub(crate) struct PrepareArgs {
     source_commit: String,
     #[arg(long)]
     expected_version: Option<String>,
+    /// Installed numeric Rust toolchain; defaults to Cargo.toml's rust-version.
+    #[arg(long)]
+    rust_toolchain: Option<String>,
 }
 
 #[derive(Args)]
@@ -100,14 +103,19 @@ impl PrepareArgs {
                 }
             );
         }
+        let toolchain = self
+            .rust_toolchain
+            .as_deref()
+            .unwrap_or(&manifest.workspace.package.rust_version);
         let compiler = command_output(Command::new("rustup").args([
             "run",
-            &manifest.workspace.package.rust_version,
+            toolchain,
             "rustc",
             "--version",
             "--verbose",
         ]))?;
         let release = compiler_release(&compiler, &manifest.workspace.package.rust_version)?;
+        compiler_release(&compiler, toolchain)?;
         let identity = BuildIdentity {
             version: manifest.workspace.package.version,
             source_commit: self.source_commit,

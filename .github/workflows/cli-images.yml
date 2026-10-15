@@ -81,6 +81,9 @@ defaults:
     shell: bash
 
 env:
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  AWS_LC_SYS_USE_SYSTEM: "0"
+  CI_TARGET_CACHE_VERSION: "2"
   SCCACHE_GHA_ENABLED: 'true'
   SCCACHE_GHA_RW_MODE: READ_ONLY
   RUSTC_WRAPPER: sccache
@@ -122,15 +125,18 @@ jobs:
           toolchain: ${{ inputs.rust-toolchain }}
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
+          cache-targets: true
+          cache-bin: false
           save-if: false
       - uses: mozilla-actions/sccache-action@v0.0.10
       - name: Validate source, toolchain, and complete binary set
         id: prepare
         run: |
           cargo xtask cli prepare --source-commit "$CLI_SOURCE_COMMIT" \
-            --expected-version "$CLI_VERSION" > "$RUNNER_TEMP/cli-identity.json"
+            --expected-version "$CLI_VERSION" --rust-toolchain "$CLI_RUST_TOOLCHAIN" \
+            > "$RUNNER_TEMP/cli-identity.json"
           jq -e --arg rust "$CLI_RUST_TOOLCHAIN" \
             '."rust-toolchain" == $rust' "$RUNNER_TEMP/cli-identity.json"
           cargo xtask cli artifacts verify "$RUNNER_TEMP/cli-binaries" \
@@ -172,9 +178,12 @@ jobs:
           toolchain: ${{ needs.prepare.outputs.rust-toolchain }}
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
-          save-if: false
+          shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
+          cache-targets: true
+          cache-bin: false
+          # Main's warmer has no Linux ARM64 runner; save dependencies in this PR's cache.
+          save-if: ${{ runner.arch == 'ARM64' && github.event_name == 'pull_request' }}
       - uses: mozilla-actions/sccache-action@v0.0.10
       - name: Install OCI verification tools
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends skopeo umoci
@@ -276,8 +285,10 @@ jobs:
           toolchain: ${{ needs.prepare.outputs.rust-toolchain }}
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
+          cache-targets: true
+          cache-bin: false
           save-if: false
       - uses: mozilla-actions/sccache-action@v0.0.10
       - name: Install OCI verification tools

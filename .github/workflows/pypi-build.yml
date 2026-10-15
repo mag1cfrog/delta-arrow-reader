@@ -23,6 +23,14 @@ on:
 permissions:
   contents: read
 
+env:
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  AWS_LC_SYS_USE_SYSTEM: "0"
+  CI_TARGET_CACHE_VERSION: "2"
+  SCCACHE_GHA_ENABLED: "true"
+  SCCACHE_GHA_RW_MODE: READ_ONLY
+  RUSTC_WRAPPER: sccache
+
 jobs:
   build:
     name: ${{ matrix.name }}
@@ -76,7 +84,6 @@ jobs:
       SCCACHE_GHA_RW_MODE: ${{ inputs.cache-only && 'READ_WRITE' || 'READ_ONLY' }}
       SCCACHE_LOG: ${{ inputs.cache-only && 'sccache::server=debug' || '' }}
       SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
-      RUSTC_WRAPPER: ${{ matrix.manylinux == 'off' && 'sccache' || '' }}
       MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos-deployment-target }}
       MANYLINUX_IMAGE: quay.io/pypa/manylinux_2_28_x86_64@sha256:4131ddd7acb9c6c966af02fe7e71edc51e078c2d41f475966697676430bfa2ae
 
@@ -124,21 +131,28 @@ jobs:
         run: |
           echo "CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_DEBUG=0" >> "$GITHUB_ENV"
           echo "RUSTFLAGS=-C link-arg=/Brepro --remap-path-prefix=${GITHUB_WORKSPACE}=." >> "$GITHUB_ENV"
-      - name: Cache Cargo registry
+      - name: Restore host build dependencies
+        if: runner.os == 'Linux'
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: python-wheels
-          cache-targets: false
-          save-if: ${{ inputs.cache-only }}
+          shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
+          cache-targets: true
+          cache-bin: false
+          save-if: false
+      - name: Install cargo-about
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@${{ steps.versions.outputs.cargo-about-version }}
       - name: Prepare Cargo cache mounts
         if: runner.os == 'Linux'
         id: cargo-cache
         run: |
           cargo_cache="${CARGO_HOME:-$HOME/.cargo}"
-          mkdir -p "$cargo_cache/registry" "$cargo_cache/git"
+          mkdir -p "$cargo_cache/registry" "$cargo_cache/git" "$RUNNER_TEMP/python-build-tools"
+          cp "$(command -v cargo-about)" "$RUNNER_TEMP/python-build-tools/cargo-about"
           echo "path=$cargo_cache" >> "$GITHUB_OUTPUT"
       - name: Set up sccache
-        if: runner.os != 'Linux'
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
           version: v0.18.0
@@ -152,12 +166,20 @@ jobs:
           cmp Cargo.lock .python-sdist-source/Cargo.lock
           cmp Cargo.toml .python-sdist-source/Cargo.toml
           cp .python-sdist-source/Cargo.lock "$RUNNER_TEMP/python-sdist/Cargo.lock"
+      - name: Cache wheel build dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: python-wheels-${{ matrix.target }}-${{ runner.os == 'Linux' && env.MANYLINUX_IMAGE || matrix.platform-tag }}
+          workspaces: ${{ runner.os == 'Linux' && '.python-sdist-source' || '.' }} -> target
+          env-vars: MACOSX_DEPLOYMENT_TARGET
+          cache-targets: true
+          cache-bin: false
+          # PR caches stay scoped to the merge ref; arbitrary sources cannot seed main.
+          save-if: ${{ inputs.cache-only || github.event_name == 'pull_request' || (github.ref == 'refs/heads/main' && inputs.source-ref == github.sha) }}
       - name: Prepare native wheel data
         if: runner.os != 'Linux'
         run: |
           rustup component add rust-docs
-          RUSTC_WRAPPER="" cargo install --locked --features cli \
-            --version '${{ steps.versions.outputs.cargo-about-version }}' cargo-about
           cargo xtask build-python-wheel --prepare-only \
             --project-directory crates/delta-arrow-reader-python \
             --target '${{ matrix.target }}' --profile release --target-dir "$PWD/target"
@@ -179,6 +201,7 @@ jobs:
           docker-options: >-
             --volume "${{ steps.cargo-cache.outputs.path }}/registry:/root/.cargo/registry"
             --volume "${{ steps.cargo-cache.outputs.path }}/git:/root/.cargo/git"
+            --volume "${{ runner.temp }}/python-build-tools:/opt/dar-tools:ro"
           before-script-linux: |
             # OpenSSL's build dependencies are all in BaseOS; skip unrelated mirrors.
             dnf install -y --repo=baseos openssl-devel
@@ -187,8 +210,7 @@ jobs:
             export SCCACHE_ERROR_LOG=/tmp/sccache.log
             # Preparation runs before the action installs sccache for Maturin.
             uv tool install 'sccache>=0.10.0'
-            RUSTC_WRAPPER="" cargo install --locked --features cli \
-              --version '${{ steps.versions.outputs.cargo-about-version }}' cargo-about
+            export PATH="/opt/dar-tools:$PATH"
             if [ "$SCCACHE_GHA_RW_MODE" = "READ_WRITE" ]; then
               trap 'RUSTC_WRAPPER= cargo run --locked --manifest-path "$GITHUB_WORKSPACE/xtask/Cargo.toml" --target-dir /tmp/dar-xtask-target -- check-cache-writes' EXIT
             fi
@@ -227,6 +249,14 @@ jobs:
         run: cargo xtask check-cache-writes
         env:
           RUSTC_WRAPPER: ""
+      - name: Restore cache ownership after the container build
+        if: always() && runner.os == 'Linux'
+        run: |
+          for directory in .python-sdist-source/target "${CARGO_HOME:-$HOME/.cargo}/registry" "${CARGO_HOME:-$HOME/.cargo}/git"; do
+            if [ -d "$directory" ]; then
+              sudo chown -R "$(id -u):$(id -g)" "$directory"
+            fi
+          done
       - name: Inspect and repair Windows DLL dependencies
         if: runner.os == 'Windows'
         run: |
@@ -367,6 +397,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ steps.rust-version.outputs.version }}
+      - name: Restore compiled dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
+          cache-targets: true
+          cache-bin: false
+          save-if: false
+      - uses: mozilla-actions/sccache-action@v0.0.10
       - uses: actions/download-artifact@v6
         with:
           pattern: delta-arrow-reader-*-wheel
