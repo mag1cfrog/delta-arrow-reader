@@ -20,6 +20,7 @@ struct ReuseFixture {
     pulls: Value,
     runs: Value,
     artifacts: Value,
+    merge: Value,
     digest: String,
 }
 
@@ -42,6 +43,7 @@ impl ReuseFixture {
             pulls: Value::Null,
             runs: Value::Null,
             artifacts: Value::Null,
+            merge: Value::Null,
             digest: String::new(),
         };
         fixture.git(&["init", "--initial-branch=main"])?;
@@ -57,6 +59,7 @@ impl ReuseFixture {
         assert_ne!(head, commit);
         fixture.git(&["tag", "v1.2.3"])?;
         let tree = fixture.git(&["rev-parse", "HEAD^{tree}"])?;
+        fixture.merge = json!({"sha": commit, "tree": {"sha": tree}});
         fixture.pulls = json!([[], [{
             "number": 42, "merged_at": "2026-10-11T00:00:00Z", "merge_commit_sha": commit,
             "user": {"login": "release-plz-bot-mag1cfrog[bot]"},
@@ -84,6 +87,7 @@ printf '%s\n' "$*" >> "$TEST_API/api-log"
 for endpoint do :; done
 case "$endpoint" in
   repos/mag1cfrog/delta-arrow-reader/commits/*/pulls?per_page=100) response=pulls ;;
+  repos/mag1cfrog/delta-arrow-reader/git/commits/*) response=merge ;;
   repos/mag1cfrog/delta-arrow-reader/actions/workflows/ci.yml/runs?event=pull_request\&head_sha=*\&per_page=100) response=runs ;;
   repos/mag1cfrog/delta-arrow-reader/actions/runs/701/artifacts?per_page=100) response=artifacts ;;
   repos/mag1cfrog/delta-arrow-reader/actions/artifacts/901/zip) response=bundle ;;
@@ -138,6 +142,7 @@ esac
             ("pulls", &self.pulls),
             ("runs", &self.runs),
             ("artifacts", &self.artifacts),
+            ("merge", &self.merge),
         ] {
             fs::write(
                 self.wheels.directory.join(name),
@@ -217,6 +222,43 @@ fn reuses_exact_wheels_across_merge_shas_and_deleted_pr_branches() -> Result<()>
         "commits/{}/pulls",
         fixture.git(&["rev-parse", "HEAD"])?
     )));
+    Ok(())
+}
+
+#[test]
+fn tagged_pr_heads_require_an_identical_merge_tree() -> Result<()> {
+    for case in [
+        "valid",
+        "changed-tree",
+        "wrong-commit",
+        "api-error",
+        "missing-merge",
+    ] {
+        let mut fixture = ReuseFixture::new(&format!("reuse-tagged-head-{case}"))?;
+        let head = fixture.pulls[1][0]["head"]["sha"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        fixture.git(&["checkout", "--detach", &head])?;
+        match case {
+            "changed-tree" => fixture.merge["tree"]["sha"] = json!("e".repeat(40)),
+            "wrong-commit" => fixture.merge["sha"] = json!("e".repeat(40)),
+            "missing-merge" => fixture.pulls[1][0]["merge_commit_sha"] = json!(null),
+            _ => {}
+        }
+        let mut command = fixture.command("reuse-python-wheels")?;
+        if case == "api-error" {
+            command.env("FAIL_RESPONSE", "merge");
+        }
+        let output = command.output()?;
+        if case == "valid" {
+            assert!(output.status.success(), "{output:?}");
+            fixture.assert_files()?;
+        } else {
+            fixture.assert_rejected(output, "")?;
+            assert!(!fixture.wheels.directory.join("reused-wheels").exists());
+        }
+    }
     Ok(())
 }
 

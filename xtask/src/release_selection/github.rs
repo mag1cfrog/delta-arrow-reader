@@ -78,6 +78,17 @@ pub(super) struct GitReference {
 }
 
 #[derive(Deserialize)]
+pub(super) struct Commit {
+    pub sha: String,
+    pub tree: ObjectSha,
+}
+
+#[derive(Deserialize)]
+pub(super) struct ObjectSha {
+    pub sha: String,
+}
+
+#[derive(Deserialize)]
 pub(super) struct PullRequest {
     pub number: NonZeroU64,
     pub merged_at: Option<String>,

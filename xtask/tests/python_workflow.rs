@@ -311,7 +311,22 @@ fn pypi_preparation_reuses_pr_wheels_and_disables_rebuilding() {
         json!({"contents": "read", "actions": "read", "pull-requests": "read"})
     );
     let steps = prepare["steps"].as_array().unwrap();
-    assert_eq!(steps[steps.len() - 2]["id"], "request");
+    assert_eq!(steps[0]["with"]["ref"], "${{ github.workflow_sha }}");
+    assert_eq!(steps[steps.len() - 3]["id"], "request");
+    let source = &steps[steps.len() - 2];
+    assert_eq!(source["uses"], "actions/checkout@v5");
+    assert_eq!(source["if"], "steps.request.outputs.publish-to == 'pypi'");
+    assert_eq!(
+        source["with"]["ref"],
+        "${{ steps.request.outputs.source-ref }}"
+    );
+    assert_eq!(source["with"]["persist-credentials"], false);
+    assert!(steps[..steps.len() - 3].iter().any(|step| {
+        step["run"].as_str().is_some_and(|script| {
+            script.contains("mv target \"$RUNNER_TEMP/python-release-target\"")
+                && script.contains("CARGO_TARGET_DIR=$RUNNER_TEMP/python-release-target")
+        })
+    }));
     let wheels = steps.last().unwrap();
     assert_eq!(wheels["id"], "wheels");
     assert_eq!(wheels["if"], "steps.request.outputs.publish-to == 'pypi'");
@@ -324,7 +339,7 @@ fn pypi_preparation_reuses_pr_wheels_and_disables_rebuilding() {
     );
     assert_eq!(
         wheels["run"],
-        "cargo xtask reuse-python-wheels wheel-artifacts --expected-version \"$EXPECTED_VERSION\""
+        "\"$CARGO_TARGET_DIR/debug/xtask\" reuse-python-wheels wheel-artifacts --expected-version \"$EXPECTED_VERSION\""
     );
     for field in ["artifact-id", "artifact-sha256"] {
         assert_eq!(

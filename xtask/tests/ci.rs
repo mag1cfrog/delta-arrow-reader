@@ -919,7 +919,12 @@ fn auxiliary_builds_keep_restored_dependencies_outside_checkout() -> Result<()> 
         (
             include_str!("../../.github/workflows/cli-release.yml"),
             "prepare",
-            "Preserve compiled dependencies across checkout changes",
+            "Configure Cargo target",
+        ),
+        (
+            include_str!("../../.github/workflows/pypi.yml"),
+            "prepare",
+            "Preserve release tools across source checkout",
         ),
         (
             include_str!("../../.github/workflows/release-plz.yml"),

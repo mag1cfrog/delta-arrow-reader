@@ -13,6 +13,7 @@ use sha2::{Digest, Sha256};
 use crate::{
     Result,
     python_wheels::{ARTIFACT_PLATFORM_TAGS, check_wheel_artifacts},
+    release_selection::release_commit_matches_pr,
     run,
 };
 
@@ -99,28 +100,28 @@ pub fn reuse_release_wheels(destination: &Path, version: &str) -> Result<()> {
     let commit = commit.trim();
     let tree = String::from_utf8(run("git", &["rev-parse", "HEAD^{tree}"])?)?;
     let tree = tree.trim();
-    let release_prs: Vec<_> =
-        api_pages::<Vec<PullRequest>>(&format!("commits/{commit}/pulls?per_page=100"))?
-            .into_iter()
-            .flatten()
-            .filter(|pr| {
-                pr.merged_at.is_some()
-                    && pr.merge_commit_sha.as_deref() == Some(commit)
-                    && pr.user.login == "release-plz-bot-mag1cfrog[bot]"
-                    && pr.head.r#ref.starts_with("release-plz-")
-                    && pr.base.r#ref == "main"
-                    && pr
-                        .head
-                        .repo
-                        .as_ref()
-                        .is_some_and(|repo| repo.full_name == REPOSITORY)
-                    && pr
-                        .base
-                        .repo
-                        .as_ref()
-                        .is_some_and(|repo| repo.full_name == REPOSITORY)
-            })
-            .collect();
+    let pulls = api_pages::<Vec<PullRequest>>(&format!("commits/{commit}/pulls?per_page=100"))?;
+    let mut release_prs = Vec::new();
+    for pr in pulls.into_iter().flatten().filter(|pr| {
+        pr.merged_at.is_some()
+            && pr.user.login == "release-plz-bot-mag1cfrog[bot]"
+            && pr.head.r#ref.starts_with("release-plz-")
+            && pr.base.r#ref == "main"
+            && pr
+                .head
+                .repo
+                .as_ref()
+                .is_some_and(|repo| repo.full_name == REPOSITORY)
+            && pr
+                .base
+                .repo
+                .as_ref()
+                .is_some_and(|repo| repo.full_name == REPOSITORY)
+    }) {
+        if release_commit_matches_pr(commit, tree, &pr.head.sha, pr.merge_commit_sha.as_deref())? {
+            release_prs.push(pr);
+        }
+    }
     let [pr] = release_prs.as_slice() else {
         return Err("release commit must belong to exactly one merged release-plz PR".into());
     };
