@@ -4,42 +4,44 @@
 
 ## [0.7.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.2...v0.7.0) - 2026-10-15
 
-### Added
+### Python
 
-- *(python)* add read-only SQL sessions ([#494](https://github.com/mag1cfrog/delta-arrow-reader/pull/494))
-- read selected delta-length values within pages ([#488](https://github.com/mag1cfrog/delta-arrow-reader/pull/488))
-- *(python)* bundle native CLI in Python wheels ([#484](https://github.com/mag1cfrog/delta-arrow-reader/pull/484))
-- *(cli)* prepare native executable for Python wheels ([#482](https://github.com/mag1cfrog/delta-arrow-reader/pull/482))
-- stream Delta tables into PyArrow readers ([#424](https://github.com/mag1cfrog/delta-arrow-reader/pull/424))
-- add Python snapshot loading and schema inspection ([#426](https://github.com/mag1cfrog/delta-arrow-reader/pull/426))
-- *(python)* add native filters with schema-aware scalar conversion ([#448](https://github.com/mag1cfrog/delta-arrow-reader/pull/448))
-- enable automatic partial-page reads by default ([#444](https://github.com/mag1cfrog/delta-arrow-reader/pull/444))
-- *(cli)* add dar snapshot inspection ([#437](https://github.com/mag1cfrog/delta-arrow-reader/pull/437))
-- add Python snapshot refresh and scan controls ([#439](https://github.com/mag1cfrog/delta-arrow-reader/pull/439))
-- make Python loading interruptible and runtime shutdown safe ([#427](https://github.com/mag1cfrog/delta-arrow-reader/pull/427))
+- Read Delta tables as PyArrow batches or query them with SQL. Includes column
+  selection, filters, snapshot refresh, and streaming results.
+  [Quickstart](https://mag1cfrog.github.io/delta-arrow-reader/python/) and
+  [API reference](https://mag1cfrog.github.io/delta-arrow-reader/python-api/).
+- Python wheels include the native `delta-arrow-reader` command and support
+  CPython 3.10+ on Linux x86_64, Windows x86_64, and macOS arm64.
+  [Platform requirements](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python).
 
-### Changed
+### Command line
 
-- separate network profiling, cost estimation and read execution ([#491](https://github.com/mag1cfrog/delta-arrow-reader/pull/491))
-- move core crate and Python packaging under crates ([#481](https://github.com/mag1cfrog/delta-arrow-reader/pull/481))
+- Use `dar inspect` to view a table's schema and version, and `dar scan` to stream
+  selected rows and columns as Arrow IPC. Supports filters and configurable
+  resource limits. [CLI quickstart](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/).
+- Run `dar` from standalone Linux amd64 or arm64 archives or container images.
+  [Installation](https://mag1cfrog.github.io/delta-arrow-reader/installation/#cli-binaries-and-container-images).
 
-### Documentation
+### Selective reads
 
-- introduce concepts progressively across the site ([#500](https://github.com/mag1cfrog/delta-arrow-reader/pull/500))
-- add generated Python API reference ([#497](https://github.com/mag1cfrog/delta-arrow-reader/pull/497))
-- explain initialization and resource configuration ([#496](https://github.com/mag1cfrog/delta-arrow-reader/pull/496))
-- explain partial-page reads in one guide ([#493](https://github.com/mag1cfrog/delta-arrow-reader/pull/493))
-- simplify README benchmark chart ([#446](https://github.com/mag1cfrog/delta-arrow-reader/pull/446))
-- install the published crate in README ([#415](https://github.com/mag1cfrog/delta-arrow-reader/pull/415))
+- Filtered S3 queries can now download selected values within Parquet pages.
+  Automatic selection is enabled by default and uses the file layout and measured
+  network conditions to choose when smaller reads are likely to be faster.
+- Supports fixed-width numeric and decimal values, plus strings and binary
+  values in supported file encodings.
+  [Supported layouts and benchmarks](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/).
 
-### Fixed
+### Upgrading from 0.6
 
-- separate Python API signatures from headings ([#498](https://github.com/mag1cfrog/delta-arrow-reader/pull/498))
-- recover partial-page reads after network warmup timeout ([#468](https://github.com/mag1cfrog/delta-arrow-reader/pull/468))
+- Opening supported S3 tables now includes network sampling with a five-second
+  budget, separate from metadata loading. Use `WarmupMode::None` or
+  `WarmupMode::QueryPlanning` to skip sampling and partial-page reads.
+  [Configuration](https://mag1cfrog.github.io/delta-arrow-reader/configuration/).
+- `WarmupMode` includes a `Network` variant with configuration and no longer
+  supports integer casts such as `mode as u8`. Code that stores modes as numbers
+  must use an explicit mapping.
 
-### Maintenance
-
-- drop Intel macOS Python wheels ([#465](https://github.com/mag1cfrog/delta-arrow-reader/pull/465))
+[All changes since 0.6.2](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.2...v0.7.0).
 
 ## [0.6.2](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.1...v0.6.2) - 2026-10-07
 
