@@ -34,6 +34,20 @@ times for the first complete query after table initialization, excluding startup
 
 ## Get started
 
+### Python
+
+Install from PyPI (Python 3.10 or later):
+
+```bash
+pip install delta-arrow-reader
+```
+
+Read tables as PyArrow batches or query them with SQL. Start with the
+[Python quickstart](https://mag1cfrog.github.io/delta-arrow-reader/python/)
+or browse the [Python API reference](https://mag1cfrog.github.io/delta-arrow-reader/python-api/).
+See [installation](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python)
+for supported platforms.
+
 ### Rust
 
 Install the reader and Tokio (Rust 1.94 or later):
@@ -69,27 +83,12 @@ Save this as `src/main.rs`, replace the table path, and run `cargo run`.
 or [query with SQL](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/).
 See the [Rust API reference](https://docs.rs/delta-arrow-reader) for types and methods.
 
-### Python
-
-Install from PyPI (Python 3.10 or later):
-
-```bash
-pip install delta-arrow-reader
-```
-
-Read tables as PyArrow batches or query them with SQL. Start with the
-[Python quickstart](https://mag1cfrog.github.io/delta-arrow-reader/python/)
-or browse the [Python API reference](https://mag1cfrog.github.io/delta-arrow-reader/python-api/).
-See [installation](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python)
-for supported platforms.
-
-### Command line and Go
+### CLI
 
 The Python package includes the `delta-arrow-reader` command. You can also
 [install a standalone `dar` binary or container](https://mag1cfrog.github.io/delta-arrow-reader/installation/#cli-binaries-and-container-images).
 The [CLI](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/) returns snapshot
-metadata as JSON and rows as an Arrow IPC stream. The [Go example](examples/go-cli)
-reads that stream through a subprocess without cgo.
+metadata as JSON and rows as an Arrow IPC stream.
 
 For development and benchmark setup, see the
 [repository documentation](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/README.md).
