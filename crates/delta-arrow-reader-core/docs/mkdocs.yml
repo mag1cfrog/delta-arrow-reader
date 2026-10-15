@@ -25,6 +25,8 @@ plugins:
           options:
             allow_inspection: false
             show_source: false
+            separate_signature: true
+            line_length: 80
             show_signature_annotations: true
             show_if_no_docstring: true
             show_root_heading: true
