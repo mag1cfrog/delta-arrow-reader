@@ -3,6 +3,7 @@
 mod filters;
 mod options;
 mod runtime;
+mod session;
 mod stream;
 
 use std::sync::Arc;
@@ -11,7 +12,10 @@ use ::delta_arrow_reader::{
     DeltaSnapshotSelection, DeltaStorageOptions, DeltaTable as CoreDeltaTable, DeltaTableBuilder,
     WarmupMode,
 };
-use arrow::{datatypes::Schema, ffi::FFI_ArrowSchema};
+use arrow::{
+    datatypes::{DataType, Field, Schema},
+    ffi::FFI_ArrowSchema,
+};
 use pyo3::{
     exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
@@ -20,6 +24,7 @@ use pyo3::{
 
 use crate::options::ScanExecutionOptions;
 use crate::runtime::Runtime;
+use crate::session::Session;
 use crate::stream::RecordBatchStream;
 
 pyo3::create_exception!(
@@ -51,15 +56,39 @@ fn export_schema(py: Python<'_>, schema: &Schema) -> PyResult<FFI_ArrowSchema> {
             "schema_conversion",
         )
     };
-    // Arrow 58's FFI exporter panics on NUL bytes in field names.
+    // Arrow 58's FFI exporter panics on NUL bytes in names or timestamp timezones.
     if schema
-        .flattened_fields()
+        .fields()
         .iter()
-        .any(|field| field.name().contains('\0'))
+        .any(|field| field_contains_nul(field))
     {
         return Err(export_error());
     }
     FFI_ArrowSchema::try_from(schema).map_err(|_| export_error())
+}
+
+fn field_contains_nul(field: &Field) -> bool {
+    field.name().contains('\0') || type_contains_nul(field.data_type())
+}
+
+fn type_contains_nul(data_type: &DataType) -> bool {
+    use DataType::*;
+    match data_type {
+        Timestamp(_, Some(timezone)) => timezone.contains('\0'),
+        List(field)
+        | LargeList(field)
+        | ListView(field)
+        | LargeListView(field)
+        | FixedSizeList(field, _)
+        | Map(field, _) => field_contains_nul(field),
+        Struct(fields) => fields.iter().any(|field| field_contains_nul(field)),
+        Union(fields, _) => fields.iter().any(|(_, field)| field_contains_nul(field)),
+        Dictionary(key, value) => type_contains_nul(key) || type_contains_nul(value),
+        RunEndEncoded(run_ends, values) => {
+            field_contains_nul(run_ends) || field_contains_nul(values)
+        }
+        _ => false,
+    }
 }
 
 /// One immutable Delta snapshot, loaded from a string or os.PathLike[str].
@@ -292,20 +321,15 @@ impl DeltaTable {
         target_partitions: Option<&Bound<'_, PyInt>>,
         execution_options: Option<PyRef<'_, ScanExecutionOptions>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let stream = Py::new(
+        self.scan(
             py,
-            self.scan(
-                py,
-                columns,
-                filters,
-                limit,
-                target_partitions,
-                execution_options,
-            )?,
-        )?;
-        py.import("pyarrow")?
-            .getattr("RecordBatchReader")?
-            .call_method1("from_stream", (stream,))
+            columns,
+            filters,
+            limit,
+            target_partitions,
+            execution_options,
+        )?
+        .into_reader(py)
     }
 
     fn __repr__(&self) -> String {
@@ -324,6 +348,7 @@ fn delta_arrow_reader(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<DeltaTable>()?;
     module.add_class::<RecordBatchStream>()?;
     module.add_class::<ScanExecutionOptions>()?;
+    module.add_class::<Session>()?;
     module.add(
         "DeltaReaderError",
         module.py().get_type::<DeltaReaderError>(),
@@ -336,6 +361,7 @@ fn delta_arrow_reader(module: &Bound<'_, PyModule>) -> PyResult<()> {
             "DeltaReaderError",
             "RecordBatchStream",
             "ScanExecutionOptions",
+            "Session",
         ],
     )
 }

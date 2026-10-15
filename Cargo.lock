@@ -1350,7 +1350,9 @@ name = "delta-arrow-reader-python"
 version = "0.6.2"
 dependencies = [
  "arrow",
+ "datafusion",
  "delta-arrow-reader",
+ "futures-util",
  "pyo3",
  "tokio",
 ]

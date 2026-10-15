@@ -1,6 +1,6 @@
 ---
 title: Project direction and language support
-description: Core Reader priorities, Python bindings, CLI distribution, and an optional DataFusion Python integration investigation.
+description: Core Reader priorities, Python bindings with SQL, and CLI distribution.
 ---
 
 # Project direction and language support
@@ -41,13 +41,12 @@ error, ownership and validation contracts rather than redesigning them.
 | Supported predicates and exact schema-aware scalar conversion | [#107](https://github.com/mag1cfrog/delta-arrow-reader/issues/107) | Core predicate semantics; no Spark parsing or new expression language |
 | Platform wheels and installed-package checks | [#418](https://github.com/mag1cfrog/delta-arrow-reader/issues/418) | Validate the completed Reader API on all supported wheel targets |
 | Release-plz and Trusted Publishing integration | [#109](https://github.com/mag1cfrog/delta-arrow-reader/issues/109) | Reuse the validated wheel builder; first publication remains on #101's release checklist |
+| Read-only SQL through Rust DataFusion | [#112](https://github.com/mag1cfrog/delta-arrow-reader/issues/112) | Register loaded snapshots and stream query results through the existing binding |
 
-The implementation order is #102, #417, #105, then both #106 and #107, followed
-by #418 and #109. The native `#113 blocks #102`
-relationship and the `#112 blocks #109` SQL-release gate have been removed.
-The Spark experiment and deferred SQL investigation were detached from the first
-Python release umbrella. Publishing depends on the validated wheel builder
-(#418), controls (#106), and filters (#107).
+The core binding implementation is complete. The next stable release also
+includes #112, a small SQL session API. Its installed tests run with the shared
+wheel checks before the first publication. The Spark experiment remains outside
+this release.
 
 The binding must preserve single-transfer Arrow ownership, retained batches and
 readers after Python table deletion, terminal errors rather than successful EOF,
@@ -57,8 +56,9 @@ core must not acquire a hidden runtime. Keep existing redacted error contracts.
 
 The Python package now builds from source with type stubs and the Rust workspace's
 shared version. It supports snapshot loading, schema/version inspection, column
-projection, row limits, PyArrow readers, and single-use stream exports. CI builds
-and checks platform wheels; PyPI publishing remains planned work. Python asyncio,
+projection, row limits, PyArrow readers, single-use stream exports, and read-only
+SQL through registered Delta snapshots. CI builds and checks platform wheels;
+PyPI publishing remains planned work. Python asyncio,
 writes, a dataframe/query product and JavaScript bindings remain outside this
 first release.
 
@@ -78,59 +78,32 @@ evidence, and [installation](../../crates/delta-arrow-reader-core/docs/public/in
 for supported runtimes and version/digest pins. The first actual public release
 remains part of the parent issue's release checklist.
 
-## Optional SQL access through DataFusion Python
+## SQL in the Python package
 
-This is a design investigation, not an implemented or tested Python adapter.
-The earlier lazy `Session`/`Table` proposal in
-[#112](https://github.com/mag1cfrog/delta-arrow-reader/issues/112) is deferred and
-retained as historical design. It must not hold up Reader bindings or publishing.
+[#112](https://github.com/mag1cfrog/delta-arrow-reader/issues/112) adds a `Session`
+that owns a Rust DataFusion context inside our PyO3 extension. Users register
+loaded `DeltaTable` snapshots and call `sql()` to get a PyArrow reader. The
+existing Rust provider handles Delta scans and eligible projection/filter
+pushdown; DataFusion handles SQL planning and computation.
 
-The current Rust API already exposes `DeltaTableProvider::try_new` and `ScanOptions`
-in `src/reader/datafusion.rs`. The provider owns a loaded snapshot, plans projection
-and filters through the existing Reader planner, and creates `DeltaScanExec`.
-Its execution path uses the Reader scheduler. The `datafusion` feature remains
-optional for Rust users. There is no need to introduce Sail to expose this provider.
+The initial API consists of session construction, table registration and read-only
+SQL execution. It reuses the binding's interruptible runtime waits and Arrow
+stream exporter. Existing readers retain their snapshots and owners when Python
+variables are deleted or the source table is refreshed. Joins, sorts and
+aggregations can retain memory despite streamed output.
 
-DataFusion Python documents a custom-provider protocol: a Python object exposes
-`__datafusion_table_provider__`, returning a capsule named
-`datafusion_table_provider` containing `FFI_TableProvider`. A consumer can register
-it in its own `SessionContext`. This supports investigating a small wrapper over
-the existing provider while leaving SQL parsing, planning and query APIs with
-DataFusion Python. See the
-[official custom-provider guide](https://datafusion.apache.org/python/user-guide/io/table_provider.html).
+The Python extension enables the existing Rust `datafusion` feature. DataFusion
+remains optional for Rust-only users. There is no dependency on the separate
+`datafusion` Python package or on `datafusion-ffi`.
 
-An ordinary Rust trait object must not be passed between independently compiled
-Python extensions. The
-[official FFI explanation](https://datafusion.apache.org/python/contributor-guide/ffi.html)
-describes the ABI boundary and why directly depending on the `datafusion-python`
-Rust crate is not a reliable substitute for that protocol.
+Registering our provider in an independently installed DataFusion Python session
+is a different integration. It would need the documented provider FFI boundary
+and version compatibility checks. It is outside this release, along with a
+Python dataframe expression API, writes, Spark compatibility and asyncio.
 
-Version selection is unresolved. The inspected Reader baseline uses DataFusion
-54.1.0; do not infer compatibility with every DataFusion Python wheel from the
-guide's minimum version. The guide's simple constructor and the
-[upstream example](https://github.com/apache/datafusion-python/blob/main/examples/datafusion-ffi-example/src/table_provider.rs)
-already differ: the inspected example accepts a session capsule and uses a
-logical codec. Pin matching versions and follow their exact protocol when this
-investigation is resumed. No compatibility matrix or wheel build was run here.
-
-A bounded future check should establish:
-
-1. Independently built wheels can register the existing provider using the pinned
-   FFI protocol, with a clear error for an unsupported version/capsule.
-2. Planning/registration stays lazy, projection and eligible filters reach the
-   Reader, and Delta/deletion-vector results agree with direct scans. Unsupported
-   filters still receive the correct residual evaluation.
-3. Snapshot/provider/runtime owners survive variable deletion; early stream drop,
-   failure and interruption release resources and stop further work admission.
-4. Schema metadata, view/dictionary types and Arrow buffers survive the boundary.
-   SQL and its resource policy belong to the consuming DataFusion context;
-   streamed output alone does not bound joins, sorts or aggregations.
-
-The existing Arrow C Stream plan also permits generic Arrow consumers. It does
-not by itself prove provider-level predicate pushdown. Decide whether to ship an
-optional FFI wrapper only after the bounded check, independently of the first
-Reader release. Do not build a second SQL engine or restore Spark compatibility
-to answer that question.
+Before release, the supported wheel platforms must pass installed SQL acceptance
+as well as the existing reader and CLI checks. Public publication stays on
+#101 and #428; source/API completion alone does not close those parents.
 
 ## Preserved systems investigations
 

@@ -7,7 +7,9 @@ use arrow::{
     ffi_stream::FFI_ArrowArrayStream,
     record_batch::{RecordBatch, RecordBatchReader},
 };
+use datafusion::{common::DataFusionError, dataframe::DataFrame};
 use delta_arrow_reader::DeltaBatchStream;
+use futures_util::{StreamExt, TryStreamExt, stream::BoxStream};
 use pyo3::{
     exceptions::{PyNotImplementedError, PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
@@ -15,6 +17,7 @@ use pyo3::{
 };
 
 use crate::runtime::Runtime;
+use crate::session::SessionState;
 
 /// Single-use Arrow stream exporter, created by DeltaTable.scan().
 ///
@@ -27,14 +30,41 @@ pub(crate) struct RecordBatchStream {
 
 impl RecordBatchStream {
     pub(crate) fn new(stream: DeltaBatchStream, runtime: Arc<Runtime>) -> Self {
+        Self::from_source(stream.schema(), BatchStream::Delta(stream), runtime)
+    }
+
+    pub(crate) fn from_sql(frame: DataFrame, session: Arc<SessionState>) -> Self {
+        let schema = Arc::new(frame.schema().as_arrow().clone());
+        // Starting the physical plan can spawn work, so wait for the first pull.
+        let stream = futures_util::stream::once(async move { frame.execute_stream().await })
+            .try_flatten()
+            .boxed();
+        let runtime = Arc::clone(&session.runtime);
+        Self::from_source(
+            schema,
+            BatchStream::Sql {
+                stream,
+                _session: session,
+            },
+            runtime,
+        )
+    }
+
+    fn from_source(schema: SchemaRef, stream: BatchStream, runtime: Arc<Runtime>) -> Self {
         Self {
             reader: Mutex::new(Some(BlockingBatchReader {
-                schema: stream.schema(),
+                schema,
                 stream: Some(stream),
                 runtime,
                 terminal_error: None,
             })),
         }
+    }
+
+    pub(crate) fn into_reader(self, py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+        py.import("pyarrow")?
+            .getattr("RecordBatchReader")?
+            .call_method1("from_stream", (Py::new(py, self)?,))
     }
 }
 
@@ -182,10 +212,30 @@ fn matches_requested_type(actual: &DataType, requested: &DataType, allow_alterna
     }
 }
 
-/// Adapts an async Delta stream to Arrow's synchronous reader callbacks.
+enum BatchStream {
+    Delta(DeltaBatchStream),
+    Sql {
+        stream: BoxStream<'static, Result<RecordBatch, DataFusionError>>,
+        _session: Arc<SessionState>,
+    },
+}
+
+impl BatchStream {
+    async fn next_batch(&mut self) -> Result<Option<RecordBatch>, String> {
+        match self {
+            Self::Delta(stream) => stream.next_batch().await.map_err(|error| error.to_string()),
+            Self::Sql { stream, .. } => stream
+                .try_next()
+                .await
+                .map_err(|_| "delta reader error: phase=datafusion code=sql_execution".to_owned()),
+        }
+    }
+}
+
+/// Adapts an async batch stream to Arrow's synchronous reader callbacks.
 struct BlockingBatchReader {
     schema: SchemaRef,
-    stream: Option<DeltaBatchStream>,
+    stream: Option<BatchStream>,
     runtime: Arc<Runtime>,
     // Repeat failures so a failed scan never appears successfully exhausted.
     terminal_error: Option<String>,
@@ -205,7 +255,7 @@ impl Iterator for BlockingBatchReader {
                     .to_owned()
             })
         })
-        .and_then(|result| result.map_err(|error| error.to_string()));
+        .flatten();
         match result {
             Ok(Some(batch)) => Some(Ok(batch)),
             Ok(None) => {

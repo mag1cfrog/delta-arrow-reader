@@ -1,7 +1,8 @@
 # Delta Arrow Reader for Python
 
 Read Delta Lake tables as PyArrow record batches with the Rust Delta Arrow Reader.
-The same package includes the native `delta-arrow-reader` command.
+Use filters directly or query registered tables with SQL. The same package
+includes the native `delta-arrow-reader` command.
 
 PyPI publication is planned. For now, download a validated wheel for your platform
 using the [installation guide](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python).
@@ -45,6 +46,21 @@ with table.to_reader() as reader:
 ```
 
 See the [Python quickstart](https://mag1cfrog.github.io/delta-arrow-reader/python/)
-for column selection, filters, and snapshot refresh. The
+for column selection, filters, and snapshot refresh. For SQL, use the included
+Rust DataFusion engine:
+
+```python
+from delta_arrow_reader import Session
+
+session = Session()
+session.register_table("events", table)
+with session.sql("SELECT COUNT(*) AS rows FROM events") as reader:
+    print(reader.read_all().to_pydict())
+```
+
+SQL supports read-only queries over registered snapshots, including joins and
+aggregations. It does not require the separate `datafusion` Python package.
+See the [SQL guide](https://mag1cfrog.github.io/delta-arrow-reader/python/#query-with-sql)
+for execution and memory behavior. The
 [contributor guide](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/contributing.md)
 covers local builds and tests.

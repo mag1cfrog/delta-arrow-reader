@@ -1,7 +1,7 @@
 # Read a Delta table with Python
 
 Read a local Delta table as PyArrow record batches, select columns and rows,
-and close the reader when you stop early.
+or query it with SQL. Close the reader when you stop early.
 
 ## Before you start
 
@@ -49,6 +49,55 @@ Refresh returns a new table. The original table and its readers keep their
 snapshot, even if refresh fails. If no new commits exist, the returned table has
 the same version. To select a specific version, use
 `DeltaTable(location, version=0)`.
+
+## Query with SQL
+
+Register the loaded table in a `Session`, then pass a read-only SQL query to
+`sql()`. It returns the same kind of PyArrow reader used above:
+
+```python
+from delta_arrow_reader import Session
+
+session = Session()
+session.register_table("events", table)
+
+with session.sql("""
+    SELECT region, COUNT(*) AS events
+    FROM events
+    WHERE id >= 100
+    GROUP BY region
+    ORDER BY region
+""") as reader:
+    for batch in reader:
+        print(batch)
+```
+
+The package includes Rust DataFusion for SQL planning, joins, aggregation and
+sorting. Delta reads still use our reader, including supported filter and column
+pushdown. You do not need the separate `datafusion` Python package.
+
+Register more tables to query them together with a JOIN. Names must be simple
+identifiers such as `events` or `order_items`; duplicate names and SQL keywords
+are rejected. Registration does not scan Parquet. `sql()` plans the query, and
+result execution starts when you read the first batch. Each call returns an
+independent reader. Joins, sorts and aggregations may use substantial memory
+even when you consume their output in batches.
+
+Each `sql()` call accepts one read-only statement. DDL, writes, COPY and
+session-changing statements are rejected. Planning and registration failures
+raise `DeltaReaderError` with phase `datafusion` and code `sql_planning` or
+`sql_registration`. SQL execution failures use PyArrow's exception type
+with `code=sql_execution`; a failed reader remains failed. Error messages omit
+SQL text, literals and table paths.
+
+A registration keeps the snapshot it received. To query a refreshed snapshot,
+register `table.refresh()` under a new name or in a new session. Existing readers
+retain their snapshots and resources even after the session or table variable
+is deleted. Use `with` to release query resources when stopping early.
+
+SQL registrations use the DataFusion adapter's default scan settings,
+independently of settings passed to `DeltaTable`. To override them, pass
+`execution_options=ScanExecutionOptions(...)` to `register_table()`.
 
 ## Filter rows
 

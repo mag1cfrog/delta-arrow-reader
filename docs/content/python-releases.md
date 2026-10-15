@@ -80,7 +80,10 @@ when the complete build failed. The
 platform artifacts and installed checks. Save the passing run URL and source
 commit in #101's checklist. For each platform, record the wheel filename and
 SHA256, artifact ID, Python and PyArrow versions, and results for pip, uv tool,
-and uvx. The checks must use the final repaired wheel, including its native CLI.
+and uvx. The checks must use the final repaired wheel, including its native CLI
+and SQL session API. Require the installed SQL tests for joins, aggregation,
+Delta/deletion-vector parity, empty/null results and retained reader ownership
+on all three platforms. SQL feature #112 must land before the next stable release.
 This build-only rehearsal does not authorize PyPI publication.
 
 ## Rehearse on TestPyPI

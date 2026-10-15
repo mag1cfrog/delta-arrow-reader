@@ -49,6 +49,8 @@ class PackageTests(unittest.TestCase):
             text = (notices / f"{package}-THIRD_PARTY_NOTICES.txt").read_text(encoding="utf-8")
             self.assertIn(dependency, text)
             self.assertIn("Rust standard library", text)
+            if package == "python":
+                self.assertIn("datafusion", text)
 
 
 class InstalledCliTests(unittest.TestCase):

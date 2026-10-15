@@ -661,7 +661,7 @@ fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Resul
             (10, "crates/delta-arrow-reader-python/tests"),
             (
                 12,
-                "crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned",
+                "crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus",
             ),
         ] {
             assert_eq!(arguments[index], "--volume");

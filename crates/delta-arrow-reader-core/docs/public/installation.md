@@ -137,8 +137,10 @@ image must provide the same glibc, libgcc, and certificate dependencies.
 
 ## Python
 
-The Python package loads Delta snapshots, exposes their versions and Arrow
-schemas, and streams rows through PyArrow. The same wheel installs the native
+The Python package loads Delta snapshots, supports filtered reads and read-only
+SQL, and streams results through PyArrow. SQL uses Rust DataFusion included in
+the extension; the separate `datafusion` Python package is not required.
+The same wheel installs the native
 `delta-arrow-reader` CLI alongside the Python API. It does not install a `dar`
 alias. The package is not published on PyPI yet.
 
@@ -162,8 +164,9 @@ wheel on CPython 3.10 with PyArrow 18.0.0 and CPython 3.14 with the current
 compatible PyArrow release. Intermediate Python versions are not separately
 tested. Free-threaded CPython, PyPy, and other platform targets are not covered.
 
-All three platforms check the installed package, Python Arrow streams, and CLI
-behavior, including scan output, errors, closed stdout, and process termination.
+All three platforms check the installed package, Python Arrow streams, SQL
+queries and CLI behavior, including scan output, errors, closed stdout, and
+process termination.
 Linux also runs the full Python suite and repeats the installed checks in a fresh
 glibc 2.28 container. Windows checks run on Windows Server 2022 and use the
 CPython/MSVC runtime libraries. The macOS deployment target is 12.0, but runtime
