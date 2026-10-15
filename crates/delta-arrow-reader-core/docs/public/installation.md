@@ -19,27 +19,20 @@ Use CPython 3.10 or newer on one of these platforms:
 
 The package includes PyArrow support, SQL, and the `delta-arrow-reader` command.
 You do not need Rust or the separate Python `datafusion` package to install a
-wheel. **The package is not published on PyPI yet.**
+wheel.
 
-### Install a CI wheel
+### Install from PyPI
 
-1. Open the repository's [GitHub Actions](https://github.com/mag1cfrog/delta-arrow-reader/actions)
-   and choose a run where all Python wheel jobs passed, including
-   `Validate wheel artifact set`.
-2. Download the wheel artifact for your platform and extract its `.whl` file.
-   The [artifact list](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/contributing.md#build-python-wheels-in-ci)
-   gives the names to look for.
-3. In your project's activated virtual environment, run the commands below.
-   Replace `/path/to/wheel.whl` with the extracted file's full path, keeping its
-   original filename:
+In your project's activated virtual environment, run:
 
 ```console
-python -m pip install --only-binary=:all: "/path/to/wheel.whl"
+python -m pip install --only-binary=:all: delta-arrow-reader
 python -I -c "import delta_arrow_reader; print(delta_arrow_reader.__version__)"
 ```
 
 The second command prints the installed version. Installation also downloads a
-compatible PyArrow wheel; neither package is compiled from source.
+compatible PyArrow wheel; neither package is compiled from source. For a project
+managed by uv, use `uv add delta-arrow-reader` instead.
 
 Continue with the [Python quickstart](https://mag1cfrog.github.io/delta-arrow-reader/python/)
 to read your first rows.
@@ -100,18 +93,17 @@ Use `delta-arrow-reader` in place of `dar` in the
 [CLI quickstart](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/).
 Both names accept the same arguments. The wheel does not install a `dar` alias.
 
-For a standalone `dar` executable, check [GitHub Releases](https://github.com/mag1cfrog/delta-arrow-reader/releases)
-for a version with CLI assets. Releases through `v0.6.2` do not include them;
-until one does, use a Python wheel or [build the CLI from source](https://mag1cfrog.github.io/delta-arrow-reader/cli/#build-from-source).
+Standalone `dar` binaries and container images are available from
+[GitHub Releases](https://github.com/mag1cfrog/delta-arrow-reader/releases).
+Choose a version whose CLI section reports successful download verification.
 
 <details markdown="1">
 <summary>Install just the command with uv</summary>
 
-Download a wheel as described in the [Python instructions](#python). Install it
-in a separate tool environment, using the wheel's full path and original filename:
+Install the command from PyPI in a separate tool environment:
 
 ```console
-uv tool install --no-build "/path/to/wheel.whl"
+uv tool install --no-build delta-arrow-reader
 delta-arrow-reader --version
 ```
 
@@ -120,7 +112,7 @@ If uv reports that its executable directory is missing from `PATH`, run
 installation:
 
 ```console
-uvx --no-build --from "/path/to/wheel.whl" delta-arrow-reader --help
+uvx --no-build delta-arrow-reader --help
 ```
 
 These tool environments do not add the Python API to your project. They still

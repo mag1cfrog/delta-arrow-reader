@@ -458,10 +458,10 @@ command in another application.
 <summary id="use-the-cli-from-a-python-wheel">Use the CLI from a Python wheel</summary>
 
 The `delta-arrow-reader` Python package includes a native command with the same
-name. Install a validated CI wheel with pip to get the Python API and CLI in one
+name. Install it from PyPI with pip to get the Python API and CLI in one
 environment, or use uv tool/uvx for a separate tool environment. Follow the
 [Python installation instructions](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python)
-for download and installation commands; PyPI publication is planned.
+for installation commands.
 
 The wheels support Linux x86_64 with glibc 2.28 or newer, Windows x86_64, and
 macOS arm64 with macOS 12.0 or newer. They require CPython 3.10 or newer and
