@@ -1,143 +1,170 @@
 ---
 title: Configuration
-description: Choose when to prepare a table and how much work the reader can do at once.
+description: Start with the defaults, then adjust table opening and resource use when you need to.
 ---
 
 # Configuration
 
-Opening a table can prepare work for later queries. You can keep the default
-preparation, skip network sampling, or defer more work until you query. You can
-also limit concurrent reads and buffering to suit your application's resources.
+Start with the defaults. You can change how much work happens before your first
+query, then adjust resource use if you need to.
 
-## Choose an initialization mode
-
-The `warmup` setting controls preparation before the table is ready to use:
-
-| Mode | Choose it when | What happens |
-| --- | --- | --- |
-| `automatic` (default) | You will run several filtered queries against an S3 table. | On supported S3 connections, opening the table caches file metadata and samples the network. Later queries reuse both. |
-| `query_planning` | You want reusable file metadata without network probes, including for local tables. | Opening takes longer and retains metadata in memory. Each query can skip rebuilding that metadata. |
-| `none` | You want less work at startup or do not want to retain the file metadata cache. | Opening skips preparation. Each query builds the metadata it needs, and no network probes run. |
-
-File metadata describes which files belong to the table and includes statistics
-used to skip files. Caching it uses memory while the table is held open; it does
-not cache query results. Even with `none`, opening still loads the table version
-and schema.
-
-Local tables do not get automatic preparation. Select `query_planning` explicitly
-to cache their metadata. Network sampling requires the default `direct` backend
-and a supported S3 connection.
-The [partial-page guide](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/)
-describes the supported S3 configurations and the optimization they enable.
-
-## Understand the five-second budget
-
-On supported S3 connections, automatic network sampling has a **five-second
-budget after metadata loading**. It can finish sooner. This is neither a fixed
-delay nor a limit on the whole table-loading operation: metadata loading adds
-its own time. Sampling reads small portions of data files, so it also adds
-requests and downloaded bytes. These measurements help the reader decide when
-smaller reads will be faster.
-
-An incomplete or failed network sample does not by itself fail table loading.
-The first later query that can use partial-page reads retries sampling once,
-with the same budget. That retry adds to the query's time, and concurrent
-queries share it. If it also fails, the reader uses normal reads without another
-sampling attempt.
-
-Keep the loaded table for later queries to reuse its metadata and network
-measurements. Registering it in a SQL session reuses that state too. Loading the
-same path into a new table starts preparation again; there is no cache on disk.
-
-Both `query_planning` and `none` skip network sampling, including the retry.
-Without those measurements, partial-page reads stay inactive. File and row-group
-pruning still work. When comparing modes for a short-lived application, measure
-table loading plus all its queries together.
-
-## Control concurrency and memory
-
-A scan can read several groups of files at once. These groups are called
-partitions; settings marked "per partition" apply separately to each group.
-
-| Setting and default | When to change it |
-| --- | --- |
-| `max_concurrent_file_reads_per_scan`: automatic | Set a positive limit to reduce the number of files one scan reads at once. A lower limit can reduce resource use, but may make the query slower. |
-| `target_partitions`: automatic | Set a smaller positive target to reduce parallel work. Usually leave it automatic so the reader can account for available CPU and memory. |
-| `prefetch_files_per_partition`: `2` | Prepare upcoming files while current files are read. Set `0` to avoid preparing files ahead of demand, for example when often stopping early. |
-| `output_buffer_batches_per_partition`: `1` | Increase it if reading should run further ahead of your batch processing. More queued batches use more memory. |
-
-The file-read cap applies to each scan, not to every query in the process
-combined. A file read can make several network requests. These settings control
-query work, not the initialization probes, and are not a total memory limit.
-Memory also includes decoding, SQL operations and batches your application keeps.
-
-The default `direct` backend supports prefetch and partial-page reads. For
-backend selection, buffering small files, and the full list of defaults, see
-the [execution options reference](https://mag1cfrog.github.io/delta-arrow-reader/reference/execution-options/).
-
-## Apply the settings
-
-### Python
+## Start with the defaults
 
 After [installing the Python package](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python),
-replace the location below with your table. This example keeps automatic
-preparation and caps each scan at four concurrent file reads:
+open a table using its path:
 
 ```python
-from delta_arrow_reader import DeltaTable, ScanExecutionOptions, Session
+from delta_arrow_reader import DeltaTable
+
+table = DeltaTable("s3://bucket/table")
+```
+
+Delta tables store their rows in data files. On supported S3 connections,
+opening a table prepares two things that later queries can reuse:
+
+1. It loads information about the table's files and keeps it in memory. Queries
+   use this to decide which files they need.
+2. It reads parts of data files to check the connection speed. This helps it
+   decide when downloading less data will make a query faster.
+
+The connection check can take **up to five seconds** and may finish sooner.
+Loading the file information takes additional time, so opening a table can take
+more than five seconds overall. Local tables skip this extra preparation.
+
+This behavior is called `automatic`. Keep using the same table object for later
+queries to reuse the work. Creating another `DeltaTable` for the same path starts
+it again. The saved information stays in memory; it does not cache query results
+or persist on disk.
+
+<details markdown="1">
+<summary>If the connection check does not finish</summary>
+
+An incomplete check does not by itself fail table loading. The first query that
+can use the measurements retries once, with the same five-second budget.
+Concurrent queries share the retry. If it also fails, queries use normal reads
+without another attempt.
+
+The check makes real requests and downloads data. It requires the default
+`direct` backend and a [supported S3 connection](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/).
+
+</details>
+
+## Want less work before the first query?
+
+### Skip the connection check
+
+If you want to keep the useful file information but avoid test reads of data
+files, use `query_planning`:
+
+```python
+table = DeltaTable("s3://bucket/table", warmup="query_planning")
+```
+
+You still wait for the file information to load. It stays in memory for later
+queries, which is useful when querying the same table repeatedly. This option
+also works for local tables.
+
+### Leave the preparation to each query
+
+If you will query only once, or want to avoid keeping the file information in
+memory, use `none`:
+
+```python
+table = DeltaTable("s3://bucket/table", warmup="none")
+```
+
+Opening still reads the table version and its column names and types. Each
+query then builds the file information it needs. Repeated queries may spend
+more time doing that work.
+
+Both options skip the connection check, including any later retry. Queries can
+still skip unwanted data, but [partial-page reads](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/)
+stay off. That optimization needs the connection measurements to decide when
+to download selected values within a block of data.
+
+Compare the time to open the table **and** run your queries when choosing a mode.
+
+## More options
+
+<details markdown="1">
+<summary>Limit how many files a query reads at once</summary>
+
+If a query uses too many resources, try a limit on concurrent file reads. This
+example allows at most four files to be read at once in one scan:
+
+```python
+from delta_arrow_reader import ScanExecutionOptions
 
 options = ScanExecutionOptions(max_concurrent_file_reads_per_scan=4)
-table = DeltaTable(
-    "s3://bucket/table",
-    warmup="automatic",
-    execution_options=options,
-)
-
-with table.to_reader(limit=10) as reader:
-    print(reader.read_all())
-
-session = Session()
-session.register_table("events", table, execution_options=options)
-with session.sql("SELECT * FROM events LIMIT 10") as reader:
+with table.to_reader(execution_options=options, limit=10) as reader:
     print(reader.read_all())
 ```
 
-Change `warmup` to `"query_planning"` or `"none"` to select another mode.
-Initialization happens in `DeltaTable(...)`; registration reuses the loaded table.
-SQL registrations have their own default scan settings, so pass `options` at
-registration too if SQL should use your custom limits.
+Lowering this limit can reduce resource use, but may slow the query. It applies
+to each scan separately, does not cap network requests or total memory, and does
+not change the connection check during table loading.
 
-Direct scans inherit the table's settings. To change one scan, pass
-`execution_options=ScanExecutionOptions(...)` to `to_reader()` or `scan()`.
-This replaces the entire options object for that scan. Pass `target_partitions`
-directly to those methods, for example `table.to_reader(target_partitions=2)`.
-Changing scan options cannot undo initialization that has already happened.
+Pass `execution_options` to `DeltaTable(...)` to set defaults for its direct
+scans. Passing it to `to_reader()` or `scan()` replaces the full options object
+for that one scan.
 
-### Rust
+Other controls let you adjust how far reading runs ahead of your application:
 
-Use `DeltaTableBuilder` to choose preparation and defaults for direct scans.
-This function runs inside your application's Tokio runtime:
+- `prefetch_files_per_partition=0` stops preparing upcoming files in advance.
+  The default is `2` per scan partition, a group of files read together.
+- `output_buffer_batches_per_partition` defaults to `1`. Increasing it lets
+  reading run further ahead of batch processing and uses more memory.
+- `target_partitions` controls how many groups can work in parallel. Pass a
+  smaller positive target to `to_reader()` or `scan()` to reduce parallel work.
+  The default chooses a target using available CPU and memory.
+
+</details>
+
+<details markdown="1">
+<summary>Use the loaded table with Python SQL</summary>
+
+Register the table you already opened. SQL reuses its file information and any
+connection measurements. Registration does not repeat the preparation.
+
+SQL registrations have their own default read settings. To give SQL a custom
+file-read limit, pass it when registering the table:
+
+```python
+from delta_arrow_reader import ScanExecutionOptions, Session
+
+options = ScanExecutionOptions(max_concurrent_file_reads_per_scan=4)
+session = Session()
+session.register_table("events", table, execution_options=options)
+```
+
+Omit `execution_options` to use SQL's defaults. Custom read settings passed to
+`DeltaTable` do not automatically carry over to SQL.
+
+</details>
+
+<details markdown="1">
+<summary>Configure a table in Rust</summary>
+
+Choose the same behavior with `with_warmup`. This example skips the connection
+check and keeps the file information for later queries:
 
 ```no_run
-use delta_arrow_reader::{
-    DeltaReaderError, DeltaScanExecutionOptions, DeltaTable, DeltaTableBuilder,
-    WarmupMode,
-};
+use delta_arrow_reader::{DeltaReaderError, DeltaTable, DeltaTableBuilder, WarmupMode};
 
 async fn open_table() -> Result<DeltaTable, DeltaReaderError> {
-    let options = DeltaScanExecutionOptions::new()
-        .with_max_concurrent_file_reads_per_scan(Some(4))?;
     DeltaTableBuilder::new("s3://bucket/table")
-        .with_warmup(WarmupMode::Automatic)
-        .with_execution_options(options)
+        .with_warmup(WarmupMode::QueryPlanning)
         .load_table()
         .await
 }
 ```
 
-Use `WarmupMode::QueryPlanning` or `WarmupMode::None` for the other modes.
-Rust also supports a custom sampling budget. For example, replace the
-`with_warmup` call above with:
+Call this function inside your application's Tokio runtime. Use
+`WarmupMode::Automatic` for the default or `WarmupMode::None` to leave preparation
+to queries.
+
+Rust also lets you shorten or extend the connection check. To give it two
+seconds, replace `with_warmup` above with:
 
 ```ignore
 .with_warmup(WarmupMode::Network {
@@ -145,12 +172,16 @@ Rust also supports a custom sampling budget. For example, replace the
 })
 ```
 
-The budget applies to sampling after metadata preparation, and to the one
-possible retry. Zero skips sampling but still prepares metadata. Python
-currently exposes the three named modes, without a custom duration.
+That limit applies to the check and its possible retry, after file information
+has loaded. Zero skips the check but still prepares file information. Python
+currently supports the three named modes without a custom time limit.
 
-For Rust SQL queries, also set `datafusion::ScanOptions.execution_options` when
+For Rust read limits, use `DeltaScanExecutionOptions` on the table builder or
+one scan. SQL uses `datafusion::ScanOptions.execution_options` when
 [registering the table](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/).
-For one direct scan, use `scan().with_execution_options(options)` and
-`with_target_partitions(...)`. As in Python, a scan override replaces its
-execution settings and leaves the loaded table's defaults unchanged.
+Changing read settings later does not undo preparation already performed.
+
+</details>
+
+For backend selection, small-file buffering and the full list of defaults,
+see the [execution options reference](https://mag1cfrog.github.io/delta-arrow-reader/reference/execution-options/).
