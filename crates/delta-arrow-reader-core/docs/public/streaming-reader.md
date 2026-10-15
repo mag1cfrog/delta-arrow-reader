@@ -44,6 +44,9 @@ calibration ranges during loading. If that attempt is incomplete, the first
 eligible filtered scan retries it once during `build`. Use `WarmupMode::None`
 when loading the table to skip network calibration.
 
+The [configuration guide](https://mag1cfrog.github.io/delta-arrow-reader/configuration/)
+compares initialization modes and explains the five-second network sampling budget.
+
 ## Reuse scan metadata across queries
 
 Automatic warmup already caches scan metadata for supported S3 stores. To

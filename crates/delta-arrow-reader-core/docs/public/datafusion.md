@@ -48,6 +48,9 @@ Registration does not open any Parquet files. DataFusion plans the read and
 opens those files when `collect` runs the query. The `LIMIT` keeps this first
 result small.
 
+Use the [configuration guide](https://mag1cfrog.github.io/delta-arrow-reader/configuration/)
+to choose preparation before registration and set resource limits for SQL scans.
+
 ## Reuse scan metadata across SQL queries
 
 If the registered table will serve several SQL queries, cache its reusable scan

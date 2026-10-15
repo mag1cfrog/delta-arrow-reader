@@ -181,9 +181,10 @@ raise `ValueError`.
 ## Prepare a table for repeated scans
 
 The default, `warmup="automatic"`, prepares supported S3 tables and profiles
-their network before querying. Other stores remain lazy. See
-[partial-page reads](partial-page-reads.md) for the sampling limits, Python
-settings, tradeoffs and benchmark results.
+their network before querying. Other stores remain lazy. The
+[configuration guide](configuration.md) compares the modes, explains the
+five-second sampling budget, and shows how to apply settings to direct and SQL
+queries. See [partial-page reads](partial-page-reads.md) for benchmark results.
 
 Use `warmup="query_planning"` to load and retain active-file metadata during table
 construction. Later scans reuse it, and refresh updates it for the new snapshot

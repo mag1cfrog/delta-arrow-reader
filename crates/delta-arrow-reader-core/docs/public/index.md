@@ -25,6 +25,7 @@ fits your application:
 
 ## After your first read
 
+- Choose [initialization and resource settings](configuration.md) for your application.
 - Learn [how the reader works](architecture.md).
 - Review the [performance reports](benchmarks.md) and their test conditions.
 - Look up a type or method in the
