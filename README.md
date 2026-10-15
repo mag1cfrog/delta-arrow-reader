@@ -5,10 +5,16 @@
 </h3>
 
 <p align="center">
-  <a href="https://mag1cfrog.github.io/delta-arrow-reader/"><img alt="User Guide" src="https://img.shields.io/badge/User_Guide-2E8540"></a>
-  <a href="https://docs.rs/delta-arrow-reader"><img alt="Rust API" src="https://img.shields.io/badge/Rust_API-orange"></a>
-  <a href="https://crates.io/crates/delta-arrow-reader"><img alt="crates.io" src="https://img.shields.io/crates/v/delta-arrow-reader.svg"></a>
-  <a href="https://pypi.org/project/delta-arrow-reader/"><img alt="PyPI" src="https://img.shields.io/pypi/v/delta-arrow-reader.svg?color=blue"></a>
+  <a href="https://mag1cfrog.github.io/delta-arrow-reader/"><img alt="User Guide" src="https://img.shields.io/badge/User_Guide-e5e7eb?style=flat-square"></a>
+  <a href="https://mag1cfrog.github.io/delta-arrow-reader/python-api/"><img alt="Python API" src="https://img.shields.io/badge/Python_API-e5e7eb?style=flat-square"></a>
+  <a href="https://docs.rs/delta-arrow-reader"><img alt="Rust API" src="https://img.shields.io/badge/Rust_API-e5e7eb?style=flat-square"></a>
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/delta-arrow-reader/"><img alt="PyPI" src="https://img.shields.io/pypi/v/delta-arrow-reader.svg?style=flat-square&amp;color=007ec6&amp;label=PyPI"></a>
+  <a href="https://crates.io/crates/delta-arrow-reader"><img alt="crates.io" src="https://img.shields.io/crates/v/delta-arrow-reader.svg?style=flat-square&amp;color=ea7233"></a>
+  <a href="https://github.com/mag1cfrog/delta-arrow-reader/blob/main/LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/Apache--2.0-e5e7eb?style=flat-square"></a>
+  <a href="https://github.com/mag1cfrog/delta-arrow-reader/actions/workflows/docs.yml?query=branch%3Amain%20event%3Apush"><img alt="Documentation build and deployment" src="https://img.shields.io/github/actions/workflow/status/mag1cfrog/delta-arrow-reader/docs.yml?branch=main&amp;event=push&amp;style=flat-square&amp;label=docs"></a>
 </p>
 
 Delta Arrow Reader is a fast, memory-efficient Delta Lake reader.
