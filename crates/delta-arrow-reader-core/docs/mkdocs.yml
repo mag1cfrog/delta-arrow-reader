@@ -18,6 +18,20 @@ theme:
 
 plugins:
   - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [python_api]
+          options:
+            allow_inspection: false
+            show_source: false
+            show_signature_annotations: true
+            show_if_no_docstring: true
+            show_root_heading: true
+            show_root_full_path: false
+            merge_init_into_class: true
+            group_by_category: false
+            members_order: source
 
 markdown_extensions:
   - admonition
@@ -26,7 +40,8 @@ markdown_extensions:
   - pymdownx.superfences
   - pymdownx.inlinehilite
   - pymdownx.highlight:
-      anchor_linenums: true
+      # API docstrings render separately, so line-number anchors would repeat.
+      anchor_linenums: false
       extend_pygments_lang:
         - name: no_run
           lang: rust
@@ -59,3 +74,9 @@ nav:
       - Execution options: reference/execution-options.md
       - Scan metrics: reference/metrics.md
       - Rust API: https://docs.rs/delta-arrow-reader
+  - Python API:
+      - Overview: python-api/index.md
+      - DeltaTable: python-api/table.md
+      - Session: python-api/session.md
+      - ScanExecutionOptions: python-api/options.md
+      - Streams and errors: python-api/streams-and-errors.md

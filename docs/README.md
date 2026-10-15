@@ -34,3 +34,25 @@ Build the site with the same strict check used by CI:
 python -m pip install -r docs/requirements.txt
 python -m zensical build --strict -f crates/delta-arrow-reader-core/docs/mkdocs.yml
 ```
+
+## Python API reference
+
+The site reads
+`crates/delta-arrow-reader-core/docs/python_api/delta_arrow_reader/__init__.pyi`,
+a generated copy of the Python type stubs with docstrings from the compiled Rust bindings.
+Ordinary site builds do not import the reader or compile Rust.
+
+Edit API descriptions in the Rust binding comments under
+`crates/delta-arrow-reader-python/src/`, and signatures in
+`crates/delta-arrow-reader-python/delta_arrow_reader.pyi`. After rebuilding and
+installing the Python package from this checkout, regenerate the API file with
+the same Python environment:
+
+```console
+python crates/delta-arrow-reader-python/generate_api_docs.py
+python crates/delta-arrow-reader-python/generate_api_docs.py --check
+```
+
+Commit the generated file with the source change. The existing `Python Package`
+CI job checks it against the bindings it already builds, so this check adds no
+second Rust build.

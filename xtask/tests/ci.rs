@@ -108,6 +108,14 @@ fn python_filter_excludes_unrelated_sources_and_tools() -> Result<()> {
             false,
         ),
         ("docs/content/contributing.md", false),
+        (
+            "crates/delta-arrow-reader-core/docs/python_api/delta_arrow_reader/__init__.pyi",
+            true,
+        ),
+        (
+            "crates/delta-arrow-reader-core/docs/public/python-api/table.md",
+            false,
+        ),
     ] {
         assert_eq!(
             filter_matches(&filters, "python", path)?,

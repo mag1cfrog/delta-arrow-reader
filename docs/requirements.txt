@@ -1,1 +1,2 @@
 zensical>=0.0.50
+mkdocstrings-python>=2.0.8,<3

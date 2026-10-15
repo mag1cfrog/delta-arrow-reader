@@ -77,6 +77,7 @@
     "benches/selective_read/src/large.rs"
   ],
   "python": [
+    "crates/delta-arrow-reader-core/docs/python_api/**",
     ".cargo/**",
     ".github/path-filters.json",
     "xtask/Cargo.toml",

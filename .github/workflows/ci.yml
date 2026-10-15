@@ -301,6 +301,9 @@ jobs:
       - name: Test Python API
         run: |
           "$RUNNER_TEMP/python-tests/bin/python" -I -m unittest discover -s crates/delta-arrow-reader-python/tests
+      - name: Check generated Python API documentation
+        run: |
+          "$RUNNER_TEMP/python-tests/bin/python" -I crates/delta-arrow-reader-python/generate_api_docs.py --check
 
   cli-checks:
     name: CLI Source

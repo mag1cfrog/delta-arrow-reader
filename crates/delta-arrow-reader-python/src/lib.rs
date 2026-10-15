@@ -31,7 +31,19 @@ pyo3::create_exception!(
     delta_arrow_reader,
     DeltaReaderError,
     PyException,
-    "A redacted reader failure with phase and code attributes."
+    r#"A failure while opening a table or preparing a query.
+
+Inspect `phase` and `code` to identify the failure without parsing the message.
+Messages omit sensitive details such as table paths and storage credentials.
+
+Attributes:
+    phase: The stage that failed, such as `schema` or `datafusion`.
+    code: The error category, such as `schema_conversion` or `sql_planning`.
+
+Invalid Python arguments can raise built-in exceptions such as `TypeError`
+or `ValueError` instead. Failures while consuming a PyArrow reader use PyArrow
+exceptions; catch those around iteration or `read_all()` as well.
+"#
 );
 
 fn reader_error(py: Python<'_>, message: String, phase: &str, code: &str) -> PyErr {
@@ -91,15 +103,50 @@ fn type_contains_nul(data_type: &DataType) -> bool {
     }
 }
 
-/// One immutable Delta snapshot, loaded from a string or os.PathLike[str].
+/// Open a Delta table for repeated queries against the same version.
 ///
-/// With version=None, load the latest snapshot. Otherwise, version must be an
-/// integer from 0 to 2**64 - 1. Booleans are not accepted.
-/// storage_options accepts a mapping of string keys to string values.
-/// warmup="automatic" prepares supported S3 tables and profiles their network.
-/// "none" defers planning metadata to scans; "query_planning" prepares
-/// reusable planning metadata during loading without reading Parquet data.
-/// execution_options=None keeps the default scan execution settings.
+/// Use `to_reader()` to read batches or register the table with a `Session`
+/// to query it with SQL. The loaded version stays fixed even if another process
+/// writes to the table. Call `refresh()` to get a new table with the latest version.
+///
+/// Examples:
+///     Replace the path with your table's directory or S3 URL.
+///
+///     ```python
+///     from delta_arrow_reader import DeltaTable
+///
+///     table = DeltaTable("path/to/table")
+///     with table.to_reader(limit=10) as reader:
+///         print(reader.read_all())
+///     ```
+///
+/// Args:
+///     location: Local directory or storage URL containing the Delta table.
+///         Accepts a string or a path object that resolves to a string.
+///     version: Version to load. `None` selects the latest available version.
+///         An explicit version must be an integer from `0` through `2**64 - 1`;
+///         booleans are not accepted.
+///     storage_options: Storage configuration as string keys and string values,
+///         for example `{"aws_region": "us-west-2"}` for S3.
+///     warmup: How much preparation to do when opening the table.
+///         `"automatic"` prepares reusable file information and checks connection
+///         speed on supported S3 stores; local tables skip this extra work.
+///         `"query_planning"` prepares file information without test reads of data.
+///         `"none"` leaves that preparation to each query. Both explicit modes
+///         skip the connection check and keep partial-page reads inactive.
+///     execution_options: Defaults for this table's `scan()` and `to_reader()`
+///         calls. `None` uses `ScanExecutionOptions()`.
+///         SQL registrations have their own defaults.
+///
+/// The automatic connection check has a five-second budget and may finish sooner.
+/// Loading file information takes additional time. Keep using the same table
+/// object to reuse this work; query results are not cached.
+///
+/// Raises:
+///     TypeError: An argument has the wrong type, including a Boolean version.
+///     ValueError: The version is negative or the warmup mode is unknown.
+///     OverflowError: The version exceeds `2**64 - 1`.
+///     DeltaReaderError: The table cannot be loaded or prepared.
 #[pyclass(module = "delta_arrow_reader", frozen)]
 struct DeltaTable {
     table: CoreDeltaTable,
@@ -172,8 +219,20 @@ impl DeltaTable {
 
     /// Load the latest snapshot and return it as a new table.
     ///
-    /// This table and its existing scans keep their original snapshot, including
-    /// when refresh fails. The new table shares this table's runtime.
+    /// The original table and its readers keep their version, even if refresh
+    /// fails. The new table keeps the storage, warmup and execution settings.
+    ///
+    /// Examples:
+    ///     ```python
+    ///     latest = table.refresh()
+    ///     print(table.version, latest.version)
+    ///     ```
+    ///
+    /// Returns:
+    ///     A table at the latest version, which may be the same version as before.
+    ///
+    /// Raises:
+    ///     DeltaReaderError: The latest snapshot cannot be loaded or prepared.
     fn refresh(&self, py: Python<'_>) -> PyResult<Self> {
         let table = self
             .runtime
@@ -187,19 +246,24 @@ impl DeltaTable {
         })
     }
 
-    /// The loaded snapshot version.
+    /// The version loaded by this table. It stays fixed until you open a new table.
     #[getter]
     fn version(&self) -> u64 {
         self.table.version()
     }
 
-    /// The logical schema as a pyarrow.Schema, independent of this table's lifetime.
+    /// Column names and types as a `pyarrow.Schema`, without reading data files.
+    ///
+    /// The schema remains usable after the table object is released.
     #[getter]
     fn schema(slf: Bound<'_, Self>) -> PyResult<Bound<'_, PyAny>> {
         slf.py().import("pyarrow")?.call_method1("schema", (slf,))
     }
 
-    /// Export a fresh Arrow schema capsule through the public Arrow protocol.
+    /// Export the schema for Arrow-compatible consumers such as `pyarrow.schema()`.
+    ///
+    /// Usually, use the `schema` property instead. Each call returns a fresh
+    /// Arrow schema capsule that owns its resources independently of this table.
     fn __arrow_c_schema__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
         let ffi_schema = export_schema(py, self.table.schema().as_ref())?;
         // The capsule drops the schema; Arrow's Drop releases it only if still owned.
@@ -208,37 +272,24 @@ impl DeltaTable {
 
     /// Plan a scan and return a single-use Arrow stream exporter.
     ///
-    /// columns=None selects all columns. A list or tuple of names selects columns
-    /// in that order; an empty list selects no columns while retaining row counts.
-    /// filters=None or [] disables filtering. A list of (column, operator, value)
-    /// tuples combines conditions with AND; a list of lists combines AND groups
-    /// with OR. An empty AND group is true. "is" and "is not" require None.
-    /// Comparisons (==, !=, <, <=, >, >=) accept bool for Boolean columns and int
-    /// for signed integer columns. Integers must fit the column's bit width;
-    /// booleans cannot be used as integers. Comparisons with None are invalid.
-    /// Float columns require finite float values. Float32 rounds to its precision
-    /// and rejects overflow. Native Arrow comparisons distinguish -0.0 from 0.0.
-    /// String columns require str values encodable as UTF-8. Binary columns
-    /// require bytes; fixed-size binary values must match the column's width.
-    /// Decimal128 columns require finite decimal.Decimal values exactly fitting
-    /// the column's precision and scale, independent of the decimal context.
-    /// Date32 columns require datetime.date values; datetime.datetime is rejected.
-    /// Microsecond timestamps require naive datetime.datetime values for columns
-    /// without a timezone, and aware values for columns with a timezone. Conversion
-    /// preserves microsecond precision and does not use the process timezone.
-    /// Timestamp values must be exact datetime.datetime instances, not subclasses.
-    /// UTC offsets must be exact datetime.timedelta instances or None.
-    /// Filter columns need not appear in columns. Filters apply before limit.
-    /// limit=None reads all rows. Otherwise, limit must be a nonnegative integer
-    /// that fits the platform's usize. Booleans are not accepted.
-    /// target_partitions=None uses automatic partition planning. An override must
-    /// be a positive integer that fits usize; booleans are not accepted.
-    /// execution_options=None inherits the table's settings. A supplied object
-    /// replaces the complete settings for this scan without changing the table.
-    /// Planning reads Delta metadata. An eligible filtered scan also retries incomplete
-    /// automatic network warmup once. Query results are read on the first pull.
-    /// Load the table with warmup="none" to skip network calibration entirely.
-    /// The stream retains its snapshot and runtime independently of this table.
+    /// Use `to_reader()` for a PyArrow reader directly. This lower-level method
+    /// is for consumers of the Arrow stream protocol. It accepts the same
+    /// parameters and has the same filtering, planning and error behavior as
+    /// `to_reader()`.
+    ///
+    /// Examples:
+    ///     ```python
+    ///     import pyarrow as pa
+    ///
+    ///     stream = table.scan(limit=10)
+    ///     with pa.RecordBatchReader.from_stream(stream) as reader:
+    ///         print(reader.read_all())
+    ///     ```
+    ///
+    /// Returns:
+    ///     An exporter that keeps the table snapshot alive. Once exported,
+    ///         the consuming reader owns cleanup. Close that reader when finished;
+    ///         closing the exporter does not close the consumer.
     #[pyo3(signature = (*, columns=None, filters=None, limit=None, target_partitions=None, execution_options=None))]
     fn scan(
         &self,
@@ -307,10 +358,89 @@ impl DeltaTable {
         ))
     }
 
-    /// Plan a scan and consume it as a pyarrow.RecordBatchReader.
+    /// Select rows and columns, then read them as PyArrow batches.
     ///
-    /// Accepts the same keyword arguments as scan().
-    /// Use a with block to close the reader, including when stopping early.
+    /// Use a `with` block so the reader closes even when you stop early.
+    /// Iterate over batches to process the result incrementally, or use
+    /// `read_all()` to collect it in memory. Rows have no guaranteed order;
+    /// use SQL with `ORDER BY` when order matters.
+    ///
+    /// Examples:
+    ///     For a table with `id` and `region` columns:
+    ///
+    ///     ```python
+    ///     with table.to_reader(
+    ///         columns=["id", "region"],
+    ///         filters=[("id", ">=", 100)],
+    ///         limit=10,
+    ///     ) as reader:
+    ///         for batch in reader:
+    ///             print(batch.to_pydict())
+    ///     ```
+    ///
+    /// Args:
+    ///     columns: Column names in output order. `None` selects all columns.
+    ///         An empty list selects no columns but preserves row counts.
+    ///     filters: Conditions written as `(column, operator, value)` tuples.
+    ///         A list of tuples combines conditions with AND. A list of lists
+    ///         combines AND groups with OR. `None` or `[]` disables filtering;
+    ///         an empty inner group is true. Filter columns need not be in the
+    ///         output. See the filtering rules below for operators and values.
+    ///     limit: Maximum number of rows after filtering. `None` reads all
+    ///         matching rows; `0` returns no rows. Must be a nonnegative integer.
+    ///     target_partitions: Target number of groups of files to process in
+    ///         parallel. `None` chooses automatically; an override must be a
+    ///         positive integer. This does not change the table's stored layout.
+    ///     execution_options: Settings for this scan. `None` inherits the table's
+    ///         settings. A supplied `ScanExecutionOptions` replaces the whole
+    ///         settings object for this scan without changing later scans.
+    ///
+    /// Returns:
+    ///     A reader that yields `pyarrow.RecordBatch` objects and retains its
+    ///         snapshot independently of the table object. Result data is read when
+    ///         you request the first batch.
+    ///
+    /// Raises:
+    ///     TypeError: An argument or filter value has the wrong type. Booleans
+    ///         are not accepted for integer settings or integer filter values.
+    ///     ValueError: A limit, partition target, operator or filter value is invalid.
+    ///     OverflowError: An integer does not fit its column type, or a limit or
+    ///         partition target exceeds `2 * sys.maxsize + 1`.
+    ///     DeltaReaderError: A column is unknown or scan planning fails.
+    ///
+    /// Planning may read table metadata before this method returns. If automatic
+    /// connection preparation was incomplete, an eligible filtered scan retries
+    /// it once, which can add up to five seconds of test reads. Use
+    /// `warmup="none"` or `"query_planning"` when opening the table to skip that
+    /// check entirely. Errors during result consumption use PyArrow exceptions.
+    ///
+    /// **Filtering rules**
+    ///
+    /// Compare with `==`, `!=`, `<`, `<=`, `>` or `>=`. Use `"is"` or
+    /// `"is not"` with `None` to test for nulls; other comparisons with `None`
+    /// are invalid. For example, `[("region", "is not", None)]` excludes null
+    /// regions. `[[("region", "==", "east")], [("id", "<", 10)]]` selects
+    /// rows matching either condition. Filters use top-level logical names.
+    /// Deleted rows remain excluded.
+    ///
+    /// Values must match the column type:
+    ///
+    /// | Column type | Python value |
+    /// | --- | --- |
+    /// | Boolean | `bool` |
+    /// | Signed integer | `int` within the column's range |
+    /// | Float32, Float64 | Finite `float`; Float32 rounds and rejects overflow |
+    /// | Utf8, LargeUtf8 | UTF-8 encodable `str` |
+    /// | Binary, LargeBinary, FixedSizeBinary | `bytes`; fixed-size values must match the width |
+    /// | Decimal128 | Finite `decimal.Decimal` that exactly fits the precision and scale |
+    /// | Date32 | `datetime.date`, excluding `datetime.datetime` |
+    /// | Microsecond timestamp | `datetime.datetime`; naive for columns without a timezone, aware otherwise |
+    ///
+    /// Float comparisons distinguish `-0.0` from `0.0`. Decimal conversion is
+    /// exact and does not depend on the decimal context. Timestamp conversion
+    /// preserves microseconds without using the process timezone. Timestamps
+    /// must be exact `datetime.datetime` instances, not subclasses, and UTC
+    /// offsets must be exact `datetime.timedelta` instances or `None`.
     #[pyo3(signature = (*, columns=None, filters=None, limit=None, target_partitions=None, execution_options=None))]
     fn to_reader<'py>(
         &self,

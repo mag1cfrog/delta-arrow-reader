@@ -64,20 +64,57 @@ fn parquet_full_file_read_threshold(value: &Bound<'_, PyAny>) -> PyResult<Option
     optional_positive_usize(value, "parquet_full_file_read_threshold_bytes")
 }
 
-/// Immutable execution settings shared by tables and individual scans.
+/// Control how a scan reads files and buffers results.
 ///
-/// max_concurrent_file_reads_per_partition defaults to 3 and must be a positive
-/// integer within the core's concurrency capacity. Booleans are not accepted.
-/// max_concurrent_file_reads_per_scan accepts the same integer range or None.
-/// Its default, None, derives the total from the partition target and limit.
-/// output_buffer_batches_per_partition defaults to 1 queued batch per partition
-/// and accepts the same positive integer range as the per-partition read limit.
-/// prefetch_files_per_partition defaults to 2 future files for the direct backend.
-/// It accepts nonnegative integers fitting usize; 0 disables file prefetch.
-/// parquet_metadata_size_hint_bytes defaults to 65536 for the direct backend.
-/// Explicit None disables the hint; supplied integers must be positive and fit usize.
-/// parquet_full_file_read_threshold_bytes defaults to None (disabled). A positive
-/// integer enables full-file buffering in the direct backend for files at or below it.
+/// Start with the defaults. If a query uses too many resources, try lowering
+/// `max_concurrent_file_reads_per_scan`. It caps files read at once in one scan,
+/// not network requests or total memory. A lower limit may slow the query.
+///
+/// Examples:
+///     ```python
+///     from delta_arrow_reader import ScanExecutionOptions
+///
+///     options = ScanExecutionOptions(max_concurrent_file_reads_per_scan=4)
+///     with table.to_reader(execution_options=options, limit=10) as reader:
+///         print(reader.read_all())
+///     ```
+///
+/// Pass the options to `DeltaTable(...)` for direct-scan defaults, to `scan()`
+/// or `to_reader()` for one scan, or to `Session.register_table()` for SQL.
+/// An override replaces the entire options object. Instances are immutable;
+/// create a new one to change settings. These resource limits do not change
+/// the connection check's budget during table initialization.
+///
+/// Args:
+///     parquet_backend: `"direct"` uses the reader's asynchronous Parquet backend.
+///         `"delta_kernel"` delegates data-file reads to Delta Kernel.
+///     max_concurrent_file_reads_per_scan: File-read limit across all partitions
+///         of one scan. `None` derives it from the partition target times the
+///         per-partition limit, capped at the concurrency capacity below.
+///     max_concurrent_file_reads_per_partition: File-read limit for each group
+///         of files processed together. Both this and the scan limit apply.
+///     output_buffer_batches_per_partition: Batches each partition can queue
+///         while waiting for the consumer. Larger buffers use more memory.
+///     prefetch_files_per_partition: Upcoming files to prepare ahead of time
+///         per partition. `0` disables prefetch. Direct backend only.
+///     parquet_metadata_size_hint_bytes: Bytes to request initially from each
+///         file's end when loading Parquet metadata. `None` disables the hint.
+///         If the metadata is larger, the reader makes another request.
+///         Direct backend only.
+///     parquet_full_file_read_threshold_bytes: Read a file entirely into memory
+///         when its size is at or below this threshold. `None` disables this.
+///         This can reduce requests for small files but reads unneeded data
+///         and uses more memory. Direct backend only.
+///
+/// When set, the file-read limits and output buffer size must be positive integers
+/// no greater than `sys.maxsize >> 2`. Prefetch accepts nonnegative integers.
+/// Byte settings accept positive integers or `None`. All integers must fit
+/// `2 * sys.maxsize + 1`; booleans are not accepted.
+///
+/// Raises:
+///     TypeError: A setting has the wrong type, including a Boolean for an integer.
+///     ValueError: A setting is out of range or the backend name is unknown.
+///     OverflowError: An integer exceeds `2 * sys.maxsize + 1`.
 #[pyclass(module = "delta_arrow_reader", frozen)]
 pub(crate) struct ScanExecutionOptions {
     pub(crate) options: DeltaScanExecutionOptions,
@@ -143,6 +180,7 @@ impl ScanExecutionOptions {
         })
     }
 
+    /// Selected Parquet backend: `"direct"` or `"delta_kernel"`.
     #[getter]
     fn parquet_backend(&self) -> &'static str {
         match self.options.parquet_backend() {
@@ -151,31 +189,37 @@ impl ScanExecutionOptions {
         }
     }
 
+    /// File-read limit for a whole scan, or `None` to derive it automatically.
     #[getter]
     fn max_concurrent_file_reads_per_scan(&self) -> Option<usize> {
         self.options.max_concurrent_file_reads_per_scan()
     }
 
+    /// Maximum number of files each scan partition can read at once.
     #[getter]
     fn max_concurrent_file_reads_per_partition(&self) -> usize {
         self.options.max_concurrent_file_reads_per_partition()
     }
 
+    /// Maximum number of output batches queued per partition.
     #[getter]
     fn output_buffer_batches_per_partition(&self) -> usize {
         self.options.output_buffer_batches_per_partition()
     }
 
+    /// Number of upcoming files prepared per partition; `0` disables prefetch.
     #[getter]
     fn prefetch_files_per_partition(&self) -> usize {
         self.options.prefetch_files_per_partition()
     }
 
+    /// Initial Parquet metadata request size in bytes, or `None` for no hint.
     #[getter]
     fn parquet_metadata_size_hint_bytes(&self) -> Option<usize> {
         self.options.parquet_metadata_size_hint_bytes()
     }
 
+    /// Largest file to buffer entirely, in bytes, or `None` to disable this.
     #[getter]
     fn parquet_full_file_read_threshold_bytes(&self) -> Option<usize> {
         self.options.parquet_full_file_read_threshold_bytes()
