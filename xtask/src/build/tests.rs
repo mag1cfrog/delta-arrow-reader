@@ -123,6 +123,7 @@ cargo-about-version = "0.9.2"
     let prepared = PrepareArgs {
         source_commit: args.source_commit.clone(),
         expected_version: Some("1.2.3".into()),
+        rust_toolchain: Some(release.clone()),
     }
     .resolve(repository)?;
     assert_eq!(prepared["version"], "1.2.3");
@@ -133,7 +134,8 @@ cargo-about-version = "0.9.2"
     assert!(
         PrepareArgs {
             source_commit: args.source_commit.clone(),
-            expected_version: Some("1.2.4".into())
+            expected_version: Some("1.2.4".into()),
+            rust_toolchain: Some(release.clone()),
         }
         .resolve(repository)
         .is_err()
