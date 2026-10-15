@@ -97,12 +97,8 @@ fn verified_artifacts_and_tools_cross_separate_permission_boundaries() {
         .iter()
         .filter(|step| step["uses"] == "actions/checkout@v5")
         .collect();
-    assert_eq!(checkouts.len(), 2);
+    assert_eq!(checkouts.len(), 1);
     assert_eq!(checkouts[0]["with"]["ref"], "${{ github.workflow_sha }}");
-    assert_eq!(
-        checkouts[1]["with"]["ref"],
-        "${{ steps.request.outputs.release-commit }}"
-    );
     assert!(
         checkouts
             .iter()

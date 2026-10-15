@@ -15,7 +15,7 @@ on:
           - testpypi
           - pypi
       expected-version:
-        description: Exact package version, without the v prefix
+        description: Exact version without v; PyPI recovery on main uses the existing version tag
         required: true
         type: string
 
@@ -47,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.workflow_sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Read Rust version
@@ -68,16 +68,27 @@ jobs:
           cache-bin: false
           save-if: false
       - uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Preserve release tools across source checkout
+        run: |
+          mkdir -p target
+          mv target "$RUNNER_TEMP/python-release-target"
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/python-release-target" >> "$GITHUB_ENV"
       - name: Check event, commit, tag, and version
         id: request
         run: cargo xtask check-python-release-request
+      - name: Check out the verified package source
+        if: steps.request.outputs.publish-to == 'pypi'
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.request.outputs.source-ref }}
+          persist-credentials: false
       - name: Retrieve validated release PR wheels
         if: steps.request.outputs.publish-to == 'pypi'
         id: wheels
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_VERSION: ${{ steps.request.outputs.expected-version }}
-        run: cargo xtask reuse-python-wheels wheel-artifacts --expected-version "$EXPECTED_VERSION"
+        run: '"$CARGO_TARGET_DIR/debug/xtask" reuse-python-wheels wheel-artifacts --expected-version "$EXPECTED_VERSION"'
 
   build:
     name: Build and test wheels

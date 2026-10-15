@@ -89,7 +89,7 @@ jobs:
           cache-targets: true
           cache-bin: false
           save-if: false
-      - name: Preserve compiled dependencies across checkout changes
+      - name: Configure Cargo target
         run: |
           mkdir -p target
           mv target "$RUNNER_TEMP/cli-maintenance-target"
@@ -98,23 +98,10 @@ jobs:
       - name: Check event and select validation
         id: request
         run: cargo xtask cli check-release-request
-      - name: Check out the verified release commit
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ steps.request.outputs.release-commit }}
-          persist-credentials: false
-      - name: Read publisher toolchain
-        id: publisher-rust
-        run: |
-          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
-          test -n "$version"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ steps.publisher-rust.outputs.version }}
       - name: Install OCI verification tools
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends skopeo umoci
       - name: Prepare trusted publication tools
+        # Recovery uses repaired tools from main, while artifacts stay bound to the release tag.
         run: |
           mkdir "$PUBLICATION"
           cargo build --locked --package xtask

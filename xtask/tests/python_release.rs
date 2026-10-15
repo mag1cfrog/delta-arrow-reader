@@ -71,6 +71,11 @@ impl ReleaseRequestRepo {
             .env("GITHUB_EVENT_NAME", event_name)
             .env("GITHUB_REF", reference)
             .env("GITHUB_SHA", sha)
+            .env("GITHUB_REPOSITORY", "mag1cfrog/delta-arrow-reader")
+            .env(
+                "GITHUB_WORKFLOW_REF",
+                format!("mag1cfrog/delta-arrow-reader/.github/workflows/pypi.yml@{reference}"),
+            )
             .output()?;
         let stderr = String::from_utf8_lossy(&result.stderr);
         let outputs = fs::read_to_string(output_path)?;
@@ -101,7 +106,7 @@ impl Drop for ReleaseRequestRepo {
 }
 
 #[test]
-fn manual_modes_require_an_exact_version_and_pypi_requires_a_tag() -> Result<()> {
+fn manual_modes_require_an_exact_version_and_allow_trusted_main_recovery() -> Result<()> {
     let repo = ReleaseRequestRepo::new("manual")?;
     repo.assert_request(
         "workflow_dispatch",
@@ -112,17 +117,12 @@ fn manual_modes_require_an_exact_version_and_pypi_requires_a_tag() -> Result<()>
     )?;
     for mode in ["none", "testpypi", "pypi"] {
         for reference in ["refs/heads/main", "refs/tags/v1.2.3"] {
-            let expected = if mode == "pypi" && reference == "refs/heads/main" {
-                Err("PyPI requires a version tag")
-            } else {
-                Ok(mode)
-            };
             repo.assert_request(
                 "workflow_dispatch",
                 json!({"inputs": {"publish-to": mode, "expected-version": "1.2.3"}}),
                 reference,
                 &repo.sha,
-                expected,
+                Ok(mode),
             )?;
         }
     }
@@ -151,6 +151,84 @@ fn manual_modes_require_an_exact_version_and_pypi_requires_a_tag() -> Result<()>
             Err("publish-to must be"),
         )?;
     }
+    Ok(())
+}
+
+#[test]
+fn main_recovery_selects_the_original_tag_and_rejects_untrusted_requests() -> Result<()> {
+    let mut repo = ReleaseRequestRepo::new("recovery")?;
+    let tagged_commit = repo.sha.clone();
+    repo.commit_manifest("[workspace.package]\nversion = '2.0.0'\n")?;
+    let event = json!({"inputs": {"publish-to": "pypi", "expected-version": "1.2.3"}});
+    let event_path = repo.directory.join("event.json");
+    let output_path = repo.directory.join("outputs");
+    fs::write(&event_path, serde_json::to_vec(&event)?)?;
+    for (name, value, accepted) in [
+        ("GITHUB_REPOSITORY", "mag1cfrog/delta-arrow-reader", true),
+        ("GITHUB_REPOSITORY", "fork/repo", false),
+        (
+            "GITHUB_WORKFLOW_REF",
+            "mag1cfrog/delta-arrow-reader/.github/workflows/pypi.yml@refs/heads/feature",
+            false,
+        ),
+        (
+            "GITHUB_WORKFLOW_REF",
+            "mag1cfrog/delta-arrow-reader/.github/workflows/other.yml@refs/heads/main",
+            false,
+        ),
+        ("GITHUB_REF", "refs/heads/feature", false),
+    ] {
+        fs::write(&output_path, "existing=kept\n")?;
+        let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+            .arg("check-python-release-request")
+            .current_dir(&repo.directory)
+            .env("GITHUB_EVENT_PATH", &event_path)
+            .env("GITHUB_OUTPUT", &output_path)
+            .env("GITHUB_EVENT_NAME", "workflow_dispatch")
+            .env("GITHUB_REF", "refs/heads/main")
+            .env("GITHUB_SHA", &repo.sha)
+            .env("GITHUB_REPOSITORY", "mag1cfrog/delta-arrow-reader")
+            .env(
+                "GITHUB_WORKFLOW_REF",
+                "mag1cfrog/delta-arrow-reader/.github/workflows/pypi.yml@refs/heads/main",
+            )
+            .env(name, value)
+            .output()?;
+        assert_eq!(
+            output.status.success(),
+            accepted,
+            "{name}={value}: {output:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(&output_path)?,
+            if accepted {
+                format!(
+                    "existing=kept\nsource-ref={tagged_commit}\nexpected-version=1.2.3\npublish-to=pypi\n"
+                )
+            } else {
+                "existing=kept\n".into()
+            }
+        );
+    }
+    repo.git(&["tag", "v3.0.0", &tagged_commit])?;
+    repo.assert_request(
+        "workflow_dispatch",
+        json!({"inputs": {"publish-to": "pypi", "expected-version": "3.0.0"}}),
+        "refs/heads/main",
+        &repo.sha,
+        Err("expected-version must match Cargo version"),
+    )?;
+    repo.git(&["checkout", "--orphan", "unmerged"])?;
+    repo.git(&["commit", "-m", "test: unmerged tag"])?;
+    repo.git(&["tag", "-f", "v1.2.3"])?;
+    repo.git(&["checkout", "main"])?;
+    repo.assert_request(
+        "workflow_dispatch",
+        event,
+        "refs/heads/main",
+        &repo.sha,
+        Err("git failed"),
+    )?;
     Ok(())
 }
 

@@ -108,10 +108,20 @@ impl ReleaseSelectionArgs {
             "commits/{}/pulls?per_page=100",
             release.commit
         ))?;
-        let mut pulls = pulls
-            .into_iter()
-            .flatten()
-            .filter(|pr| trusted_release_pr(pr, &release, &repository));
+        let mut matching = Vec::new();
+        for pr in pulls.into_iter().flatten() {
+            if trusted_release_pr(&pr, &repository)
+                && release_commit_matches_pr(
+                    &release.commit,
+                    &release.tree,
+                    &pr.head.sha,
+                    pr.merge_commit_sha.as_deref(),
+                )?
+            {
+                matching.push(pr);
+            }
+        }
+        let mut pulls = matching.into_iter();
         let pr = pulls.next().ok_or_else(|| {
             InvalidInputSnafu {
                 message: "release commit has no merged upstream release-plz PR",
@@ -361,15 +371,7 @@ fn tag_commit(tag: &str) -> Result<String> {
 }
 
 fn resolve_release(tag: &str) -> Result<ReleaseIdentity> {
-    #[derive(Deserialize)]
-    struct Commit {
-        sha: String,
-        tree: ObjectSha,
-    }
-    #[derive(Deserialize)]
-    struct ObjectSha {
-        sha: String,
-    }
+    use github::{Commit, ObjectSha};
     #[derive(Deserialize)]
     struct Comparison {
         status: String,
@@ -442,13 +444,34 @@ fn read_manifest<T: serde::de::DeserializeOwned>(path: &str, commit: &str) -> Re
     toml::from_str(&text).context(TomlSnafu { path })
 }
 
-fn trusted_release_pr(
-    pr: &PullRequest,
-    release: &ReleaseIdentity,
-    repository: &Repository,
-) -> bool {
+pub(crate) fn release_commit_matches_pr(
+    commit: &str,
+    tree: &str,
+    head: &str,
+    merge: Option<&str>,
+) -> Result<bool> {
+    let Some(merge) = merge.filter(|sha| is_full_commit_sha(sha)) else {
+        return Ok(false);
+    };
+    if commit == merge {
+        return Ok(true);
+    }
+    if commit != head {
+        return Ok(false);
+    }
+    // Release-plz can tag the PR head; it must contain exactly what was merged.
+    let merged: github::Commit = github::get(&format!("git/commits/{merge}"))?;
+    ensure!(
+        merged.sha == merge,
+        InvalidInputSnafu {
+            message: "merge commit differs from GitHub metadata"
+        }
+    );
+    Ok(merged.tree.sha == tree)
+}
+
+fn trusted_release_pr(pr: &PullRequest, repository: &Repository) -> bool {
     pr.merged_at.as_ref().is_some_and(|date| !date.is_empty())
-        && pr.merge_commit_sha.as_deref() == Some(&release.commit)
         && pr.user.login == "release-plz-bot-mag1cfrog[bot]"
         && pr.head.r#ref.starts_with("release-plz-")
         && is_full_commit_sha(&pr.head.sha)

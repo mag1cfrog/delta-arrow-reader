@@ -43,6 +43,45 @@ fn selects_artifact_metadata_across_different_merge_shas_without_the_temporary_c
 }
 
 #[test]
+fn accepts_a_tagged_pr_head_only_when_the_merge_has_the_same_tree() -> Result<()> {
+    for changed_merge in [false, true] {
+        let mut fixture = Fixture::new()?;
+        let head = "c".repeat(40);
+        let merge = "b".repeat(40);
+        fixture.responses.get_mut(TAG).unwrap()["object"]["sha"] = json!(head);
+        fixture.responses.insert(
+            format!("git/commits/{head}"),
+            json!({"sha": head, "tree": {"sha": "d".repeat(40)}}),
+        );
+        fixture.responses.insert(
+            format!("compare/{head}...main"),
+            json!({"status": "ahead", "base_commit": {"sha": head}, "merge_base_commit": {"sha": head}}),
+        );
+        fixture.responses.insert(
+            format!("commits/{head}/pulls?per_page=100"),
+            fixture.responses[PULLS].clone(),
+        );
+        for path in [MANIFEST, CLI_MANIFEST] {
+            fixture
+                .raw
+                .insert(path.replace(&merge, &head), fixture.raw[path].clone());
+        }
+        if changed_merge {
+            fixture
+                .responses
+                .get_mut(&format!("git/commits/{merge}"))
+                .unwrap()["tree"]["sha"] = json!("e".repeat(40));
+            fixture.rejected(fixture.command(true)?.output()?, "no merged upstream")?;
+        } else {
+            let selected = fixture.selected(fixture.command(true)?.output()?)?;
+            assert_eq!(selected["release"]["commit"], head);
+            assert_eq!(selected["validation_record"], fixture.record);
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn accepts_historical_manifests_and_requires_a_workspace_version() -> Result<()> {
     let mut fixture = Fixture::new()?;
     fixture.raw.insert(

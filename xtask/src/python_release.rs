@@ -2,27 +2,38 @@ use std::{env, fs, io::Write};
 
 use serde_json::Value;
 
-use crate::{Result, run};
+use crate::{Result, build::is_stable_version, run, validation_record::REPOSITORY};
 
 pub fn validate_release_request() -> Result<()> {
     let event: Value = serde_json::from_slice(&fs::read(env::var("GITHUB_EVENT_PATH")?)?)?;
     let event_name = env::var("GITHUB_EVENT_NAME")?;
     let reference = env::var("GITHUB_REF")?;
-    let source_sha = env::var("GITHUB_SHA")?;
+    let event_commit = env::var("GITHUB_SHA")?;
 
-    if source_sha.len() != 40
-        || !source_sha
+    if event_commit.len() != 40
+        || !event_commit
             .bytes()
             .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
     {
         return Err("source must be a full commit SHA".into());
     }
     let head = String::from_utf8(run("git", &["rev-parse", "HEAD"])?)?;
-    if head.trim() != source_sha {
+    if head.trim() != event_commit {
         return Err("checkout does not match the event commit".into());
     }
+    let recovery = event_name == "workflow_dispatch"
+        && reference == "refs/heads/main"
+        && event["inputs"]["publish-to"] == "pypi";
+    let source_commit = if recovery {
+        recovery_commit(&event)?
+    } else {
+        event_commit
+    };
     // Read committed bytes so local edits cannot change the release version.
-    let manifest = String::from_utf8(run("git", &["show", "HEAD:Cargo.toml"])?)?;
+    let manifest = String::from_utf8(run(
+        "git",
+        &["show", &format!("{source_commit}:Cargo.toml")],
+    )?)?;
     let manifest: toml::Table = manifest.parse()?;
     let version = manifest
         .get("workspace")
@@ -81,12 +92,12 @@ pub fn validate_release_request() -> Result<()> {
             "git",
             &["rev-parse", "--verify", &format!("{reference}^{{commit}}")],
         )?)?;
-        if tag_sha.trim() != source_sha {
+        if tag_sha.trim() != source_commit {
             return Err("selected tag does not point to the event commit".into());
         }
-    } else if publish_to == "pypi" || !reference.starts_with("refs/heads/") {
+    } else if (publish_to == "pypi" && !recovery) || !reference.starts_with("refs/heads/") {
         return Err(
-            "PyPI requires a version tag; other modes accept branches or version tags".into(),
+            "PyPI requires a version tag or trusted main recovery; other modes accept branches or version tags".into(),
         );
     }
 
@@ -96,7 +107,32 @@ pub fn validate_release_request() -> Result<()> {
         .open(env::var("GITHUB_OUTPUT")?)?;
     write!(
         output,
-        "source-ref={source_sha}\nexpected-version={version}\npublish-to={publish_to}\n"
+        "source-ref={source_commit}\nexpected-version={version}\npublish-to={publish_to}\n"
     )?;
     Ok(())
+}
+
+fn recovery_commit(event: &Value) -> Result<String> {
+    if env::var("GITHUB_REPOSITORY").as_deref() != Ok(REPOSITORY)
+        || env::var("GITHUB_WORKFLOW_REF").as_deref()
+            != Ok(format!("{REPOSITORY}/.github/workflows/pypi.yml@refs/heads/main").as_str())
+    {
+        return Err("PyPI recovery requires the upstream main release workflow".into());
+    }
+    let version = event["inputs"]["expected-version"]
+        .as_str()
+        .filter(|version| is_stable_version(version))
+        .ok_or("expected-version must be a stable X.Y.Z version")?;
+    let commit = String::from_utf8(run(
+        "git",
+        &[
+            "rev-parse",
+            "--verify",
+            &format!("refs/tags/v{version}^{{commit}}"),
+        ],
+    )?)?;
+    let commit = commit.trim();
+    // Run repaired tools from main without changing the tagged package source.
+    run("git", &["merge-base", "--is-ancestor", commit, "HEAD"])?;
+    Ok(commit.into())
 }
