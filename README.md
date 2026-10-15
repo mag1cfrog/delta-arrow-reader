@@ -7,6 +7,7 @@
 <p align="center">
   <a href="https://docs.rs/delta-arrow-reader"><img alt="Rust API" src="https://docs.rs/delta-arrow-reader/badge.svg"></a>
   <a href="https://crates.io/crates/delta-arrow-reader"><img alt="crates.io" src="https://img.shields.io/crates/v/delta-arrow-reader.svg"></a>
+  <a href="https://pypi.org/project/delta-arrow-reader/"><img alt="PyPI" src="https://img.shields.io/pypi/v/delta-arrow-reader.svg"></a>
 </p>
 
 Delta Arrow Reader is a fast, memory-efficient Delta Lake reader.
@@ -33,22 +34,14 @@ times for the first complete query after table initialization, excluding startup
 
 ## Get started
 
+### Rust
+
 Install the reader and Tokio (Rust 1.94 or later):
 
 ```bash
 cargo add delta-arrow-reader
 cargo add tokio --features macros,rt-multi-thread
 ```
-
-For Python, [install a CI wheel or build from source to read tables with PyArrow](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python).
-The same package includes the native `delta-arrow-reader` CLI. Install the wheel
-with pip for both the API and command, or use uv tool/uvx for a separate CLI
-environment. PyPI publishing is planned.
-
-For Go and other languages, [install a version-pinned `dar` binary or container](https://mag1cfrog.github.io/delta-arrow-reader/installation/#cli-binaries-and-container-images).
-The [CLI](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/) returns snapshot
-metadata as JSON and rows as an Arrow IPC stream. The [Go example](examples/go-cli)
-reads that stream through a subprocess without cgo.
 
 Read up to 100 rows from an existing Delta table:
 
@@ -75,6 +68,28 @@ Save this as `src/main.rs`, replace the table path, and run `cargo run`.
 [Read a table](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
 or [query with SQL](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/).
 See the [Rust API reference](https://docs.rs/delta-arrow-reader) for types and methods.
+
+### Python
+
+Install from PyPI (Python 3.10 or later):
+
+```bash
+pip install delta-arrow-reader
+```
+
+Read tables as PyArrow batches or query them with SQL. Start with the
+[Python quickstart](https://mag1cfrog.github.io/delta-arrow-reader/python/)
+or browse the [Python API reference](https://mag1cfrog.github.io/delta-arrow-reader/python-api/).
+See [installation](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python)
+for supported platforms.
+
+### Command line and Go
+
+The Python package includes the `delta-arrow-reader` command. You can also
+[install a standalone `dar` binary or container](https://mag1cfrog.github.io/delta-arrow-reader/installation/#cli-binaries-and-container-images).
+The [CLI](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/) returns snapshot
+metadata as JSON and rows as an Arrow IPC stream. The [Go example](examples/go-cli)
+reads that stream through a subprocess without cgo.
 
 For development and benchmark setup, see the
 [repository documentation](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/README.md).
