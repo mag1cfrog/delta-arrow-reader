@@ -28,6 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      rust_docs: ${{ steps.filter.outputs.rust_docs }}
       tooling: ${{ steps.filter.outputs.tooling }}
       python: ${{ steps.filter.outputs.python }}
       cli: ${{ steps.filter.outputs.cli }}
@@ -45,7 +46,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - name: Detect code changes
+      - name: Detect changed files
         id: filter
         uses: dorny/paths-filter@v4
         with:
@@ -184,6 +185,41 @@ jobs:
         run: git diff --check
       - if: matrix.task == 'Package'
         run: cargo package --locked
+
+  rust-docs:
+    name: Rust Documentation
+    needs: changes
+    # Full code checks already build Rust documentation and test its examples.
+    if: needs.changes.outputs.rust_docs == 'true' && needs.changes.outputs.code != 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - name: Read Rust version
+        id: rust-version
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
+          cache-targets: true
+          cache-bin: false
+          save-if: false
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Check Rust documentation and examples
+        run: |
+          RUSTDOCFLAGS="-D warnings" cargo doc --locked --all-features --no-deps
+          cargo test --locked --doc
+          cargo test --locked --all-features --doc
+          git diff --check
 
   tooling-checks:
     name: CI Tools
@@ -464,7 +500,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [changes, feature-tests, platform-tests, checks, tooling-checks, python-package, cli-checks, release-approval, release-wheels, release-cli, release-cli-images, release-cli-record, selective-read-fixtures]
+    needs: [changes, feature-tests, platform-tests, checks, rust-docs, tooling-checks, python-package, cli-checks, release-approval, release-wheels, release-cli, release-cli-images, release-cli-record, selective-read-fixtures]
     if: always()
     runs-on: ubuntu-latest
 
@@ -545,6 +581,11 @@ jobs:
           fi
 
           if [ "${{ needs.changes.outputs.code }}" != "true" ]; then
+            if [ "${{ needs.changes.outputs.rust_docs }}" = "true" ] && \
+               [ "${{ needs.rust-docs.result }}" != "success" ]; then
+              echo "Rust Documentation did not pass: ${{ needs.rust-docs.result }}"
+              exit 1
+            fi
             echo "No code changes detected"
             exit 0
           fi

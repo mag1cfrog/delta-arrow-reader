@@ -395,6 +395,7 @@ fn required_ci_rejects_missing_or_failed_image_handoffs_only_on_release_prs() ->
         for release in ["true", "false"] {
             let valid = BTreeMap::from([
                 ("changes.outputs.code", code),
+                ("changes.outputs.rust_docs", "false"),
                 ("changes.outputs.python", "false"),
                 ("changes.outputs.cli", "false"),
                 ("changes.outputs.tooling", "false"),
