@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+## [0.7.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.2...v0.7.0) - 2026-10-15
+
+### Added
+
+- *(python)* add read-only SQL sessions ([#494](https://github.com/mag1cfrog/delta-arrow-reader/pull/494))
+- read selected delta-length values within pages ([#488](https://github.com/mag1cfrog/delta-arrow-reader/pull/488))
+- *(python)* bundle native CLI in Python wheels ([#484](https://github.com/mag1cfrog/delta-arrow-reader/pull/484))
+- *(cli)* prepare native executable for Python wheels ([#482](https://github.com/mag1cfrog/delta-arrow-reader/pull/482))
+- stream Delta tables into PyArrow readers ([#424](https://github.com/mag1cfrog/delta-arrow-reader/pull/424))
+- add Python snapshot loading and schema inspection ([#426](https://github.com/mag1cfrog/delta-arrow-reader/pull/426))
+- *(python)* add native filters with schema-aware scalar conversion ([#448](https://github.com/mag1cfrog/delta-arrow-reader/pull/448))
+- enable automatic partial-page reads by default ([#444](https://github.com/mag1cfrog/delta-arrow-reader/pull/444))
+- *(cli)* add dar snapshot inspection ([#437](https://github.com/mag1cfrog/delta-arrow-reader/pull/437))
+- add Python snapshot refresh and scan controls ([#439](https://github.com/mag1cfrog/delta-arrow-reader/pull/439))
+- make Python loading interruptible and runtime shutdown safe ([#427](https://github.com/mag1cfrog/delta-arrow-reader/pull/427))
+
+### Changed
+
+- separate network profiling, cost estimation and read execution ([#491](https://github.com/mag1cfrog/delta-arrow-reader/pull/491))
+- move core crate and Python packaging under crates ([#481](https://github.com/mag1cfrog/delta-arrow-reader/pull/481))
+
+### Documentation
+
+- introduce concepts progressively across the site ([#500](https://github.com/mag1cfrog/delta-arrow-reader/pull/500))
+- add generated Python API reference ([#497](https://github.com/mag1cfrog/delta-arrow-reader/pull/497))
+- explain initialization and resource configuration ([#496](https://github.com/mag1cfrog/delta-arrow-reader/pull/496))
+- explain partial-page reads in one guide ([#493](https://github.com/mag1cfrog/delta-arrow-reader/pull/493))
+- simplify README benchmark chart ([#446](https://github.com/mag1cfrog/delta-arrow-reader/pull/446))
+- install the published crate in README ([#415](https://github.com/mag1cfrog/delta-arrow-reader/pull/415))
+
+### Fixed
+
+- separate Python API signatures from headings ([#498](https://github.com/mag1cfrog/delta-arrow-reader/pull/498))
+- recover partial-page reads after network warmup timeout ([#468](https://github.com/mag1cfrog/delta-arrow-reader/pull/468))
+
+### Maintenance
+
+- drop Intel macOS Python wheels ([#465](https://github.com/mag1cfrog/delta-arrow-reader/pull/465))
+
 ## [0.6.2](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.1...v0.6.2) - 2026-10-07
 
 ### Added
