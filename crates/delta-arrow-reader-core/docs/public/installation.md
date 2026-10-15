@@ -129,8 +129,11 @@ For a digest pin, copy the index digest from the Release's CLI section and use
 both `linux/amd64` and `linux/arm64`. Public pulls need no GitHub login.
 There are no `latest`, major-version, or minor-version aliases.
 
-See the [CLI guide](cli.md) for table mounts, storage configuration, and scan
-options. The [Go consumer](https://github.com/mag1cfrog/delta-arrow-reader/tree/main/examples/go-cli)
+Start with the [CLI quickstart](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/)
+to inspect a table and save a small result. The
+[CLI reference](https://mag1cfrog.github.io/delta-arrow-reader/cli/)
+covers table mounts, storage configuration, and scan options. The
+[Go consumer](https://github.com/mag1cfrog/delta-arrow-reader/tree/main/examples/go-cli)
 shows how to copy the binary and notices from a pinned CLI image into a service
 image, read Arrow batches without cgo, and handle process failures. The service
 image must provide the same glibc, libgcc, and certificate dependencies.
@@ -217,7 +220,7 @@ After a combined version is published on PyPI, you can install it by name with
 `uv tool install --no-build delta-arrow-reader`, or
 `uvx --no-build delta-arrow-reader --help`. The package and command both use
 `delta-arrow-reader`, with no `-cli` suffix. See the
-[CLI guide](https://mag1cfrog.github.io/delta-arrow-reader/cli/) for `inspect` and
+[CLI quickstart](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/) for `inspect` and
 `scan` examples; substitute `delta-arrow-reader` for `dar` in those commands.
 
 ### Build from source

@@ -1,4 +1,8 @@
-# Command-line reader
+# Command-line reference
+
+For your first read, start with the [CLI quickstart](cli-quickstart.md).
+This page covers installation alternatives, command options, JSON formats,
+and process behavior for scripts and applications.
 
 `dar inspect` prints a Delta table's snapshot version and complete logical
 Arrow schema as JSON. It reads Delta log metadata without scanning rows or

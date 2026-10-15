@@ -46,7 +46,7 @@ with pip for both the API and command, or use uv tool/uvx for a separate CLI
 environment. PyPI publishing is planned.
 
 For Go and other languages, [install a version-pinned `dar` binary or container](https://mag1cfrog.github.io/delta-arrow-reader/installation/#cli-binaries-and-container-images).
-The [CLI](https://mag1cfrog.github.io/delta-arrow-reader/cli/) returns snapshot
+The [CLI](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/) returns snapshot
 metadata as JSON and rows as an Arrow IPC stream. The [Go example](examples/go-cli)
 reads that stream through a subprocess without cgo.
 
