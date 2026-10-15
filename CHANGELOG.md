@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.7.1](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.7.0...v0.7.1) - 2026-10-15
+
+### Documentation
+
+- align guides and release recovery with v0.7 ([#505](https://github.com/mag1cfrog/delta-arrow-reader/pull/505))
+- update README and installation for the PyPI release ([#503](https://github.com/mag1cfrog/delta-arrow-reader/pull/503))
+
 ## [0.7.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.2...v0.7.0) - 2026-10-15
 
 ### Python
