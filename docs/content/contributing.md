@@ -428,10 +428,11 @@ Use absolute links between shared pages. Mark runnable Rust examples as
 `no_run`, and mark incomplete snippets as `ignore`, so both documentation
 renderers handle them correctly.
 
-Install the documentation dependencies, then build or serve the site:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then build or
+serve the site from the repository root. uv prepares the environment automatically
+using the versions in `docs/uv.lock`:
 
 ```console
-python -m pip install -r docs/requirements.txt
-python -m zensical build --strict -f crates/delta-arrow-reader-core/docs/mkdocs.yml
-python -m zensical serve -f crates/delta-arrow-reader-core/docs/mkdocs.yml
+uv run --locked --project docs zensical build --strict -f crates/delta-arrow-reader-core/docs/mkdocs.yml
+uv run --locked --project docs zensical serve -f crates/delta-arrow-reader-core/docs/mkdocs.yml
 ```

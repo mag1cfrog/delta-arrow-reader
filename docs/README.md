@@ -28,12 +28,16 @@ retain their paths. Some are hashed inputs to reader builds, so preserve their
 bytes when reproducing recorded runs. Removing a page from navigation alone
 does not remove it from the site or its search index.
 
-Build the site with the same strict check used by CI:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then run this
+from the repository root to build the site with the same strict check used by CI:
 
 ```console
-python -m pip install -r docs/requirements.txt
-python -m zensical build --strict -f crates/delta-arrow-reader-core/docs/mkdocs.yml
+uv run --locked --project docs zensical build --strict -f crates/delta-arrow-reader-core/docs/mkdocs.yml
 ```
+
+uv creates `docs/.venv` with Python 3.12 and installs the tool versions recorded in
+`docs/uv.lock`. To update the tools, run
+`uv lock --project docs --upgrade`, rebuild the site, and commit the updated lockfile.
 
 ## Python API reference
 
