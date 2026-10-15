@@ -9,7 +9,7 @@ default-members = ["crates/delta-arrow-reader-core"]
 resolver = "3"
 
 [workspace.package]
-version = "0.7.0"
+version = "0.7.1"
 rust-version = "1.94"
 
 [workspace.metadata.cli-release]
