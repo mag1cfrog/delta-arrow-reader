@@ -12,182 +12,448 @@ __version__: str
 _Filter = tuple[str, Literal['is', 'is not'], None] | tuple[str, Literal['==', '!=', '<', '<=', '>', '>='], bool | int | float | str | bytes | Decimal | date | datetime]
 
 class DeltaReaderError(Exception):
-    """A redacted reader failure with phase and code attributes."""
+    """A failure while opening a table or preparing a query.
+
+Inspect `phase` and `code` to identify the failure without parsing the message.
+Messages omit sensitive details such as table paths and storage credentials.
+
+Attributes:
+    phase: The stage that failed, such as `schema` or `datafusion`.
+    code: The error category, such as `schema_conversion` or `sql_planning`.
+
+Invalid Python arguments can raise built-in exceptions such as `TypeError`
+or `ValueError` instead. Failures while consuming a PyArrow reader use PyArrow
+exceptions; catch those around iteration or `read_all()` as well.
+"""
     phase: str
     code: str
 
 class ScanExecutionOptions:
-    """Immutable execution settings shared by tables and individual scans.
+    """Control how a scan reads files and buffers results.
 
-max_concurrent_file_reads_per_partition defaults to 3 and must be a positive
-integer within the core's concurrency capacity. Booleans are not accepted.
-max_concurrent_file_reads_per_scan accepts the same integer range or None.
-Its default, None, derives the total from the partition target and limit.
-output_buffer_batches_per_partition defaults to 1 queued batch per partition
-and accepts the same positive integer range as the per-partition read limit.
-prefetch_files_per_partition defaults to 2 future files for the direct backend.
-It accepts nonnegative integers fitting usize; 0 disables file prefetch.
-parquet_metadata_size_hint_bytes defaults to 65536 for the direct backend.
-Explicit None disables the hint; supplied integers must be positive and fit usize.
-parquet_full_file_read_threshold_bytes defaults to None (disabled). A positive
-integer enables full-file buffering in the direct backend for files at or below it."""
+Start with the defaults. If a query uses too many resources, try lowering
+`max_concurrent_file_reads_per_scan`. It caps files read at once in one scan,
+not network requests or total memory. A lower limit may slow the query.
+
+Examples:
+    ```python
+    from delta_arrow_reader import ScanExecutionOptions
+
+    options = ScanExecutionOptions(max_concurrent_file_reads_per_scan=4)
+    with table.to_reader(execution_options=options, limit=10) as reader:
+        print(reader.read_all())
+    ```
+
+Pass the options to `DeltaTable(...)` for direct-scan defaults, to `scan()`
+or `to_reader()` for one scan, or to `Session.register_table()` for SQL.
+An override replaces the entire options object. Instances are immutable;
+create a new one to change settings. These resource limits do not change
+the connection check's budget during table initialization.
+
+Args:
+    parquet_backend: `"direct"` uses the reader's asynchronous Parquet backend.
+        `"delta_kernel"` delegates data-file reads to Delta Kernel.
+    max_concurrent_file_reads_per_scan: File-read limit across all partitions
+        of one scan. `None` derives it from the partition target times the
+        per-partition limit, capped at the concurrency capacity below.
+    max_concurrent_file_reads_per_partition: File-read limit for each group
+        of files processed together. Both this and the scan limit apply.
+    output_buffer_batches_per_partition: Batches each partition can queue
+        while waiting for the consumer. Larger buffers use more memory.
+    prefetch_files_per_partition: Upcoming files to prepare ahead of time
+        per partition. `0` disables prefetch. Direct backend only.
+    parquet_metadata_size_hint_bytes: Bytes to request initially from each
+        file's end when loading Parquet metadata. `None` disables the hint.
+        If the metadata is larger, the reader makes another request.
+        Direct backend only.
+    parquet_full_file_read_threshold_bytes: Read a file entirely into memory
+        when its size is at or below this threshold. `None` disables this.
+        This can reduce requests for small files but reads unneeded data
+        and uses more memory. Direct backend only.
+
+When set, the file-read limits and output buffer size must be positive integers
+no greater than `sys.maxsize >> 2`. Prefetch accepts nonnegative integers.
+Byte settings accept positive integers or `None`. All integers must fit
+`2 * sys.maxsize + 1`; booleans are not accepted.
+
+Raises:
+    TypeError: A setting has the wrong type, including a Boolean for an integer.
+    ValueError: A setting is out of range or the backend name is unknown.
+    OverflowError: An integer exceeds `2 * sys.maxsize + 1`."""
 
     def __init__(self, *, parquet_backend: Literal['direct', 'delta_kernel']='direct', max_concurrent_file_reads_per_scan: int | None=None, max_concurrent_file_reads_per_partition: int=3, output_buffer_batches_per_partition: int=1, prefetch_files_per_partition: int=2, parquet_metadata_size_hint_bytes: int | None=65536, parquet_full_file_read_threshold_bytes: int | None=None) -> None:
         ...
 
     @property
     def parquet_backend(self) -> Literal['direct', 'delta_kernel']:
+        """Selected Parquet backend: `"direct"` or `"delta_kernel"`."""
         ...
 
     @property
     def max_concurrent_file_reads_per_scan(self) -> int | None:
+        """File-read limit for a whole scan, or `None` to derive it automatically."""
         ...
 
     @property
     def max_concurrent_file_reads_per_partition(self) -> int:
+        """Maximum number of files each scan partition can read at once."""
         ...
 
     @property
     def output_buffer_batches_per_partition(self) -> int:
+        """Maximum number of output batches queued per partition."""
         ...
 
     @property
     def prefetch_files_per_partition(self) -> int:
+        """Number of upcoming files prepared per partition; `0` disables prefetch."""
         ...
 
     @property
     def parquet_metadata_size_hint_bytes(self) -> int | None:
+        """Initial Parquet metadata request size in bytes, or `None` for no hint."""
         ...
 
     @property
     def parquet_full_file_read_threshold_bytes(self) -> int | None:
+        """Largest file to buffer entirely, in bytes, or `None` to disable this."""
         ...
 
 class RecordBatchStream:
-    """Single-use Arrow stream exporter, created by DeltaTable.scan().
+    """Hand a scan to a consumer that supports the Arrow stream protocol.
 
-Pass this object to pyarrow.RecordBatchReader.from_stream(). After export,
-the consumer owns cleanup; closing this object does not close the consumer."""
+Created by `DeltaTable.scan()`; it has no public constructor. For normal
+PyArrow usage, `DeltaTable.to_reader()` does this conversion for you.
+
+Examples:
+    ```python
+    import pyarrow as pa
+
+    stream = table.scan(limit=10)
+    with pa.RecordBatchReader.from_stream(stream) as reader:
+        print(reader.read_all())
+    ```
+
+Each stream can be exported once. After export, close the consuming reader
+to release resources; closing this object does not close the consumer.
+If you decide not to export it, call `close()` to release the scan."""
 
     def __arrow_c_stream__(self, requested_schema: object | None=None) -> object:
-        """Export once, accepting None or an identical requested schema capsule.
+        """Transfer the stream to an Arrow consumer. Usually called by the consumer.
 
-Incompatible schemas raise ValueError; alternate representations raise
-NotImplementedError. A rejected request leaves the stream available."""
+Args:
+    requested_schema: `None` or an Arrow schema capsule identical to the
+        scan schema. This method does not cast or convert the data.
+
+Returns:
+    An Arrow stream capsule that owns the scan resources.
+
+Raises:
+    TypeError: The requested schema is not a capsule.
+    ValueError: The schema capsule is invalid or incompatible.
+    NotImplementedError: The consumer requests an alternate representation.
+    RuntimeError: The stream has already been exported or closed.
+
+A rejected schema request leaves the stream available for another attempt."""
         ...
 
     def close(self) -> None:
-        """Release an unexported stream. Repeated calls have no effect."""
+        """Release an unexported stream. Repeated calls have no effect.
+
+After export, call `close()` on the consuming reader instead."""
         ...
 
     def __enter__(self) -> RecordBatchStream:
+        """Return this exporter for use in a `with` block."""
         ...
 
     def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None) -> None:
+        """Close any unexported stream on leaving the block. Exceptions are not suppressed."""
         ...
 
 class DeltaTable:
-    """One immutable Delta snapshot, loaded from a string or os.PathLike[str].
+    """Open a Delta table for repeated queries against the same version.
 
-With version=None, load the latest snapshot. Otherwise, version must be an
-integer from 0 to 2**64 - 1. Booleans are not accepted.
-storage_options accepts a mapping of string keys to string values.
-warmup="automatic" prepares supported S3 tables and profiles their network.
-"none" defers planning metadata to scans; "query_planning" prepares
-reusable planning metadata during loading without reading Parquet data.
-execution_options=None keeps the default scan execution settings."""
+Use `to_reader()` to read batches or register the table with a `Session`
+to query it with SQL. The loaded version stays fixed even if another process
+writes to the table. Call `refresh()` to get a new table with the latest version.
+
+Examples:
+    Replace the path with your table's directory or S3 URL.
+
+    ```python
+    from delta_arrow_reader import DeltaTable
+
+    table = DeltaTable("path/to/table")
+    with table.to_reader(limit=10) as reader:
+        print(reader.read_all())
+    ```
+
+Args:
+    location: Local directory or storage URL containing the Delta table.
+        Accepts a string or a path object that resolves to a string.
+    version: Version to load. `None` selects the latest available version.
+        An explicit version must be an integer from `0` through `2**64 - 1`;
+        booleans are not accepted.
+    storage_options: Storage configuration as string keys and string values,
+        for example `{"aws_region": "us-west-2"}` for S3.
+    warmup: How much preparation to do when opening the table.
+        `"automatic"` prepares reusable file information and checks connection
+        speed on supported S3 stores; local tables skip this extra work.
+        `"query_planning"` prepares file information without test reads of data.
+        `"none"` leaves that preparation to each query. Both explicit modes
+        skip the connection check and keep partial-page reads inactive.
+    execution_options: Defaults for this table's `scan()` and `to_reader()`
+        calls. `None` uses `ScanExecutionOptions()`.
+        SQL registrations have their own defaults.
+
+The automatic connection check has a five-second budget and may finish sooner.
+Loading file information takes additional time. Keep using the same table
+object to reuse this work; query results are not cached.
+
+Raises:
+    TypeError: An argument has the wrong type, including a Boolean version.
+    ValueError: The version is negative or the warmup mode is unknown.
+    OverflowError: The version exceeds `2**64 - 1`.
+    DeltaReaderError: The table cannot be loaded or prepared."""
 
     def __init__(self, location: str | PathLike[str], *, version: int | None=None, storage_options: Mapping[str, str] | None=None, warmup: Literal['automatic', 'none', 'query_planning']='automatic', execution_options: ScanExecutionOptions | None=None) -> None:
+        ...
+
+    def to_reader(self, *, columns: list[str] | tuple[str, ...] | None=None, filters: list[_Filter] | list[list[_Filter]] | None=None, limit: int | None=None, target_partitions: int | None=None, execution_options: ScanExecutionOptions | None=None) -> pyarrow.RecordBatchReader:
+        """Select rows and columns, then read them as PyArrow batches.
+
+Use a `with` block so the reader closes even when you stop early.
+Iterate over batches to process the result incrementally, or use
+`read_all()` to collect it in memory. Rows have no guaranteed order;
+use SQL with `ORDER BY` when order matters.
+
+Examples:
+    For a table with `id` and `region` columns:
+
+    ```python
+    with table.to_reader(
+        columns=["id", "region"],
+        filters=[("id", ">=", 100)],
+        limit=10,
+    ) as reader:
+        for batch in reader:
+            print(batch.to_pydict())
+    ```
+
+Args:
+    columns: Column names in output order. `None` selects all columns.
+        An empty list selects no columns but preserves row counts.
+    filters: Conditions written as `(column, operator, value)` tuples.
+        A list of tuples combines conditions with AND. A list of lists
+        combines AND groups with OR. `None` or `[]` disables filtering;
+        an empty inner group is true. Filter columns need not be in the
+        output. See the filtering rules below for operators and values.
+    limit: Maximum number of rows after filtering. `None` reads all
+        matching rows; `0` returns no rows. Must be a nonnegative integer.
+    target_partitions: Target number of groups of files to process in
+        parallel. `None` chooses automatically; an override must be a
+        positive integer. This does not change the table's stored layout.
+    execution_options: Settings for this scan. `None` inherits the table's
+        settings. A supplied `ScanExecutionOptions` replaces the whole
+        settings object for this scan without changing later scans.
+
+Returns:
+    A reader that yields `pyarrow.RecordBatch` objects and retains its
+        snapshot independently of the table object. Result data is read when
+        you request the first batch.
+
+Raises:
+    TypeError: An argument or filter value has the wrong type. Booleans
+        are not accepted for integer settings or integer filter values.
+    ValueError: A limit, partition target, operator or filter value is invalid.
+    OverflowError: An integer does not fit its column type, or a limit or
+        partition target exceeds `2 * sys.maxsize + 1`.
+    DeltaReaderError: A column is unknown or scan planning fails.
+
+Planning may read table metadata before this method returns. If automatic
+connection preparation was incomplete, an eligible filtered scan retries
+it once, which can add up to five seconds of test reads. Use
+`warmup="none"` or `"query_planning"` when opening the table to skip that
+check entirely. Errors during result consumption use PyArrow exceptions.
+
+**Filtering rules**
+
+Compare with `==`, `!=`, `<`, `<=`, `>` or `>=`. Use `"is"` or
+`"is not"` with `None` to test for nulls; other comparisons with `None`
+are invalid. For example, `[("region", "is not", None)]` excludes null
+regions. `[[("region", "==", "east")], [("id", "<", 10)]]` selects
+rows matching either condition. Filters use top-level logical names.
+Deleted rows remain excluded.
+
+Values must match the column type:
+
+| Column type | Python value |
+| --- | --- |
+| Boolean | `bool` |
+| Signed integer | `int` within the column's range |
+| Float32, Float64 | Finite `float`; Float32 rounds and rejects overflow |
+| Utf8, LargeUtf8 | UTF-8 encodable `str` |
+| Binary, LargeBinary, FixedSizeBinary | `bytes`; fixed-size values must match the width |
+| Decimal128 | Finite `decimal.Decimal` that exactly fits the precision and scale |
+| Date32 | `datetime.date`, excluding `datetime.datetime` |
+| Microsecond timestamp | `datetime.datetime`; naive for columns without a timezone, aware otherwise |
+
+Float comparisons distinguish `-0.0` from `0.0`. Decimal conversion is
+exact and does not depend on the decimal context. Timestamp conversion
+preserves microseconds without using the process timezone. Timestamps
+must be exact `datetime.datetime` instances, not subclasses, and UTC
+offsets must be exact `datetime.timedelta` instances or `None`."""
         ...
 
     def refresh(self) -> DeltaTable:
         """Load the latest snapshot and return it as a new table.
 
-This table and its existing scans keep their original snapshot, including
-when refresh fails. The new table shares this table's runtime."""
+The original table and its readers keep their version, even if refresh
+fails. The new table keeps the storage, warmup and execution settings.
+
+Examples:
+    ```python
+    latest = table.refresh()
+    print(table.version, latest.version)
+    ```
+
+Returns:
+    A table at the latest version, which may be the same version as before.
+
+Raises:
+    DeltaReaderError: The latest snapshot cannot be loaded or prepared."""
         ...
 
     @property
     def version(self) -> int:
-        """The loaded snapshot version."""
+        """The version loaded by this table. It stays fixed until you open a new table."""
         ...
 
     @property
     def schema(self) -> pyarrow.Schema:
-        """The logical schema as a pyarrow.Schema, independent of this table's lifetime."""
-        ...
+        """Column names and types as a `pyarrow.Schema`, without reading data files.
 
-    def __arrow_c_schema__(self) -> object:
-        """Export a fresh Arrow schema capsule through the public Arrow protocol."""
+The schema remains usable after the table object is released."""
         ...
 
     def scan(self, *, columns: list[str] | tuple[str, ...] | None=None, filters: list[_Filter] | list[list[_Filter]] | None=None, limit: int | None=None, target_partitions: int | None=None, execution_options: ScanExecutionOptions | None=None) -> RecordBatchStream:
         """Plan a scan and return a single-use Arrow stream exporter.
 
-columns=None selects all columns. A list or tuple of names selects columns
-in that order; an empty list selects no columns while retaining row counts.
-filters=None or [] disables filtering. A list of (column, operator, value)
-tuples combines conditions with AND; a list of lists combines AND groups
-with OR. An empty AND group is true. "is" and "is not" require None.
-Comparisons (==, !=, <, <=, >, >=) accept bool for Boolean columns and int
-for signed integer columns. Integers must fit the column's bit width;
-booleans cannot be used as integers. Comparisons with None are invalid.
-Float columns require finite float values. Float32 rounds to its precision
-and rejects overflow. Native Arrow comparisons distinguish -0.0 from 0.0.
-String columns require str values encodable as UTF-8. Binary columns
-require bytes; fixed-size binary values must match the column's width.
-Decimal128 columns require finite decimal.Decimal values exactly fitting
-the column's precision and scale, independent of the decimal context.
-Date32 columns require datetime.date values; datetime.datetime is rejected.
-Microsecond timestamps require naive datetime.datetime values for columns
-without a timezone, and aware values for columns with a timezone. Conversion
-preserves microsecond precision and does not use the process timezone.
-Timestamp values must be exact datetime.datetime instances, not subclasses.
-UTC offsets must be exact datetime.timedelta instances or None.
-Filter columns need not appear in columns. Filters apply before limit.
-limit=None reads all rows. Otherwise, limit must be a nonnegative integer
-that fits the platform's usize. Booleans are not accepted.
-target_partitions=None uses automatic partition planning. An override must
-be a positive integer that fits usize; booleans are not accepted.
-execution_options=None inherits the table's settings. A supplied object
-replaces the complete settings for this scan without changing the table.
-Planning reads Delta metadata. An eligible filtered scan also retries incomplete
-automatic network warmup once. Query results are read on the first pull.
-Load the table with warmup="none" to skip network calibration entirely.
-The stream retains its snapshot and runtime independently of this table."""
+Use `to_reader()` for a PyArrow reader directly. This lower-level method
+is for consumers of the Arrow stream protocol. It accepts the same
+parameters and has the same filtering, planning and error behavior as
+`to_reader()`.
+
+Examples:
+    ```python
+    import pyarrow as pa
+
+    stream = table.scan(limit=10)
+    with pa.RecordBatchReader.from_stream(stream) as reader:
+        print(reader.read_all())
+    ```
+
+Returns:
+    An exporter that keeps the table snapshot alive. Once exported,
+        the consuming reader owns cleanup. Close that reader when finished;
+        closing the exporter does not close the consumer."""
         ...
 
-    def to_reader(self, *, columns: list[str] | tuple[str, ...] | None=None, filters: list[_Filter] | list[list[_Filter]] | None=None, limit: int | None=None, target_partitions: int | None=None, execution_options: ScanExecutionOptions | None=None) -> pyarrow.RecordBatchReader:
-        """Plan a scan and consume it as a pyarrow.RecordBatchReader.
+    def __arrow_c_schema__(self) -> object:
+        """Export the schema for Arrow-compatible consumers such as `pyarrow.schema()`.
 
-Accepts the same keyword arguments as scan().
-Use a with block to close the reader, including when stopping early."""
+Usually, use the `schema` property instead. Each call returns a fresh
+Arrow schema capsule that owns its resources independently of this table."""
         ...
 
 class Session:
-    """A read-only SQL session backed by Rust DataFusion.
+    """Query Delta tables with SQL and read the results as PyArrow batches.
 
-Register loaded DeltaTable snapshots, then consume sql() results as PyArrow
-readers. Joins, sorts and aggregations may retain memory while producing a
-streamed result. This is independent of the separate datafusion Python package."""
+Register tables you have already opened, then call `sql()`. The package
+includes the Rust DataFusion engine; you do not need to install the separate
+`datafusion` Python package.
+
+Examples:
+    ```python
+    from delta_arrow_reader import DeltaTable, Session
+
+    table = DeltaTable("path/to/table")
+    session = Session()
+    session.register_table("events", table)
+    with session.sql("SELECT COUNT(*) AS rows FROM events") as reader:
+        print(reader.read_all().to_pydict())
+    ```
+
+Register more tables to query them together with a JOIN. Only read-only SQL
+is supported. Joins, sorts and aggregations can use substantial memory even
+when you read their output in batches."""
 
     def __init__(self) -> None:
         ...
 
     def register_table(self, name: str, table: DeltaTable, *, execution_options: ScanExecutionOptions | None=None) -> None:
-        """Register an immutable snapshot without reading Parquet data.
+        """Give an opened table a name to use in SQL queries.
 
-Names follow the Rust adapter's identifier rules. Duplicate names fail
-without replacing the existing table. Refreshing the source DeltaTable
-does not change a registration. Omitted execution_options uses the
-DataFusion adapter defaults, independently of the table's direct scans."""
+Registration reuses the table's prepared file information and connection
+measurements. It does not read Parquet data or repeat initialization.
+
+Examples:
+    ```python
+    session.register_table("latest_events", table.refresh())
+    ```
+
+Args:
+    name: A simple identifier, such as `events` or `order_items`. Start
+        with an ASCII letter or underscore, then use ASCII letters, digits
+        or underscores. SQL keywords and duplicate names are rejected.
+    table: The loaded `DeltaTable` snapshot to query. Refreshing the
+        original variable later does not change this registration.
+        Register the refreshed table under a new name or in a new session.
+    execution_options: Read settings for this registration. `None` uses
+        the DataFusion adapter defaults, independently of custom settings
+        passed to `DeltaTable`. Pass a `ScanExecutionOptions` explicitly
+        to override them.
+
+Raises:
+    TypeError: An argument has the wrong type.
+    DeltaReaderError: Registration fails, including an invalid or duplicate
+        name. The error has phase `datafusion` and code `sql_registration`.
+        A duplicate does not replace the existing table."""
         ...
 
     def sql(self, query: str) -> pyarrow.RecordBatchReader:
-        """Plan one read-only SQL statement and return a pyarrow.RecordBatchReader.
+        """Run a read-only SQL query over registered tables.
 
-Results start executing on the first pull. Each call creates an
-independent reader that retains its session and snapshots. Use a with
-block to release query resources when stopping early. DDL, DML, COPY
-and session-changing statements are rejected before execution."""
+This call plans the query. Result execution starts when you request the
+first batch. Use a `with` block to release resources if you stop early.
+
+Examples:
+    For a registered `events` table with a `region` column:
+
+    ```python
+    with session.sql(
+        "SELECT region, COUNT(*) AS rows FROM events GROUP BY region"
+    ) as reader:
+        for batch in reader:
+            print(batch.to_pydict())
+    ```
+
+Args:
+    query: One read-only SQL statement. Table creation, writes, COPY and
+        session-changing statements are rejected before execution.
+
+Returns:
+    An independent PyArrow reader. It retains the session and table
+        snapshots even if those Python variables are deleted.
+
+Raises:
+    TypeError: The query is not a string.
+    DeltaReaderError: The query is invalid, unsupported or cannot be
+        planned, or its schema cannot be exported. Planning failures have
+        phase `datafusion` and code `sql_planning`.
+
+Execution errors are raised by PyArrow while consuming results, with
+`code=sql_execution` in the message. A failed reader remains failed.
+SQL error messages omit query text, literal values and table paths."""
         ...

@@ -30,6 +30,7 @@ plugins:
             show_root_heading: true
             show_root_full_path: false
             merge_init_into_class: true
+            group_by_category: false
             members_order: source
 
 markdown_extensions:
@@ -39,7 +40,8 @@ markdown_extensions:
   - pymdownx.superfences
   - pymdownx.inlinehilite
   - pymdownx.highlight:
-      anchor_linenums: true
+      # API docstrings render separately, so line-number anchors would repeat.
+      anchor_linenums: false
       extend_pygments_lang:
         - name: no_run
           lang: rust

@@ -19,10 +19,23 @@ use pyo3::{
 use crate::runtime::Runtime;
 use crate::session::SessionState;
 
-/// Single-use Arrow stream exporter, created by DeltaTable.scan().
+/// Hand a scan to a consumer that supports the Arrow stream protocol.
 ///
-/// Pass this object to pyarrow.RecordBatchReader.from_stream(). After export,
-/// the consumer owns cleanup; closing this object does not close the consumer.
+/// Created by `DeltaTable.scan()`; it has no public constructor. For normal
+/// PyArrow usage, `DeltaTable.to_reader()` does this conversion for you.
+///
+/// Examples:
+///     ```python
+///     import pyarrow as pa
+///
+///     stream = table.scan(limit=10)
+///     with pa.RecordBatchReader.from_stream(stream) as reader:
+///         print(reader.read_all())
+///     ```
+///
+/// Each stream can be exported once. After export, close the consuming reader
+/// to release resources; closing this object does not close the consumer.
+/// If you decide not to export it, call `close()` to release the scan.
 #[pyclass(module = "delta_arrow_reader", frozen)]
 pub(crate) struct RecordBatchStream {
     reader: Mutex<Option<BlockingBatchReader>>,
@@ -70,10 +83,22 @@ impl RecordBatchStream {
 
 #[pymethods]
 impl RecordBatchStream {
-    /// Export once, accepting None or an identical requested schema capsule.
+    /// Transfer the stream to an Arrow consumer. Usually called by the consumer.
     ///
-    /// Incompatible schemas raise ValueError; alternate representations raise
-    /// NotImplementedError. A rejected request leaves the stream available.
+    /// Args:
+    ///     requested_schema: `None` or an Arrow schema capsule identical to the
+    ///         scan schema. This method does not cast or convert the data.
+    ///
+    /// Returns:
+    ///     An Arrow stream capsule that owns the scan resources.
+    ///
+    /// Raises:
+    ///     TypeError: The requested schema is not a capsule.
+    ///     ValueError: The schema capsule is invalid or incompatible.
+    ///     NotImplementedError: The consumer requests an alternate representation.
+    ///     RuntimeError: The stream has already been exported or closed.
+    ///
+    /// A rejected schema request leaves the stream available for another attempt.
     #[pyo3(signature = (requested_schema=None))]
     fn __arrow_c_stream__<'py>(
         &self,
@@ -100,6 +125,8 @@ impl RecordBatchStream {
     }
 
     /// Release an unexported stream. Repeated calls have no effect.
+    ///
+    /// After export, call `close()` on the consuming reader instead.
     fn close(&self) -> PyResult<()> {
         let reader = self
             .reader
@@ -111,10 +138,12 @@ impl RecordBatchStream {
         Ok(())
     }
 
+    /// Return this exporter for use in a `with` block.
     fn __enter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
+    /// Close any unexported stream on leaving the block. Exceptions are not suppressed.
     fn __exit__(
         &self,
         _exc_type: &Bound<'_, PyAny>,

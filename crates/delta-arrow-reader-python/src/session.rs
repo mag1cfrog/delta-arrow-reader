@@ -11,11 +11,26 @@ use crate::{
     stream::RecordBatchStream,
 };
 
-/// A read-only SQL session backed by Rust DataFusion.
+/// Query Delta tables with SQL and read the results as PyArrow batches.
 ///
-/// Register loaded DeltaTable snapshots, then consume sql() results as PyArrow
-/// readers. Joins, sorts and aggregations may retain memory while producing a
-/// streamed result. This is independent of the separate datafusion Python package.
+/// Register tables you have already opened, then call `sql()`. The package
+/// includes the Rust DataFusion engine; you do not need to install the separate
+/// `datafusion` Python package.
+///
+/// Examples:
+///     ```python
+///     from delta_arrow_reader import DeltaTable, Session
+///
+///     table = DeltaTable("path/to/table")
+///     session = Session()
+///     session.register_table("events", table)
+///     with session.sql("SELECT COUNT(*) AS rows FROM events") as reader:
+///         print(reader.read_all().to_pydict())
+///     ```
+///
+/// Register more tables to query them together with a JOIN. Only read-only SQL
+/// is supported. Joins, sorts and aggregations can use substantial memory even
+/// when you read their output in batches.
 #[pyclass(module = "delta_arrow_reader", frozen)]
 pub(crate) struct Session {
     state: Arc<SessionState>,
@@ -46,12 +61,33 @@ impl Session {
         })
     }
 
-    /// Register an immutable snapshot without reading Parquet data.
+    /// Give an opened table a name to use in SQL queries.
     ///
-    /// Names follow the Rust adapter's identifier rules. Duplicate names fail
-    /// without replacing the existing table. Refreshing the source DeltaTable
-    /// does not change a registration. Omitted execution_options uses the
-    /// DataFusion adapter defaults, independently of the table's direct scans.
+    /// Registration reuses the table's prepared file information and connection
+    /// measurements. It does not read Parquet data or repeat initialization.
+    ///
+    /// Examples:
+    ///     ```python
+    ///     session.register_table("latest_events", table.refresh())
+    ///     ```
+    ///
+    /// Args:
+    ///     name: A simple identifier, such as `events` or `order_items`. Start
+    ///         with an ASCII letter or underscore, then use ASCII letters, digits
+    ///         or underscores. SQL keywords and duplicate names are rejected.
+    ///     table: The loaded `DeltaTable` snapshot to query. Refreshing the
+    ///         original variable later does not change this registration.
+    ///         Register the refreshed table under a new name or in a new session.
+    ///     execution_options: Read settings for this registration. `None` uses
+    ///         the DataFusion adapter defaults, independently of custom settings
+    ///         passed to `DeltaTable`. Pass a `ScanExecutionOptions` explicitly
+    ///         to override them.
+    ///
+    /// Raises:
+    ///     TypeError: An argument has the wrong type.
+    ///     DeltaReaderError: Registration fails, including an invalid or duplicate
+    ///         name. The error has phase `datafusion` and code `sql_registration`.
+    ///         A duplicate does not replace the existing table.
     #[pyo3(signature = (name, table, *, execution_options=None))]
     fn register_table(
         &self,
@@ -77,12 +113,39 @@ impl Session {
         Ok(())
     }
 
-    /// Plan one read-only SQL statement and return a pyarrow.RecordBatchReader.
+    /// Run a read-only SQL query over registered tables.
     ///
-    /// Results start executing on the first pull. Each call creates an
-    /// independent reader that retains its session and snapshots. Use a with
-    /// block to release query resources when stopping early. DDL, DML, COPY
-    /// and session-changing statements are rejected before execution.
+    /// This call plans the query. Result execution starts when you request the
+    /// first batch. Use a `with` block to release resources if you stop early.
+    ///
+    /// Examples:
+    ///     For a registered `events` table with a `region` column:
+    ///
+    ///     ```python
+    ///     with session.sql(
+    ///         "SELECT region, COUNT(*) AS rows FROM events GROUP BY region"
+    ///     ) as reader:
+    ///         for batch in reader:
+    ///             print(batch.to_pydict())
+    ///     ```
+    ///
+    /// Args:
+    ///     query: One read-only SQL statement. Table creation, writes, COPY and
+    ///         session-changing statements are rejected before execution.
+    ///
+    /// Returns:
+    ///     An independent PyArrow reader. It retains the session and table
+    ///         snapshots even if those Python variables are deleted.
+    ///
+    /// Raises:
+    ///     TypeError: The query is not a string.
+    ///     DeltaReaderError: The query is invalid, unsupported or cannot be
+    ///         planned, or its schema cannot be exported. Planning failures have
+    ///         phase `datafusion` and code `sql_planning`.
+    ///
+    /// Execution errors are raised by PyArrow while consuming results, with
+    /// `code=sql_execution` in the message. A failed reader remains failed.
+    /// SQL error messages omit query text, literal values and table paths.
     fn sql<'py>(&self, py: Python<'py>, query: &str) -> PyResult<Bound<'py, PyAny>> {
         let options = SQLOptions::new()
             .with_allow_ddl(false)
