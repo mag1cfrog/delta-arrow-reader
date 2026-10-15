@@ -41,7 +41,7 @@ fn wheel_build_stops_at_each_failure_and_cleans_stale_payloads() -> Result {
     executable(
         &root.join("bin/rustc"),
         &format!(
-            "if [ \"$1\" = '-vV' ]; then\n  printf 'release: {rust_version}.0\\nhost: x86_64-unknown-linux-gnu\\n'\nelse\n  printf '%s/sysroot\\n' \"$TEST_ROOT\"\nfi\n"
+            "if [ \"$1\" = '-vV' ]; then\n  printf 'release: {rust_version}.0\\nhost: %s\\n' \"$TEST_TARGET\"\nelse\n  printf '%s/sysroot\\n' \"$TEST_ROOT\"\nfi\n"
         ),
     )?;
     executable(
@@ -84,6 +84,7 @@ case "$1" in
   build)
     [ "$FAIL_STAGE" != build ] || exit 41
     printf '%s\n' "$@" > "$TEST_ROOT/cargo-arguments"
+    printf '%s\n' "${{CARGO_MANIFEST_DIR-unset}}" "${{CARGO_PKG_NAME-unset}}" "${{CARGO_PKG_VERSION_MAJOR-unset}}" "$CARGO_BUILD_JOBS" "$RUSTFLAGS" "$CARGO_TARGET_DIR" > "$TEST_ROOT/cargo-environment"
     cat "$TEST_ROOT/cargo-artifact.json" ;;
   about)
     [ "$CARGO_NET_OFFLINE" = "$EXPECTED_CARGO_NET_OFFLINE" ] || exit 44
@@ -102,7 +103,8 @@ esac
         &root.join("bin/maturin"),
         r#"
 printf '%s\n' "$@" > "$TEST_ROOT/maturin-arguments"
-test -x delta_arrow_reader.data/scripts/delta-arrow-reader
+printf '%s\n' "${CARGO_MANIFEST_DIR-unset}" "${CARGO_PKG_NAME-unset}" "${CARGO_PKG_VERSION_MAJOR-unset}" "$CARGO_BUILD_JOBS" "$RUSTFLAGS" "$CARGO_TARGET_DIR" > "$TEST_ROOT/maturin-environment"
+test -x "delta_arrow_reader.data/scripts/$TEST_EXECUTABLE"
 test -f delta_arrow_reader.data/data/share/delta-arrow-reader/python-THIRD_PARTY_NOTICES.txt
 test -f delta_arrow_reader.data/data/share/delta-arrow-reader/cli-THIRD_PARTY_NOTICES.txt
 [ "$FAIL_STAGE" != maturin ] || exit 43
@@ -116,14 +118,26 @@ printf '%s/assembled.whl\n' "$TEST_ROOT"
             .chain(env::split_paths(&env::var_os("PATH").unwrap_or_default())),
     )?;
 
-    for (failure, network_flag, inherited_offline) in [
-        ("build", None, "false"),
-        ("notices", None, "false"),
-        ("maturin", None, "false"),
-        ("none", None, "false"),
-        ("none", Some("--offline"), "false"),
-        ("none", Some("--frozen"), "false"),
-        ("none", None, "true"),
+    for (target, failure, network_flag, inherited_offline) in [
+        ("x86_64-unknown-linux-gnu", "build", None, "false"),
+        ("x86_64-unknown-linux-gnu", "notices", None, "false"),
+        ("x86_64-unknown-linux-gnu", "maturin", None, "false"),
+        ("x86_64-unknown-linux-gnu", "none", None, "false"),
+        (
+            "x86_64-unknown-linux-gnu",
+            "none",
+            Some("--offline"),
+            "false",
+        ),
+        (
+            "x86_64-unknown-linux-gnu",
+            "none",
+            Some("--frozen"),
+            "false",
+        ),
+        ("x86_64-unknown-linux-gnu", "none", None, "true"),
+        ("aarch64-apple-darwin", "none", None, "false"),
+        ("x86_64-pc-windows-msvc", "none", None, "false"),
     ] {
         let data = root.join("delta_arrow_reader.data");
         fs::create_dir_all(data.join("scripts"))?;
@@ -132,7 +146,8 @@ printf '%s/assembled.whl\n' "$TEST_ROOT"
             "stale wrong platform CLI",
         )?;
         let output_directory = root.join(format!("wheel output {failure}"));
-        let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+        let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
+        command
             .args([
                 "build-python-wheel",
                 "--editable",
@@ -149,7 +164,22 @@ printf '%s/assembled.whl\n' "$TEST_ROOT"
             .env("PATH", &search_path)
             .env("CARGO", root.join("bin/cargo"))
             .env("RUSTC", root.join("bin/rustc"))
+            .env("CARGO_MANIFEST_DIR", "/inherited/xtask")
+            .env("CARGO_PKG_NAME", "xtask")
+            .env("CARGO_PKG_VERSION_MAJOR", "0")
+            .env("CARGO_BUILD_JOBS", "3")
+            .env("RUSTFLAGS", "-C debuginfo=0")
+            .env("CARGO_TARGET_DIR", "inherited target")
             .env("TEST_ROOT", root)
+            .env("TEST_TARGET", target)
+            .env(
+                "TEST_EXECUTABLE",
+                if target == "x86_64-pc-windows-msvc" {
+                    "delta-arrow-reader.exe"
+                } else {
+                    "delta-arrow-reader"
+                },
+            )
             .env("TEST_WORKSPACE", repository)
             .env("FAIL_STAGE", failure)
             .env("CARGO_NET_OFFLINE", inherited_offline)
@@ -157,8 +187,13 @@ printf '%s/assembled.whl\n' "$TEST_ROOT"
                 "EXPECTED_CARGO_NET_OFFLINE",
                 network_flag.map_or(inherited_offline, |_| "true"),
             )
-            .env_remove("CARGO_BUILD_TARGET")
-            .output()?;
+            .env_remove("CARGO_BUILD_TARGET");
+        if target == "x86_64-pc-windows-msvc" {
+            command
+                .args(["--target", target])
+                .env("CARGO_BUILD_TARGET", "i686-pc-windows-msvc");
+        }
+        let output = command.output()?;
         assert_eq!(
             output.status.success(),
             failure == "none",
@@ -181,11 +216,18 @@ printf '%s/assembled.whl\n' "$TEST_ROOT"
                 .starts_with(".python-wheel-")
         }));
         if failure == "none" {
+            for tool in ["cargo", "maturin"] {
+                assert_eq!(
+                    fs::read_to_string(root.join(format!("{tool}-environment")))?,
+                    "unset\nunset\nunset\n3\n-C debuginfo=0\ninherited target\n",
+                    "{tool} must drop xtask's package metadata and preserve build settings"
+                );
+            }
             let cargo = fs::read_to_string(root.join("cargo-arguments"))?;
             let maturin = fs::read_to_string(root.join("maturin-arguments"))?;
             for arguments in [&cargo, &maturin] {
                 assert!(arguments.contains("--profile\nrelease\n"));
-                assert!(arguments.contains("--target\nx86_64-unknown-linux-gnu\n"));
+                assert!(arguments.contains(&format!("--target\n{target}\n")));
                 assert!(arguments.contains(&format!(
                     "--target-dir\n{}\n",
                     root.join("build outputs").display()
@@ -232,6 +274,7 @@ fn source_archives_use_the_current_workspace_with_a_cached_xtask() -> Result {
         ("NOTICE", b"test notice".to_vec()),
         (".cargo/config.toml", Vec::new()),
         ("crates/delta-arrow-reader-cli/Cargo.toml", Vec::new()),
+        ("crates/delta-arrow-reader-cli/build.rs", Vec::new()),
         ("crates/delta-arrow-reader-cli/Dockerfile", Vec::new()),
         ("crates/delta-arrow-reader-cli/src/main.rs", Vec::new()),
         (

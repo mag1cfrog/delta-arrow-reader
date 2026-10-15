@@ -152,6 +152,50 @@ fn debian_build_uses_the_restored_target_and_prebuilt_notice_tool() -> Result<()
         assert!(arguments.contains("--package xtask --bin xtask"));
         assert!(!arguments.contains("cargo install"));
     }
+    let arguments = fs::read_to_string(&arguments)?;
+    let container_script = arguments
+        .split_once("bash\n-euo\npipefail\n-c\n")
+        .unwrap()
+        .1;
+    let script = format!(
+        r#"
+apt-get() {{ :; }}
+git() {{ :; }}
+install() {{ :; }}
+strip() {{ :; }}
+rustup() {{
+  printf '%s\n' "$*"
+  case "$*" in *"cargo $FAIL_CARGO "*) return 7 ;; esac
+  return 0
+}}
+{container_script}
+"#
+    );
+    for cache_only in ["true", "false"] {
+        for fail in ["", "test", "run"] {
+            let output = Command::new("bash")
+                .args(["-euo", "pipefail", "-c", &script])
+                .env("CACHE_ONLY", cache_only)
+                .env("FAIL_CARGO", fail)
+                .env("CLI_RUST_TOOLCHAIN", "1.94.1")
+                .env("CLI_SOURCE_COMMIT", "a".repeat(40))
+                .env("CLI_ARCHITECTURE", "amd64")
+                .env("CLI_VERSION", "1.2.3")
+                .output()?;
+            let should_fail = fail == "run" || fail == "test" && cache_only == "false";
+            assert_eq!(
+                output.status.success(),
+                !should_fail,
+                "{cache_only}, {fail}: {output:?}"
+            );
+            let calls = String::from_utf8(output.stdout)?;
+            assert_eq!(calls.contains("cargo test "), cache_only == "false");
+            assert_eq!(
+                calls.contains("cargo run "),
+                !(fail == "test" && cache_only == "false")
+            );
+        }
+    }
     Ok(())
 }
 
@@ -318,7 +362,7 @@ fn cli_handoff_requires_source_checks_builds_and_runtime_tests() -> Result<(), B
         "RUNTIME_RESULT",
     ];
     assert_eq!(validate["needs"], json!(stages));
-    assert_eq!(validate["if"], "always()");
+    assert_eq!(validate["if"], "${{ always() && !inputs.cache-only }}");
     for (stage, variable) in stages.iter().zip(variables) {
         assert_eq!(
             validate["env"][variable],

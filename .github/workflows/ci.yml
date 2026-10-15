@@ -223,7 +223,7 @@ jobs:
       - name: Check CI workflows
         uses: docker://rhysd/actionlint:1.7.12
         with:
-          args: .github/workflows/ci.yml .github/workflows/cli-build.yml .github/workflows/cli-images.yml .github/workflows/cli-release.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml .github/workflows/benchmark-fixtures.yml
+          args: .github/workflows/ci.yml .github/workflows/cli-build.yml .github/workflows/cli-images.yml .github/workflows/cli-release.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml .github/workflows/release-cache-warm.yml .github/workflows/benchmark-fixtures.yml
       - run: cargo fmt --package xtask -- --check
       - name: Test CI workflows, Python, and cache tasks
         run: |

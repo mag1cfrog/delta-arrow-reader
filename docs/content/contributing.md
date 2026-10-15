@@ -322,24 +322,39 @@ use temporary uv tool and cache directories. No repair, repackaging, or rebuild
 occurs between acceptance and artifact upload.
 
 After relevant main pushes, `.github/workflows/cache-warm.yml` warms core test
-caches, including the Python runtime tests on Linux, and retains the two most
-recently used Windows core target caches. PR builds only read the caches.
-Only manual runs of `Warm CI caches` also call the wheel workflow with
-`cache-only: true`. This mode accepts only the triggering main commit, writes
-compiler and Cargo registry caches, and runs the wheel checks. It does not upload
-artifacts or report a validated artifact set. Wheel builds cache the Cargo registry
-without restoring core target directories.
-Core and wheel cache warming each run one platform at a time to reduce cache
-upload bursts. A failed cache write gets one fresh build after a 60-second wait,
-reusing entries that were already uploaded. Persistent cache write errors
-fail the warmer, except when another build has uploaded the same immutable entry.
+caches, including the Python runtime tests on Linux. Core cache warming runs one
+platform at a time to limit sccache upload bursts. A failed cache write gets one
+fresh build after a 60-second wait, reusing entries already uploaded. Persistent
+write errors fail the warmer, except when another build has uploaded the same
+immutable entry.
+
+`Warm release build caches` runs when a release commit reaches main, or when
+started manually on main. It calls the CLI and wheel builders with
+`cache-only: true`, building both CLI architectures and all three wheel platforms
+in parallel. This mode accepts only the triggering main commit, saves Cargo
+registry and compiled dependency caches, and skips release acceptance and artifact
+uploads. It never reports a validated artifact set. Future release PRs can read
+these main caches; release publication still uses the artifacts validated before
+merge. Manual runs of `Warm CI caches` also warm wheel dependencies.
+
+Release PRs can save their own dependency caches for reruns. Linux wheel builds
+keep host tools, container tools, and wheel outputs in separate directories so
+Maturin's cleanup preserves the tool caches. macOS wheel builds share Maturin's
+dependency linker flags; the CLI build script still rejects unresolved symbols
+when linking the executable. Both wheel build stages remove xtask's inherited
+Cargo package metadata so it does not invalidate dependency caches. Different
+dependency features can still require separate compilations.
+
+Cache pruning retains the most recently used main cache for each build family and
+platform, and removes managed caches belonging to closed PRs. Open PR caches and
+unrelated cache families are preserved.
 
 The cache helpers are Rust commands in the workspace's private `xtask` crate:
 `cargo xtask check-cache-writes` and `cargo xtask prune-ci-caches`.
 Run its CLI, cache, and Python release tests with
 `cargo test --locked --package xtask`.
 Cache pruning requires `gh`, `GH_TOKEN`, and `GH_REPO`;
-the pruning job alone has `actions: write` permission.
+the pruning jobs have `actions: write` and `pull-requests: read` permission.
 
 The `xtask` tests also cover Python release validation and workflow gates.
 The release planning tests require `release-plz` 0.3.171 on `PATH` and are
@@ -362,8 +377,9 @@ and Fedora 44. **Build CLI binaries** also supports manual runs with an explicit
 commit and version. The Python release planning tests use temporary repositories
 and a local baseline without publishing packages.
 
-To populate caches after a toolchain or workflow change, run `Warm CI caches`
-manually on main. The first build for new compiler inputs can still be cold.
+To populate core caches after a toolchain or workflow change, run `Warm CI caches`
+manually on main. Use `Warm release build caches` for CLI and wheel dependencies.
+The first build for new compiler inputs can still be cold.
 
 Each platform job uploads its final wheel only after the Python, CLI, native
 dependency, and uv checks pass:

@@ -12,7 +12,7 @@ use snafu::{ResultExt, ensure};
 
 use crate::{
     build::compiler_field,
-    command::command_output,
+    command::{command_output, remove_cargo_package_environment},
     error::{FileSnafu, InvalidInputSnafu, Result},
     notices::dependency_notices,
     python_cli::{build_cli, macos_deployment_target, stage_cli},
@@ -219,6 +219,7 @@ impl BuildPythonWheelArgs {
             path: output_directory,
         })?;
         let mut command = Command::new("maturin");
+        remove_cargo_package_environment(&mut command);
         command
             .current_dir(project)
             .args([

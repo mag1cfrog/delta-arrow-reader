@@ -12,6 +12,10 @@ on:
         required: false
         default: ''
         type: string
+      cache-only:
+        description: Warm main's dependency caches without release acceptance or artifact uploads
+        type: boolean
+        default: false
     outputs:
       validated:
         description: 'true only after source checks, both builds, all six runtime checks, and the complete artifact set pass'
@@ -76,6 +80,19 @@ jobs:
       image: ${{ steps.prepare.outputs.image }}
       about-version: ${{ steps.prepare.outputs.about-version }}
     steps:
+      - name: Require trusted main cache warming
+        if: inputs.cache-only
+        env:
+          SOURCE_REF: ${{ inputs.source-ref }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ] || [ "$SOURCE_REF" != "$GITHUB_SHA" ]; then
+            echo "Cache warming must build the triggering main commit"
+            exit 1
+          fi
+          case "$GITHUB_EVENT_NAME" in
+            push|workflow_dispatch) ;;
+            *) echo "Cache warming requires a main push or manual run"; exit 1 ;;
+          esac
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.source-ref }}
@@ -111,6 +128,7 @@ jobs:
   checks:
     name: Check CLI source and release tools
     needs: prepare
+    if: ${{ !inputs.cache-only }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -162,6 +180,7 @@ jobs:
       CLI_RUST_TOOLCHAIN: ${{ needs.prepare.outputs.rust-toolchain }}
       CLI_ARCHITECTURE: ${{ matrix.architecture }}
       CLI_IMAGE: ${{ needs.prepare.outputs.image }}
+      CACHE_ONLY: ${{ inputs.cache-only || false }}
       RUSTC_WRAPPER: ""
     steps:
       - uses: actions/checkout@v5
@@ -205,15 +224,17 @@ jobs:
             --env CARGO_BUILD_JOBS=4 \
             --env CARGO_PROFILE_DEV_DEBUG --env CARGO_INCREMENTAL \
             --env CLI_SOURCE_COMMIT --env CLI_VERSION --env CLI_RUST_TOOLCHAIN \
-            --env CLI_ARCHITECTURE \
+            --env CLI_ARCHITECTURE --env CACHE_ONLY \
             "$CLI_IMAGE" bash -euo pipefail -c '
               apt-get update
               apt-get install -y --no-install-recommends \
                 build-essential binutils ca-certificates curl git pkg-config
               git config --global --add safe.directory /source
-              rustup run "$CLI_RUST_TOOLCHAIN" cargo test --locked --package xtask --bin xtask \
-                --target-dir /build/target native_build_preserves_metadata_and_rejects_source_changes \
-                -- --ignored
+              if [ "$CACHE_ONLY" != "true" ]; then
+                rustup run "$CLI_RUST_TOOLCHAIN" cargo test --locked --package xtask --bin xtask \
+                  --target-dir /build/target native_build_preserves_metadata_and_rejects_source_changes \
+                  -- --ignored
+              fi
               rustup run "$CLI_RUST_TOOLCHAIN" cargo run --locked --package xtask \
                 --target-dir /build/target -- cli build-archive \
                 --source-commit "$CLI_SOURCE_COMMIT" --architecture "$CLI_ARCHITECTURE" \
@@ -231,6 +252,7 @@ jobs:
             fi
           done
       - name: Upload platform archive
+        if: ${{ !inputs.cache-only }}
         uses: actions/upload-artifact@v6
         with:
           name: dar-cli-${{ needs.prepare.outputs.source-commit }}-${{ matrix.architecture }}
@@ -240,6 +262,7 @@ jobs:
           overwrite: true
           retention-days: 90
       - name: Upload native acceptance tool
+        if: ${{ !inputs.cache-only }}
         uses: actions/upload-artifact@v6
         with:
           name: dar-cli-tools-${{ needs.prepare.outputs.source-commit }}-${{ matrix.architecture }}
@@ -251,6 +274,7 @@ jobs:
   runtime:
     name: Test ${{ matrix.distribution.name }} / ${{ matrix.platform.architecture }}
     needs: [prepare, build]
+    if: ${{ !inputs.cache-only }}
     runs-on: ${{ matrix.platform.runner }}
     timeout-minutes: 15
     strategy:
@@ -309,7 +333,7 @@ jobs:
   validate:
     name: Validate complete CLI artifact set
     needs: [prepare, checks, build, runtime]
-    if: always()
+    if: ${{ always() && !inputs.cache-only }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
