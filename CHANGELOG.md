@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+## [0.7.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.2...v0.7.0) - 2026-10-15
+
+### Python
+
+- Read Delta tables as PyArrow batches or query them with SQL. Includes column
+  selection, filters, snapshot refresh, and streaming results.
+  [Quickstart](https://mag1cfrog.github.io/delta-arrow-reader/python/) and
+  [API reference](https://mag1cfrog.github.io/delta-arrow-reader/python-api/).
+- Python wheels include the native `delta-arrow-reader` command and support
+  CPython 3.10+ on Linux x86_64, Windows x86_64, and macOS arm64.
+  [Platform requirements](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python).
+
+### Command line
+
+- Use `dar inspect` to view a table's schema and version, and `dar scan` to stream
+  selected rows and columns as Arrow IPC. Supports filters and configurable
+  resource limits. [CLI quickstart](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/).
+- Run `dar` from standalone Linux amd64 or arm64 archives or container images.
+  [Installation](https://mag1cfrog.github.io/delta-arrow-reader/installation/#cli-binaries-and-container-images).
+
+### Selective reads
+
+- Filtered S3 queries can now download selected values within Parquet pages.
+  Automatic selection is enabled by default and uses the file layout and measured
+  network conditions to choose when smaller reads are likely to be faster.
+- Supports fixed-width numeric and decimal values, plus strings and binary
+  values in supported file encodings.
+  [Supported layouts and benchmarks](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/).
+
+### Upgrading from 0.6
+
+- Opening supported S3 tables now includes network sampling with a five-second
+  budget, separate from metadata loading. Use `WarmupMode::None` or
+  `WarmupMode::QueryPlanning` to skip sampling and partial-page reads.
+  [Configuration](https://mag1cfrog.github.io/delta-arrow-reader/configuration/).
+- `WarmupMode` includes a `Network` variant with configuration and no longer
+  supports integer casts such as `mode as u8`. Code that stores modes as numbers
+  must use an explicit mapping.
+
+[All changes since 0.6.2](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.2...v0.7.0).
+
 ## [0.6.2](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.1...v0.6.2) - 2026-10-07
 
 ### Added
