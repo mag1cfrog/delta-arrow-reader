@@ -7,7 +7,8 @@ This quickstart starts with a local table and reads at most ten rows.
 
 [Install the CLI](installation.md#cli-binaries-and-container-images) and have a
 Delta table available. Replace `/path/to/table` below with the table's directory,
-not a single Parquet file. Run the shell examples in Bash.
+which contains `_delta_log`, rather than a single Parquet file. Run the shell
+examples in Bash.
 
 The examples use the standalone command, `dar`. If you installed the
 [Python package](installation.md#python), use `delta-arrow-reader` in its place.

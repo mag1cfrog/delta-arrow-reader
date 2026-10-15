@@ -6,8 +6,9 @@ description: Read Delta Lake tables with Python, Rust, or the command line.
 # Delta Arrow Reader
 
 Delta Arrow Reader lets you read Delta Lake tables from Python, Rust, or the
-command line. Select the rows and columns you need, and work with them as Arrow
-batches arrive without first loading the whole result into memory.
+command line. Select the rows and columns you need, then process them in batches
+instead of loading the whole result into memory. Each batch is a group of rows
+in Apache Arrow format, ready to use in your application.
 
 The reader works with existing Delta tables. It does not write tables or manage
 transactions.

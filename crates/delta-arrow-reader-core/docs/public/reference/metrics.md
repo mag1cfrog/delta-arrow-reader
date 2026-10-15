@@ -4,6 +4,25 @@
 returns an immutable point-in-time `DeltaScanMetricsSnapshot`. The handle stays
 usable after its batch stream finishes or is dropped.
 
+## Inspect a Rust scan
+
+Keep the metrics handle before consuming the stream, then inspect it after the
+read. This example takes a scan you have already built:
+
+```ignore
+let mut batches = scan.into_stream();
+let metrics = batches.metrics();
+
+while let Some(batch) = batches.next_batch().await? {
+    println!("rows={}", batch.num_rows());
+}
+
+println!("tasks={}", metrics.snapshot().file_tasks_completed);
+```
+
+If you stop early and drop the stream, the reader stops scheduling new files.
+The handle remains usable, but its counters describe only the work performed.
+
 ## Core scan metrics
 
 | Field | Meaning |

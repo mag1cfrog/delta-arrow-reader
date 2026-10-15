@@ -54,10 +54,10 @@ nav:
   - Start here:
       - Overview: index.md
       - Installation: installation.md
-      - Streaming reader quickstart: streaming-reader.md
       - Python quickstart: python.md
       - Command-line quickstart: cli-quickstart.md
-      - DataFusion quickstart: datafusion.md
+      - Rust quickstart: streaming-reader.md
+      - DataFusion in Rust: datafusion.md
       - Configuration: configuration.md
   - How it works:
       - Architecture: architecture.md
