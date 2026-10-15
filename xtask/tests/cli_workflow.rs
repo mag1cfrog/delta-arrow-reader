@@ -293,6 +293,7 @@ fn ci_requires_approved_and_validated_cli_artifacts_only_for_release_prs()
                     for validated in ["true", "false", ""] {
                         let values = [
                             ("changes.outputs.code", code),
+                            ("changes.outputs.rust_docs", "false"),
                             ("changes.outputs.python", "false"),
                             ("changes.outputs.cli", "false"),
                             ("changes.outputs.tooling", "false"),

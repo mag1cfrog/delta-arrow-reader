@@ -1,15 +1,16 @@
-# Predicate decoding
+# Decoding filter columns
 
-To apply a `WHERE` condition, or predicate, a reader must decode the columns
-used by that condition. This benchmark compares decoding just those three
-columns with also decoding 64 columns that the filter does not use. Both cases
-apply the same filter and return the same rows.
+A `WHERE` filter needs to decode the columns it tests. In this experiment,
+decoding only those three columns took 0.425 ms, compared with 32.428 ms when
+64 unrelated columns were included. Both cases returned the same 16 rows.
+
+This measures one filtering step inside Delta Arrow Reader. It is not a full
+Delta query or a comparison with another engine. Use the
+[wide-table report](selective-read-results.md) for that comparison.
 
 ## Result
 
-This local run took place on August 28, 2026, on an AMD Ryzen 7 8845HS with
-8 cores, 16 threads, 27.95 GiB RAM, and NVMe storage, running Fedora 43 with
-Linux 6.19.14. Each value is the median of five repetitions.
+Medians of five repetitions.
 
 | Filter input | Columns decoded | Decode time | Peak memory | Matching rows |
 | --- | ---: | ---: | ---: | ---: |
@@ -24,6 +25,13 @@ the memory it holds in RAM. One MiB is 1,048,576 bytes.
 Both cases returned the same 16 row IDs with a checksum of 122,880.
 
 ## Method
+
+<details markdown="1">
+<summary>Hardware, fixture, timing, and validation details</summary>
+
+This local run took place on August 28, 2026, on an AMD Ryzen 7 8845HS with
+8 cores, 16 threads, 27.95 GiB RAM, and NVMe storage, running Fedora 43 with
+Linux 6.19.14. Each value is the median of five repetitions.
 
 The synthetic Parquet file contains 16,384 rows, split into four row groups
 (chunks of 4,096 rows). It has an integer `row_id`, three string columns used
@@ -48,6 +56,8 @@ have been selected.
 
 The wide projection is an artificial control within Delta Arrow Reader. For
 a comparison with other readers, see [selective reads on wide tables](selective-read-results.md).
+
+</details>
 
 ## Run the benchmark
 

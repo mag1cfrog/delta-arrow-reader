@@ -1,158 +1,54 @@
 # Installation
 
-The Rust crate requires Rust 1.94 or newer. The dependencies you need
-depend on whether you plan to use the streaming API or DataFusion.
+Choose the interface you want to use. You only need the installation steps for
+that interface:
 
-## Streaming reader
-
-For streaming Arrow batches, add the reader, Tokio, and the futures utilities
-used by the quickstart:
-
-```bash
-cargo add delta-arrow-reader futures-util
-cargo add tokio --features macros,rt-multi-thread
-```
-
-The [streaming reader quickstart](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
-shows how to load a table and consume its Arrow batches.
-
-## DataFusion adapter
-
-For SQL queries, enable the reader's `datafusion` feature and add DataFusion:
-
-```bash
-cargo add delta-arrow-reader --features datafusion
-cargo add datafusion@54 --no-default-features --features sql
-cargo add tokio --features macros,rt-multi-thread
-```
-
-The adapter uses DataFusion 54. Your application's direct DataFusion dependency
-must use the same major version because provider types from different majors
-are not interchangeable.
-
-The [DataFusion quickstart](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/)
-shows how to register a table and query it with SQL.
-
-## Optional Cargo feature
-
-The streaming API and both Parquet backends are always available. Enable the
-optional `datafusion` feature to register Delta tables with DataFusion and
-expose execution metrics.
-
-The direct Parquet backend is selected by default. Rust callers can choose the
-Delta Kernel backend through `DeltaScanExecutionOptions` without changing
-Cargo features.
-
-Both Rust APIs run on your application's Tokio runtime. They do not create a
-separate runtime.
-
-## HTTPS and build prerequisites
-
-The reader selects rustls for both object-store access and Kernel's HTTPS
-reads. Its default and `datafusion` dependency graphs do not require OpenSSL
-development libraries. Native build tools are still needed: Kernel's rustls
-feature uses AWS-LC, which builds native cryptographic code.
-
-HTTPS connections verify the server's certificate and hostname. Install your
-organization's CA in the platform trust store when accessing private endpoints.
-On Linux, both HTTP clients load system CA certificates and also honor
-`SSL_CERT_FILE` and `SSL_CERT_DIR`. Minimal container images need a CA bundle
-such as the distribution's `ca-certificates` package.
-
-Kernel's HTTPS client uses `rustls-platform-verifier`: certificate validation
-uses WebPKI on Linux and the platform verifier on macOS and Windows. The
-object-store client uses rustls with native root certificates. This replaces
-Kernel's previous native-tls/OpenSSL validation on Linux, so certificates must
-also satisfy WebPKI's validation rules. Kernel HTTPS connections use TLS 1.2
-or 1.3. Storage options and proxy configuration continue to use the underlying
-clients' existing interfaces.
-
-## CLI binaries and container images
-
-The `dar` executable lets Go and other languages read Delta tables through a
-subprocess. `inspect` returns JSON; `scan` writes an Arrow IPC stream to stdout.
-Installation requires no Rust or Python runtime.
-
-Choose a stable version from [GitHub Releases](https://github.com/mag1cfrog/delta-arrow-reader/releases)
-whose CLI section reports successful download verification. Older releases may
-have no CLI files. Replace `X.Y.Z` below with that version, without the `v`
-prefix. On Linux, run this script in a writable directory; it downloads both architectures
-so the complete checksum file can be checked before extraction:
-
-```sh
-set -eu
-version=X.Y.Z
-mkdir "dar-$version"
-cd "dar-$version"
-release_url="https://github.com/mag1cfrog/delta-arrow-reader/releases/download/v$version"
-for file in "dar-v$version-linux-amd64-gnu.tar.gz" \
-            "dar-v$version-linux-arm64-gnu.tar.gz" cli-artifacts.json SHA256SUMS; do
-  curl --fail --location --output "$file" "$release_url/$file"
-done
-sha256sum --check SHA256SUMS
-case "$(uname -m)" in
-  x86_64) architecture=amd64 ;;
-  aarch64|arm64) architecture=arm64 ;;
-  *) echo 'No release binary for this architecture' >&2; exit 1 ;;
-esac
-mkdir cli
-tar -xzf "dar-v$version-linux-$architecture-gnu.tar.gz" -C cli
-./cli/dar --version
-```
-
-Add the extracted `cli` directory to your application's executable search path,
-or invoke `dar` by its absolute path. Keep `LICENSE` and `NOTICE` beside it when
-redistributing the binary. `cli-artifacts.json` records the tested source commit,
-toolchain, runtime libraries, and binary/archive hashes. The Release's CLI
-section also lists the final release commit and the checksum file's own hash.
-The tested PR merge commit and final release commit may differ while containing
-the same source tree.
-
-The binaries support Linux amd64 with a baseline x86-64 CPU and Linux arm64 with
-a baseline ARMv8-A CPU. Both require glibc 2.36 or newer, libgcc, and CA
-certificates for HTTPS. The same Debian 12 builds are tested on Debian 12,
-Ubuntu 24.04, and Fedora 44. Install `libc6`, `libgcc-s1`, and `ca-certificates`
-on Debian/Ubuntu, or `glibc`, `libgcc`, and `ca-certificates` on Fedora. Alpine's
-musl runtime, `scratch`, macOS, and Windows have no official standalone CLI
-release binary. The [Python wheels](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python)
-include a CLI for their own supported platforms, with a separate runtime baseline.
-
-The public container includes those runtime dependencies. It runs `dar` as a
-command and exits; it does not host an HTTP service. Pin the version:
-
-```sh
-docker run --rm --read-only ghcr.io/mag1cfrog/delta-arrow-reader:vX.Y.Z --version
-```
-
-For a digest pin, copy the index digest from the Release's CLI section and use
-`ghcr.io/mag1cfrog/delta-arrow-reader@sha256:<index-hash>`. The index contains
-both `linux/amd64` and `linux/arm64`. Public pulls need no GitHub login.
-There are no `latest`, major-version, or minor-version aliases.
-
-See the [CLI guide](cli.md) for table mounts, storage configuration, and scan
-options. The [Go consumer](https://github.com/mag1cfrog/delta-arrow-reader/tree/main/examples/go-cli)
-shows how to copy the binary and notices from a pinned CLI image into a service
-image, read Arrow batches without cgo, and handle process failures. The service
-image must provide the same glibc, libgcc, and certificate dependencies.
+- [Python](#python): read with PyArrow or run SQL.
+- [Command line](#cli-binaries-and-container-images): inspect a table or save rows to a file.
+- [Rust](#streaming-reader): read batches in an application, with optional SQL support.
 
 ## Python
 
-The Python package loads Delta snapshots, supports filtered reads and read-only
-SQL, and streams results through PyArrow. SQL uses Rust DataFusion included in
-the extension; the separate `datafusion` Python package is not required.
-The same wheel installs the native
-`delta-arrow-reader` CLI alongside the Python API. It does not install a `dar`
-alias. The package is not published on PyPI yet.
+Use CPython 3.10 or newer on one of these platforms:
+
+| System | Requirements |
+| --- | --- |
+| Linux | x86_64, glibc 2.28 or newer |
+| Windows | x86_64 |
+| macOS | Apple silicon, macOS 12.0 or newer |
+
+The package includes PyArrow support, SQL, and the `delta-arrow-reader` command.
+You do not need Rust or the separate Python `datafusion` package to install a
+wheel. **The package is not published on PyPI yet.**
 
 ### Install a CI wheel
 
-The wheel builder targets these systems:
+1. Open the repository's [GitHub Actions](https://github.com/mag1cfrog/delta-arrow-reader/actions)
+   and choose a run where all Python wheel jobs passed, including
+   `Validate wheel artifact set`.
+2. Download the wheel artifact for your platform and extract its `.whl` file.
+   The [artifact list](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/contributing.md#build-python-wheels-in-ci)
+   gives the names to look for.
+3. In your project's activated virtual environment, run the commands below.
+   Replace `/path/to/wheel.whl` with the extracted file's full path, keeping its
+   original filename:
 
-| System target | Wheel platform tag |
-| --- | --- |
-| Linux x86_64, glibc 2.28 or newer | `manylinux_2_28_x86_64` |
-| Windows x86_64 | `win_amd64` |
-| macOS arm64, macOS 12.0 or newer | `macosx_12_0_arm64` |
+```console
+python -m pip install --only-binary=:all: "/path/to/wheel.whl"
+python -I -c "import delta_arrow_reader; print(delta_arrow_reader.__version__)"
+```
+
+The second command prints the installed version. Installation also downloads a
+compatible PyArrow wheel; neither package is compiled from source.
+
+Continue with the [Python quickstart](https://mag1cfrog.github.io/delta-arrow-reader/python/)
+to read your first rows.
+
+<details markdown="1">
+<summary>Supported Python versions and platform details</summary>
+
+The wheel platform tags are `manylinux_2_28_x86_64`, `win_amd64`, and
+`macosx_12_0_arm64`, respectively.
 
 These targets apply to both the Python extension and bundled CLI. Linux arm64,
 Intel Macs, Windows arm64, and musl systems have no official wheels or wheel CI
@@ -173,54 +69,10 @@ CPython/MSVC runtime libraries. The macOS deployment target is 12.0, but runtime
 checks use newer macOS runners. Your Python and PyArrow distributions must also
 support your OS.
 
-Choose a run where all Python wheel jobs passed, including
-`Validate wheel artifact set`. Download the artifact for your platform and
-extract its `.whl` file. The
-[wheel build instructions](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/contributing.md#build-python-wheels-in-ci)
-list the artifact names, download commands, and CI runners.
+</details>
 
-In an activated virtual environment, replace `/path/to/wheel.whl` with the
-full path to the extracted wheel, keeping its original filename:
-
-```console
-python -m pip install --only-binary=:all: "/path/to/wheel.whl"
-python -I -c "import delta_arrow_reader; print(delta_arrow_reader.__version__)"
-delta-arrow-reader --version
-```
-
-This installs the wheel and a compatible PyArrow wheel without compiling from
-source. Rust and native build tools are not needed for wheel installation.
-
-To keep the CLI in a separate environment, install it with uv tool:
-
-```console
-uv tool install --no-build "/path/to/wheel.whl"
-delta-arrow-reader --version
-```
-
-If uv reports that its executable directory is missing from `PATH`, run
-`uv tool update-shell` and restart your shell. To run without a persistent tool
-installation, use uvx:
-
-```console
-uvx --no-build --from "/path/to/wheel.whl" delta-arrow-reader --help
-```
-
-Both commands use the wheel's full path and original filename. These tool
-environments do not add the Python API to your project's environment. They still
-install the Python extension, native CLI, and PyArrow, so they use more disk
-space than the standalone Linux archive. Keep the tool environment and its Python
-installation available when invoking the command.
-
-After a combined version is published on PyPI, you can install it by name with
-`python -m pip install --only-binary=:all: delta-arrow-reader`,
-`uv tool install --no-build delta-arrow-reader`, or
-`uvx --no-build delta-arrow-reader --help`. The package and command both use
-`delta-arrow-reader`, with no `-cli` suffix. See the
-[CLI guide](https://mag1cfrog.github.io/delta-arrow-reader/cli/) for `inspect` and
-`scan` examples; substitute `delta-arrow-reader` for `dar` in those commands.
-
-### Build from source
+<details markdown="1">
+<summary id="build-from-source">Build the Python package from source instead</summary>
 
 Use Python 3.10 or newer and Rust 1.94.x to install from source. Source builds also
 need `curl`, `cargo-about`, and Rust's license documentation. From the repository
@@ -234,97 +86,183 @@ cargo install --locked --features cli --version 0.9.2 cargo-about
 python -m pip install ./crates/delta-arrow-reader-python
 ```
 
-Installation also installs PyArrow 18 or newer. The
-[Python quickstart](https://mag1cfrog.github.io/delta-arrow-reader/python/)
-uses a sample table included in the repository.
+</details>
 
-### Read a table
+## CLI binaries and container images
 
-To read your own table, replace `/path/to/delta-table` with its local path:
+If you installed the Python package above, you already have the CLI:
 
-```python
-from pathlib import Path
-
-from delta_arrow_reader import DeltaTable
-
-location = Path("/path/to/delta-table")
-table = DeltaTable(location)
-print(table.version)
-print(table.schema)
-
-with table.to_reader() as reader:
-    for batch in reader:
-        print(batch.num_rows)
-
-original = DeltaTable(location, version=0)
-print(original.schema)
+```console
+delta-arrow-reader --version
 ```
 
-Omitting `version` or passing `None` loads the latest snapshot. An explicit
-version must be an integer from `0` to `2**64 - 1`; booleans are rejected.
-Each table keeps the snapshot it loaded, even if new commits arrive. Its
-`version` and `schema` properties are read-only, and the `pyarrow.Schema`
-remains usable after the table is deleted.
+Use `delta-arrow-reader` in place of `dar` in the
+[CLI quickstart](https://mag1cfrog.github.io/delta-arrow-reader/cli-quickstart/).
+Both names accept the same arguments. The wheel does not install a `dar` alias.
 
-Each `to_reader()` call creates an independent `pyarrow.RecordBatchReader` over
-the selected columns and rows of that snapshot. Planning reads Delta metadata;
-Parquet reads start when you request a batch. Use a `with` block to close the reader,
-including when you stop early. Readers and returned batches remain usable after
-the table is deleted. Calling `reader.read_all()` materializes all remaining rows
-in memory.
+For a standalone `dar` executable, check [GitHub Releases](https://github.com/mag1cfrog/delta-arrow-reader/releases)
+for a version with CLI assets. Releases through `v0.6.2` do not include them;
+until one does, use a Python wheel or [build the CLI from source](https://mag1cfrog.github.io/delta-arrow-reader/cli/#build-from-source).
 
-To pass a stream to an Arrow consumer directly, use `table.scan()`. For PyArrow,
-the equivalent reader construction is:
+<details markdown="1">
+<summary>Install just the command with uv</summary>
 
-```python
-import pyarrow as pa
+Download a wheel as described in the [Python instructions](#python). Install it
+in a separate tool environment, using the wheel's full path and original filename:
 
-with table.scan() as stream:
-    with pa.RecordBatchReader.from_stream(stream, schema=table.schema) as reader:
-        for batch in reader:
-            print(batch.num_rows)
-            break  # Both context managers still close on early exit.
+```console
+uv tool install --no-build "/path/to/wheel.whl"
+delta-arrow-reader --version
 ```
 
-`scan()` returns a `RecordBatchStream`, which has no public constructor. A stream
-can be exported once. Closing it before export releases the scan; subsequent
-export attempts raise `RuntimeError`. After export, the consumer owns cleanup,
-so closing the original stream does not close the consumer. Repeated `close()`
-calls are harmless, and context-manager exit does not suppress exceptions.
+If uv reports that its executable directory is missing from `PATH`, run
+`uv tool update-shell` and restart your shell. To run without a persistent tool
+installation:
 
-Both methods accept a keyword-only `columns` argument. Omit it or pass `None`
-to read all columns. A list or tuple selects columns in the given order, such as
-`table.to_reader(columns=["value", "id"])` on a table with those columns. An empty
-list or tuple selects no columns while preserving row counts. Bare strings and
-non-string entries raise `TypeError`; unknown or repeated column names raise
-`DeltaReaderError` with code `invalid_projection`.
+```console
+uvx --no-build --from "/path/to/wheel.whl" delta-arrow-reader --help
+```
 
-Both methods also accept a keyword-only `limit` argument. Omit it or pass `None`
-to read all rows, or use a nonnegative integer to cap the result, such as
-`table.to_reader(columns=["value", "id"], limit=100)`. The integer must fit Rust's
-`usize` on the platform; larger values raise `OverflowError`. Negative values
-raise `ValueError`, and booleans and other types raise `TypeError`. `limit=0`
-returns an empty result with the selected schema without reading data files.
+These tool environments do not add the Python API to your project. They still
+install the extension, CLI, and PyArrow. Keep the tool environment and its Python
+installation available when using the command.
 
-The optional `schema` request must match the scan schema, including field order,
-names, nullability, and metadata. Incompatible schemas raise `ValueError`.
-Requests for alternate Arrow representations, such as a different integer width
-or string encoding, raise `NotImplementedError`; the exporter does not cast or
-project data. A rejected request leaves the stream available for another attempt.
+</details>
 
-`location` also accepts a string path or a supported storage URL. Pass backend
-settings through `storage_options`, a mapping of string keys to string values
-that the constructor copies before loading.
+<details markdown="1">
+<summary>Download and verify a standalone Linux release</summary>
 
-Loading and planning failures raise `delta_arrow_reader.DeltaReaderError` with a
-redacted message and `phase` and `code` attributes. Failures while consuming a
-reader raise PyArrow exceptions with redacted `phase` and `code` text in the
-message. Invalid arguments raise Python's `TypeError`, `ValueError`, or
-`OverflowError`.
+Choose a release whose CLI section reports successful download verification.
+Replace `X.Y.Z` below with that version, without the `v` prefix. Run this script
+in a writable directory. It downloads both architectures so the complete checksum
+file can be checked before extraction:
 
-Loading, planning, and batch reads release the GIL so other Python threads can
-run. When loading or planning on Python's main thread, Ctrl+C raises
-`KeyboardInterrupt` and cancels the pending operation. Interruption during a
-batch read reaches the caller as a PyArrow exception.
-Synchronous Kernel work already running may still finish after interruption;
-cancellation does not stop it immediately.
+```sh
+set -eu
+version=X.Y.Z
+mkdir "dar-$version"
+cd "dar-$version"
+release_url="https://github.com/mag1cfrog/delta-arrow-reader/releases/download/v$version"
+for file in "dar-v$version-linux-amd64-gnu.tar.gz" \
+            "dar-v$version-linux-arm64-gnu.tar.gz" cli-artifacts.json SHA256SUMS; do
+  curl --fail --location --output "$file" "$release_url/$file"
+done
+sha256sum --check SHA256SUMS
+case "$(uname -m)" in
+  x86_64) architecture=amd64 ;;
+  aarch64|arm64) architecture=arm64 ;;
+  *) echo 'No release binary for this architecture' >&2; exit 1 ;;
+esac
+mkdir cli
+tar -xzf "dar-v$version-linux-$architecture-gnu.tar.gz" -C cli
+./cli/dar --version
+export PATH="$PWD/cli:$PATH"
+```
+
+The final command adds `dar` to `PATH` for this shell. For later use, add the
+extracted `cli` directory to your application's executable search path or use
+its absolute path. Keep `LICENSE` and `NOTICE` beside it when redistributing it.
+
+The binaries require Linux amd64 or arm64, glibc 2.36 or newer, libgcc, and CA
+certificates for HTTPS. They do not need Rust or Python. They do not run on
+Alpine's musl runtime, `scratch`, macOS, or Windows; Python wheels have their own
+platform requirements. See [Linux runtime details](https://mag1cfrog.github.io/delta-arrow-reader/cli/#use-a-linux-binary)
+for supported distributions and packages.
+
+`cli-artifacts.json` records the tested source commit, toolchain, runtime
+libraries, and hashes. The Release's CLI section lists the final release commit
+and checksum file's hash. The tested and final commits can differ while
+containing the same source tree.
+
+</details>
+
+<details markdown="1">
+<summary>Use a published container</summary>
+
+Choose a release with a verified CLI container, then pin its version:
+
+```sh
+docker run --rm --read-only ghcr.io/mag1cfrog/delta-arrow-reader:vX.Y.Z --version
+```
+
+The public image includes the runtime libraries and certificates for
+`linux/amd64` and `linux/arm64`. It runs a command and exits. Public pulls need
+no GitHub login. There are no `latest`, major-version, or minor-version aliases.
+
+For a digest pin, copy the index digest from the Release's CLI section and use
+`ghcr.io/mag1cfrog/delta-arrow-reader@sha256:<index-hash>`. See
+[container usage](https://mag1cfrog.github.io/delta-arrow-reader/cli/#use-a-container-or-a-go-service)
+for mounting a table or integrating the CLI with a Go service.
+
+</details>
+
+## Rust
+
+Use Rust 1.94 or newer. Run the commands below from your Cargo project.
+The examples use your application's Tokio runtime.
+
+### Streaming reader
+
+```bash
+cargo add delta-arrow-reader
+cargo add tokio --features macros,rt-multi-thread
+```
+
+Continue with the [Rust quickstart](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
+to read your first batch. It uses `next_batch()`, so no separate stream utility
+dependency is needed.
+
+### DataFusion adapter
+
+To query the table with SQL in Rust:
+
+```bash
+cargo add delta-arrow-reader --features datafusion
+cargo add datafusion@54 --no-default-features --features sql
+cargo add tokio --features macros,rt-multi-thread
+```
+
+The adapter uses DataFusion 54. Your direct DataFusion dependency must use the
+same major version. Continue with the [DataFusion quickstart](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/).
+
+<details markdown="1">
+<summary id="optional-cargo-feature">Optional Cargo feature</summary>
+
+The streaming API and both Parquet backends are always available. The optional
+`datafusion` feature adds SQL integration. The direct Parquet backend is the
+default; choosing the Delta Kernel backend does not require another feature.
+See [execution options](https://mag1cfrog.github.io/delta-arrow-reader/reference/execution-options/)
+when you need to change read settings.
+
+</details>
+
+## HTTPS and build prerequisites
+
+When building from source, install a Rust toolchain and native build tools.
+OpenSSL development libraries are not required. When using HTTPS storage,
+ensure your system or container has a CA certificate bundle, such as Linux's
+`ca-certificates` package.
+
+<details markdown="1">
+<summary>Private endpoints and certificate validation</summary>
+
+The reader selects rustls for both object-store access and Kernel's HTTPS
+reads. Its default and `datafusion` dependency graphs do not require OpenSSL
+development libraries. Native build tools are still needed: Kernel's rustls
+feature uses AWS-LC, which builds native cryptographic code.
+
+HTTPS connections verify the server's certificate and hostname. Install your
+organization's CA in the platform trust store when accessing private endpoints.
+On Linux, both HTTP clients load system CA certificates and also honor
+`SSL_CERT_FILE` and `SSL_CERT_DIR`. Minimal container images need a CA bundle
+such as the distribution's `ca-certificates` package.
+
+Kernel's HTTPS client uses `rustls-platform-verifier`: certificate validation
+uses WebPKI on Linux and the platform verifier on macOS and Windows. The
+object-store client uses rustls with native root certificates. This replaces
+Kernel's previous native-tls/OpenSSL validation on Linux, so certificates must
+also satisfy WebPKI's validation rules. Kernel HTTPS connections use TLS 1.2
+or 1.3. Storage options and proxy configuration continue to use the underlying
+clients' existing interfaces.
+
+</details>

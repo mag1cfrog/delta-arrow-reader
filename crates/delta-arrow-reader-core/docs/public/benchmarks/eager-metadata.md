@@ -1,22 +1,21 @@
 # Repeated queries
 
-Keeping a table open lets a reader reuse metadata and its measured connection
-profile. The public benchmark tests this pattern by opening a table once and
-running the same query twice, without caching the query result.
+Keeping a table open avoids repeating its initialization. In these runs, DAR's
+first and second queries took similar time: both reused the prepared table,
+and both still planned and read the full result. Query results were not cached.
+
+Use this report to distinguish the one-time opening cost from query time. It
+measures a table opened once and queried twice, rather than isolating the saving
+from one particular cache.
 
 ## Results
 
-These are Delta Arrow Reader's current results from the
-[wide-table comparison](selective-read-results.md), measured at merged commit
-`cd3064e` with the default automatic warmup and partial-page policy. The queries
-return about 900 rows and 70 columns from tables containing about 60 million
-rows. Grouped matches sit close together; scattered matches are spread out.
-Deletion vectors (DVs) mark deleted rows without rewriting the data files.
-
-The reader had four physical CPU cores and an 8 GiB memory limit. Storage used
-an emulated connection with 200 ms request latency (+/-20 ms jitter) and a
-shared 150 Mbps bandwidth limit. Times are medians of five independent
-processes, in seconds. Engine startup is excluded.
+Times are medians of five independent processes, in seconds. Startup is excluded.
+These are the same wide-table cases as the [five-reader comparison](selective-read-results.md):
+about 900 returned rows from about 60 million, with matches grouped together
+or spread out. DV means rows are marked as deleted without rewriting the files.
+Storage used MinIO with simulated latency and a shared bandwidth limit, as in
+that comparison.
 
 | Table / matches | Initialization | First query | Second query |
 | --- | ---: | ---: | ---: |
@@ -35,6 +34,22 @@ full result. These paired queries give five independent samples per query
 position. The [full comparison](selective-read-results.md#initialization-and-repeated-queries)
 includes quartiles, initialization-plus-first-query timings, and results for
 all five readers.
+
+<details markdown="1">
+<summary>Build, workload, and controlled network conditions</summary>
+
+These are Delta Arrow Reader's published results from the
+[wide-table comparison](selective-read-results.md), measured at merged commit
+`cd3064e` with the default automatic warmup and partial-page policy. The queries
+return about 900 rows and 70 columns from tables containing about 60 million
+rows.
+
+The reader had four physical CPU cores and an 8 GiB memory limit. Storage used
+an emulated connection with 200 ms request latency (+/-20 ms jitter) and a
+shared 150 Mbps bandwidth limit. Times are medians of five independent
+processes, in seconds. Engine startup is excluded.
+
+</details>
 
 ## Interpreting reuse savings
 

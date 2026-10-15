@@ -1,34 +1,44 @@
 ---
 title: Performance
-description: Results for selective Delta queries, repeated queries, filtering, page-index reads, and range planning.
+description: Compare readers on selective queries, then explore which parts of a read account for the savings.
 ---
 
 # Performance
 
-Start with [selective reads on wide tables](benchmarks/selective-read-results.md)
-for a comparison with delta-rs, DuckDB, Polars, and single-machine Spark. The
-benchmark returns about 900 rows and 70 columns from public, TPC-H-derived
-tables with about 60 million rows. It tests matching rows stored close together
-or spread out, and deletion vectors, which mark deleted rows without rewriting
-the data files.
+Start with the [wide-table comparison](benchmarks/selective-read-results.md)
+to compare Delta Arrow Reader with delta-rs, DuckDB, Polars, and single-machine
+Spark. DAR was fastest in all eight tested cases. Each query returns about
+900 rows and 70 columns from a table of about 60 million rows derived from TPC-H.
 
-The report includes all eight cases, timing distributions, downloaded bytes,
-request counts, and test conditions. Compare readers within the same case:
-layout, cache state, and storage latency affect the result.
+The report uses the same input and resource limits for each reader. It includes
+queries with matching rows grouped together or spread out, with and without
+deletion vectors (rows marked as deleted). These are custom selective queries,
+not standard TPC-H queries or a TPC-H score.
 
-## More reports
+## Choose a report
 
-The repeated-query report looks at reusing an open table. The partial-page guide
-covers real S3 and controlled MinIO measurements. The remaining experiments
-isolate parts of the read path using small generated tables.
-
-| Report | What it measures |
+| What you want to know | Read |
 | --- | --- |
-| [Repeated queries](benchmarks/eager-metadata.md) | Initialization, the first query, and a second query on the same open table. |
-| [Partial-page reads](partial-page-reads.md#benchmark-results) | Ordinary versus automatic reads on real S3, and the effects of supporting more page types on MinIO. |
-| [Predicate decoding](benchmarks/row-filter.md) | Decoding just the columns needed by a `WHERE` filter. |
-| [Page-index reads](benchmarks/page-index.md) | Skipping parts of a file when matching rows are stored close together. |
-| [Range planning](benchmarks/range-planning.md) | Trading fewer requests for more downloaded bytes under controlled latency and throughput. |
+| How do the five readers compare on the same queries? | [Selective reads on wide tables](benchmarks/selective-read-results.md) |
+| What does opening a table cost, and what happens on a second query? | [Repeated queries](benchmarks/eager-metadata.md) |
+| Does reading selected values within pages help on real S3? | [Partial-page results](partial-page-reads.md#benchmark-results) |
 
-For fixture generation, reader builds, and measurement commands, see the
-[benchmark instructions in the repository](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/benches/selective_read/README.md).
+Compare results within the same test environment. The wide-table comparison
+uses MinIO with controlled latency and bandwidth; the real S3 test uses a
+connection from Los Angeles to Oregon. Their absolute times are not directly
+comparable. Opening time and query time are reported separately.
+
+## Understand individual optimizations
+
+These smaller experiments isolate one part of reading. Their millisecond
+timings explain a mechanism, rather than predict a full application query.
+
+| Experiment | Question |
+| --- | --- |
+| [Predicate decoding](benchmarks/row-filter.md) | How much work does a filter save by decoding only the columns it needs? |
+| [Page-index reads](benchmarks/page-index.md) | When can selected rows leave whole pages unread? |
+| [Range planning](benchmarks/range-planning.md) | When is downloading extra bytes faster than making more requests? |
+
+Each report includes its test conditions and commands. For the five-reader
+comparison's fixture generation and pinned builds, use the
+[reproduction instructions](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/benches/selective_read/README.md).

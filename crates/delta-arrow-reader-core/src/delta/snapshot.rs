@@ -1400,15 +1400,12 @@ mod tests {
     #[test]
     fn forwards_storage_options_to_exactly_one_store_construction()
     -> Result<(), Box<dyn std::error::Error>> {
-        let scheme = format!(
-            "darstorage{}{}",
-            std::process::id(),
-            SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
-        );
+        // Each test owns a distinct entry in the process-wide storage registry.
+        let scheme = "dar-snapshot-empty";
         let captured = Arc::new(Mutex::new(Vec::<DeltaStorageOptions>::new()));
         let handler_capture = Arc::clone(&captured);
         insert_url_handler(
-            &scheme,
+            scheme,
             Arc::new(move |_url, options| {
                 handler_capture
                     .lock()
@@ -1500,11 +1497,7 @@ mod tests {
     #[test]
     fn successful_load_forwards_options_once_without_retaining_them()
     -> Result<(), Box<dyn std::error::Error>> {
-        let scheme = format!(
-            "darstorage{}{}",
-            std::process::id(),
-            SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
-        );
+        let scheme = "dar-snapshot-loaded";
         let store = InMemory::new();
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
@@ -1520,7 +1513,7 @@ mod tests {
         let captured = Arc::new(Mutex::new(Vec::<DeltaStorageOptions>::new()));
         let handler_capture = Arc::clone(&captured);
         insert_url_handler(
-            &scheme,
+            scheme,
             Arc::new(move |_url, options| {
                 handler_capture
                     .lock()

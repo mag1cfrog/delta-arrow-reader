@@ -1394,11 +1394,18 @@ pub(in crate::reader) mod tests {
     impl TestDir {
         pub(super) fn new(name: &str) -> Result<Self, Box<dyn std::error::Error>> {
             let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+            Self::new_at(name, nonce)
+        }
+
+        fn new_at(name: &str, nonce: u128) -> Result<Self, Box<dyn std::error::Error>> {
+            // Concurrent fixtures can observe the same clock tick.
+            static NEXT_DIR: AtomicUsize = AtomicUsize::new(0);
+            let sequence = NEXT_DIR.fetch_add(1, Ordering::Relaxed);
             let path = std::env::temp_dir().join(format!(
-                "delta-arrow-reader-{name}-{}-{nonce}",
+                "delta-arrow-reader-{name}-{}-{nonce}-{sequence}",
                 std::process::id()
             ));
-            fs::create_dir_all(&path)?;
+            fs::create_dir(&path)?;
             Ok(Self(path))
         }
 
@@ -1411,6 +1418,20 @@ pub(in crate::reader) mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn test_dirs_are_isolated_when_the_clock_does_not_advance()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let first = TestDir::new_at("same-clock-tick", 0)?;
+        let second = TestDir::new_at("same-clock-tick", 0)?;
+        assert_ne!(first.path(), second.path());
+
+        fs::write(first.path().join("fixture"), "first")?;
+        fs::write(second.path().join("fixture"), "second")?;
+        drop(first);
+        assert_eq!(fs::read_to_string(second.path().join("fixture"))?, "second");
+        Ok(())
     }
 
     #[derive(Clone, Copy)]

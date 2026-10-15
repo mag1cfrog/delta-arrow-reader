@@ -5,8 +5,9 @@ description: Start with the defaults, then adjust table opening and resource use
 
 # Configuration
 
-Start with the defaults. You can change how much work happens before your first
-query, then adjust resource use if you need to.
+You do not need to choose settings before your first query. After the
+[Python quickstart](python.md) or [Rust quickstart](streaming-reader.md), use
+this page when opening a table takes too long or a query uses too many resources.
 
 ## Start with the defaults
 
@@ -16,28 +17,66 @@ open a table using its path:
 ```python
 from delta_arrow_reader import DeltaTable
 
-table = DeltaTable("s3://bucket/table")
+table = DeltaTable("/path/to/table")
 ```
 
-Delta tables store their rows in data files. On supported S3 connections,
-opening a table prepares two things that later queries can reuse:
+Keep using the same `table` for later queries. Each new `DeltaTable` opens the
+table again and repeats its preparation. A loaded table stays on one version.
+[Refresh](python.md#read-again-or-use-newer-data) opens the latest version as a
+new table.
+
+## Read from S3
+
+Use an `s3://bucket/table` URL in place of a local path and supply your storage
+settings. For example, if you use AWS credentials from environment variables:
+
+<details markdown="1">
+<summary>Open an S3 table with credentials from your environment</summary>
+
+Set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in your environment. When
+using temporary credentials, also set `AWS_SESSION_TOKEN`. Replace the bucket,
+table prefix, and region in this example:
+
+```python
+import os
+
+from delta_arrow_reader import DeltaTable
+
+options = {
+    "aws_region": "<region>",
+    "aws_access_key_id": os.environ["AWS_ACCESS_KEY_ID"],
+    "aws_secret_access_key": os.environ["AWS_SECRET_ACCESS_KEY"],
+}
+if token := os.environ.get("AWS_SESSION_TOKEN"):
+    options["aws_session_token"] = token
+
+table = DeltaTable("s3://<bucket>/<table-prefix>", storage_options=options)
+```
+
+Keep credentials out of source code. `storage_options` takes string keys and
+values; the available settings depend on the storage backend.
+
+</details>
+
+With the default `automatic` mode on supported S3 connections, opening a table
+prepares information for later queries and checks the connection speed.
+**The connection check can take up to
+five seconds**, plus the time needed to load the file information. It may finish
+sooner. Local tables skip this extra preparation.
+
+<details markdown="1">
+<summary>What the S3 preparation does</summary>
+
+Delta tables store their rows in data files. Opening a supported S3 table
+prepares two things that later queries can reuse:
 
 1. It loads information about the table's files and keeps it in memory. Queries
    use this to decide which files they need.
 2. It reads parts of data files to check the connection speed. This helps it
    decide when downloading less data will make a query faster.
 
-The connection check can take **up to five seconds** and may finish sooner.
-Loading the file information takes additional time, so opening a table can take
-more than five seconds overall. Local tables skip this extra preparation.
-
-This behavior is called `automatic`. Keep using the same table object for later
-queries to reuse the work. Creating another `DeltaTable` for the same path starts
-it again. The saved information stays in memory; it does not cache query results
-or persist on disk.
-
-<details markdown="1">
-<summary>If the connection check does not finish</summary>
+The saved information stays in memory; it does not cache query results or
+persist on disk.
 
 An incomplete check does not by itself fail table loading. The first query that
 can use the measurements retries once, with the same five-second budget.
@@ -50,6 +89,9 @@ The check makes real requests and downloads data. It requires the default
 </details>
 
 ## Want less work before the first query?
+
+Set `warmup` when opening the table. Keep the same path and any `storage_options`
+you normally use; the examples below show just the setting being changed.
 
 ### Skip the connection check
 
@@ -84,7 +126,10 @@ to download selected values within a block of data.
 
 Compare the time to open the table **and** run your queries when choosing a mode.
 
-## More options
+## Adjust queries when needed
+
+Start with the default read settings. Change one setting at a time if a query
+uses more resources than your application can spare.
 
 <details markdown="1">
 <summary>Limit how many files a query reads at once</summary>
@@ -108,15 +153,10 @@ Pass `execution_options` to `DeltaTable(...)` to set defaults for its direct
 scans. Passing it to `to_reader()` or `scan()` replaces the full options object
 for that one scan.
 
-Other controls let you adjust how far reading runs ahead of your application:
-
-- `prefetch_files_per_partition=0` stops preparing upcoming files in advance.
-  The default is `2` per scan partition, a group of files read together.
-- `output_buffer_batches_per_partition` defaults to `1`. Increasing it lets
-  reading run further ahead of batch processing and uses more memory.
-- `target_partitions` controls how many groups can work in parallel. Pass a
-  smaller positive target to `to_reader()` or `scan()` to reduce parallel work.
-  The default chooses a target using available CPU and memory.
+For controls over buffering and reading ahead, see
+[ScanExecutionOptions](python-api/options.md). For the number of groups of files
+processed in parallel, see `target_partitions` in
+[to_reader()](python-api/table.md#delta_arrow_reader.DeltaTable.to_reader).
 
 </details>
 
@@ -138,7 +178,8 @@ session.register_table("events", table, execution_options=options)
 ```
 
 Omit `execution_options` to use SQL's defaults. Custom read settings passed to
-`DeltaTable` do not automatically carry over to SQL.
+`DeltaTable` do not automatically carry over to SQL. The
+[SQL quickstart](python.md#query-with-sql) shows how to run the query afterward.
 
 </details>
 

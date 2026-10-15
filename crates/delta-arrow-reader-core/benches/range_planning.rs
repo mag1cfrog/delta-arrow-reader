@@ -7,7 +7,10 @@ use std::{
     fs::{self, File},
     io,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -343,13 +346,32 @@ impl Fixture {
         profile: TransportProfile,
         retain: bool,
     ) -> Result<Self, Box<dyn Error>> {
-        shape.validate()?;
-        let path = temp_root.join(format!(
-            "delta-arrow-reader-range-planning-{}-{}",
-            std::process::id(),
+        Self::create_at(
+            temp_root,
+            shape,
+            profile,
+            retain,
             SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos(),
+        )
+    }
+
+    fn create_at(
+        temp_root: &Path,
+        shape: FixtureShape,
+        profile: TransportProfile,
+        retain: bool,
+        timestamp: u128,
+    ) -> Result<Self, Box<dyn Error>> {
+        shape.validate()?;
+        static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
+        let path = temp_root.join(format!(
+            "delta-arrow-reader-range-planning-{}-{timestamp}-{}",
+            std::process::id(),
+            NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed),
         ));
-        fs::create_dir_all(path.join("_delta_log"))?;
+        fs::create_dir_all(temp_root)?;
+        fs::create_dir(&path)?;
+        fs::create_dir(path.join("_delta_log"))?;
 
         let schema = benchmark_schema(shape.payload_columns);
         let properties = WriterProperties::builder()
@@ -1088,6 +1110,22 @@ mod tests {
             TEST_SHAPE.data_files
                 * TEST_SHAPE.row_groups
                 * (TEST_SHAPE.rows_per_group / TEST_SHAPE.rows_per_page)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn fixtures_with_the_same_timestamp_have_independent_directories() -> TestResult {
+        let create = || Fixture::create_at(&env::temp_dir(), TEST_SHAPE, TEST_PROFILE, false, 0);
+        let first = create()?;
+        let second = create()?;
+        assert_ne!(first.path, second.path);
+        drop(first);
+        assert!(
+            second
+                .path
+                .join("_delta_log/00000000000000000000.json")
+                .is_file()
         );
         Ok(())
     }

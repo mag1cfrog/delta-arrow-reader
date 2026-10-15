@@ -1,15 +1,19 @@
-# Query a table with DataFusion
+# Query a table with DataFusion in Rust
 
-Use DataFusion when your application already depends on it or when you want to
-query a Delta table with SQL. This quickstart loads one table, registers it by
-name, and runs a query that returns a small result.
+Register a Delta table with DataFusion, then query it with SQL. Start with a
+small result before writing a larger query.
+
+For SQL from Python, use the [Python quickstart](https://mag1cfrog.github.io/delta-arrow-reader/python/#query-with-sql) instead.
 
 ## Before you start
 
-Add the [DataFusion dependencies](https://mag1cfrog.github.io/delta-arrow-reader/installation/#datafusion-adapter). You will
-also need the path to a Delta table that your application can read.
+Add the [DataFusion dependencies](https://mag1cfrog.github.io/delta-arrow-reader/installation/#datafusion-adapter)
+to your Rust application. You also need an existing Delta table. Use its
+directory, which contains `_delta_log`, rather than a single Parquet file.
 
-## Register and query the table
+## Run your first query
+
+Replace `/path/to/table` with your table's path:
 
 ```no_run
 use datafusion::prelude::SessionContext;
@@ -21,90 +25,65 @@ use delta_arrow_reader::{
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = SessionContext::new();
-    let table = DeltaTableBuilder::new("/tmp/example-delta-table")
+    let table = DeltaTableBuilder::new("/path/to/table")
         .load_table()
         .await?;
 
-    register_table(
-        &context,
-        "orders",
-        table,
-        ScanOptions::default(),
-    )?;
+    register_table(&context, "events", table, ScanOptions::default())?;
 
-    let batches = context
-        .sql("SELECT * FROM orders LIMIT 100")
+    context
+        .sql("SELECT * FROM events LIMIT 10")
         .await?
-        .collect()
+        .show()
         .await?;
-    println!("batches={}", batches.len());
     Ok(())
 }
 ```
 
-`load_table` selects one Delta table version and reads its Arrow schema.
-`register_table` makes that loaded table available in DataFusion as `orders`.
-Registration does not open any Parquet files. DataFusion plans the read and
-opens those files when `collect` runs the query. The `LIMIT` keeps this first
-result small.
+This prints up to ten rows. `register_table` gives the loaded table the name
+`events` inside this session. It does not copy the table or read its rows.
+`show()` runs the query and prints the result.
 
-Use the [configuration guide](https://mag1cfrog.github.io/delta-arrow-reader/configuration/)
-to choose preparation before registration and set resource limits for SQL scans.
+## Select rows and columns
 
-## Reuse scan metadata across SQL queries
+Once the first query works, change the SQL. For example, if your table has
+`id` and `region` columns:
 
-If the registered table will serve several SQL queries, cache its reusable scan
-metadata before registration:
-
-```no_run
-use datafusion::prelude::SessionContext;
-use delta_arrow_reader::{
-    DeltaTableBuilder, WarmupMode,
-    datafusion::{ScanOptions, register_table},
-};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let context = SessionContext::new();
-    let table = DeltaTableBuilder::new("/tmp/example-delta-table")
-        .with_warmup(WarmupMode::QueryPlanning)
-        .load_table()
-        .await?;
-
-    register_table(
-        &context,
-        "orders",
-        table,
-        ScanOptions::default(),
-    )?;
-
-    let batches = context
-        .sql("SELECT * FROM orders LIMIT 100")
-        .await?
-        .collect()
-        .await?;
-    println!("batches={}", batches.len());
-    Ok(())
-}
+```sql
+SELECT id, region
+FROM events
+WHERE id >= 100
+ORDER BY id
+LIMIT 10
 ```
 
-`WarmupMode::QueryPlanning` builds the cache while `load_table` loads the
-table. `register_table` uses that same loaded table and does not build another
-cache. All SQL queries through the registered provider can therefore reuse the
-cached metadata without replaying the Delta log or checkpoint. Each query
-still applies its own projection and predicate and reads its own Parquet
-footers and data.
+Use column names from your own table. Without `ORDER BY`, row order is not
+guaranteed. Register more tables under different names to join them in SQL.
 
-The default `WarmupMode::Automatic` prepares supported S3 tables and profiles
-their network before querying. Use `QueryPlanning` to prepare only metadata, or
-`None` to skip preparation for a one-off or occasional query. Local tables remain
-lazy by default. The crate does not maintain a table-name registry.
+## Use the result in your application
 
-A registered provider stays on the Delta version that it loaded. Refreshing a
-provider does not modify the DataFusion catalog entry that points to the old
-provider.
+Replace `.show()` with `.collect()` to get a vector of Arrow batches:
 
-## Refresh a registered provider
+```ignore
+let batches = context
+    .sql("SELECT * FROM events LIMIT 10")
+    .await?
+    .collect()
+    .await?;
+```
+
+`collect()` keeps the whole result in memory. For larger results, use
+DataFusion's `execute_stream()` and process batches as they arrive. Sorting,
+grouping, and joining may still need substantial memory.
+
+## Query the table again
+
+Reuse the same session and registration for later queries. The registration
+keeps the table version it received, even if another process writes new data.
+Opening a new table or refreshing one does not replace an existing registration.
+
+<details markdown="1">
+<summary id="refresh-a-registered-provider">Refresh a registration in a long-running service</summary>
 
 Keep the concrete `DeltaTableProvider` when a long-running service needs to
 refresh its registration:
@@ -118,16 +97,16 @@ use delta_arrow_reader::{
     datafusion::{DeltaTableProvider, ScanOptions},
 };
 
-async fn refresh_orders(
+async fn refresh_events(
     context: &SessionContext,
     provider: &mut DeltaTableProvider,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let refreshed = provider.refresh().await?;
-    let previous = context.deregister_table("orders")?;
+    let previous = context.deregister_table("events")?;
 
-    if let Err(error) = context.register_table("orders", Arc::new(refreshed.clone())) {
+    if let Err(error) = context.register_table("events", Arc::new(refreshed.clone())) {
         if let Some(previous) = previous {
-            let _ = context.register_table("orders", previous)?;
+            let _ = context.register_table("events", previous)?;
         }
         return Err(error.into());
     }
@@ -136,16 +115,17 @@ async fn refresh_orders(
     Ok(())
 }
 
-# async fn setup() -> Result<(), Box<dyn std::error::Error>> {
-let context = SessionContext::new();
-let table = DeltaTableBuilder::new("/tmp/example-delta-table")
-    .load_table()
-    .await?;
-let mut provider = DeltaTableProvider::try_new(table, ScanOptions::default())?;
-let _ = context.register_table("orders", Arc::new(provider.clone()))?;
-refresh_orders(&context, &mut provider).await?;
-# Ok(())
-# }
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let context = SessionContext::new();
+    let table = DeltaTableBuilder::new("/path/to/table")
+        .load_table()
+        .await?;
+    let mut provider = DeltaTableProvider::try_new(table, ScanOptions::default())?;
+    let _ = context.register_table("events", Arc::new(provider.clone()))?;
+    refresh_events(&context, &mut provider).await?;
+    Ok(())
+}
 ```
 
 The returned provider keeps the existing scan options and range-read
@@ -154,15 +134,17 @@ The original provider remains usable, so queries that already hold it continue
 against the old snapshot.
 
 DataFusion uses separate deregistration and registration calls, so there is a
-short interval with no `orders` registration. If that gap matters, pause new
+short interval with no `events` registration. If that gap matters, pause new
 query planning while the two calls run. The example restores the previous
 provider if the new registration fails.
 
 `DeltaTableProvider::refresh` does not poll in the background. The application
 chooses when to refresh and when to replace its registration.
 
-The [Delta metadata lifecycle](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/)
-follows this cache across several queries. For the rest of the read path, see
-[how the reader works](https://mag1cfrog.github.io/delta-arrow-reader/architecture/).
-The [Rust API reference](https://docs.rs/delta-arrow-reader) documents the
-available scan options and metrics.
+</details>
+
+## Where to go next
+
+- [Configuration](https://mag1cfrog.github.io/delta-arrow-reader/configuration/): prepare a table for repeated queries or limit concurrent file reads.
+- [Metadata lifecycle](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/): understand which work queries can reuse.
+- [Rust API reference](https://docs.rs/delta-arrow-reader): look up the adapter and scan options.

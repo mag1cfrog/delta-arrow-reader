@@ -1,19 +1,18 @@
-# Range planning
+# Combining read requests
 
-When a query needs only parts of a Parquet file, the reader can request those
-byte ranges separately or combine nearby ranges into fewer requests. Combining
-them means downloading the gaps too. Delta Arrow Reader measures request
-latency and shared throughput to choose between these options automatically.
+Reading fewer bytes can require more requests. This experiment shows when it
+is faster to download the gaps between wanted ranges instead: at low bandwidth,
+keeping exact ranges won; at higher latency and throughput, combining some
+ranges helped.
 
-This benchmark compares automatic planning, exact ranges, a fixed 1 MiB merge
-threshold, and the object store's own multi-range behavior. A controlled HTTP
-server gives every policy the same latency and throughput.
+The benchmark compares automatic planning, exact ranges, a fixed 1 MiB merge
+threshold, and the object store's own behavior. A controlled HTTP server gives
+every policy the same latency and throughput. These are policies inside Delta
+Arrow Reader, not different query engines.
 
 ## Results
 
-This local run took place on August 29, 2026, on an AMD Ryzen 7 8845HS with
-8 cores, 16 threads, 27.95 GiB RAM, and NVMe storage, running Fedora 43 with
-Linux 6.19.14. Times are medians of three repetitions.
+Medians of three repetitions.
 
 The dense query selects every second payload column; the sparse query selects
 every fourth. This selection of output columns is the query's projection.
@@ -42,6 +41,13 @@ needs observations before adapting; those first reads affect a short scan.
 
 ## What is measured
 
+<details markdown="1">
+<summary>Hardware, fixture, timing, and validation details</summary>
+
+This local run took place on August 29, 2026, on an AMD Ryzen 7 8845HS with
+8 cores, 16 threads, 27.95 GiB RAM, and NVMe storage, running Fedora 43 with
+Linux 6.19.14. Times are medians of three repetitions.
+
 The generated Delta table has four Parquet files totaling 42,985,459 bytes.
 Each has two row groups of 256 rows, with 32 rows per data page and offset
 indexes enabled. It contains a row ID, a predicate column, and 48 nullable
@@ -63,6 +69,8 @@ concurrent responses. Up to 10 range requests can run at once. This emulates
 latency and bandwidth, without modeling TLS, retries, provider throttling, or
 public-network variability.
 
+</details>
+
 ## Read bytes alongside time
 
 For the dense projection, exact reads produced 212 server requests and
@@ -74,7 +82,11 @@ and 256 KiB to the planned ranges. Use those totals when comparing I/O. In this
 harness, the store policy produced the same request and byte counts as the
 fixed 1 MiB policy.
 
-Automatic planning estimates time from request waves and planned bytes:
+<details markdown="1">
+<summary>How the reported planner estimated time</summary>
+
+In this reported run, automatic planning estimated time from request waves
+and planned bytes:
 
 ```text
 request_waves = ceil(request_count / 10)
@@ -85,6 +97,8 @@ estimated_time = request_waves * typical_request_latency
 It learns from successful reads and favors fewer bytes when estimates are
 within 10%. Estimates exclude scheduling, protocol handling, and result
 assembly, so they do not predict the entire query time.
+
+</details>
 
 ## Run the benchmark
 

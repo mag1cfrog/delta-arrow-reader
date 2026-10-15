@@ -78,7 +78,7 @@ fn python_filter_excludes_unrelated_sources_and_tools() -> Result<()> {
             "crates/delta-arrow-reader-python/delta_arrow_reader.pyi",
             true,
         ),
-        ("README.md", true),
+        ("README.md", false),
         ("LICENSE", true),
         (".cargo/config.toml", true),
         ("xtask/Cargo.toml", true),
@@ -478,7 +478,14 @@ fn standalone_docs_skip_rust_checks() -> Result<()> {
         "crates/delta-arrow-reader-core/docs/public/cli.md",
         "crates/delta-arrow-reader-core/docs/public/benchmarks/selective-read-results.md",
     ] {
-        for name in ["code", "python", "cli", "tooling", "selective_read"] {
+        for name in [
+            "code",
+            "rust_docs",
+            "python",
+            "cli",
+            "tooling",
+            "selective_read",
+        ] {
             assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
         }
     }
@@ -498,7 +505,7 @@ fn embedded_docs_trigger_their_rust_checks() -> Result<()> {
     let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
     let include = regex::Regex::new(r#"include_str!\("([^"]+\.md)"\)"#)?;
     for (source, filter) in [
-        ("crates/delta-arrow-reader-core/src/guides.rs", "code"),
+        ("crates/delta-arrow-reader-core/src/guides.rs", "rust_docs"),
         ("benches/selective_read/src/main.rs", "selective_read"),
         ("benches/selective_read/src/production.rs", "selective_read"),
         ("benches/selective_read/src/large.rs", "selective_read"),
@@ -513,6 +520,66 @@ fn embedded_docs_trigger_their_rust_checks() -> Result<()> {
             let path = path.strip_prefix(root())?.to_str().unwrap();
             assert!(filter_matches(&filters, filter, path)?, "{filter}: {path}");
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn rust_docs_skip_runtime_checks() -> Result<()> {
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
+    assert!(filter_matches(&filters, "rust_docs", "README.md")?);
+    for path in filters["rust_docs"].as_array().unwrap() {
+        let path = path.as_str().unwrap();
+        for name in ["code", "python", "cli", "tooling", "selective_read"] {
+            assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
+        }
+    }
+
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    let jobs = &ci["jobs"];
+    assert_eq!(
+        jobs["changes"]["outputs"]["rust_docs"],
+        "${{ steps.filter.outputs.rust_docs }}"
+    );
+    let docs = &jobs["rust-docs"];
+    assert_eq!(docs["needs"], "changes");
+    assert_eq!(docs["runs-on"], "ubuntu-latest");
+    assert!(
+        jobs["ci"]["needs"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("rust-docs"))
+    );
+
+    let condition = docs["if"]
+        .as_str()
+        .unwrap()
+        .replace("needs.changes.outputs.rust_docs", "\"$RUST_DOCS\"")
+        .replace("needs.changes.outputs.code", "\"$CODE\"");
+    for code in ["true", "false"] {
+        for rust_docs in ["true", "false"] {
+            let output = Command::new("bash")
+                .args(["-ec", &format!("[[ {condition} ]]")])
+                .env("CODE", code)
+                .env("RUST_DOCS", rust_docs)
+                .output()?;
+            assert_eq!(
+                output.status.success(),
+                rust_docs == "true" && code == "false",
+                "code={code}, rust_docs={rust_docs}: {output:?}"
+            );
+        }
+    }
+    let commands = workflow_script(
+        include_str!("../../.github/workflows/ci.yml"),
+        "Check Rust documentation and examples",
+    );
+    for command in [
+        "RUSTDOCFLAGS=\"-D warnings\" cargo doc --locked --all-features --no-deps",
+        "cargo test --locked --doc",
+        "cargo test --locked --all-features --doc",
+    ] {
+        assert!(commands.lines().any(|line| line == command), "{command}");
     }
     Ok(())
 }
@@ -539,6 +606,27 @@ fn check_ci_results(values: &[(&str, &str)]) -> Result<Output> {
     Ok(Command::new("bash")
         .args(["-e", "-c", &rendered])
         .output()?)
+}
+
+#[test]
+fn summary_requires_rust_docs_when_core_checks_are_skipped() -> Result<()> {
+    for code in ["true", "false"] {
+        for rust_docs in ["true", "false"] {
+            for result in ["success", "failure", "skipped", "cancelled", ""] {
+                let output = check_ci_results(&[
+                    ("changes.outputs.code", code),
+                    ("changes.outputs.rust_docs", rust_docs),
+                    ("rust-docs.result", result),
+                ])?;
+                assert_eq!(
+                    output.status.success(),
+                    code == "true" || rust_docs != "true" || result == "success",
+                    "code={code}, rust_docs={rust_docs}, result={result}: {output:?}"
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 #[test]

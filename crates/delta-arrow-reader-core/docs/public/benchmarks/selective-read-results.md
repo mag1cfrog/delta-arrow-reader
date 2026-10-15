@@ -10,12 +10,18 @@ single-machine Spark on queries that return about 900 rows from Delta tables
 containing about 60 million rows. The 416-column tables return 69 selected
 columns; the 90-column tables return 71.
 
-Matching rows are either grouped together or spread out within row groups.
+Matching rows are either grouped together or spread out within the files.
+Parquet stores files in larger blocks of rows called row groups; the two
+layouts change where matches sit within those groups.
 Each layout has a snapshot with and without deletion vectors (DVs), which mark
 deleted rows without rewriting data files. These combinations give eight cases.
 The inputs use public TPC-H lineitem data at scale factor 10, extended with
 synthetic numeric columns. These are custom scans, not standard TPC-H queries
 or a TPC-H score.
+
+DAR had the lowest median query time in all eight cases below. The differences
+apply to these selective queries and test conditions; other layouts, queries,
+and connections can change the result.
 
 ## Query an initialized table
 
@@ -23,14 +29,6 @@ The README chart shows the **first complete query after table initialization**.
 All five readers use this boundary: query planning, reading, and consuming every
 result are timed. Process startup, Python imports, Spark session/JVM startup,
 and table initialization are excluded. No query result cache is used.
-
-DAR was rerun from merged commit
-[`cd3064e`](https://github.com/mag1cfrog/delta-arrow-reader/commit/cd3064e7551bf04b4c763b540d855b285d65a738)
-with its default automatic warmup and partial-page policy. The other four
-readers retain their original five samples per case. The same input hashes,
-queries, hardware, CPU and memory limits, MinIO binary, and network proxy
-settings were verified before the update. This comparison combines the new
-DAR measurements with the earlier competitor measurements.
 
 Every value is the median of five independent processes, in seconds; lower is
 faster. Each process initializes its table once and runs two queries. Only its
@@ -40,6 +38,8 @@ before timing began.
 All readers had four physical CPU cores and an 8 GiB memory limit. Storage used
 200 ms request latency (+/-20 ms jitter) and a shared 150 Mbps bandwidth limit.
 These conditions emulate a network connection, not a particular cloud service.
+DAR's updated measurements are compared with the other readers' earlier samples,
+after verifying the same inputs, hardware, and test settings.
 
 | Columns / matches | DAR | delta-rs | DuckDB | Polars | Spark |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -51,6 +51,19 @@ These conditions emulate a network connection, not a particular cloud service.
 | 90, scattered | 9.975 | 22.594 | 23.014 | 22.175 | 25.534 |
 | 90, grouped + DV | 1.979 | 177.713 | 23.719 | 166.096 | 14.071 |
 | 90, scattered + DV | 10.274 | 178.820 | 24.169 | 166.000 | 26.840 |
+
+<details markdown="1">
+<summary>Reader revisions and comparison provenance</summary>
+
+DAR was rerun from merged commit
+[`cd3064e`](https://github.com/mag1cfrog/delta-arrow-reader/commit/cd3064e7551bf04b4c763b540d855b285d65a738)
+with its default automatic warmup and partial-page policy. The other four
+readers retain their original five samples per case. The same input hashes,
+queries, hardware, CPU and memory limits, MinIO binary, and network proxy
+settings were verified before the update. This comparison combines the new
+DAR measurements with the earlier competitor measurements.
+
+</details>
 
 ??? details "First-query quartiles"
 
@@ -138,6 +151,9 @@ logs, listings, Parquet, deletion vectors, and DAR's connection sampling.
 One MiB is 1,048,576 bytes. The byte count is what the proxy accepted for
 delivery to the reader, including bytes from interrupted responses.
 
+<details markdown="1">
+<summary>Downloaded MiB and request counts for all readers</summary>
+
 | Columns / matches | DAR | delta-rs | DuckDB | Polars | Spark |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | 416, grouped | 41.37 / 5077 | 331.73 / 86 | 339.06 / 76 | 346.00 / 84 | 136.59 / 887 |
@@ -148,6 +164,8 @@ delivery to the reader, including bytes from interrupted responses.
 | 90, scattered | 435.38 / 34717 | 761.89 / 102 | 761.29 / 102 | 771.57 / 136 | 765.26 / 281 |
 | 90, grouped + DV | 37.38 / 5517 | 5836.14 / 210 | 758.09 / 94 | 5837.30 / 978 | 148.54 / 1189 |
 | 90, scattered + DV | 340.85 / 44492 | 5876.37 / 210 | 763.18 / 118 | 5877.53 / 978 | 766.32 / 405 |
+
+</details>
 
 File statistics identify five of 130 Parquet files for the 416-column query
 and six of 60 for the 90-column query. The predicates and matching file sets
@@ -170,6 +188,9 @@ grouped layout, matches sit close together within each row group. The scattered
 layout reorders rows within each group, preserving values and file/group
 membership. A DV snapshot shares its base table's Parquet bytes and deletes one
 of the 895 matching rows.
+
+<details markdown="1">
+<summary>Table sizes, full filter, and Parquet writer settings</summary>
 
 | Table / matches | Files | Stored columns | Output columns | Parquet GiB | Matching rows |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -202,7 +223,16 @@ for the 416-column table and eight for the 90-column table. Page settings are
 20,000 rows, 1 MiB, and 1,024-row write batches. Checking the row limit at batch
 boundaries can produce pages with 20,480 rows.
 
+</details>
+
 ## Test conditions
+
+All readers use four physical CPU cores and an 8 GiB memory limit, with the
+same controlled MinIO connection. The full configuration records the pinned
+versions, process placement, and cache treatment:
+
+<details markdown="1">
+<summary>Hardware, versions, resource allocation, and warmup</summary>
 
 | Setting | Recorded value |
 | --- | --- |
@@ -227,6 +257,8 @@ The scattered 416-column cases use a separate storage warmup. The other six
 use their exact validation run as storage warmup. The update preserves this
 per-case choice. Storage warmup happens in a separate process and is distinct
 from the table initialization measured in every invocation.
+
+</details>
 
 The transport is emulated. Hardware, cache state, query selectivity, file
 encoding, and storage conditions can change the results. These timings do not
