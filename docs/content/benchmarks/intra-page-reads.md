@@ -4,8 +4,12 @@ This records the reader from [#420](https://github.com/mag1cfrog/delta-arrow-rea
 and transport-aware planning from [#421](https://github.com/mag1cfrog/delta-arrow-reader/issues/421).
 Conditional partial reads and supported S3 initialization profiling are now
 enabled by default. The [default validation](intra-page-defaults.md) records
-current measurements, initialization costs and remaining limits. Earlier
+the measurements, initialization costs and limits at that change. Earlier
 measurements below describe the defaults in effect at the time.
+
+For current configuration and supported numeric, decimal, string, and binary
+layouts, use the [partial-page guide](../../../crates/delta-arrow-reader-core/docs/public/partial-page-reads.md).
+This page retains the implementation history and experiments.
 
 The [partial-read transport checks](intra-page-connections.md) cover bounded
 connection setup, connection reuse, and public S3 fallback. They also retain the

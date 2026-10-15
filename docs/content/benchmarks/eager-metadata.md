@@ -88,4 +88,4 @@ reproducible comparison of the two lifecycles; measure representative tables on
 their real storage before choosing a production default.
 
 For the public repeated-query results and the limits of that comparison, see
-[repeated queries](../../public/benchmarks/eager-metadata.md).
+[repeated queries](../../../crates/delta-arrow-reader-core/docs/public/benchmarks/eager-metadata.md).

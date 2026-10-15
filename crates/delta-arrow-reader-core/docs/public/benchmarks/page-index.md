@@ -11,6 +11,8 @@ files contain the same data and return the same result.
 
 This is a small, local experiment with Delta Arrow Reader. For a comparison
 between readers on larger tables, see [selective reads on wide tables](selective-read-results.md).
+For reading selected values inside a page on supported S3 tables, see
+[partial-page reads](../partial-page-reads.md).
 
 ## Result
 

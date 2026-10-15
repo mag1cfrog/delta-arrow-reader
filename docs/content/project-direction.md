@@ -25,28 +25,28 @@ The existing Rust reader and optional DataFusion provider remain the foundation:
 This decision introduces no new runtime implementation. It does not approve a
 dependency upgrade or relax an existing correctness requirement.
 
-## Python can proceed independently
+## Python bindings
 
-The first useful Python release is a binding to the core Reader. The existing
+Python support shipped in [v0.7.0](https://github.com/mag1cfrog/delta-arrow-reader/releases/tag/v0.7.0)
+as a binding to the core Reader, with read-only SQL and a bundled CLI. The
 [Python umbrella #101](https://github.com/mag1cfrog/delta-arrow-reader/issues/101)
-and its focused leaves already define most of the desired API. Retain their
-error, ownership and validation contracts rather than redesigning them.
+and its implementation issues record the API, error, ownership, and validation
+contracts. Keep those contracts when extending the binding.
 
-| Work | Existing owner | Boundary |
+| Work | Implementation issue | Boundary |
 | --- | --- | --- |
-| Install/import, load a latest or versioned snapshot, schema/version, reader errors | [#102](https://github.com/mag1cfrog/delta-arrow-reader/issues/102) | Independently actionable; no Spark or SQL frontend prerequisite |
-| Shared interruptible waits and runtime shutdown | [#417](https://github.com/mag1cfrog/delta-arrow-reader/issues/417) | Verify through table loading before adding streaming |
+| Install/import, load a latest or versioned snapshot, schema/version, reader errors | [#102](https://github.com/mag1cfrog/delta-arrow-reader/issues/102) | Load snapshots without a Spark frontend |
+| Shared interruptible waits and runtime shutdown | [#417](https://github.com/mag1cfrog/delta-arrow-reader/issues/417) | Release the GIL during waits; allow interruption and safe shutdown |
 | Projection/limits, Arrow C Stream and `pyarrow.RecordBatchReader` | [#105](https://github.com/mag1cfrog/delta-arrow-reader/issues/105) | Reuse the native scan; no eager collection or second producer queue |
 | Refresh and existing scan/resource controls | [#106](https://github.com/mag1cfrog/delta-arrow-reader/issues/106) | New snapshots do not retarget existing readers |
 | Supported predicates and exact schema-aware scalar conversion | [#107](https://github.com/mag1cfrog/delta-arrow-reader/issues/107) | Core predicate semantics; no Spark parsing or new expression language |
-| Platform wheels and installed-package checks | [#418](https://github.com/mag1cfrog/delta-arrow-reader/issues/418) | Validate the completed Reader API on all supported wheel targets |
-| Release-plz and Trusted Publishing integration | [#109](https://github.com/mag1cfrog/delta-arrow-reader/issues/109) | Reuse the validated wheel builder; first publication remains on #101's release checklist |
+| Platform wheels and installed-package checks | [#418](https://github.com/mag1cfrog/delta-arrow-reader/issues/418) | Validate installed reader, SQL, and CLI APIs on supported wheel targets |
+| Release-plz and Trusted Publishing integration | [#109](https://github.com/mag1cfrog/delta-arrow-reader/issues/109) | Publish the exact wheels validated on the release PR |
 | Read-only SQL through Rust DataFusion | [#112](https://github.com/mag1cfrog/delta-arrow-reader/issues/112) | Register loaded snapshots and stream query results through the existing binding |
 
-The core binding implementation is complete. The next stable release also
-includes #112, a small SQL session API. Its installed tests run with the shared
-wheel checks before the first publication. The Spark experiment remains outside
-this release.
+The core binding and SQL session API are released. Their installed tests run
+with the shared wheel checks before publication. The Spark experiment remains
+outside the release.
 
 The binding must preserve single-transfer Arrow ownership, retained batches and
 readers after Python table deletion, terminal errors rather than successful EOF,
@@ -54,13 +54,14 @@ early close, GIL release during blocking work, interruption and safe final runti
 shutdown. The binding owns its runtime; import must not start it, and the Rust
 core must not acquire a hidden runtime. Keep existing redacted error contracts.
 
-The Python package now builds from source with type stubs and the Rust workspace's
-shared version. It supports snapshot loading, schema/version inspection, column
-projection, row limits, PyArrow readers, single-use stream exports, and read-only
-SQL through registered Delta snapshots. CI builds and checks platform wheels;
-PyPI publishing remains planned work. Python asyncio,
-writes, a dataframe/query product and JavaScript bindings remain outside this
-first release.
+The [Python package](https://pypi.org/project/delta-arrow-reader/) is available on
+PyPI with the Rust workspace's shared version. It supports snapshot loading,
+schema/version inspection, column projection, native filters, row limits,
+PyArrow readers, single-use stream exports, refresh, and read-only SQL through
+registered Delta snapshots. See the
+[installation guide](../../crates/delta-arrow-reader-core/docs/public/installation.md#python)
+for wheels and source builds. Python asyncio, writes, a dataframe expression API,
+and JavaScript bindings remain outside this release.
 
 ## CLI access from other languages
 
@@ -73,14 +74,15 @@ cgo. This boundary does not require a hosted service or another scan engine.
 Linux amd64 and arm64 releases use the workspace version. Heavy binary,
 distribution, image, and Go checks run on the release PR after approval.
 Publication reuses those exact archives and OCI images in GitHub Releases and
-GHCR. See the [release runbook](cli-release.md) for recovery and first-release
+GHCR. Version 0.7.0 is the first public standalone CLI release. See the
+[release runbook](cli-release.md) for recovery and publication
 evidence, and [installation](../../crates/delta-arrow-reader-core/docs/public/installation.md#cli-binaries-and-container-images)
-for supported runtimes and version/digest pins. The first actual public release
-remains part of the parent issue's release checklist.
+for supported runtimes and version/digest pins. The parent issue tracks the
+first-release verification record.
 
 ## SQL in the Python package
 
-[#112](https://github.com/mag1cfrog/delta-arrow-reader/issues/112) adds a `Session`
+[#112](https://github.com/mag1cfrog/delta-arrow-reader/issues/112) added a `Session`
 that owns a Rust DataFusion context inside our PyO3 extension. Users register
 loaded `DeltaTable` snapshots and call `sql()` to get a PyArrow reader. The
 existing Rust provider handles Delta scans and eligible projection/filter
@@ -101,9 +103,9 @@ is a different integration. It would need the documented provider FFI boundary
 and version compatibility checks. It is outside this release, along with a
 Python dataframe expression API, writes, Spark compatibility and asyncio.
 
-Before release, the supported wheel platforms must pass installed SQL acceptance
-as well as the existing reader and CLI checks. Public publication stays on
-#101 and #428; source/API completion alone does not close those parents.
+Every release requires installed SQL acceptance on the supported wheel platforms,
+along with the reader and CLI checks. #101 and #428 retain the first-release
+checklists and verification evidence.
 
 ## Preserved systems investigations
 

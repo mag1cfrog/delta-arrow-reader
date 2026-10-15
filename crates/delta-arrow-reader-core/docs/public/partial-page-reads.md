@@ -9,9 +9,9 @@ A query can return only a handful of rows and still download a lot of data.
 Partial-page reads help Delta Arrow Reader avoid downloading values your query
 does not need, even when those values sit next to ones it does need.
 
-This is **on by default** for supported S3 tables. The reader uses it when it
-expects a faster query and keeps normal reads otherwise. It changes how data is
-fetched, not which rows your query returns.
+This is **on by default** when opening supported S3 tables with the Python or
+Rust API. The reader uses it when it expects a faster query and keeps normal
+reads otherwise. It changes how data is fetched, not which rows your query returns.
 
 ## How it works
 
@@ -113,6 +113,9 @@ results within the same environment; real S3 has different network conditions.
 Start with the default. If the extra requests or opening cost do not suit your
 application, choose ordinary reads instead. The options below allow the
 optimization; they never force it when the reader expects it to be slower.
+
+The [CLI](https://mag1cfrog.github.io/delta-arrow-reader/cli/#scan-rows) skips
+connection sampling and keeps partial-page reads off.
 
 <details markdown="1">
 <summary id="python">Python: choose whether to measure the connection</summary>
