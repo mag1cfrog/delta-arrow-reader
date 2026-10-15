@@ -428,6 +428,7 @@ fn wheel_builds_reuse_dependencies_without_reusing_validation() -> Result<()> {
         .iter()
         .find(|step| step["id"] == "wheel-build")
         .unwrap();
+    assert_eq!(build["with"]["target"], "${{ matrix.target }}");
     assert!(
         build["with"]["docker-options"]
             .as_str()
@@ -441,6 +442,164 @@ fn wheel_builds_reuse_dependencies_without_reusing_validation() -> Result<()> {
             .contains("export PATH=\"/opt/dar-tools:$PATH\"")
     );
     assert!(!include_str!("../../.github/workflows/pypi-build.yml").contains("cargo install"));
+    Ok(())
+}
+
+#[test]
+fn linux_wheel_target_is_absolute_and_separate_from_host_outputs() -> Result<()> {
+    let workflow: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;
+    let build = workflow["jobs"]["build"]["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|step| step["id"] == "wheel-build")
+        .unwrap();
+    let fixture = tempfile::Builder::new()
+        .prefix("wheel build paths ")
+        .tempdir()?;
+    for (platform, target) in [
+        ("Linux", ".python-sdist-source/target"),
+        ("Windows", "target"),
+        ("macOS", "target"),
+    ] {
+        let expected = if platform == "Linux" {
+            fixture.path().join(target)
+        } else {
+            target.into()
+        };
+        let arguments = build["with"]["args"]
+            .as_str()
+            .unwrap()
+            .replace(
+                "${{ runner.os == 'Linux' && format('{0}/.python-sdist-source/target', github.workspace) || 'target' }}",
+                expected.to_str().unwrap(),
+            )
+            .replace(
+                "${{ runner.os == 'Linux' && '../dist' || matrix.wheel-dir }}",
+                "dist",
+            )
+            .replace("${{ matrix.interpreter }}", "python");
+        let output = Command::new("bash")
+            .args(["-euc", &format!("printf '%s\\n' {arguments}")])
+            .output()?;
+        assert!(output.status.success(), "{platform}: {output:?}");
+        let stdout = String::from_utf8(output.stdout)?;
+        let arguments: Vec<_> = stdout.lines().collect();
+        let path = Path::new(
+            arguments
+                .windows(2)
+                .find(|args| args[0] == "--target-dir")
+                .unwrap()[1],
+        );
+        assert_eq!(path, expected);
+        if platform == "Linux" {
+            assert!(path.is_absolute());
+            assert!(!path.starts_with(fixture.path().join("target")));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn linux_wheel_tools_stay_cached_outside_maturin_cleanup() -> Result<()> {
+    let workflow: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;
+    let build = workflow["jobs"]["build"]["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|step| step["id"] == "wheel-build")
+        .unwrap();
+    let preparation = build["with"]["before-script-linux"]
+        .as_str()
+        .unwrap()
+        .lines()
+        .skip_while(|line| !line.contains("cargo xtask build-python-wheel"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .replace("${{ matrix.target }}", "x86_64-unknown-linux-gnu");
+    assert!(!preparation.is_empty());
+    let fixture = tempfile::Builder::new().prefix("wheel tools ").tempdir()?;
+    let script =
+        format!("cargo() {{ printf '%s\\n' \"$CARGO_TARGET_DIR\" \"$@\"; }}\n{preparation}");
+    let output = Command::new("bash")
+        .args(["-euc", &script])
+        .current_dir(fixture.path())
+        .env_remove("CARGO_TARGET_DIR")
+        .output()?;
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8(output.stdout)?;
+    let arguments: Vec<_> = stdout.lines().collect();
+    let tools = Path::new(arguments[0]);
+    let wheel = Path::new(
+        arguments
+            .windows(2)
+            .find(|args| args[0] == "--target-dir")
+            .unwrap()[1],
+    );
+    assert_eq!(wheel, fixture.path().join("target"));
+    assert!(
+        tools.starts_with(wheel),
+        "tools must remain in the saved cache"
+    );
+    for profile in ["debug", "release"] {
+        assert!(!tools.join(profile).starts_with(wheel.join(profile)));
+    }
+    Ok(())
+}
+
+#[test]
+fn macos_wheel_flags_keep_the_cli_linker_strict() -> Result<()> {
+    let workflow: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/pypi-build.yml"))?;
+    let steps = workflow["jobs"]["build"]["steps"].as_array().unwrap();
+    let position = |name| steps.iter().position(|step| step["name"] == name).unwrap();
+    let flags_position = position("Match Maturin's macOS dependency flags");
+    assert!(flags_position < position("Cache wheel build dependencies"));
+    assert!(flags_position < position("Prepare native wheel data"));
+    let flags = &steps[flags_position];
+    assert_eq!(flags["if"], "runner.os == 'macOS'");
+    let fixture = tempfile::tempdir()?;
+    let environment = fixture.path().join("environment");
+    let output = Command::new("bash")
+        .args(["-euc", flags["run"].as_str().unwrap()])
+        .env("GITHUB_ENV", &environment)
+        .output()?;
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        fs::read_to_string(environment)?,
+        "RUSTFLAGS=-C link-arg=-undefined -C link-arg=dynamic_lookup\n"
+    );
+
+    let build_script = fixture.path().join("build-script");
+    let output = Command::new("rustc")
+        .arg(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../crates/delta-arrow-reader-cli/build.rs"),
+        )
+        .arg("-o")
+        .arg(&build_script)
+        .output()?;
+    assert!(output.status.success(), "{output:?}");
+    for target_os in ["linux", "windows", "macos"] {
+        let output = Command::new(&build_script)
+            .env("CARGO_CFG_TARGET_OS", target_os)
+            .output()?;
+        assert!(output.status.success(), "{output:?}");
+        let stdout = String::from_utf8(output.stdout)?;
+        let linker_args: Vec<_> = stdout
+            .lines()
+            .filter(|line| line.contains("rustc-link-arg"))
+            .collect();
+        if target_os == "macos" {
+            assert_eq!(
+                linker_args,
+                ["cargo::rustc-link-arg-bin=dar=-Wl,-undefined,error"]
+            );
+        } else {
+            assert!(linker_args.is_empty());
+        }
+    }
     Ok(())
 }
 
@@ -562,7 +721,7 @@ fn every_wheel_cli_is_audited_after_installation_and_before_upload() -> Result<(
     assert!(position("Test installed wheel on Python 3.10 and PyArrow 18.0.0") < audit_position);
     assert!(audit_position < position("Upload validated wheel"));
     let audit = &steps[audit_position];
-    assert!(audit["if"].is_null());
+    assert_eq!(audit["if"], "${{ !inputs.cache-only }}");
     assert!(audit["continue-on-error"].is_null());
     let fixture = WheelFixture::new("installed-cli-audit")?;
     let runner_temp = fixture.directory.join("runner temp");
@@ -612,7 +771,10 @@ fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Resul
     assert!(position("Test installed wheel on Python 3.14 and current PyArrow") < runtime_position);
     assert!(runtime_position < position("Upload validated wheel"));
     let runtime = &steps[runtime_position];
-    assert_eq!(runtime["if"], "runner.os == 'Linux'");
+    assert_eq!(
+        runtime["if"],
+        "${{ !inputs.cache-only && runner.os == 'Linux' }}"
+    );
     assert!(runtime["continue-on-error"].is_null());
     assert_eq!(
         steps[position("Build wheel")]["with"]["container"],
@@ -748,7 +910,7 @@ fn tool_acceptance_checks_both_environments_before_upload() -> Result<()> {
     assert!(position("Test installed wheel on Python 3.14 and current PyArrow") < tool_position);
     assert!(tool_position < position("Upload validated wheel"));
     let tool = &steps[tool_position];
-    assert!(tool["if"].is_null());
+    assert_eq!(tool["if"], "${{ !inputs.cache-only }}");
     assert!(tool["continue-on-error"].is_null());
     assert_eq!(tool["working-directory"], "${{ runner.temp }}");
     assert_eq!(

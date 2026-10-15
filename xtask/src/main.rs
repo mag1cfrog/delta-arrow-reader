@@ -32,6 +32,7 @@ mod scan;
 mod validation_record;
 
 use std::{
+    collections::BTreeMap,
     env,
     error::Error,
     fs, io,
@@ -63,7 +64,7 @@ enum Task {
     CheckCacheWrites,
     /// Summarize sccache read failures without printing request details.
     ReportCacheReads,
-    /// Keep the two most recently used core CI target caches per platform.
+    /// Keep the last-used main build caches and remove caches from closed PRs.
     PruneCiCaches,
     /// Prepare release-plz configuration for the current shared release baseline.
     PrepareReleasePrConfig { destination: PathBuf },
@@ -259,10 +260,16 @@ impl CliTask {
     }
 }
 
-const TARGET_CACHE_PREFIXES: [&str; 3] = [
+const TARGET_CACHE_PREFIXES: [&str; 9] = [
     "v0-rust-core-ci-targets-Linux-x64-",
+    "v0-rust-core-ci-targets-Linux-arm64-",
     "v0-rust-core-ci-targets-Darwin-arm64-",
     "v0-rust-core-ci-targets-Windows_NT-x64-",
+    "v0-rust-cli-debian-amd64-",
+    "v0-rust-cli-debian-arm64-",
+    "v0-rust-python-wheels-x86_64-unknown-linux-gnu-",
+    "v0-rust-python-wheels-aarch64-apple-darwin-",
+    "v0-rust-python-wheels-x86_64-pc-windows-msvc-",
 ];
 const CACHE_REF: &str = "refs/heads/main";
 
@@ -287,6 +294,21 @@ struct Cache {
     key: String,
     r#ref: String,
     last_accessed_at: String,
+}
+
+impl Cache {
+    fn pull_request_number(&self) -> Option<u64> {
+        self.r#ref
+            .strip_prefix("refs/pull/")?
+            .strip_suffix("/merge")?
+            .parse()
+            .ok()
+    }
+}
+
+#[derive(Deserialize)]
+struct PullRequestState {
+    state: String,
 }
 
 fn run(program: &str, args: &[&str]) -> Result<Vec<u8>> {
@@ -364,30 +386,67 @@ fn report_cache_reads() -> Result<()> {
     Ok(())
 }
 
-fn stale_caches(pages: Vec<CachePage>, prefix: &str) -> Vec<Cache> {
-    let mut caches: Vec<_> = pages
+fn stale_caches(
+    pages: Vec<CachePage>,
+    prefix: &str,
+    pull_requests: &BTreeMap<u64, PullRequestState>,
+) -> Vec<Cache> {
+    let (mut main, others): (Vec<_>, Vec<_>) = pages
         .into_iter()
         .flat_map(|page| page.actions_caches)
-        .filter(|cache| cache.r#ref == CACHE_REF && cache.key.starts_with(prefix))
-        .collect();
-    caches.sort_by(|a, b| b.last_accessed_at.cmp(&a.last_accessed_at));
-    caches.into_iter().skip(2).collect()
+        .filter(|cache| cache.key.starts_with(prefix))
+        .partition(|cache| cache.r#ref == CACHE_REF);
+    main.sort_by(|a, b| {
+        b.last_accessed_at
+            .cmp(&a.last_accessed_at)
+            .then_with(|| b.id.cmp(&a.id))
+    });
+    main.into_iter()
+        .skip(1)
+        .chain(others.into_iter().filter(|cache| {
+            cache
+                .pull_request_number()
+                .and_then(|number| pull_requests.get(&number))
+                .is_some_and(|request| request.state == "closed")
+        }))
+        .collect()
 }
 
 fn prune_ci_caches() -> Result<()> {
-    let endpoint = format!("repos/{}/actions/caches", env::var("GH_REPO")?);
+    let repository = format!("repos/{}", env::var("GH_REPO")?);
+    let endpoint = format!("{repository}/actions/caches");
+    let mut pull_requests = BTreeMap::new();
     for prefix in TARGET_CACHE_PREFIXES {
-        let pages = serde_json::from_slice(&run(
+        let pages: Vec<CachePage> = serde_json::from_slice(&run(
             "gh",
             &[
                 "api",
                 "--paginate",
                 "--slurp",
-                &format!("{endpoint}?key={prefix}&ref={CACHE_REF}&per_page=100"),
+                &format!("{endpoint}?key={prefix}&per_page=100"),
             ],
         )?)?;
-        for cache in stale_caches(pages, prefix) {
-            println!("Deleting superseded CI target cache: {}", cache.key);
+        for cache in pages
+            .iter()
+            .flat_map(|page| &page.actions_caches)
+            .filter(|cache| cache.key.starts_with(prefix))
+        {
+            if let Some(number) = cache.pull_request_number()
+                && let std::collections::btree_map::Entry::Vacant(entry) =
+                    pull_requests.entry(number)
+            {
+                let request = serde_json::from_slice(&run(
+                    "gh",
+                    &["api", &format!("{repository}/pulls/{number}")],
+                )?)?;
+                entry.insert(request);
+            }
+        }
+        for cache in stale_caches(pages, prefix, &pull_requests) {
+            println!(
+                "Deleting unused build cache: {} ({})",
+                cache.key, cache.r#ref
+            );
             run(
                 "gh",
                 &[
@@ -418,7 +477,7 @@ mod cache_tests {
     }
 
     #[test]
-    fn retains_two_recently_used_caches_across_pages_and_preserves_other_families_and_refs() {
+    fn retains_the_last_used_main_cache_across_pages_and_preserves_other_families_and_refs() {
         let mut other_family = cache(5);
         other_family.key = "sccache-other".into();
         let other_platform = Cache {
@@ -436,19 +495,20 @@ mod cache_tests {
             },
         ];
         assert_eq!(
-            stale_caches(pages, WINDOWS_CACHE_PREFIX)
+            stale_caches(pages, WINDOWS_CACHE_PREFIX, &BTreeMap::new())
                 .iter()
                 .map(|cache| cache.id)
                 .collect::<Vec<_>>(),
-            [2, 1]
+            [3, 2, 1]
         );
-        for count in 0..=2 {
+        for count in 0..=1 {
             assert!(
                 stale_caches(
                     vec![CachePage {
                         actions_caches: (1..=count).map(cache).collect()
                     }],
-                    WINDOWS_CACHE_PREFIX
+                    WINDOWS_CACHE_PREFIX,
+                    &BTreeMap::new(),
                 )
                 .is_empty()
             );
@@ -463,11 +523,54 @@ mod cache_tests {
             actions_caches: vec![reused, cache(2), cache(3), cache(4)],
         }];
         assert_eq!(
-            stale_caches(pages, WINDOWS_CACHE_PREFIX)
+            stale_caches(pages, WINDOWS_CACHE_PREFIX, &BTreeMap::new())
                 .iter()
                 .map(|cache| cache.id)
                 .collect::<Vec<_>>(),
-            [3, 2]
+            [4, 3, 2]
+        );
+    }
+
+    #[test]
+    fn only_closed_pull_request_caches_are_pruned() {
+        let pages = vec![CachePage {
+            actions_caches: (1..=4)
+                .map(|id| Cache {
+                    r#ref: format!("refs/pull/{id}/merge"),
+                    ..cache(id)
+                })
+                .chain([Cache {
+                    r#ref: "refs/heads/feature".into(),
+                    ..cache(5)
+                }])
+                .collect(),
+        }];
+        let requests = BTreeMap::from([
+            (
+                1,
+                PullRequestState {
+                    state: "closed".into(),
+                },
+            ),
+            (
+                2,
+                PullRequestState {
+                    state: "open".into(),
+                },
+            ),
+            (
+                3,
+                PullRequestState {
+                    state: "unknown".into(),
+                },
+            ),
+        ]);
+        assert_eq!(
+            stale_caches(pages, WINDOWS_CACHE_PREFIX, &requests)
+                .iter()
+                .map(|cache| cache.id)
+                .collect::<Vec<_>>(),
+            [1]
         );
     }
 

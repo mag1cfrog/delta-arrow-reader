@@ -32,6 +32,7 @@ fn complete_workspace_sdist(repository: &Path, source: &Path, destination: &Path
         "NOTICE",
         ".cargo/config.toml",
         "crates/delta-arrow-reader-cli/Cargo.toml",
+        "crates/delta-arrow-reader-cli/build.rs",
         "crates/delta-arrow-reader-cli/Dockerfile",
         "crates/delta-arrow-reader-cli/src",
         "crates/delta-arrow-reader-cli/release",

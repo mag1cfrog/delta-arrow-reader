@@ -168,12 +168,16 @@ jobs:
           RUSTC_WRAPPER: ""
 
   prune:
-    name: Retain two target caches per platform
+    name: Retain current build caches
     needs: core
     runs-on: ubuntu-latest
+    concurrency:
+      group: build-cache-pruning
+      cancel-in-progress: false
     permissions:
       actions: write
       contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable

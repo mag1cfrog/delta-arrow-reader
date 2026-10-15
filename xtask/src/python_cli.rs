@@ -13,7 +13,7 @@ use snafu::{ResultExt, ensure};
 
 use crate::{
     build::{compiler_field, compiler_release},
-    command::{command_output, output_with_timeout},
+    command::{command_output, output_with_timeout, remove_cargo_package_environment},
     error::{FileSnafu, InvalidInputSnafu, JsonSnafu, Result},
     repository::{WorkspaceManifest, read_toml, repository_root},
 };
@@ -61,6 +61,7 @@ pub(crate) fn build_cli(
     compiler_release(&compiler, &manifest.workspace.package.rust_version)?;
     check_native_target(target, compiler_field(&compiler, "host")?)?;
     let mut command = Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
+    remove_cargo_package_environment(&mut command);
     if let Some(deployment) = macos_deployment_target(target) {
         command.env("MACOSX_DEPLOYMENT_TARGET", deployment);
     }

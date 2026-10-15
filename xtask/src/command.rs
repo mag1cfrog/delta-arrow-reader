@@ -1,4 +1,5 @@
 use std::{
+    env,
     io::{self, Read, Seek},
     process::{Child, Command, ExitStatus, Output, Stdio},
     thread,
@@ -8,6 +9,18 @@ use std::{
 use snafu::{ResultExt, ensure};
 
 use crate::error::{CommandFailedSnafu, CommandStartSnafu, Result, Utf8Snafu};
+
+pub(crate) fn remove_cargo_package_environment(command: &mut Command) {
+    // Metadata inherited from `cargo run` changes dependency build-script fingerprints.
+    for (key, _) in env::vars_os() {
+        if key
+            .to_str()
+            .is_some_and(|key| key.starts_with("CARGO_PKG_") || key.starts_with("CARGO_MANIFEST_"))
+        {
+            command.env_remove(key);
+        }
+    }
+}
 
 pub(crate) fn command_output(command: &mut Command) -> Result<String> {
     let program = command.get_program().to_string_lossy().into_owned();

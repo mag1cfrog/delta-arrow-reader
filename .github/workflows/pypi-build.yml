@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       cache-only:
-        description: Warm main's build caches without uploading wheel artifacts
+        description: Warm main's dependency caches without release acceptance or artifact uploads
         type: boolean
         default: false
     outputs:
@@ -40,8 +40,7 @@ jobs:
         shell: bash
     strategy:
       fail-fast: false
-      # GitHub limits new cache entries to 200 per minute across the repository.
-      max-parallel: ${{ inputs.cache-only && 1 || 3 }}
+      max-parallel: 3
       matrix:
         include:
           - name: Linux x86_64
@@ -81,8 +80,6 @@ jobs:
       CACHE_ONLY: ${{ inputs.cache-only }}
       CARGO_INCREMENTAL: "0"
       SCCACHE_GHA_ENABLED: "true"
-      SCCACHE_GHA_RW_MODE: ${{ inputs.cache-only && 'READ_WRITE' || 'READ_ONLY' }}
-      SCCACHE_LOG: ${{ inputs.cache-only && 'sccache::server=debug' || '' }}
       SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
       MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos-deployment-target }}
       MANYLINUX_IMAGE: quay.io/pypa/manylinux_2_28_x86_64@sha256:4131ddd7acb9c6c966af02fe7e71edc51e078c2d41f475966697676430bfa2ae
@@ -131,6 +128,11 @@ jobs:
         run: |
           echo "CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_DEBUG=0" >> "$GITHUB_ENV"
           echo "RUSTFLAGS=-C link-arg=/Brepro --remap-path-prefix=${GITHUB_WORKSPACE}=." >> "$GITHUB_ENV"
+      - name: Match Maturin's macOS dependency flags
+        if: runner.os == 'macOS'
+        run: |
+          # CLI build.rs restores strict symbol resolution for the executable.
+          echo "RUSTFLAGS=-C link-arg=-undefined -C link-arg=dynamic_lookup" >> "$GITHUB_ENV"
       - name: Restore host build dependencies
         if: runner.os == 'Linux'
         uses: Swatinem/rust-cache@v2
@@ -169,7 +171,8 @@ jobs:
       - name: Cache wheel build dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: python-wheels-${{ matrix.target }}-${{ runner.os == 'Linux' && env.MANYLINUX_IMAGE || matrix.platform-tag }}
+          # v2 keeps container tool dependencies outside Maturin's cleanup paths.
+          shared-key: python-wheels-${{ matrix.target }}-v2-${{ runner.os == 'Linux' && env.MANYLINUX_IMAGE || matrix.platform-tag }}
           workspaces: ${{ runner.os == 'Linux' && '.python-sdist-source' || '.' }} -> target
           env-vars: MACOSX_DEPLOYMENT_TARGET
           cache-targets: true
@@ -185,16 +188,15 @@ jobs:
             --target '${{ matrix.target }}' --profile release --target-dir "$PWD/target"
       - name: Build wheel
         id: wheel-build
-        continue-on-error: ${{ inputs.cache-only && runner.os == 'Linux' }}
         uses: PyO3/maturin-action@v1
-        with: &wheel-build-inputs
+        with:
           working-directory: ${{ runner.os == 'Linux' && '.python-sdist-source' || '.' }}
           command: build
           maturin-version: v1.14.1
           rust-toolchain: ${{ steps.versions.outputs.rust-version }}
           rustup-components: rust-docs
-          # Native Windows builds need RUSTFLAGS on host build scripts and proc macros too.
-          target: ${{ runner.os != 'Windows' && matrix.target || '' }}
+          # Match the staged CLI's explicit Cargo target on every platform.
+          target: ${{ matrix.target }}
           container: ${{ runner.os == 'Linux' && env.MANYLINUX_IMAGE || '' }}
           manylinux: ${{ matrix.manylinux }}
           sccache: ${{ runner.os == 'Linux' }}
@@ -211,44 +213,14 @@ jobs:
             # Preparation runs before the action installs sccache for Maturin.
             uv tool install 'sccache>=0.10.0'
             export PATH="/opt/dar-tools:$PATH"
-            if [ "$SCCACHE_GHA_RW_MODE" = "READ_WRITE" ]; then
-              trap 'RUSTC_WRAPPER= cargo run --locked --manifest-path "$GITHUB_WORKSPACE/xtask/Cargo.toml" --target-dir /tmp/dar-xtask-target -- check-cache-writes' EXIT
-            fi
-            cargo xtask build-python-wheel --prepare-only --project-directory . \
+            # Keep the tool's cache outside Maturin's target/debug/build cleanup.
+            CARGO_TARGET_DIR="$PWD/target/wheel-tools" cargo xtask build-python-wheel --prepare-only --project-directory . \
               --target '${{ matrix.target }}' --profile release --target-dir "$PWD/target"
           args: >-
-            --locked --release --out ${{ runner.os == 'Linux' && '../dist' || matrix.wheel-dir }} --target-dir target
+            --locked --release --out ${{ runner.os == 'Linux' && '../dist' || matrix.wheel-dir }}
+            --target-dir "${{ runner.os == 'Linux' && format('{0}/.python-sdist-source/target', github.workspace) || 'target' }}"
             --manifest-path crates/delta-arrow-reader-python/Cargo.toml
             --compatibility pypi --auditwheel repair --interpreter ${{ matrix.interpreter }}
-      - name: Check wheel cache writes
-        id: cache-writes
-        if: inputs.cache-only && runner.os != 'Linux'
-        continue-on-error: true
-        run: cargo xtask check-cache-writes
-        env:
-          RUSTC_WRAPPER: ""
-      - name: Prepare cache write retry
-        if: inputs.cache-only && (steps.wheel-build.outcome == 'failure' || steps.cache-writes.outcome == 'failure')
-        env:
-          RUSTC_WRAPPER: ""
-        run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            sudo rm -rf .python-sdist-source/target
-          else
-            sccache --stop-server
-            cargo clean --target-dir target
-          fi
-          # Recompile after the rate-limit window; existing remote entries are reused.
-          sleep 60
-      - name: Retry wheel cache writes
-        if: inputs.cache-only && (steps.wheel-build.outcome == 'failure' || steps.cache-writes.outcome == 'failure')
-        uses: PyO3/maturin-action@v1
-        with: *wheel-build-inputs
-      - name: Check retried wheel cache writes
-        if: steps.cache-writes.outcome == 'failure'
-        run: cargo xtask check-cache-writes
-        env:
-          RUSTC_WRAPPER: ""
       - name: Restore cache ownership after the container build
         if: always() && runner.os == 'Linux'
         run: |
@@ -258,19 +230,20 @@ jobs:
             fi
           done
       - name: Inspect and repair Windows DLL dependencies
-        if: runner.os == 'Windows'
+        if: ${{ !inputs.cache-only && runner.os == 'Windows' }}
         run: |
           python -m pip install --only-binary=:all: delvewheel
           python -m delvewheel show unrepaired-dist/*.whl
           python -m delvewheel repair --wheel-dir dist unrepaired-dist/*.whl
       - name: Inspect and repair macOS library dependencies
-        if: runner.os == 'macOS'
+        if: ${{ !inputs.cache-only && runner.os == 'macOS' }}
         run: |
           python -m pip install --only-binary=:all: delocate
           delocate-wheel --verbose --require-archs "$(uname -m)" \
             --wheel-dir dist unrepaired-dist/*.whl
           delocate-listdeps --all dist/*.whl
       - name: Inspect wheel metadata
+        if: ${{ !inputs.cache-only }}
         env:
           RUSTC_WRAPPER: ""
         run: |
@@ -278,12 +251,13 @@ jobs:
           cargo xtask check-python-wheel dist/*.whl \
             --expected-version "$EXPECTED_VERSION" --platform-tag '${{ matrix.platform-tag }}'
       - name: Inspect Linux native dependencies
-        if: runner.os == 'Linux'
+        if: ${{ !inputs.cache-only && runner.os == 'Linux' }}
         run: |
           cmp "$RUNNER_TEMP/python-sdist/Cargo.lock" .python-sdist-source/Cargo.lock
           python -m pip install --only-binary=:all: auditwheel
           auditwheel show dist/*.whl
       - name: Test installed wheel on Python 3.10 and PyArrow 18.0.0
+        if: ${{ !inputs.cache-only }}
         working-directory: ${{ runner.temp }}
         run: |
           python -m venv python310
@@ -292,6 +266,7 @@ jobs:
           python310/${{ matrix.venv-python }} -I -m unittest discover \
             -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" ${{ matrix.test-args }}
       - name: Audit installed wheel CLI
+        if: ${{ !inputs.cache-only }}
         env:
           RUSTC_WRAPPER: ""
         run: |
@@ -300,9 +275,11 @@ jobs:
             --platform-tag '${{ matrix.platform-tag }}'
       - uses: actions/setup-python@v6
         id: python314
+        if: ${{ !inputs.cache-only }}
         with:
           python-version: '3.14'
       - name: Test installed wheel on Python 3.14 and current PyArrow
+        if: ${{ !inputs.cache-only }}
         working-directory: ${{ runner.temp }}
         run: |
           python -m venv python314
@@ -311,7 +288,7 @@ jobs:
           python314/${{ matrix.venv-python }} -I -m unittest discover \
             -s "$GITHUB_WORKSPACE/crates/delta-arrow-reader-python/tests" ${{ matrix.test-args }}
       - name: Test installed wheel on glibc 2.28
-        if: runner.os == 'Linux'
+        if: ${{ !inputs.cache-only && runner.os == 'Linux' }}
         run: |
           python_tests=crates/delta-arrow-reader-python/tests
           fixture=crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus
@@ -336,6 +313,7 @@ jobs:
               done
             '
       - name: Test wheel with uv tool and uvx
+        if: ${{ !inputs.cache-only }}
         working-directory: ${{ runner.temp }}
         env:
           UV_PYTHON: ${{ steps.python314.outputs.python-path }}

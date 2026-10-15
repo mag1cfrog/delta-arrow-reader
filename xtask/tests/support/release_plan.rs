@@ -20,16 +20,20 @@ pub fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-fn tar_files(files: &[(&str, &[u8], u32)]) -> Result<Vec<u8>> {
+fn tar_entries(entries: &[(&str, &[u8], u32)]) -> Result<Vec<u8>> {
     let mut archive = tar::Builder::new(Vec::new());
-    for (name, bytes, mode) in files {
+    for (name, bytes, mode) in entries {
         let mut header = tar::Header::new_ustar();
         header.set_size(bytes.len() as u64);
         header.set_mode(*mode);
         header.set_uid(0);
         header.set_gid(0);
         header.set_mtime(0);
-        header.set_entry_type(tar::EntryType::Regular);
+        header.set_entry_type(if name.ends_with('/') {
+            tar::EntryType::Directory
+        } else {
+            tar::EntryType::Regular
+        });
         archive.append_data(&mut header, name, *bytes)?;
     }
     Ok(archive.into_inner()?)
@@ -106,7 +110,7 @@ impl PlanFixture {
                 ),
                 ("usr/share/doc/dar/NOTICE", notice.as_slice(), 0o644),
             ];
-            let layer = tar_files(&files)?;
+            let layer = tar_entries(&files)?;
             let layer_hash = sha256(&layer);
             let config = json!({
                 "os":"linux", "architecture": architecture,
@@ -133,9 +137,12 @@ impl PlanFixture {
                 "schemaVersion":2, "manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json",
                     "size":manifest.len(), "digest":format!("sha256:{manifest_hash}"), "annotations":{"org.opencontainers.image.ref.name":"dar"}}],
             }))?;
-            let archive = tar_files(&[
+            let archive = tar_entries(&[
                 ("oci-layout", b"{\"imageLayoutVersion\":\"1.0.0\"}", 0o644),
                 ("index.json", &index, 0o644),
+                // Skopeo needs explicit parents to extract a root-owned archive without root.
+                ("blobs/", b"", 0o755),
+                ("blobs/sha256/", b"", 0o755),
                 (&format!("blobs/sha256/{manifest_hash}"), &manifest, 0o644),
                 (&format!("blobs/sha256/{config_hash}"), &config_bytes, 0o644),
                 (&format!("blobs/sha256/{layer_hash}"), &layer, 0o644),

@@ -28,6 +28,7 @@ impl Fixture {
                 "[alias]\nxtask = \"run --locked --package xtask --\"\n",
             ),
             ("crates/delta-arrow-reader-cli/Cargo.toml", "CLI manifest"),
+            ("crates/delta-arrow-reader-cli/build.rs", "fn main() {}"),
             ("crates/delta-arrow-reader-cli/Dockerfile", "FROM fixture"),
             ("crates/delta-arrow-reader-cli/src/main.rs", "fn main() {}"),
             (
@@ -115,6 +116,7 @@ fn preserves_metadata_and_adds_build_sources_without_generated_files() -> TestRe
     for relative in [
         "Cargo.toml",
         "Cargo.lock",
+        "crates/delta-arrow-reader-cli/build.rs",
         "crates/delta-arrow-reader-cli/src/main.rs",
         "xtask/src/main.rs",
     ] {
