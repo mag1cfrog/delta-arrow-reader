@@ -5,6 +5,7 @@
 </h3>
 
 <p align="center">
+  <a href="https://mag1cfrog.github.io/delta-arrow-reader/"><img alt="Documentation" src="https://img.shields.io/badge/docs-user%20guide-blue"></a>
   <a href="https://docs.rs/delta-arrow-reader"><img alt="Rust API" src="https://docs.rs/delta-arrow-reader/badge.svg"></a>
   <a href="https://crates.io/crates/delta-arrow-reader"><img alt="crates.io" src="https://img.shields.io/crates/v/delta-arrow-reader.svg"></a>
   <a href="https://pypi.org/project/delta-arrow-reader/"><img alt="PyPI" src="https://img.shields.io/pypi/v/delta-arrow-reader.svg"></a>
