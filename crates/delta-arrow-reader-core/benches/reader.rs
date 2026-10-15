@@ -8,7 +8,7 @@ use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -719,14 +719,33 @@ impl Fixture {
         storage: StorageProfile,
         retain: bool,
     ) -> Result<Self, Box<dyn Error>> {
+        Self::create_at(
+            temp_root,
+            workload,
+            storage,
+            retain,
+            SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos(),
+        )
+    }
+
+    fn create_at(
+        temp_root: &Path,
+        workload: Workload,
+        storage: StorageProfile,
+        retain: bool,
+        timestamp: u128,
+    ) -> Result<Self, Box<dyn Error>> {
+        static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
         let path = temp_root.join(format!(
-            "{}-delta-arrow-reader-{}-{}",
+            "{}-delta-arrow-reader-{}-{timestamp}-{}",
             std::process::id(),
             workload.name(),
-            SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
+            NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed),
         ));
         let log_path = path.join("_delta_log");
-        fs::create_dir_all(&log_path)?;
+        fs::create_dir_all(temp_root)?;
+        fs::create_dir(&path)?;
+        fs::create_dir(&log_path)?;
         let schema = Arc::new(Schema::new(vec![
             Field::new("id", DataType::Int32, false),
             Field::new("customer_name", DataType::Utf8, true),
@@ -2274,6 +2293,30 @@ mod tests {
         drop(retained);
         assert!(retained_path.exists());
         fs::remove_dir_all(retained_path)?;
+        Ok(())
+    }
+
+    #[test]
+    fn fixtures_with_the_same_timestamp_have_independent_directories() -> TestResult {
+        let create = || {
+            Fixture::create_at(
+                &env::temp_dir(),
+                Workload::FewLarger,
+                StorageProfile::local(),
+                false,
+                0,
+            )
+        };
+        let first = create()?;
+        let second = create()?;
+        assert_ne!(first.path, second.path);
+        drop(first);
+        assert!(
+            second
+                .path
+                .join("_delta_log/00000000000000000000.json")
+                .is_file()
+        );
         Ok(())
     }
 

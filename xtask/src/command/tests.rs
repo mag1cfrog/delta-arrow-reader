@@ -113,14 +113,10 @@ fn captures_both_streams_without_pipe_backpressure() -> Result<()> {
 }
 
 #[test]
-fn timeout_kills_and_reaps_the_child() -> std::result::Result<(), Box<dyn std::error::Error>> {
+fn command_wrappers_report_timeouts() {
     for capture_output in [true, false] {
-        let temporary = tempfile::tempdir()?;
-        let pid_file = temporary.path().join("pid");
-        let mut command = Command::new("sh");
-        command
-            .args(["-c", "echo $$ > \"$1\"; exec sleep 30", "fixture"])
-            .arg(&pid_file);
+        let mut command = Command::new("sleep");
+        command.arg("30");
         let timeout = Duration::from_millis(200);
         let start = Instant::now();
         let result = if capture_output {
@@ -133,15 +129,25 @@ fn timeout_kills_and_reaps_the_child() -> std::result::Result<(), Box<dyn std::e
             matches!(result, Err(crate::error::Error::CommandStart { source, .. }) if source.kind() == io::ErrorKind::TimedOut)
         );
         assert!(start.elapsed() < Duration::from_secs(5));
-        let pid = std::fs::read_to_string(pid_file)?;
-        assert!(
-            !Command::new("sh")
-                .args(["-c", "kill -0 \"$1\"", "fixture", pid.trim()])
-                .output()?
-                .status
-                .success()
-        );
     }
+}
+
+#[test]
+fn timeout_kills_and_reaps_the_child() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let mut child = Command::new("sleep").arg("30").spawn()?;
+    let error = wait_with_timeout(&mut child, Duration::ZERO).expect_err("child must time out");
+    assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+    // Check before try_wait, which would itself reap a child left behind by the helper.
+    #[cfg(target_os = "linux")]
+    assert_eq!(
+        rustix::process::waitpid(
+            Some(rustix::process::Pid::from_child(&child)),
+            rustix::process::WaitOptions::NOHANG,
+        )
+        .expect_err("timeout handler must reap the child"),
+        rustix::io::Errno::CHILD
+    );
+    assert!(child.try_wait()?.is_some_and(|status| !status.success()));
     Ok(())
 }
 
