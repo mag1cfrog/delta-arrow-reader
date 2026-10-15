@@ -245,13 +245,19 @@ another Python thread can run during these waits.
 Pull request CI runs the `Python Package` job for changes covered by
 the Python filter in `.github/path-filters.json`. Shared Rust code, binding code,
 Python test fixtures, workspace manifests, package metadata, CLI source, and
-native packaging tools trigger these checks. Unrelated release tools, benchmarks,
-and `docs/` skip them.
+native packaging tools trigger these checks. The generated Python API file under
+`crates/delta-arrow-reader-core/docs/python_api/` also triggers them. Unrelated
+release tools, benchmarks, and `docs/` skip them.
 
 The job runs Clippy, the Rust runtime ownership tests, and the full Python suite
 on Linux with Python 3.10 and PyArrow 18.0.0. It uses the PEP 517 backend's editable
 install to build both the extension and CLI in a virtual environment. Feature pull requests do not
 build the three release wheels.
+
+The same installed bindings also check the generated Python API documentation.
+After changing Rust binding comments or Python signatures, follow the
+[regeneration instructions](../README.md#python-api-reference) and include the
+updated generated file in the pull request.
 
 Release-plz pull requests targeting main also require three-platform wheel
 validation. CI identifies them by the release bot's identity and a

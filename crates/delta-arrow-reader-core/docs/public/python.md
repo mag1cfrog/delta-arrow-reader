@@ -3,6 +3,8 @@
 Read a local Delta table as PyArrow record batches, select columns and rows,
 or query it with SQL. Close the reader when you stop early.
 
+For individual methods and their parameters, see the [Python API reference](python-api/index.md).
+
 ## Before you start
 
 [Install the Python package](installation.md#python), then start a Python session
