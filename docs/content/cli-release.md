@@ -61,9 +61,11 @@ below. Do not edit or retag an older release to test publication.
 | Notes | Mark the CLI section complete after delivery succeeds | `contents: write`, `actions: read`, `pull-requests: read` |
 | Result | Require every publication stage, or confirm a read-only rehearsal | None |
 
-Preparation compiles the `xtask` maintenance executable from the verified
-release commit so recovery uses that release's embedded image baseline and
-license data. It does not compile `dar`, build images, or run acceptance tests.
+Preparation compiles the `xtask` maintenance executable from the trusted
+workflow revision. A recovery dispatched from `main` can therefore use repaired
+publishing tools. The selected archives and images must still match the release
+tag, validated source tree, and recorded hashes. Preparation does not compile
+`dar`, build images, or run acceptance tests.
 Write jobs receive this executable and the verified plan in an immutable
 same-run artifact; they check hashes supplied separately by the preparation job
 before execution. That temporary transfer artifact is retained for 7 days.
@@ -157,8 +159,9 @@ the same command with `-f mode=publish` and the same identities.
 
 Automatic selection fails when several eligible records remain. It prints the
 candidate IDs for explicit recovery selection; it never chooses the newest
-artifact globally or falls back to current `main`. Recovery uses the selected
-release commit's publisher, preserving its runtime image baseline.
+artifact globally or substitutes artifacts built from current `main`. Recovery
+uses publishing tools from `main` to verify and publish the selected release's
+original archives and images.
 
 | Existing state | Recovery |
 | --- | --- |
@@ -185,9 +188,11 @@ delivery checks and the final notes update pass.
 ## Run the publisher commands locally
 
 Prefer the workflow for its scoped credentials and concurrency control. For
-diagnosis, use the verified release checkout, GitHub CLI read access, and the
+diagnosis, use a clean checkout of current `main`, GitHub CLI read access, and the
 tool versions listed in the [release tools reference](../../crates/delta-arrow-reader-cli/release/README.md).
-Build the maintenance tool once, then prepare a new directory with explicit IDs:
+The tag selects the release source and artifacts; the checkout supplies the
+publishing tools. Build the maintenance tool once, then prepare a new directory
+with explicit IDs:
 
 ```sh
 cargo build --locked --package xtask

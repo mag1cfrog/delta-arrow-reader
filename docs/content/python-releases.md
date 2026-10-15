@@ -1,12 +1,13 @@
 # Publish Python wheels
 
 This guide is for maintainers releasing `delta-arrow-reader` wheels containing
-both the Python API and native CLI. Complete the
-[first-release checklist in #101](https://github.com/mag1cfrog/delta-arrow-reader/issues/101)
-before the first PyPI publication, including TestPyPI rehearsal and maintainer
-authorization. Track the first public combined-package installation checks in
-#101 and the [CLI parent issue #428](https://github.com/mag1cfrog/delta-arrow-reader/issues/428).
-Merging the publishing workflow does not complete that checklist.
+both the Python API and native CLI. The first combined package is available on
+[PyPI as 0.7.0](https://pypi.org/project/delta-arrow-reader/0.7.0/).
+The first-release checklists and verification records are tracked in
+[#101](https://github.com/mag1cfrog/delta-arrow-reader/issues/101) and
+[#428](https://github.com/mag1cfrog/delta-arrow-reader/issues/428).
+Each new publication still requires successful release checks and maintainer
+authorization.
 
 The commands use a Linux or macOS shell and an authenticated GitHub CLI. Replace
 `X.Y.Z` with the exact stable version in the selected commit's root `Cargo.toml`.
@@ -83,7 +84,7 @@ SHA256, artifact ID, Python and PyArrow versions, and results for pip, uv tool,
 and uvx. The checks must use the final repaired wheel, including its native CLI
 and SQL session API. Require the installed SQL tests for joins, aggregation,
 Delta/deletion-vector parity, empty/null results and retained reader ownership
-on all three platforms. SQL feature #112 must land before the next stable release.
+on all three platforms.
 This build-only rehearsal does not authorize PyPI publication.
 
 ## Rehearse on TestPyPI
@@ -182,8 +183,10 @@ gh workflow run pypi.yml --repo mag1cfrog/delta-arrow-reader \
   -f publish-to=pypi -f expected-version="$PYTHON_RELEASE_VERSION"
 ```
 
-Manual PyPI publication requires the matching version tag; a branch is rejected.
-It uses the same release PR artifact checks as automatic publication.
+Manual PyPI publication normally runs from the matching version tag. To use a
+publishing fix that landed after the tag, follow
+[recovery from main](#use-repaired-publishing-tools). Other branches are rejected.
+Both paths use the same release PR artifact checks as automatic publication.
 If an upload already started, use the recovery steps below instead of starting
 a new run. After publication, repeat the installation and acceptance checks in a
 fresh environment, changing the reader's index URL to `https://pypi.org/simple/`.
@@ -198,27 +201,40 @@ for the commands and record the tested platform and Python version.
 
 ### Check artifact selection without publishing
 
-For an existing release tag whose commit belongs to a merged release-plz PR,
-the selection command can download and validate the retained bundle without
-uploading. Run it from a clean checkout of that tag with authenticated `gh`
-access to the repository's Actions and pull requests. Set
-`PYTHON_RELEASE_VERSION` to the tag's exact version:
+The selection command can download and validate a release PR's retained bundle
+without uploading. Build the current tools from a clean checkout of `main`,
+then run that executable from a separate checkout of the tag. This lets an older
+release use repaired selection tools without changing its package source.
+You need authenticated `gh` access to Actions and pull requests and the release
+tag fetched locally. Set `PYTHON_RELEASE_VERSION` to its exact version:
 
 ```console
+PYTHON_RELEASE_VERSION=X.Y.Z
+cargo build --locked --package xtask
+PYTHON_RELEASE_TOOLS="$(pwd)/target/debug/xtask"
 PYTHON_ARTIFACT_CHECK="$(mktemp -d)"
-GITHUB_REPOSITORY=mag1cfrog/delta-arrow-reader \
-GITHUB_OUTPUT="$PYTHON_ARTIFACT_CHECK/identity" \
-  cargo xtask reuse-python-wheels "$PYTHON_ARTIFACT_CHECK/wheel-artifacts" \
-    --expected-version "$PYTHON_RELEASE_VERSION"
+git worktree add --detach "$PYTHON_ARTIFACT_CHECK/source" "v$PYTHON_RELEASE_VERSION"
+(
+  cd "$PYTHON_ARTIFACT_CHECK/source"
+  GITHUB_REPOSITORY=mag1cfrog/delta-arrow-reader \
+  GITHUB_OUTPUT="$PYTHON_ARTIFACT_CHECK/identity" \
+    "$PYTHON_RELEASE_TOOLS" reuse-python-wheels "$PYTHON_ARTIFACT_CHECK/wheel-artifacts" \
+      --expected-version "$PYTHON_RELEASE_VERSION"
+)
 cat "$PYTHON_ARTIFACT_CHECK/identity"
+git worktree remove "$PYTHON_ARTIFACT_CHECK/source"
 ```
 
 Record the returned `artifact-id` and `artifact-sha256`, the CI run URL, and
 individual wheel hashes. A build-only run does not create a merged release PR
 or its retained bundle, so it cannot satisfy this selection check. Do not merge
 a release PR or publish a package solely to make the rehearsal pass.
+If you use a custom Cargo target directory, adjust `PYTHON_RELEASE_TOOLS` to
+the executable built there. The download remains in `PYTHON_ARTIFACT_CHECK`.
 
 ## Recover an interrupted upload
+
+### Retry a failed upload job
 
 Open the original `Python release` run. Confirm that preparation and
 `Require validated wheels` succeeded and that only the selected upload job
@@ -252,3 +268,29 @@ Stop on a hash mismatch or if the original artifacts are unavailable. Corrected
 binaries need a new shared version and tag. This includes adding a CLI to a
 version already published with library-only wheels. Do not overwrite released
 files, move the release tag, or bypass the hash checks.
+
+### Use repaired publishing tools
+
+If preparation failed before any upload and its fix has landed on `main`,
+dispatch the repaired workflow from `main`:
+
+```console
+PYTHON_RELEASE_VERSION=X.Y.Z
+gh workflow run pypi.yml --repo mag1cfrog/delta-arrow-reader --ref main \
+  -f publish-to=pypi -f expected-version="$PYTHON_RELEASE_VERSION"
+```
+
+This uses the existing `vX.Y.Z` tag as the package source. The tag must be an
+ancestor of the selected `main` commit and its Cargo version must match the
+input. The workflow runs repaired tools but selects the original validated
+wheels; it does not rebuild them or move the tag.
+
+When `pypi-release` allows only `v*` tags, temporarily add an exact `main` branch
+rule in Settings > Environments > pypi-release. Keep the required reviewer and
+approve this recovery deployment. Remove that temporary rule when the attempt
+finishes, including after a failure. A branch-rule rejection requires fixing
+the rule before rerunning the failed job; reviewer approval alone cannot bypass it.
+
+Once an upload has started, retry its failed jobs using the original artifact
+selection as described above. Do not start a new dispatch to repair a partial
+upload.

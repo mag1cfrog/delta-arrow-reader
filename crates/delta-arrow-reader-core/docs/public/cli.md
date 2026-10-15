@@ -78,6 +78,11 @@ dar scan [--table-version N] [--storage-options-file PATH]
 Table paths, snapshot selection, and storage options follow the inspection
 rules. Each invocation reads one immutable snapshot.
 
+CLI scans skip table warmup and S3 connection sampling, so partial-page reads
+stay off. File, row-group, and whole-page skipping remain available. For repeated
+queries with automatic connection sampling, use the [Python](python.md) or
+[Rust](streaming-reader.md) API.
+
 <details markdown="1">
 <summary>Column selection and row-limit rules</summary>
 

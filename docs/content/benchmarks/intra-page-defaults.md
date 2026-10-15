@@ -112,5 +112,5 @@ leave the published five-reader results and README chart unchanged.
 To skip profiling, use Rust `WarmupMode::None` or Python `warmup="none"`.
 Rust callers can also disable partial reads on the table builder with
 `with_experimental_intra_page_reads(false)`. See the
-[execution options](../../public/reference/execution-options.md) for scope and
+[execution options](../../../crates/delta-arrow-reader-core/docs/public/reference/execution-options.md) for scope and
 per-scan overrides.

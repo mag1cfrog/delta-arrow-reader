@@ -1,8 +1,8 @@
 # Benchmarks
 
-The [TPC-H-derived selective-read results](../../public/benchmarks/selective-read-results.md) cover
-eight SF10 cases with delta-rs, DuckDB, Polars and Spark. That report is
-under review. This page retains the earlier four-workload local MinIO comparison
+The [TPC-H-derived selective-read results](../../../crates/delta-arrow-reader-core/docs/public/benchmarks/selective-read-results.md) cover
+eight SF10 cases with delta-rs, DuckDB, Polars and Spark. This page retains
+the earlier four-workload local MinIO comparison
 and its original reader versions.
 
 We compared Delta Arrow Reader with delta-rs, DuckDB, Polars, and Daft on four
@@ -181,9 +181,9 @@ change.
   Delta Arrow Reader, and delta-rs, with every anonymized repetition available.
 - [Lazy and eager scan metadata](eager-metadata.md) compares when
   Delta scan metadata is loaded and reused across repeated queries.
-- [Parquet row-filter predicate decoding](../../public/benchmarks/row-filter.md) compares
+- [Parquet row-filter predicate decoding](../../../crates/delta-arrow-reader-core/docs/public/benchmarks/row-filter.md) compares
   decoding only predicate columns with decoding unrelated columns as well.
-- [Parquet page-index range reads](../../public/benchmarks/page-index.md) measures page-level
+- [Parquet page-index range reads](../../../crates/delta-arrow-reader-core/docs/public/benchmarks/page-index.md) measures page-level
   reads for localized and scattered row-filter matches.
-- [Adaptive Parquet range planning](../../public/benchmarks/range-planning.md) compares
+- [Adaptive Parquet range planning](../../../crates/delta-arrow-reader-core/docs/public/benchmarks/range-planning.md) compares
   exact and merged byte-range reads under controlled transport conditions.

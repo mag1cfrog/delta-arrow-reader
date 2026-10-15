@@ -36,10 +36,11 @@ cargo package --locked
 ## Test the CLI
 
 Run the CLI checks from the repository root on Linux, with a C compiler and
-OpenSSL available. Set `cli_version` to the workspace version in `Cargo.toml`:
+the `openssl` command available for local HTTPS tests. Set `cli_version` to the
+workspace version in `Cargo.toml`:
 
 ```console
-cli_version=0.6.2
+cli_version=X.Y.Z
 cargo build --locked -p delta-arrow-reader-cli
 cargo test --locked -p delta-arrow-reader-cli
 cargo clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings
@@ -51,9 +52,10 @@ The Cargo tests compare IPC schemas and rows with the Rust core and check
 argument validation and process errors. The xtask suites read the IPC output and
 exercise backpressure, partial results, broken pipes, signals, HTTPS, and shutdown
 with pending blocking reads. They use checked-in fixtures, local servers, and
-Linux process controls; no cloud credentials are needed. These CLI checks run
-after approval on release-plz PRs or through a manual release validation run.
-Feature PRs skip the CLI builds and acceptance suites. See the
+Linux process controls; no cloud credentials are needed. The CLI Source job runs
+formatting, Clippy, and unit tests on relevant feature PRs. The process and scan
+acceptance suites run after approval on release-plz PRs or through a manual
+release validation run. See the
 [CLI release tools](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-cli/release/README.md#validate-a-cli-release)
 for approval and artifact details.
 
@@ -175,8 +177,8 @@ from the repository root with the expected version and platform tag:
 
 ```console
 cargo xtask check-python-wheel \
-  /path/to/delta_arrow_reader-0.6.2-cp310-abi3-manylinux_2_28_x86_64.whl \
-  --expected-version 0.6.2 --platform-tag manylinux_2_28_x86_64
+  /path/to/delta_arrow_reader-X.Y.Z-cp310-abi3-manylinux_2_28_x86_64.whl \
+  --expected-version X.Y.Z --platform-tag manylinux_2_28_x86_64
 ```
 
 Use the version and platform tag required by your build. The check compares the
@@ -195,7 +197,7 @@ python -I -m unittest discover \
   -k installed
 ```
 
-This selects package metadata, native CLI, and local Arrow stream checks.
+This selects package metadata, native CLI, SQL, and local Arrow stream checks.
 The stream check covers both Python entrypoints and both Parquet backends,
 selects columns and filters rows, and closes the reader before consuming all results.
 It uses the checked-in Spark fixture and checks batch values after closing the
@@ -292,7 +294,7 @@ Maturin on Linux, delvewheel on Windows, or delocate on macOS repairs the wheel.
 The workflow checks the final wheel's metadata and extension dependencies, then
 installs it outside the checkout on Python 3.10 with PyArrow 18.0.0 and Python
 3.14 with the current compatible PyArrow release. Linux runs the full Python
-suite; Windows and macOS run all the installed-package, Python stream, and CLI
+suite; Windows and macOS run all the installed-package, Python stream, SQL, and CLI
 checks described above.
 
 Wheel repair does not replace the separate audit of the CLI in `.data/scripts`.
@@ -426,7 +428,7 @@ package version for that run:
 
 ```console
 gh run download RUN_ID --pattern 'delta-arrow-reader-*-wheel' --dir wheel-artifacts
-cargo xtask check-python-artifacts wheel-artifacts --expected-version 0.6.2
+cargo xtask check-python-artifacts wheel-artifacts --expected-version X.Y.Z
 ```
 
 The reusable wheel workflow produces build artifacts only. For publisher setup,
