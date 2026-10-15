@@ -55,8 +55,9 @@ Feature PRs skip release approval, builds, and image/Go acceptance. They still
 run the small workflow tests alongside the shared xtask checks for Python and
 cache tasks when tooling files change. Changes to CLI source or its dependencies
 also run the separate CLI Source job with formatting, Clippy, and unit tests.
-Native builds and runtime acceptance run only for approved release PRs or an
-explicit manual build. To run the builder manually
+Runtime acceptance runs only for approved release PRs or an explicit manual
+build. Release commits on main also build native binaries to warm dependency
+caches, without acceptance or artifact uploads. To run the builder manually
 during development, select
 **Build CLI binaries** in Actions and supply the commit as `source-ref` and its
 version as `expected-version`. The successful job summary links the complete

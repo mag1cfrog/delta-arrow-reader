@@ -65,6 +65,7 @@ fn python_filter_excludes_unrelated_sources_and_tools() -> Result<()> {
         ("Cargo.lock", true),
         ("Cargo.toml", true),
         ("crates/delta-arrow-reader-cli/Cargo.toml", true),
+        ("crates/delta-arrow-reader-cli/build.rs", true),
         ("crates/delta-arrow-reader-python/src/lib.rs", true),
         ("crates/delta-arrow-reader-python/tests/test_table.py", true),
         ("crates/delta-arrow-reader-core/tests/reader/https.py", true),
@@ -776,6 +777,7 @@ fn release_helpers_match_the_main_dependency_cache() -> Result<()> {
         include_str!("../../.github/workflows/pypi-build.yml"),
         include_str!("../../.github/workflows/pypi.yml"),
         include_str!("../../.github/workflows/release-plz.yml"),
+        include_str!("../../.github/workflows/release-cache-warm.yml"),
     ] {
         let workflow: Value = serde_yaml_ng::from_str(source)?;
         let mut readers = 0;
@@ -886,13 +888,140 @@ fn auxiliary_builds_keep_restored_dependencies_outside_checkout() -> Result<()> 
 }
 
 #[test]
-fn wheel_cache_warming_requires_manual_dispatch() -> Result<()> {
+fn core_cache_warmer_only_builds_wheels_on_manual_dispatch() -> Result<()> {
     let warmer: Value =
         serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
     assert_eq!(
         warmer["jobs"]["wheels"]["if"],
         "github.event_name == 'workflow_dispatch'"
     );
+    Ok(())
+}
+
+#[test]
+fn release_cache_warming_is_scoped_to_main_releases_and_manual_runs() -> Result<()> {
+    let warmer: Value = serde_yaml_ng::from_str(include_str!(
+        "../../.github/workflows/release-cache-warm.yml"
+    ))?;
+    assert_eq!(
+        warmer["on"],
+        json!({"push": {"branches": ["main"]}, "workflow_dispatch": null})
+    );
+    assert_eq!(warmer["concurrency"]["cancel-in-progress"], false);
+    let condition = warmer["jobs"]["prepare"]["if"]
+        .as_str()
+        .unwrap()
+        .replace(
+            "contains(github.event.head_commit.message, 'chore: release v')",
+            "\"$COMMIT_MESSAGE\" == *'chore: release v'*",
+        )
+        .replace(
+            "contains(github.event.head_commit.message, 'release-plz-')",
+            "\"$COMMIT_MESSAGE\" == *'release-plz-'*",
+        )
+        .replace("github.ref", "\"$REF\"")
+        .replace("github.event_name", "\"$EVENT\"");
+    for git_ref in ["refs/heads/main", "refs/heads/feature", "refs/pull/1/merge"] {
+        for event in ["push", "workflow_dispatch"] {
+            for (message, release) in [
+                ("feat: add a reader", false),
+                ("chore: release v0.7.0 (#416)", true),
+                (
+                    "Merge pull request #416 from owner/release-plz-2026-10-07",
+                    true,
+                ),
+            ] {
+                let output = Command::new("bash")
+                    .args(["-ec", &format!("[[ {condition} ]]")])
+                    .env("REF", git_ref)
+                    .env("EVENT", event)
+                    .env("COMMIT_MESSAGE", message)
+                    .output()?;
+                assert_eq!(
+                    output.status.success(),
+                    git_ref == "refs/heads/main" && (event == "workflow_dispatch" || release),
+                    "{git_ref}, {event}, {message}: {output:?}"
+                );
+            }
+        }
+    }
+    for (name, workflow) in [("wheels", "pypi-build.yml"), ("cli", "cli-build.yml")] {
+        let job = &warmer["jobs"][name];
+        assert_eq!(job["needs"], "prepare");
+        assert_eq!(job["uses"], format!("./.github/workflows/{workflow}"));
+        assert_eq!(job["with"]["source-ref"], "${{ github.sha }}");
+        assert_eq!(job["with"]["cache-only"], true);
+    }
+    assert_eq!(
+        warmer["jobs"]["prune"]["needs"],
+        json!(["prepare", "wheels", "cli"])
+    );
+    let core_warmer: Value =
+        serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
+    for workflow in [&warmer, &core_warmer] {
+        assert_eq!(
+            workflow["jobs"]["prune"]["concurrency"],
+            json!({"group": "build-cache-pruning", "cancel-in-progress": false})
+        );
+    }
+    let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
+    assert!(filter_matches(
+        &filters,
+        "tooling",
+        ".github/workflows/release-cache-warm.yml"
+    )?);
+    Ok(())
+}
+
+#[test]
+fn cache_only_builds_cannot_report_release_validation_or_upload_artifacts() -> Result<()> {
+    for source in [
+        include_str!("../../.github/workflows/pypi-build.yml"),
+        include_str!("../../.github/workflows/cli-build.yml"),
+    ] {
+        let workflow: Value = serde_yaml_ng::from_str(source)?;
+        assert_eq!(
+            workflow["on"]["workflow_call"]["inputs"]["cache-only"]["default"],
+            false
+        );
+        assert_eq!(
+            workflow["jobs"]["validate"]["if"],
+            "${{ always() && !inputs.cache-only }}"
+        );
+        let build = &workflow["jobs"]["build"];
+        for step in build["steps"].as_array().unwrap() {
+            let name = step["name"].as_str().unwrap_or_default();
+            if step["uses"] == "actions/upload-artifact@v6"
+                || name.starts_with("Test ")
+                || name.starts_with("Inspect ")
+                || name == "Audit installed wheel CLI"
+            {
+                assert!(
+                    step["if"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .contains("!inputs.cache-only"),
+                    "{name}"
+                );
+            }
+        }
+        if workflow["jobs"]["runtime"].is_object() {
+            for job in ["checks", "runtime"] {
+                assert_eq!(workflow["jobs"][job]["if"], "${{ !inputs.cache-only }}");
+            }
+        } else {
+            assert_eq!(build["strategy"]["max-parallel"], 3);
+            assert_eq!(workflow["env"]["SCCACHE_GHA_RW_MODE"], "READ_ONLY");
+            assert!(build["env"]["SCCACHE_GHA_RW_MODE"].is_null());
+            let step = build["steps"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|step| step["id"] == "wheel-build")
+                .unwrap();
+            assert!(step["continue-on-error"].is_null());
+        }
+    }
     Ok(())
 }
 
@@ -971,10 +1100,16 @@ fn benchmark_cache_warming_matches_pr_builds() -> Result<()> {
 
 #[test]
 fn cache_warming_requires_the_triggering_main_commit() -> Result<()> {
-    let script = workflow_script(
-        include_str!("../../.github/workflows/pypi-build.yml"),
-        "Check build inputs and read Rust version",
-    );
+    let scripts = [
+        workflow_script(
+            include_str!("../../.github/workflows/pypi-build.yml"),
+            "Check build inputs and read Rust version",
+        ),
+        workflow_script(
+            include_str!("../../.github/workflows/cli-build.yml"),
+            "Require trusted main cache warming",
+        ),
+    ];
     let output = Command::new("git")
         .args(["rev-parse", "HEAD"])
         .current_dir(root())
@@ -989,44 +1124,46 @@ fn cache_warming_requires_the_triggering_main_commit() -> Result<()> {
         })
         .unwrap();
     let directory = test_dir("main-guard");
-    for git_ref in [
-        "refs/heads/main",
-        "refs/heads/fix/example",
-        "refs/pull/1/merge",
-    ] {
-        for event in [
-            "push",
-            "workflow_dispatch",
-            "pull_request",
-            "pull_request_target",
+    for script in scripts {
+        for git_ref in [
+            "refs/heads/main",
+            "refs/heads/fix/example",
+            "refs/pull/1/merge",
         ] {
-            for same_commit in [true, false] {
-                let output = Command::new("bash")
-                    .args(["-e", "-c", &script])
-                    .current_dir(root())
-                    .env("CACHE_ONLY", "true")
-                    .env("SOURCE_REF", sha.trim())
-                    .env(
-                        "GITHUB_SHA",
-                        if same_commit {
-                            sha.trim()
-                        } else {
-                            "0000000000000000000000000000000000000000"
-                        },
-                    )
-                    .env("GITHUB_REF", git_ref)
-                    .env("GITHUB_EVENT_NAME", event)
-                    .env("EXPECTED_VERSION", version)
-                    .env("GITHUB_OUTPUT", directory.join("output"))
-                    .output()?;
-                let expected = git_ref == "refs/heads/main"
-                    && matches!(event, "push" | "workflow_dispatch")
-                    && same_commit;
-                assert_eq!(
-                    output.status.success(),
-                    expected,
-                    "{git_ref}, {event}, same_commit={same_commit}: {output:?}"
-                );
+            for event in [
+                "push",
+                "workflow_dispatch",
+                "pull_request",
+                "pull_request_target",
+            ] {
+                for same_commit in [true, false] {
+                    let output = Command::new("bash")
+                        .args(["-e", "-c", &script])
+                        .current_dir(root())
+                        .env("CACHE_ONLY", "true")
+                        .env("SOURCE_REF", sha.trim())
+                        .env(
+                            "GITHUB_SHA",
+                            if same_commit {
+                                sha.trim()
+                            } else {
+                                "0000000000000000000000000000000000000000"
+                            },
+                        )
+                        .env("GITHUB_REF", git_ref)
+                        .env("GITHUB_EVENT_NAME", event)
+                        .env("EXPECTED_VERSION", version)
+                        .env("GITHUB_OUTPUT", directory.join("output"))
+                        .output()?;
+                    let expected = git_ref == "refs/heads/main"
+                        && matches!(event, "push" | "workflow_dispatch")
+                        && same_commit;
+                    assert_eq!(
+                        output.status.success(),
+                        expected,
+                        "{git_ref}, {event}, same_commit={same_commit}: {output:?}"
+                    );
+                }
             }
         }
     }
@@ -1035,55 +1172,10 @@ fn cache_warming_requires_the_triggering_main_commit() -> Result<()> {
 }
 
 #[test]
-fn linux_cache_check_isolates_build_outputs_without_masking_build_failures() -> Result<()> {
-    let directory = test_dir("linux-exit");
-    let cargo = directory.join("cargo");
-    fs::write(
-        &cargo,
-        "#!/bin/sh\ntest -z \"$RUSTC_WRAPPER\" || exit 10\nprintf '%s\\n' \"$@\"\nexit \"$CACHE_CHECK_EXIT\"\n",
-    )?;
-    fs::set_permissions(&cargo, fs::Permissions::from_mode(0o755))?;
-    let trap = include_str!("../../.github/workflows/pypi-build.yml")
-        .lines()
-        .find(|line| line.trim_start().starts_with("trap '"))
-        .unwrap();
-    for build_status in [0, 7] {
-        for check_status in [0, 9] {
-            let output = Command::new("/bin/bash")
-                .args(["-euc", &format!("{trap}\nexit {build_status}")])
-                .env("PATH", &directory)
-                .env("GITHUB_WORKSPACE", root())
-                .env("RUSTC_WRAPPER", "sccache")
-                .env("CACHE_CHECK_EXIT", check_status.to_string())
-                .output()?;
-            assert_eq!(
-                output.status.success(),
-                build_status == 0 && check_status == 0,
-                "build={build_status}, check={check_status}: {output:?}"
-            );
-            let stdout = String::from_utf8(output.stdout)?;
-            let args: Vec<_> = stdout.lines().collect();
-            let target = args
-                .windows(2)
-                .find(|args| args[0] == "--target-dir")
-                .expect("container cache check must use a separate target directory")[1];
-            let target = Path::new(target);
-            assert!(target.is_absolute(), "container target must be absolute");
-            assert!(
-                !target.starts_with(root()),
-                "container target must stay outside the mounted workspace"
-            );
-        }
-    }
-    fs::remove_dir_all(directory)?;
-    Ok(())
-}
-
-#[test]
-fn cache_retry_cleans_the_correct_target_and_restarts_native_sccache() -> Result<()> {
+fn cache_retry_cleans_the_correct_target_and_restarts_sccache() -> Result<()> {
     let directory = test_dir("cache-retry");
     let log = directory.join("commands");
-    for program in ["sudo", "sccache", "cargo", "sleep"] {
+    for program in ["sccache", "cargo", "sleep"] {
         let path = directory.join(program);
         fs::write(
             &path,
@@ -1091,42 +1183,29 @@ fn cache_retry_cleans_the_correct_target_and_restarts_native_sccache() -> Result
         )?;
         fs::set_permissions(path, fs::Permissions::from_mode(0o755))?;
     }
-    let wheel_script = workflow_script(
-        include_str!("../../.github/workflows/pypi-build.yml"),
-        "Prepare cache write retry",
+    let core_script = workflow_script(
+        include_str!("../../.github/workflows/cache-warm.yml"),
+        "Prepare core cache write retry",
     );
     let benchmark_script = workflow_script(
         include_str!("../../.github/workflows/cache-warm.yml"),
         "Prepare benchmark cache write retry",
     );
-    for (script, runner, expected) in [
+    for (script, expected) in [
         (
-            &wheel_script,
-            "Linux",
-            "sudo rm -rf .python-sdist-source/target\nsleep 60\n",
-        ),
-        (
-            &wheel_script,
-            "Windows",
-            "sccache --stop-server\ncargo clean --target-dir target\nsleep 60\n",
-        ),
-        (
-            &wheel_script,
-            "macOS",
+            &core_script,
             "sccache --stop-server\ncargo clean --target-dir target\nsleep 60\n",
         ),
         (
             &benchmark_script,
-            "Linux",
             "sccache --stop-server\ncargo clean --target-dir /tmp/benchmark-fixtures\nsleep 60\n",
         ),
     ] {
-        for failure in ["", "sudo", "sccache", "cargo"] {
+        for failure in ["", "sccache", "cargo"] {
             fs::write(&log, "")?;
             let output = Command::new("/bin/bash")
                 .args(["-euc", script])
                 .env("PATH", &directory)
-                .env("RUNNER_OS", runner)
                 .env("RUSTC_WRAPPER", "")
                 .env("CARGO_TARGET_DIR", "/tmp/benchmark-fixtures")
                 .env("COMMAND_LOG", &log)
@@ -1136,7 +1215,7 @@ fn cache_retry_cleans_the_correct_target_and_restarts_native_sccache() -> Result
             assert_eq!(
                 output.status.success(),
                 !should_fail,
-                "{runner}: {output:?}"
+                "{expected}: {output:?}"
             );
             let actual = fs::read_to_string(&log)?;
             if should_fail {
@@ -1359,9 +1438,16 @@ fn prune_deletes_by_id_and_stops_on_command_or_schema_errors() -> Result<()> {
         &gh,
         r#"#!/bin/sh
 case "$*" in
-  'api --paginate --slurp repos/owner/repo/actions/caches?key=v0-rust-core-ci-targets-'*'&ref=refs/heads/main&per_page=100')
+  'api --paginate --slurp repos/owner/repo/actions/caches?key=v0-rust-'*'&per_page=100')
     [ "$FAIL_LIST" != true ] || exit 9
     printf '%s' "$CACHE_PAGES" ;;
+  'api repos/owner/repo/pulls/42')
+    [ "$FAIL_PR" != true ] || exit 10
+    printf '%s\n' "$2" >> "$PR_LOG"
+    printf '%s' "$CLOSED_PR_RESPONSE" ;;
+  'api repos/owner/repo/pulls/43')
+    printf '%s\n' "$2" >> "$PR_LOG"
+    printf '{"state":"open"}' ;;
   'api --method DELETE repos/owner/repo/actions/caches/'*)
     printf '%s\n' "$4" >> "$DELETE_LOG"
     [ "$FAIL_DELETE" != true ] || exit 7 ;;
@@ -1374,11 +1460,21 @@ esac
         json!({"id": id, "key": format!("v0-rust-core-ci-targets-{platform}-{id}"),
         "ref": "refs/heads/main", "last_accessed_at": format!("2026-10-{id:02}T00:00:00Z")})
     };
+    let mut closed = cache(5, "Linux-x64");
+    closed["ref"] = json!("refs/pull/42/merge");
+    let mut open = cache(6, "Linux-x64");
+    open["ref"] = json!("refs/pull/43/merge");
+    let mut branch = cache(7, "Linux-x64");
+    branch["ref"] = json!("refs/heads/feature");
+    let mut cli = closed.clone();
+    cli["id"] = json!(8);
+    cli["key"] = json!("v0-rust-cli-debian-amd64-old");
     let pages = json!([
         {"actions_caches": [
             cache(14, "Linux-x64"), cache(13, "Linux-x64"),
             cache(24, "Darwin-arm64"), cache(23, "Darwin-arm64"),
             cache(4, "Windows_NT-x64"), cache(3, "Windows_NT-x64"),
+            closed, open, branch, cli,
         ]},
         {"actions_caches": [
             cache(12, "Linux-x64"), cache(11, "Linux-x64"),
@@ -1394,15 +1490,37 @@ esac
         .env("GH_REPO", "owner/repo")
         .env("CACHE_PAGES", pages.to_string())
         .env("DELETE_LOG", &log)
+        .env("PR_LOG", directory.join("pull-requests"))
+        .env("CLOSED_PR_RESPONSE", r#"{"state":"closed"}"#)
+        .env("FAIL_PR", "false")
         .env("FAIL_DELETE", "false")
         .env("FAIL_LIST", "false");
-    assert!(command.output()?.status.success());
+    let output = command.output()?;
+    assert!(output.status.success(), "{output:?}");
     assert_eq!(
         fs::read_to_string(&log)?,
-        "repos/owner/repo/actions/caches/12\nrepos/owner/repo/actions/caches/11\n\
-         repos/owner/repo/actions/caches/22\nrepos/owner/repo/actions/caches/21\n\
-         repos/owner/repo/actions/caches/2\nrepos/owner/repo/actions/caches/1\n"
+        "repos/owner/repo/actions/caches/13\nrepos/owner/repo/actions/caches/12\nrepos/owner/repo/actions/caches/11\nrepos/owner/repo/actions/caches/5\n\
+         repos/owner/repo/actions/caches/23\nrepos/owner/repo/actions/caches/22\nrepos/owner/repo/actions/caches/21\n\
+         repos/owner/repo/actions/caches/3\nrepos/owner/repo/actions/caches/2\nrepos/owner/repo/actions/caches/1\n\
+         repos/owner/repo/actions/caches/8\n"
     );
+    assert_eq!(
+        fs::read_to_string(directory.join("pull-requests"))?,
+        "repos/owner/repo/pulls/42\nrepos/owner/repo/pulls/43\n"
+    );
+    fs::write(&log, "")?;
+    assert!(!command.env("FAIL_PR", "true").output()?.status.success());
+    assert!(fs::read_to_string(&log)?.is_empty());
+    assert!(
+        !command
+            .env("FAIL_PR", "false")
+            .env("CLOSED_PR_RESPONSE", "{}")
+            .output()?
+            .status
+            .success()
+    );
+    assert!(fs::read_to_string(&log)?.is_empty());
+    command.env("CLOSED_PR_RESPONSE", r#"{"state":"closed"}"#);
     fs::write(&log, "")?;
     assert!(
         !command
@@ -1413,7 +1531,7 @@ esac
     );
     assert_eq!(
         fs::read_to_string(&log)?,
-        "repos/owner/repo/actions/caches/12\n"
+        "repos/owner/repo/actions/caches/13\n"
     );
     fs::write(&log, "")?;
     assert!(!command.env("FAIL_LIST", "true").output()?.status.success());
