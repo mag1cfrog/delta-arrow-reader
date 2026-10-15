@@ -9,6 +9,9 @@ page is for readers who want to understand or tune how the work is divided.
 
 ## Choose a warmup mode
 
+For a practical comparison and Python or Rust examples, start with
+[configuration](https://mag1cfrog.github.io/delta-arrow-reader/configuration/).
+
 `DeltaTableBuilder::load_table` defaults to `WarmupMode::Automatic`. For supported
 S3 stores, the Direct backend prepares reusable metadata and samples the
 network before the first query. Other stores, explicit range policies and the

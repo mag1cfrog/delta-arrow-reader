@@ -51,6 +51,9 @@ If it starts but cannot finish, the first eligible query can try once more.
 Concurrent queries share that retry. Its time is part of that query; if it also
 fails, later queries keep normal reads without trying again.
 
+The [configuration guide](https://mag1cfrog.github.io/delta-arrow-reader/configuration/)
+compares initialization choices and shows how to skip sampling or change its budget.
+
 <details>
 <summary>Supported file formats and decision thresholds</summary>
 

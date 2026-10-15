@@ -21,6 +21,7 @@ plugins:
 
 markdown_extensions:
   - admonition
+  - md_in_html
   - pymdownx.details
   - pymdownx.superfences
   - pymdownx.inlinehilite
@@ -40,6 +41,7 @@ nav:
       - Python quickstart: python.md
       - Command-line reader: cli.md
       - DataFusion quickstart: datafusion.md
+      - Configuration: configuration.md
   - How it works:
       - Architecture: architecture.md
       - Delta metadata lifecycle: delta-metadata-lifecycle.md
