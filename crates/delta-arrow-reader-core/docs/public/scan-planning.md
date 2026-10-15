@@ -1,65 +1,28 @@
-# Scan Planning
+# Scan planning
 
-Scan planning turns the files in a Delta snapshot into a bounded set of tasks.
-It happens after the reader knows which columns and rows the query needs.
-Planning may also retry incomplete network warmup before query execution begins.
+Before reading rows, the reader decides which files a query needs and how to
+share the work. It creates groups of file tasks that can run in parallel.
+These groups are called *execution partitions*. They do not change the table's
+files or its partition columns.
 
-If you only need to run a query, the defaults are a good place to start. This
-page is for readers who want to understand or tune how the work is divided.
-
-## Choose a warmup mode
-
-For a practical comparison and Python or Rust examples, start with
-[configuration](https://mag1cfrog.github.io/delta-arrow-reader/configuration/).
-
-`DeltaTableBuilder::load_table` defaults to `WarmupMode::Automatic`. For supported
-S3 stores, the Direct backend prepares reusable metadata and samples the
-network before the first query. Other stores, explicit range policies and the
-Delta Kernel backend do no warmup. Disabling partial-page reads on the table
-builder also disables automatic warmup.
-
-Choose `WarmupMode::None` to skip preparation. Each scan then performs Delta
-log/checkpoint replay before Delta Kernel applies its predicate and selects files.
-
-`DeltaTableBuilder::with_warmup(WarmupMode::QueryPlanning)` instead materializes
-a query-unfiltered set of reconciled active `add` metadata during table
-initialization. It retains all available file statistics, so later scan builds
-can still make query-specific data-skipping decisions. Those builds pass the
-retained metadata to Delta Kernel through `Scan::scan_metadata_from`; Delta
-Kernel remains responsible for applying the query predicate and selecting
-files.
-
-These modes produce the same file tasks. Partition values, schema transforms,
-and deletion-vector information follow the selected files in every mode.
-
-Query-planning warmup adds initialization time and retains metadata in memory.
-Use the [metadata comparison instructions](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/benchmarks/eager-metadata.md)
-to measure whether it reduces total time for your queries.
-
-To see how this initialization choice plays out across several queries, follow
-the [metadata warmup lifecycles](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/).
-
-The [partial-page guide](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/#measure-the-connection)
-explains how network sampling selects data files, shares its profile and recovers
-once after an incomplete attempt. It also covers supported stores, sampling
-limits, explicit configuration and the initialization cost.
-
-`load_snapshot` never performs warmup. Converting that snapshot with `into_table`
-also leaves warmup undone; use `load_table` for automatic preparation.
+The defaults choose the amount of parallel work for you. This page explains
+those choices; [Configuration](https://mag1cfrog.github.io/delta-arrow-reader/configuration/)
+shows the settings to use when you need to adjust them.
 
 ## Choose a partition target
 
-The partition target is the number of independent groups the reader tries to
-create. It is a target, not a promise: a scan with fewer files may produce fewer
-groups, and an empty scan produces none.
+The target is the number of independent groups the reader tries to create.
+It starts from available CPU parallelism, then applies memory and open-file
+limits it can determine cheaply. DataFusion's session target can also cap it.
+A smaller scan may need fewer groups, and an empty scan has none.
 
-You can set the target explicitly:
+You can supply a positive target with `DeltaScanBuilder::with_target_partitions`
+in Rust, `target_partitions` in Python, or `datafusion::ScanOptions::target_partitions`
+for SQL. An explicit target overrides the automatic resource caps and skips the
+host probes. It does not reserve memory or guarantee that a query fits in memory.
 
-- The streaming API uses `DeltaScanBuilder::with_target_partitions`.
-- The DataFusion adapter uses `datafusion::ScanOptions::target_partitions`.
-
-An explicit target must be greater than zero. It wins over the automatic target
-and its resource caps, so planning skips the environment probes for that scan.
+<details markdown="1">
+<summary>Automatic limits and Linux memory accounting</summary>
 
 Without an explicit value, the reader starts with the process's available
 parallelism. It then caps that number with the values it can determine cheaply:
@@ -117,18 +80,22 @@ latency and force later reads from storage. The partition cap is a planning
 heuristic: it does not reserve memory, enforce a process memory limit, or
 guarantee that a scan avoids OOM.
 
+</details>
+
 ## Select the files
 
-Delta Kernel consumes the table's Delta scan metadata. With no warmup, Delta
-log/checkpoint replay reconciles the active `add` metadata for that scan;
-query-planning warmup starts from the retained reconciled result. Delta Kernel
-then applies partition and data-statistics pruning. Each selected file becomes
-a scan task with its path, size and row estimates when available, partition
-values, schema transforms, and deletion-vector information.
+The reader uses the Delta table's file information and the query's conditions
+to remove files that cannot match. With a prepared table it reuses that
+information; otherwise it builds it for this query. Delta Kernel applies the
+partition values and file statistics to make the selection.
 
-Choosing the partition target before this step keeps host policy separate from
-table shape. Parquet file size is not a reliable estimate of decoded Arrow
-memory, and choosing a larger target cannot by itself split one physical file.
+Each remaining file becomes a task carrying its location, size and row estimates
+when available, partition values, schema changes, and deletion-vector information.
+A deletion vector marks rows that must stay excluded from the result.
+
+The reader chooses its partition target before selecting files. Compressed
+Parquet file size does not reliably predict memory use after decoding, and a
+larger target alone cannot split one physical file.
 
 ## Group whole files
 
@@ -147,6 +114,13 @@ This whole-file plan is the final plan for the streaming API. DataFusion has one
 optional step that can divide files more finely.
 
 ## Split files with DataFusion
+
+If there are too few files to fill the target, DataFusion can split large files
+into ranged tasks. This is available for direct Parquet reads through the
+DataFusion adapter. Streaming API scans keep whole-file tasks.
+
+<details markdown="1">
+<summary>Repartitioning settings and split sizes</summary>
 
 Intra-file repartitioning is available only for direct Parquet scans through the
 DataFusion adapter. `datafusion::IntraFileRepartitioning` controls when the
@@ -167,7 +141,15 @@ When repartitioning runs, DataFusion flattens the current groups and aims for
 are unavailable or DataFusion finds no useful split, the reader keeps the
 whole-file plan.
 
+</details>
+
 ## Keep row groups intact
+
+Parquet stores a file in groups of rows called row groups. A split assigns each
+group to one task so the same rows are not read twice or left out.
+
+<details markdown="1">
+<summary>How a range owns a row group</summary>
 
 A ranged task never reads half of a Parquet row group. The range containing a
 row group's first column-page offset owns that whole row group. The reader then
@@ -177,5 +159,87 @@ Every ranged task keeps the original Delta file metadata, including partition
 values, transforms, and deletion-vector coordinates. A scan therefore returns
 the same rows whether it uses whole-file tasks or ranged tasks.
 
-See [read scheduling](https://mag1cfrog.github.io/delta-arrow-reader/read-scheduling/) for what happens when these tasks
-start running.
+</details>
+
+## Choose a warmup mode
+
+Preparing a table changes when file information is loaded, rather than which
+rows a query returns. The default prepares supported S3 tables while opening;
+other stores remain lazy. Start with the
+[metadata lifecycle](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/)
+for an explanation of reuse across queries.
+
+<details markdown="1">
+<summary>Preparation APIs and incomplete network checks</summary>
+
+For a practical comparison and Python or Rust examples, start with
+[configuration](https://mag1cfrog.github.io/delta-arrow-reader/configuration/).
+
+`DeltaTableBuilder::load_table` defaults to `WarmupMode::Automatic`. For supported
+S3 stores, the Direct backend prepares reusable metadata and samples the
+network before the first query. Other stores, explicit range policies and the
+Delta Kernel backend do no warmup. Disabling partial-page reads on the table
+builder also disables automatic warmup.
+
+Choose `WarmupMode::None` to skip preparation. Each scan then performs Delta
+log/checkpoint replay before Delta Kernel applies its predicate and selects files.
+
+`DeltaTableBuilder::with_warmup(WarmupMode::QueryPlanning)` instead materializes
+a query-unfiltered set of reconciled active `add` metadata during table
+initialization. It retains all available file statistics, so later scan builds
+can still make query-specific data-skipping decisions. Those builds pass the
+retained metadata to Delta Kernel through `Scan::scan_metadata_from`; Delta
+Kernel remains responsible for applying the query predicate and selecting
+files.
+
+These modes produce the same file tasks. Partition values, schema transforms,
+and deletion-vector information follow the selected files in every mode.
+
+Query-planning warmup adds initialization time and retains metadata in memory.
+Use the [metadata comparison instructions](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/benchmarks/eager-metadata.md)
+to measure whether it reduces total time for your queries.
+
+To see how this initialization choice plays out across several queries, follow
+the [metadata warmup lifecycles](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/).
+
+The [partial-page guide](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/#measure-the-connection)
+explains how network sampling selects data files, shares its profile and recovers
+once after an incomplete attempt. It also covers supported stores, sampling
+limits, explicit configuration and the initialization cost.
+
+`load_snapshot` never performs warmup. Converting that snapshot with `into_table`
+also leaves warmup undone; use `load_table` for automatic preparation.
+
+</details>
+
+## Floating-point row-group pruning
+
+Some floating-point statistics cannot safely exclude a row group because it
+might contain NaN values. The reader then reads and filters the group instead.
+This costs extra I/O but preserves the query's comparisons.
+
+<details markdown="1">
+<summary>Exact NaN and min/max rules</summary>
+
+For physical Parquet `FLOAT` and `DOUBLE` columns, the `Direct` backend requires
+a usable `nan_count = 0` before using min/max bounds to prune `<`, `<=`, `>`,
+`>=`, or `!=`. Missing, invalid, or nonzero counts prevent these bounds from
+excluding a row group for those operators, which can mean extra reads. An
+explicit zero restores these pruning opportunities when the bounds suffice.
+
+Bounds can omit NaNs. The
+[Parquet specification](https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift)
+requires readers to assume NaNs may exist when `nan_count` is absent. Direct's
+row evaluator uses Arrow comparisons: negative NaNs sort below non-NaN values,
+positive NaNs above them. For example, bounds of `[1.5, 1.5]` do not rule out
+`v > 100.0` if the group might contain a positive NaN.
+
+Equality to a finite value can still exclude impossible matches, such as
+`v = 100.0` with those bounds. Null checks with valid counts and an independently
+impossible `AND` condition on another column can also exclude row groups. The
+NaN guard checks physical statistics; widening integers to floats does not
+require NaN counts.
+
+</details>
+
+For the next stage, see [read scheduling](https://mag1cfrog.github.io/delta-arrow-reader/read-scheduling/).

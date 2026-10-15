@@ -1,16 +1,22 @@
 # Python API
 
-Use `DeltaTable` to read a Delta table as PyArrow batches. For SQL, register the
-table with a `Session`, then run your query. The [Python quickstart](../python.md)
-walks through both approaches with a sample table.
+Use this section to look up a method or parameter. For your first query, follow
+the [Python quickstart](../python.md); it starts with reading ten rows and then
+adds column selection, filters, and SQL.
 
-| API | Use it to |
+## Find the operation you need
+
+| Task | API |
 | --- | --- |
-| [DeltaTable](table.md) | Open a table, inspect its schema, select columns and filter rows. |
-| [Session](session.md) | Register tables and query them with SQL. |
-| [ScanExecutionOptions](options.md) | Control how much work a query runs at once. |
-| [Streams and errors](streams-and-errors.md) | Work with Arrow stream exports and reader errors. |
+| Open a table and inspect its columns | [DeltaTable](table.md) |
+| Select rows and columns as PyArrow batches | [DeltaTable.to_reader()](table.md#delta_arrow_reader.DeltaTable.to_reader) |
+| Run SQL over one or more tables | [Session](session.md) |
+| Read a newer table version | [DeltaTable.refresh()](table.md#delta_arrow_reader.DeltaTable.refresh) |
+| Limit concurrent file reads or buffering | [ScanExecutionOptions](options.md) |
+| Handle a failure or export an Arrow stream | [Streams and errors](streams-and-errors.md) |
 
-For help choosing initialization and resource settings, start with
-[Configuration](../configuration.md). These API pages list the available
-parameters, defaults and return types.
+## Choose settings after the first query
+
+Start with the defaults. [Configuration](../configuration.md) explains the cost
+of opening a table and the tradeoffs of changing resource limits. The API pages
+below give exact signatures, accepted values, defaults, and exceptions.

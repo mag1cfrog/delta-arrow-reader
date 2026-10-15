@@ -1,79 +1,82 @@
-# Architecture
+# How a read works
 
-Whether you use the streaming API or DataFusion, Delta Arrow Reader follows the
-same path from a Delta Lake table to Apache Arrow record batches.
+Delta Arrow Reader turns a Delta table into batches of rows your application can
+process. It tries to avoid reading data the query does not need, then delivers
+the remaining rows a batch at a time.
+
+A Delta table has two parts: Parquet files containing the rows, and a Delta log
+that records which files belong to each version of the table. You open the table
+directory; the reader uses the log to find the right files.
 
 ## From a table to Arrow batches
 
-At a high level, the reader does three things:
+1. **Open a version.** Load the table's column names and types, and identify the
+   version to read. A loaded table stays on that version even if someone writes
+   new data.
+2. **Choose the data.** Use your requested columns and filter conditions to rule
+   out files and parts of files that cannot contribute to the result.
+3. **Return batches.** Read the remaining data, exclude deleted rows, apply the
+   table's schema, and return groups of rows in Arrow format.
 
-1. It loads the table. The reader normalizes the table location, resolves the
-   object store, then loads one Delta snapshot with its protocol and schema.
-2. It plans the scan. The reader applies the requested columns and predicate,
-   removes files that cannot match, and divides the remaining files into
-   partitions.
-3. It runs the scan. The reader opens the Parquet files, applies deletion
-   vectors and Delta schema changes, and returns batches as the application
-   asks for them.
+The reader works at several levels. Parquet divides a file into row groups,
+then divides each column's data into smaller pages:
 
-Once loaded, a `DeltaTable` always points to the same snapshot. Its `refresh`
-method loads the latest snapshot into a new table and leaves the original
-unchanged.
+| Level | What the reader can avoid |
+| --- | --- |
+| File | Files whose recorded values cannot match the filter. |
+| Row group | Groups of rows that statistics inside the file rule out. |
+| Page | Pages in output columns that contain no selected rows. |
+| Values within a page | Unneeded values, when the file format supports partial reads and the expected saving justifies the requests. |
 
-## Remote I/O phases
-
-For a table in remote storage, the read path has three distinct I/O phases.
-The warmup mode controls whether Delta scan metadata is prepared during table
-initialization or during each query.
-
-The default `Automatic` mode prepares supported S3 tables and also performs
-bounded network sampling. Other stores remain lazy. The table below separates
-metadata preparation from the additional [network profiling](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/#measure-the-connection).
-
-| Phase | No warmup | Query planning |
-| --- | --- | --- |
-| 1. Delta scan metadata | Every scan build performs Delta log/checkpoint replay and selects active files. | Table initialization performs the replay once. Later scan builds select files from the retained metadata. |
-| 2. Parquet metadata | The query reads footers and prunes row groups. | The query reads footers and prunes row groups. |
-| 3. Parquet data | The query reads the selected row groups. | Unchanged. |
-
-A successful query-planning warmup needs no later Delta log/checkpoint reads
-for file discovery from that table. It does not move Parquet metadata or data
-reads into initialization, and it does not change deletion-vector behavior.
-
-The retained Delta scan metadata contains reconciled active `add` metadata and
-available file statistics, not raw JSON commit files. It belongs to one exact
-snapshot and remains in memory for the lifetime of that loaded table.
-Separately loaded tables do not share this memory. There is no TTL, eviction,
-persistence, or background refresh. An explicit refresh can update the retained
-metadata from commits written after its version. If a newer checkpoint makes
-that impossible, Delta Kernel rebuilds the metadata from the checkpoint.
+If the available information cannot rule data out safely, the reader reads and
+filters it. A deletion vector is a list of rows marked as deleted; those rows
+stay excluded whichever read strategy is chosen.
 
 ## Streaming API
 
-With the streaming API, these stages appear as a table, a single-use scan, and a
-batch stream. The reader applies the predicate, removes any columns that were
-needed only for filtering, and stops at the requested row limit. Metrics remain
-available after the stream finishes or is dropped.
+In Rust, a loaded table creates a scan, and the scan produces a stream of Arrow
+batches. Python's `to_reader()` exposes those batches through PyArrow. Reading
+incrementally lets your application process a large result without collecting
+it all in memory.
+
+A Rust scan is single-use. It applies the filter, removes columns needed only to
+evaluate that filter, and stops at the requested row limit. You can still
+inspect its metrics after the stream finishes or is dropped.
 
 ## DataFusion adapter
 
-The DataFusion adapter changes the front end, not the reader underneath it.
-DataFusion plans the SQL query and the work that happens after the scan. Delta
-Arrow Reader still handles the Delta metadata, chooses the data files, applies
-deletion vectors and schema changes, and reads the Parquet data.
+For SQL, DataFusion plans the query and operations such as joins, sorting, and
+aggregation. Delta Arrow Reader handles the Delta table reads underneath it,
+including file selection, deletion vectors, and schema changes.
 
-The adapter registers one table at a time. Applications such as Delta Funnel
-remain responsible for coordinating several tables, exposing configuration,
-building reports, and sending the results elsewhere.
+The adapter registers one table at a time. Your application chooses which tables
+to register and how to use the results. Applications such as Delta Funnel also
+coordinate multiple tables, configuration, reporting, and delivery.
+
+## Remote I/O phases
+
+A remote query needs information about the table's files, information inside the
+selected Parquet files, and finally the selected data. Keeping a table open can
+save repeated work on the first part.
+
+By default, supported S3 tables prepare reusable file information and measure
+the connection while opening. Local tables build file information during queries
+and skip the connection check. The
+[configuration guide](https://mag1cfrog.github.io/delta-arrow-reader/configuration/)
+explains the opening cost and alternatives. The
+[metadata lifecycle](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/)
+explains what is reused and what each query still reads.
 
 ## Parquet backends
 
-The default `Direct` backend reads Parquet data asynchronously through
-the same object store used to load the snapshot. The `DeltaKernel` backend
-reads data files through Delta Kernel's synchronous iterator API.
-Whichever backend you choose, the rest of the scan behaves the same.
+The default `Direct` backend reads Parquet files asynchronously through the
+same object store used to open the table. It can use the finer read strategies
+shown above. The optional `DeltaKernel` backend delegates data-file reads to
+Delta Kernel's synchronous iterator. Both preserve the scan's filtering,
+projection, deletion, and schema behavior.
 
-### Predicate-aware Parquet reads
+<details markdown="1">
+<summary id="predicate-aware-parquet-reads">How filtering avoids decoding and downloading unrelated columns</summary>
 
 When the `Direct` backend can evaluate a row predicate exactly, it applies that
 predicate as a Parquet row filter before decoding the output columns. The row
@@ -94,45 +97,34 @@ For supported pages, the reader can also fetch just the selected values inside
 a page. [Partial-page reads](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/) explains the layouts, network
 cost decision, configuration and measured tradeoffs.
 
-### Floating-point row-group pruning
+</details>
 
-For physical Parquet `FLOAT` and `DOUBLE` columns, the `Direct` backend requires
-a usable `nan_count = 0` before using min/max bounds to prune `<`, `<=`, `>`,
-`>=`, or `!=`. Missing, invalid, or nonzero counts prevent these bounds from
-excluding a row group for those operators, which can mean extra reads. An
-explicit zero restores these pruning opportunities when the bounds suffice.
+<details markdown="1">
+<summary id="floating-point-row-group-pruning">Why floating-point columns sometimes need extra reads</summary>
 
-Bounds can omit NaNs. The
-[Parquet specification](https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift)
-requires readers to assume NaNs may exist when `nan_count` is absent. Direct's
-row evaluator uses Arrow comparisons: negative NaNs sort below non-NaN values,
-positive NaNs above them. For example, bounds of `[1.5, 1.5]` do not rule out
-`v > 100.0` if the group might contain a positive NaN.
+NaN values need special handling before statistics can rule out a row group.
+See the [floating-point pruning rules](https://mag1cfrog.github.io/delta-arrow-reader/scan-planning/#floating-point-row-group-pruning)
+for the exact conditions.
 
-Equality to a finite value can still exclude impossible matches, such as
-`v = 100.0` with those bounds. Null checks with valid counts and an independently
-impossible `AND` condition on another column can also exclude row groups. The
-NaN guard checks physical statistics; widening integers to floats does not
-require NaN counts.
+</details>
 
 ## Cancellation
 
-The reader schedules file work gradually instead of starting every file at
-once. When the application drops a stream, the reader stops scheduling new
-files. Synchronous work that has already started may continue until it reaches
-a safe stopping point.
+The reader starts file work gradually. Dropping the stream stops new work;
+Python callers can close their reader or leave its `with` block. Synchronous
+work already inside a dependency call may continue until a safe stopping point.
+The [scheduling guide](https://mag1cfrog.github.io/delta-arrow-reader/read-scheduling/)
+explains how reading ahead, buffering, and cancellation fit together.
 
 ## Out of scope
 
-Delta Arrow Reader does not write Delta tables, manage transactions, create a
-Tokio runtime, or coordinate application workflows.
+Delta Arrow Reader reads existing tables. It does not write Delta tables,
+manage transactions, create a Tokio runtime for Rust callers, or coordinate
+application workflows.
 
 ## Go deeper
 
-- [Delta metadata lifecycle](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/) follows one loaded table through
-  several queries and explains when keeping its file metadata in memory can
-  save planning time.
-- [Scan planning](https://mag1cfrog.github.io/delta-arrow-reader/scan-planning/) explains how the reader chooses a partition
-  target, groups files, and optionally splits large files.
-- [Read scheduling](https://mag1cfrog.github.io/delta-arrow-reader/read-scheduling/) explains concurrency, prefetching,
-  dynamic pruning, backpressure, and cancellation.
+- [Metadata lifecycle](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/): why keeping a table open can reduce repeated work.
+- [Scan planning](https://mag1cfrog.github.io/delta-arrow-reader/scan-planning/): how selected files become parallel work.
+- [Read scheduling](https://mag1cfrog.github.io/delta-arrow-reader/read-scheduling/): how the reader overlaps work and reacts to a slow consumer.
+- [Partial-page reads](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/): when fetching individual values can reduce downloads.

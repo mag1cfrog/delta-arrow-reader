@@ -1,121 +1,107 @@
-# Delta metadata lifecycle
+# Reuse a loaded table
 
-Every Delta query needs to know which Parquet files belong to the loaded table
-version. It can then narrow that list using the query predicate, partition
-values, and file statistics. The Delta log or checkpoint supplies the file
-list. The list and the information used to prune it are the table's scan
-metadata.
+A query needs to find the files belonging to its table version before reading rows.
+Repeating that preparation can take time, even when the query returns very
+little data. Keeping a table open lets queries reuse information about its
+files when metadata preparation is enabled.
 
-`WarmupMode` controls how much reusable metadata `load_table` prepares. The
-default `Automatic` mode prepares supported S3 tables and samples their
-network; local tables remain lazy. `None` waits until each scan is built.
-`QueryPlanning` prepares reusable Delta metadata without network sampling.
-
-Each query still gets its own file, row-group, and page selection. The cache
-does not reuse one query's selection for another query or change query results.
+This page explains what the reader can reuse and when you need to refresh it.
+For code examples and setting names, see
+[Configuration](https://mag1cfrog.github.io/delta-arrow-reader/configuration/).
 
 ## What happens before rows are read
 
-A query against remote storage can involve three rounds of I/O:
+The Delta log records changes to the table. A checkpoint summarizes that
+history. The reader uses them to build a file list for one table version,
+including available statistics such as the values each file might contain.
+This information is the table's *scan metadata*.
 
-1. The reader uses the Delta log or checkpoint to find the active files. Delta
-   Kernel applies the query predicate to their partition values and file
-   statistics, removing files that cannot match.
-2. The reader fetches the remaining Parquet footers. Row-group statistics may
-   narrow the read again.
-3. The reader fetches the selected Parquet row groups and produces Arrow
-   batches.
-
-The first round mixes work that can be reused with work that belongs to one
-query. Replaying the Delta history and reconciling the active files can be
-reused for a loaded table version. Applying a predicate cannot.
-`WarmupMode::QueryPlanning` moves only that reusable work to table
-initialization. Parquet metadata and data remain part of each query.
-
-This difference matters most for a selective query. Statistics may reduce a
-large table to a few Parquet row groups, making the data read small, while
-Delta replay remains a fixed planning cost. On remote storage, that planning
-cost can take longer than reading the result. Reusing active-file metadata
-removes the repeated replay without changing the later pruning or Parquet I/O.
+Every query uses its own conditions to narrow that file list. It then reads
+metadata inside the remaining Parquet files, followed by the data it needs.
+A prepared table can reuse the file list and statistics. It does not cache query
+results, Parquet footers, data pages, or decoded batches.
 
 ## No warmup
 
-`WarmupMode::None` leaves reusable metadata work to each scan. This is also the
-default behavior for local tables:
+With `WarmupMode::None`, opening a table reads its version and column schema.
+Each query then builds the file information it needs:
 
 ```text
-table load -> table version and schema
-query 1 -> Delta replay -> query pruning -> Parquet footer/data
-query 2 -> Delta replay -> query pruning -> Parquet footer/data
-query 3 -> Delta replay -> query pruning -> Parquet footer/data
+Open table:  load version and schema
+Query 1:     build file list -> select data -> read rows
+Query 2:     build file list -> select data -> read rows
 ```
 
-Loading the table selects a version and reads its schema. The reader waits
-until a scan is built to assemble the active-file metadata and ask Delta
-Kernel to prune it for that scan.
-
-This keeps table loading quick and avoids retaining an active-file cache. The
-tradeoff is that every scan against the loaded table repeats the Delta replay.
-No warmup usually fits tables that are queried once, queried occasionally, or
-loaded in a process with tight memory limits.
+This keeps opening work small and avoids retaining a file list in memory.
+Repeated queries pay for that preparation again. Local tables use this lazy
+behavior by default.
 
 ## Query-planning warmup
 
-`DeltaTableBuilder::with_warmup(WarmupMode::QueryPlanning)` prepares the same
-reusable metadata before `load_table()` returns:
+With `WarmupMode::QueryPlanning`, opening also builds and keeps the file
+information. Queries reuse it while applying their own filters:
 
 ```text
-table initialization -> Delta replay -> metadata cache
-                                           |
-query 1 -----------------------------------+-> pruning -> Parquet footer/data
-query 2 -----------------------------------+-> pruning -> Parquet footer/data
-query 3 -----------------------------------+-> pruning -> Parquet footer/data
+Open table:  load version and schema -> prepare file list
+Query 1:     reuse file list -> select data -> read rows
+Query 2:     reuse file list -> select data -> read rows
 ```
 
-The method returns after the cache is ready, so table initialization takes
-longer. The cache contains the reconciled Delta `add` metadata for the current
-active files, including available file statistics. It does not contain the raw
-commit history.
+Opening takes longer, and the file information stays in memory while the table
+is loaded. Later queries avoid rebuilding it. This can matter when filtering
+leaves very little data to read and finding that data is a large part of the cost.
 
-When a scan is built, the reader gives this metadata back to Delta Kernel
-through `Scan::scan_metadata_from`. Delta Kernel applies that scan's predicate
-and statistics pruning. Different queries can therefore select different
-files while sharing the result of Delta replay.
+<details markdown="1">
+<summary>What the cache contains and who owns it</summary>
 
-The cache belongs to one loaded table. If the same location is loaded twice,
-the two table objects have separate caches. Each table stays fixed at its
-loaded version. Calling `refresh` creates another table instead of changing the
-existing one.
+`DeltaTableBuilder::with_warmup(WarmupMode::QueryPlanning)` finishes preparation
+before `load_table()` returns. The cache contains reconciled Delta `add`
+metadata for active files and all available file statistics, rather than the
+raw commit history. Each scan passes it to Delta Kernel through
+`Scan::scan_metadata_from`; Kernel still applies that query's predicate.
+
+The cache belongs to one loaded table version. Opening the same location twice
+creates separate caches. There is no TTL, eviction, disk persistence, or sharing
+between independently loaded tables. The reader does not choose additional
+tables to warm automatically. Keeping a cache does not change row selection,
+Parquet I/O, or deletion-vector handling.
+
+</details>
 
 ## Which mode should you use?
 
-This choice applies to the loaded table, whether you query it through the
-streaming API or DataFusion SQL. The warmup behavior is the same through both
-APIs.
+The modes apply whether you read batches directly or use DataFusion SQL:
 
-| Consideration | No warmup | Query planning |
+| Mode | Work when opening | Work on later queries |
 | --- | --- | --- |
-| Typical use | One query, occasional queries, or tight memory limits | Repeated queries where Delta replay is costly |
-| Table loading | Returns without building a reusable scan cache | Waits for Delta replay and cache creation |
-| Memory while loaded | No reusable active-file cache | Keeps active-file metadata and statistics |
-| Each later scan | Replays Delta metadata, then prunes | Reuses Delta metadata, then prunes |
-| Seeing a newer version | `refresh` returns a new lazy table | `refresh` updates or reuses the retained cache |
-| Parquet metadata and data reads | Per query | Per query |
+| `Automatic` (default) | Prepare file information and measure the connection on supported S3 stores; other stores remain lazy. | Reuse that preparation when available. |
+| `QueryPlanning` | Prepare file information, without test reads of data files. | Reuse the file information; partial-page reads stay off. |
+| `None` | Load the version and schema without retaining the file list. | Build file information for each query; partial-page reads stay off. |
 
-The default `WarmupMode::Automatic` prepares supported S3 tables and also
-[profiles the network](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/#measure-the-connection). Choose `None` when
-initialization time or retained metadata costs more than the expected reuse
-savings. No single query count is a reliable break-even point. The result depends on the
-table history, checkpoint shape, file count, available statistics, storage
-latency, query selectivity, and memory pressure.
+Automatic S3 preparation also measures whether smaller data requests will help.
+The [connection check](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/#measure-the-connection)
+has its own time and I/O costs.
+
+Compare opening time plus all the queries your application will run. There is
+no fixed query count at which preparation pays off: the table's history, file
+count, statistics, storage latency, query selectivity, and available memory all
+matter. Use `None` when the opening cost or retained metadata outweighs reuse;
+use `QueryPlanning` when you want metadata reuse without network sampling.
 
 ## Version and refresh behavior
 
-Every loaded table and cache represents one exact Delta version. Commits
-written later do not change that table or any scan already built from it.
-`DeltaTable::refresh` checks for the latest version and returns another
-immutable table. If no newer version exists, it reuses the existing snapshot,
-schema, and query-planning cache.
+A loaded table stays on the version it opened. Later writes do not change it
+or scans already built from it. `refresh()` opens the latest version as a new
+table, leaving the original usable even if refresh fails. If the version has
+not changed, the returned table reuses the snapshot, schema, and prepared cache.
+
+Your application decides when to refresh. The reader does not poll in the
+background. For SQL, refreshing a provider also rebuilds its schema when needed,
+but does not replace the old registration in a DataFusion session. See the
+[registration refresh example](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/#refresh-a-registered-provider).
+
+<details markdown="1">
+<summary>Incremental refresh, checkpoints, and failures</summary>
 
 With no warmup, the returned table has no retained active-file cache. Its scans
 continue to assemble scan metadata when they are built. With query-planning
@@ -131,24 +117,11 @@ load a newer unsupported protocol for inspection, but its scans still reject
 that protocol. Refreshing a warmed table fails if the newer protocol cannot be
 used to rebuild its query-planning cache.
 
-`DeltaTableProvider::refresh` applies the same table refresh and rebuilds its
-DataFusion schema when needed. It returns a new provider but does not replace a
-provider already registered in a `SessionContext`.
-
-The in-memory cache does not provide:
-
-- background polling;
-- TTL or eviction;
-- persistence across processes;
-- sharing between independently loaded tables;
-- Parquet data-page or decoded-batch caching; or
-- automatic selection of which tables to warm.
+</details>
 
 ## Related guides
 
-- [Read a table with the streaming API](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
-- [Register and query a table with DataFusion](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/)
-- [Understand how scans are planned](https://mag1cfrog.github.io/delta-arrow-reader/scan-planning/)
-- [See the repeated-query results](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/eager-metadata/)
-- [Compare metadata-loading modes](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/benchmarks/eager-metadata.md)
-- [Open the warmup Rust API](https://docs.rs/delta-arrow-reader/latest/delta_arrow_reader/struct.DeltaTableBuilder.html#method.with_warmup)
+- [Configuration](https://mag1cfrog.github.io/delta-arrow-reader/configuration/): choose preparation and resource settings.
+- [Repeated-query results](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/eager-metadata/): see initialization and two queries measured separately.
+- [Controlled metadata experiment](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/benchmarks/eager-metadata.md): compare lazy and eager loading on your table.
+- [Warmup Rust API](https://docs.rs/delta-arrow-reader/latest/delta_arrow_reader/struct.DeltaTableBuilder.html#method.with_warmup): look up the available modes.

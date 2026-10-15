@@ -54,87 +54,6 @@ fails, later queries keep normal reads without trying again.
 The [configuration guide](https://mag1cfrog.github.io/delta-arrow-reader/configuration/)
 compares initialization choices and shows how to skip sampling or change its budget.
 
-<details>
-<summary>Supported file formats and decision thresholds</summary>
-
-<p>
-Pages must be flat V1 pages with an offset index and no page checksum. Both
-required and nullable columns work. An offset index locates pages, not individual
-values. Nested columns, V2 pages, dictionary encoding and unsupported compression
-use ordinary reads. Invalid supported structures return errors.
-</p>
-
-<p>
-Fixed-width values support PLAIN INT32, INT64, FLOAT, DOUBLE and
-FIXED_LEN_BYTE_ARRAY, either uncompressed or in a single Zstd frame of raw blocks
-without checksums. Raw blocks contain uncompressed bytes; this is not arbitrary
-partial decompression. Value widths and null information locate the selected
-values. Existing date, timestamp, decimal and type-widening conversions apply;
-this adds no new Delta type mappings. Decimal widths come from the Parquet schema.
-Strings and binary require uncompressed DELTA_LENGTH_BYTE_ARRAY pages. Both
-ordinary Arrow arrays and DataFusion view arrays work; Zstd strings use normal reads.
-</p>
-
-<p>
-The shared model includes bytes, latency, bandwidth, concurrency, request handling
-and reads that must wait for earlier results. Partial reads must save more than
-10% of estimated cost. Variable-length discovery simulates its extra reads plus a
-complete fallback, using measured latency samples. Discovery, decision work and
-fallback must fit within a modeled 5% overhead budget, checked before each round.
-After discovery, partial reads must save at least 25% of the batch's bytes and
-more than 10% of its remaining read cost. Fallback reuses downloaded prefixes.
-These estimates are not wall-time guarantees. Work limits or insufficient evidence
-keep ordinary reads. Mixed projections keep profitable fixed-width partial reads;
-variable-length discovery runs when that path declines the batch. The normal
-Parquet decoder still handles row selection, preserving original row positions
-for DV filtering.
-</p>
-
-</details>
-
-## Enable or disable it
-
-You do not need extra configuration to enable it. To turn it off in Rust:
-
-```no_run
-use delta_arrow_reader::{DeltaScanExecutionOptions, DeltaTableBuilder};
-
-#[tokio::main]
-async fn main() -> Result<(), delta_arrow_reader::DeltaReaderError> {
-    let options = DeltaScanExecutionOptions::new()
-        .with_experimental_intra_page_reads(false);
-    let table = DeltaTableBuilder::new("s3://bucket/table")
-        .with_execution_options(options)
-        .load_table()
-        .await?;
-    Ok(())
-}
-```
-
-Use `true` to explicitly allow it again. This allows the reader to choose; it
-never forces partial reads when they would be unsuitable.
-
-Setting `false` on the table builder also skips the automatic connection check.
-Any explicit warmup choices still apply.
-
-DataFusion has its own `ScanOptions.execution_options`. Apply the same options
-there to control its queries as well as table loading.
-
-### Python
-
-Python uses `warmup`, without a separate partial-read switch:
-
-```python
-from delta_arrow_reader import DeltaTable
-
-automatic = DeltaTable("s3://bucket/table", warmup="automatic")
-ordinary = DeltaTable("s3://bucket/table", warmup="query_planning")
-```
-
-`automatic` allows partial reads. `query_planning` prepares file metadata but
-skips the connection check, keeping normal reads. `none` skips both kinds of
-preparation.
-
 ## Tradeoffs
 
 - Opening a table takes longer because of the connection check. Keeping the table
@@ -146,64 +65,6 @@ preparation.
 - The reader can start exploring a page and then decide to read it normally.
   That exploration still costs time. Network changes can also make an estimate
   wrong, so the optimization does not guarantee that every query is faster.
-
-<details>
-<summary>Profiling, resource limits and diagnostics</summary>
-
-<p>
-In Rust, <code>WarmupMode::QueryPlanning</code> prepares file metadata without
-testing the network; <code>WarmupMode::None</code> skips both. Neither supplies
-the measurements needed for partial reads. A streaming scan can override options
-with <code>DeltaScanBuilder::with_execution_options</code>. Per-scan settings
-cannot undo initialization already performed.
-</p>
-
-<p>
-Profiling selects up to three active files of at least 4 MiB, scheduling at most
-24.375 MiB across 3,180 requests; retries can add traffic. It separately measures
-latency, bandwidth and sustained small-request capacity. Failed or incomplete
-samples are discarded without failing table loading. The profile stays in memory
-and is shared by scans, table clones and refreshed snapshots. Reads that overlap
-other range reads from the same loaded table do not update it.
-</p>
-
-<p>
-Use <code>WarmupMode::Network { max_duration: std::time::Duration::from_secs(2) }</code>
-to change the sampling limit; zero skips sampling. Recovery has the same time and
-I/O limits. A failed or cancelled recovery is not retried. A scan that disables
-partial reads or uses another backend or an explicit range policy does not consume
-pending recovery. <code>load_snapshot</code> and <code>into_table</code> do no warmup;
-use <code>load_table</code> for automatic preparation.
-</p>
-
-<p>
-Profiling requires the Direct backend, Automatic range policy and a supported
-<code>s3://</code> or <code>s3a://</code> transport. Custom HTTP settings, applicable
-system proxies, S3 Express and other stores keep ordinary reads. Automatic warmup
-skips unsupported configurations, though a proxy can reject sampling after metadata
-preparation. Explicit Network mode on unsupported stores retains metadata warmup
-only. Local and fully buffered files use ordinary reads.
-</p>
-
-<p>
-Planned requests share 512 process-wide read slots; ordinary plans use at most 10
-per plan. Requests release their slots when responses finish, including retries.
-Partial reads and calibration share a separate S3 connection pool with 64
-connection-setup slots. Variable-length reads share a 512 MiB reservation for
-cached data, lengths and reconstructed pages. Arrow views hold their reservation
-until their buffers are released; other batches may use ordinary reads meanwhile.
-Probes and selected data share the original request's byte budget.
-</p>
-
-<p>
-The <code>delta_arrow_reader::diagnostics::intra_page</code> tracing target reports
-eligibility, estimates and fallback reasons. The <code>network_warmup</code>
-diagnostic distinguishes initialization from recovery. See the
-<a href="https://mag1cfrog.github.io/delta-arrow-reader/reference/metrics/">scan metrics</a>
-for byte and request counters.
-</p>
-
-</details>
 
 ## Benchmark results
 
@@ -246,3 +107,151 @@ contains all 36 comparisons and the raw samples.
 The [five-reader comparison](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/selective-read-results/)
 also uses controlled MinIO and includes the earlier Automatic gains. Compare
 results within the same environment; real S3 has different network conditions.
+
+## Enable or disable it
+
+Start with the default. If the extra requests or opening cost do not suit your
+application, choose ordinary reads instead. The options below allow the
+optimization; they never force it when the reader expects it to be slower.
+
+<details markdown="1">
+<summary id="python">Python: choose whether to measure the connection</summary>
+
+Python uses `warmup`, without a separate partial-read switch:
+
+```python
+from delta_arrow_reader import DeltaTable
+
+automatic = DeltaTable("s3://bucket/table", warmup="automatic")
+ordinary = DeltaTable("s3://bucket/table", warmup="query_planning")
+```
+
+`automatic` allows partial reads. `query_planning` prepares file metadata but
+skips the connection check, keeping normal reads. `none` skips both kinds of
+preparation.
+
+</details>
+
+<details markdown="1">
+<summary>Rust: enable or disable partial-page reads</summary>
+
+You do not need extra configuration to enable it. To turn it off in Rust:
+
+```no_run
+use delta_arrow_reader::{DeltaScanExecutionOptions, DeltaTableBuilder};
+
+#[tokio::main]
+async fn main() -> Result<(), delta_arrow_reader::DeltaReaderError> {
+    let options = DeltaScanExecutionOptions::new()
+        .with_experimental_intra_page_reads(false);
+    let table = DeltaTableBuilder::new("s3://bucket/table")
+        .with_execution_options(options)
+        .load_table()
+        .await?;
+    Ok(())
+}
+```
+
+Use `true` to explicitly allow it again. This allows the reader to choose; it
+never forces partial reads when they would be unsuitable.
+
+Setting `false` on the table builder also skips the automatic connection check.
+Any explicit warmup choices still apply.
+
+DataFusion has its own `ScanOptions.execution_options`. Apply the same options
+there to control its queries as well as table loading.
+
+In Rust, `WarmupMode::QueryPlanning` prepares file metadata without
+testing the network; `WarmupMode::None` skips both. Neither supplies
+the measurements needed for partial reads. A streaming scan can override options
+with `DeltaScanBuilder::with_execution_options`. Per-scan settings
+cannot undo initialization already performed.
+
+</details>
+
+## Technical details
+
+Use these details to check a file's eligibility or investigate why a query
+kept ordinary reads.
+
+<details markdown="1">
+<summary>Supported page formats and column types</summary>
+
+Pages must be flat V1 pages with an offset index and no page checksum. Both
+required and nullable columns work. An offset index locates pages, not individual
+values. Nested columns, V2 pages, dictionary encoding and unsupported compression
+use ordinary reads. Invalid supported structures return errors.
+
+Fixed-width values support PLAIN INT32, INT64, FLOAT, DOUBLE and
+FIXED_LEN_BYTE_ARRAY, either uncompressed or in a single Zstd frame of raw blocks
+without checksums. Raw blocks contain uncompressed bytes; this is not arbitrary
+partial decompression. Value widths and null information locate the selected
+values. Existing date, timestamp, decimal and type-widening conversions apply;
+this adds no new Delta type mappings. Decimal widths come from the Parquet schema.
+Strings and binary require uncompressed DELTA_LENGTH_BYTE_ARRAY pages. Both
+ordinary Arrow arrays and DataFusion view arrays work; Zstd strings use normal reads.
+
+</details>
+
+<details markdown="1">
+<summary>Cost estimates and fallback thresholds</summary>
+
+The shared model includes bytes, latency, bandwidth, concurrency, request handling
+and reads that must wait for earlier results. Partial reads must save more than
+10% of estimated cost. Variable-length discovery simulates its extra reads plus a
+complete fallback, using measured latency samples. Discovery, decision work and
+fallback must fit within a modeled 5% overhead budget, checked before each round.
+After discovery, partial reads must save at least 25% of the batch's bytes and
+more than 10% of its remaining read cost. Fallback reuses downloaded prefixes.
+These estimates are not wall-time guarantees. Work limits or insufficient evidence
+keep ordinary reads. Mixed projections keep profitable fixed-width partial reads;
+variable-length discovery runs when that path declines the batch. The normal
+Parquet decoder still handles row selection, preserving original row positions
+for DV filtering.
+
+</details>
+
+<details markdown="1">
+<summary>Connection sampling, retries, and supported stores</summary>
+
+Profiling selects up to three active files of at least 4 MiB, scheduling at most
+24.375 MiB across 3,180 requests; retries can add traffic. It separately measures
+latency, bandwidth and sustained small-request capacity. Failed or incomplete
+samples are discarded without failing table loading. The profile stays in memory
+and is shared by scans, table clones and refreshed snapshots. Reads that overlap
+other range reads from the same loaded table do not update it.
+
+Use `WarmupMode::Network { max_duration: std::time::Duration::from_secs(2) }`
+to change the sampling limit; zero skips sampling. Recovery has the same time and
+I/O limits. A failed or cancelled recovery is not retried. A scan that disables
+partial reads or uses another backend or an explicit range policy does not consume
+pending recovery. `load_snapshot` and `into_table` do no warmup;
+use `load_table` for automatic preparation.
+
+Profiling requires the Direct backend, Automatic range policy and a supported
+`s3://` or `s3a://` transport. Custom HTTP settings, applicable
+system proxies, S3 Express and other stores keep ordinary reads. Automatic warmup
+skips unsupported configurations, though a proxy can reject sampling after metadata
+preparation. Explicit Network mode on unsupported stores retains metadata warmup
+only. Local and fully buffered files use ordinary reads.
+
+</details>
+
+<details markdown="1">
+<summary>Request slots and memory limits</summary>
+
+Planned requests share 512 process-wide read slots; ordinary plans use at most 10
+per plan. Requests release their slots when responses finish, including retries.
+Partial reads and calibration share a separate S3 connection pool with 64
+connection-setup slots. Variable-length reads share a 512 MiB reservation for
+cached data, lengths and reconstructed pages. Arrow views hold their reservation
+until their buffers are released; other batches may use ordinary reads meanwhile.
+Probes and selected data share the original request's byte budget.
+
+</details>
+
+The `delta_arrow_reader::diagnostics::intra_page` tracing target reports
+eligibility, estimates and fallback reasons. The `network_warmup`
+diagnostic distinguishes initialization from recovery. See the
+[scan metrics](https://mag1cfrog.github.io/delta-arrow-reader/reference/metrics/)
+for byte and request counters.

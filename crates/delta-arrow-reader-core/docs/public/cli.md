@@ -1,144 +1,26 @@
 # Command-line reference
 
-For your first read, start with the [CLI quickstart](cli-quickstart.md).
-This page covers installation alternatives, command options, JSON formats,
-and process behavior for scripts and applications.
+Look up command arguments, input formats, and process behavior here. For a first
+read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 
-`dar inspect` prints a Delta table's snapshot version and complete logical
-Arrow schema as JSON. It reads Delta log metadata without scanning rows or
-reading Parquet data or deletion-vector files. A table with an unsupported
-scan protocol can still be inspected if its snapshot and schema can be loaded.
+| Task | Command or section |
+| --- | --- |
+| See the table's columns and version | [`dar inspect`](#inspect-a-snapshot) |
+| Save selected rows as Arrow | [`dar scan`](#scan-rows) |
+| Select rows by a condition | [Filter rows](#filter-rows) |
+| Connect to remote storage | [Storage options file](#storage-options-file) |
+| Change parallel reads or buffering | [Execution options](#execution-options) |
+| Handle a command's result in a script | [Inspection JSON](#inspection-json) and [exit statuses](#errors-and-process-status) |
 
-`dar scan` reads one snapshot and writes its rows as an Arrow IPC stream. Use
-it with redirected stdout or a subprocess pipe.
-
-## Use the CLI from a Python wheel
-
-The `delta-arrow-reader` Python package includes a native command with the same
-name. Install a validated CI wheel with pip to get the Python API and CLI in one
-environment, or use uv tool/uvx for a separate tool environment. Follow the
-[Python installation instructions](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python)
-for download and installation commands; PyPI publication is planned.
-
-The wheels support Linux x86_64 with glibc 2.28 or newer, Windows x86_64, and
-macOS arm64 with macOS 12.0 or newer. They require CPython 3.10 or newer and
-install PyArrow even when you only need the CLI. The installation guide lists
-the tested Python versions and runtime requirements. No Rust toolchain is needed
-to install a wheel.
-
-Use the full command name for wheel installations:
-
-```sh
-delta-arrow-reader --version
-delta-arrow-reader inspect /data/orders
-delta-arrow-reader scan --column id --limit 100 /data/orders > sample.arrow
-```
-
-The examples below use the standalone name `dar`. Substitute
-`delta-arrow-reader` when using a wheel. Both commands accept the same arguments
-and have the same output and exit statuses; wheels do not install a `dar` alias.
-The Linux archives and containers below have their own platform and runtime
-requirements.
-
-## Use a Linux binary
-
-CLI releases provide validated archives for these platforms:
-
-| Platform | Rust target | Minimum runtime |
-| --- | --- | --- |
-| Linux amd64 | `x86_64-unknown-linux-gnu` | glibc 2.36, baseline x86-64 CPU |
-| Linux arm64 | `aarch64-unknown-linux-gnu` | glibc 2.36, baseline ARMv8-A CPU |
-
-Both targets are built on Debian 12. The same binaries are tested on Debian 12,
-Ubuntu 24.04, and Fedora 44. They use glibc and libgcc shared libraries. On Debian
-or Ubuntu, install `libc6`, `libgcc-s1`, and `ca-certificates`; on Fedora, install
-`glibc`, `libgcc`, and `ca-certificates`. The certificate bundle is needed for
-HTTPS storage. The archives do not support Alpine Linux's musl runtime or a
-`scratch` container. Other platforms can build from source.
-
-Follow the [version-pinned installation and checksum steps](installation.md#cli-binaries-and-container-images)
-to download the two archives, `cli-artifacts.json`, and `SHA256SUMS` from a
-completed GitHub Release. Extract the archive for your CPU after verification.
-Keep `LICENSE` and `NOTICE` alongside `dar`, including when distributing it with
-a service. The executable works outside a source checkout and does not require
-Python or Rust.
-
-## Use a container or a Go service
-
-The CLI container packages the same standalone binary with its runtime libraries
-and CA certificates. Copy the index digest from the completed Release's CLI
-section and replace `RELEASE_INDEX_HASH` below. Docker selects the matching
-architecture from the index:
-
-```sh
-dar_image='ghcr.io/mag1cfrog/delta-arrow-reader@sha256:RELEASE_INDEX_HASH'
-docker run --rm --read-only "$dar_image" --version
-docker run --rm --read-only \
-  --mount type=bind,src=/absolute/path/to/table,dst=/table,readonly \
-  "$dar_image" inspect /table
-docker run --rm --read-only \
-  --mount type=bind,src=/absolute/path/to/table,dst=/table,readonly \
-  "$dar_image" scan --column id --limit 100 /table > sample.arrow
-```
-
-The image runs `dar` directly as UID/GID `65532:65532`. Omitting arguments prints
-help. Each invocation exits when the command finishes; the image does not run a
-Reader server. Mounted files and their parent directories must be readable by that user.
-Supply storage credentials and configuration at runtime. Keep HTTPS certificate
-verification enabled and provide a readable custom trust bundle when required
-by your storage endpoint. See [HTTPS configuration](installation.md#https-and-build-prerequisites).
-
-When `dar` is the container's PID 1, SIGINT and SIGTERM stop it with exit status
-130 and 143, respectively. The CLI does not flush buffered output or finish an
-IPC stream after either signal. Treat that result as an interrupted scan.
-
-A Go service can invoke the binary with `exec.CommandContext` and decode stdout
-with the official Arrow Go streaming IPC reader. Pass each CLI argument
-separately, drain stderr separately, and require both successful IPC decoding and
-a zero child exit status. An early stop or decoding failure must cancel, close,
-and reap the child before returning.
-
-The runnable [Go example](https://github.com/mag1cfrog/delta-arrow-reader/tree/main/examples/go-cli)
-includes bounded stderr capture, cancellation tests, and a consumer Dockerfile.
-Its `COPY --from` stages copy `/usr/local/bin/dar` and `/usr/share/doc/dar/` from
-an explicit CLI image into a Debian 12 service image. The service still needs
-glibc 2.36 or newer, the binary manifest's shared libraries, and CA certificates.
-Copying the executable alone does not support Alpine or `scratch`. The Go
-application needs no cgo or Rust toolchain at runtime.
-
-## Build from source
-
-Install the [Rust build prerequisites](installation.md#https-and-build-prerequisites),
-then run these commands from a checkout containing the CLI crate:
-
-```sh
-cargo build --locked -p delta-arrow-reader-cli
-./target/debug/dar --version
-./target/debug/dar --help
-```
-
-To install the binary into Cargo's binary directory, usually `~/.cargo/bin`:
-
-```sh
-cargo install --locked --path crates/delta-arrow-reader-cli
-dar inspect --help
-```
-
-The CLI package is built from source and is not published to crates.io. It
-shares the workspace version, and `dar --version` prints `dar <version>` plus
-a newline. Help and version work outside the checkout without opening files,
-loading a table, starting a runtime, or contacting storage.
-
-If the executable is named `delta-arrow-reader` (`delta-arrow-reader.exe` on
-Windows), help and version display `delta-arrow-reader`. Both names accept the
-same arguments and produce the same inspection JSON, Arrow streams, diagnostics,
-and exit statuses.
-
-`-h` is short for `--help`, and `-V` is short for `--version`. For inspection
-help, use `dar inspect --help` or `dar help inspect`. Scan help is available
-through `dar scan --help` or `dar help scan`.
+The standalone command is `dar`. A Python wheel installs `delta-arrow-reader`
+instead; substitute that name in the examples. Both accept the same arguments.
+For packages and runtime requirements, see [Installation](installation.md).
 
 ## Inspect a snapshot
+
+`inspect` returns the table version and column schema as JSON. It reads Delta
+metadata without reading row data or deletion-vector files. A table whose scan
+protocol is unsupported can still be inspected if its snapshot and schema load.
 
 ```sh
 dar inspect /data/orders
@@ -156,6 +38,9 @@ parsing and allows a table name beginning with `-`.
 dar inspect [--table-version N] [--storage-options-file PATH] [--] TABLE
 ```
 
+<details markdown="1">
+<summary>Version bounds and argument parsing</summary>
+
 Both options may appear once. Omit `--table-version` to select the latest
 snapshot, or pass unsigned decimal digits from `0` through
 `18446744073709551615`. Signs, whitespace, fractions, exponents, and overflow
@@ -168,6 +53,8 @@ The parser accepts the full u64 range. The current Kernel cannot load version
 Explicit versions use a forward listing of retained log entries up to the
 requested version. Kernel validates the commits and checkpoints in that listing.
 Discovery does not search numeric version gaps.
+
+</details>
 
 ## Scan rows
 
@@ -191,6 +78,9 @@ dar scan [--table-version N] [--storage-options-file PATH]
 Table paths, snapshot selection, and storage options follow the inspection
 rules. Each invocation reads one immutable snapshot.
 
+<details markdown="1">
+<summary>Column selection and row-limit rules</summary>
+
 Omit projection flags to read all columns. Repeat `--column` once per logical
 column, in the desired output order. A name containing commas or dots remains
 one name. The reader validates names and rejects duplicates. `--no-columns`
@@ -204,11 +94,18 @@ promise a global row order.
 Empty results, including `--limit 0`, contain the selected schema in a valid
 IPC stream.
 
+</details>
+
+<details markdown="1">
+<summary>Streaming, schema preservation, and memory use</summary>
+
 The CLI completes scan planning before writing the schema, then writes and
 flushes each batch before requesting another. It preserves logical types,
 nullability, nested values, and schema and field metadata. It does not collect
 the whole result. Memory use includes the core's read buffers, the current
 batch, and IPC encoding state; variable-sized batches have no fixed byte bound.
+
+</details>
 
 Require both successful Arrow decoding and a successful child exit status.
 IPC readers can accept EOF at a message boundary, so readable output can still
@@ -251,7 +148,8 @@ JSON
 dar scan --predicate-file predicate.json --limit 100 /data/orders > sample.arrow
 ```
 
-### Predicate objects
+<details markdown="1">
+<summary id="predicate-objects">Predicate operators and logical combinations</summary>
 
 The file must contain exactly one predicate object. Only the fields shown
 for each operator are accepted:
@@ -279,7 +177,10 @@ Column names are passed unchanged. They must identify an unambiguous top-level
 logical field; dots are not interpreted as nested access. There is no SQL
 parser or schema-based scalar type inference.
 
-### Scalar objects
+</details>
+
+<details markdown="1">
+<summary id="scalar-objects">Scalar types, validation, and input limits</summary>
 
 Comparison values must be non-null objects with a `type` tag and the fields
 listed below. Types must exactly match the column's Arrow type, including
@@ -322,7 +223,45 @@ and value compatibility are validated by the core during scan planning.
 Failures there produce status 1 with `scan_planning/unsupported_predicate`
 and leave stdout empty.
 
+</details>
+
+## Storage options file
+
+`--storage-options-file` accepts a local UTF-8 JSON file containing an object
+of string keys and string values. For example, to access an HTTP endpoint:
+
+```json
+{"allow_http":"true"}
+```
+
+The CLI forwards keys and values unchanged, including case, spaces, and
+commas. The core reader interprets provider options. Omitting the file supplies
+an empty explicit map and keeps the core's environment and provider credential
+behavior. An empty object is also valid.
+
+<details markdown="1">
+<summary>Storage file parsing and size limits</summary>
+
+The file limit is 1 MiB (1,048,576 bytes), measured before JSON parsing. Reading
+stops when that limit is exceeded. Invalid UTF-8, malformed JSON, trailing
+non-whitespace content, duplicate keys (including equivalent escaped keys),
+and non-string values are rejected before table loading. File paths resolve
+against the working directory. A path of `-` names a local file; it does not
+read standard input.
+
+</details>
+
 ## Execution options
+
+Omit these options to use the reader's defaults. `--target-partitions` changes
+how many groups of files can work in parallel. `--execution-options-file` supplies
+a JSON object for file-read limits, buffering, and backend selection.
+
+See [Configuration](configuration.md) to understand the tradeoffs. The CLI's
+accepted fields and validation rules are listed below.
+
+<details markdown="1">
+<summary>Execution flags, complete JSON example, and accepted fields</summary>
 
 `--target-partitions N` sets the execution partition target for one scan. It
 may appear once and accepts positive unsigned decimal digits fitting the
@@ -399,26 +338,7 @@ The native setters validate positive values and capacity limits before table
 loading. Their failures also exit 2, preserving the core's redacted
 `configuration/invalid_configuration` diagnostic and leaving stdout empty.
 
-## Storage options file
-
-`--storage-options-file` accepts a local UTF-8 JSON file containing an object
-of string keys and string values. For example, to access an HTTP endpoint:
-
-```json
-{"allow_http":"true"}
-```
-
-The CLI forwards keys and values unchanged, including case, spaces, and
-commas. The core reader interprets provider options. Omitting the file supplies
-an empty explicit map and keeps the core's environment and provider credential
-behavior. An empty object is also valid.
-
-The file limit is 1 MiB (1,048,576 bytes), measured before JSON parsing. Reading
-stops when that limit is exceeded. Invalid UTF-8, malformed JSON, trailing
-non-whitespace content, duplicate keys (including equivalent escaped keys),
-and non-string values are rejected before table loading. File paths resolve
-against the working directory. A path of `-` names a local file; it does not
-read standard input.
+</details>
 
 ## Inspection JSON
 
@@ -433,6 +353,9 @@ stdout and leaves stderr empty. This example represents an empty schema:
 range. `schema` uses the upstream `arrow_schema::Schema` Serde representation
 at the locked workspace Arrow version (currently 58.4.0). It retains field
 order, nested types, nullability, field metadata, and schema metadata.
+
+<details markdown="1">
+<summary>Field encodings and format compatibility</summary>
 
 For example, a nullable string field is encoded as:
 
@@ -453,6 +376,8 @@ Arrow version with its `serde` feature can deserialize the `schema` value
 directly into `arrow_schema::Schema`. JSON object key order is not significant.
 Incompatible changes to the envelope or schema encoding require a new
 `format_version`.
+
+</details>
 
 The envelope does not include table locations or storage options. Requested
 schema metadata is returned as table data, including any sensitive strings
@@ -480,6 +405,9 @@ errors. Use `--help` for usage.
 | 1 | Runtime, reader, or Arrow IPC encoding failure |
 | 3 | stdout write or flush failure, including a broken pipe |
 
+<details markdown="1">
+<summary>Diagnostic codes and output after a failure</summary>
+
 | CLI phase | Code | Meaning |
 | --- | --- | --- |
 | `configuration` | `invalid_cli_argument` | Invalid command, argument, or option value |
@@ -498,6 +426,11 @@ leave stdout empty. Consumers must check the process status and discard output
 from any unsuccessful invocation, including partial output after a write
 failure. Status 3 is preserved even when stderr cannot be written.
 
+</details>
+
+<details markdown="1">
+<summary>Threads, blocked output, cancellation, and signals</summary>
+
 Each command runs in one process. The CLI drives its asynchronous runtime on
 the main thread and ignores `TOKIO_WORKER_THREADS`. Scans use a separate output
 thread so a blocked stdout pipe does not stall network reads. The output thread
@@ -512,3 +445,149 @@ Outside PID 1, Linux signals keep their normal termination behavior: a killed
 process is unsuccessful and need not emit an error object. This applies while loading,
 waiting for a batch, or writing to a blocked pipe. A parent that cancels the
 child must also wait for it to exit and reap it.
+
+</details>
+
+## Installation alternatives
+
+[Installation](installation.md#cli-binaries-and-container-images) lists the
+available packages. Use these details when choosing a runtime or embedding the
+command in another application.
+
+<details markdown="1">
+<summary id="use-the-cli-from-a-python-wheel">Use the CLI from a Python wheel</summary>
+
+The `delta-arrow-reader` Python package includes a native command with the same
+name. Install a validated CI wheel with pip to get the Python API and CLI in one
+environment, or use uv tool/uvx for a separate tool environment. Follow the
+[Python installation instructions](https://mag1cfrog.github.io/delta-arrow-reader/installation/#python)
+for download and installation commands; PyPI publication is planned.
+
+The wheels support Linux x86_64 with glibc 2.28 or newer, Windows x86_64, and
+macOS arm64 with macOS 12.0 or newer. They require CPython 3.10 or newer and
+install PyArrow even when you only need the CLI. The installation guide lists
+the tested Python versions and runtime requirements. No Rust toolchain is needed
+to install a wheel.
+
+Use the full command name for wheel installations:
+
+```sh
+delta-arrow-reader --version
+delta-arrow-reader inspect /data/orders
+delta-arrow-reader scan --column id --limit 100 /data/orders > sample.arrow
+```
+
+The reference examples use the standalone name `dar`. Substitute
+`delta-arrow-reader` when using a wheel. Both commands accept the same arguments
+and have the same output and exit statuses; wheels do not install a `dar` alias.
+The Linux archives and containers below have their own platform and runtime
+requirements.
+
+</details>
+
+<details markdown="1">
+<summary id="use-a-linux-binary">Use a Linux binary</summary>
+
+CLI releases provide validated archives for these platforms:
+
+| Platform | Rust target | Minimum runtime |
+| --- | --- | --- |
+| Linux amd64 | `x86_64-unknown-linux-gnu` | glibc 2.36, baseline x86-64 CPU |
+| Linux arm64 | `aarch64-unknown-linux-gnu` | glibc 2.36, baseline ARMv8-A CPU |
+
+Both targets are built on Debian 12. The same binaries are tested on Debian 12,
+Ubuntu 24.04, and Fedora 44. They use glibc and libgcc shared libraries. On Debian
+or Ubuntu, install `libc6`, `libgcc-s1`, and `ca-certificates`; on Fedora, install
+`glibc`, `libgcc`, and `ca-certificates`. The certificate bundle is needed for
+HTTPS storage. The archives do not support Alpine Linux's musl runtime or a
+`scratch` container. Other platforms can build from source.
+
+Follow the [version-pinned installation and checksum steps](installation.md#cli-binaries-and-container-images)
+to download the two archives, `cli-artifacts.json`, and `SHA256SUMS` from a
+completed GitHub Release. Extract the archive for your CPU after verification.
+Keep `LICENSE` and `NOTICE` alongside `dar`, including when distributing it with
+a service. The executable works outside a source checkout and does not require
+Python or Rust.
+
+</details>
+
+<details markdown="1">
+<summary id="use-a-container-or-a-go-service">Use a container or a Go service</summary>
+
+The CLI container packages the same standalone binary with its runtime libraries
+and CA certificates. Copy the index digest from the completed Release's CLI
+section and replace `RELEASE_INDEX_HASH` below. Docker selects the matching
+architecture from the index:
+
+```sh
+dar_image='ghcr.io/mag1cfrog/delta-arrow-reader@sha256:RELEASE_INDEX_HASH'
+docker run --rm --read-only "$dar_image" --version
+docker run --rm --read-only \
+  --mount type=bind,src=/absolute/path/to/table,dst=/table,readonly \
+  "$dar_image" inspect /table
+docker run --rm --read-only \
+  --mount type=bind,src=/absolute/path/to/table,dst=/table,readonly \
+  "$dar_image" scan --column id --limit 100 /table > sample.arrow
+```
+
+The image runs `dar` directly as UID/GID `65532:65532`. Omitting arguments prints
+help. Each invocation exits when the command finishes; the image does not run a
+Reader server. Mounted files and their parent directories must be readable by that user.
+Supply storage credentials and configuration at runtime. Keep HTTPS certificate
+verification enabled and provide a readable custom trust bundle when required
+by your storage endpoint. See [HTTPS configuration](installation.md#https-and-build-prerequisites).
+
+When `dar` is the container's PID 1, SIGINT and SIGTERM stop it with exit status
+130 and 143, respectively. The CLI does not flush buffered output or finish an
+IPC stream after either signal. Treat that result as an interrupted scan.
+
+A Go service can invoke the binary with `exec.CommandContext` and decode stdout
+with the official Arrow Go streaming IPC reader. Pass each CLI argument
+separately, drain stderr separately, and require both successful IPC decoding and
+a zero child exit status. An early stop or decoding failure must cancel, close,
+and reap the child before returning.
+
+The runnable [Go example](https://github.com/mag1cfrog/delta-arrow-reader/tree/main/examples/go-cli)
+includes bounded stderr capture, cancellation tests, and a consumer Dockerfile.
+Its `COPY --from` stages copy `/usr/local/bin/dar` and `/usr/share/doc/dar/` from
+an explicit CLI image into a Debian 12 service image. The service still needs
+glibc 2.36 or newer, the binary manifest's shared libraries, and CA certificates.
+Copying the executable alone does not support Alpine or `scratch`. The Go
+application needs no cgo or Rust toolchain at runtime.
+
+</details>
+
+<details markdown="1">
+<summary id="build-from-source">Build from source</summary>
+
+Install the [Rust build prerequisites](installation.md#https-and-build-prerequisites),
+then run these commands from a checkout containing the CLI crate:
+
+```sh
+cargo build --locked -p delta-arrow-reader-cli
+./target/debug/dar --version
+./target/debug/dar --help
+```
+
+To install the binary into Cargo's binary directory, usually `~/.cargo/bin`:
+
+```sh
+cargo install --locked --path crates/delta-arrow-reader-cli
+dar inspect --help
+```
+
+The CLI package is built from source and is not published to crates.io. It
+shares the workspace version, and `dar --version` prints `dar <version>` plus
+a newline. Help and version work outside the checkout without opening files,
+loading a table, starting a runtime, or contacting storage.
+
+If the executable is named `delta-arrow-reader` (`delta-arrow-reader.exe` on
+Windows), help and version display `delta-arrow-reader`. Both names accept the
+same arguments and produce the same inspection JSON, Arrow streams, diagnostics,
+and exit statuses.
+
+`-h` is short for `--help`, and `-V` is short for `--version`. For inspection
+help, use `dar inspect --help` or `dar help inspect`. Scan help is available
+through `dar scan --help` or `dar help scan`.
+
+</details>

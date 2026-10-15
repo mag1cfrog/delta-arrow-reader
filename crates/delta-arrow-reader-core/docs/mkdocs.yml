@@ -60,18 +60,18 @@ nav:
       - DataFusion in Rust: datafusion.md
       - Configuration: configuration.md
   - How it works:
-      - Architecture: architecture.md
-      - Delta metadata lifecycle: delta-metadata-lifecycle.md
+      - How a read works: architecture.md
+      - Reusing a loaded table: delta-metadata-lifecycle.md
       - Scan planning: scan-planning.md
-      - Partial-page reads: partial-page-reads.md
       - Read scheduling: read-scheduling.md
+      - Partial-page reads: partial-page-reads.md
   - Performance:
       - Overview: benchmarks.md
       - Selective reads on wide tables: benchmarks/selective-read-results.md
       - Repeated queries: benchmarks/eager-metadata.md
-      - Predicate decoding: benchmarks/row-filter.md
-      - Page-index reads: benchmarks/page-index.md
-      - Range planning: benchmarks/range-planning.md
+      - Decoding filter columns: benchmarks/row-filter.md
+      - Skipping pages: benchmarks/page-index.md
+      - Combining read requests: benchmarks/range-planning.md
   - Reference:
       - Command-line reference: cli.md
       - Execution options: reference/execution-options.md

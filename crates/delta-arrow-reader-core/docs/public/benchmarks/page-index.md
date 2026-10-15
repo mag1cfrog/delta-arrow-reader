@@ -1,20 +1,20 @@
-# Page-index reads
+# Skipping pages with an index
 
-Parquet stores each column in small chunks called pages. An offset index maps
-pages to their locations in a file, so the reader can fetch just the pages that
-contain selected rows. This can reduce downloads when a query returns only a
-small part of a table.
+An index can save downloads when matching rows are close together. In this
+experiment, it reduced received bytes by 96.4% for grouped matches. It saved no
+bytes when matching rows touched every page.
 
-This benchmark tests grouped matches, which fit on one page in each row group
-(a larger chunk of rows), and scattered matches, which touch every page. Each
-layout is written once with offset indexes and once without them. Both files
-contain the same data and return the same result.
+Parquet divides each column into small blocks called pages. An offset index
+locates those pages in the file. The reader can then fetch only pages containing
+selected rows. Each layout here is written with and without the index; both
+files contain the same data and return the same result.
+
+This is a small, local experiment with Delta Arrow Reader. For a comparison
+between readers on larger tables, see [selective reads on wide tables](selective-read-results.md).
 
 ## Result
 
-This local run took place on August 28, 2026, on an AMD Ryzen 7 8845HS with
-8 cores, 16 threads, 27.95 GiB RAM, and NVMe storage, running Fedora 43 with
-Linux 6.19.14. Each value is the median of five repetitions.
+Medians of five repetitions.
 
 These timings include result validation and hashing. The current
 harness validates once before timing, as described below, so new latency
@@ -41,6 +41,13 @@ and five range requests. The indexed case took 3.7% longer in this run. This is
 the case where loading the index did not produce a narrower data read.
 
 ## Method
+
+<details markdown="1">
+<summary>Hardware, fixture, timing, and validation details</summary>
+
+This local run took place on August 28, 2026, on an AMD Ryzen 7 8845HS with
+8 cores, 16 threads, 27.95 GiB RAM, and NVMe storage, running Fedora 43 with
+Linux 6.19.14. Each value is the median of five repetitions.
 
 Each fixture contains two row groups of 4,096 rows. A data page contains 128
 rows, and the query projects 16 nullable string payload columns while filtering
@@ -74,6 +81,8 @@ alongside the latency measurements.
 
 This compares two Delta Arrow Reader configurations. For a comparison with
 other readers, see [selective reads on wide tables](selective-read-results.md).
+
+</details>
 
 ## Run the benchmark
 
