@@ -17,7 +17,7 @@ use tokio::{
     sync::{Notify, OwnedSemaphorePermit, Semaphore, mpsc},
     task::JoinHandle,
 };
-use tracing::Instrument;
+use tracing::{Instrument, instrument::WithSubscriber};
 
 use super::planning::{DeltaScanFileTask, DeltaScanPlan};
 use crate::{
@@ -591,16 +591,15 @@ impl PartitionStream {
             );
             span.follows_from(tracing::Span::current().id());
             tokio::spawn(
-                crate::tracing_context::TracingContext::capture().bind(
-                    async move {
-                        // Declared before the producer future so its resources are
-                        // dropped before the reservation is returned, including unwind.
-                        let _completion = completion;
-                        run_partition(output, scheduler, metrics, run_cancellation, prefetch_files)
-                            .await;
-                    }
-                    .instrument(span),
-                ),
+                async move {
+                    // Declared before the producer future so its resources are
+                    // dropped before the reservation is returned, including unwind.
+                    let _completion = completion;
+                    run_partition(output, scheduler, metrics, run_cancellation, prefetch_files)
+                        .await;
+                }
+                .instrument(span.or_current())
+                .with_current_subscriber(),
             )
         });
 
@@ -2341,10 +2340,7 @@ mod tests {
                 max_file_reads: 0,
                 reserved_file_reads: 0,
             };
-            let collector = Collector::new(tracing::Level::ERROR);
-            let mut stream = tracing::subscriber::with_default(collector.clone(), || {
-                crate::reader::tests::direct_stream(VecDeque::new(), metrics(), 0)
-            });
+            let mut stream = crate::reader::tests::direct_stream(VecDeque::new(), metrics(), 0);
             stream.partitions = OrderedPartitionStream {
                 partitions: VecDeque::from([partition]),
                 cancellation: Some(cancellation.clone()),
@@ -2352,6 +2348,7 @@ mod tests {
                 ..OrderedPartitionStream::default()
             };
             stream.partition_count = 1;
+            let collector = Collector::new(tracing::Level::ERROR);
 
             let error = timeout(Duration::from_secs(5), stream.next())
                 .with_subscriber(collector.clone())

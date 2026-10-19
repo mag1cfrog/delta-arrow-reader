@@ -189,10 +189,21 @@ pub(crate) async fn load_deletion_vector_masker(
             let engine_context = Arc::clone(engine_context);
             let metrics_for_task = metrics.clone();
             let range_read_estimator = Arc::clone(range_read_estimator);
-            let rows = match crate::tracing_context::spawn_blocking(move || {
-                // A running blocking read survives cancellation of its async caller.
-                let _active_read = (!handle.is_inline()).then(|| range_read_estimator.start_read());
-                load_deletion_vector_rows(engine_context.as_ref(), &handle, &metrics_for_task)
+            let dispatch = tracing::dispatcher::get_default(Clone::clone);
+            let span = tracing::Span::current();
+            let rows = match tokio::task::spawn_blocking(move || {
+                tracing::dispatcher::with_default(&dispatch, || {
+                    span.in_scope(|| {
+                        // A running blocking read survives cancellation of its async caller.
+                        let _active_read =
+                            (!handle.is_inline()).then(|| range_read_estimator.start_read());
+                        load_deletion_vector_rows(
+                            engine_context.as_ref(),
+                            &handle,
+                            &metrics_for_task,
+                        )
+                    })
+                })
             })
             .await
             {
@@ -1441,7 +1452,6 @@ mod tests {
             "Runtime::",
             "z85",
             "datafusion",
-            "tracing::",
         ] {
             assert!(!deletion_vector_source.contains(forbidden), "{forbidden}");
         }

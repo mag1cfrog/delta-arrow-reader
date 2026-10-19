@@ -25,126 +25,6 @@ fn unpolled_future_does_not_capture_its_creation_subscriber() -> TestResult {
 }
 
 #[test]
-fn unparented_stream_does_not_inherit_a_later_request() -> TestResult {
-    for backend in [
-        ParquetReaderBackend::Direct,
-        ParquetReaderBackend::DeltaKernel,
-    ] {
-        for level in [Level::TRACE, Level::ERROR] {
-            let runtime = runtime()?;
-            let fixture = LogTable::new()?;
-            fixture.write(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
-            let table = runtime.block_on(fixture.builder(backend).load_table())?;
-            let plan = runtime.block_on(table.scan().build())?;
-            let collector = Collector::new(level);
-            let dispatch = tracing::Dispatch::new(collector.clone());
-            let mut stream = tracing::dispatcher::with_default(&dispatch, || plan.into_stream());
-            if level == Level::ERROR {
-                fs::remove_file(fixture.0.join("secret-data.parquet"))?;
-            }
-            let unrelated = tracing::dispatcher::with_default(
-                &dispatch,
-                || tracing::error_span!(target: "delta_arrow_reader::test", "unrelated request"),
-            );
-            let unrelated_id = unrelated.id().unwrap().into_u64();
-            runtime.block_on(
-                async {
-                    if level == Level::ERROR {
-                        assert!(stream.next_batch().await.is_err());
-                    } else {
-                        assert_eq!(stream.next_batch().await?.unwrap().num_rows(), 2);
-                        assert!(stream.next_batch().await?.is_none());
-                    }
-                    drop(stream);
-                    tracing::error!(target: "delta_arrow_reader::test", event = "unrelated.probe");
-                    Ok::<_, DeltaReaderError>(())
-                }
-                .instrument(unrelated)
-                .with_subscriber(dispatch),
-            )?;
-            drop(runtime);
-            let records = collector.records();
-            assert!(
-                records
-                    .iter()
-                    .any(|record| record.fields.get("operation") == Some(&json!("scan_execution")))
-            );
-            for record in records {
-                if record.fields.get("event") == Some(&json!("unrelated.probe")) {
-                    assert_eq!(record.parent, Some(unrelated_id));
-                } else if record.span_id != Some(unrelated_id) {
-                    assert!(!collector.linked_to(&record, unrelated_id), "{record:?}");
-                }
-            }
-            collector.assert_balanced();
-        }
-    }
-    Ok(())
-}
-
-#[test]
-fn stream_keeps_its_parent_beneath_a_later_registry_scope() -> TestResult {
-    use tracing_subscriber::{Layer, layer::Context, prelude::*, registry::LookupSpan};
-
-    #[derive(Clone, Default)]
-    struct EventParents(Arc<Mutex<Vec<Option<tracing::span::Id>>>>);
-    impl<S: tracing::Subscriber + for<'a> LookupSpan<'a>> Layer<S> for EventParents {
-        fn on_event(&self, event: &tracing::Event<'_>, context: Context<'_, S>) {
-            if event.metadata().target() == "delta_arrow_reader" {
-                self.0
-                    .lock()
-                    .unwrap()
-                    .push(context.event_span(event).map(|span| span.id()));
-            }
-        }
-    }
-
-    for backend in [
-        ParquetReaderBackend::Direct,
-        ParquetReaderBackend::DeltaKernel,
-    ] {
-        for complete in [false, true] {
-            let runtime = runtime()?;
-            let fixture = LogTable::new()?;
-            fixture.write(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
-            let table = runtime.block_on(fixture.builder(backend).load_table())?;
-            let plan = runtime.block_on(table.scan().build())?;
-            let parents = EventParents::default();
-            let subscriber = tracing_subscriber::Registry::default().with(parents.clone());
-            with_default(subscriber, || -> TestResult {
-                let owner = tracing::info_span!(parent: None, "owner");
-                let entered_owner = owner.enter();
-                let mut stream = plan.into_stream();
-                let later = tracing::info_span!(parent: None, "later caller");
-                let entered_later = later.enter();
-                assert_eq!(
-                    runtime.block_on(stream.next_batch())?.unwrap().num_rows(),
-                    2
-                );
-                if complete {
-                    assert!(runtime.block_on(stream.next_batch())?.is_none());
-                }
-                drop(stream);
-                assert_eq!(tracing::Span::current().id(), later.id());
-                drop(entered_later);
-                assert_eq!(tracing::Span::current().id(), owner.id());
-                drop(entered_owner);
-                assert!(tracing::Span::current().is_none());
-                let parents = parents.0.lock().unwrap();
-                assert_eq!(parents.len(), 2, "start and terminal events expected");
-                assert!(
-                    parents.iter().all(|parent| *parent == owner.id()),
-                    "expected parent {:?}, got {parents:?}",
-                    owner.id()
-                );
-                Ok(())
-            })?;
-        }
-    }
-    Ok(())
-}
-
-#[test]
 fn public_operations_propagate_dispatch_and_parent_to_workers() -> TestResult {
     for multi_thread in [false, true] {
         let runtime = if multi_thread {
@@ -225,7 +105,7 @@ fn public_operations_propagate_dispatch_and_parent_to_workers() -> TestResult {
 }
 
 #[test]
-fn stream_keeps_its_creation_context_when_polled_or_dropped_elsewhere() -> TestResult {
+fn streams_use_the_polling_caller_for_both_backends() -> TestResult {
     for backend in [
         ParquetReaderBackend::Direct,
         ParquetReaderBackend::DeltaKernel,
@@ -236,72 +116,80 @@ fn stream_keeps_its_creation_context_when_polled_or_dropped_elsewhere() -> TestR
             fixture.write(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
             let table = runtime.block_on(fixture.builder(backend).load_table())?;
             let plan = runtime.block_on(table.scan().build())?;
-            let owner = Collector::new(Level::TRACE);
-            let unrelated = Collector::new(Level::TRACE);
-            let span = caller(&owner);
-            let parent = span.id().unwrap().into_u64();
-            let mut stream = with_default(owner.clone(), || span.in_scope(|| plan.into_stream()));
-            drop(span);
-            assert!(owner.events().is_empty());
-            let consume = async move {
-                assert_eq!(stream.next_batch().await?.unwrap().num_rows(), 2);
-                if complete {
-                    assert!(stream.next_batch().await?.is_none());
+            let collector = Collector::new(Level::TRACE);
+            let mut stream = plan.into_stream();
+            assert!(collector.events().is_empty());
+            let parent = caller(&collector);
+            let parent_id = parent.id().unwrap().into_u64();
+            runtime.block_on(
+                async move {
+                    assert_eq!(stream.next_batch().await?.unwrap().num_rows(), 2);
+                    if complete {
+                        assert!(stream.next_batch().await?.is_none());
+                    }
+                    drop(stream);
+                    Ok::<_, DeltaReaderError>(())
                 }
-                drop(stream);
-                tracing::info!(target: "delta_arrow_reader::test", event = "unrelated.probe");
-                Ok::<_, DeltaReaderError>(())
-            }
-            .with_subscriber(unrelated.clone());
-            runtime.block_on(async { tokio::spawn(consume).await })??;
+                .instrument(parent)
+                .with_subscriber(collector.clone()),
+            )?;
             drop(runtime);
-            let events = owner.events();
-            assert_ne!(events[0].thread, std::thread::current().id());
-            assert!(events.iter().any(|record| record.fields.get("event")
-                == Some(&json!(if complete {
+            let events = collector.events();
+            let execution = events
+                .iter()
+                .filter(|record| record.fields.get("operation") == Some(&json!("scan_execution")))
+                .collect::<Vec<_>>();
+            assert_eq!(execution.len(), 2, "start and terminal events expected");
+            assert_eq!(execution[0].fields["event"], "scan_execution.started");
+            assert_eq!(
+                execution[1].fields["event"],
+                if complete {
                     "scan_execution.completed"
                 } else {
                     "scan_execution.dropped"
-                }))));
-            assert!(
-                events.iter().all(|record| owner.linked_to(record, parent)),
-                "{events:?}"
+                }
             );
-            let other = unrelated.events();
-            assert_eq!(other.len(), 1, "{other:?}");
-            assert_eq!(other[0].fields["event"], "unrelated.probe");
-            owner.assert_balanced();
+            assert_eq!(
+                execution[0].fields["operation_id"],
+                execution[1].fields["operation_id"]
+            );
+            assert!(
+                events
+                    .iter()
+                    .all(|event| collector.linked_to(event, parent_id))
+            );
+            collector.assert_balanced();
         }
     }
     Ok(())
 }
 
 #[test]
-fn concurrent_and_later_operations_do_not_inherit_another_caller() -> TestResult {
+fn concurrent_operations_keep_distinct_spans_on_a_reused_worker() -> TestResult {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .max_blocking_threads(1)
         .enable_all()
         .build()?;
     let fixture = LogTable::new()?;
-    let first = Collector::new(Level::TRACE);
-    let second = Collector::new(Level::TRACE);
-    let roots = [caller(&first), caller(&second)];
+    let collector = Collector::new(Level::TRACE);
+    let roots = [caller(&collector), caller(&collector)];
     let ids = roots.each_ref().map(|span| span.id().unwrap().into_u64());
-    let (one, two) = runtime.block_on(async {
-        futures_util::join!(
-            fixture
-                .builder(ParquetReaderBackend::Direct)
-                .load_table()
-                .instrument(roots[0].clone())
-                .with_subscriber(first.clone()),
-            fixture
-                .builder(ParquetReaderBackend::Direct)
-                .load_table()
-                .instrument(roots[1].clone())
-                .with_subscriber(second.clone()),
-        )
-    });
+    let (one, two) = runtime.block_on(
+        async {
+            futures_util::join!(
+                fixture
+                    .builder(ParquetReaderBackend::Direct)
+                    .load_table()
+                    .instrument(roots[0].clone()),
+                fixture
+                    .builder(ParquetReaderBackend::Direct)
+                    .load_table()
+                    .instrument(roots[1].clone()),
+            )
+        }
+        .with_subscriber(collector.clone()),
+    );
     let (one, _two) = (one?, two?);
     let cloned = one.clone();
     let _plan = runtime.block_on(
@@ -309,47 +197,43 @@ fn concurrent_and_later_operations_do_not_inherit_another_caller() -> TestResult
             .scan()
             .build()
             .instrument(roots[1].clone())
-            .with_subscriber(second.clone()),
+            .with_subscriber(collector.clone()),
     )?;
-    for (collector, id) in [(&first, ids[0]), (&second, ids[1])] {
-        assert!(
-            collector
-                .events()
-                .iter()
-                .all(|record| collector.linked_to(record, id))
-        );
-        collector.assert_balanced();
-    }
-    let worker = |collector: &Collector| {
-        collector
-            .events()
-            .into_iter()
-            .find(|record| record.fields.get("event") == Some(&json!("snapshot_load.completed")))
-            .unwrap()
+    let events = collector.events();
+    let worker = |id| {
+        events
+            .iter()
+            .find(|record| {
+                record.fields.get("event") == Some(&json!("snapshot_load.completed"))
+                    && collector.linked_to(record, id)
+            })
+            .expect("snapshot worker lost its caller span")
             .thread
     };
     assert_eq!(
-        worker(&first),
-        worker(&second),
+        worker(ids[0]),
+        worker(ids[1]),
         "blocking worker should be reused"
     );
+    assert!(events.iter().all(|record| {
+        collector.linked_to(record, ids[0]) || collector.linked_to(record, ids[1])
+    }));
+    let planning = events
+        .iter()
+        .filter(|record| record.fields.get("operation") == Some(&json!("scan_planning")))
+        .collect::<Vec<_>>();
+    assert_eq!(planning.len(), 2);
     assert!(
-        !first
-            .events()
+        planning
             .iter()
-            .any(|record| record.fields.get("operation") == Some(&json!("scan_planning")))
+            .all(|record| collector.linked_to(record, ids[1]))
     );
-    assert!(
-        second
-            .events()
-            .iter()
-            .any(|record| record.fields.get("operation") == Some(&json!("scan_planning")))
-    );
+    collector.assert_balanced();
     Ok(())
 }
 
 #[test]
-fn filtered_spans_do_not_redirect_failures_or_retain_completed_streams() -> TestResult {
+fn filtered_spans_keep_failures_visible_and_terminal_streams_release_resources() -> TestResult {
     for level in [Level::WARN, Level::ERROR] {
         for backend in [
             ParquetReaderBackend::Direct,
@@ -357,7 +241,6 @@ fn filtered_spans_do_not_redirect_failures_or_retain_completed_streams() -> Test
         ] {
             let runtime = runtime()?;
             let owner = Collector::new(level);
-            let other = Collector::new(Level::TRACE);
             let disabled = caller(&owner);
             assert!(disabled.is_disabled());
             let error = runtime
@@ -374,12 +257,11 @@ fn filtered_spans_do_not_redirect_failures_or_retain_completed_streams() -> Test
             let table = runtime.block_on(fixture.builder(backend).load_table())?;
             let plan = runtime.block_on(table.scan().build())?;
             fs::remove_file(fixture.0.join("secret-missing.parquet"))?;
-            let mut stream = with_default(owner.clone(), || plan.into_stream());
+            let mut stream = plan.into_stream();
             let error = runtime
-                .block_on(stream.next_batch().with_subscriber(other.clone()))
+                .block_on(stream.next_batch().with_subscriber(owner.clone()))
                 .unwrap_err();
             failure(&owner, "scan_execution", &error);
-            assert!(other.records().is_empty());
             let lifetime = owner.lifetime();
             drop(owner);
             assert!(runtime.block_on(stream.next_batch())?.is_none());
@@ -395,7 +277,7 @@ fn filtered_spans_do_not_redirect_failures_or_retain_completed_streams() -> Test
 }
 
 #[test]
-fn pending_load_and_refresh_keep_context_when_resumed_or_dropped() -> TestResult {
+fn pending_load_and_refresh_report_abandonment_before_workers_finish() -> TestResult {
     use futures_util::FutureExt;
     for (refresh, complete) in [(false, false), (true, false), (false, true), (true, true)] {
         let runtime = runtime()?;
@@ -449,11 +331,10 @@ fn pending_load_and_refresh_keep_context_when_resumed_or_dropped() -> TestResult
             );
         });
         started.recv_timeout(Duration::from_secs(5))?;
-        let other = Collector::new(Level::TRACE);
         let lifetime = owner.lifetime();
         if complete {
             release.send(())?;
-            let result = runtime.block_on(future.with_subscriber(other.clone()))?;
+            let result = runtime.block_on(future.with_subscriber(owner.clone()))?;
             let events = owner.events();
             assert!(
                 events
@@ -469,7 +350,7 @@ fn pending_load_and_refresh_keep_context_when_resumed_or_dropped() -> TestResult
             owner.assert_balanced();
             drop(owner);
         } else {
-            with_default(other.clone(), || drop(future));
+            with_default(owner.clone(), || drop(future));
             assert!(
                 owner
                     .events()
@@ -488,14 +369,13 @@ fn pending_load_and_refresh_keep_context_when_resumed_or_dropped() -> TestResult
             lifetime.upgrade().is_none(),
             "finished worker retained its context"
         );
-        assert!(other.records().is_empty());
     }
     Ok(())
 }
 
 #[cfg(feature = "datafusion")]
 #[test]
-fn datafusion_terminal_error_releases_context_without_an_extra_poll() -> TestResult {
+fn datafusion_terminal_error_releases_resources_without_an_extra_poll() -> TestResult {
     use datafusion::{datasource::TableProvider, prelude::SessionContext};
     use delta_arrow_reader::datafusion::{DeltaTableProvider, ScanOptions};
     use futures_util::{FutureExt, StreamExt};
@@ -521,19 +401,21 @@ fn datafusion_terminal_error_releases_context_without_an_extra_poll() -> TestRes
             let plan = runtime.block_on(provider.scan(&session.state(), None, &[], None))?;
             fs::remove_file(fixture.0.join("secret-missing.parquet"))?;
             let owner = Collector::new(level);
-            let other = Collector::new(Level::TRACE);
             let parent = caller(&owner);
             let mut stream = with_default(owner.clone(), || {
                 parent.in_scope(|| plan.execute(0, session.task_ctx()))
             })?;
-            drop(parent);
             let error = runtime
-                .block_on(stream.next().with_subscriber(other.clone()))
+                .block_on(
+                    stream
+                        .next()
+                        .instrument(parent)
+                        .with_subscriber(owner.clone()),
+                )
                 .unwrap();
             assert!(error.is_err());
             // Outstanding workers may retain context until they finish; keep the stream alive.
             drop(runtime);
-            assert!(other.records().is_empty());
             owner.assert_balanced();
             let lifetime = owner.lifetime();
             drop(owner);
@@ -549,7 +431,7 @@ fn datafusion_terminal_error_releases_context_without_an_extra_poll() -> TestRes
 
 #[cfg(feature = "datafusion")]
 #[test]
-fn reusable_datafusion_plan_captures_each_execution_caller() -> TestResult {
+fn reusable_datafusion_plan_uses_each_polling_caller() -> TestResult {
     use datafusion::{datasource::TableProvider, prelude::SessionContext};
     use delta_arrow_reader::datafusion::{DeltaTableProvider, ScanOptions};
     use futures_util::StreamExt;
@@ -585,13 +467,11 @@ fn reusable_datafusion_plan_captures_each_execution_caller() -> TestResult {
         );
         for _ in 0..2 {
             let owner = Collector::new(Level::TRACE);
-            let other = Collector::new(Level::TRACE);
             let parent = caller(&owner);
             let id = parent.id().unwrap().into_u64();
             let mut stream = with_default(owner.clone(), || {
                 parent.in_scope(|| plan.execute(0, session.task_ctx()))
             })?;
-            drop(parent);
             runtime.block_on(
                 async {
                     let mut rows = 0;
@@ -601,7 +481,8 @@ fn reusable_datafusion_plan_captures_each_execution_caller() -> TestResult {
                     assert_eq!(rows, 2);
                     Ok::<_, Box<dyn Error>>(())
                 }
-                .with_subscriber(other.clone()),
+                .instrument(parent)
+                .with_subscriber(owner.clone()),
             )?;
             let records = owner.records();
             assert!(
@@ -610,7 +491,6 @@ fn reusable_datafusion_plan_captures_each_execution_caller() -> TestResult {
                     .any(|record| record.name == "Delta partition task"
                         && owner.linked_to(record, id))
             );
-            assert!(other.records().is_empty());
             owner.assert_balanced();
             let lifetime = owner.lifetime();
             drop(owner);

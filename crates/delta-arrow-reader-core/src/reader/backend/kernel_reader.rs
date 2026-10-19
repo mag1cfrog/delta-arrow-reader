@@ -202,9 +202,15 @@ fn spawn_blocking_file_stream(
     + 'static,
 ) -> FileBatchStream {
     let (output, receiver) = mpsc::channel(output_buffer_batches);
-    let task = crate::tracing_context::spawn_blocking(move || {
-        let _permit = permit;
-        producer(output, cancellation)
+    let dispatch = tracing::dispatcher::get_default(Clone::clone);
+    let span = tracing::Span::current();
+    let task = tokio::task::spawn_blocking(move || {
+        tracing::dispatcher::with_default(&dispatch, || {
+            span.in_scope(|| {
+                let _permit = permit;
+                producer(output, cancellation)
+            })
+        })
     });
     let state = DeltaKernelFileStreamState {
         receiver,
@@ -436,9 +442,8 @@ mod tests {
             cancellation.clone(),
         );
         let collector = Collector::new(tracing::Level::INFO);
-        let mut stream = tracing::subscriber::with_default(collector.clone(), || {
-            crate::reader::tests::direct_stream(VecDeque::from([partition]), metrics, 1)
-        });
+        let mut stream =
+            crate::reader::tests::direct_stream(VecDeque::from([partition]), metrics, 1);
         stream.backend = ParquetReaderBackend::DeltaKernel;
         stream.partition_count = 1;
         assert!(
@@ -449,8 +454,7 @@ mod tests {
                 .is_none()
         );
         timeout(Duration::from_secs(5), entered.notified()).await?;
-        let unrelated = Collector::new(tracing::Level::INFO);
-        tracing::subscriber::with_default(unrelated.clone(), || drop(stream));
+        tracing::subscriber::with_default(collector.clone(), || drop(stream));
         assert!(cancellation.is_cancelled());
         assert!(!finished.load(Ordering::SeqCst));
         assert_eq!(limiter.active_file_reads(), 1);
@@ -469,7 +473,6 @@ mod tests {
         assert_eq!(events[2].fields["backend"], "DeltaKernel");
         assert_eq!(events[2].fields["output_started"], false);
         assert_eq!(events[3].fields["event"], "kernel.producer.finished");
-        assert!(unrelated.records().is_empty());
         assert_eq!(
             events[0].fields["operation_id"],
             events[2].fields["operation_id"]

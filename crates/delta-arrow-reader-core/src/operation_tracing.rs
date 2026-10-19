@@ -9,7 +9,7 @@ use std::sync::{
 };
 use std::time::Instant;
 
-use crate::tracing_context::TracingContext;
+use tracing::{Dispatch, Span};
 
 use crate::{DeltaReaderError, DeltaSnapshotSelection, ParquetReaderBackend};
 
@@ -142,7 +142,8 @@ pub(crate) struct Operation {
     kind: OperationKind,
     context: OperationContext,
     started: Instant,
-    tracing: TracingContext,
+    dispatch: Dispatch,
+    span: Span,
     finished: bool,
 }
 
@@ -153,15 +154,12 @@ impl Operation {
             kind,
             context: OperationContext(Arc::new(Mutex::new(fields))),
             started: Instant::now(),
-            tracing: TracingContext::capture(),
+            dispatch: tracing::dispatcher::get_default(Clone::clone),
+            span: Span::current(),
             finished: false,
         };
         operation.milestone(Outcome::Started);
         operation
-    }
-
-    pub(crate) fn tracing(&self) -> &TracingContext {
-        &self.tracing
     }
 
     pub(crate) fn id(&self) -> u64 {
@@ -243,7 +241,7 @@ impl Operation {
     }
 
     fn in_scope(&self, emit: impl FnOnce()) {
-        self.tracing.in_scope(emit);
+        tracing::dispatcher::with_default(&self.dispatch, || self.span.in_scope(emit));
     }
 }
 

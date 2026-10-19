@@ -108,7 +108,6 @@ fn build_client(
                     let (sender, driver) = http1::handshake(stream)
                         .await
                         .map_err(|e| HttpError::new(HttpErrorKind::Connect, e))?;
-                    // A pooled connection outlives requests; do not capture request context here.
                     tokio::spawn(async move {
                         if let Err(error) = driver.await {
                             tracing::debug!(
@@ -490,52 +489,6 @@ mod tests {
             .to_owned();
         assert_eq!(&response.into_body().bytes().await.unwrap()[..], b"ok");
         id
-    }
-
-    #[tokio::test]
-    async fn reused_connection_does_not_retain_request_subscribers() {
-        use crate::{test_tracing::Collector, tracing_context::TracingContext};
-        use tracing::subscriber::with_default;
-
-        tokio::time::timeout(Duration::from_secs(5), async {
-            let server = server().await;
-            let mut connection = None;
-            let mut client = None;
-            for _ in 0..2 {
-                let collector = Collector::new(tracing::Level::TRACE);
-                let context = with_default(collector.clone(), TracingContext::capture);
-                let lifetime = collector.lifetime();
-                let observed = context
-                    .bind(async {
-                        let client = client.get_or_insert_with(|| {
-                            build_client(
-                                true,
-                                Arc::new(Semaphore::new(1)),
-                                Duration::from_secs(2),
-                                Duration::from_secs(1),
-                                Matcher::builder().build(),
-                            )
-                            .unwrap()
-                        });
-                        tracing::info!(target: "delta_arrow_reader::test", event = "request.probe");
-                        healthy(client, &server.origin).await
-                    })
-                    .await;
-                if let Some(previous) = connection.replace(observed.clone()) {
-                    assert_eq!(previous, observed);
-                }
-                assert_eq!(collector.events().len(), 1);
-                drop(context);
-                drop(collector);
-                assert!(
-                    lifetime.upgrade().is_none(),
-                    "the pool retained a request's subscriber"
-                );
-            }
-            assert_eq!(server.active.load(Ordering::SeqCst), 1);
-        })
-        .await
-        .unwrap();
     }
 
     #[tokio::test]

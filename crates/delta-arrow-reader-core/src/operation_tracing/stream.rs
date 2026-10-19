@@ -1,9 +1,9 @@
 //! Diagnostics for a stream's first poll, terminal result, and abandonment.
 
 use super::{NEXT_OPERATION_ID, TARGET, backend_name};
-use crate::tracing_context::TracingContext;
 use crate::{DeltaReaderError, ParquetReaderBackend};
 use std::{sync::atomic::Ordering, time::Instant};
+use tracing::{Dispatch, Span};
 
 pub(crate) enum StreamOutcome<'a> {
     Eof,
@@ -19,7 +19,8 @@ pub(crate) struct StreamOperation {
     backend: ParquetReaderBackend,
     partition_count: usize,
     started: Instant,
-    tracing: TracingContext,
+    dispatch: Dispatch,
+    span: Span,
     output_started: bool,
     finished: bool,
 }
@@ -38,7 +39,8 @@ impl StreamOperation {
             backend,
             partition_count,
             started: Instant::now(),
-            tracing: TracingContext::capture(),
+            dispatch: tracing::dispatcher::get_default(Clone::clone),
+            span: Span::current(),
             output_started: false,
             finished: false,
         };
@@ -94,7 +96,7 @@ impl StreamOperation {
     }
 
     fn in_scope(&self, emit: impl FnOnce()) {
-        self.tracing.in_scope(emit);
+        tracing::dispatcher::with_default(&self.dispatch, || self.span.in_scope(emit));
     }
 }
 

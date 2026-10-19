@@ -30,6 +30,8 @@ use self::{
     },
 };
 
+use tracing::{Instrument, instrument::WithSubscriber};
+
 use crate::{
     DeltaReaderError, DeltaScanExecutionOptions, DeltaTable, ParquetReaderBackend,
     delta::kernel::{DeltaKernelPredicate, kernel_pruning_predicate},
@@ -380,76 +382,88 @@ impl TableProvider for DeltaTableProvider {
         let provider = self.clone();
         let projection = projection.cloned();
         let filters = filters.to_vec();
-        let tracing = crate::tracing_context::TracingContext::capture();
-        tracing
-            .bind(async {
-                let result = crate::tracing_context::spawn_blocking(move || {
-                    provider.plan(
-                        session_target_partitions,
-                        projection.as_deref(),
-                        &filters,
-                        limit,
-                    )
+        async {
+            let dispatch = tracing::dispatcher::get_default(Clone::clone);
+            let span = tracing::Span::current();
+            let result = tokio::task::spawn_blocking(move || {
+                tracing::dispatcher::with_default(&dispatch, || {
+                    span.in_scope(|| {
+                        provider.plan(
+                            session_target_partitions,
+                            projection.as_deref(),
+                            &filters,
+                            limit,
+                        )
+                    })
                 })
-                .await
-                .boxed()
-                .context(ScanPlanningSnafu {
-                    reason: "datafusion_scan_planning_task_failed",
-                })
-                .and_then(|result| result);
-
-                let result = match result {
-                    Ok(ScanPreparation::Ready(plan)) => Ok(plan),
-                    Ok(ScanPreparation::NeedsNetworkWarmup(pending)) => {
-                        let ExecutionPlanInputs {
-                            reader_plan,
-                            datafusion_plan,
-                            exact_row_predicate,
-                        } = *pending;
-                        self.table
-                            .recover_network_warmup(self.options.execution_options)
-                            .await;
-                        let provider = self.clone();
-                        crate::tracing_context::spawn_blocking(move || {
-                            provider.build_execution_plan(
-                                reader_plan,
-                                datafusion_plan,
-                                exact_row_predicate,
-                            )
-                        })
-                        .await
-                        .boxed()
-                        .context(ScanPlanningSnafu {
-                            reason: "datafusion_scan_execution_setup_task_failed",
-                        })
-                    }
-                    Err(error) => Err(error),
-                };
-
-                match result {
-                    Ok(plan) => {
-                        tracing::debug!(
-                            target: TRACING_TARGET,
-                            event = "provider_scan.planned",
-                            snapshot_version = self.table.version(),
-                            partition_count = plan.properties().output_partitioning().partition_count(),
-                            backend = ?self.options.execution_options.parquet_backend(),
-                            outcome = "planned"
-                        );
-                        Ok(plan)
-                    }
-                    Err(error) => {
-                        trace_failure(
-                            "provider_scan.failed",
-                            self.table.version(),
-                            self.options.execution_options.parquet_backend(),
-                            &error,
-                        );
-                        Err(DataFusionError::External(Box::new(error)))
-                    }
-                }
             })
             .await
+            .boxed()
+            .context(ScanPlanningSnafu {
+                reason: "datafusion_scan_planning_task_failed",
+            })
+            .and_then(|result| result);
+
+            let result = match result {
+                Ok(ScanPreparation::Ready(plan)) => Ok(plan),
+                Ok(ScanPreparation::NeedsNetworkWarmup(pending)) => {
+                    let ExecutionPlanInputs {
+                        reader_plan,
+                        datafusion_plan,
+                        exact_row_predicate,
+                    } = *pending;
+                    self.table
+                        .recover_network_warmup(self.options.execution_options)
+                        .await;
+                    let provider = self.clone();
+                    let dispatch = tracing::dispatcher::get_default(Clone::clone);
+                    let span = tracing::Span::current();
+                    tokio::task::spawn_blocking(move || {
+                        tracing::dispatcher::with_default(&dispatch, || {
+                            span.in_scope(|| {
+                                provider.build_execution_plan(
+                                    reader_plan,
+                                    datafusion_plan,
+                                    exact_row_predicate,
+                                )
+                            })
+                        })
+                    })
+                    .await
+                    .boxed()
+                    .context(ScanPlanningSnafu {
+                        reason: "datafusion_scan_execution_setup_task_failed",
+                    })
+                }
+                Err(error) => Err(error),
+            };
+
+            match result {
+                Ok(plan) => {
+                    tracing::debug!(
+                        target: TRACING_TARGET,
+                        event = "provider_scan.planned",
+                        snapshot_version = self.table.version(),
+                        partition_count = plan.properties().output_partitioning().partition_count(),
+                        backend = ?self.options.execution_options.parquet_backend(),
+                        outcome = "planned"
+                    );
+                    Ok(plan)
+                }
+                Err(error) => {
+                    trace_failure(
+                        "provider_scan.failed",
+                        self.table.version(),
+                        self.options.execution_options.parquet_backend(),
+                        &error,
+                    );
+                    Err(DataFusionError::External(Box::new(error)))
+                }
+            }
+        }
+        .in_current_span()
+        .with_current_subscriber()
+        .await
     }
 
     fn supports_filters_pushdown(

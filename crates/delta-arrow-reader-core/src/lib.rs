@@ -5,7 +5,6 @@ mod delta;
 mod error;
 mod operation_tracing;
 mod reader;
-mod tracing_context;
 
 #[cfg(test)]
 #[path = "../tests/support/tracing.rs"]

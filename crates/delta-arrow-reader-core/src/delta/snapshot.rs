@@ -308,8 +308,19 @@ pub(crate) async fn load_delta_table_snapshot(
     context: OperationContext,
 ) -> Result<ArrowTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
-    let result = crate::tracing_context::spawn_blocking(move || {
-        load_arrow_snapshot_blocking(&table_location, &storage_options, selection, Some(&context))
+    let dispatch = tracing::dispatcher::get_default(Clone::clone);
+    let span = tracing::Span::current();
+    let result = tokio::task::spawn_blocking(move || {
+        tracing::dispatcher::with_default(&dispatch, || {
+            span.in_scope(|| {
+                load_arrow_snapshot_blocking(
+                    &table_location,
+                    &storage_options,
+                    selection,
+                    Some(&context),
+                )
+            })
+        })
     })
     .await
     .boxed()
@@ -333,11 +344,20 @@ pub(crate) async fn load_kernel_table_snapshot(
     context: OperationContext,
 ) -> Result<KernelTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
-    let result = crate::tracing_context::spawn_blocking(move || {
-        let snapshot =
-            load_kernel_table_snapshot_blocking(&table_location, &storage_options, selection)?;
-        context.snapshot_loaded(snapshot.version());
-        Ok(snapshot)
+    let dispatch = tracing::dispatcher::get_default(Clone::clone);
+    let span = tracing::Span::current();
+    let result = tokio::task::spawn_blocking(move || {
+        tracing::dispatcher::with_default(&dispatch, || {
+            span.in_scope(|| {
+                let snapshot = load_kernel_table_snapshot_blocking(
+                    &table_location,
+                    &storage_options,
+                    selection,
+                )?;
+                context.snapshot_loaded(snapshot.version());
+                Ok(snapshot)
+            })
+        })
     })
     .await
     .boxed()
