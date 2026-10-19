@@ -588,6 +588,8 @@ pub(crate) async fn cancellable<T>(
         let mut terminate = signal(SignalKind::terminate()).context(crate::RuntimeSnafu {
             reason: "terminate_handler_install_failed",
         })?;
+        #[cfg(target_os = "linux")]
+        crate::signals::defer_to_async_cancellation();
         async move {
             Ok::<u8, io::Error>(
                 tokio::select! { _ = interrupt.recv() => 130, _ = terminate.recv() => 143 },

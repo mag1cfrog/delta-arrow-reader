@@ -63,6 +63,12 @@ impl Fixture {
 set -eu
 printf '%s\000' "$@" >> "$DAR_TEST_DIR/calls"
 if IFS= read -r unused; then exit 98; fi
+if [ -n "${DAR_TEST_PID1_SIGNAL:-}" ]; then
+  printf '%s' "$PPID" > "$DAR_TEST_DIR/parent_pid"
+  [ "$PPID" = 1 ] || exit 96
+  kill -"$DAR_TEST_PID1_SIGNAL" "$PPID"
+  exec /bin/sleep 60
+fi
 if [ "${DAR_TEST_HANG:-}" = 1 ]; then
   printf '%s' "$$" > "$DAR_TEST_DIR/pid"
   exec /bin/sleep 60
@@ -467,6 +473,43 @@ fn check_cancellation(stderr: &[u8], status: i32) {
     assert!(record.contains(&format!("exit_status={status}")), "{text}");
     assert!(!text.contains("ERROR"), "{text}");
     assert!(!text.contains("secret"), "{text}");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires unshare and permission to create user/PID namespaces"]
+fn pid_one_cancellation_preserves_uc_diagnostic() -> TestResult {
+    for (signal, status) in [("INT", 130), ("TERM", 143)] {
+        let fixture = Fixture::new(false)?;
+        let inspect = fixture.inspect();
+        // Keep unshare on the host PATH; env then execs DAR as namespace PID 1.
+        // --kill-child also cleans up the namespace if the test times out.
+        let output = run_with_timeout(
+            Command::new("unshare")
+                .args([
+                    "--user",
+                    "--map-root-user",
+                    "--pid",
+                    "--fork",
+                    "--kill-child",
+                ])
+                .arg("/usr/bin/env")
+                .arg(format!("PATH={}", fixture.directory.path().display()))
+                .arg(inspect.get_program())
+                .args(inspect.get_args())
+                .env("DAR_TEST_DIR", fixture.directory.path())
+                .env("RUST_LOG", "info")
+                .env("DAR_TEST_PID1_SIGNAL", signal),
+        )?;
+        assert_eq!(
+            fs::read_to_string(fixture.directory.path().join("parent_pid"))?,
+            "1"
+        );
+        assert_eq!(output.status.code(), Some(status));
+        assert!(output.stdout.is_empty());
+        check_cancellation(&output.stderr, status);
+    }
+    Ok(())
 }
 
 // Only GET/HEAD and log listing are needed, following the core cloud-location fixture.
