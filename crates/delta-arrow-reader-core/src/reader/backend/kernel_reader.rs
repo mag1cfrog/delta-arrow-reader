@@ -368,6 +368,108 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn dropped_reader_never_completes_when_its_blocking_producer_finishes()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use crate::{
+            DeltaScanMetrics,
+            reader::{
+                metrics::DeltaScanMetricsConfig,
+                scheduling::{
+                    FileAdmissionDecision, FileBatchStream, FileExecutor, PartitionStream,
+                },
+            },
+            test_tracing::Collector,
+        };
+        use futures_util::FutureExt;
+        use std::{collections::VecDeque, sync::Mutex};
+        use tracing::instrument::WithSubscriber;
+
+        let options = options()?;
+        let limiter = ScanReadLimiter::new(options, 1, 1);
+        let cancellation = ScanCancellation::new();
+        let metrics = DeltaScanMetrics::new(DeltaScanMetricsConfig {
+            snapshot_version: 7,
+            parquet_backend: ParquetReaderBackend::DeltaKernel,
+            scan_partitions_planned: 1,
+            files_planned: 1,
+            add_actions_excluded_during_planning: Some(0),
+            estimated_input_rows: Some(1),
+            estimated_input_bytes: Some(1),
+        });
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let finished = Arc::new(AtomicBool::new(false));
+        let (release, gate) = std::sync::mpsc::channel();
+        let gate = Mutex::new(Some(gate));
+        let producer_entered = entered.clone();
+        let producer_finished = finished.clone();
+        let executor: FileExecutor<(), FileBatchStream> =
+            Arc::new(move |_, permit, cancellation| {
+                let gate = gate.lock().unwrap().take().unwrap();
+                let entered = producer_entered.clone();
+                let finished = producer_finished.clone();
+                async move {
+                    Ok(spawn_blocking_file_stream(
+                        1,
+                        permit,
+                        cancellation,
+                        move |_, _| {
+                            entered.notify_one();
+                            gate.recv_timeout(Duration::from_secs(5))
+                                .expect("release blocked producer");
+                            finished.store(true, Ordering::SeqCst);
+                            Ok(())
+                        },
+                    ))
+                }
+                .boxed()
+            });
+        let partition = PartitionStream::new(
+            vec![()],
+            limiter.partition(0)?,
+            options,
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
+            executor,
+            metrics.clone(),
+            cancellation.clone(),
+        );
+        let mut stream =
+            crate::reader::tests::direct_stream(VecDeque::from([partition]), metrics, 1);
+        stream.backend = ParquetReaderBackend::DeltaKernel;
+        stream.partition_count = 1;
+        let collector = Collector::new(tracing::Level::INFO);
+        assert!(
+            stream
+                .next_batch()
+                .with_subscriber(collector.clone())
+                .now_or_never()
+                .is_none()
+        );
+        timeout(Duration::from_secs(5), entered.notified()).await?;
+        drop(stream);
+        assert!(cancellation.is_cancelled());
+        assert!(!finished.load(Ordering::SeqCst));
+        assert_eq!(limiter.active_file_reads(), 1);
+        release.send(())?;
+        timeout(Duration::from_secs(5), async {
+            while limiter.active_file_reads() != 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await?;
+        assert!(finished.load(Ordering::SeqCst));
+        let events = collector.events();
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[1].fields["event"], "scan_execution.dropped");
+        assert_eq!(events[1].fields["backend"], "DeltaKernel");
+        assert_eq!(events[1].fields["output_started"], false);
+        assert_eq!(
+            events[0].fields["operation_id"],
+            events[1].fields["operation_id"]
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn producer_error_and_panic_reach_the_stream_once()
     -> Result<(), Box<dyn std::error::Error>> {
         let limiter = ScanReadLimiter::new(options()?, 1, 1);

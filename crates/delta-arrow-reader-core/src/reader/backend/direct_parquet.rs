@@ -4795,6 +4795,74 @@ pub(in crate::reader) mod tests {
     }
 
     #[tokio::test]
+    async fn public_stream_reports_deletion_vector_and_transform_failures_in_both_backends()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use crate::{reader::DeltaScan, test_tracing::Collector};
+        use tracing::{Level, instrument::WithSubscriber};
+
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
+        let bytes = parquet_bytes_for(schema, vec![Arc::new(Int32Array::from(vec![1, 2, 3]))])?;
+        for backend in [
+            ParquetReaderBackend::Direct,
+            ParquetReaderBackend::DeltaKernel,
+        ] {
+            for failure in ["deletion_vector_read", "physical_to_logical_transform"] {
+                for level in [Level::ERROR, Level::TRACE] {
+                    let root = TestDir::new("secret-execution-failure")?;
+                    write_partitioned_dv_table(&root, &bytes)?;
+                    let mut plan =
+                        pipeline_plan_for_backend(&root, None, Some(64 * 1024), backend, false)?;
+                    if failure == "deletion_vector_read" {
+                        fs::remove_file(root.path().join(DV_FILE))?;
+                    } else {
+                        Arc::get_mut(&mut plan).unwrap().partitions[0].file_tasks[0].transform =
+                            KernelPhysicalToLogicalTransform::from_test_expression(
+                                Expression::Column(ColumnName::new(["secret_missing_column"])),
+                            );
+                    }
+                    let metrics = plan.metrics.clone();
+                    let mut stream = DeltaScan {
+                        plan_id: 1,
+                        plan,
+                        predicate: None,
+                        limit: None,
+                        physical_row_predicate: None,
+                        range_read_estimator: Arc::default(),
+                    }
+                    .into_stream();
+                    let collector = Collector::new(level);
+                    let error = stream
+                        .next_batch()
+                        .with_subscriber(collector.clone())
+                        .await
+                        .unwrap_err();
+                    assert_eq!(error.code(), failure);
+                    assert!(stream.next_batch().await?.is_none());
+                    drop(stream);
+                    let records = collector.records();
+                    let errors: Vec<_> = records
+                        .iter()
+                        .filter(|event| event.level == Level::ERROR)
+                        .collect();
+                    assert_eq!(errors.len(), 1, "{records:?}");
+                    assert_eq!(errors[0].fields["event"], "scan_execution.failed");
+                    assert_eq!(errors[0].fields["error_phase"], error.phase().as_str());
+                    assert_eq!(errors[0].fields["error_code"], failure);
+                    assert_eq!(errors[0].fields["error_reason"], error.reason());
+                    assert_eq!(errors[0].fields["backend"], format!("{backend:?}"));
+                    assert_eq!(errors[0].fields["output_started"], false);
+                    assert_eq!(errors[0].fields["partition"], 0);
+                    assert!(!format!("{records:?}").contains("secret"));
+                    assert!(!format!("{records:?}").contains(DV_FILE));
+                    assert_eq!(metrics.snapshot().file_tasks_started, 1);
+                    assert_eq!(metrics.snapshot().file_tasks_completed, 0);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn logical_pipeline_reports_dv_transform_and_schema_errors()
     -> Result<(), Box<dyn std::error::Error>> {
         let dv_root = TestDir::new("direct-dv-error")?;

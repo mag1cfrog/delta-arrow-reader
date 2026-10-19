@@ -41,7 +41,7 @@ that treats a helper failure as a failed command can use the error fields below.
 | --- | --- | --- |
 | `operation`, `event`, `outcome` | String | Public boundary, lifecycle event, and result |
 | `operation_id` | Unsigned 64-bit integer | Opaque process-local invocation identity; retries and concurrent calls have distinct IDs |
-| `plan_id` | Optional unsigned 64-bit integer | Planning operation's ID, also carried by its ordinary stream's existing `scan_execution.*` events |
+| `plan_id` | Optional unsigned 64-bit integer | Planning operation's ID, also carried by its ordinary stream's `scan_execution.*` events |
 | `elapsed_micros` | Unsigned 128-bit integer | Monotonic wall time in microseconds since operation entry/first poll, including time waiting for workers and I/O |
 | `selection` | Optional string | `latest` or `version` for a load or refresh |
 | `requested_snapshot_version` | Optional unsigned 64-bit integer | Explicit version requested by a builder |
@@ -61,6 +61,49 @@ WARN/ERROR, or ERROR alone, does not need a DEBUG/INFO parent span to interpret
 it. Event names and the field meanings in these tables form the lifecycle
 contract. Consumers ignore additional fields; detailed profiling records and
 human message wording are not a second stable interface.
+
+## Ordinary stream execution
+
+`DeltaBatchStream` owns one `scan_execution` operation across all calls to
+`next_batch` or `Stream::poll_next`. Its first poll emits INFO
+`scan_execution.started`. It then emits one terminal event:
+
+| Event | Level | `outcome` | Meaning |
+| --- | --- | --- | --- |
+| `scan_execution.completed` | INFO | `completed` | The caller observed EOF, or received the batch satisfying its row limit |
+| `scan_execution.failed` | ERROR | `failed` | Reading, decoding, applying a deletion vector/transform, finalizing a batch, or running a worker failed |
+| `scan_execution.cancelled` | INFO | `cancelled` | The scheduler observed explicit scan cancellation |
+| `scan_execution.dropped` | INFO | `dropped` | The caller dropped a started stream before a terminal result |
+
+These events use the same target and identity/time types as public operation
+events. Each stream gets a fresh `operation_id`; `plan_id` identifies the plan
+that created it. Every event carries `snapshot_version`, `backend`, and
+`partition_count`. ERROR events also carry the error fields below, so filtering
+out INFO still leaves a self-contained failure.
+
+| Stream field | Type | Meaning |
+| --- | --- | --- |
+| `output_started` | Boolean | At least one batch has been returned, including an empty batch; prefetched batches do not count |
+| `completion_reason` | Optional string | `eof` or `row_limit`, present only on completion |
+| `partition` | Optional unsigned integer | Zero-based planned partition being consumed when failure occurred; absent if unavailable |
+
+Elapsed time starts at the first poll and includes consumer waiting between
+polls. It is wall time, not CPU time. Reaching a zero-row limit completes without
+reading data. Reaching a positive limit completes with the final returned batch;
+otherwise, returning the last batch alone does not prove EOF. The caller must
+poll again to observe completion.
+
+Dropping an unpolled stream emits nothing. Dropping only a pending `next_batch`
+future leaves its borrowed stream alive and resumable. Dropping a started stream
+requests cleanup, but does not prove blocking producers have stopped. Their late
+completion cannot emit success for the dropped stream. Once terminal, further
+polling and cleanup emit no additional terminal event.
+
+Only the explicit `scan_execution_cancelled` error reason or the scheduler's
+cancellation state produces a normal cancellation outcome. Unexpected worker
+abort/panic and internal capacity failures remain ERROR failures, even when
+their compatibility error code is `cancelled`. Returned errors and cleanup
+behavior are unchanged.
 
 ## Recoverable network warmup
 
@@ -108,9 +151,11 @@ async fn load_with_diagnostics(
 ```
 
 Public operation terminal events retain the dispatch/span captured at entry or
-first poll, including on drop. They do not install a global subscriber, write a
-file, or change the returned error. Nested worker diagnostics do not yet
-consistently inherit a scoped subscriber across task handoffs.
+first poll, including on drop. Ordinary streams currently capture this context
+at their first poll. Creating a stream under a scoped subscriber alone does not
+capture it. The core does not install a global subscriber, write a file, or
+change the returned error. Nested worker diagnostics do not yet consistently
+inherit a scoped subscriber across task handoffs.
 
 ## Error fields
 
@@ -221,16 +266,17 @@ if let Err(error) = DeltaTableBuilder::new("/tmp/table").load_table().await {
 | Pure validation/configuration helpers | Return-only; fixed error reason | Invalid column/partition options and protocol checks stay quiet |
 | Optional network sampling | Enclosing load or ordinary plan; bounded warning and typed read/transport cause | Initial S3 sample failure and retained transport-initialization errors; failed/timed-out recovery warns once without changing rows or published estimator; concurrent recovery and cancellation tests |
 | `snapshot_load.*`, `snapshot_refresh.*`, `scan_metadata_cache_build.*` | Internal DEBUG phases; enclosing public operation owns ERROR | Existing phase-field tests, eager metadata tracing, source preservation |
-| Planning/transport profiling spans, automatic range planning, network sample details | DEBUG details; fixed names, numeric measurements, bounded status | Existing planning/range tests and recovery callback lock-reentry test |
-| `scan_execution.*` | Existing DEBUG ordinary stream events; plan correlation | Bounded failure fields and existing scheduler/cleanup tests |
+| Planning/transport profiling spans, automatic range planning, network sample details | DEBUG details; fixed names, numeric measurements, bounded status; TRACE cost/calibration details | Existing planning/range tests and recovery callback lock-reentry test |
+| Ordinary storage reads, Parquet decoding, deletion vectors, physical-to-logical transforms, and final row filtering/projection | Public stream; execution/plan identities, version/backend, partition, partial-output flag, typed cause | Both backends report failure after partial output at WARN/ERROR; focused DV/transform and finalization fixtures retain the error and stop the stream |
+| Scheduler admission, capacity, and worker-join failures | Public stream owns ERROR; explicit cancellation owns INFO | Worker panic versus unexpected abort retain distinct causes; internal capacity errors remain failures; permits are released |
+| `scan_execution.*` success, cancellation, and drop | Public stream owns bounded INFO milestones; no event per batch | EOF and zero/positive limits, concurrent IDs, unpolled drop, resumable pending waits, drop under another subscriber, blocking producer finishing after drop, subscriber panic |
+| Disabled/filtered execution diagnostics | Same reader operations and lazy error classification; no diagnostic I/O | No-subscriber and WARN runs preserve rows and scan metrics, including Direct request counts; controlled scheduling tests retain read bounds and cleanup |
 | `provider_scan.*`, `provider_registration.*` | Existing DataFusion DEBUG callbacks | Shared classification through typed DataFusion wrappers; optional build compatibility |
 
 The shared S3 HTTP connection driver records `error_source_kind` on its own
 target without formatting the dependency error.
 
-Ordinary stream execution still needs a complete outcome contract for EOF, row
-limits, cancellation, partial output, and drop, plus WARN/ERROR visibility. Its
-`plan_id` links it to planning but is not a separate execution identity.
 DataFusion provider/physical-plan lifecycles and propagation of nested diagnostic
-context across workers remain separate work. The coverage table records the
-current boundaries; it does not claim complete execution or task-handoff coverage.
+context across workers remain separate work, including capturing a stream's
+caller context at creation. The coverage table describes ordinary reader
+operations; it does not promise DataFusion lifecycle or task-handoff coverage.

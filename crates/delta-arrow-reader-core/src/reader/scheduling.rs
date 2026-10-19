@@ -133,6 +133,7 @@ pub(crate) struct PartitionStream {
 #[derive(Default)]
 pub(crate) struct OrderedPartitionStream {
     partitions: VecDeque<PartitionStream>,
+    cancellation: Option<ScanCancellation>,
     admitted: usize,
     available_file_reads: usize,
     consumed: usize,
@@ -170,6 +171,9 @@ impl OrderedPartitionStream {
             }
         }
         Self {
+            cancellation: partitions
+                .front()
+                .map(|partition| partition.cancellation.clone()),
             partitions,
             admitted: 0,
             available_file_reads: scan_capacity,
@@ -183,6 +187,16 @@ impl OrderedPartitionStream {
         self.admitted = 0;
         self.available_file_reads = 0;
         self.completions = None;
+    }
+
+    pub(crate) fn is_cancelled(&self) -> bool {
+        self.cancellation
+            .as_ref()
+            .is_some_and(ScanCancellation::is_cancelled)
+    }
+
+    pub(crate) fn current_partition(&self) -> Option<usize> {
+        self.partitions.front().map(|_| self.consumed)
     }
 
     fn reclaim_completed(&mut self, context: &mut Context<'_>) {
@@ -2301,7 +2315,9 @@ mod tests {
     #[tokio::test]
     async fn failed_partition_workers_preserve_the_join_cause_and_terminal_state()
     -> Result<(), Box<dyn std::error::Error>> {
+        use crate::test_tracing::Collector;
         use std::error::Error as _;
+        use tracing::instrument::WithSubscriber;
 
         for (panics, expected) in [(true, "worker_panicked"), (false, "worker_cancelled")] {
             let cancellation = ScanCancellation::new();
@@ -2316,15 +2332,25 @@ mod tests {
             if !panics {
                 task.abort();
             }
-            let mut stream = PartitionStream {
+            let partition = PartitionStream {
                 state: PartitionStreamState::Running { receiver, task },
                 cancellation: cancellation.clone(),
                 file_read_permits: Arc::new(tokio::sync::Semaphore::new(0)),
                 max_file_reads: 0,
                 reserved_file_reads: 0,
             };
+            let mut stream = crate::reader::tests::direct_stream(VecDeque::new(), metrics(), 0);
+            stream.partitions = OrderedPartitionStream {
+                partitions: VecDeque::from([partition]),
+                cancellation: Some(cancellation.clone()),
+                admitted: 1,
+                ..OrderedPartitionStream::default()
+            };
+            stream.partition_count = 1;
+            let collector = Collector::new(tracing::Level::ERROR);
 
             let error = timeout(Duration::from_secs(5), stream.next())
+                .with_subscriber(collector.clone())
                 .await?
                 .ok_or("worker failure must reach the stream")?
                 .expect_err("worker failure must not look like EOF");
@@ -2341,6 +2367,16 @@ mod tests {
             assert!(cancellation.is_cancelled());
             assert!(stream.next().await.is_none());
             assert!(stream.next().await.is_none());
+            drop(stream);
+            let events = collector.events();
+            assert_eq!(events.len(), 1, "{events:?}");
+            assert_eq!(events[0].level, tracing::Level::ERROR);
+            assert_eq!(events[0].fields["event"], "scan_execution.failed");
+            assert_eq!(events[0].fields["error_code"], "cancelled");
+            assert_eq!(events[0].fields["error_source_kind"], expected);
+            assert_eq!(events[0].fields["partition"], 0);
+            assert_eq!(events[0].fields["output_started"], false);
+            assert!(!format!("{events:?}").contains("secret-worker-payload"));
         }
         Ok(())
     }
