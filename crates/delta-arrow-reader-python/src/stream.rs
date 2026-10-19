@@ -43,7 +43,11 @@ pub(crate) struct RecordBatchStream {
 
 impl RecordBatchStream {
     pub(crate) fn new(stream: DeltaBatchStream, runtime: Arc<Runtime>) -> Self {
-        Self::from_source(stream.schema(), BatchStream::Delta(stream), runtime)
+        Self::from_source(
+            stream.schema(),
+            BatchStream::Delta(Box::new(stream)),
+            runtime,
+        )
     }
 
     pub(crate) fn from_sql(frame: DataFrame, session: Arc<SessionState>) -> Self {
@@ -242,7 +246,7 @@ fn matches_requested_type(actual: &DataType, requested: &DataType, allow_alterna
 }
 
 enum BatchStream {
-    Delta(DeltaBatchStream),
+    Delta(Box<DeltaBatchStream>),
     Sql {
         stream: BoxStream<'static, Result<RecordBatch, DataFusionError>>,
         _session: Arc<SessionState>,

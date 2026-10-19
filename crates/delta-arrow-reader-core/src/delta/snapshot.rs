@@ -15,6 +15,7 @@ use crate::{
     error::{
         ScanPlanningSnafu, SchemaConversionSnafu, SnapshotLoadSnafu, StorageInitializationSnafu,
     },
+    operation_tracing::OperationContext,
 };
 
 const TRACING_TARGET: &str = "delta_arrow_reader";
@@ -141,11 +142,11 @@ impl ArrowTableSnapshot {
         }
     }
 
-    pub(crate) fn refresh(&self) -> Result<Self, DeltaReaderError> {
+    pub(crate) fn refresh(&self, context: &OperationContext) -> Result<Self, DeltaReaderError> {
         let previous_snapshot_version = self.version();
         trace_snapshot_refresh_started(previous_snapshot_version);
         let started_at = Instant::now();
-        let result = self.build_refreshed_snapshot();
+        let result = self.build_refreshed_snapshot(context);
 
         match &result {
             Ok(snapshot) => trace_snapshot_refresh_completed(
@@ -162,7 +163,10 @@ impl ArrowTableSnapshot {
         result
     }
 
-    fn build_refreshed_snapshot(&self) -> Result<Self, DeltaReaderError> {
+    fn build_refreshed_snapshot(
+        &self,
+        context: &OperationContext,
+    ) -> Result<Self, DeltaReaderError> {
         let snapshot = self
             .engine_context
             .refresh_snapshot(&self.snapshot)
@@ -170,6 +174,7 @@ impl ArrowTableSnapshot {
             .context(SnapshotLoadSnafu {
                 reason: "snapshot_refresh_failed",
             })?;
+        context.snapshot_loaded(snapshot.version());
         if snapshot.version() == self.version() {
             return Ok(self.clone());
         }
@@ -210,15 +215,31 @@ impl ArrowTableSnapshot {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn load_delta_table_snapshot_blocking(
     table_location: &str,
     storage_options: &DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
 ) -> Result<ArrowTableSnapshot, DeltaReaderError> {
+    load_arrow_snapshot_blocking(table_location, storage_options, selection, None)
+}
+
+fn load_arrow_snapshot_blocking(
+    table_location: &str,
+    storage_options: &DeltaStorageOptions,
+    selection: DeltaSnapshotSelection,
+    context: Option<&OperationContext>,
+) -> Result<ArrowTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     trace_snapshot_load_started(selection_kind);
-    let result = build_kernel_table_snapshot(table_location, storage_options, selection)
-        .and_then(KernelTableSnapshot::into_arrow_snapshot);
+    let result = build_kernel_table_snapshot(table_location, storage_options, selection).and_then(
+        |snapshot| {
+            if let Some(context) = context {
+                context.snapshot_loaded(snapshot.version());
+            }
+            snapshot.into_arrow_snapshot()
+        },
+    );
 
     match &result {
         Ok(snapshot) => trace_snapshot_load_completed(selection_kind, snapshot),
@@ -284,10 +305,11 @@ pub(crate) async fn load_delta_table_snapshot(
     table_location: String,
     storage_options: DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
+    context: OperationContext,
 ) -> Result<ArrowTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     let result = tokio::task::spawn_blocking(move || {
-        load_delta_table_snapshot_blocking(&table_location, &storage_options, selection)
+        load_arrow_snapshot_blocking(&table_location, &storage_options, selection, Some(&context))
     })
     .await
     .boxed()
@@ -308,10 +330,14 @@ pub(crate) async fn load_kernel_table_snapshot(
     table_location: String,
     storage_options: DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
+    context: OperationContext,
 ) -> Result<KernelTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     let result = tokio::task::spawn_blocking(move || {
-        load_kernel_table_snapshot_blocking(&table_location, &storage_options, selection)
+        let snapshot =
+            load_kernel_table_snapshot_blocking(&table_location, &storage_options, selection)?;
+        context.snapshot_loaded(snapshot.version());
+        Ok(snapshot)
     })
     .await
     .boxed()
@@ -1136,9 +1162,12 @@ mod tests {
         )?;
 
         let (result, events) = capture_events(|| {
-            let refreshed_lazy = lazy_snapshot.refresh()?;
-            let refreshed_warm = warm_snapshot.refresh()?;
-            let unchanged_warm = refreshed_warm.refresh()?;
+            let refreshed_lazy =
+                lazy_snapshot.refresh(&crate::operation_tracing::OperationContext::default())?;
+            let refreshed_warm =
+                warm_snapshot.refresh(&crate::operation_tracing::OperationContext::default())?;
+            let unchanged_warm =
+                refreshed_warm.refresh(&crate::operation_tracing::OperationContext::default())?;
             Ok::<_, DeltaReaderError>((refreshed_lazy, refreshed_warm, unchanged_warm))
         });
         let (refreshed_lazy, refreshed_warm, unchanged_warm) = result?;
@@ -1196,7 +1225,9 @@ mod tests {
             ),
         )?;
 
-        let (result, events) = capture_events(|| snapshot.refresh());
+        let (result, events) = capture_events(|| {
+            snapshot.refresh(&crate::operation_tracing::OperationContext::default())
+        });
         let error = match result {
             Ok(_) => return Err("malformed refreshed metadata must fail".into()),
             Err(error) => error,
@@ -1707,11 +1738,13 @@ mod tests {
                 table_uri.clone(),
                 DeltaStorageOptions::new(),
                 DeltaSnapshotSelection::Latest,
+                crate::operation_tracing::OperationContext::default(),
             ),
             load_delta_table_snapshot(
                 table_uri,
                 DeltaStorageOptions::new(),
                 DeltaSnapshotSelection::Version(0),
+                crate::operation_tracing::OperationContext::default(),
             ),
         ));
         let first = first?;

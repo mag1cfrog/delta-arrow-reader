@@ -3,7 +3,12 @@
 
 mod delta;
 mod error;
+mod operation_tracing;
 mod reader;
+
+#[cfg(test)]
+#[path = "../tests/support/tracing.rs"]
+mod test_tracing;
 
 pub mod guides;
 

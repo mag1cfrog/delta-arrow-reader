@@ -27,10 +27,10 @@
 
 mod warmup;
 
-pub(crate) use warmup::NetworkWarmupPlan;
 pub(in crate::reader) use warmup::ParquetRangeReadState;
 #[cfg(test)]
 pub(super) use warmup::warmup;
+pub(crate) use warmup::{NetworkWarmupOutcome, NetworkWarmupPlan};
 
 use std::{
     collections::VecDeque,

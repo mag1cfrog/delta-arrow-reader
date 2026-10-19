@@ -7,7 +7,7 @@
 //! only when warmup reports success.
 
 use std::{
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
 
@@ -15,7 +15,7 @@ use object_store::{ObjectStore, Result, path::Path};
 use tokio::sync::Semaphore;
 
 use super::super::{
-    cost_model::FallbackEstimator,
+    cost_model::{FallbackEstimator, TransportEstimate},
     metered_object_store::{MeteredParquetObjectStore, MultiRangeReadStrategy},
     range_planning,
 };
@@ -36,7 +36,27 @@ use crate::{
 #[derive(Default)]
 pub(in crate::reader) struct ParquetRangeReadState {
     estimator: RwLock<Arc<ParquetRangeReadEstimator>>,
-    recovery: tokio::sync::Mutex<Option<NetworkWarmupPlan>>,
+    recovery: Mutex<RecoveryState>,
+    recovery_finished: tokio::sync::Notify,
+}
+
+#[derive(Default)]
+struct RecoveryState {
+    pending: Option<NetworkWarmupPlan>,
+    running: bool,
+}
+
+// Wake peers on cancellation too; consuming the plan still uses its one retry.
+struct RecoveryAttempt<'a>(&'a ParquetRangeReadState);
+impl Drop for RecoveryAttempt<'_> {
+    fn drop(&mut self) {
+        self.0
+            .recovery
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .running = false;
+        self.0.recovery_finished.notify_waiters();
+    }
 }
 
 impl ParquetRangeReadState {
@@ -57,7 +77,10 @@ impl ParquetRangeReadState {
     }
 
     pub(in crate::reader) async fn defer_network_warmup(&self, plan: NetworkWarmupPlan) {
-        *self.recovery.lock().await = Some(plan);
+        self.recovery
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .pending = Some(plan);
     }
 
     #[cfg(feature = "datafusion")]
@@ -69,25 +92,48 @@ impl ParquetRangeReadState {
             && self
                 .recovery
                 .try_lock()
-                // A locked state may be publishing another query's recovered estimator.
-                .map_or(true, |pending| pending.is_some())
+                .map_or(true, |state| state.running || state.pending.is_some())
     }
 
     pub(in crate::reader) async fn recover_network_warmup(
         &self,
         options: DeltaScanExecutionOptions,
-    ) {
+    ) -> Option<NetworkWarmupOutcome> {
         if !NetworkWarmupPlan::supports_scan(options) {
-            return;
+            return None;
         }
-        let mut pending = self.recovery.lock().await;
-        let Some(plan) = pending.take() else {
-            return;
+        let plan = loop {
+            let finished = self.recovery_finished.notified();
+            tokio::pin!(finished);
+            // Register before inspecting state so completion cannot lose a wakeup.
+            finished.as_mut().enable();
+            let plan = {
+                let mut state = self
+                    .recovery
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if state.running {
+                    None
+                } else {
+                    let plan = state.pending.take()?;
+                    state.running = true;
+                    Some(plan)
+                }
+            };
+            if let Some(plan) = plan {
+                break plan;
+            }
+            finished.await;
         };
-        // Keep the lock through the attempt so concurrent scans share its result.
-        if let Some(estimator) = plan.run("recovery", &self.estimator()).await {
+        // Peers wait for publication while storage/subscriber callbacks run without this lock.
+        let attempt = RecoveryAttempt(self);
+        let outcome = plan.run(&self.estimator()).await;
+        if let Some(estimator) = outcome.estimator() {
             self.set_estimator(estimator);
         }
+        drop(attempt);
+        outcome.trace("recovery");
+        Some(outcome)
     }
 }
 
@@ -105,7 +151,7 @@ impl NetworkWarmupPlan {
         snapshot: &crate::delta::snapshot::ArrowTableSnapshot,
         options: DeltaScanExecutionOptions,
         max_duration: Duration,
-    ) -> Option<Self> {
+    ) -> object_store::Result<Option<Self>> {
         let context = snapshot.engine_context();
         let strategy = MultiRangeReadStrategy::for_policy(
             options.parquet_range_read_policy(),
@@ -115,31 +161,34 @@ impl NetworkWarmupPlan {
             || options.parquet_backend() != ParquetReaderBackend::Direct
             || strategy != MultiRangeReadStrategy::ChooseAutomatically
         {
-            return None;
+            return Ok(None);
         }
-        let files = crate::delta::kernel::sample_data_files(
-            snapshot.eager_scan_metadata()?,
-            WARMUP_READ_BYTES,
-            WARMUP_FILE_LIMIT,
-        )
-        .into_iter()
-        .filter_map(|(path, size)| {
-            resolve_data_file_path(context.file_resolution_url(), &path)
-                .ok()
-                .map(|path| (path, size))
-        })
-        .collect::<Vec<_>>();
+        let Some(metadata) = snapshot.eager_scan_metadata() else {
+            return Ok(None);
+        };
+        let files =
+            crate::delta::kernel::sample_data_files(metadata, WARMUP_READ_BYTES, WARMUP_FILE_LIMIT)
+                .into_iter()
+                .filter_map(|(path, size)| {
+                    resolve_data_file_path(context.file_resolution_url(), &path)
+                        .ok()
+                        .map(|path| (path, size))
+                })
+                .collect::<Vec<_>>();
         if files.is_empty() {
-            return None;
+            return Ok(None);
         }
-        Some(Self {
+        let Some(partial_read_store) = context.partial_read_store()? else {
+            return Ok(None);
+        };
+        Ok(Some(Self {
             object_store: context.object_store(),
-            partial_read_store: context.partial_read_store()?,
+            partial_read_store,
             files,
             snapshot_version: snapshot.version(),
             max_duration,
             range_read_budget: &range_planning::RANGE_READ_PERMITS,
-        })
+        }))
     }
 
     pub(crate) fn supports_scan(options: DeltaScanExecutionOptions) -> bool {
@@ -151,9 +200,8 @@ impl NetworkWarmupPlan {
 
     pub(crate) async fn run(
         &self,
-        phase: &'static str,
         previous_estimator: &ParquetRangeReadEstimator,
-    ) -> Option<Arc<ParquetRangeReadEstimator>> {
+    ) -> NetworkWarmupOutcome {
         let estimator = Arc::new(
             previous_estimator
                 .for_network_warmup()
@@ -180,30 +228,94 @@ impl NetworkWarmupPlan {
             warmup(&store, &self.files, self.range_read_budget),
         )
         .await;
-        let status = match outcome {
-            Ok(Ok(true)) => "complete",
-            Ok(Ok(false)) => "insufficient_samples",
-            Ok(Err(_)) => "read_failed",
-            Err(_) => "timeout",
+        let (status, error) = match outcome {
+            Ok(Ok(true)) => ("complete", None),
+            Ok(Ok(false)) => ("insufficient_samples", None),
+            Ok(Err(error)) => ("read_failed", Some(error)),
+            Err(_) => ("timeout", None),
         };
-        let counts = metrics.snapshot();
-        let estimate = store.transport_estimate();
-        let calibration = store.range_read_calibration();
+        let elapsed_micros = started.elapsed().as_micros();
+        let measurements = tracing::enabled!(target: "delta_arrow_reader::diagnostics::network_warmup", tracing::Level::DEBUG)
+            .then(|| {
+                let counts = metrics.snapshot();
+                WarmupMeasurements {
+                    requests: counts.parquet_data_file_range_get_operations,
+                    bytes_received: counts.parquet_data_file_bytes_received,
+                    estimate: store.transport_estimate(),
+                    request_overhead_bytes: store.request_overhead_bytes(),
+                    calibration: store.range_read_calibration(),
+                }
+            });
+        NetworkWarmupOutcome {
+            status,
+            error,
+            elapsed_micros,
+            measurements,
+            // Incomplete calibration must not seed a partially measured network profile.
+            estimator: (status == "complete").then_some(estimator),
+        }
+    }
+}
+
+/// Sampling result and measurements, reported after publishing or retaining the profile.
+pub(crate) struct NetworkWarmupOutcome {
+    status: &'static str,
+    error: Option<object_store::Error>,
+    elapsed_micros: u128,
+    measurements: Option<WarmupMeasurements>,
+    estimator: Option<Arc<ParquetRangeReadEstimator>>,
+}
+
+// Freeze sample diagnostics before concurrent scans can update the published estimator.
+struct WarmupMeasurements {
+    requests: Option<u64>,
+    bytes_received: Option<u64>,
+    estimate: Option<TransportEstimate>,
+    request_overhead_bytes: Option<u128>,
+    calibration: Option<Arc<RangeReadCalibration>>,
+}
+
+impl NetworkWarmupOutcome {
+    pub(crate) fn estimator(&self) -> Option<Arc<ParquetRangeReadEstimator>> {
+        self.estimator.clone()
+    }
+
+    pub(crate) fn warn(
+        &self,
+        phase: &'static str,
+        operation: &crate::operation_tracing::Operation,
+    ) {
+        if matches!(self.status, "read_failed" | "timeout") {
+            operation.network_warmup_degraded(
+                phase,
+                self.status,
+                self.error
+                    .as_ref()
+                    .map(|error| error as &(dyn std::error::Error + 'static)),
+            );
+        }
+    }
+
+    pub(crate) fn trace(&self, phase: &'static str) {
+        let Some(measurements) = &self.measurements else {
+            return;
+        };
+        let estimate = measurements.estimate;
+        let calibration = &measurements.calibration;
         tracing::debug!(target: "delta_arrow_reader::diagnostics::network_warmup",
-            phase, status, elapsed_micros = started.elapsed().as_micros(),
-            requests = counts.parquet_data_file_range_get_operations,
-            bytes_received = counts.parquet_data_file_bytes_received,
+            phase, status = self.status, elapsed_micros = self.elapsed_micros,
+            error_source_kind = self.error.as_ref().map(|error| crate::error::source_kind(error)),
+            requests = measurements.requests,
+            bytes_received = measurements.bytes_received,
             request_latency_micros = estimate.map(|value| value.request_latency.as_micros()),
             throughput_bytes_per_second = estimate.map(|value| value.shared_throughput_bytes_per_second),
-            request_overhead_bytes = store.request_overhead_bytes(),
+            request_overhead_bytes = measurements.request_overhead_bytes,
             calibrated_throughput_bytes_per_second = calibration.as_ref().map(|value| value.bytes_per_second),
             ordinary_request_latency_samples = calibration.as_ref().map(|value| value.ordinary_request_latencies.len()),
             partial_request_latency_samples = calibration.as_ref().map(|value| value.partial_request_latencies.len()),
             request_duration_samples = calibration.as_ref().map(|value| value.partial_request_durations.len()),
             small_request_samples = calibration.as_ref().and_then(|value| value.small_reads.as_ref()).map(|value| value.latencies.len()),
-            "Network warmup completed");
-        // Incomplete calibration must not seed a partially measured network profile.
-        (status == "complete").then_some(estimator)
+            "Network warmup attempt finished");
     }
 }
 
@@ -272,10 +384,12 @@ pub(in super::super) async fn warmup(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     // Replace measurements and their cache together; incomplete warmup keeps the previous pair.
-    if let Some(fallback_estimator) = fallback_estimator {
-        samples.fallback_estimator = Some(fallback_estimator);
+    let complete =
+        fallback_estimator.is_some() && samples.request_overheads.len() >= MIN_TRANSPORT_SAMPLES;
+    if complete {
+        samples.fallback_estimator = fallback_estimator;
     }
-    Ok(samples.request_overheads.len() >= MIN_TRANSPORT_SAMPLES)
+    Ok(complete)
 }
 
 async fn sample_partial_reads(
@@ -319,4 +433,78 @@ async fn sample_partial_reads(
             durations: durations.into(),
         }),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tracing::{Level, instrument::WithSubscriber};
+
+    #[tokio::test]
+    async fn warmup_diagnostics_do_not_change_after_publishing_the_estimator()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (plan, _) =
+            crate::reader::backend::direct_parquet::tests::network_warmup_fixture().await?;
+        let collector = crate::test_tracing::Collector::new(Level::DEBUG);
+        let outcome = plan
+            .run(&ParquetRangeReadEstimator::default())
+            .with_subscriber(collector.clone())
+            .await;
+        let estimator = outcome.estimator().ok_or("warmup did not complete")?;
+        tracing::subscriber::with_default(collector.clone(), || {
+            outcome.trace("recovery");
+            // Later queries can replace the estimator's recent sample windows.
+            for _ in 0..4 {
+                estimator.seed_transport_estimate(TransportEstimate {
+                    request_latency: Duration::from_secs(30),
+                    shared_throughput_bytes_per_second: 1,
+                });
+            }
+            outcome.trace("recovery");
+        });
+        let events: Vec<_> = collector
+            .events()
+            .into_iter()
+            .filter(|event| event.target == "delta_arrow_reader::diagnostics::network_warmup")
+            .collect();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].fields, events[1].fields);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn recovery_callbacks_can_inspect_shared_state_without_lock_reentry()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let state = Arc::new(ParquetRangeReadState::default());
+        let (plan, store) =
+            crate::reader::backend::direct_parquet::tests::network_warmup_fixture().await?;
+        store.fail_range(1);
+        state.defer_network_warmup(plan).await;
+        let mut collector = crate::test_tracing::Collector::new(Level::TRACE);
+        let observed = Arc::clone(&state);
+        collector.probe = Some(Arc::new(move || {
+            assert!(observed.recovery.try_lock().is_ok());
+            assert!(observed.estimator.try_read().is_ok());
+        }));
+        let outcome = state
+            .recover_network_warmup(DeltaScanExecutionOptions::default())
+            .with_subscriber(collector.clone())
+            .await;
+        assert!(
+            outcome
+                .ok_or("missing recovery outcome")?
+                .estimator()
+                .is_none()
+        );
+        let records = collector.records();
+        assert!(records.iter().any(|record| record.is_span));
+        assert!(
+            records
+                .iter()
+                .any(|record| record.target == "delta_arrow_reader::diagnostics::network_warmup")
+        );
+        assert_eq!(store.range_call_count(), 1);
+        collector.clear();
+        Ok(())
+    }
 }

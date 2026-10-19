@@ -611,16 +611,16 @@ impl DeltaKernelEngineContext {
     }
 
     /// Only SDK-owned S3 clients with supported network settings use partial reads.
-    pub(crate) fn partial_read_store(&self) -> Option<Arc<dyn ObjectStore>> {
-        let store = self
-            .partial_read_builder
-            .as_ref()
-            .and_then(|builder| builder.clone().build().ok());
-        if store.is_none() {
+    pub(crate) fn partial_read_store(&self) -> object_store::Result<Option<Arc<dyn ObjectStore>>> {
+        let Some(builder) = self.partial_read_builder.as_ref() else {
             tracing::debug!(target: "delta_arrow_reader::diagnostics::network_warmup",
                 "Partial-read transport unavailable; keeping ordinary reads");
-        }
-        store.map(|store| Arc::new(store) as Arc<dyn ObjectStore>)
+            return Ok(None);
+        };
+        builder
+            .clone()
+            .build()
+            .map(|store| Some(Arc::new(store) as Arc<dyn ObjectStore>))
     }
 
     pub(crate) fn evaluate_predicate(
@@ -796,6 +796,46 @@ mod tests {
 
     use super::*;
     use crate::reader::predicate::evaluate_predicate;
+
+    #[test]
+    fn partial_read_transport_keeps_its_initialization_error()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use object_store::{
+            aws::AmazonS3Builder,
+            client::{ClientOptions, HttpClient, HttpConnector},
+        };
+        #[derive(Debug)]
+        struct FailingConnector;
+        impl HttpConnector for FailingConnector {
+            fn connect(&self, _: &ClientOptions) -> object_store::Result<HttpClient> {
+                Err(object_store::Error::Generic {
+                    store: "test",
+                    source: std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "secret-transport-source",
+                    )
+                    .into(),
+                })
+            }
+        }
+        let url =
+            Url::from_directory_path(std::env::temp_dir()).map_err(|_| "invalid temp path")?;
+        let mut context = DeltaKernelEngineContext::try_new(url, &DeltaStorageOptions::new())?;
+        assert!(context.partial_read_store()?.is_none());
+        context.partial_read_builder = Some(
+            AmazonS3Builder::new()
+                .with_bucket_name("test")
+                .with_region("us-east-1")
+                .with_skip_signature(true)
+                .with_http_connector(FailingConnector),
+        );
+        let error = context
+            .partial_read_store()
+            .err()
+            .ok_or("transport setup must retain its error")?;
+        assert_eq!(crate::error::source_kind(&error), "permission_denied");
+        Ok(())
+    }
 
     #[test]
     fn network_samples_use_only_usable_unique_paths_within_the_limit()

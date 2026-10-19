@@ -24,7 +24,71 @@ use url::Url;
 mod support;
 use support::RealParquetDeltaTable;
 
+#[allow(dead_code)]
+#[path = "support/tracing.rs"]
+mod capture;
+
 type TestResult = Result<(), Box<dyn Error>>;
+
+#[tokio::test]
+async fn optional_network_sampling_failure_warns_but_table_loading_succeeds() -> TestResult {
+    use serde_json::json;
+    use tracing::{Level, instrument::WithSubscriber};
+
+    let store = Arc::new(InMemory::new());
+    let schema = json!({"type":"struct","fields":[{"name":"id","type":"integer","nullable":true,"metadata":{}}]});
+    let actions = [
+        json!({"protocol":{"minReaderVersion":1,"minWriterVersion":2}}),
+        json!({"metaData":{"id":"test","format":{"provider":"parquet","options":{}},"schemaString":schema.to_string(),"partitionColumns":[],"configuration":{},"createdTime":0}}),
+        json!({"add":{"path":"secret-missing-file.parquet","size":8 * 1024 * 1024,"partitionValues":{},"modificationTime":0,"dataChange":true}}),
+    ];
+    store
+        .put(
+            &StorePath::from("table/_delta_log/00000000000000000000.json"),
+            actions
+                .iter()
+                .map(Value::to_string)
+                .collect::<Vec<_>>()
+                .join("\n")
+                .into(),
+        )
+        .await?;
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let options = DeltaStorageOptions::from([
+        (
+            "aws_endpoint".into(),
+            format!("http://{}", listener.local_addr()?),
+        ),
+        ("aws_region".into(), "us-east-1".into()),
+        ("aws_allow_http".into(), "true".into()),
+        ("aws_skip_signature".into(), "true".into()),
+    ]);
+    let mut server = JoinSet::new();
+    server.spawn(serve_s3(listener, store));
+    let collector = capture::Collector::new(Level::WARN);
+    let table = DeltaTableBuilder::new("s3://bucket/table/")
+        .with_storage_options(options)
+        .with_warmup(delta_arrow_reader::WarmupMode::Network {
+            max_duration: std::time::Duration::from_secs(5),
+        })
+        .load_table()
+        .with_subscriber(collector.clone())
+        .await?;
+    assert_eq!(table.version(), 0);
+    let events = collector.events();
+    assert_eq!(events.len(), 1, "{events:?}");
+    let warning = &events[0];
+    assert_eq!(warning.level, Level::WARN);
+    assert_eq!(warning.fields["event"], "network_warmup.degraded");
+    assert_eq!(warning.fields["operation"], "load_table");
+    assert_eq!(warning.fields["phase"], "initialization");
+    assert_eq!(warning.fields["status"], "read_failed");
+    assert_eq!(warning.fields["error_source_kind"], "not_found");
+    assert_eq!(warning.fields["snapshot_version"], 0);
+    assert!(warning.fields["operation_id"].as_u64().is_some());
+    assert!(!format!("{events:?}").contains("secret-"));
+    Ok(())
+}
 
 #[tokio::test]
 async fn cloud_table_locations_use_bucket_relative_keys_in_both_backends() -> TestResult {
