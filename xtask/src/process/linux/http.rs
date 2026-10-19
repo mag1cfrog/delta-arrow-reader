@@ -121,7 +121,7 @@ impl ProcessFixture<'_> {
         let output = run_cli(
             self.command()
                 .args(["inspect", "--storage-options-file"])
-                .arg(options)
+                .arg(&options)
                 .arg(format!("{}/", server.origin)),
         )?;
         let inspection = check_inspection(&output)?;
@@ -131,6 +131,32 @@ impl ProcessFixture<'_> {
                 message: format!("unexpected HTTP inspection: {inspection}")
             }
         );
+        let location = server
+            .origin
+            .replace("http://", "http://secret-user:secret-password@");
+        for filter in [
+            "info",
+            "debug",
+            "trace,reqwest=trace,hyper=trace,object_store=trace",
+        ] {
+            let verbose = run_cli(
+                self.command()
+                    .env("RUST_LOG", filter)
+                    .args(["inspect", "--storage-options-file"])
+                    .arg(&options)
+                    .arg(&location),
+            )?;
+            let text = String::from_utf8_lossy(&verbose.stderr);
+            ensure!(
+                verbose.status.success()
+                    && verbose.stdout == output.stdout
+                    && text.contains("table_load.completed")
+                    && !text.contains("secret"),
+                InvalidInputSnafu {
+                    message: format!("HTTP tracing changed output or exposed credentials: {text}")
+                }
+            );
+        }
         let requests = server.take_requests()?;
         ensure!(
             !requests.is_empty()

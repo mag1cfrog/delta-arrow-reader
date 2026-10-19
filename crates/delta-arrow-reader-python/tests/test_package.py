@@ -65,7 +65,7 @@ class InstalledCliTests(unittest.TestCase):
         self.directory = Path(temporary.name)
         self.environment = {
             key: value for key, value in os.environ.items()
-            if not key.startswith(("LD_", "DYLD_"))
+            if not key.startswith(("LD_", "DYLD_")) and key != "RUST_LOG"
         }
         if os.name == "nt":
             windows = Path(os.environ["SystemRoot"])
@@ -89,12 +89,17 @@ class InstalledCliTests(unittest.TestCase):
         return result.stdout
 
     def assert_diagnostic(self, stderr, phase, code):
-        diagnostic = json.loads(stderr)
-        self.assertEqual(set(diagnostic), {"phase", "code", "message"})
-        self.assertEqual(diagnostic["phase"], phase)
-        self.assertEqual(diagnostic["code"], code)
-        self.assertIsInstance(diagnostic["message"], str)
-        self.assertTrue(diagnostic["message"])
+        text = stderr.decode("utf-8")
+        self.assertTrue(text.endswith("\n"), text)
+        self.assertEqual(len(text.splitlines()), 1, text)
+        self.assertTrue(text.startswith(("ERROR delta_arrow_reader: ",
+                                         "ERROR delta_arrow_reader_cli: ")), text)
+        fields = text.split()
+        self.assertIn(f'error_phase="{phase}"', fields)
+        self.assertIn(f'error_code="{code}"', fields)
+        self.assertIn('outcome="failed"', fields)
+        self.assertTrue(any(field.startswith('error_reason="') for field in fields), text)
+        self.assertNotIn("\x1b", text)
         self.assertNotIn(b"secret", stderr)
         self.assertNotIn(b"Traceback", stderr)
 

@@ -127,7 +127,7 @@ impl ScanFixture<'_> {
             .current_dir(self.directory.path())
             .env("NO_PROXY", "*")
             .env("no_proxy", "*")
-            .env("RUST_LOG", "trace")
+            .env_remove("RUST_LOG")
             .stdin(Stdio::null());
         command
     }

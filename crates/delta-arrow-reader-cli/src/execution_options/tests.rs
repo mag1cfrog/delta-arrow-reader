@@ -209,9 +209,13 @@ fn native_configuration_errors_keep_their_diagnostics_and_source() {
         .unwrap_err();
     let error = parse(r#"{"output_buffer_batches_per_partition":0}"#).unwrap_err();
     assert_eq!(error.exit_code(), ExitCode::from(2));
-    assert_eq!(
-        error.diagnostic(),
-        json!({"phase":native.phase().as_str(), "code":native.code(), "message":native.to_string()})
-    );
+    let text = crate::diagnostics::capture("warn", || error.log_failure());
+    for (field, value) in [
+        ("error_phase", native.phase().as_str()),
+        ("error_code", native.code()),
+        ("error_reason", native.reason()),
+    ] {
+        assert!(text.contains(&format!("{field}=\"{value}\"")), "{text}");
+    }
     assert!(error.source().unwrap().is::<DeltaReaderError>());
 }

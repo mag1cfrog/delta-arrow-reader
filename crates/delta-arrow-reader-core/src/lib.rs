@@ -16,7 +16,7 @@ pub mod guides;
 pub use reader::datafusion;
 
 pub use delta::DeltaProtocol;
-pub use error::{DeltaReaderError, DeltaReaderPhase};
+pub use error::{DeltaReaderError, DeltaReaderPhase, source_kind as error_source_kind};
 pub use futures_util::TryStreamExt;
 #[doc(hidden)]
 pub mod diagnostics {

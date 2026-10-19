@@ -80,14 +80,8 @@ fn executable_names_preserve_help_version_and_redacted_errors()
         )?;
         assert_eq!(output.status.code(), Some(2));
         assert!(output.stdout.is_empty());
-        assert_eq!(
-            serde_json::from_slice::<Value>(&output.stderr)?,
-            serde_json::json!({
-                "phase": "configuration",
-                "code": "invalid_cli_argument",
-                "message": "Invalid command-line arguments (kind=UnknownArgument).",
-            })
-        );
+        let diagnostic = check_failure(&output.stderr, "configuration", "invalid_cli_argument");
+        assert!(diagnostic.contains("argument_kind=UnknownArgument"));
         fs::remove_file(executable)?;
     }
     Ok(())
@@ -117,13 +111,10 @@ fn argument_failures_keep_distinct_safe_kinds() -> Result<(), Box<dyn std::error
         let output = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).args(arguments))?;
         assert_eq!(output.status.code(), Some(2));
         assert!(output.stdout.is_empty());
-        let diagnostic: Value = serde_json::from_slice(&output.stderr)?;
-        assert_eq!(
-            diagnostic,
-            serde_json::json!({
-                "phase": "configuration", "code": "invalid_cli_argument",
-                "message": format!("Invalid command-line arguments (kind={kind})."),
-            })
+        let diagnostic = check_failure(&output.stderr, "configuration", "invalid_cli_argument");
+        assert!(
+            diagnostic.contains(&format!("argument_kind={kind}")),
+            "{diagnostic}"
         );
         assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
     }
@@ -157,13 +148,15 @@ fn json_input_failures_keep_distinct_safe_causes() -> Result<(), Box<dyn std::er
             )?;
             assert_eq!(output.status.code(), Some(2), "{output:?}");
             assert!(output.stdout.is_empty());
-            let diagnostic: Value = serde_json::from_slice(&output.stderr)?;
-            assert_eq!(diagnostic.as_object().unwrap().len(), 3);
-            assert_eq!(diagnostic["phase"], "configuration");
-            assert_eq!(diagnostic["code"], "invalid_input_json");
+            let diagnostic = check_failure(&output.stderr, "configuration", "invalid_input_json");
+            let field = if detail.starts_with("kind=") {
+                format!("json_{detail}")
+            } else {
+                format!("error_reason=\"{}\"", detail.trim_start_matches("reason="))
+            };
             assert!(
-                diagnostic["message"].as_str().unwrap().contains(detail),
-                "{option}, expected {detail}: {diagnostic}"
+                diagnostic.contains(&field),
+                "{option}, expected {field}: {diagnostic}"
             );
             assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
         }
@@ -189,11 +182,8 @@ fn predicate_validation_reasons_survive_json_decoding() -> Result<(), Box<dyn st
         )?;
         assert_eq!(output.status.code(), Some(2));
         assert!(output.stdout.is_empty());
-        let diagnostic: Value = serde_json::from_slice(&output.stderr)?;
-        assert_eq!(diagnostic, serde_json::json!({
-            "phase": "configuration", "code": "invalid_input_json",
-            "message": format!("Invalid JSON input (reason={reason})."),
-        }));
+        let diagnostic = check_failure(&output.stderr, "configuration", "invalid_input_json");
+        assert!(diagnostic.contains(&format!("error_reason=\"{reason}\"")), "{diagnostic}");
         assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
     }
     Ok(())
@@ -419,4 +409,146 @@ fn assert_fixture_schema_fields(actual: &Fields, oracle: &Fields, delta: &[Value
             (actual, expected) => assert_eq!(actual, expected),
         }
     }
+}
+
+fn check_failure<'a>(stderr: &'a [u8], phase: &str, code: &str) -> &'a str {
+    let text = std::str::from_utf8(stderr).unwrap();
+    assert!(text.ends_with('\n'), "{text}");
+    assert_eq!(text.lines().count(), 1, "{text}");
+    assert!(text.starts_with("ERROR delta_arrow_reader"), "{text}");
+    for field in [
+        format!("error_phase=\"{phase}\""),
+        format!("error_code=\"{code}\""),
+        "outcome=\"failed\"".into(),
+    ] {
+        assert!(
+            text.split_whitespace().any(|token| token == field),
+            "missing {field}: {text}"
+        );
+    }
+    assert!(text.contains("error_reason=\""), "{text}");
+    assert!(!text.contains("secret"), "{text}");
+    text
+}
+
+#[test]
+fn verbosity_preserves_stdout_and_core_failure_identity() -> Result<(), Box<dyn std::error::Error>>
+{
+    let table = Path::new(env!("CARGO_MANIFEST_DIR")).join(
+        "../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned/table",
+    );
+    for command in ["inspect", "scan"] {
+        let mut args = vec![command];
+        if command == "scan" {
+            args.extend(["--limit", "0"]);
+        }
+        let baseline = run_with_timeout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .args(&args)
+                .arg(&table)
+                .env_remove("RUST_LOG"),
+        )?;
+        assert!(baseline.status.success(), "{baseline:?}");
+        assert!(baseline.stderr.is_empty());
+        for level in [
+            "error",
+            "warn",
+            "info",
+            "debug",
+            "trace",
+            "delta_arrow_reader=debug",
+            "off",
+        ] {
+            let output = run_with_timeout(
+                Command::new(env!("CARGO_BIN_EXE_dar"))
+                    .args(&args)
+                    .arg(&table)
+                    .env("RUST_LOG", level),
+            )?;
+            assert!(output.status.success(), "{output:?}");
+            assert_eq!(output.stdout, baseline.stdout, "{command}, {level}");
+            let text = String::from_utf8(output.stderr)?;
+            assert!(!text.contains("secret"), "{text}");
+            if matches!(level, "error" | "warn" | "off") {
+                assert!(text.is_empty(), "{text}");
+            } else {
+                assert!(text.contains("table_load.completed"), "{text}");
+                if command == "scan" {
+                    assert!(text.contains("scan_execution.completed"), "{text}");
+                }
+                if level.contains("debug") || level == "trace" {
+                    assert!(text.contains("DEBUG"), "{text}");
+                }
+            }
+        }
+    }
+    for (args, event, code) in [
+        (
+            vec![
+                "inspect",
+                "unknown://secret-user:secret-password@host/secret-table?token=secret-token",
+            ],
+            "table_load.failed",
+            "storage_initialization",
+        ),
+        (
+            vec!["scan", table.to_str().unwrap(), "--column", "secret-column"],
+            "scan_planning.failed",
+            "invalid_projection",
+        ),
+    ] {
+        for level in ["warn", "info", "debug", "trace"] {
+            let output = run_with_timeout(
+                Command::new(env!("CARGO_BIN_EXE_dar"))
+                    .args(&args)
+                    .env("RUST_LOG", level),
+            )?;
+            assert_eq!(output.status.code(), Some(1), "{output:?}");
+            assert!(output.stdout.is_empty());
+            let text = String::from_utf8(output.stderr)?;
+            assert!(!text.contains("secret"), "{text}");
+            let failures: Vec<_> = text
+                .lines()
+                .filter(|line| line.starts_with("ERROR "))
+                .collect();
+            assert_eq!(failures.len(), 1, "{text}");
+            let failure = failures[0];
+            for field in [
+                format!("event=\"{event}\""),
+                format!("error_code=\"{code}\""),
+                "operation_id=".into(),
+                "error_reason=".into(),
+            ] {
+                assert!(failure.contains(&field), "{field}: {text}");
+            }
+            assert!(!failure.contains("cli.failed"), "{text}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn invalid_filter_is_redacted_and_falls_back_without_affecting_stdout()
+-> Result<(), Box<dyn std::error::Error>> {
+    for filter in [
+        "delta_arrow_reader=secret-invalid-level",
+        "trace=debug=secret",
+    ] {
+        let output = run_with_timeout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .arg("--version")
+                .env("RUST_LOG", filter),
+        )?;
+        assert!(output.status.success());
+        assert_eq!(
+            output.stdout,
+            format!("dar {}\n", env!("CARGO_PKG_VERSION")).as_bytes()
+        );
+        let text = String::from_utf8(output.stderr)?;
+        assert_eq!(text.lines().count(), 1, "{text}");
+        assert!(text.trim_start().starts_with("WARN "), "{text}");
+        assert!(text.contains("invalid_rust_log"), "{text}");
+        assert!(!text.contains("secret"), "{text}");
+    }
+    Ok(())
 }

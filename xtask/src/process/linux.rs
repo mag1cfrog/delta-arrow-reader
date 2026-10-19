@@ -165,7 +165,7 @@ impl ProcessFixture<'_> {
             .current_dir(self.directory.path())
             .env("NO_PROXY", "*")
             .env("no_proxy", "*")
-            .env("RUST_LOG", "trace")
+            .env_remove("RUST_LOG")
             .stdin(Stdio::null());
         command
     }
@@ -526,19 +526,13 @@ impl ProcessFixture<'_> {
                 "storage_initialization",
             ),
         ] {
-            let diagnostic = check_error(
-                &run_cli(self.command().arg("inspect").arg(location))?,
-                1,
-                phase,
-                code,
-            )?;
-            let prefix = format!("delta reader error: phase={phase} code={code} reason=");
+            let output = run_cli(self.command().arg("inspect").arg(location))?;
+            let diagnostic = check_error(&output, 1, phase, code)?;
             ensure!(
-                diagnostic["message"]
-                    .as_str()
-                    .is_some_and(|message| message.starts_with(&prefix)),
+                diagnostic.contains("event=\"table_load.failed\"")
+                    && diagnostic.contains("operation_id="),
                 InvalidInputSnafu {
-                    message: format!("core diagnostic prefix was lost: {diagnostic}")
+                    message: format!("core operation identity was lost: {diagnostic}")
                 }
             );
         }
@@ -650,7 +644,12 @@ pub(crate) fn compile_fault_library(repository: &Path, destination: &Path) -> Re
     )
 }
 
-pub(crate) fn check_error(output: &Output, status: i32, phase: &str, code: &str) -> Result<Value> {
+pub(crate) fn check_error<'a>(
+    output: &'a Output,
+    status: i32,
+    phase: &str,
+    code: &str,
+) -> Result<&'a str> {
     ensure!(
         output.status.code() == Some(status) && output.stdout.is_empty(),
         InvalidInputSnafu {
@@ -663,35 +662,46 @@ pub(crate) fn check_error(output: &Output, status: i32, phase: &str, code: &str)
     check_diagnostic(&output.stderr, phase, code)
 }
 
-pub(crate) fn check_diagnostic(stderr: &[u8], phase: &str, code: &str) -> Result<Value> {
-    ensure!(
-        stderr.ends_with(b"\n")
-            && stderr.iter().filter(|byte| **byte == b'\n').count() == 1
-            && !stderr
-                .windows(b"secret".len())
-                .any(|window| window == b"secret"),
+pub(crate) fn check_diagnostic<'a>(stderr: &'a [u8], phase: &str, code: &str) -> Result<&'a str> {
+    let text = std::str::from_utf8(stderr).map_err(|_| {
         InvalidInputSnafu {
-            message: format!(
-                "expected one redacted diagnostic: {:?}",
-                String::from_utf8_lossy(stderr)
-            )
+            message: "CLI diagnostic was not UTF-8",
         }
-    );
-    let value: Value = serde_json::from_slice(stderr).context(JsonSnafu {
-        subject: "CLI diagnostic",
+        .build()
     })?;
     ensure!(
-        value
-            .as_object()
-            .is_some_and(|fields| fields.len() == 3 && fields.values().all(Value::is_string))
-            && value["phase"] == phase
-            && value["code"] == code
-            && value["message"].is_string(),
+        text.ends_with('\n')
+            && text.lines().count() == 1
+            && (text.starts_with("ERROR delta_arrow_reader: ")
+                || text.starts_with("ERROR delta_arrow_reader_cli: "))
+            && !text.contains("secret")
+            && !text.contains('\x1b'),
         InvalidInputSnafu {
-            message: format!("expected diagnostic phase={phase} code={code}: {value}")
+            message: format!("expected one redacted ERROR: {text:?}")
         }
     );
-    Ok(value)
+    for field in [
+        format!("error_phase=\"{phase}\""),
+        format!("error_code=\"{code}\""),
+        "outcome=\"failed\"".into(),
+    ] {
+        ensure!(
+            text.split_whitespace().any(|token| token == field),
+            InvalidInputSnafu {
+                message: format!("expected {field}: {text}")
+            }
+        );
+    }
+    ensure!(
+        text.split_whitespace()
+            .any(|token| token.starts_with("error_reason=\"")
+                && token.ends_with('"')
+                && token.len() > "error_reason=\"\"".len()),
+        InvalidInputSnafu {
+            message: format!("missing failure reason: {text}")
+        }
+    );
+    Ok(text)
 }
 
 pub(crate) fn check_inspection(output: &Output) -> Result<Value> {

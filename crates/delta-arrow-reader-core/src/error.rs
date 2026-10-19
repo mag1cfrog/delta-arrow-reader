@@ -1,6 +1,6 @@
 mod source;
 
-pub(crate) use source::source_kind;
+pub use source::source_kind;
 
 use std::{error::Error as _, fmt};
 

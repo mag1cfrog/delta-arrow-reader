@@ -1,3 +1,4 @@
+mod diagnostics;
 mod execution_options;
 mod input;
 mod predicate;
@@ -18,8 +19,9 @@ use arrow_schema::{ArrowError, Schema};
 use clap::{Args, Parser, Subcommand, error::ErrorKind};
 use delta_arrow_reader::{
     DeltaReaderError, DeltaScan, DeltaSnapshotSelection, DeltaTableBuilder, WarmupMode,
+    error_source_kind,
 };
-use serde_json::{Value, json};
+use serde_json::json;
 use snafu::{ResultExt, Snafu, ensure};
 
 /// Read Delta Lake snapshots as JSON metadata or Arrow IPC streams.
@@ -93,7 +95,10 @@ enum Error {
     #[snafu(display("Could not read the input file."))]
     InputIo { source: io::Error },
     #[snafu(display("The reader runtime failed."))]
-    Runtime { source: io::Error },
+    Runtime {
+        source: io::Error,
+        reason: &'static str,
+    },
     #[snafu(display("Could not write or flush stdout."))]
     Output { source: io::Error },
     #[snafu(display("Could not encode the Arrow IPC stream."))]
@@ -120,23 +125,87 @@ impl fmt::Debug for Error {
 }
 
 impl Error {
-    fn diagnostic(&self) -> Value {
-        let (phase, code) = match self {
-            Self::Argument { .. } | Self::TerminalOutput => {
-                ("configuration", "invalid_cli_argument")
+    fn log_failure(&self) {
+        let (phase, code, reason, source_kind) = match self {
+            // These API boundaries already emit their terminal core event.
+            Self::Reader { .. } => return,
+            Self::Configuration { source } => (
+                source.phase().as_str(),
+                source.code(),
+                source.reason(),
+                source.source_kind(),
+            ),
+            Self::Argument { .. } => (
+                "configuration",
+                "invalid_cli_argument",
+                "argument_parse_failed",
+                None,
+            ),
+            Self::TerminalOutput => (
+                "configuration",
+                "invalid_cli_argument",
+                "stdout_is_terminal",
+                None,
+            ),
+            Self::InputJson { .. } => (
+                "configuration",
+                "invalid_input_json",
+                "input_json_decode_failed",
+                None,
+            ),
+            Self::InputValidation { reason } => {
+                ("configuration", "invalid_input_json", *reason, None)
             }
-            Self::InputJson { .. } | Self::InputValidation { .. } => {
-                ("configuration", "invalid_input_json")
-            }
-            Self::InputIo { .. } => ("configuration", "input_file_io"),
-            Self::Runtime { .. } => ("execution", "runtime_initialization"),
-            Self::Output { .. } => ("execution", "output_write"),
-            Self::ArrowIpc { .. } => ("execution", "arrow_ipc"),
-            Self::Reader { source } | Self::Configuration { source } => {
-                (source.phase().as_str(), source.code())
-            }
+            Self::InputIo { source } => (
+                "configuration",
+                "input_file_io",
+                "input_file_read_failed",
+                Some(error_source_kind(source)),
+            ),
+            Self::Runtime { source, reason } => (
+                "execution",
+                "runtime_initialization",
+                *reason,
+                Some(error_source_kind(source)),
+            ),
+            Self::Output { source } => (
+                "execution",
+                "output_write",
+                "stdout_write_failed",
+                Some(error_source_kind(source)),
+            ),
+            Self::ArrowIpc { source } => (
+                "execution",
+                "arrow_ipc",
+                "arrow_ipc_encode_failed",
+                Some(error_source_kind(source)),
+            ),
         };
-        json!({"phase": phase, "code": code, "message": self.to_string()})
+        let argument_kind = match self {
+            Self::Argument { kind } => Some(tracing::field::debug(kind)),
+            _ => None,
+        };
+        let (json_kind, json_line, json_column) = match self {
+            Self::InputJson { source } => (
+                Some(tracing::field::debug(source.classify())),
+                Some(source.line()),
+                Some(source.column()),
+            ),
+            _ => (None, None, None),
+        };
+        let (io_kind, os_error) = match self {
+            Self::InputIo { source } | Self::Runtime { source, .. } | Self::Output { source } => (
+                Some(tracing::field::debug(source.kind())),
+                source.raw_os_error(),
+            ),
+            _ => (None, None),
+        };
+        tracing::error!(target: "delta_arrow_reader_cli",
+            event = "cli.failed", operation = "cli_command", outcome = "failed",
+            error_phase = phase, error_code = code, error_reason = reason,
+            error_source_kind = source_kind, argument_kind, json_kind, json_line, json_column, io_kind, os_error,
+            "CLI command failed"
+        );
     }
 
     fn exit_code(&self) -> ExitCode {
@@ -150,11 +219,6 @@ impl Error {
             Self::Runtime { .. } | Self::Reader { .. } | Self::ArrowIpc { .. } => 1,
             Self::Output { .. } => 3,
         })
-    }
-
-    fn write_diagnostic(&self) {
-        let mut stderr = io::stderr().lock();
-        let _ = writeln!(stderr, "{}", self.diagnostic()).and_then(|()| stderr.flush());
     }
 }
 
@@ -199,7 +263,9 @@ fn encode_inspection_json(version: u64, schema: &Schema) -> Vec<u8> {
 
 fn run() -> Result<(), Error> {
     #[cfg(target_os = "linux")]
-    signals::install_container_signal_handlers().context(RuntimeSnafu)?;
+    signals::install_container_signal_handlers().context(RuntimeSnafu {
+        reason: "signal_handler_install_failed",
+    })?;
 
     let command = match Cli::try_parse() {
         Err(error)
@@ -257,22 +323,14 @@ fn run() -> Result<(), Error> {
             DeltaSnapshotSelection::Version,
         ))
         .with_storage_options(storage_options);
-    // Kernel starts threads lazily and can panic without waking its caller.
-    // The CLI owns the process: fail immediately with a redacted diagnostic,
-    // including for worker panics, instead of unwinding into a blocking join.
-    std::panic::set_hook(Box::new(|_| {
-        Error::Runtime {
-            source: io::Error::other("reader runtime panicked"),
-        }
-        .write_diagnostic();
-        std::process::exit(1);
-    }));
     // Drive async work on the calling thread. A dedicated Tokio worker can
     // occupy the last OS thread and leave blocking loads queued forever.
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
-        .context(RuntimeSnafu)?;
+        .context(RuntimeSnafu {
+            reason: "runtime_build_failed",
+        })?;
     let result = runtime.block_on(async {
         let table = builder.load_table().await.context(ReaderSnafu)?;
         match command {
@@ -345,18 +403,33 @@ async fn write_arrow_stream(scan: DeltaScan) -> Result<(), Error> {
             });
             let _ = result_sender.send(result);
         })
-        .context(RuntimeSnafu)?;
+        .context(RuntimeSnafu {
+            reason: "output_thread_spawn_failed",
+        })?;
     result_receiver
         .await
         .map_err(io::Error::other)
-        .context(RuntimeSnafu)?
+        .context(RuntimeSnafu {
+            reason: "output_thread_result_lost",
+        })?
 }
 
 fn main() -> ExitCode {
+    diagnostics::init();
+    // Kernel workers can panic without waking their caller. Report synchronously
+    // and exit without unwinding into a blocking join; never format the payload.
+    std::panic::set_hook(Box::new(|_| {
+        tracing::error!(target: "delta_arrow_reader_cli",
+            event = "cli.failed", operation = "cli_command", outcome = "failed",
+            error_phase = "execution", error_code = "runtime_initialization",
+            error_reason = "process_panicked", "CLI process panicked"
+        );
+        std::process::exit(1);
+    }));
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            error.write_diagnostic();
+            error.log_failure();
             error.exit_code()
         }
     }
@@ -367,6 +440,7 @@ mod tests {
     use std::{collections::HashMap, sync::Arc};
 
     use arrow_schema::{DataType, Field, TimeUnit};
+    use serde_json::Value;
 
     use super::*;
 
@@ -496,16 +570,92 @@ mod tests {
 
         let output = Error::from(ArrowError::from(io::Error::other("secret output path")));
         assert_eq!(output.exit_code(), ExitCode::from(3));
-        assert_eq!(output.diagnostic()["code"], "output_write");
+        assert!(
+            diagnostics::capture("warn", || output.log_failure())
+                .contains("error_code=\"output_write\"")
+        );
         assert!(output.source().unwrap().is::<io::Error>());
         let encoding = Error::from(ArrowError::IpcError("secret schema".into()));
         assert_eq!(encoding.exit_code(), ExitCode::from(1));
-        assert_eq!(encoding.diagnostic()["code"], "arrow_ipc");
+        assert!(
+            diagnostics::capture("warn", || encoding.log_failure())
+                .contains("error_code=\"arrow_ipc\"")
+        );
         assert!(encoding.source().unwrap().is::<ArrowError>());
         for error in [output, encoding] {
-            assert_eq!(error.diagnostic()["phase"], "execution");
-            assert!(!error.diagnostic().to_string().contains("secret"));
+            let text = diagnostics::capture("warn", || error.log_failure());
+            assert!(text.contains("error_phase=\"execution\""));
+            assert!(!text.contains("secret"));
             assert_eq!(format!("{error:?}"), error.to_string());
+        }
+    }
+
+    #[test]
+    fn cli_failures_preserve_safe_causes_without_formatting_sources() {
+        let failures = [
+            (
+                Error::InputIo {
+                    source: io::Error::new(io::ErrorKind::NotFound, "secret path"),
+                },
+                "not_found",
+                "io_kind=NotFound",
+            ),
+            (
+                Error::InputIo {
+                    source: io::Error::new(io::ErrorKind::PermissionDenied, "secret path"),
+                },
+                "permission_denied",
+                "io_kind=PermissionDenied",
+            ),
+            (
+                Error::Output {
+                    source: io::Error::new(io::ErrorKind::BrokenPipe, "secret pipe"),
+                },
+                "broken_pipe",
+                "io_kind=BrokenPipe",
+            ),
+            (
+                Error::Output {
+                    source: io::Error::new(io::ErrorKind::WriteZero, "secret output"),
+                },
+                "unknown",
+                "io_kind=WriteZero",
+            ),
+            (
+                Error::Runtime {
+                    source: io::Error::from_raw_os_error(11),
+                    reason: "output_thread_spawn_failed",
+                },
+                "unknown",
+                "os_error=11",
+            ),
+            (
+                Error::ArrowIpc {
+                    source: ArrowError::IpcError("secret metadata".into()),
+                },
+                "arrow_ipc",
+                "error_code=\"arrow_ipc\"",
+            ),
+            (
+                Error::ArrowIpc {
+                    source: ArrowError::SchemaError("secret schema".into()),
+                },
+                "schema",
+                "error_code=\"arrow_ipc\"",
+            ),
+        ];
+        for (error, source_kind, detail) in failures {
+            for filter in ["warn", "trace"] {
+                let text = diagnostics::capture(filter, || error.log_failure());
+                assert_eq!(text.lines().count(), 1, "{text}");
+                assert!(
+                    text.contains(&format!("error_source_kind=\"{source_kind}\"")),
+                    "{text}"
+                );
+                assert!(text.contains(detail), "{text}");
+                assert!(!text.contains("secret"), "{text}");
+                assert!(!format!("{error:?}").contains("secret"));
+            }
         }
     }
 
@@ -540,7 +690,7 @@ mod tests {
         assert_eq!(source.classify(), serde_json::error::Category::Data);
         assert!(source.to_string().contains("secret-field"));
         assert!(error.to_string().contains("kind=Data"));
-        assert!(!error.diagnostic().to_string().contains("secret"));
+        assert!(!diagnostics::capture("trace", || error.log_failure()).contains("secret"));
         assert!(!format!("{error:?}").contains("secret"));
 
         std::fs::write(&path, b" \n !secret").unwrap();
@@ -562,13 +712,9 @@ mod tests {
             .context(InputIoSnafu)
             .unwrap_err();
         assert!(error.source().unwrap().is::<io::Error>());
-        assert_eq!(
-            error.diagnostic(),
-            json!({
-                "phase": "configuration", "code": "input_file_io",
-                "message": "Could not read the input file.",
-            })
-        );
+        let text = diagnostics::capture("warn", || error.log_failure());
+        assert!(text.contains("error_code=\"input_file_io\""));
+        assert!(!text.contains("secret"));
         assert_eq!(format!("{error:?}"), error.to_string());
     }
 }

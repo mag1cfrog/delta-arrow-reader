@@ -139,9 +139,9 @@ impl ProcessFixture<'_> {
                 )?;
                 let diagnostic = check_error(&output, 1, "scan_planning", "unsupported_predicate")?;
                 ensure!(
-                    diagnostic["message"]
-                        .as_str()
-                        .is_some_and(|message| message.ends_with(&format!("reason={reason}"))),
+                    diagnostic
+                        .split_whitespace()
+                        .any(|field| field == format!("error_reason=\"{reason}\"")),
                     InvalidInputSnafu {
                         message: format!(
                             "predicate {predicate} with flags {flags:?} expected reason={reason}: {diagnostic}"

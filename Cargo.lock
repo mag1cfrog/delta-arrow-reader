@@ -1344,6 +1344,8 @@ dependencies = [
  "snafu",
  "tempfile",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

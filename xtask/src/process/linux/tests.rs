@@ -11,31 +11,59 @@ fn output(status: i32, stdout: &[u8], stderr: &[u8]) -> Output {
 }
 
 #[test]
-fn diagnostics_require_exact_fields_redaction_status_and_empty_stdout() -> Result<()> {
-    let diagnostic =
-        b"{\"phase\":\"snapshot\",\"code\":\"snapshot_load\",\"message\":\"Failed\"}\n";
-    check_error(&output(1, b"", diagnostic), 1, "snapshot", "snapshot_load")?;
+fn diagnostics_require_one_redacted_error_with_safe_fields_and_status() -> Result<()> {
+    let diagnostic = "ERROR delta_arrow_reader: event=\"table_load.failed\" outcome=\"failed\" operation_id=1 error_phase=\"snapshot\" error_code=\"snapshot_load\" error_reason=\"snapshot_load_failed\"\n";
+    check_error(
+        &output(1, b"", diagnostic.as_bytes()),
+        1,
+        "snapshot",
+        "snapshot_load",
+    )?;
     for actual in [
-        output(0, b"", diagnostic),
-        output(1, b"unexpected", diagnostic),
-        output(1, b"", &diagnostic[..diagnostic.len() - 1]),
-        output(1, b"", &[diagnostic.as_slice(), b"\n"].concat()),
+        output(0, b"", diagnostic.as_bytes()),
+        output(1, b"unexpected", diagnostic.as_bytes()),
+        output(1, b"", diagnostic.trim_end().as_bytes()),
+        output(1, b"", format!("{diagnostic}\n").as_bytes()),
+        output(1, b"", format!("{diagnostic}{diagnostic}").as_bytes()),
         output(1, b"", b"null\n"),
-        output(1, b"", b"invalid JSON\n"),
+        output(
+            1,
+            b"",
+            b"{\"phase\":\"snapshot\",\"code\":\"snapshot_load\",\"message\":\"Failed\"}\n",
+        ),
     ] {
         assert!(check_error(&actual, 1, "snapshot", "snapshot_load").is_err());
     }
-    for value in [
-        json!({"phase": "snapshot", "code": "snapshot_load", "message": "secret data"}),
-        json!({"phase": "other", "code": "snapshot_load", "message": "Failed"}),
-        json!({"phase": "snapshot", "code": "other", "message": "Failed"}),
-        json!({"phase": "snapshot", "code": "snapshot_load", "other": "Failed"}),
-        json!({"phase": "snapshot", "code": "snapshot_load", "message": 1}),
-        json!({"phase": "snapshot", "code": "snapshot_load", "message": "Failed", "extra": ""}),
+    for text in [
+        diagnostic.replace("ERROR", "DEBUG"),
+        diagnostic.replace("delta_arrow_reader:", "object_store:"),
+        diagnostic.replace("snapshot_load_failed", "secret"),
+        diagnostic.replace("error_phase=\"snapshot\"", "error_phase=\"other\""),
+        diagnostic.replace("error_code=\"snapshot_load\"", "error_code=\"other\""),
+        diagnostic.replace("error_reason=", "missing="),
+        diagnostic.replace("snapshot_load_failed", ""),
+        diagnostic.replace("outcome=\"failed\"", "outcome=\"completed\""),
+        diagnostic.replace("ERROR", "\x1b[31mERROR"),
     ] {
-        let actual = output(1, b"", format!("{value}\n").as_bytes());
-        assert!(check_error(&actual, 1, "snapshot", "snapshot_load").is_err());
+        assert!(
+            check_error(
+                &output(1, b"", text.as_bytes()),
+                1,
+                "snapshot",
+                "snapshot_load"
+            )
+            .is_err(),
+            "{text}"
+        );
     }
+    // Additional safe fields are allowed; the formatter is not a fixed JSON schema.
+    check_diagnostic(
+        diagnostic
+            .replace("\n", " error_source_kind=\"not_found\"\n")
+            .as_bytes(),
+        "snapshot",
+        "snapshot_load",
+    )?;
     Ok(())
 }
 
