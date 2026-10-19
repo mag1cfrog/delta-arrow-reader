@@ -25,6 +25,64 @@ fn unpolled_future_does_not_capture_its_creation_subscriber() -> TestResult {
 }
 
 #[test]
+fn unparented_stream_does_not_inherit_a_later_request() -> TestResult {
+    for backend in [
+        ParquetReaderBackend::Direct,
+        ParquetReaderBackend::DeltaKernel,
+    ] {
+        for level in [Level::TRACE, Level::ERROR] {
+            let runtime = runtime()?;
+            let fixture = LogTable::new()?;
+            fixture.write(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+            let table = runtime.block_on(fixture.builder(backend).load_table())?;
+            let plan = runtime.block_on(table.scan().build())?;
+            let collector = Collector::new(level);
+            let dispatch = tracing::Dispatch::new(collector.clone());
+            let mut stream = tracing::dispatcher::with_default(&dispatch, || plan.into_stream());
+            if level == Level::ERROR {
+                fs::remove_file(fixture.0.join("secret-data.parquet"))?;
+            }
+            let unrelated = tracing::dispatcher::with_default(
+                &dispatch,
+                || tracing::error_span!(target: "delta_arrow_reader::test", "unrelated request"),
+            );
+            let unrelated_id = unrelated.id().unwrap().into_u64();
+            runtime.block_on(
+                async {
+                    if level == Level::ERROR {
+                        assert!(stream.next_batch().await.is_err());
+                    } else {
+                        assert_eq!(stream.next_batch().await?.unwrap().num_rows(), 2);
+                        assert!(stream.next_batch().await?.is_none());
+                    }
+                    drop(stream);
+                    tracing::error!(target: "delta_arrow_reader::test", event = "unrelated.probe");
+                    Ok::<_, DeltaReaderError>(())
+                }
+                .instrument(unrelated)
+                .with_subscriber(dispatch),
+            )?;
+            drop(runtime);
+            let records = collector.records();
+            assert!(
+                records
+                    .iter()
+                    .any(|record| record.fields.get("operation") == Some(&json!("scan_execution")))
+            );
+            for record in records {
+                if record.fields.get("event") == Some(&json!("unrelated.probe")) {
+                    assert_eq!(record.parent, Some(unrelated_id));
+                } else if record.span_id != Some(unrelated_id) {
+                    assert!(!collector.linked_to(&record, unrelated_id), "{record:?}");
+                }
+            }
+            collector.assert_balanced();
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn public_operations_propagate_dispatch_and_parent_to_workers() -> TestResult {
     for multi_thread in [false, true] {
         let runtime = if multi_thread {

@@ -1326,6 +1326,7 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-core",
+ "tracing-subscriber",
  "url",
  "windows-sys 0.61.2",
 ]

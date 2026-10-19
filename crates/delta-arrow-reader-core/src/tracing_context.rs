@@ -3,6 +3,7 @@
 use futures_util::Stream;
 use std::{
     future::Future,
+    marker::PhantomData,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -23,13 +24,56 @@ impl TracingContext {
     }
 
     pub(crate) fn in_scope<T>(&self, work: impl FnOnce() -> T) -> T {
-        tracing::dispatcher::with_default(&self.dispatch, || self.span.in_scope(work))
+        tracing::dispatcher::with_default(&self.dispatch, || {
+            if self.span.is_none() {
+                // Entering Span::none() does not clear an unrelated caller's active spans.
+                let _suspended = SuspendedSpans::new(&self.dispatch);
+                work()
+            } else {
+                self.span.in_scope(work)
+            }
+        })
     }
 
     pub(crate) fn bind<T>(&self, work: T) -> WithContext<T> {
         WithContext {
             inner: Some(Box::pin(work)),
             context: Some(self.clone()),
+        }
+    }
+}
+
+struct SuspendedSpans<'a> {
+    dispatch: &'a Dispatch,
+    spans: Vec<Span>,
+    _thread_bound: PhantomData<*const ()>,
+}
+
+impl<'a> SuspendedSpans<'a> {
+    fn new(dispatch: &'a Dispatch) -> Self {
+        let mut suspended = Self {
+            dispatch,
+            spans: Vec::new(),
+            _thread_bound: PhantomData,
+        };
+        loop {
+            let span = Span::current();
+            let Some(id) = span.id() else {
+                return suspended;
+            };
+            // Keep the span alive until it has been re-entered, including during unwind.
+            suspended.spans.push(span);
+            dispatch.exit(&id);
+        }
+    }
+}
+
+impl Drop for SuspendedSpans<'_> {
+    fn drop(&mut self) {
+        for span in self.spans.iter().rev() {
+            if let Some(id) = span.id() {
+                self.dispatch.enter(&id);
+            }
         }
     }
 }
@@ -109,6 +153,97 @@ mod tests {
         fn drop(&mut self) {
             tracing::info!(target: "delta_arrow_reader::test", event = "work.cleanup");
         }
+    }
+
+    #[test]
+    fn absent_parent_survives_polling_cleanup_and_unwind_under_the_same_subscriber() {
+        for pending in [false, true] {
+            let collector = Collector::new(Level::TRACE);
+            with_default(collector.clone(), || {
+                let root = TracingContext::capture();
+                let mut work = root.bind(async {
+                    let _cleanup = Cleanup;
+                    let child = tracing::info_span!(target: "delta_arrow_reader::test", "child");
+                    child.in_scope(|| {
+                        tracing::info!(target: "delta_arrow_reader::test", event = "child.work");
+                    });
+                    if pending {
+                        std::future::pending::<()>().await;
+                    }
+                });
+                let outer =
+                    tracing::info_span!(target: "delta_arrow_reader::test", "unrelated outer");
+                let _outer = outer.enter();
+                let inner =
+                    tracing::info_span!(target: "delta_arrow_reader::test", "unrelated inner");
+                let _inner = inner.enter();
+                assert_eq!(Pin::new(&mut work).now_or_never().is_none(), pending);
+                assert_eq!(Span::current().id(), inner.id());
+                drop(work);
+                assert_eq!(Span::current().id(), inner.id());
+                let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    root.in_scope(|| {
+                        assert!(Span::current().is_none());
+                        panic!("work panicked");
+                    });
+                }));
+                assert!(panic.is_err());
+                assert_eq!(Span::current().id(), inner.id());
+                let records = collector.records();
+                let child = records
+                    .iter()
+                    .find(|record| record.name == "child")
+                    .unwrap();
+                assert_eq!(child.parent, None);
+                let events = collector.events();
+                assert_eq!(events[0].parent, child.span_id);
+                assert_eq!(events[1].fields["event"], "work.cleanup");
+                assert_eq!(events[1].parent, None);
+            });
+            collector.assert_balanced();
+        }
+    }
+
+    #[test]
+    fn absent_parent_restores_registry_spans_with_repeated_entries() {
+        use tracing_subscriber::registry::LookupSpan;
+
+        let dispatch = Dispatch::new(tracing_subscriber::Registry::default());
+        tracing::dispatcher::with_default(&dispatch, || {
+            let root = TracingContext::capture();
+            let outer = tracing::info_span!("outer");
+            let entered_outer = outer.enter();
+            let inner = tracing::info_span!("inner");
+            let entered_inner = inner.enter();
+            let repeated_outer = outer.enter();
+            let before = Span::current().id();
+            root.in_scope(|| {
+                assert!(Span::current().is_none());
+                let child = tracing::info_span!("child");
+                let registry = dispatch
+                    .downcast_ref::<tracing_subscriber::Registry>()
+                    .unwrap();
+                assert!(
+                    registry
+                        .span(&child.id().unwrap())
+                        .unwrap()
+                        .parent()
+                        .is_none()
+                );
+                let entered = child.enter();
+                root.in_scope(|| assert!(Span::current().is_none()));
+                assert_eq!(Span::current().id(), child.id());
+                drop(entered);
+                assert!(Span::current().is_none());
+            });
+            assert_eq!(Span::current().id(), before);
+            drop(repeated_outer);
+            assert_eq!(Span::current().id(), inner.id());
+            drop(entered_inner);
+            assert_eq!(Span::current().id(), outer.id());
+            drop(entered_outer);
+            assert!(Span::current().is_none());
+        });
     }
 
     #[test]

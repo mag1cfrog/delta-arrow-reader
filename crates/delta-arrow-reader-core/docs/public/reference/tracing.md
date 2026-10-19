@@ -178,6 +178,10 @@ do not carry an earlier caller's context into later operations.
 The bindings restore the worker's previous dispatch/span after each poll or
 synchronous section. Cleanup uses the captured dispatch as well: a polling-only
 `WithSubscriber` wrapper is insufficient for destruction on another thread.
+When the captured context has no parent span, the binding temporarily exits
+active spans in that subscriber and restores them afterward, including on unwind.
+Subscribers can observe these exit/enter pairs; the spans remain open. This keeps
+work without a parent from inheriting a later caller's span in the same subscriber.
 No entered span or default-dispatch guard is held across an await. Finished
 operations and exhausted streams release their context; outstanding workers
 retain their own references until they finish. An unpolled ordinary stream
