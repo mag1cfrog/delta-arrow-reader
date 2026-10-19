@@ -1,5 +1,8 @@
 //! Terminal diagnostics owned by public reader operations.
 
+mod stream;
+pub(crate) use stream::{StreamOperation, StreamOutcome};
+
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicU64, Ordering},

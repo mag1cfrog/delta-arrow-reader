@@ -66,10 +66,11 @@ use crate::{
         },
     },
     error::{DataFileReadSnafu, InvalidConfigurationSnafu, ScanPlanningSnafu, SnapshotLoadSnafu},
-    operation_tracing::{Operation, OperationFields, OperationKind},
+    operation_tracing::{
+        Operation, OperationFields, OperationKind, StreamOperation, StreamOutcome,
+    },
 };
 
-const TRACING_TARGET: &str = "delta_arrow_reader";
 const DELTA_LOG_SCAN_METADATA_SOURCE: &str = "delta_log";
 const QUERY_PLANNING_CACHE_SCAN_METADATA_SOURCE: &str = "query_planning_cache";
 
@@ -812,7 +813,7 @@ impl DeltaScan {
             snapshot_version,
             backend,
             partition_count,
-            started: false,
+            operation: None,
             done: false,
         }
     }
@@ -842,7 +843,7 @@ pub struct DeltaBatchStream {
     snapshot_version: u64,
     backend: ParquetReaderBackend,
     partition_count: usize,
-    started: bool,
+    operation: Option<StreamOperation>,
     done: bool,
 }
 
@@ -867,42 +868,33 @@ impl DeltaBatchStream {
     }
 
     fn start(&mut self) {
-        if self.started {
+        if self.operation.is_some() {
             return;
         }
-        self.started = true;
-        trace_execution_started(
+        self.operation = Some(StreamOperation::start(
             self.plan_id,
             self.snapshot_version,
             self.backend,
             self.partition_count,
-        );
+        ));
     }
 
-    fn complete(&mut self) {
-        if self.done {
-            return;
-        }
-        self.partitions.clear();
+    fn finish(&mut self, outcome: StreamOutcome<'_>) {
+        let partition = self.partitions.current_partition();
         self.done = true;
-        trace_execution_completed(
-            self.plan_id,
-            self.snapshot_version,
-            self.backend,
-            self.partition_count,
-        );
+        self.partitions.clear();
+        if let Some(operation) = self.operation.take() {
+            operation.finish(outcome, partition);
+        }
     }
 
     fn fail(&mut self, error: &DeltaReaderError) {
-        self.partitions.clear();
-        self.done = true;
-        trace_execution_failed(
-            self.plan_id,
-            self.snapshot_version,
-            self.backend,
-            self.partition_count,
-            error,
-        );
+        self.finish(match error {
+            DeltaReaderError::Cancelled {
+                reason: "scan_execution_cancelled",
+            } => StreamOutcome::Cancelled,
+            _ => StreamOutcome::Failed(error),
+        });
     }
 
     fn finalize_batch(&self, mut batch: RecordBatch) -> Result<RecordBatch, DeltaReaderError> {
@@ -930,6 +922,10 @@ impl Stream for DeltaBatchStream {
             return Poll::Ready(None);
         }
         this.start();
+        if this.remaining == Some(0) {
+            this.finish(StreamOutcome::RowLimit);
+            return Poll::Ready(None);
+        }
 
         match Pin::new(&mut this.partitions).poll_next(context) {
             Poll::Ready(Some(Ok(batch))) => {
@@ -944,10 +940,15 @@ impl Stream for DeltaBatchStream {
                     if batch.num_rows() >= *remaining {
                         batch = batch.slice(0, *remaining);
                         *remaining = 0;
-                        this.complete();
                     } else {
                         *remaining -= batch.num_rows();
                     }
+                }
+                if let Some(operation) = this.operation.as_mut() {
+                    operation.record_output();
+                }
+                if this.remaining == Some(0) {
+                    this.finish(StreamOutcome::RowLimit);
                 }
                 Poll::Ready(Some(Ok(batch)))
             }
@@ -956,7 +957,12 @@ impl Stream for DeltaBatchStream {
                 Poll::Ready(Some(Err(error)))
             }
             Poll::Ready(None) => {
-                this.complete();
+                let outcome = if this.partitions.is_cancelled() {
+                    StreamOutcome::Cancelled
+                } else {
+                    StreamOutcome::Eof
+                };
+                this.finish(outcome);
                 Poll::Ready(None)
             }
             Poll::Pending => Poll::Pending,
@@ -969,14 +975,10 @@ impl Drop for DeltaBatchStream {
         if self.done {
             return;
         }
-        self.partitions.clear();
         self.done = true;
-        trace_execution_dropped(
-            self.plan_id,
-            self.snapshot_version,
-            self.backend,
-            self.partition_count,
-        );
+        self.partitions.clear();
+        // Drop the operation after requesting cleanup; blocking producers may still be running.
+        drop(self.operation.take());
     }
 }
 
@@ -987,81 +989,9 @@ pub(crate) fn delta_kernel_executor(
     backend::kernel_reader::delta_kernel_file_executor(plan, range_read_estimator)
 }
 
-fn trace_execution_started(
-    plan_id: u64,
-    snapshot_version: u64,
-    backend: ParquetReaderBackend,
-    partition_count: usize,
-) {
-    tracing::debug!(
-        target: TRACING_TARGET,
-        event = "scan_execution.started",
-        plan_id,
-        snapshot_version,
-        backend = ?backend,
-        partition_count,
-        outcome = "started"
-    );
-}
-
-fn trace_execution_completed(
-    plan_id: u64,
-    snapshot_version: u64,
-    backend: ParquetReaderBackend,
-    partition_count: usize,
-) {
-    tracing::debug!(
-        target: TRACING_TARGET,
-        event = "scan_execution.completed",
-        plan_id,
-        snapshot_version,
-        backend = ?backend,
-        partition_count,
-        outcome = "completed"
-    );
-}
-
-fn trace_execution_failed(
-    plan_id: u64,
-    snapshot_version: u64,
-    backend: ParquetReaderBackend,
-    partition_count: usize,
-    error: &DeltaReaderError,
-) {
-    tracing::debug!(
-        target: TRACING_TARGET,
-        event = "scan_execution.failed",
-        plan_id,
-        snapshot_version,
-        backend = ?backend,
-        partition_count,
-        outcome = "failed",
-        error_code = error.code(),
-        error_phase = error.phase().as_str(),
-        error_reason = error.reason(),
-        error_source_kind = error.source_kind()
-    );
-}
-
-fn trace_execution_dropped(
-    plan_id: u64,
-    snapshot_version: u64,
-    backend: ParquetReaderBackend,
-    partition_count: usize,
-) {
-    tracing::debug!(
-        target: TRACING_TARGET,
-        event = "scan_execution.dropped",
-        plan_id,
-        snapshot_version,
-        backend = ?backend,
-        partition_count,
-        outcome = "dropped"
-    );
-}
-
 #[cfg(test)]
 mod tests {
+    mod stream_tracing;
     use std::{
         collections::{BTreeMap, VecDeque},
         fmt, fs,
@@ -1085,10 +1015,8 @@ mod tests {
         subscriber::{Interest, with_default},
     };
 
-    use super::{
-        DeltaBatchStream, DeltaTable, trace_execution_completed, trace_execution_dropped,
-        trace_execution_failed, trace_execution_started,
-    };
+    use super::{DeltaBatchStream, DeltaTable};
+    use crate::operation_tracing::{StreamOperation, StreamOutcome};
     use crate::{
         DeltaScanExecutionOptions, DeltaScanMetrics, DeltaSnapshotSelection, DeltaStorageOptions,
         ParquetReaderBackend,
@@ -1344,7 +1272,7 @@ mod tests {
         ))
     }
 
-    fn direct_stream(
+    pub(super) fn direct_stream(
         partitions: VecDeque<PartitionStream>,
         metrics: DeltaScanMetrics,
         scan_capacity: usize,
@@ -1360,7 +1288,7 @@ mod tests {
             snapshot_version: 7,
             backend: ParquetReaderBackend::Direct,
             partition_count: 2,
-            started: false,
+            operation: None,
             done: false,
         }
     }
@@ -1427,60 +1355,6 @@ mod tests {
     }
 
     #[test]
-    fn stream_lifecycle_tracing_has_only_bounded_fields() {
-        let error = crate::DeltaReaderError::DataFileRead {
-            reason: "parquet_batch_read_failed",
-            source: Box::new(std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                "secret-source-message",
-            )),
-        };
-
-        let (_, events) = capture_events(|| {
-            trace_execution_started(1, 7, ParquetReaderBackend::Direct, 2);
-            trace_execution_completed(1, 7, ParquetReaderBackend::Direct, 2);
-            trace_execution_failed(1, 7, ParquetReaderBackend::Direct, 2, &error);
-            trace_execution_dropped(1, 7, ParquetReaderBackend::Direct, 2);
-        });
-
-        assert_eq!(events.len(), 4);
-        let allowed = [
-            "plan_id",
-            "backend",
-            "error_phase",
-            "error_code",
-            "error_reason",
-            "error_source_kind",
-            "event",
-            "outcome",
-            "partition_count",
-            "snapshot_version",
-        ];
-        for fields in events.iter() {
-            assert!(fields.keys().all(|field| allowed.contains(&field.as_str())));
-            assert!(fields.contains_key("event"));
-            assert!(fields.contains_key("snapshot_version"));
-            assert!(fields.contains_key("backend"));
-            assert!(fields.contains_key("partition_count"));
-            assert!(fields.contains_key("outcome"));
-            assert!(!format!("{fields:?}").contains("secret-source-message"));
-            if fields
-                .get("outcome")
-                .is_some_and(|outcome| outcome == "failed")
-            {
-                assert_eq!(
-                    fields.get("error_reason").map(String::as_str),
-                    Some("parquet_batch_read_failed")
-                );
-                assert_eq!(
-                    fields.get("error_source_kind").map(String::as_str),
-                    Some("timeout")
-                );
-            }
-        }
-    }
-
-    #[test]
     fn disabled_stream_failure_events_do_not_inspect_dependency_sources() {
         #[derive(Debug)]
         struct SourceProbe;
@@ -1502,7 +1376,8 @@ mod tests {
             source: Box::new(SourceProbe),
         };
         with_default(tracing::subscriber::NoSubscriber::default(), || {
-            trace_execution_failed(1, 0, ParquetReaderBackend::Direct, 1, &error);
+            StreamOperation::start(1, 0, ParquetReaderBackend::Direct, 1)
+                .finish(StreamOutcome::Failed(&error), Some(0));
         });
     }
 
