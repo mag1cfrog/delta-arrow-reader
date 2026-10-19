@@ -79,10 +79,17 @@ struct TableArgs {
 
 #[derive(Snafu)]
 enum Error {
-    #[snafu(display("Invalid command-line arguments."))]
-    Argument,
-    #[snafu(display("Invalid JSON input."))]
-    InputJson,
+    #[snafu(display("Invalid command-line arguments (kind={kind:?})."))]
+    Argument { kind: ErrorKind },
+    #[snafu(display("Arrow IPC output requires redirected stdout."))]
+    TerminalOutput,
+    #[snafu(display(
+        "Invalid JSON input (kind={:?}, line={}, column={}).",
+        source.classify(), source.line(), source.column()
+    ))]
+    InputJson { source: serde_json::Error },
+    #[snafu(display("Invalid JSON input (reason={reason})."))]
+    InputValidation { reason: &'static str },
     #[snafu(display("Could not read the input file."))]
     InputIo { source: io::Error },
     #[snafu(display("The reader runtime failed."))]
@@ -115,8 +122,12 @@ impl fmt::Debug for Error {
 impl Error {
     fn diagnostic(&self) -> Value {
         let (phase, code) = match self {
-            Self::Argument => ("configuration", "invalid_cli_argument"),
-            Self::InputJson => ("configuration", "invalid_input_json"),
+            Self::Argument { .. } | Self::TerminalOutput => {
+                ("configuration", "invalid_cli_argument")
+            }
+            Self::InputJson { .. } | Self::InputValidation { .. } => {
+                ("configuration", "invalid_input_json")
+            }
             Self::InputIo { .. } => ("configuration", "input_file_io"),
             Self::Runtime { .. } => ("execution", "runtime_initialization"),
             Self::Output { .. } => ("execution", "output_write"),
@@ -130,8 +141,10 @@ impl Error {
 
     fn exit_code(&self) -> ExitCode {
         ExitCode::from(match self {
-            Self::Argument
-            | Self::InputJson
+            Self::Argument { .. }
+            | Self::TerminalOutput
+            | Self::InputJson { .. }
+            | Self::InputValidation { .. }
             | Self::InputIo { .. }
             | Self::Configuration { .. } => 2,
             Self::Runtime { .. } | Self::Reader { .. } | Self::ArrowIpc { .. } => 1,
@@ -158,9 +171,16 @@ fn command_name() -> &'static str {
 fn parse_unsigned_decimal<T: FromStr>(value: &str) -> Result<T, Error> {
     ensure!(
         !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()),
-        ArgumentSnafu
+        ArgumentSnafu {
+            kind: ErrorKind::ValueValidation
+        }
     );
-    value.parse().map_err(|_| ArgumentSnafu.build())
+    value.parse().map_err(|_| {
+        ArgumentSnafu {
+            kind: ErrorKind::ValueValidation,
+        }
+        .build()
+    })
 }
 
 fn encode_inspection_json(version: u64, schema: &Schema) -> Vec<u8> {
@@ -191,12 +211,12 @@ fn run() -> Result<(), Error> {
             return write_stdout(error.to_string().as_bytes());
         }
         // Clap's other diagnostics may contain argument values. Emit our redacted error.
-        Err(_) => return ArgumentSnafu.fail(),
+        Err(error) => return ArgumentSnafu { kind: error.kind() }.fail(),
         Ok(cli) => cli.command,
     };
 
     if matches!(command, Command::Scan { .. }) {
-        ensure!(!io::stdout().is_terminal(), ArgumentSnafu);
+        ensure!(!io::stdout().is_terminal(), TerminalOutputSnafu);
     }
     let table_args = match &command {
         Command::Inspect(table) | Command::Scan { table, .. } => table,
@@ -209,7 +229,7 @@ fn run() -> Result<(), Error> {
         Command::Scan {
             predicate_file: Some(path),
             ..
-        } => Some(input::read_json_file::<predicate::PredicateInput>(path)?.0),
+        } => Some(input::read_json_file::<predicate::PredicateInput>(path)?.into_predicate()?),
         _ => None,
     };
     let execution_options = match &command {
@@ -498,6 +518,40 @@ mod tests {
         assert_eq!(options.0["AWS_ACCESS_KEY_ID"], " secret, value ");
         assert_eq!(options.0["MixedCase"], "unchanged");
         assert_eq!(options.0.len(), 2);
+    }
+
+    #[test]
+    fn json_input_keeps_the_source_but_formats_only_safe_context() {
+        use std::error::Error as _;
+
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("secret-input.json");
+        std::fs::write(&path, r#"{"secret-field":0}"#).unwrap();
+        let error = input::read_json_file::<
+            input::JsonObject<execution_options::ExecutionOptionsInput>,
+        >(path.to_str().unwrap())
+        .err()
+        .unwrap();
+        let source = error
+            .source()
+            .unwrap()
+            .downcast_ref::<serde_json::Error>()
+            .unwrap();
+        assert_eq!(source.classify(), serde_json::error::Category::Data);
+        assert!(source.to_string().contains("secret-field"));
+        assert!(error.to_string().contains("kind=Data"));
+        assert!(!error.diagnostic().to_string().contains("secret"));
+        assert!(!format!("{error:?}").contains("secret"));
+
+        std::fs::write(&path, b" \n !secret").unwrap();
+        let error = input::read_json_file::<input::StorageOptionsInput>(path.to_str().unwrap())
+            .err()
+            .unwrap();
+        assert_eq!(
+            error.to_string(),
+            "Invalid JSON input (kind=Syntax, line=2, column=2)."
+        );
+        assert_eq!(error.exit_code(), ExitCode::from(2));
     }
 
     #[test]

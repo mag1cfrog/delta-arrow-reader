@@ -1,11 +1,16 @@
 use serde_json::{Value, json};
+use snafu::ResultExt;
 
 use super::*;
 
+fn parse_text(text: &str) -> Result<DeltaPredicate, Error> {
+    serde_json::from_str::<PredicateInput>(text)
+        .context(crate::InputJsonSnafu)?
+        .into_predicate()
+}
+
 fn parse(value: Value) -> DeltaPredicate {
-    serde_json::from_str::<PredicateInput>(&value.to_string())
-        .unwrap()
-        .0
+    parse_text(&value.to_string()).unwrap()
 }
 
 fn parse_scalar(value: Value) -> DeltaScalar {
@@ -284,10 +289,7 @@ fn rejects_wrong_shapes_unknown_fields_and_duplicate_keys() {
         r#"{"op":"eq","column":"id","value":["int32","1"]}"#,
         r#"{"op":"eq","column":"id","value":{"type":"int32","value":"1"},"value":null}"#,
     ] {
-        assert!(
-            serde_json::from_str::<PredicateInput>(text).is_err(),
-            "{text}"
-        );
+        assert!(parse_text(text).is_err(), "{text}");
     }
     for scalar in [
         "{}",
@@ -340,10 +342,7 @@ fn rejects_wrong_shapes_unknown_fields_and_duplicate_keys() {
         r#"{"type":"decimal128","value":"1","precision":1,"precision":1,"scale":0}"#,
     ] {
         let text = format!(r#"{{"op":"eq","column":"id","value":{scalar}}}"#);
-        assert!(
-            serde_json::from_str::<PredicateInput>(&text).is_err(),
-            "{text}"
-        );
+        assert!(parse_text(&text).is_err(), "{text}");
     }
 }
 
@@ -389,10 +388,7 @@ fn rejects_noncanonical_integers_and_width_overflow() {
                 scalar["scale"] = json!(0);
             }
             let predicate = json!({"op": "eq", "column": "id", "value": scalar});
-            assert!(
-                serde_json::from_str::<PredicateInput>(&predicate.to_string()).is_err(),
-                "{predicate}"
-            );
+            assert!(parse_text(&predicate.to_string()).is_err(), "{predicate}");
         }
     }
 }
@@ -401,7 +397,7 @@ fn rejects_noncanonical_integers_and_width_overflow() {
 fn enforces_depth_and_node_limits_including_the_root() {
     let mut value = json!({"op": "constant", "value": true});
     for depth in 1..=33 {
-        let result = serde_json::from_str::<PredicateInput>(&value.to_string());
+        let result = parse_text(&value.to_string());
         assert_eq!(result.is_ok(), depth <= 32, "depth {depth}");
         value = match depth % 3 {
             0 => json!({"op": "not", "arg": value}),
@@ -412,20 +408,17 @@ fn enforces_depth_and_node_limits_including_the_root() {
     for nodes in [1024, 1025] {
         let args = vec![json!({"op": "constant", "value": true}); nodes - 1];
         let value = json!({"op": "and", "args": args});
-        assert_eq!(
-            serde_json::from_str::<PredicateInput>(&value.to_string()).is_ok(),
-            nodes == 1024
-        );
+        assert_eq!(parse_text(&value.to_string()).is_ok(), nodes == 1024);
     }
     // Count across sibling subtrees, not just within each branch.
     let args = vec![json!({"op": "not", "arg": {"op": "constant", "value": true}}); 512];
     let value = json!({"op": "or", "args": args});
-    assert!(serde_json::from_str::<PredicateInput>(&value.to_string()).is_err());
+    assert!(parse_text(&value.to_string()).is_err());
     let deeply_nested = format!(
         "{}{}{}",
         r#"{"op":"not","arg":"#.repeat(256),
         r#"{"op":"constant","value":true}"#,
         "}".repeat(256)
     );
-    assert!(serde_json::from_str::<PredicateInput>(&deeply_nested).is_err());
+    assert!(parse_text(&deeply_nested).is_err());
 }

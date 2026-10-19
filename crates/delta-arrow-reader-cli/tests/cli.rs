@@ -85,10 +85,116 @@ fn executable_names_preserve_help_version_and_redacted_errors()
             serde_json::json!({
                 "phase": "configuration",
                 "code": "invalid_cli_argument",
-                "message": "Invalid command-line arguments.",
+                "message": "Invalid command-line arguments (kind=UnknownArgument).",
             })
         );
         fs::remove_file(executable)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn argument_failures_keep_distinct_safe_kinds() -> Result<(), Box<dyn std::error::Error>> {
+    for (arguments, kind) in [
+        (vec!["--secret-option"], "UnknownArgument"),
+        (vec!["inspect"], "MissingRequiredArgument"),
+        (vec!["secret-command"], "InvalidSubcommand"),
+        (
+            vec!["scan", "secret-table", "--limit", "secret-value"],
+            "ValueValidation",
+        ),
+        (
+            vec![
+                "scan",
+                "secret-table",
+                "--no-columns",
+                "--column",
+                "secret-column",
+            ],
+            "ArgumentConflict",
+        ),
+    ] {
+        let output = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).args(arguments))?;
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let diagnostic: Value = serde_json::from_slice(&output.stderr)?;
+        assert_eq!(
+            diagnostic,
+            serde_json::json!({
+                "phase": "configuration", "code": "invalid_cli_argument",
+                "message": format!("Invalid command-line arguments (kind={kind})."),
+            })
+        );
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+    }
+    Ok(())
+}
+
+#[test]
+fn json_input_failures_keep_distinct_safe_causes() -> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::Builder::new().prefix("secret-inputs").tempdir()?;
+    let path = directory.path().join("secret-input.json");
+    let mut oversized = br#"{"secret-key":"secret-value"}"#.to_vec();
+    oversized.resize(1024 * 1024 + 1, b' ');
+    for option in [
+        "--storage-options-file",
+        "--predicate-file",
+        "--execution-options-file",
+    ] {
+        for (contents, detail) in [
+            (b"!secret-value".as_slice(), "kind=Syntax"),
+            (br#""secret-value""#.as_slice(), "kind=Data"),
+            (b"{".as_slice(), "kind=Eof"),
+            (oversized.as_slice(), "reason=input_file_too_large"),
+        ] {
+            fs::write(&path, contents)?;
+            let output = run_with_timeout(
+                Command::new(env!("CARGO_BIN_EXE_dar"))
+                    .args(["scan", option])
+                    .arg(&path)
+                    .arg("secret-missing-table")
+                    .env("RUST_LOG", "trace"),
+            )?;
+            assert_eq!(output.status.code(), Some(2), "{output:?}");
+            assert!(output.stdout.is_empty());
+            let diagnostic: Value = serde_json::from_slice(&output.stderr)?;
+            assert_eq!(diagnostic.as_object().unwrap().len(), 3);
+            assert_eq!(diagnostic["phase"], "configuration");
+            assert_eq!(diagnostic["code"], "invalid_input_json");
+            assert!(
+                diagnostic["message"].as_str().unwrap().contains(detail),
+                "{option}, expected {detail}: {diagnostic}"
+            );
+            assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn predicate_validation_reasons_survive_json_decoding() -> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("secret-predicate.json");
+    let leaf = r#"{"op":"is_null","column":"secret-column"}"#;
+    for (predicate, reason) in [
+        (format!("{}{leaf}{}", r#"{"op":"not","arg":"#.repeat(32), "}".repeat(32)), "predicate_depth_limit_exceeded"),
+        (format!(r#"{{"op":"and","args":[{}]}}"#, [leaf; 1024].join(",")), "predicate_node_limit_exceeded"),
+        (r#"{"op":"eq","column":"secret-column","value":{"type":"float32","value":1e100}}"#.into(), "predicate_non_finite_float"),
+        (r#"{"op":"eq","column":"secret-column","value":{"type":"fixed_size_binary","size":2,"value":[1]}}"#.into(), "predicate_binary_size_mismatch"),
+    ] {
+        fs::write(&path, predicate)?;
+        let output = run_with_timeout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .args(["scan", "--predicate-file"]).arg(&path).arg("secret-missing-table"),
+        )?;
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let diagnostic: Value = serde_json::from_slice(&output.stderr)?;
+        assert_eq!(diagnostic, serde_json::json!({
+            "phase": "configuration", "code": "invalid_input_json",
+            "message": format!("Invalid JSON input (reason={reason})."),
+        }));
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
     }
     Ok(())
 }

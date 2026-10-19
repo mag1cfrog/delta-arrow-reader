@@ -394,7 +394,7 @@ An ordinary failure writes one JSON object plus newline to stderr. Its only
 fields are the strings `phase`, `code`, and `message`:
 
 ```json
-{"phase":"configuration","code":"invalid_cli_argument","message":"Invalid command-line arguments."}
+{"phase":"configuration","code":"invalid_cli_argument","message":"Invalid command-line arguments (kind=UnknownArgument)."}
 ```
 
 Diagnostics omit argument values, file paths, URLs, configuration contents,
@@ -402,6 +402,16 @@ credential names and values, and underlying dependency messages. Reader
 failures retain the core reader's phase, code, and redacted Display message.
 The CLI does not start a tracing logger or mix progress or usage text into
 errors. Use `--help` for usage.
+
+Argument errors identify the parser's error kind, such as `UnknownArgument` or
+`MissingRequiredArgument`. JSON errors include the safe category (`Syntax`,
+`Data`, or `Eof`) and the parser's line and column. An oversized input instead
+reports `reason=input_file_too_large`. Predicate validation reports a fixed
+reason for exceeding depth or node limits, non-finite floats, or a fixed-size
+binary length mismatch. Schema errors reported by Serde share the `Data`
+category; their dependency messages are not parsed or printed. Scripts should
+use the exit status, `phase`, and `code` rather than matching the human-readable
+message.
 
 | Status | Meaning |
 | --- | --- |
