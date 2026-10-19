@@ -76,6 +76,7 @@ nav:
       - Command-line reference: cli.md
       - Execution options: reference/execution-options.md
       - Scan metrics: reference/metrics.md
+      - Tracing: reference/tracing.md
       - Rust API: https://docs.rs/delta-arrow-reader
   - Python API:
       - Overview: python-api/index.md

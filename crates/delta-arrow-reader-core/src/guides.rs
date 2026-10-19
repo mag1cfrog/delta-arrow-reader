@@ -36,6 +36,9 @@ pub mod concepts {
 
 /// Look up scan controls and metrics.
 pub mod reference {
+    #[doc = include_str!("../docs/public/reference/tracing.md")]
+    pub mod tracing {}
+
     #[doc = include_str!("../docs/public/reference/execution-options.md")]
     pub mod execution_options {}
 

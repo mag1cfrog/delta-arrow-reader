@@ -647,13 +647,13 @@ impl Stream for PartitionStream {
                         self.state = PartitionStreamState::Done;
                         return Poll::Ready(None);
                     }
-                    Poll::Ready(Err(_)) => {
+                    Poll::Ready(Err(source)) => {
                         self.state = PartitionStreamState::Done;
                         return Poll::Ready(self.cancellation.cancel().then(|| {
-                            Err(CancelledSnafu {
+                            Err(DeltaReaderError::ExecutionTaskFailed {
                                 reason: "partition_scheduler_task_failed",
-                            }
-                            .build())
+                                source: Box::new(source),
+                            })
                         }));
                     }
                     Poll::Pending => return Poll::Pending,
@@ -2295,6 +2295,53 @@ mod tests {
         assert_eq!(snapshot.scan_partitions_completed, 0);
         assert_eq!(snapshot.file_tasks_started, 2);
         assert_eq!(snapshot.file_tasks_completed, 0);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn failed_partition_workers_preserve_the_join_cause_and_terminal_state()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use std::error::Error as _;
+
+        for (panics, expected) in [(true, "worker_panicked"), (false, "worker_cancelled")] {
+            let cancellation = ScanCancellation::new();
+            let (output, receiver) = mpsc::channel(1);
+            let task = tokio::spawn(async move {
+                let _output = output;
+                if panics {
+                    panic!("secret-worker-payload");
+                }
+                pending::<()>().await;
+            });
+            if !panics {
+                task.abort();
+            }
+            let mut stream = PartitionStream {
+                state: PartitionStreamState::Running { receiver, task },
+                cancellation: cancellation.clone(),
+                file_read_permits: Arc::new(tokio::sync::Semaphore::new(0)),
+                max_file_reads: 0,
+                reserved_file_reads: 0,
+            };
+
+            let error = timeout(Duration::from_secs(5), stream.next())
+                .await?
+                .ok_or("worker failure must reach the stream")?
+                .expect_err("worker failure must not look like EOF");
+            assert_eq!(error.phase(), DeltaReaderPhase::Execution);
+            assert_eq!(error.code(), "cancelled");
+            assert_eq!(error.reason(), "partition_scheduler_task_failed");
+            assert_eq!(error.source_kind(), Some(expected));
+            assert!(
+                error
+                    .source()
+                    .is_some_and(|source| source.is::<tokio::task::JoinError>())
+            );
+            assert!(!error.to_string().contains("secret-worker-payload"));
+            assert!(cancellation.is_cancelled());
+            assert!(stream.next().await.is_none());
+            assert!(stream.next().await.is_none());
+        }
         Ok(())
     }
 

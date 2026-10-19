@@ -671,9 +671,7 @@ impl DeltaKernelEngineContext {
                 let engine = VersionedEngine::new(Arc::clone(self.engine()), version);
                 let snapshot = builder.build(&engine)?;
                 if snapshot.version() != version {
-                    return Err(delta_kernel::Error::generic(
-                        "snapshot version is unavailable",
-                    ));
+                    return Err(delta_kernel::Error::MissingVersion);
                 }
                 snapshot
             }

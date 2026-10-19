@@ -232,7 +232,15 @@ fn public_eager_initialization_emits_complete_structured_lifecycle_events() -> T
         failed.get("event").map(String::as_str),
         Some("scan_metadata_cache_build.failed")
     );
-    assert_eq!(failed.len(), 6);
+    assert_eq!(failed.len(), 8);
+    assert_eq!(
+        failed.get("error_reason").map(String::as_str),
+        Some("query_planning_warmup_materialization_failed")
+    );
+    assert_eq!(
+        failed.get("error_source_kind").map(String::as_str),
+        Some("arrow_json")
+    );
     assert_eq!(failed.get("outcome").map(String::as_str), Some("failed"));
     assert_eq!(
         failed.get("snapshot_version").map(String::as_str),

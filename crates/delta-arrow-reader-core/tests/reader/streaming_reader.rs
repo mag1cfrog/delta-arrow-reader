@@ -813,6 +813,59 @@ fn unsupported_protocol_is_inspectable_but_never_scannable() -> TestResult {
 }
 
 #[test]
+fn snapshot_error_diagnostics_distinguish_missing_and_corrupt_logs() -> TestResult {
+    let runtime = runtime()?;
+    let empty = TestTable::empty("missing-snapshot")?;
+    let valid = TestTable::two_versions("missing-requested-version")?;
+    let corrupt = TestTable::empty("corrupt-snapshot")?;
+    fs::write(
+        corrupt.0.join("_delta_log/00000000000000000000.json"),
+        "{secret-invalid-json\n",
+    )?;
+    for backend in [
+        ParquetReaderBackend::Direct,
+        ParquetReaderBackend::DeltaKernel,
+    ] {
+        let options = DeltaScanExecutionOptions::new().with_parquet_backend(backend);
+        for (fixture, selection, expected) in [
+            (&empty, DeltaSnapshotSelection::Latest, "unknown"),
+            (
+                &valid,
+                DeltaSnapshotSelection::Version(99),
+                "missing_version",
+            ),
+            (&corrupt, DeltaSnapshotSelection::Latest, "arrow_json"),
+        ] {
+            let error = runtime
+                .block_on(
+                    DeltaTableBuilder::new(fixture.uri())
+                        .with_snapshot_selection(selection)
+                        .with_execution_options(options)
+                        .with_warmup(WarmupMode::None)
+                        .load_table(),
+                )
+                .expect_err("invalid snapshot must fail");
+            assert_eq!(error.phase(), DeltaReaderPhase::Snapshot);
+            assert_eq!(error.code(), "snapshot_load");
+            assert_eq!(error.reason(), "snapshot_load_failed");
+            assert_eq!(error.source_kind(), Some(expected));
+            let source = error
+                .source()
+                .and_then(|source| source.downcast_ref::<delta_kernel::Error>())
+                .expect("snapshot failures preserve the Kernel source");
+            if expected == "unknown" {
+                // Kernel 0.25 exposes an empty log as Generic; revisit on upgrade.
+                assert!(matches!(source, delta_kernel::Error::Generic(_)));
+            } else if expected == "missing_version" {
+                assert!(matches!(source, delta_kernel::Error::MissingVersion));
+            }
+            assert!(!format!("{error:?}").contains("secret-invalid-json"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn eager_metadata_failure_returns_no_table_and_redacts_the_source() -> TestResult {
     const INVALID_SIZE: &str = "secret-not-a-file-size";
     let fixture = TestTable::malformed_add("eager-failure", INVALID_SIZE)?;

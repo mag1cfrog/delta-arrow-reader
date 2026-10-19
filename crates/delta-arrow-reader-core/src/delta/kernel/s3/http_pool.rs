@@ -110,7 +110,10 @@ fn build_client(
                         .map_err(|e| HttpError::new(HttpErrorKind::Connect, e))?;
                     tokio::spawn(async move {
                         if let Err(error) = driver.await {
-                            tracing::debug!(%error, "HTTP/1 connection closed with an error");
+                            tracing::debug!(
+                                error_source_kind = crate::error::source_kind(&error),
+                                "HTTP/1 connection closed with an error"
+                            );
                         }
                     });
                     Ok(Connection {
@@ -568,10 +571,9 @@ mod tests {
             let truncated = request(&client, &server.origin, "/truncated")
                 .await
                 .unwrap();
-            assert_eq!(
-                truncated.into_body().bytes().await.unwrap_err().kind(),
-                HttpErrorKind::Interrupted
-            );
+            let error = truncated.into_body().bytes().await.unwrap_err();
+            assert_eq!(error.kind(), HttpErrorKind::Interrupted);
+            assert_eq!(crate::error::source_kind(&error), "unexpected_eof");
             healthy(&client, &server.origin).await;
 
             let missing = request(&client, &server.origin, "/missing").await.unwrap();

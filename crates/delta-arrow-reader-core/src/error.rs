@@ -1,4 +1,8 @@
-use std::fmt;
+mod source;
+
+pub(crate) use source::source_kind;
+
+use std::{error::Error as _, fmt};
 
 use snafu::Snafu;
 
@@ -196,6 +200,19 @@ pub enum DeltaReaderError {
         /// Fixed redacted reason category.
         reason: &'static str,
     },
+    /// An execution worker failed before it could return its result.
+    ///
+    /// The `cancelled` code is retained for compatibility with scheduler errors.
+    /// Inspect the source kind to distinguish worker failure from caller cancellation.
+    #[non_exhaustive]
+    #[snafu(display("delta reader error: phase=execution code=cancelled reason={reason}"))]
+    ExecutionTaskFailed {
+        /// Fixed redacted reason category.
+        reason: &'static str,
+        /// Underlying task failure, including its panic or cancellation category.
+        #[snafu(source(from(exact)))]
+        source: Box<dyn std::error::Error + Send + Sync + 'static>,
+    },
     /// Optional DataFusion integration failed.
     #[cfg(feature = "datafusion")]
     #[non_exhaustive]
@@ -228,7 +245,7 @@ impl DeltaReaderError {
             Self::DataFileRead { .. } => "data_file_read",
             Self::DeletionVectorRead { .. } => "deletion_vector_read",
             Self::PhysicalToLogicalTransform { .. } => "physical_to_logical_transform",
-            Self::Cancelled { .. } => "cancelled",
+            Self::Cancelled { .. } | Self::ExecutionTaskFailed { .. } => "cancelled",
             #[cfg(feature = "datafusion")]
             Self::DataFusionAdapter { .. } => "datafusion_adapter",
         }
@@ -247,13 +264,51 @@ impl DeltaReaderError {
             | Self::UnsupportedPredicate { .. }
             | Self::ScanPlanning { .. }
             | Self::ScanPartitionPlanning { .. } => DeltaReaderPhase::ScanPlanning,
-            Self::Cancelled { .. } => DeltaReaderPhase::Execution,
+            Self::Cancelled { .. } | Self::ExecutionTaskFailed { .. } => {
+                DeltaReaderPhase::Execution
+            }
             Self::DataFileRead { .. } => DeltaReaderPhase::DataFileRead,
             Self::DeletionVectorRead { .. } => DeltaReaderPhase::DeletionVector,
             Self::PhysicalToLogicalTransform { .. } => DeltaReaderPhase::Transform,
             #[cfg(feature = "datafusion")]
             Self::DataFusionAdapter { .. } => DeltaReaderPhase::DataFusion,
         }
+    }
+
+    /// Returns the fixed, redacted reason supplied by the reader.
+    pub const fn reason(&self) -> &'static str {
+        match self {
+            Self::InvalidConfiguration { reason }
+            | Self::InvalidTableLocation { reason }
+            | Self::StorageInitialization { reason, .. }
+            | Self::SnapshotLoad { reason, .. }
+            | Self::UnsupportedProtocol { reason }
+            | Self::SchemaConversion { reason, .. }
+            | Self::InvalidProjection { reason }
+            | Self::UnsupportedPredicate { reason }
+            | Self::ScanPlanning { reason, .. }
+            | Self::ScanPartitionPlanning { reason }
+            | Self::DataFileRead { reason, .. }
+            | Self::DeletionVectorRead { reason, .. }
+            | Self::PhysicalToLogicalTransform { reason, .. }
+            | Self::Cancelled { reason }
+            | Self::ExecutionTaskFailed { reason, .. } => reason,
+            #[cfg(feature = "datafusion")]
+            Self::DataFusionAdapter { reason, .. } => reason,
+        }
+    }
+
+    /// Classifies the dependency failure without formatting its message.
+    ///
+    /// Returns `None` when this error has no source. `Some("unknown")` means the
+    /// source exposes no recognized category; `Some("source_chain_limit")` means
+    /// traversal stopped at its depth bound. Categories describe observed error
+    /// types, not retry advice. New categories may be added.
+    ///
+    /// See the [tracing reference](crate::guides::reference::tracing) for the
+    /// categories and wrapper traversal rules. The original source is unchanged.
+    pub fn source_kind(&self) -> Option<&'static str> {
+        self.source().map(source_kind)
     }
 }
 
@@ -413,6 +468,15 @@ mod tests {
                 DeltaReaderPhase::Execution,
                 false,
             ),
+            (
+                DeltaReaderError::ExecutionTaskFailed {
+                    reason: "cancelled",
+                    source: dependency_source(),
+                },
+                "cancelled",
+                DeltaReaderPhase::Execution,
+                true,
+            ),
             #[cfg(feature = "datafusion")]
             (
                 DeltaReaderError::DataFusionAdapter {
@@ -431,6 +495,8 @@ mod tests {
             assert_eq!(error.source().is_some(), has_source);
             assert_eq!(error.code(), name);
             assert_eq!(error.phase(), phase);
+            assert_eq!(error.reason(), name);
+            assert_eq!(error.source_kind().is_some(), has_source);
             let display = error.to_string();
             let debug = format!("{error:?}");
             assert!(display.contains(&format!("phase={}", phase.as_str())));
