@@ -1097,6 +1097,76 @@ pub(in crate::reader) mod tests {
     }
 
     #[tokio::test]
+    async fn incomplete_network_recovery_keeps_the_profile_and_reports_insufficient_samples()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use crate::test_tracing::Collector;
+        use futures_util::TryStreamExt;
+        use tracing::{Level, instrument::WithSubscriber};
+
+        let (table, _, _root) =
+            gated_recovery_table(TestDeletionVector::None, GateRequest::Range(0)).await?;
+        let (warmup, store) = network_warmup_fixture().await?;
+        let budget = warmup.range_read_budget;
+        let path = warmup.files[0].0.clone();
+        // Pause the first small-read sample after the twelve ordinary calibration requests.
+        store.range_target.store(13, Ordering::Release);
+        let original = table.range_read_estimator();
+        let concurrent_store = MeteredParquetObjectStore::new(
+            Arc::clone(&store.inner),
+            metrics(),
+            MultiRangeReadStrategy::UseStoreImplementation,
+        )
+        .with_range_read_estimator(Arc::clone(&original));
+        table.range_read_state.defer_network_warmup(warmup).await;
+        let predicate = crate::DeltaPredicate::Compare {
+            column: "id".into(),
+            op: crate::DeltaComparison::Gt,
+            value: crate::DeltaScalar::Int32(1),
+        };
+        let collector = Collector::new(Level::DEBUG);
+        let planning = table
+            .scan()
+            .with_predicate(predicate.clone())
+            .build()
+            .with_subscriber(collector.clone());
+        tokio::pin!(planning);
+        tokio::select! {
+            _ = &mut planning => panic!("planning completed before the sample gate"),
+            result = tokio::time::timeout(Duration::from_secs(5), store.wait_started()) => result?,
+        }
+        concurrent_store.get_range(&path, 0..1).await?;
+        store.release_request();
+        let scan = planning.await?;
+        assert!(Arc::ptr_eq(&original, &table.range_read_estimator()));
+        assert_eq!(
+            budget.available_permits(),
+            crate::reader::options::MAX_SHARED_RANGE_READS
+        );
+        let batches = scan.into_stream().try_collect::<Vec<_>>().await?;
+        assert_eq!(int32_ids(&batches)?, [2, 3, 4, 5, 6]);
+
+        let requests = store.range_call_count();
+        let _next_scan = table
+            .scan()
+            .with_predicate(predicate)
+            .build()
+            .with_subscriber(collector.clone())
+            .await?;
+        assert_eq!(store.range_call_count(), requests);
+        let events = collector.events();
+        assert!(events.iter().all(|event| event.level > Level::WARN));
+        let warmup_events: Vec<_> = events
+            .iter()
+            .filter(|event| event.target == "delta_arrow_reader::diagnostics::network_warmup")
+            .collect();
+        assert_eq!(warmup_events.len(), 1);
+        assert_eq!(warmup_events[0].level, Level::DEBUG);
+        assert_eq!(warmup_events[0].fields["phase"], "recovery");
+        assert_eq!(warmup_events[0].fields["status"], "insufficient_samples");
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn network_warmup_recovers_once_and_concurrent_queries_share_it()
     -> Result<(), Box<dyn std::error::Error>> {
         let (plan, gated) = network_warmup_fixture().await?;

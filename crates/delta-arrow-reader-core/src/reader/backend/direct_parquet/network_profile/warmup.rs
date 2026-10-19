@@ -384,10 +384,12 @@ pub(in super::super) async fn warmup(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     // Replace measurements and their cache together; incomplete warmup keeps the previous pair.
-    if let Some(fallback_estimator) = fallback_estimator {
-        samples.fallback_estimator = Some(fallback_estimator);
+    let complete =
+        fallback_estimator.is_some() && samples.request_overheads.len() >= MIN_TRANSPORT_SAMPLES;
+    if complete {
+        samples.fallback_estimator = fallback_estimator;
     }
-    Ok(samples.request_overheads.len() >= MIN_TRANSPORT_SAMPLES)
+    Ok(complete)
 }
 
 async fn sample_partial_reads(
