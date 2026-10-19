@@ -388,7 +388,7 @@ mod tests {
         };
         use futures_util::FutureExt;
         use std::{collections::VecDeque, sync::Mutex};
-        use tracing::instrument::WithSubscriber;
+        use tracing::{Instrument, instrument::WithSubscriber};
 
         let options = options()?;
         let limiter = ScanReadLimiter::new(options, 1, 1);
@@ -442,6 +442,11 @@ mod tests {
             cancellation.clone(),
         );
         let collector = Collector::new(tracing::Level::INFO);
+        let parent = tracing::subscriber::with_default(
+            collector.clone(),
+            || tracing::info_span!(target: "delta_arrow_reader::test", "caller"),
+        );
+        let parent_id = parent.id().ok_or("caller span disabled")?.into_u64();
         let mut stream =
             crate::reader::tests::direct_stream(VecDeque::from([partition]), metrics, 1);
         stream.backend = ParquetReaderBackend::DeltaKernel;
@@ -449,6 +454,7 @@ mod tests {
         assert!(
             stream
                 .next_batch()
+                .instrument(parent)
                 .with_subscriber(collector.clone())
                 .now_or_never()
                 .is_none()
@@ -477,6 +483,16 @@ mod tests {
             events[0].fields["operation_id"],
             events[2].fields["operation_id"]
         );
+        // The DEBUG partition span is filtered out; producer events must keep the INFO caller.
+        assert!(
+            collector
+                .records()
+                .iter()
+                .all(|record| record.name != "Delta partition task")
+        );
+        for event in &events {
+            assert!(collector.linked_to(event, parent_id), "{event:?}");
+        }
         Ok(())
     }
 

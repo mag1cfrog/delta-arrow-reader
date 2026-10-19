@@ -1109,8 +1109,9 @@ mod tests {
     #[tokio::test]
     async fn native_and_datafusion_scans_use_the_recovered_profile() -> TestResult {
         use crate::reader::backend::direct_parquet::tests::network_warmup_fixture;
-        use crate::{DeltaComparison, DeltaPredicate, DeltaScalar};
+        use crate::{DeltaComparison, DeltaPredicate, DeltaScalar, test_tracing::Collector};
         use futures_util::TryStreamExt;
+        use tracing::{Instrument, Level, instrument::WithSubscriber};
 
         for datafusion_first in [false, true] {
             let fixture = TestTable::partitioned("recovered-profile")?;
@@ -1156,9 +1157,26 @@ mod tests {
 
             for use_datafusion in [datafusion_first, !datafusion_first, datafusion_first] {
                 let mut actual = if use_datafusion {
+                    let collector = Collector::new(Level::TRACE);
+                    let parent = tracing::subscriber::with_default(
+                        collector.clone(),
+                        || tracing::info_span!(target: "delta_arrow_reader::test", "caller"),
+                    );
+                    let parent_id = parent.id().ok_or("caller span disabled")?.into_u64();
                     let plan = provider
                         .scan(&context.state(), None, &filters, None)
+                        .instrument(parent)
+                        .with_subscriber(collector.clone())
                         .await?;
+                    let records = collector.records();
+                    for name in ["Delta scan planning", "Delta scan execution setup"] {
+                        let span = records
+                            .iter()
+                            .find(|record| record.is_span && record.name == name)
+                            .ok_or_else(|| format!("missing {name}"))?;
+                        assert!(collector.linked_to(span, parent_id), "{span:?}");
+                    }
+                    collector.assert_balanced();
                     let scan = plan
                         .downcast_ref::<DeltaScanExec>()
                         .ok_or("expected DeltaScanExec")?;

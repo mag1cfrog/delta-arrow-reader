@@ -105,6 +105,34 @@ fn public_operations_propagate_dispatch_and_parent_to_workers() -> TestResult {
 }
 
 #[test]
+fn snapshot_load_propagates_dispatch_and_parent_to_its_worker() -> TestResult {
+    let fixture = LogTable::new()?;
+    let collector = Collector::new(Level::TRACE);
+    let parent = caller(&collector);
+    let parent_id = parent.id().unwrap().into_u64();
+    let caller_thread = std::thread::current().id();
+    let snapshot = runtime()?.block_on(
+        fixture
+            .builder(ParquetReaderBackend::Direct)
+            .load_snapshot()
+            .instrument(parent)
+            .with_subscriber(collector.clone()),
+    )?;
+    assert_eq!(snapshot.version(), 0);
+    let events = collector.events();
+    for name in ["snapshot_load.started", "snapshot_load.completed"] {
+        let event = events
+            .iter()
+            .find(|record| record.fields.get("event") == Some(&json!(name)))
+            .unwrap_or_else(|| panic!("missing {name}"));
+        assert_ne!(event.thread, caller_thread);
+        assert!(collector.linked_to(event, parent_id), "{event:?}");
+    }
+    collector.assert_balanced();
+    Ok(())
+}
+
+#[test]
 fn streams_use_the_polling_caller_for_both_backends() -> TestResult {
     for backend in [
         ParquetReaderBackend::Direct,
@@ -453,12 +481,23 @@ fn reusable_datafusion_plan_uses_each_polling_caller() -> TestResult {
         )?;
         let session = SessionContext::new();
         let planning = Collector::new(Level::TRACE);
+        let parent = caller(&planning);
+        let parent_id = parent.id().unwrap().into_u64();
         let plan = runtime.block_on(
             provider
                 .scan(&session.state(), None, &[], None)
-                .instrument(caller(&planning))
+                .instrument(parent)
                 .with_subscriber(planning.clone()),
         )?;
+        let records = planning.records();
+        for name in ["Delta scan planning", "Delta scan execution setup"] {
+            let span = records
+                .iter()
+                .find(|record| record.is_span && record.name == name)
+                .unwrap_or_else(|| panic!("missing {name}"));
+            assert!(planning.linked_to(span, parent_id), "{span:?}");
+        }
+        planning.assert_balanced();
         let lifetime = planning.lifetime();
         drop(planning);
         assert!(
