@@ -16,7 +16,7 @@ use tracing::instrument::WithSubscriber;
 
 const EXECUTION: &str = "datafusion_partition_execution";
 
-async fn plan(
+pub(super) async fn plan(
     fixture: &LogTable,
     backend: ParquetReaderBackend,
     partitions: usize,

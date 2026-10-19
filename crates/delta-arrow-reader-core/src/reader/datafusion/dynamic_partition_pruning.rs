@@ -74,10 +74,8 @@ pub(crate) fn evaluate_dynamic_partition_filter(
                 DynamicPartitionKeepReason::FilterUnavailable,
             );
         }
-        Err(_) => {
-            return DynamicPartitionPruningDecision::Keep(
-                DynamicPartitionKeepReason::EvaluationFailed,
-            );
+        Err(error) => {
+            return DynamicPartitionPruningDecision::Keep(evaluation_failure("snapshot", &error));
         }
     };
     let is_literal_true_placeholder = is_literal_true(snapshot.as_ref());
@@ -89,10 +87,19 @@ pub(crate) fn evaluate_dynamic_partition_filter(
 
     match snapshot.evaluate(&batch) {
         Ok(value) => boolean_decision(value, is_literal_true_placeholder),
-        Err(_) => {
-            DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::EvaluationFailed)
-        }
+        Err(error) => DynamicPartitionPruningDecision::Keep(evaluation_failure("evaluate", &error)),
     }
+}
+
+fn evaluation_failure(
+    phase: &'static str,
+    error: &(dyn std::error::Error + 'static),
+) -> DynamicPartitionKeepReason {
+    tracing::debug!(target: "delta_arrow_reader::diagnostics::dynamic_partition_pruning",
+        event = "dynamic_partition_pruning.kept", phase,
+        reason = "evaluation_failed", error_source_kind = crate::error::source_kind(error)
+    );
+    DynamicPartitionKeepReason::EvaluationFailed
 }
 
 /// Builds the one-row Arrow input batch used for dynamic filter evaluation.
@@ -139,11 +146,11 @@ fn materialize_partition_batch(
         let scalar = parse_partition_scalar(field, raw_value)?;
         columns[partition_column.index] = scalar
             .to_array_of_size(1)
-            .map_err(|_| DynamicPartitionKeepReason::EvaluationFailed)?;
+            .map_err(|error| evaluation_failure("materialize", &error))?;
     }
 
     RecordBatch::try_new(nullable_schema(&filter.provider_schema), columns)
-        .map_err(|_| DynamicPartitionKeepReason::EvaluationFailed)
+        .map_err(|error| evaluation_failure("materialize", &error))
 }
 
 /// Returns a schema shape suitable for a synthetic metadata row.

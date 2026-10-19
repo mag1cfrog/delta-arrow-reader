@@ -152,6 +152,11 @@ carry the error category, safe source kind, plan and execution IDs, and the
 partition index without requiring DEBUG spans. The returned DataFusion error
 still retains the reader error and its sources.
 
+Failures while DataFusion prepares a DAR scan appear under
+`datafusion_replace_children` or `datafusion_repartition`, before any partition
+execution starts. Both carry the original plan ID. A successful preparation
+callback can return an unchanged plan.
+
 At INFO, `provider_scan.completed` reports that planning returned a physical
 plan. `datafusion_partition_execution.completed` reports EOF for one partition.
 An upstream `LIMIT` can instead produce a partition `dropped` event after it has
