@@ -110,7 +110,10 @@ fn build_client(
                         .map_err(|e| HttpError::new(HttpErrorKind::Connect, e))?;
                     tokio::spawn(async move {
                         if let Err(error) = driver.await {
-                            tracing::debug!(%error, "HTTP/1 connection closed with an error");
+                            tracing::debug!(
+                                error_source_kind = crate::error::source_kind(&error),
+                                "HTTP/1 connection closed with an error"
+                            );
                         }
                     });
                     Ok(Connection {

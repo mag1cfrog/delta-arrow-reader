@@ -369,7 +369,9 @@ fn trace_snapshot_load_failed(selection: &'static str, error: &DeltaReaderError)
         event = SNAPSHOT_LOAD_FAILED_EVENT,
         selection,
         error_code = error.code(),
-        error_phase = error.phase().as_str()
+        error_phase = error.phase().as_str(),
+        error_reason = error.reason(),
+        error_source_kind = error.source_kind()
     );
 }
 
@@ -415,7 +417,9 @@ fn trace_snapshot_refresh_failed(
         previous_snapshot_version,
         elapsed_micros,
         error_code = error.code(),
-        error_phase = error.phase().as_str()
+        error_phase = error.phase().as_str(),
+        error_reason = error.reason(),
+        error_source_kind = error.source_kind()
     );
 }
 
@@ -456,7 +460,9 @@ fn trace_scan_metadata_cache_build_failed(
         outcome = "failed",
         elapsed_micros,
         error_code = error.code(),
-        error_phase = error.phase().as_str()
+        error_phase = error.phase().as_str(),
+        error_reason = error.reason(),
+        error_source_kind = error.source_kind()
     );
 }
 
@@ -1016,6 +1022,11 @@ mod tests {
             BTreeMap::from([
                 ("error_phase".to_owned(), "storage".to_owned()),
                 ("error_code".to_owned(), "storage_initialization".to_owned(),),
+                (
+                    "error_reason".to_owned(),
+                    "storage_initialization_failed".to_owned()
+                ),
+                ("error_source_kind".to_owned(), "unknown".to_owned()),
                 ("event".to_owned(), "snapshot_load.failed".to_owned()),
                 ("selection".to_owned(), "version".to_owned()),
             ])
@@ -1153,7 +1164,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["not_loaded", "refreshed", "reused"]
         );
-        assert!(events.chunks_exact(2).all(|events| {
+        assert!(events.as_chunks::<2>().0.iter().all(|events| {
             events[0].fields.get("event").map(String::as_str) == Some("snapshot_refresh.started")
                 && events[1].fields.get("event").map(String::as_str)
                     == Some("snapshot_refresh.completed")
@@ -1209,7 +1220,18 @@ mod tests {
             events[1].fields.get("error_phase").map(String::as_str),
             Some("scan_planning")
         );
-        assert_eq!(events[1].fields.len(), 5);
+        assert_eq!(events[1].fields.len(), 7);
+        assert_eq!(
+            events[1].fields.get("error_reason").map(String::as_str),
+            Some("query_planning_cache_refresh_failed")
+        );
+        assert_eq!(
+            events[1]
+                .fields
+                .get("error_source_kind")
+                .map(String::as_str),
+            Some("arrow_json")
+        );
         events[1]
             .fields
             .get("elapsed_micros")
@@ -1303,7 +1325,18 @@ mod tests {
             events[1].fields.get("error_phase").map(String::as_str),
             Some("scan_planning")
         );
-        assert_eq!(events[1].fields.len(), 6);
+        assert_eq!(events[1].fields.len(), 8);
+        assert_eq!(
+            events[1].fields.get("error_reason").map(String::as_str),
+            Some("query_planning_warmup_materialization_failed")
+        );
+        assert_eq!(
+            events[1]
+                .fields
+                .get("error_source_kind")
+                .map(String::as_str),
+            Some("arrow_json")
+        );
         events[1]
             .fields
             .get("elapsed_micros")

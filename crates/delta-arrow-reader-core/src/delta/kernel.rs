@@ -671,6 +671,8 @@ impl DeltaKernelEngineContext {
                 let engine = VersionedEngine::new(Arc::clone(self.engine()), version);
                 let snapshot = builder.build(&engine)?;
                 if snapshot.version() != version {
+                    // Revisit this reader-owned Generic when adopting typed Kernel snapshot
+                    // errors; upgrading the dependency alone does not change this branch.
                     return Err(delta_kernel::Error::generic(
                         "snapshot version is unavailable",
                     ));

@@ -951,7 +951,9 @@ fn trace_planning_failed(
         scan_metadata_source,
         outcome = "failed",
         error_code = error.code(),
-        error_phase = error.phase().as_str()
+        error_phase = error.phase().as_str(),
+        error_reason = error.reason(),
+        error_source_kind = error.source_kind()
     );
 }
 
@@ -999,7 +1001,9 @@ fn trace_execution_failed(
         partition_count,
         outcome = "failed",
         error_code = error.code(),
-        error_phase = error.phase().as_str()
+        error_phase = error.phase().as_str(),
+        error_reason = error.reason(),
+        error_source_kind = error.source_kind()
     );
 }
 
@@ -1386,7 +1390,13 @@ mod tests {
 
     #[test]
     fn lifecycle_tracing_has_only_bounded_fields() {
-        let error = InvalidConfigurationSnafu { reason: "test" }.build();
+        let error = crate::DeltaReaderError::DataFileRead {
+            reason: "parquet_batch_read_failed",
+            source: Box::new(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "secret-source-message",
+            )),
+        };
 
         let (_, events) = capture_events(|| {
             trace_planning_started(7, ParquetReaderBackend::Direct, "query_planning_cache");
@@ -1408,6 +1418,8 @@ mod tests {
             "backend",
             "error_phase",
             "error_code",
+            "error_reason",
+            "error_source_kind",
             "event",
             "outcome",
             "partition_count",
@@ -1421,6 +1433,20 @@ mod tests {
             assert!(fields.contains_key("backend"));
             assert!(fields.contains_key("partition_count"));
             assert!(fields.contains_key("outcome"));
+            assert!(!format!("{fields:?}").contains("secret-source-message"));
+            if fields
+                .get("outcome")
+                .is_some_and(|outcome| outcome == "failed")
+            {
+                assert_eq!(
+                    fields.get("error_reason").map(String::as_str),
+                    Some("parquet_batch_read_failed")
+                );
+                assert_eq!(
+                    fields.get("error_source_kind").map(String::as_str),
+                    Some("timeout")
+                );
+            }
             if fields
                 .get("event")
                 .is_some_and(|event| event.starts_with("scan_planning."))
@@ -1431,6 +1457,33 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn disabled_failure_events_do_not_inspect_dependency_sources() {
+        #[derive(Debug)]
+        struct SourceProbe;
+
+        impl fmt::Display for SourceProbe {
+            fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
+                panic!("disabled diagnostics must not format errors");
+            }
+        }
+
+        impl std::error::Error for SourceProbe {
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                panic!("disabled diagnostics must not traverse errors");
+            }
+        }
+
+        let error = crate::DeltaReaderError::DataFileRead {
+            reason: "parquet_batch_read_failed",
+            source: Box::new(SourceProbe),
+        };
+        with_default(tracing::subscriber::NoSubscriber::default(), || {
+            trace_execution_failed(0, ParquetReaderBackend::Direct, 1, &error);
+            trace_planning_failed(0, ParquetReaderBackend::Direct, "delta_log", &error);
+        });
     }
 
     #[test]

@@ -692,7 +692,9 @@ fn trace_failure(
         backend = ?backend,
         outcome = "failed",
         error_code = error.code(),
-        error_phase = error.phase().as_str()
+        error_phase = error.phase().as_str(),
+        error_reason = error.reason(),
+        error_source_kind = error.source_kind()
     );
 }
 

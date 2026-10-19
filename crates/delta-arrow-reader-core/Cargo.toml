@@ -88,6 +88,9 @@ arrow = "58.3.0"
 bytes = "1"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 datafusion = { version = "54.1.0", default-features = false, features = ["sql"], optional = true }
+# Keep both Kernel pins until empty String/Binary partition values retain NULL
+# semantics in the partition regression tests. Upstream fix:
+# https://github.com/delta-io/delta-kernel-rs/pull/3260
 delta_kernel = { version = "=0.25.0", default-features = false, features = ["arrow", "internal-api"] }
 delta_kernel_default_engine = { version = "=0.25.0", default-features = false, features = ["arrow", "rustls"] }
 futures-util = "0.3"
