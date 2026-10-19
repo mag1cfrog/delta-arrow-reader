@@ -547,6 +547,10 @@ where
 }
 
 impl PartitionStream {
+    pub(crate) fn is_cancelled(&self) -> bool {
+        self.cancellation.is_cancelled()
+    }
+
     pub(crate) fn new<Task>(
         file_tasks: Vec<Task>,
         partition_limiter: PartitionReadLimiter,
@@ -617,10 +621,11 @@ impl PartitionStream {
     }
 
     pub(crate) fn start(&mut self) {
+        let cancelled = self.is_cancelled();
         let PartitionStreamState::NotStarted(start) = &mut self.state else {
             return;
         };
-        if self.cancellation.is_cancelled() {
+        if cancelled {
             self.state = PartitionStreamState::Done;
             return;
         }

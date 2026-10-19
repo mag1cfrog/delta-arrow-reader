@@ -143,6 +143,27 @@ chooses when to refresh and when to replace its registration.
 
 </details>
 
+## Diagnose a failed read
+
+Install your application's tracing subscriber before loading the table, planning
+the query, and consuming its results. A filter such as `delta_arrow_reader=warn`
+includes optional warmup warnings and terminal reader failures. ERROR records
+carry the error category, safe source kind, plan and execution IDs, and the
+partition index without requiring DEBUG spans. The returned DataFusion error
+still retains the reader error and its sources.
+
+Failures while DataFusion prepares a DAR scan appear under
+`datafusion_replace_children` or `datafusion_repartition`, before any partition
+execution starts. Both carry the original plan ID. A successful preparation
+callback can return an unchanged plan.
+
+At INFO, `provider_scan.completed` reports that planning returned a physical
+plan. `datafusion_partition_execution.completed` reports EOF for one partition.
+An upstream `LIMIT` can instead produce a partition `dropped` event after it has
+enough rows. Check the query's returned result for whole-query success.
+See [Tracing](reference/tracing.md) for subscriber setup, event fields, and the
+boundaries covered by the reader.
+
 ## Where to go next
 
 - [Configuration](https://mag1cfrog.github.io/delta-arrow-reader/configuration/): prepare a table for repeated queries or limit concurrent file reads.

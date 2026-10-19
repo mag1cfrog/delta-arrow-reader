@@ -3,6 +3,15 @@
 
 #[path = "support/tracing.rs"]
 mod capture;
+#[cfg(feature = "datafusion")]
+#[path = "operation_tracing/datafusion_callbacks.rs"]
+mod datafusion_callbacks;
+#[cfg(feature = "datafusion")]
+#[path = "operation_tracing/datafusion_execution.rs"]
+mod datafusion_execution;
+#[cfg(feature = "datafusion")]
+#[path = "operation_tracing/datafusion.rs"]
+mod datafusion_provider;
 #[path = "operation_tracing/tasks.rs"]
 mod tasks;
 

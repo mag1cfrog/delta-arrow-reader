@@ -23,6 +23,18 @@ pub(crate) enum OperationKind {
     IntoTable,
     Refresh,
     Planning,
+    #[cfg(feature = "datafusion")]
+    ProviderCreation,
+    #[cfg(feature = "datafusion")]
+    ProviderRegistration,
+    #[cfg(feature = "datafusion")]
+    ProviderRefresh,
+    #[cfg(feature = "datafusion")]
+    ProviderScan,
+    #[cfg(feature = "datafusion")]
+    DataFusionReplaceChildren,
+    #[cfg(feature = "datafusion")]
+    DataFusionRepartition,
 }
 
 impl OperationKind {
@@ -33,6 +45,18 @@ impl OperationKind {
             Self::IntoTable => "into_table",
             Self::Refresh => "refresh",
             Self::Planning => "scan_planning",
+            #[cfg(feature = "datafusion")]
+            Self::ProviderCreation => "provider_creation",
+            #[cfg(feature = "datafusion")]
+            Self::ProviderRegistration => "provider_registration",
+            #[cfg(feature = "datafusion")]
+            Self::ProviderRefresh => "provider_refresh",
+            #[cfg(feature = "datafusion")]
+            Self::ProviderScan => "provider_scan",
+            #[cfg(feature = "datafusion")]
+            Self::DataFusionReplaceChildren => "datafusion_replace_children",
+            #[cfg(feature = "datafusion")]
+            Self::DataFusionRepartition => "datafusion_repartition",
         }
     }
 
@@ -58,6 +82,62 @@ impl OperationKind {
             (Self::Planning, Outcome::Completed) => "scan_planning.completed",
             (Self::Planning, Outcome::Failed) => "scan_planning.failed",
             (Self::Planning, Outcome::Abandoned) => "scan_planning.abandoned",
+            #[cfg(feature = "datafusion")]
+            (Self::ProviderCreation, Outcome::Started) => "provider_creation.started",
+            #[cfg(feature = "datafusion")]
+            (Self::ProviderCreation, Outcome::Completed) => "provider_creation.completed",
+            #[cfg(feature = "datafusion")]
+            (Self::ProviderCreation, Outcome::Failed) => "provider_creation.failed",
+            #[cfg(feature = "datafusion")]
+            (Self::ProviderCreation, Outcome::Abandoned) => "provider_creation.abandoned",
+            #[cfg(feature = "datafusion")]
+            (Self::ProviderRegistration, Outcome::Started) => "provider_registration.started",
+            #[cfg(feature = "datafusion")]
+            (Self::ProviderRegistration, Outcome::Completed) => "provider_registration.completed",
+            #[cfg(feature = "datafusion")]
+            (Self::ProviderRegistration, Outcome::Failed) => "provider_registration.failed",
+            #[cfg(feature = "datafusion")]
+            (Self::ProviderRegistration, Outcome::Abandoned) => "provider_registration.abandoned",
+            #[cfg(feature = "datafusion")]
+            (Self::ProviderRefresh, Outcome::Started) => "provider_refresh.started",
+            #[cfg(feature = "datafusion")]
+            (Self::ProviderRefresh, Outcome::Completed) => "provider_refresh.completed",
+            #[cfg(feature = "datafusion")]
+            (Self::ProviderRefresh, Outcome::Failed) => "provider_refresh.failed",
+            #[cfg(feature = "datafusion")]
+            (Self::ProviderRefresh, Outcome::Abandoned) => "provider_refresh.abandoned",
+            #[cfg(feature = "datafusion")]
+            (Self::ProviderScan, Outcome::Started) => "provider_scan.started",
+            #[cfg(feature = "datafusion")]
+            (Self::ProviderScan, Outcome::Completed) => "provider_scan.completed",
+            #[cfg(feature = "datafusion")]
+            (Self::ProviderScan, Outcome::Failed) => "provider_scan.failed",
+            #[cfg(feature = "datafusion")]
+            (Self::ProviderScan, Outcome::Abandoned) => "provider_scan.abandoned",
+            #[cfg(feature = "datafusion")]
+            (Self::DataFusionReplaceChildren, Outcome::Started) => {
+                "datafusion_replace_children.started"
+            }
+            #[cfg(feature = "datafusion")]
+            (Self::DataFusionReplaceChildren, Outcome::Completed) => {
+                "datafusion_replace_children.completed"
+            }
+            #[cfg(feature = "datafusion")]
+            (Self::DataFusionReplaceChildren, Outcome::Failed) => {
+                "datafusion_replace_children.failed"
+            }
+            #[cfg(feature = "datafusion")]
+            (Self::DataFusionReplaceChildren, Outcome::Abandoned) => {
+                "datafusion_replace_children.abandoned"
+            }
+            #[cfg(feature = "datafusion")]
+            (Self::DataFusionRepartition, Outcome::Started) => "datafusion_repartition.started",
+            #[cfg(feature = "datafusion")]
+            (Self::DataFusionRepartition, Outcome::Completed) => "datafusion_repartition.completed",
+            #[cfg(feature = "datafusion")]
+            (Self::DataFusionRepartition, Outcome::Failed) => "datafusion_repartition.failed",
+            #[cfg(feature = "datafusion")]
+            (Self::DataFusionRepartition, Outcome::Abandoned) => "datafusion_repartition.abandoned",
         }
     }
 }
@@ -83,6 +163,7 @@ impl Outcome {
 
 #[derive(Clone, Copy, Default)]
 pub(crate) struct OperationFields {
+    pub(crate) plan_id: Option<u64>,
     pub(crate) selection: Option<&'static str>,
     pub(crate) requested_snapshot_version: Option<u64>,
     pub(crate) snapshot_version: Option<u64>,
@@ -148,9 +229,16 @@ pub(crate) struct Operation {
 }
 
 impl Operation {
-    pub(crate) fn start(kind: OperationKind, fields: OperationFields) -> Self {
+    pub(crate) fn start(kind: OperationKind, mut fields: OperationFields) -> Self {
+        let id = NEXT_OPERATION_ID.fetch_add(1, Ordering::Relaxed);
+        match kind {
+            OperationKind::Planning => fields.plan_id = Some(id),
+            #[cfg(feature = "datafusion")]
+            OperationKind::ProviderScan => fields.plan_id = Some(id),
+            _ => {}
+        }
         let operation = Self {
-            id: NEXT_OPERATION_ID.fetch_add(1, Ordering::Relaxed),
+            id,
             kind,
             context: OperationContext(Arc::new(Mutex::new(fields))),
             started: Instant::now(),
@@ -170,10 +258,6 @@ impl Operation {
         self.context.clone()
     }
 
-    fn plan_id(&self) -> Option<u64> {
-        matches!(self.kind, OperationKind::Planning).then_some(self.id)
-    }
-
     pub(crate) fn finish<T>(
         mut self,
         result: Result<T, DeltaReaderError>,
@@ -186,7 +270,7 @@ impl Operation {
                 let fields = self.context.fields();
                 tracing::error!(target: TARGET,
                     event = self.kind.event(Outcome::Failed), operation = self.kind.name(),
-                    operation_id = self.id, plan_id = self.plan_id(), outcome = "failed",
+                    operation_id = self.id, plan_id = fields.plan_id, outcome = "failed",
                     elapsed_micros = self.started.elapsed().as_micros(),
                     selection = fields.selection,
                     requested_snapshot_version = fields.requested_snapshot_version,
@@ -213,7 +297,7 @@ impl Operation {
             let fields = self.context.fields();
             tracing::warn!(target: TARGET,
                 event = "network_warmup.degraded", operation = self.kind.name(),
-                operation_id = self.id, plan_id = self.plan_id(), outcome = "degraded",
+                operation_id = self.id, plan_id = fields.plan_id, outcome = "degraded",
                 phase, status, error_source_kind = source.map(crate::error::source_kind),
                 snapshot_version = fields.snapshot_version,
                 backend = fields.backend.map(backend_name),
@@ -227,7 +311,7 @@ impl Operation {
             let fields = self.context.fields();
             tracing::info!(target: TARGET,
                 event = self.kind.event(outcome), operation = self.kind.name(),
-                operation_id = self.id, plan_id = self.plan_id(), outcome = outcome.as_str(),
+                operation_id = self.id, plan_id = fields.plan_id, outcome = outcome.as_str(),
                 elapsed_micros = self.started.elapsed().as_micros(),
                 selection = fields.selection,
                 requested_snapshot_version = fields.requested_snapshot_version,

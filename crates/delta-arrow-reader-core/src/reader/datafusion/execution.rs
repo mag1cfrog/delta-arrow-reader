@@ -43,7 +43,7 @@ use datafusion::{
         filter_pushdown::{
             ChildPushdownResult, FilterPushdownPhase, FilterPushdownPropagation, PushedDown,
         },
-        stream::{EmptyRecordBatchStream, RecordBatchStreamAdapter},
+        stream::RecordBatchStreamAdapter,
     },
 };
 use futures_util::{StreamExt, stream};
@@ -63,6 +63,9 @@ use crate::reader::backend::direct_parquet::{
 use crate::{
     DeltaReaderError, DeltaScanMetrics, DeltaScanMetricsSnapshot, ParquetReaderBackend,
     delta::kernel::DeltaKernelPredicate,
+    operation_tracing::{
+        Operation, OperationFields, OperationKind, StreamOperation, StreamOutcome,
+    },
     reader::{
         delta_kernel_executor,
         metrics::saturating_fetch_add,
@@ -311,6 +314,7 @@ pub(crate) fn create_datafusion_execution_plan(
     range_read_estimator: Arc<ParquetRangeReadEstimator>,
     metrics: ScanMetrics,
     intra_file_repartitioning: IntraFileRepartitioning,
+    plan_id: u64,
 ) -> Arc<dyn ExecutionPlan> {
     Arc::new(DeltaScanExec::new(
         reader_plan,
@@ -319,11 +323,13 @@ pub(crate) fn create_datafusion_execution_plan(
         range_read_estimator,
         metrics,
         intra_file_repartitioning,
+        plan_id,
     ))
 }
 
 #[derive(Clone)]
 struct DeltaScanExec {
+    plan_id: u64,
     reader_plan: Arc<DeltaScanPlan>,
     schema: SchemaRef,
     output_projection: Option<Arc<[usize]>>,
@@ -348,6 +354,7 @@ impl DeltaScanExec {
         range_read_estimator: Arc<ParquetRangeReadEstimator>,
         metrics: ScanMetrics,
         intra_file_repartitioning: IntraFileRepartitioning,
+        plan_id: u64,
     ) -> Self {
         let schema = datafusion_plan.projection.output_schema;
         let output_projection = datafusion_plan.projection.output_projection.map(Arc::from);
@@ -359,6 +366,7 @@ impl DeltaScanExec {
         );
 
         Self {
+            plan_id,
             reader_plan: Arc::new(reader_plan),
             schema,
             output_projection,
@@ -372,6 +380,19 @@ impl DeltaScanExec {
             parquet_metadata_cache: None,
             file_tasks_repartitioned: false,
         }
+    }
+
+    fn start_plan_operation(&self, kind: OperationKind) -> Operation {
+        Operation::start(
+            kind,
+            OperationFields {
+                plan_id: Some(self.plan_id),
+                snapshot_version: Some(self.reader_plan.snapshot_version),
+                backend: Some(self.reader_plan.execution_options.parquet_backend()),
+                partition_count: Some(self.properties.output_partitioning().partition_count()),
+                ..OperationFields::default()
+            },
+        )
     }
 
     fn with_dynamic_filters(
@@ -440,7 +461,7 @@ fn repartition_file_tasks(
     target_partitions: usize,
     minimum_total_bytes: usize,
     policy: IntraFileRepartitioning,
-) -> DataFusionResult<Option<Vec<DeltaScanPartition>>> {
+) -> Result<Option<Vec<DeltaScanPartition>>, DeltaReaderError> {
     if target_partitions == 0 {
         return Err(adapter_error("scan_partition_target_must_be_positive"));
     }
@@ -468,7 +489,7 @@ fn repartition_file_tasks(
 
 fn file_groups_from_partitions(
     partitions: &[DeltaScanPartition],
-) -> DataFusionResult<Option<Vec<FileGroup>>> {
+) -> Result<Option<Vec<FileGroup>>, DeltaReaderError> {
     let mut groups = Vec::with_capacity(partitions.len());
     for partition in partitions {
         let mut files = Vec::with_capacity(partition.file_tasks.len());
@@ -485,7 +506,7 @@ fn file_groups_from_partitions(
 
 fn partitioned_file_from_task(
     task: &DeltaScanFileTask,
-) -> DataFusionResult<Option<PartitionedFile>> {
+) -> Result<Option<PartitionedFile>, DeltaReaderError> {
     let Some(file_size) = task.file_size.filter(|size| *size > 0) else {
         return Ok(None);
     };
@@ -507,20 +528,22 @@ fn partitioned_file_from_task(
 
 fn partitions_from_file_groups(
     groups: Vec<FileGroup>,
-) -> DataFusionResult<Vec<DeltaScanPartition>> {
+) -> Result<Vec<DeltaScanPartition>, DeltaReaderError> {
     let mut partitions = Vec::with_capacity(groups.len());
     for group in groups {
         let tasks = group
             .into_inner()
             .into_iter()
             .map(task_from_partitioned_file)
-            .collect::<DataFusionResult<Vec<_>>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
         partitions.push(DeltaScanPartition { file_tasks: tasks });
     }
     Ok(partitions)
 }
 
-fn task_from_partitioned_file(file: PartitionedFile) -> DataFusionResult<DeltaScanFileTask> {
+fn task_from_partitioned_file(
+    file: PartitionedFile,
+) -> Result<DeltaScanFileTask, DeltaReaderError> {
     let mut task = file
         .extension::<DeltaScanFileTask>()
         .cloned()
@@ -589,13 +612,22 @@ impl ExecutionPlan for DeltaScanExec {
         self: Arc<Self>,
         children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> DataFusionResult<Arc<dyn ExecutionPlan>> {
-        if children.is_empty() {
+        let operation = self.start_plan_operation(OperationKind::DataFusionReplaceChildren);
+        let result: Result<Arc<dyn ExecutionPlan>, _> = if children.is_empty() {
             Ok(self)
         } else {
-            Err(DataFusionError::Internal(
-                "DeltaScanExec does not accept child execution plans".to_owned(),
-            ))
-        }
+            Err(DeltaReaderError::DataFusionAdapter {
+                reason: "scan_children_not_supported",
+                source: Box::new(DataFusionError::Internal(
+                    "DeltaScanExec does not accept child execution plans".to_owned(),
+                )),
+            })
+        };
+        // Keep this callback's native DataFusion error after recording core diagnostics.
+        operation.finish(result).map_err(|error| match error {
+            DeltaReaderError::DataFusionAdapter { source, .. } => *source,
+            error => datafusion_error(error),
+        })
     }
 
     fn repartitioned(
@@ -603,26 +635,32 @@ impl ExecutionPlan for DeltaScanExec {
         _datafusion_target_partitions: usize,
         config: &ConfigOptions,
     ) -> DataFusionResult<Option<Arc<dyn ExecutionPlan>>> {
-        if self.file_tasks_repartitioned
-            || self.reader_plan.execution_options.parquet_backend() != ParquetReaderBackend::Direct
-        {
-            return Ok(None);
-        }
-        // Scan planning already applied the provider override and resource caps.
-        let target_partitions = self
-            .reader_plan
-            .partition_target_diagnostic
-            .target_partitions;
-        let Some(partitions) = repartition_file_tasks(
-            &self.reader_plan.partitions,
-            target_partitions,
-            config.optimizer.repartition_file_min_size,
-            self.intra_file_repartitioning,
-        )?
-        else {
-            return Ok(None);
-        };
-        Ok(Some(self.with_repartitioned_partitions(partitions)))
+        let operation = self.start_plan_operation(OperationKind::DataFusionRepartition);
+        let result = (|| {
+            if self.file_tasks_repartitioned
+                || self.reader_plan.execution_options.parquet_backend()
+                    != ParquetReaderBackend::Direct
+            {
+                return Ok(None);
+            }
+            // Scan planning already applied the provider override and resource caps.
+            let target_partitions = self
+                .reader_plan
+                .partition_target_diagnostic
+                .target_partitions;
+            let Some(partitions) = repartition_file_tasks(
+                &self.reader_plan.partitions,
+                target_partitions,
+                config.optimizer.repartition_file_min_size,
+                self.intra_file_repartitioning,
+            )?
+            else {
+                return Ok(None);
+            };
+            operation.context().planned(partitions.len().max(1));
+            Ok(Some(self.with_repartitioned_partitions(partitions)))
+        })();
+        operation.finish(result).map_err(datafusion_error)
     }
 
     fn execute(
@@ -630,50 +668,91 @@ impl ExecutionPlan for DeltaScanExec {
         partition: usize,
         context: Arc<TaskContext>,
     ) -> DataFusionResult<SendableRecordBatchStream> {
-        if partition >= self.properties.output_partitioning().partition_count() {
-            return Err(adapter_error("scan_partition_index_out_of_range"));
-        }
-        if self.reader_plan.partitions.is_empty() {
-            return Ok(Box::pin(EmptyRecordBatchStream::new(Arc::clone(
-                &self.schema,
-            ))));
-        }
-
-        let configured_batch_size_rows = context.session_config().batch_size();
-        self.metrics
-            .record_configured_batch_size_rows(configured_batch_size_rows);
-        let admission = dynamic_partition_admission_policy(
-            self.metrics.clone(),
-            Arc::clone(&self.dynamic_filters),
+        let operation = StreamOperation::start_partition(
+            self.plan_id,
+            self.reader_plan.snapshot_version,
+            self.reader_plan.execution_options.parquet_backend(),
+            self.properties.output_partitioning().partition_count(),
+            partition,
         );
-        let executor = match self.reader_plan.execution_options.parquet_backend() {
-            ParquetReaderBackend::Direct => direct_parquet_file_executor(
-                &self.reader_plan,
-                Some(configured_batch_size_rows),
-                self.exact_row_predicate.clone(),
-                Arc::clone(&self.range_read_estimator),
-                self.parquet_metadata_cache.clone(),
-            ),
-            ParquetReaderBackend::DeltaKernel => {
-                delta_kernel_executor(&self.reader_plan, Arc::clone(&self.range_read_estimator))
+        let setup_result = (|| {
+            if partition >= self.properties.output_partitioning().partition_count() {
+                return Err(adapter_error("scan_partition_index_out_of_range"));
+            }
+            if self.reader_plan.partitions.is_empty() {
+                return Ok(None);
+            }
+
+            let configured_batch_size_rows = context.session_config().batch_size();
+            self.metrics
+                .record_configured_batch_size_rows(configured_batch_size_rows);
+            let admission = dynamic_partition_admission_policy(
+                self.metrics.clone(),
+                Arc::clone(&self.dynamic_filters),
+            );
+            let executor = match self.reader_plan.execution_options.parquet_backend() {
+                ParquetReaderBackend::Direct => direct_parquet_file_executor(
+                    &self.reader_plan,
+                    Some(configured_batch_size_rows),
+                    self.exact_row_predicate.clone(),
+                    Arc::clone(&self.range_read_estimator),
+                    self.parquet_metadata_cache.clone(),
+                ),
+                ParquetReaderBackend::DeltaKernel => {
+                    delta_kernel_executor(&self.reader_plan, Arc::clone(&self.range_read_estimator))
+                }
+            };
+            DeltaScanScheduler::new_with_limiter(
+                Arc::clone(&self.reader_plan),
+                Arc::clone(&self.limiter),
+            )
+            .partition_stream(partition, admission, executor)
+            .map(Some)
+        })();
+        let partition_stream = match setup_result {
+            Ok(partition_stream) => partition_stream,
+            Err(error) => {
+                operation.finish(StreamOutcome::Failed(&error), None);
+                return Err(datafusion_error(error));
             }
         };
-        let stream = DeltaScanScheduler::new_with_limiter(
-            Arc::clone(&self.reader_plan),
-            Arc::clone(&self.limiter),
-        )
-        .partition_stream(partition, admission, executor)
-        .map_err(datafusion_error)?;
         let schema = Arc::clone(&self.schema);
         let projection = self.output_projection.clone();
         let stream = stream::unfold(
-            (Some(stream), projection),
-            |(stream, projection)| async move {
-                let mut stream = stream?;
-                let result = stream.next().await?;
-                let result = finalize_output_batch(result, projection.as_deref());
-                let stream = result.is_ok().then_some(stream);
-                Some((result, (stream, projection)))
+            Some((partition_stream, projection, operation)),
+            |state| async move {
+                let (mut partition_stream, projection, mut operation) = state?;
+                let result = match partition_stream.as_mut() {
+                    Some(partition_stream) => partition_stream.next().await,
+                    None => None,
+                };
+                let Some(result) = result else {
+                    let outcome = if partition_stream.as_ref().is_some_and(|s| s.is_cancelled()) {
+                        StreamOutcome::Cancelled
+                    } else {
+                        StreamOutcome::Eof
+                    };
+                    drop(partition_stream);
+                    operation.finish(outcome, None);
+                    return None;
+                };
+                match finalize_output_batch(result, projection.as_deref()) {
+                    Ok(batch) => {
+                        operation.record_output();
+                        Some((Ok(batch), Some((partition_stream, projection, operation))))
+                    }
+                    Err(error) => {
+                        drop(partition_stream);
+                        let outcome = match &error {
+                            DeltaReaderError::Cancelled {
+                                reason: "scan_execution_cancelled",
+                            } => StreamOutcome::Cancelled,
+                            _ => StreamOutcome::Failed(&error),
+                        };
+                        operation.finish(outcome, None);
+                        Some((Err(datafusion_error(error)), None))
+                    }
+                }
             },
         );
 
@@ -802,13 +881,11 @@ fn project_output_batch(
 fn finalize_output_batch(
     result: Result<RecordBatch, DeltaReaderError>,
     projection: Option<&[usize]>,
-) -> DataFusionResult<RecordBatch> {
-    let batch = result.map_err(datafusion_error)?;
-    project_output_batch(batch, projection).map_err(|source| {
-        datafusion_error(DeltaReaderError::DataFusionAdapter {
-            reason: "scan_output_projection_failed",
-            source: Box::new(DataFusionError::from(source)),
-        })
+) -> Result<RecordBatch, DeltaReaderError> {
+    let batch = result?;
+    project_output_batch(batch, projection).map_err(|source| DeltaReaderError::DataFusionAdapter {
+        reason: "scan_output_projection_failed",
+        source: Box::new(DataFusionError::from(source)),
     })
 }
 
@@ -816,11 +893,11 @@ fn datafusion_error(error: DeltaReaderError) -> DataFusionError {
     DataFusionError::External(Box::new(error))
 }
 
-fn adapter_error(reason: &'static str) -> DataFusionError {
-    datafusion_error(DeltaReaderError::DataFusionAdapter {
+fn adapter_error(reason: &'static str) -> DeltaReaderError {
+    DeltaReaderError::DataFusionAdapter {
         reason,
         source: Box::new(DataFusionError::Execution(reason.to_owned())),
-    })
+    }
 }
 
 #[cfg(test)]
@@ -1099,11 +1176,311 @@ mod tests {
             Arc::default(),
             metrics,
             intra_file_repartitioning,
+            0,
         ))
     }
 
     fn session(batch_size: usize) -> SessionContext {
         SessionContext::new_with_config(SessionConfig::new().with_batch_size(batch_size))
+    }
+
+    #[tokio::test]
+    async fn repartition_failures_keep_typed_reasons_and_leave_the_plan_usable() -> TestResult {
+        use crate::{WarmupMode, test_tracing::Collector};
+        use tracing::{Level, subscriber::with_default};
+
+        let fixture = TestTable::partitioned("secret-repartition-errors")?;
+        let table = DeltaTableBuilder::new(fixture.uri())
+            .with_warmup(WarmupMode::None)
+            .load_table()
+            .await?;
+        let provider = DeltaTableProvider::try_new(
+            table,
+            ScanOptions {
+                target_partitions: Some(4),
+                ..ScanOptions::default()
+            },
+        )?;
+        let context = session(2);
+        let original = provider.scan(&context.state(), None, &[], None).await?;
+        let scan = original.downcast_ref::<DeltaScanExec>().unwrap();
+        let mut identities = HashSet::new();
+        for level in [Level::WARN, Level::ERROR, Level::DEBUG] {
+            for reason in [
+                "scan_partition_target_must_be_positive",
+                "scan_file_range_invalid",
+            ] {
+                let mut invalid = scan.clone();
+                let reader = Arc::make_mut(&mut invalid.reader_plan);
+                if reason == "scan_partition_target_must_be_positive" {
+                    reader.partition_target_diagnostic.target_partitions = 0;
+                } else {
+                    reader.partitions[0].file_tasks[0].parquet_byte_range = Some(1..1);
+                }
+                let before = scan.metrics.snapshot().reader_metrics;
+                let collector = Collector::new(level);
+                let error = with_default(collector.clone(), || {
+                    invalid.repartitioned(4, &ConfigOptions::default())
+                })
+                .unwrap_err();
+                let DataFusionError::External(source) = error else {
+                    panic!("lost reader error wrapper");
+                };
+                let error = source.downcast_ref::<DeltaReaderError>().unwrap();
+                assert_eq!(error.reason(), reason);
+                let DeltaReaderError::DataFusionAdapter { source, .. } = error else {
+                    panic!("lost adapter error");
+                };
+                assert!(
+                    matches!(source.as_ref(), DataFusionError::Execution(message) if message == reason)
+                );
+                let events = collector.events();
+                let failures: Vec<_> = events
+                    .iter()
+                    .filter(|event| event.level == Level::ERROR)
+                    .collect();
+                assert_eq!(failures.len(), 1, "{events:?}");
+                let event = failures[0];
+                assert_eq!(event.fields["event"], "datafusion_repartition.failed");
+                assert_eq!(event.fields["error_phase"], error.phase().as_str());
+                assert_eq!(event.fields["error_code"], error.code());
+                assert_eq!(event.fields["error_reason"], reason);
+                assert_eq!(event.fields["error_source_kind"], "datafusion_execution");
+                assert_eq!(event.fields["plan_id"], scan.plan_id);
+                assert_eq!(event.fields["snapshot_version"], 0);
+                assert_eq!(event.fields["backend"], "Direct");
+                assert_eq!(event.fields["partition_count"], 2);
+                assert!(identities.insert(event.fields["operation_id"].as_u64().unwrap()));
+                assert!(
+                    !events
+                        .iter()
+                        .any(|event| event.fields.get("outcome") == Some(&json!("completed")))
+                );
+                assert!(!format!("{:?}", collector.records()).contains("secret"));
+                assert_eq!(scan.metrics.snapshot().reader_metrics, before);
+            }
+        }
+        let mut actual =
+            ids(&datafusion::physical_plan::collect(original, context.task_ctx()).await?);
+        actual.sort_unstable();
+        assert_eq!(actual, [1, 2, 3, 4]);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn dynamic_pruning_fallback_keeps_rows_and_safe_debug_causes() -> TestResult {
+        use crate::{WarmupMode, test_tracing::Collector};
+        use tracing::{Level, instrument::WithSubscriber, subscriber::with_default};
+
+        for backend in [
+            ParquetReaderBackend::Direct,
+            ParquetReaderBackend::DeltaKernel,
+        ] {
+            for level in [Level::WARN, Level::DEBUG] {
+                for cause in ["datafusion_internal", "divide_by_zero"] {
+                    let fixture = TestTable::partitioned("secret-pruning-fallback")?;
+                    let table = DeltaTableBuilder::new(fixture.uri())
+                        .with_warmup(WarmupMode::None)
+                        .load_table()
+                        .await?;
+                    let provider = DeltaTableProvider::try_new(
+                        table,
+                        ScanOptions {
+                            execution_options: DeltaScanExecutionOptions::default()
+                                .with_parquet_backend(backend),
+                            target_partitions: Some(1),
+                            ..ScanOptions::default()
+                        },
+                    )?;
+                    let context = session(2);
+                    let plan = provider.scan(&context.state(), None, &[], None).await?;
+                    let collector = Collector::new(level);
+                    let rejected = with_default(collector.clone(), || {
+                        plan.handle_child_pushdown_result(
+                            FilterPushdownPhase::Post,
+                            hook_input(vec![dynamic_filter("secret-missing-column", 99)]),
+                            &ConfigOptions::default(),
+                        )
+                    })?;
+                    assert!(matches!(rejected.filters.as_slice(), [PushedDown::No]));
+                    assert!(rejected.updated_node.is_none());
+                    assert!(collector.events().is_empty());
+                    let dynamic = dynamic_filter("region", 1);
+                    let updated = plan
+                        .handle_child_pushdown_result(
+                            FilterPushdownPhase::Post,
+                            hook_input(vec![dynamic.clone()]),
+                            &ConfigOptions::default(),
+                        )?
+                        .updated_node
+                        .unwrap();
+                    assert_eq!(
+                        updated.downcast_ref::<DeltaScanExec>().unwrap().plan_id,
+                        plan.downcast_ref::<DeltaScanExec>().unwrap().plan_id
+                    );
+                    let expression: Arc<dyn datafusion::physical_plan::PhysicalExpr> =
+                        if cause == "datafusion_internal" {
+                            Arc::new(Column::new("secret-missing-column", 99))
+                        } else {
+                            Arc::new(BinaryExpr::new(
+                                physical_lit(1_i32),
+                                Operator::Divide,
+                                physical_lit(0_i32),
+                            ))
+                        };
+                    dynamic.update(expression)?;
+                    let batches = datafusion::physical_plan::collect(
+                        Arc::clone(&updated),
+                        context.task_ctx(),
+                    )
+                    .with_subscriber(collector.clone())
+                    .await?;
+                    assert_eq!(ids(&batches), [1, 2, 3, 4]);
+                    let metrics = collect_scan_metrics(updated.as_ref())[0].snapshot();
+                    assert_eq!(metrics.dynamic_partition_tasks_kept_unevaluable_filter, 2);
+                    assert_eq!(metrics.reader_metrics.file_tasks_completed, 2);
+                    let events = collector.events();
+                    assert!(
+                        events
+                            .iter()
+                            .all(|event| event.level != Level::WARN && event.level != Level::ERROR)
+                    );
+                    if level == Level::WARN {
+                        assert!(events.is_empty());
+                    } else {
+                        let fallbacks: Vec<_> = events
+                            .iter()
+                            .filter(|event| {
+                                event.fields.get("event")
+                                    == Some(&json!("dynamic_partition_pruning.kept"))
+                            })
+                            .collect();
+                        assert_eq!(fallbacks.len(), 2, "{events:?}");
+                        for event in fallbacks {
+                            assert_eq!(event.level, Level::DEBUG);
+                            assert_eq!(event.fields["phase"], "evaluate");
+                            assert_eq!(event.fields["reason"], "evaluation_failed");
+                            assert_eq!(event.fields["error_source_kind"], cause);
+                        }
+                    }
+                    assert!(!format!("{:?}", collector.records()).contains("secret"));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn execution_traces_projection_and_transform_failures_before_wrapping() -> TestResult {
+        use crate::{
+            WarmupMode, delta::kernel::KernelPhysicalToLogicalTransform, test_tracing::Collector,
+        };
+        use delta_kernel::expressions::{ColumnName, Expression};
+        use tracing::{Level, instrument::WithSubscriber, subscriber::with_default};
+
+        for backend in [
+            ParquetReaderBackend::Direct,
+            ParquetReaderBackend::DeltaKernel,
+        ] {
+            for level in [Level::ERROR, Level::DEBUG] {
+                for projection_failure in [true, false] {
+                    let fixture = TestTable::partitioned("secret-transform-projection")?;
+                    let table = DeltaTableBuilder::new(fixture.uri())
+                        .with_warmup(WarmupMode::None)
+                        .load_table()
+                        .await?;
+                    let provider = DeltaTableProvider::try_new(
+                        table,
+                        ScanOptions {
+                            target_partitions: Some(1),
+                            execution_options: DeltaScanExecutionOptions::default()
+                                .with_parquet_backend(backend),
+                            ..ScanOptions::default()
+                        },
+                    )?;
+                    let context = session(2);
+                    let plan = provider.scan(&context.state(), None, &[], None).await?;
+                    let mut plan = plan.downcast_ref::<DeltaScanExec>().unwrap().clone();
+                    if projection_failure {
+                        plan.output_projection = Some(Arc::from([usize::MAX]));
+                    } else {
+                        Arc::make_mut(&mut plan.reader_plan).partitions[0].file_tasks[1]
+                            .transform = KernelPhysicalToLogicalTransform::from_test_expression(
+                            Expression::Column(ColumnName::new(["secret_missing_column"])),
+                        );
+                    }
+                    let collector = Collector::new(level);
+                    let mut stream =
+                        with_default(collector.clone(), || plan.execute(0, context.task_ctx()))?;
+                    if !projection_failure {
+                        assert_eq!(
+                            stream
+                                .next()
+                                .with_subscriber(collector.clone())
+                                .await
+                                .unwrap()?
+                                .num_rows(),
+                            2
+                        );
+                    }
+                    let error = stream
+                        .next()
+                        .with_subscriber(collector.clone())
+                        .await
+                        .unwrap()
+                        .unwrap_err();
+                    let DataFusionError::External(source) = error else {
+                        panic!("missing typed external error");
+                    };
+                    let error = source.downcast_ref::<DeltaReaderError>().unwrap();
+                    assert!(error.source().is_some());
+                    if projection_failure {
+                        let DeltaReaderError::DataFusionAdapter { source, reason } = error else {
+                            panic!("missing typed projection error");
+                        };
+                        assert_eq!(*reason, "scan_output_projection_failed");
+                        assert!(matches!(source.as_ref(), DataFusionError::ArrowError(..)));
+                    } else {
+                        assert_eq!(error.code(), "physical_to_logical_transform");
+                    }
+                    // A caller may stop polling after Err; outstanding file permits must be released.
+                    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                        while plan.limiter.active_file_reads() != 0 {
+                            tokio::task::yield_now().await;
+                        }
+                    })
+                    .await?;
+                    let records = collector.records();
+                    let errors: Vec<_> = records
+                        .iter()
+                        .filter(|event| event.level == Level::ERROR)
+                        .collect();
+                    assert_eq!(errors.len(), 1, "{records:?}");
+                    let event = errors[0];
+                    assert_eq!(
+                        event.fields["event"],
+                        "datafusion_partition_execution.failed"
+                    );
+                    assert_eq!(event.fields["error_phase"], error.phase().as_str());
+                    assert_eq!(event.fields["error_code"], error.code());
+                    assert_eq!(event.fields["error_reason"], error.reason());
+                    assert_eq!(
+                        event.fields["error_source_kind"].as_str(),
+                        error.source_kind()
+                    );
+                    assert_eq!(event.fields["plan_id"], plan.plan_id);
+                    assert_eq!(event.fields["partition"], 0);
+                    assert_eq!(event.fields["output_started"], !projection_failure);
+                    assert!(!format!("{records:?}").contains("secret"));
+                    let event_count = collector.events().len();
+                    assert!(stream.next().await.is_none());
+                    assert!(stream.next().await.is_none());
+                    drop(stream);
+                    assert_eq!(collector.events().len(), event_count);
+                }
+            }
+        }
+        Ok(())
     }
 
     #[tokio::test]
@@ -1203,6 +1580,129 @@ mod tests {
                 assert_eq!(probe.range_call_count(), requests_before_recovery + 3_180);
             }
         }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn provider_recovery_warns_once_and_preserves_results() -> TestResult {
+        use crate::reader::backend::direct_parquet::tests::network_warmup_fixture;
+        use crate::test_tracing::Collector;
+        use tracing::{Level, instrument::WithSubscriber};
+
+        for level in [Level::WARN, Level::INFO] {
+            let fixture = TestTable::partitioned("provider-recovery-warning")?;
+            let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
+            let original = table.range_read_estimator();
+            let (warmup, probe) = network_warmup_fixture().await?;
+            probe.fail_range(1);
+            table.range_read_state.defer_network_warmup(warmup).await;
+            let provider = DeltaTableProvider::try_new(table.clone(), ScanOptions::default())?;
+            let context = SessionContext::new();
+            let collector = Collector::new(level);
+            let mut previous_requests = None;
+            for _ in 0..2 {
+                let plan = provider
+                    .scan(&context.state(), None, &[col("id").gt(lit(1_i32))], None)
+                    .with_subscriber(collector.clone())
+                    .await?;
+                let mut actual =
+                    ids(&datafusion::physical_plan::collect(plan, context.task_ctx()).await?);
+                actual.sort_unstable();
+                assert_eq!(actual, [2, 3, 4]);
+                if let Some(previous) = previous_requests {
+                    assert_eq!(probe.range_call_count(), previous);
+                }
+                previous_requests = Some(probe.range_call_count());
+            }
+            assert!(Arc::ptr_eq(&original, &table.range_read_estimator()));
+            let events = collector.events();
+            assert!(events.iter().all(|event| event.level != Level::ERROR));
+            let warnings: Vec<_> = events
+                .iter()
+                .filter(|event| event.level == Level::WARN)
+                .collect();
+            assert_eq!(warnings.len(), 1, "{events:?}");
+            let warning = warnings[0];
+            assert_eq!(warning.fields["event"], "network_warmup.degraded");
+            assert_eq!(warning.fields["operation"], "provider_scan");
+            assert_eq!(warning.fields["phase"], "recovery");
+            assert_eq!(warning.fields["status"], "read_failed");
+            assert_eq!(warning.fields["snapshot_version"], 0);
+            assert_eq!(warning.fields["backend"], "Direct");
+            assert_eq!(warning.fields["plan_id"], warning.fields["operation_id"]);
+            assert_eq!(warning.fields["error_source_kind"], "unknown");
+            if level == Level::INFO {
+                assert!(
+                    events
+                        .iter()
+                        .any(|event| event.fields["event"] == "provider_scan.completed"
+                            && event.fields["operation_id"] == warning.fields["operation_id"])
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn provider_recovery_setup_panic_retains_partition_context_and_join_error() -> TestResult
+    {
+        use crate::reader::backend::direct_parquet::tests::network_warmup_fixture;
+        use crate::test_tracing::Collector;
+        use tracing::{Level, instrument::WithSubscriber};
+
+        let fixture = TestTable::partitioned("provider-recovery-setup-failure")?;
+        let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
+        let (warmup, probe) = network_warmup_fixture().await?;
+        probe.fail_range(1);
+        table.range_read_state.defer_network_warmup(warmup).await;
+        let provider = DeltaTableProvider::try_new(table, ScanOptions::default())?;
+        let context = SessionContext::new();
+        let mut collector = Collector::new(Level::DEBUG);
+        let observed = collector.clone();
+        collector.probe = Some(Arc::new(move || {
+            assert!(
+                !observed.records().last().is_some_and(
+                    |record| record.is_span && record.name == "Delta scan execution setup"
+                ),
+                "injected setup panic"
+            );
+        }));
+        let error = provider
+            .scan(&context.state(), None, &[col("id").gt(lit(1_i32))], None)
+            .with_subscriber(collector.clone())
+            .await
+            .expect_err("setup worker must fail");
+        let DataFusionError::External(source) = error else {
+            return Err("missing typed reader error".into());
+        };
+        let reader = source
+            .downcast_ref::<DeltaReaderError>()
+            .ok_or("missing reader error")?;
+        assert_eq!(
+            reader.reason(),
+            "datafusion_scan_execution_setup_task_failed"
+        );
+        assert!(
+            reader
+                .source()
+                .and_then(|source| source.downcast_ref::<tokio::task::JoinError>())
+                .is_some_and(tokio::task::JoinError::is_panic)
+        );
+        let events = collector.events();
+        let failures: Vec<_> = events
+            .iter()
+            .filter(|event| event.level == Level::ERROR)
+            .collect();
+        assert_eq!(failures.len(), 1);
+        assert_eq!(failures[0].fields["event"], "provider_scan.failed");
+        assert_eq!(failures[0].fields["error_source_kind"], "worker_panicked");
+        assert_eq!(failures[0].fields["partition_count"], 2);
+        assert!(
+            !events
+                .iter()
+                .any(|event| event.fields.get("event") == Some(&json!("provider_scan.completed")))
+        );
+        collector.assert_balanced();
         Ok(())
     }
 
