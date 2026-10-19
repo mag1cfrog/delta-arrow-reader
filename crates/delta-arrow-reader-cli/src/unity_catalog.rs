@@ -323,11 +323,8 @@ impl Location {
                     })
                     .filter(|s| !s.is_empty())
                     .ok_or(Error::Unsupported)?;
-                let (container, path) = url
-                    .path()
-                    .trim_start_matches('/')
-                    .split_once('/')
-                    .ok_or(Error::Unsupported)?;
+                let path = url.path().trim_start_matches('/');
+                let (container, path) = path.split_once('/').unwrap_or((path, ""));
                 if container.is_empty() {
                     return Err(Error::Response);
                 }
@@ -777,6 +774,26 @@ mod tests {
             Err(Error::Region)
         );
         validate_options(&DeltaStorageOptions::new(), Some(Cloud::Azure)).unwrap();
+    }
+
+    #[test]
+    fn azure_container_root_locations_are_equivalent() {
+        let expected = "abfss://container@account.dfs.core.windows.net/";
+        for location in [
+            "https://account.blob.core.windows.net/container",
+            "https://account.blob.core.windows.net/container/",
+            "https://account.dfs.core.windows.net/container",
+            "https://account.dfs.core.windows.net/container/",
+            expected,
+        ] {
+            assert_eq!(Location::parse(location).unwrap().url.as_str(), expected);
+        }
+        for location in [
+            "https://account.blob.core.windows.net",
+            "https://account.dfs.core.windows.net/",
+        ] {
+            assert!(Location::parse(location).is_err(), "{location}");
+        }
     }
 
     #[test]
