@@ -571,10 +571,9 @@ mod tests {
             let truncated = request(&client, &server.origin, "/truncated")
                 .await
                 .unwrap();
-            assert_eq!(
-                truncated.into_body().bytes().await.unwrap_err().kind(),
-                HttpErrorKind::Interrupted
-            );
+            let error = truncated.into_body().bytes().await.unwrap_err();
+            assert_eq!(error.kind(), HttpErrorKind::Interrupted);
+            assert_eq!(crate::error::source_kind(&error), "unexpected_eof");
             healthy(&client, &server.origin).await;
 
             let missing = request(&client, &server.origin, "/missing").await.unwrap();

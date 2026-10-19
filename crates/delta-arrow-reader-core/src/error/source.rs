@@ -177,7 +177,7 @@ pub(crate) fn source_kind(mut error: &(dyn Error + 'static)) -> &'static str {
         if let Some(http) = error.downcast_ref::<HttpError>() {
             match http.kind() {
                 HttpErrorKind::Timeout => return "timeout",
-                HttpErrorKind::Interrupted => return "interrupted",
+                HttpErrorKind::Interrupted => fallback = "interrupted",
                 HttpErrorKind::Connect => fallback = "http_connect",
                 HttpErrorKind::Request => fallback = "http_request",
                 HttpErrorKind::Decode => fallback = "http_decode",
@@ -401,6 +401,24 @@ mod tests {
             source_kind(&ParquetError::EOF("secret-path".into())),
             "unexpected_eof"
         );
+    }
+
+    #[test]
+    fn interrupted_http_errors_preserve_typed_causes_and_fallback() {
+        for (kind, expected) in [
+            (io::ErrorKind::ConnectionReset, "connection_reset"),
+            (io::ErrorKind::ConnectionAborted, "connection_aborted"),
+            (io::ErrorKind::BrokenPipe, "broken_pipe"),
+            (io::ErrorKind::UnexpectedEof, "unexpected_eof"),
+        ] {
+            let error = snapshot_error(HttpError::new(
+                HttpErrorKind::Interrupted,
+                io::Error::new(kind, Unprintable),
+            ));
+            assert_eq!(error.source_kind(), Some(expected));
+        }
+        let error = snapshot_error(HttpError::new(HttpErrorKind::Interrupted, Unprintable));
+        assert_eq!(error.source_kind(), Some("interrupted"));
     }
 
     #[test]
