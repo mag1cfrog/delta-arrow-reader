@@ -829,7 +829,11 @@ fn snapshot_error_diagnostics_distinguish_missing_and_corrupt_logs() -> TestResu
         let options = DeltaScanExecutionOptions::new().with_parquet_backend(backend);
         for (fixture, selection, expected) in [
             (&empty, DeltaSnapshotSelection::Latest, "unknown"),
-            (&valid, DeltaSnapshotSelection::Version(99), "unknown"),
+            (
+                &valid,
+                DeltaSnapshotSelection::Version(99),
+                "missing_version",
+            ),
             (&corrupt, DeltaSnapshotSelection::Latest, "arrow_json"),
         ] {
             let error = runtime
@@ -845,16 +849,15 @@ fn snapshot_error_diagnostics_distinguish_missing_and_corrupt_logs() -> TestResu
             assert_eq!(error.code(), "snapshot_load");
             assert_eq!(error.reason(), "snapshot_load_failed");
             assert_eq!(error.source_kind(), Some(expected));
-            assert!(error.source().is_some());
+            let source = error
+                .source()
+                .and_then(|source| source.downcast_ref::<delta_kernel::Error>())
+                .expect("snapshot failures preserve the Kernel source");
             if expected == "unknown" {
-                // Kernel and the bounded-version adapter both expose Generic here.
-                // Revisit these expectations with the upgrade notes in error/source.rs.
-                assert!(matches!(
-                    error
-                        .source()
-                        .and_then(|source| source.downcast_ref::<delta_kernel::Error>()),
-                    Some(delta_kernel::Error::Generic(_))
-                ));
+                // Kernel 0.25 exposes an empty log as Generic; revisit on upgrade.
+                assert!(matches!(source, delta_kernel::Error::Generic(_)));
+            } else if expected == "missing_version" {
+                assert!(matches!(source, delta_kernel::Error::MissingVersion));
             }
             assert!(!format!("{error:?}").contains("secret-invalid-json"));
         }

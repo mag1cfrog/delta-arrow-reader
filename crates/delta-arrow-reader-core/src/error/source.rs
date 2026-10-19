@@ -26,8 +26,7 @@ pub(crate) fn source_kind(mut error: &(dyn Error + 'static)) -> &'static str {
         if let Some(kernel) = error.downcast_ref::<KernelError>() {
             // Kernel 0.25's generic snapshot failures stay unknown; do not parse their text.
             // Kernel 0.29 adds typed cases: https://github.com/delta-io/delta-kernel-rs/pull/3195
-            // After lifting the pins in Cargo.toml, revisit these mappings, load_snapshot's
-            // reader-owned Generic errors, and the public snapshot diagnostic test.
+            // After lifting the pins in Cargo.toml, revisit these mappings and snapshot tests.
             // Some Kernel wrappers hide or skip their inner error in Error::source().
             error = match kernel {
                 KernelError::Backtraced { source, .. } => source.as_ref(),

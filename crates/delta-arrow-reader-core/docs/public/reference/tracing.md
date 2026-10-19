@@ -54,24 +54,24 @@ category, such as `invalid_projection`.
 | DataFusion | `datafusion_plan`, `datafusion_execution`, `datafusion_internal`, `invalid_configuration`, `resources_exhausted`, `multiple_errors` |
 
 `unknown` means a source exists but exposes no recognized classification. For
-example, Kernel 0.25 reports an empty log as `Generic(String)`. The reader's
-bounded-version adapter also returns `Generic(String)` when the loaded snapshot
-does not match the requested version. Classification does not infer a type from
-these messages.
-The separate typed `MissingVersion` variant maps to `missing_version` when it is
-present. Categories such as `parquet`, `arrow`, and `worker_failed` can also
-reflect a dependency that retained a broad category but
-converted its detailed cause into a string. `multiple_errors` identifies a
-DataFusion collection without presenting its first member as the entire cause.
+example, Kernel 0.25 reports an empty log as `Generic(String)`. Classification
+does not infer a type from these messages. The reader's bounded-version adapter
+returns typed `MissingVersion` (`missing_version`) when it loads a snapshot whose
+version differs from the requested version.
 
-Kernel 0.29 adds `EmptyLog` and `MissingVersion(version)` through
+Categories such as `parquet`, `arrow`, and `worker_failed` can also reflect a
+dependency that retained a broad category but converted its detailed cause into
+a string. `multiple_errors` identifies a DataFusion collection without presenting
+its first member as the entire cause.
+
+Kernel 0.29 adds `EmptyLog` and a version-carrying `MissingVersion(version)` through
 [upstream #3195](https://github.com/delta-io/delta-kernel-rs/pull/3195).
 The dependency remains pinned because newer releases treat empty String/Binary
 partition values as non-null, tracked by
 [upstream #3260](https://github.com/delta-io/delta-kernel-rs/pull/3260).
 Once a release passes the partition regression tests, update the source mappings,
-the bounded-version adapter, and the snapshot diagnostic tests together.
-Upgrading Kernel alone does not change the reader-owned generic errors.
+the adapter's `MissingVersion` construction, and the snapshot diagnostic tests
+together.
 
 `source_chain_limit` means the traversal reached its depth bound, including a
 cyclic source implementation. It is distinct from an error with no source.
