@@ -4,9 +4,117 @@ The core emits `tracing` events. The application installs the subscriber and
 chooses filtering, formatting, and destinations. Returned `DeltaReaderError`
 values remain available without a subscriber.
 
+## Public operation events
+
+The following boundaries own their diagnostic outcome on the
+`delta_arrow_reader` target. Each invocation emits INFO `started`, then one
+terminal event: INFO `completed`, ERROR `failed`, or INFO `abandoned`.
+The event name is the family in the table followed by that outcome, for example
+`table_load.failed`.
+
+| Public boundary | `operation` | Event family | Responsibility |
+| --- | --- | --- | --- |
+| `DeltaTableBuilder::load_table` | `load_table` | `table_load` | Location/storage setup, snapshot, schema, protocol checks required by warmup, and required query metadata |
+| `DeltaTableBuilder::load_snapshot` | `load_snapshot` | `table_snapshot_load` | Warmup-option validation, location/storage setup, and the Kernel snapshot |
+| `DeltaTableSnapshot::into_table` | `into_table` | `table_conversion` | Separately requested Arrow schema conversion |
+| `DeltaTable::refresh` | `refresh` | `table_refresh` | Snapshot, schema, retained metadata, and worker completion; failure leaves the original table intact |
+| `DeltaScanBuilder::build` | `scan_planning` | `scan_planning` | Protocol/predicate validation, projection, metadata and physical planning, and optional network recovery |
+
+Async operations start on their first poll. Creating and dropping an unpolled
+future emits nothing. Dropping a pending operation records `abandoned`; it does
+not mean that its blocking work has stopped. Only the public caller's operation
+can emit its terminal event. Blocking work that finishes later cannot report that
+abandoned operation as successful. Worker panic or unexpected worker cancellation
+returned to the caller is an ERROR failure.
+Internal DEBUG phases can finish after the caller abandons the public operation;
+their completion describes that phase only.
+The drop handler does not invoke subscribers during panic unwinding. Delivery is
+not guaranteed after a subscriber panic or process abort.
+
+Internal schema conversion and metadata preparation during loading belong to the
+load operation. Their DEBUG phase events do not emit another terminal ERROR.
+Pure helpers such as `validate_protocol`, `predicate_column_type`, and fallible
+option setters return errors without an automatic ERROR event. An application
+that treats a helper failure as a failed command can use the error fields below.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `operation`, `event`, `outcome` | String | Public boundary, lifecycle event, and result |
+| `operation_id` | Unsigned 64-bit integer | Opaque process-local invocation identity; retries and concurrent calls have distinct IDs |
+| `plan_id` | Optional unsigned 64-bit integer | Planning operation's ID, also carried by its ordinary stream's existing `scan_execution.*` events |
+| `elapsed_micros` | Unsigned 128-bit integer | Monotonic wall time in microseconds since operation entry/first poll, including time waiting for workers and I/O |
+| `selection` | Optional string | `latest` or `version` for a load or refresh |
+| `requested_snapshot_version` | Optional unsigned 64-bit integer | Explicit version requested by a builder |
+| `snapshot_version` | Optional unsigned 64-bit integer | Resolved version, retained even if later schema or metadata work fails |
+| `previous_snapshot_version` | Optional unsigned 64-bit integer | Original table version during refresh |
+| `backend` | Optional string | Configured scan backend: `Direct` or `DeltaKernel`; snapshot loading itself uses Kernel in both cases |
+| `scan_metadata_source` | Optional string | Planning uses `delta_log` or `query_planning_cache` |
+| `partition_count` | Optional unsigned integer | Known planned partition count, including zero for an empty plan |
+
+Unavailable fields are not recorded as zero or the string `None`. A failed request
+for version 99 can carry `requested_snapshot_version = 99` with no resolved
+`snapshot_version`. A refresh failure after resolving version 4 can carry both
+`previous_snapshot_version = 3` and `snapshot_version = 4`.
+
+Required failure context is on the ERROR event itself. A subscriber that enables
+WARN/ERROR, or ERROR alone, does not need a DEBUG/INFO parent span to interpret
+it. Event names and the field meanings in these tables form the lifecycle
+contract. Consumers ignore additional fields; detailed profiling records and
+human message wording are not a second stable interface.
+
+## Recoverable network warmup
+
+Optional network sampling can fail while the load or plan succeeds. A timed-out
+or failed sample emits WARN `network_warmup.degraded`, with the owning
+`operation`, `operation_id`, available version/backend, and operation elapsed
+time. `phase` is `initialization` or `recovery`; `status` is `timeout` or
+`read_failed`. Failure to construct the optional partial-read transport uses
+`transport_unavailable`. Read and transport failures include `error_source_kind`
+when a typed source is available. The previous estimator remains usable.
+
+There is at most one warning per attempt: initialization and, if sampling started,
+the table's one deferred recovery attempt. Concurrent eligible scans share that
+recovery result.
+Insufficient samples, unsupported sampling, and disabled warmup are expected
+fallbacks, not warnings. Required metadata preparation is different: its failure
+fails the owning operation and emits ERROR.
+
+The detailed `delta_arrow_reader::diagnostics::network_warmup` event remains
+DEBUG. Its elapsed time covers sampling alone, and its counts describe that
+attempt, including partial work. Sampling and subscriber callbacks run outside
+the shared recovery-state lock; cancellation wakes waiting scans and consumes
+the recovery attempt. Subscribers run synchronously and must avoid waiting for
+the operation that invoked them.
+Measurements are captured before the estimator is published, so later queries
+cannot change the diagnostics for that sampling attempt.
+
+## Subscribe from Rust
+
+The application supplies its subscriber, including filtering and output policy.
+This example scopes it to one load without installing a global subscriber:
+
+```no_run
+use delta_arrow_reader::{DeltaReaderError, DeltaTable, DeltaTableBuilder};
+use tracing::{Subscriber, instrument::WithSubscriber};
+
+async fn load_with_diagnostics(
+    subscriber: impl Subscriber + Send + Sync + 'static,
+) -> Result<DeltaTable, DeltaReaderError> {
+    DeltaTableBuilder::new("/tmp/table")
+        .load_table()
+        .with_subscriber(subscriber)
+        .await
+}
+```
+
+Public operation terminal events retain the dispatch/span captured at entry or
+first poll, including on drop. They do not install a global subscriber, write a
+file, or change the returned error. Nested worker diagnostics do not yet
+consistently inherit a scoped subscriber across task handoffs.
+
 ## Error fields
 
-Existing reader failure events on the `delta_arrow_reader` target contain:
+Terminal failures and existing internal failure events contain:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -102,21 +210,27 @@ if let Err(error) = DeltaTableBuilder::new("/tmp/table").load_table().await {
 # }
 ```
 
-## Existing event coverage
+## Diagnostic coverage
 
-| Events | Error fields cover | Regression coverage |
+| Boundary or event family | Owner and safe context | Regression coverage |
 | --- | --- | --- |
-| `snapshot_load.failed` | Location/storage setup, snapshot loading, and schema conversion in the load path | Snapshot source preservation, bounded load fields, missing/corrupt snapshots through the public reader |
-| `snapshot_refresh.failed` | Snapshot/schema and retained metadata refresh | Refresh failure retains the original table and redacts source values |
-| `scan_metadata_cache_build.failed` | Required metadata preparation | Eager metadata failure through the public reader |
-| `scan_planning.failed` | Failures inside the instrumented planning path | Planning failure fields and metadata source |
-| `scan_execution.failed` | Errors returned by the ordinary batch stream | Bounded failure fields and scheduler failure/cleanup tests |
-| `provider_scan.failed`, `provider_registration.failed` | Existing DataFusion provider failure callbacks | Shared classification through typed DataFusion wrappers |
+| Early load/configuration, location/storage setup, missing/corrupt snapshots | Public load; requested version, available resolved version, typed cause | WARN/ERROR-only public tests distinguish missing version, corrupt metadata, access denial, missing object, and worker panic |
+| Schema conversion, protocol checks for warmup, required query metadata | Enclosing load, or standalone conversion; resolved version and failure phase | Public conversion/metadata failures produce one ERROR, including both Parquet backend configurations |
+| Refresh snapshot/schema/cache and task-join errors | Public refresh; previous and resolved versions remain distinct | Failed schema/cache refresh preserves the original table and its scans; successful retry remains possible |
+| Protocol/predicate/projection and physical planning | Public planning; plan identity, version, backend, metadata source | Early validation and projection failures; concurrent planning IDs linked to their streams |
+| Pure validation/configuration helpers | Return-only; fixed error reason | Invalid column/partition options and protocol checks stay quiet |
+| Optional network sampling | Enclosing load or ordinary plan; bounded warning and typed read/transport cause | Initial S3 sample failure and retained transport-initialization errors; failed/timed-out recovery warns once without changing rows or published estimator; concurrent recovery and cancellation tests |
+| `snapshot_load.*`, `snapshot_refresh.*`, `scan_metadata_cache_build.*` | Internal DEBUG phases; enclosing public operation owns ERROR | Existing phase-field tests, eager metadata tracing, source preservation |
+| Planning/transport profiling spans, automatic range planning, network sample details | DEBUG details; fixed names, numeric measurements, bounded status | Existing planning/range tests and recovery callback lock-reentry test |
+| `scan_execution.*` | Existing DEBUG ordinary stream events; plan correlation | Bounded failure fields and existing scheduler/cleanup tests |
+| `provider_scan.*`, `provider_registration.*` | Existing DataFusion DEBUG callbacks | Shared classification through typed DataFusion wrappers; optional build compatibility |
 
 The shared S3 HTTP connection driver records `error_source_kind` on its own
 target without formatting the dependency error.
 
-These failure events currently use DEBUG. They do not cover every early public
-validation exit, and task handoffs do not consistently preserve a scoped
-subscriber. They also lack per-invocation identifiers. This field reference does
-not imply complete operation lifecycles or WARN/ERROR visibility.
+Ordinary stream execution still needs a complete outcome contract for EOF, row
+limits, cancellation, partial output, and drop, plus WARN/ERROR visibility. Its
+`plan_id` links it to planning but is not a separate execution identity.
+DataFusion provider/physical-plan lifecycles and propagation of nested diagnostic
+context across workers remain separate work. The coverage table records the
+current boundaries; it does not claim complete execution or task-handoff coverage.

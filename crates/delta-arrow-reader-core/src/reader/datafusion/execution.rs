@@ -1119,7 +1119,7 @@ mod tests {
             // Inject failed calibration while keeping real Delta query execution.
             let (warmup, probe) = network_warmup_fixture().await?;
             probe.fail_range(1);
-            assert!(warmup.run("initialization", &original).await.is_none());
+            assert!(warmup.run(&original).await.estimator().is_none());
             table.range_read_state.defer_network_warmup(warmup).await;
             let requests_before_recovery = probe.range_call_count();
             let predicate = DeltaPredicate::Compare {

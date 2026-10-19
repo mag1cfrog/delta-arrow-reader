@@ -46,7 +46,9 @@ use super::{data_file_error, file_location::resolve_data_file_path};
 
 pub(crate) use self::metadata_cache::ParquetMetadataCache;
 pub(in crate::reader) use self::network_profile::ParquetRangeReadState;
-pub(crate) use self::network_profile::{NetworkWarmupPlan, ParquetRangeReadEstimator};
+pub(crate) use self::network_profile::{
+    NetworkWarmupOutcome, NetworkWarmupPlan, ParquetRangeReadEstimator,
+};
 use self::{
     intra_page::{IntraPageReader, SelectedRows, SharedSelection},
     metadata_cache::CachedParquetMetadata,
@@ -1001,17 +1003,107 @@ pub(in crate::reader) mod tests {
     }
 
     #[tokio::test]
+    async fn failed_network_recovery_warns_once_without_failing_public_scans()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use crate::test_tracing::Collector;
+        use futures_util::TryStreamExt;
+        use tracing::{Level, instrument::WithSubscriber};
+
+        for level in [
+            None,
+            Some(Level::ERROR),
+            Some(Level::WARN),
+            Some(Level::TRACE),
+        ] {
+            for timeout in [false, true] {
+                let (table, _, _root) =
+                    gated_recovery_table(TestDeletionVector::None, GateRequest::Range(0)).await?;
+                let (mut warmup, store) = network_warmup_fixture().await?;
+                if timeout {
+                    store.gate_next_range();
+                    warmup.max_duration = Duration::from_millis(10);
+                } else {
+                    store.fail_range(1);
+                }
+                let original = table.range_read_estimator();
+                table.range_read_state.defer_network_warmup(warmup).await;
+                let collector = Collector::new(level.unwrap_or(Level::ERROR));
+                let dispatch = match level {
+                    Some(_) => tracing::Dispatch::new(collector.clone()),
+                    None => tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default()),
+                };
+                async {
+                    let mut previous_requests = None;
+                    for _ in 0..2 {
+                        let batches = table
+                            .scan()
+                            .with_predicate(crate::DeltaPredicate::Compare {
+                                column: "id".into(),
+                                op: crate::DeltaComparison::Gt,
+                                value: crate::DeltaScalar::Int32(1),
+                            })
+                            .build()
+                            .await?
+                            .into_stream()
+                            .try_collect::<Vec<_>>()
+                            .await?;
+                        assert_eq!(int32_ids(&batches)?, [2, 3, 4, 5, 6]);
+                        let requests = store.range_call_count();
+                        if let Some(previous) = previous_requests {
+                            assert_eq!(requests, previous);
+                        }
+                        previous_requests = Some(requests);
+                    }
+                    Ok::<_, Box<dyn std::error::Error>>(())
+                }
+                .with_subscriber(dispatch)
+                .await?;
+                assert!(Arc::ptr_eq(&original, &table.range_read_estimator()));
+                assert!(store.range_call_count() > 0);
+                let events = collector.events();
+                assert!(events.iter().all(|event| event.level != Level::ERROR));
+                let warnings: Vec<_> = events
+                    .iter()
+                    .filter(|event| event.level == Level::WARN)
+                    .collect();
+                if level.is_none_or(|level| level == Level::ERROR) {
+                    assert!(warnings.is_empty());
+                } else {
+                    assert_eq!(warnings.len(), 1);
+                    let warning = warnings[0];
+                    assert_eq!(warning.fields["event"], "network_warmup.degraded");
+                    assert_eq!(
+                        warning.fields["status"],
+                        if timeout { "timeout" } else { "read_failed" }
+                    );
+                    assert_eq!(warning.fields["operation"], "scan_planning");
+                    assert_eq!(warning.fields["phase"], "recovery");
+                    assert_eq!(warning.fields["snapshot_version"], table.version());
+                    assert!(warning.fields["operation_id"].as_u64().is_some());
+                    if level == Some(Level::TRACE) {
+                        assert!(events.iter().any(|event| {
+                            event
+                                .fields
+                                .get("event")
+                                .and_then(serde_json::Value::as_str)
+                                == Some("scan_planning.completed")
+                                && event.fields["operation_id"] == warning.fields["operation_id"]
+                        }));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn network_warmup_recovers_once_and_concurrent_queries_share_it()
     -> Result<(), Box<dyn std::error::Error>> {
         let (plan, gated) = network_warmup_fixture().await?;
         let state = ParquetRangeReadState::default();
         let original_estimator = state.estimator();
         gated.gate_next_range();
-        assert!(
-            plan.run("initialization", &original_estimator)
-                .await
-                .is_none()
-        );
+        assert!(plan.run(&original_estimator).await.estimator().is_none());
         assert!(gated.was_cancelled());
         tokio::time::timeout(Duration::from_secs(5), gated.wait_started()).await?;
         let requests_after_timeout = gated.range_call_count();
@@ -1082,7 +1174,15 @@ pub(in crate::reader) mod tests {
                     Box::pin(state.recover_network_warmup(DeltaScanExecutionOptions::default()));
                 assert!(futures_util::poll!(&mut recovery).is_pending());
                 tokio::time::timeout(Duration::from_secs(5), store.wait_started()).await?;
+                let mut peer =
+                    Box::pin(state.recover_network_warmup(DeltaScanExecutionOptions::default()));
+                assert!(futures_util::poll!(&mut peer).is_pending());
                 drop(recovery);
+                assert!(
+                    tokio::time::timeout(Duration::from_secs(5), peer)
+                        .await?
+                        .is_none()
+                );
                 assert!(store.was_cancelled());
             } else {
                 store.fail_range(1);

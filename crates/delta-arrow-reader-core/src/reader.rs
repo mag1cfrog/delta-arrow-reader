@@ -40,7 +40,7 @@ use snafu::ResultExt;
 
 use self::{
     backend::direct_parquet::{
-        NetworkWarmupPlan, ParquetRangeReadEstimator, ParquetRangeReadState,
+        NetworkWarmupOutcome, NetworkWarmupPlan, ParquetRangeReadEstimator, ParquetRangeReadState,
     },
     planning::{
         DeltaScanPartitionTargetOptions, DeltaScanPlan, build_physical_row_predicate, plan_scan,
@@ -66,6 +66,7 @@ use crate::{
         },
     },
     error::{DataFileReadSnafu, InvalidConfigurationSnafu, ScanPlanningSnafu, SnapshotLoadSnafu},
+    operation_tracing::{Operation, OperationFields, OperationKind},
 };
 
 const TRACING_TARGET: &str = "delta_arrow_reader";
@@ -231,38 +232,61 @@ impl DeltaTableBuilder {
     /// warmup can also fail if the table protocol is unsupported or its reusable metadata cannot be
     /// built.
     pub async fn load_table(self) -> Result<DeltaTable, DeltaReaderError> {
-        let snapshot = load_delta_table_snapshot(
-            self.table_location,
-            self.storage_options,
-            self.snapshot_selection,
-        )
-        .await?;
-        let warmup = self
-            .warmup
-            .for_table(snapshot.engine_context(), self.execution_options);
-        let snapshot = if warmup == WarmupMode::None {
-            snapshot
-        } else {
-            validate_protocol(snapshot.protocol())?;
-            materialize_eager_scan_metadata(snapshot).await?
-        };
-        let table = DeltaTable::new(snapshot, self.execution_options);
-        if let WarmupMode::Network { max_duration } = warmup
-            && let Some(plan) = NetworkWarmupPlan::new(
-                table.snapshot.as_ref(),
-                self.execution_options,
-                max_duration,
+        let operation = Operation::start(
+            OperationKind::LoadTable,
+            OperationFields::loading(
+                self.snapshot_selection,
+                self.execution_options.parquet_backend(),
+            ),
+        );
+        let result = async {
+            let snapshot = load_delta_table_snapshot(
+                self.table_location,
+                self.storage_options,
+                self.snapshot_selection,
+                operation.context(),
             )
-        {
-            match plan
-                .run("initialization", &table.range_read_estimator())
-                .await
-            {
-                Some(estimator) => table.range_read_state.set_estimator(estimator),
-                None => table.range_read_state.defer_network_warmup(plan).await,
+            .await?;
+            let warmup = self
+                .warmup
+                .for_table(snapshot.engine_context(), self.execution_options);
+            let snapshot = if warmup == WarmupMode::None {
+                snapshot
+            } else {
+                validate_protocol(snapshot.protocol())?;
+                materialize_eager_scan_metadata(snapshot).await?
+            };
+            let table = DeltaTable::new(snapshot, self.execution_options);
+            if let WarmupMode::Network { max_duration } = warmup {
+                let plan = match NetworkWarmupPlan::new(
+                    table.snapshot.as_ref(),
+                    self.execution_options,
+                    max_duration,
+                ) {
+                    Ok(plan) => plan,
+                    Err(error) => {
+                        operation.network_warmup_degraded(
+                            "initialization",
+                            "transport_unavailable",
+                            Some(&error),
+                        );
+                        None
+                    }
+                };
+                if let Some(plan) = plan {
+                    let outcome = plan.run(&table.range_read_estimator()).await;
+                    match outcome.estimator() {
+                        Some(estimator) => table.range_read_state.set_estimator(estimator),
+                        None => table.range_read_state.defer_network_warmup(plan).await,
+                    }
+                    outcome.trace("initialization");
+                    outcome.warn("initialization", &operation);
+                }
             }
+            Ok(table)
         }
-        Ok(table)
+        .await;
+        operation.finish(result)
     }
 
     /// Loads a Delta Kernel snapshot without converting its logical Arrow schema.
@@ -276,19 +300,31 @@ impl DeltaTableBuilder {
     /// Returns an error if warmup was requested or if the table location, storage, or snapshot
     /// cannot be loaded.
     pub async fn load_snapshot(self) -> Result<DeltaTableSnapshot, DeltaReaderError> {
-        if !matches!(self.warmup, WarmupMode::Automatic | WarmupMode::None) {
-            return InvalidConfigurationSnafu {
-                reason: "snapshot_load_does_not_support_table_warmup",
+        let operation = Operation::start(
+            OperationKind::LoadSnapshot,
+            OperationFields::loading(
+                self.snapshot_selection,
+                self.execution_options.parquet_backend(),
+            ),
+        );
+        let result = async {
+            if !matches!(self.warmup, WarmupMode::Automatic | WarmupMode::None) {
+                return InvalidConfigurationSnafu {
+                    reason: "snapshot_load_does_not_support_table_warmup",
+                }
+                .fail();
             }
-            .fail();
+            let snapshot = load_kernel_table_snapshot(
+                self.table_location,
+                self.storage_options,
+                self.snapshot_selection,
+                operation.context(),
+            )
+            .await?;
+            Ok(DeltaTableSnapshot::new(snapshot, self.execution_options))
         }
-        let snapshot = load_kernel_table_snapshot(
-            self.table_location,
-            self.storage_options,
-            self.snapshot_selection,
-        )
-        .await?;
-        Ok(DeltaTableSnapshot::new(snapshot, self.execution_options))
+        .await;
+        operation.finish(result)
     }
 }
 
@@ -354,10 +390,19 @@ impl DeltaTableSnapshot {
 
     /// Converts the logical Arrow schema and finishes constructing the table.
     pub fn into_table(self) -> Result<DeltaTable, DeltaReaderError> {
-        Ok(DeltaTable::new(
-            self.snapshot.into_arrow_snapshot()?,
-            self.execution_options,
-        ))
+        let operation = Operation::start(
+            OperationKind::IntoTable,
+            OperationFields {
+                snapshot_version: Some(self.version()),
+                backend: Some(self.execution_options.parquet_backend()),
+                ..OperationFields::default()
+            },
+        );
+        operation.finish(
+            self.snapshot
+                .into_arrow_snapshot()
+                .map(|snapshot| DeltaTable::new(snapshot, self.execution_options)),
+        )
     }
 }
 
@@ -391,8 +436,11 @@ impl DeltaTable {
         self.range_read_state.estimator()
     }
 
-    pub(crate) async fn recover_network_warmup(&self, options: DeltaScanExecutionOptions) {
-        self.range_read_state.recover_network_warmup(options).await;
+    pub(crate) async fn recover_network_warmup(
+        &self,
+        options: DeltaScanExecutionOptions,
+    ) -> Option<NetworkWarmupOutcome> {
+        self.range_read_state.recover_network_warmup(options).await
     }
 
     #[cfg(feature = "datafusion")]
@@ -460,24 +508,38 @@ impl DeltaTable {
     /// Returns an error if the newer snapshot, schema, or retained query-planning metadata cannot
     /// be loaded. No partially refreshed table is returned.
     pub async fn refresh(&self) -> Result<Self, DeltaReaderError> {
-        let snapshot = Arc::clone(&self.snapshot);
-        let range_read_estimator = self.range_read_estimator();
-        let snapshot = tokio::task::spawn_blocking(move || {
-            // Refresh may keep reading metadata after its async caller is dropped.
-            let _active_read = range_read_estimator.start_read();
-            snapshot.refresh()
-        })
-        .await
-        .boxed()
-        .context(SnapshotLoadSnafu {
-            reason: "snapshot_refresh_task_failed",
-        })
-        .and_then(|result| result)?;
-        Ok(Self {
-            snapshot: Arc::new(snapshot),
-            execution_options: self.execution_options,
-            range_read_state: Arc::clone(&self.range_read_state),
-        })
+        let operation = Operation::start(
+            OperationKind::Refresh,
+            OperationFields {
+                selection: Some("latest"),
+                previous_snapshot_version: Some(self.version()),
+                backend: Some(self.execution_options.parquet_backend()),
+                ..OperationFields::default()
+            },
+        );
+        let context = operation.context();
+        let result = async {
+            let snapshot = Arc::clone(&self.snapshot);
+            let range_read_estimator = self.range_read_estimator();
+            let snapshot = tokio::task::spawn_blocking(move || {
+                // Refresh may keep reading metadata after its async caller is dropped.
+                let _active_read = range_read_estimator.start_read();
+                snapshot.refresh(&context)
+            })
+            .await
+            .boxed()
+            .context(SnapshotLoadSnafu {
+                reason: "snapshot_refresh_task_failed",
+            })
+            .and_then(|result| result)?;
+            Ok(Self {
+                snapshot: Arc::new(snapshot),
+                execution_options: self.execution_options,
+                range_read_state: Arc::clone(&self.range_read_state),
+            })
+        }
+        .await;
+        operation.finish(result)
     }
 
     /// Starts configuring a new single-use scan.
@@ -565,11 +627,6 @@ impl<'table> DeltaScanBuilder<'table> {
     /// an eligible filtered scan also makes one bounded recovery attempt. See [`WarmupMode`].
     /// Reads that produce query results begin when the scan's stream is polled.
     pub async fn build(self) -> Result<DeltaScan, DeltaReaderError> {
-        self.table.validate_protocol()?;
-        if let Some(predicate) = self.predicate.as_ref() {
-            validate_predicate(predicate, self.table.schema().as_ref())?;
-        }
-
         let snapshot_version = self.table.version();
         let backend = self.execution_options.parquet_backend();
         let scan_metadata_source = if self.table.snapshot.eager_scan_metadata().is_some() {
@@ -577,87 +634,95 @@ impl<'table> DeltaScanBuilder<'table> {
         } else {
             DELTA_LOG_SCAN_METADATA_SOURCE
         };
-        trace_planning_started(snapshot_version, backend, scan_metadata_source);
-        let snapshot = Arc::clone(&self.table.snapshot);
-        let projection = self.projection;
-        let predicate = self.predicate;
-        let hidden_columns = predicate
-            .as_ref()
-            .map(referenced_columns)
-            .unwrap_or_default();
-        let row_predicate = predicate
-            .as_ref()
-            .filter(|_| backend == ParquetReaderBackend::Direct)
-            .and_then(|predicate| kernel_row_predicate(predicate, snapshot.partition_columns()));
-        let kernel_predicate = predicate.as_ref().and_then(kernel_pruning_predicate);
-        let include_stats = kernel_predicate.is_some();
-        let execution_options = self.execution_options;
-        let target_partitions = self.target_partitions;
-        let result = tokio::task::spawn_blocking(move || {
-            // Reuse the already-mapped predicate for ordinary data-only filters.
-            let same_predicate = row_predicate.is_some() && row_predicate == kernel_predicate;
-            let plan = plan_scan(
-                snapshot.as_ref(),
-                projection.as_deref(),
-                &hidden_columns,
-                kernel_predicate,
-                include_stats,
-                execution_options,
-                DeltaScanPartitionTargetOptions {
-                    explicit_target_partitions: target_partitions,
-                    datafusion_target_partitions: None,
-                },
-            )?;
-            let physical_row_predicate = if plan.partitions.is_empty() {
-                None
-            } else if same_predicate {
-                plan.physical_predicate.clone()
-            } else {
-                build_physical_row_predicate(
+        let operation = Operation::start(
+            OperationKind::Planning,
+            OperationFields {
+                snapshot_version: Some(snapshot_version),
+                backend: Some(backend),
+                scan_metadata_source: Some(scan_metadata_source),
+                ..OperationFields::default()
+            },
+        );
+        let result = async {
+            self.table.validate_protocol()?;
+            if let Some(predicate) = self.predicate.as_ref() {
+                validate_predicate(predicate, self.table.schema().as_ref())?;
+            }
+            let snapshot = Arc::clone(&self.table.snapshot);
+            let projection = self.projection;
+            let predicate = self.predicate;
+            let hidden_columns = predicate
+                .as_ref()
+                .map(referenced_columns)
+                .unwrap_or_default();
+            let row_predicate = predicate
+                .as_ref()
+                .filter(|_| backend == ParquetReaderBackend::Direct)
+                .and_then(|predicate| {
+                    kernel_row_predicate(predicate, snapshot.partition_columns())
+                });
+            let kernel_predicate = predicate.as_ref().and_then(kernel_pruning_predicate);
+            let include_stats = kernel_predicate.is_some();
+            let execution_options = self.execution_options;
+            let target_partitions = self.target_partitions;
+            let (plan, physical_row_predicate) = tokio::task::spawn_blocking(move || {
+                // Reuse the already-mapped predicate for ordinary data-only filters.
+                let same_predicate = row_predicate.is_some() && row_predicate == kernel_predicate;
+                let plan = plan_scan(
                     snapshot.as_ref(),
                     projection.as_deref(),
                     &hidden_columns,
-                    row_predicate,
-                )?
-            };
-            Ok((plan, physical_row_predicate))
-        })
-        .await
-        .boxed()
-        .context(ScanPlanningSnafu {
-            reason: "scan_planning_task_failed",
-        })
-        .and_then(|result| result);
+                    kernel_predicate,
+                    include_stats,
+                    execution_options,
+                    DeltaScanPartitionTargetOptions {
+                        explicit_target_partitions: target_partitions,
+                        datafusion_target_partitions: None,
+                    },
+                )?;
+                let physical_row_predicate = if plan.partitions.is_empty() {
+                    None
+                } else if same_predicate {
+                    plan.physical_predicate.clone()
+                } else {
+                    build_physical_row_predicate(
+                        snapshot.as_ref(),
+                        projection.as_deref(),
+                        &hidden_columns,
+                        row_predicate,
+                    )?
+                };
+                Ok((plan, physical_row_predicate))
+            })
+            .await
+            .boxed()
+            .context(ScanPlanningSnafu {
+                reason: "scan_planning_task_failed",
+            })
+            .and_then(|result| result)?;
 
-        match result {
-            Ok((plan, physical_row_predicate)) => {
-                if self.limit != Some(0)
-                    && physical_row_predicate.is_some()
-                    && !plan.partitions.is_empty()
-                {
-                    self.table
-                        .recover_network_warmup(self.execution_options)
-                        .await;
-                }
-                trace_planning_completed(
-                    snapshot_version,
-                    backend,
-                    plan.partitions.len(),
-                    scan_metadata_source,
-                );
-                Ok(DeltaScan {
-                    plan: Arc::new(plan),
-                    predicate,
-                    limit: self.limit,
-                    physical_row_predicate,
-                    range_read_estimator: self.table.range_read_estimator(),
-                })
+            operation.context().planned(plan.partitions.len());
+            if self.limit != Some(0)
+                && physical_row_predicate.is_some()
+                && !plan.partitions.is_empty()
+                && let Some(outcome) = self
+                    .table
+                    .recover_network_warmup(self.execution_options)
+                    .await
+            {
+                outcome.warn("recovery", &operation);
             }
-            Err(error) => {
-                trace_planning_failed(snapshot_version, backend, scan_metadata_source, &error);
-                Err(error)
-            }
+            Ok(DeltaScan {
+                plan_id: operation.id(),
+                plan: Arc::new(plan),
+                predicate,
+                limit: self.limit,
+                physical_row_predicate,
+                range_read_estimator: self.table.range_read_estimator(),
+            })
         }
+        .await;
+        operation.finish(result)
     }
 }
 
@@ -683,6 +748,7 @@ impl<'table> DeltaScanBuilder<'table> {
 /// ```
 #[must_use = "scans do nothing unless converted into a stream"]
 pub struct DeltaScan {
+    plan_id: u64,
     plan: Arc<DeltaScanPlan>,
     predicate: Option<DeltaPredicate>,
     limit: Option<usize>,
@@ -736,6 +802,7 @@ impl DeltaScan {
         };
 
         DeltaBatchStream {
+            plan_id: self.plan_id,
             schema,
             metrics,
             partitions,
@@ -765,6 +832,7 @@ impl DeltaScan {
 /// ```
 #[must_use = "streams do nothing unless polled"]
 pub struct DeltaBatchStream {
+    plan_id: u64,
     schema: SchemaRef,
     metrics: DeltaScanMetrics,
     partitions: OrderedPartitionStream,
@@ -803,7 +871,12 @@ impl DeltaBatchStream {
             return;
         }
         self.started = true;
-        trace_execution_started(self.snapshot_version, self.backend, self.partition_count);
+        trace_execution_started(
+            self.plan_id,
+            self.snapshot_version,
+            self.backend,
+            self.partition_count,
+        );
     }
 
     fn complete(&mut self) {
@@ -812,13 +885,19 @@ impl DeltaBatchStream {
         }
         self.partitions.clear();
         self.done = true;
-        trace_execution_completed(self.snapshot_version, self.backend, self.partition_count);
+        trace_execution_completed(
+            self.plan_id,
+            self.snapshot_version,
+            self.backend,
+            self.partition_count,
+        );
     }
 
     fn fail(&mut self, error: &DeltaReaderError) {
         self.partitions.clear();
         self.done = true;
         trace_execution_failed(
+            self.plan_id,
             self.snapshot_version,
             self.backend,
             self.partition_count,
@@ -892,7 +971,12 @@ impl Drop for DeltaBatchStream {
         }
         self.partitions.clear();
         self.done = true;
-        trace_execution_dropped(self.snapshot_version, self.backend, self.partition_count);
+        trace_execution_dropped(
+            self.plan_id,
+            self.snapshot_version,
+            self.backend,
+            self.partition_count,
+        );
     }
 }
 
@@ -903,61 +987,8 @@ pub(crate) fn delta_kernel_executor(
     backend::kernel_reader::delta_kernel_file_executor(plan, range_read_estimator)
 }
 
-fn trace_planning_started(
-    snapshot_version: u64,
-    backend: ParquetReaderBackend,
-    scan_metadata_source: &'static str,
-) {
-    tracing::debug!(
-        target: TRACING_TARGET,
-        event = "scan_planning.started",
-        snapshot_version,
-        backend = ?backend,
-        partition_count = tracing::field::Empty,
-        scan_metadata_source,
-        outcome = "started"
-    );
-}
-
-fn trace_planning_completed(
-    snapshot_version: u64,
-    backend: ParquetReaderBackend,
-    partition_count: usize,
-    scan_metadata_source: &'static str,
-) {
-    tracing::debug!(
-        target: TRACING_TARGET,
-        event = "scan_planning.completed",
-        snapshot_version,
-        backend = ?backend,
-        partition_count,
-        scan_metadata_source,
-        outcome = "completed"
-    );
-}
-
-fn trace_planning_failed(
-    snapshot_version: u64,
-    backend: ParquetReaderBackend,
-    scan_metadata_source: &'static str,
-    error: &DeltaReaderError,
-) {
-    tracing::debug!(
-        target: TRACING_TARGET,
-        event = "scan_planning.failed",
-        snapshot_version,
-        backend = ?backend,
-        partition_count = tracing::field::Empty,
-        scan_metadata_source,
-        outcome = "failed",
-        error_code = error.code(),
-        error_phase = error.phase().as_str(),
-        error_reason = error.reason(),
-        error_source_kind = error.source_kind()
-    );
-}
-
 fn trace_execution_started(
+    plan_id: u64,
     snapshot_version: u64,
     backend: ParquetReaderBackend,
     partition_count: usize,
@@ -965,6 +996,7 @@ fn trace_execution_started(
     tracing::debug!(
         target: TRACING_TARGET,
         event = "scan_execution.started",
+        plan_id,
         snapshot_version,
         backend = ?backend,
         partition_count,
@@ -973,6 +1005,7 @@ fn trace_execution_started(
 }
 
 fn trace_execution_completed(
+    plan_id: u64,
     snapshot_version: u64,
     backend: ParquetReaderBackend,
     partition_count: usize,
@@ -980,6 +1013,7 @@ fn trace_execution_completed(
     tracing::debug!(
         target: TRACING_TARGET,
         event = "scan_execution.completed",
+        plan_id,
         snapshot_version,
         backend = ?backend,
         partition_count,
@@ -988,6 +1022,7 @@ fn trace_execution_completed(
 }
 
 fn trace_execution_failed(
+    plan_id: u64,
     snapshot_version: u64,
     backend: ParquetReaderBackend,
     partition_count: usize,
@@ -996,6 +1031,7 @@ fn trace_execution_failed(
     tracing::debug!(
         target: TRACING_TARGET,
         event = "scan_execution.failed",
+        plan_id,
         snapshot_version,
         backend = ?backend,
         partition_count,
@@ -1008,6 +1044,7 @@ fn trace_execution_failed(
 }
 
 fn trace_execution_dropped(
+    plan_id: u64,
     snapshot_version: u64,
     backend: ParquetReaderBackend,
     partition_count: usize,
@@ -1015,6 +1052,7 @@ fn trace_execution_dropped(
     tracing::debug!(
         target: TRACING_TARGET,
         event = "scan_execution.dropped",
+        plan_id,
         snapshot_version,
         backend = ?backend,
         partition_count,
@@ -1049,8 +1087,7 @@ mod tests {
 
     use super::{
         DeltaBatchStream, DeltaTable, trace_execution_completed, trace_execution_dropped,
-        trace_execution_failed, trace_execution_started, trace_planning_completed,
-        trace_planning_failed, trace_planning_started,
+        trace_execution_failed, trace_execution_started,
     };
     use crate::{
         DeltaScanExecutionOptions, DeltaScanMetrics, DeltaSnapshotSelection, DeltaStorageOptions,
@@ -1126,7 +1163,7 @@ mod tests {
 
     impl Subscriber for EventFields {
         fn register_callsite(&self, metadata: &'static Metadata<'static>) -> Interest {
-            if metadata.target() == "delta_arrow_reader" && *metadata.level() == Level::DEBUG {
+            if metadata.target() == "delta_arrow_reader" && *metadata.level() <= Level::DEBUG {
                 Interest::always()
             } else {
                 Interest::sometimes()
@@ -1134,7 +1171,7 @@ mod tests {
         }
 
         fn enabled(&self, metadata: &Metadata<'_>) -> bool {
-            metadata.target() == "delta_arrow_reader" && *metadata.level() == Level::DEBUG
+            metadata.target() == "delta_arrow_reader" && *metadata.level() <= Level::DEBUG
         }
 
         fn new_span(&self, _attributes: &Attributes<'_>) -> Id {
@@ -1313,6 +1350,7 @@ mod tests {
         scan_capacity: usize,
     ) -> DeltaBatchStream {
         DeltaBatchStream {
+            plan_id: 1,
             schema: schema(),
             metrics,
             partitions: OrderedPartitionStream::new(partitions, scan_capacity),
@@ -1389,7 +1427,7 @@ mod tests {
     }
 
     #[test]
-    fn lifecycle_tracing_has_only_bounded_fields() {
+    fn stream_lifecycle_tracing_has_only_bounded_fields() {
         let error = crate::DeltaReaderError::DataFileRead {
             reason: "parquet_batch_read_failed",
             source: Box::new(std::io::Error::new(
@@ -1399,22 +1437,15 @@ mod tests {
         };
 
         let (_, events) = capture_events(|| {
-            trace_planning_started(7, ParquetReaderBackend::Direct, "query_planning_cache");
-            trace_planning_completed(7, ParquetReaderBackend::Direct, 2, "query_planning_cache");
-            trace_planning_failed(
-                7,
-                ParquetReaderBackend::Direct,
-                "query_planning_cache",
-                &error,
-            );
-            trace_execution_started(7, ParquetReaderBackend::Direct, 2);
-            trace_execution_completed(7, ParquetReaderBackend::Direct, 2);
-            trace_execution_failed(7, ParquetReaderBackend::Direct, 2, &error);
-            trace_execution_dropped(7, ParquetReaderBackend::Direct, 2);
+            trace_execution_started(1, 7, ParquetReaderBackend::Direct, 2);
+            trace_execution_completed(1, 7, ParquetReaderBackend::Direct, 2);
+            trace_execution_failed(1, 7, ParquetReaderBackend::Direct, 2, &error);
+            trace_execution_dropped(1, 7, ParquetReaderBackend::Direct, 2);
         });
 
-        assert_eq!(events.len(), 7);
+        assert_eq!(events.len(), 4);
         let allowed = [
+            "plan_id",
             "backend",
             "error_phase",
             "error_code",
@@ -1423,7 +1454,6 @@ mod tests {
             "event",
             "outcome",
             "partition_count",
-            "scan_metadata_source",
             "snapshot_version",
         ];
         for fields in events.iter() {
@@ -1447,20 +1477,11 @@ mod tests {
                     Some("timeout")
                 );
             }
-            if fields
-                .get("event")
-                .is_some_and(|event| event.starts_with("scan_planning."))
-            {
-                assert_eq!(
-                    fields.get("scan_metadata_source").map(String::as_str),
-                    Some("query_planning_cache")
-                );
-            }
         }
     }
 
     #[test]
-    fn disabled_failure_events_do_not_inspect_dependency_sources() {
+    fn disabled_stream_failure_events_do_not_inspect_dependency_sources() {
         #[derive(Debug)]
         struct SourceProbe;
 
@@ -1481,8 +1502,7 @@ mod tests {
             source: Box::new(SourceProbe),
         };
         with_default(tracing::subscriber::NoSubscriber::default(), || {
-            trace_execution_failed(0, ParquetReaderBackend::Direct, 1, &error);
-            trace_planning_failed(0, ParquetReaderBackend::Direct, "delta_log", &error);
+            trace_execution_failed(1, 0, ParquetReaderBackend::Direct, 1, &error);
         });
     }
 
