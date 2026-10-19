@@ -308,7 +308,7 @@ pub(crate) async fn load_delta_table_snapshot(
     context: OperationContext,
 ) -> Result<ArrowTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
-    let result = tokio::task::spawn_blocking(move || {
+    let result = crate::tracing_context::spawn_blocking(move || {
         load_arrow_snapshot_blocking(&table_location, &storage_options, selection, Some(&context))
     })
     .await
@@ -333,7 +333,7 @@ pub(crate) async fn load_kernel_table_snapshot(
     context: OperationContext,
 ) -> Result<KernelTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
-    let result = tokio::task::spawn_blocking(move || {
+    let result = crate::tracing_context::spawn_blocking(move || {
         let snapshot =
             load_kernel_table_snapshot_blocking(&table_location, &storage_options, selection)?;
         context.snapshot_loaded(snapshot.version());

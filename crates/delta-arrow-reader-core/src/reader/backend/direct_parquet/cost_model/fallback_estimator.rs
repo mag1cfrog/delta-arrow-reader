@@ -74,7 +74,7 @@ impl FallbackEstimator {
             let plan = Arc::clone(&plan);
             let permit = Arc::clone(&permit);
             let trials = worker * TRIALS / self.workers..(worker + 1) * TRIALS / self.workers;
-            jobs.push(tokio::task::spawn_blocking(move || {
+            jobs.push(crate::tracing_context::spawn_blocking(move || {
                 // The jobs, not the awaiting query, own capacity during cancellation or failure.
                 let _permit = permit;
                 if Instant::now() >= deadline {

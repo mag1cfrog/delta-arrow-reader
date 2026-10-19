@@ -69,6 +69,7 @@ use crate::{
     operation_tracing::{
         Operation, OperationFields, OperationKind, StreamOperation, StreamOutcome,
     },
+    tracing_context::TracingContext,
 };
 
 const DELTA_LOG_SCAN_METADATA_SOURCE: &str = "delta_log";
@@ -240,53 +241,55 @@ impl DeltaTableBuilder {
                 self.execution_options.parquet_backend(),
             ),
         );
-        let result = async {
-            let snapshot = load_delta_table_snapshot(
-                self.table_location,
-                self.storage_options,
-                self.snapshot_selection,
-                operation.context(),
-            )
-            .await?;
-            let warmup = self
-                .warmup
-                .for_table(snapshot.engine_context(), self.execution_options);
-            let snapshot = if warmup == WarmupMode::None {
-                snapshot
-            } else {
-                validate_protocol(snapshot.protocol())?;
-                materialize_eager_scan_metadata(snapshot).await?
-            };
-            let table = DeltaTable::new(snapshot, self.execution_options);
-            if let WarmupMode::Network { max_duration } = warmup {
-                let plan = match NetworkWarmupPlan::new(
-                    table.snapshot.as_ref(),
-                    self.execution_options,
-                    max_duration,
-                ) {
-                    Ok(plan) => plan,
-                    Err(error) => {
-                        operation.network_warmup_degraded(
-                            "initialization",
-                            "transport_unavailable",
-                            Some(&error),
-                        );
-                        None
-                    }
+        let result = operation
+            .tracing()
+            .bind(async {
+                let snapshot = load_delta_table_snapshot(
+                    self.table_location,
+                    self.storage_options,
+                    self.snapshot_selection,
+                    operation.context(),
+                )
+                .await?;
+                let warmup = self
+                    .warmup
+                    .for_table(snapshot.engine_context(), self.execution_options);
+                let snapshot = if warmup == WarmupMode::None {
+                    snapshot
+                } else {
+                    validate_protocol(snapshot.protocol())?;
+                    materialize_eager_scan_metadata(snapshot).await?
                 };
-                if let Some(plan) = plan {
-                    let outcome = plan.run(&table.range_read_estimator()).await;
-                    match outcome.estimator() {
-                        Some(estimator) => table.range_read_state.set_estimator(estimator),
-                        None => table.range_read_state.defer_network_warmup(plan).await,
+                let table = DeltaTable::new(snapshot, self.execution_options);
+                if let WarmupMode::Network { max_duration } = warmup {
+                    let plan = match NetworkWarmupPlan::new(
+                        table.snapshot.as_ref(),
+                        self.execution_options,
+                        max_duration,
+                    ) {
+                        Ok(plan) => plan,
+                        Err(error) => {
+                            operation.network_warmup_degraded(
+                                "initialization",
+                                "transport_unavailable",
+                                Some(&error),
+                            );
+                            None
+                        }
+                    };
+                    if let Some(plan) = plan {
+                        let outcome = plan.run(&table.range_read_estimator()).await;
+                        match outcome.estimator() {
+                            Some(estimator) => table.range_read_state.set_estimator(estimator),
+                            None => table.range_read_state.defer_network_warmup(plan).await,
+                        }
+                        outcome.trace("initialization");
+                        outcome.warn("initialization", &operation);
                     }
-                    outcome.trace("initialization");
-                    outcome.warn("initialization", &operation);
                 }
-            }
-            Ok(table)
-        }
-        .await;
+                Ok(table)
+            })
+            .await;
         operation.finish(result)
     }
 
@@ -308,23 +311,25 @@ impl DeltaTableBuilder {
                 self.execution_options.parquet_backend(),
             ),
         );
-        let result = async {
-            if !matches!(self.warmup, WarmupMode::Automatic | WarmupMode::None) {
-                return InvalidConfigurationSnafu {
-                    reason: "snapshot_load_does_not_support_table_warmup",
+        let result = operation
+            .tracing()
+            .bind(async {
+                if !matches!(self.warmup, WarmupMode::Automatic | WarmupMode::None) {
+                    return InvalidConfigurationSnafu {
+                        reason: "snapshot_load_does_not_support_table_warmup",
+                    }
+                    .fail();
                 }
-                .fail();
-            }
-            let snapshot = load_kernel_table_snapshot(
-                self.table_location,
-                self.storage_options,
-                self.snapshot_selection,
-                operation.context(),
-            )
-            .await?;
-            Ok(DeltaTableSnapshot::new(snapshot, self.execution_options))
-        }
-        .await;
+                let snapshot = load_kernel_table_snapshot(
+                    self.table_location,
+                    self.storage_options,
+                    self.snapshot_selection,
+                    operation.context(),
+                )
+                .await?;
+                Ok(DeltaTableSnapshot::new(snapshot, self.execution_options))
+            })
+            .await;
         operation.finish(result)
     }
 }
@@ -332,7 +337,7 @@ impl DeltaTableBuilder {
 async fn materialize_eager_scan_metadata(
     snapshot: ArrowTableSnapshot,
 ) -> Result<ArrowTableSnapshot, DeltaReaderError> {
-    tokio::task::spawn_blocking(move || snapshot.materialize_eager_scan_metadata())
+    crate::tracing_context::spawn_blocking(move || snapshot.materialize_eager_scan_metadata())
         .await
         .boxed()
         .context(ScanPlanningSnafu {
@@ -519,27 +524,29 @@ impl DeltaTable {
             },
         );
         let context = operation.context();
-        let result = async {
-            let snapshot = Arc::clone(&self.snapshot);
-            let range_read_estimator = self.range_read_estimator();
-            let snapshot = tokio::task::spawn_blocking(move || {
-                // Refresh may keep reading metadata after its async caller is dropped.
-                let _active_read = range_read_estimator.start_read();
-                snapshot.refresh(&context)
+        let result = operation
+            .tracing()
+            .bind(async {
+                let snapshot = Arc::clone(&self.snapshot);
+                let range_read_estimator = self.range_read_estimator();
+                let snapshot = crate::tracing_context::spawn_blocking(move || {
+                    // Refresh may keep reading metadata after its async caller is dropped.
+                    let _active_read = range_read_estimator.start_read();
+                    snapshot.refresh(&context)
+                })
+                .await
+                .boxed()
+                .context(SnapshotLoadSnafu {
+                    reason: "snapshot_refresh_task_failed",
+                })
+                .and_then(|result| result)?;
+                Ok(Self {
+                    snapshot: Arc::new(snapshot),
+                    execution_options: self.execution_options,
+                    range_read_state: Arc::clone(&self.range_read_state),
+                })
             })
-            .await
-            .boxed()
-            .context(SnapshotLoadSnafu {
-                reason: "snapshot_refresh_task_failed",
-            })
-            .and_then(|result| result)?;
-            Ok(Self {
-                snapshot: Arc::new(snapshot),
-                execution_options: self.execution_options,
-                range_read_state: Arc::clone(&self.range_read_state),
-            })
-        }
-        .await;
+            .await;
         operation.finish(result)
     }
 
@@ -644,85 +651,89 @@ impl<'table> DeltaScanBuilder<'table> {
                 ..OperationFields::default()
             },
         );
-        let result = async {
-            self.table.validate_protocol()?;
-            if let Some(predicate) = self.predicate.as_ref() {
-                validate_predicate(predicate, self.table.schema().as_ref())?;
-            }
-            let snapshot = Arc::clone(&self.table.snapshot);
-            let projection = self.projection;
-            let predicate = self.predicate;
-            let hidden_columns = predicate
-                .as_ref()
-                .map(referenced_columns)
-                .unwrap_or_default();
-            let row_predicate = predicate
-                .as_ref()
-                .filter(|_| backend == ParquetReaderBackend::Direct)
-                .and_then(|predicate| {
-                    kernel_row_predicate(predicate, snapshot.partition_columns())
-                });
-            let kernel_predicate = predicate.as_ref().and_then(kernel_pruning_predicate);
-            let include_stats = kernel_predicate.is_some();
-            let execution_options = self.execution_options;
-            let target_partitions = self.target_partitions;
-            let (plan, physical_row_predicate) = tokio::task::spawn_blocking(move || {
-                // Reuse the already-mapped predicate for ordinary data-only filters.
-                let same_predicate = row_predicate.is_some() && row_predicate == kernel_predicate;
-                let plan = plan_scan(
-                    snapshot.as_ref(),
-                    projection.as_deref(),
-                    &hidden_columns,
-                    kernel_predicate,
-                    include_stats,
-                    execution_options,
-                    DeltaScanPartitionTargetOptions {
-                        explicit_target_partitions: target_partitions,
-                        datafusion_target_partitions: None,
-                    },
-                )?;
-                let physical_row_predicate = if plan.partitions.is_empty() {
-                    None
-                } else if same_predicate {
-                    plan.physical_predicate.clone()
-                } else {
-                    build_physical_row_predicate(
-                        snapshot.as_ref(),
-                        projection.as_deref(),
-                        &hidden_columns,
-                        row_predicate,
-                    )?
-                };
-                Ok((plan, physical_row_predicate))
-            })
-            .await
-            .boxed()
-            .context(ScanPlanningSnafu {
-                reason: "scan_planning_task_failed",
-            })
-            .and_then(|result| result)?;
-
-            operation.context().planned(plan.partitions.len());
-            if self.limit != Some(0)
-                && physical_row_predicate.is_some()
-                && !plan.partitions.is_empty()
-                && let Some(outcome) = self
-                    .table
-                    .recover_network_warmup(self.execution_options)
+        let result = operation
+            .tracing()
+            .bind(async {
+                self.table.validate_protocol()?;
+                if let Some(predicate) = self.predicate.as_ref() {
+                    validate_predicate(predicate, self.table.schema().as_ref())?;
+                }
+                let snapshot = Arc::clone(&self.table.snapshot);
+                let projection = self.projection;
+                let predicate = self.predicate;
+                let hidden_columns = predicate
+                    .as_ref()
+                    .map(referenced_columns)
+                    .unwrap_or_default();
+                let row_predicate = predicate
+                    .as_ref()
+                    .filter(|_| backend == ParquetReaderBackend::Direct)
+                    .and_then(|predicate| {
+                        kernel_row_predicate(predicate, snapshot.partition_columns())
+                    });
+                let kernel_predicate = predicate.as_ref().and_then(kernel_pruning_predicate);
+                let include_stats = kernel_predicate.is_some();
+                let execution_options = self.execution_options;
+                let target_partitions = self.target_partitions;
+                let (plan, physical_row_predicate) =
+                    crate::tracing_context::spawn_blocking(move || {
+                        // Reuse the already-mapped predicate for ordinary data-only filters.
+                        let same_predicate =
+                            row_predicate.is_some() && row_predicate == kernel_predicate;
+                        let plan = plan_scan(
+                            snapshot.as_ref(),
+                            projection.as_deref(),
+                            &hidden_columns,
+                            kernel_predicate,
+                            include_stats,
+                            execution_options,
+                            DeltaScanPartitionTargetOptions {
+                                explicit_target_partitions: target_partitions,
+                                datafusion_target_partitions: None,
+                            },
+                        )?;
+                        let physical_row_predicate = if plan.partitions.is_empty() {
+                            None
+                        } else if same_predicate {
+                            plan.physical_predicate.clone()
+                        } else {
+                            build_physical_row_predicate(
+                                snapshot.as_ref(),
+                                projection.as_deref(),
+                                &hidden_columns,
+                                row_predicate,
+                            )?
+                        };
+                        Ok((plan, physical_row_predicate))
+                    })
                     .await
-            {
-                outcome.warn("recovery", &operation);
-            }
-            Ok(DeltaScan {
-                plan_id: operation.id(),
-                plan: Arc::new(plan),
-                predicate,
-                limit: self.limit,
-                physical_row_predicate,
-                range_read_estimator: self.table.range_read_estimator(),
+                    .boxed()
+                    .context(ScanPlanningSnafu {
+                        reason: "scan_planning_task_failed",
+                    })
+                    .and_then(|result| result)?;
+
+                operation.context().planned(plan.partitions.len());
+                if self.limit != Some(0)
+                    && physical_row_predicate.is_some()
+                    && !plan.partitions.is_empty()
+                    && let Some(outcome) = self
+                        .table
+                        .recover_network_warmup(self.execution_options)
+                        .await
+                {
+                    outcome.warn("recovery", &operation);
+                }
+                Ok(DeltaScan {
+                    plan_id: operation.id(),
+                    plan: Arc::new(plan),
+                    predicate,
+                    limit: self.limit,
+                    physical_row_predicate,
+                    range_read_estimator: self.table.range_read_estimator(),
+                })
             })
-        }
-        .await;
+            .await;
         operation.finish(result)
     }
 }
@@ -772,6 +783,7 @@ impl DeltaScan {
     ///
     /// Reads for query results begin when the stream is polled. Network warmup may already
     /// have read calibration ranges during table loading or scan building.
+    /// Diagnostics retain the current tracing subscriber and span for later polling and drop.
     pub fn into_stream(self) -> DeltaBatchStream {
         let metrics = self.plan.metrics.clone();
         let schema = Arc::clone(&self.plan.projected_schema);
@@ -813,6 +825,7 @@ impl DeltaScan {
             snapshot_version,
             backend,
             partition_count,
+            tracing: Some(TracingContext::capture()),
             operation: None,
             done: false,
         }
@@ -843,6 +856,7 @@ pub struct DeltaBatchStream {
     snapshot_version: u64,
     backend: ParquetReaderBackend,
     partition_count: usize,
+    tracing: Option<TracingContext>,
     operation: Option<StreamOperation>,
     done: bool,
 }
@@ -883,6 +897,7 @@ impl DeltaBatchStream {
         let partition = self.partitions.current_partition();
         self.done = true;
         self.partitions.clear();
+        self.tracing = None;
         if let Some(operation) = self.operation.take() {
             operation.finish(outcome, partition);
         }
@@ -918,6 +933,19 @@ impl Stream for DeltaBatchStream {
 
     fn poll_next(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
+        let Some(tracing) = this.tracing.clone() else {
+            return Poll::Ready(None);
+        };
+        tracing.in_scope(|| this.poll_next_in_context(context))
+    }
+}
+
+impl DeltaBatchStream {
+    fn poll_next_in_context(
+        &mut self,
+        context: &mut Context<'_>,
+    ) -> Poll<Option<Result<RecordBatch, DeltaReaderError>>> {
+        let this = self;
         if this.done {
             return Poll::Ready(None);
         }
@@ -976,9 +1004,13 @@ impl Drop for DeltaBatchStream {
             return;
         }
         self.done = true;
-        self.partitions.clear();
-        // Drop the operation after requesting cleanup; blocking producers may still be running.
-        drop(self.operation.take());
+        if let Some(context) = self.tracing.take() {
+            context.in_scope(|| {
+                self.partitions.clear();
+                // Blocking producers may still be running after cleanup is requested.
+                drop(self.operation.take());
+            });
+        }
     }
 }
 
@@ -1288,6 +1320,7 @@ mod tests {
             snapshot_version: 7,
             backend: ParquetReaderBackend::Direct,
             partition_count: 2,
+            tracing: Some(crate::tracing_context::TracingContext::capture()),
             operation: None,
             done: false,
         }

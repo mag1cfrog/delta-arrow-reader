@@ -3,6 +3,8 @@
 
 #[path = "support/tracing.rs"]
 mod capture;
+#[path = "operation_tracing/context.rs"]
+mod context;
 
 use capture::{Captured, Collector};
 use delta_arrow_reader::{

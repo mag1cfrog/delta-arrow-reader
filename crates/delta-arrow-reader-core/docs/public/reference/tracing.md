@@ -150,12 +150,46 @@ async fn load_with_diagnostics(
 }
 ```
 
-Public operation terminal events retain the dispatch/span captured at entry or
-first poll, including on drop. Ordinary streams currently capture this context
-at their first poll. Creating a stream under a scoped subscriber alone does not
-capture it. The core does not install a global subscriber, write a file, or
-change the returned error. Nested worker diagnostics do not yet consistently
-inherit a scoped subscriber across task handoffs.
+The core carries both the subscriber dispatch and the current span. A missing
+or filtered span does not disable dispatch propagation. The core does not
+install a global subscriber, write a file, or change the returned error.
+
+## Context capture and handoffs
+
+| Boundary | Capture point and lifetime |
+| --- | --- |
+| Async load, snapshot load, refresh, and ordinary planning | First poll captures the caller. Later polls and cleanup retain that context. An unpolled future captures nothing. |
+| Synchronous snapshot conversion and provider registration | Use the caller at entry. |
+| Ordinary `DeltaScan::into_stream` | Captures the execution caller at creation. Events start on first poll; polling and drop retain the creation context, even on another thread. |
+| Kernel snapshot loading, refresh, eager metadata, ordinary/provider planning and execution setup | Blocking workers inherit the operation context and release it when their work finishes, even after caller abandonment. |
+| Lazy partition startup and Direct reads | Inherit the stream's execution context. Partition profiling spans keep their explicit link to the caller; transport and range-read work run within the partition task. |
+| DeltaKernel file producer and deletion-vector loading | Blocking work inherits the invoking execution context. Cached deletion-vector data retains no subscriber. |
+| Numeric fallback-cost workers | Inherit the current read's context; the shared estimator and cached numeric results retain none. |
+| DataFusion provider scan | First poll captures its planning caller, including deferred warmup and blocking setup. The returned plan retains no planning subscriber. |
+| DataFusion `ExecutionPlan::execute` | Each invocation captures its own caller for deferred polling, child tasks, and cleanup. Reusing a plan starts with the new execution caller. |
+| Pooled S3 connection driver, pool cleanup, and shared Kernel-engine shutdown | Background infrastructure does not capture a request's context. Driver diagnostics use the worker's ambient/global subscriber, if any. Request-level diagnostics remain with the request. |
+
+For example, a plan built under A can create an ordinary stream under B. That
+stream belongs to B, even if C polls or drops it later. Scope `into_stream` under
+the intended execution subscriber; scoping only `next_batch` does not replace
+the stream's owner. Table clones, refreshed tables, and reusable DataFusion plans
+do not carry an earlier caller's context into later operations.
+
+The bindings restore the worker's previous dispatch/span after each poll or
+synchronous section. Cleanup uses the captured dispatch as well: a polling-only
+`WithSubscriber` wrapper is insufficient for destruction on another thread.
+No entered span or default-dispatch guard is held across an await. Finished
+operations and exhausted streams release their context; outstanding workers
+retain their own references until they finish. An unpolled ordinary stream
+retains its creation context until dropped, but emits no lifecycle events.
+Drop requests cleanup without joining blocking workers.
+
+Subscriber callbacks run synchronously on the polling, worker, or dropping
+thread. Keep callbacks short; do not wait for or synchronously reenter the work
+that invoked them. A subscriber that retains a reader handle can create its own
+reference cycle. The application owns subscriber shutdown and flushing, and
+must account for blocking work that continues after cancellation. Third-party
+threads and their diagnostics are outside the reader's context guarantee.
 
 ## Error fields
 
@@ -276,7 +310,6 @@ if let Err(error) = DeltaTableBuilder::new("/tmp/table").load_table().await {
 The shared S3 HTTP connection driver records `error_source_kind` on its own
 target without formatting the dependency error.
 
-DataFusion provider/physical-plan lifecycles and propagation of nested diagnostic
-context across workers remain separate work, including capturing a stream's
-caller context at creation. The coverage table describes ordinary reader
-operations; it does not promise DataFusion lifecycle or task-handoff coverage.
+DataFusion provider/physical-plan lifecycle levels and terminal outcomes remain
+separate work. Context propagation covers their planning and execution handoffs;
+it does not add the ordinary reader's lifecycle contract to DataFusion.

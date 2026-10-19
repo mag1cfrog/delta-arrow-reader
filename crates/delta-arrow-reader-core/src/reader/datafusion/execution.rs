@@ -43,7 +43,7 @@ use datafusion::{
         filter_pushdown::{
             ChildPushdownResult, FilterPushdownPhase, FilterPushdownPropagation, PushedDown,
         },
-        stream::{EmptyRecordBatchStream, RecordBatchStreamAdapter},
+        stream::RecordBatchStreamAdapter,
     },
 };
 use futures_util::{StreamExt, stream};
@@ -633,10 +633,12 @@ impl ExecutionPlan for DeltaScanExec {
         if partition >= self.properties.output_partitioning().partition_count() {
             return Err(adapter_error("scan_partition_index_out_of_range"));
         }
+        let tracing = crate::tracing_context::TracingContext::capture();
         if self.reader_plan.partitions.is_empty() {
-            return Ok(Box::pin(EmptyRecordBatchStream::new(Arc::clone(
-                &self.schema,
-            ))));
+            return Ok(Box::pin(RecordBatchStreamAdapter::new(
+                Arc::clone(&self.schema),
+                tracing.bind(stream::empty()),
+            )));
         }
 
         let configured_batch_size_rows = context.session_config().batch_size();
@@ -677,6 +679,7 @@ impl ExecutionPlan for DeltaScanExec {
             },
         );
 
+        let stream = tracing.bind(stream);
         Ok(Box::pin(RecordBatchStreamAdapter::new(schema, stream)))
     }
 

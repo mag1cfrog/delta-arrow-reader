@@ -112,6 +112,7 @@ url = "2"
 [dev-dependencies]
 hyper = { version = "1", features = ["server"] }
 serde_json = "1"
+tracing-core = "0.1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

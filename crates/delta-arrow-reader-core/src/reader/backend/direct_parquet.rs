@@ -4821,16 +4821,18 @@ pub(in crate::reader) mod tests {
                             );
                     }
                     let metrics = plan.metrics.clone();
-                    let mut stream = DeltaScan {
-                        plan_id: 1,
-                        plan,
-                        predicate: None,
-                        limit: None,
-                        physical_row_predicate: None,
-                        range_read_estimator: Arc::default(),
-                    }
-                    .into_stream();
                     let collector = Collector::new(level);
+                    let mut stream = tracing::subscriber::with_default(collector.clone(), || {
+                        DeltaScan {
+                            plan_id: 1,
+                            plan,
+                            predicate: None,
+                            limit: None,
+                            physical_row_predicate: None,
+                            range_read_estimator: Arc::default(),
+                        }
+                        .into_stream()
+                    });
                     let error = stream
                         .next_batch()
                         .with_subscriber(collector.clone())

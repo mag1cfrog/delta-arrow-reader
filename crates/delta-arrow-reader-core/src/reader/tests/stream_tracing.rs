@@ -29,7 +29,7 @@ async fn pending_batch_wait_can_resume_drop_or_cancel_without_false_completion()
             cancellation,
             metrics,
             first_partition_gate,
-        } = controlled_merge()?;
+        } = with_default(collector.clone(), controlled_merge)?;
         timeout(
             Duration::from_secs(5),
             async {
@@ -92,7 +92,7 @@ async fn cancellation_before_first_poll_is_not_eof() -> TestResult {
         cancellation,
         metrics,
         ..
-    } = controlled_merge()?;
+    } = with_default(collector.clone(), controlled_merge)?;
     cancellation.cancel();
     assert!(
         stream
@@ -124,8 +124,10 @@ async fn cancellation_error_reason_does_not_hide_internal_failures() -> TestResu
             metrics.clone(),
             cancellation,
         );
-        let mut stream = direct_stream(VecDeque::from([partition]), metrics, 1);
         let collector = Collector::new(Level::INFO);
+        let mut stream = with_default(collector.clone(), || {
+            direct_stream(VecDeque::from([partition]), metrics, 1)
+        });
         let error = stream
             .next_batch()
             .with_subscriber(collector.clone())
@@ -159,7 +161,7 @@ async fn finalizing_a_batch_reports_one_error_and_releases_reads() -> TestResult
         limiter,
         cancellation,
         ..
-    } = controlled_merge()?;
+    } = with_default(collector.clone(), controlled_merge)?;
     stream.projection = Some(vec![99]);
     let error = stream
         .next_batch()
@@ -195,7 +197,9 @@ fn terminal_subscriber_panic_never_reports_another_outcome() -> TestResult {
             panic!("terminal subscriber failed");
         }
     }));
-    let mut stream = direct_stream(VecDeque::new(), metrics(), 0);
+    let mut stream = with_default(collector.clone(), || {
+        direct_stream(VecDeque::new(), metrics(), 0)
+    });
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         with_default(collector.clone(), || {
             assert!(

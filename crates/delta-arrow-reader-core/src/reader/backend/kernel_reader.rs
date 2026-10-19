@@ -202,7 +202,7 @@ fn spawn_blocking_file_stream(
     + 'static,
 ) -> FileBatchStream {
     let (output, receiver) = mpsc::channel(output_buffer_batches);
-    let task = tokio::task::spawn_blocking(move || {
+    let task = crate::tracing_context::spawn_blocking(move || {
         let _permit = permit;
         producer(output, cancellation)
     });
@@ -402,8 +402,8 @@ mod tests {
         let gate = Mutex::new(Some(gate));
         let producer_entered = entered.clone();
         let producer_finished = finished.clone();
-        let executor: FileExecutor<(), FileBatchStream> =
-            Arc::new(move |_, permit, cancellation| {
+        let executor: FileExecutor<(), FileBatchStream> = Arc::new(
+            move |_, permit, cancellation| {
                 let gate = gate.lock().unwrap().take().unwrap();
                 let entered = producer_entered.clone();
                 let finished = producer_finished.clone();
@@ -413,16 +413,19 @@ mod tests {
                         permit,
                         cancellation,
                         move |_, _| {
+                            tracing::info!(target: "delta_arrow_reader::test", event = "kernel.producer.started");
                             entered.notify_one();
                             gate.recv_timeout(Duration::from_secs(5))
                                 .expect("release blocked producer");
                             finished.store(true, Ordering::SeqCst);
+                            tracing::info!(target: "delta_arrow_reader::test", event = "kernel.producer.finished");
                             Ok(())
                         },
                     ))
                 }
                 .boxed()
-            });
+            },
+        );
         let partition = PartitionStream::new(
             vec![()],
             limiter.partition(0)?,
@@ -432,11 +435,12 @@ mod tests {
             metrics.clone(),
             cancellation.clone(),
         );
-        let mut stream =
-            crate::reader::tests::direct_stream(VecDeque::from([partition]), metrics, 1);
+        let collector = Collector::new(tracing::Level::INFO);
+        let mut stream = tracing::subscriber::with_default(collector.clone(), || {
+            crate::reader::tests::direct_stream(VecDeque::from([partition]), metrics, 1)
+        });
         stream.backend = ParquetReaderBackend::DeltaKernel;
         stream.partition_count = 1;
-        let collector = Collector::new(tracing::Level::INFO);
         assert!(
             stream
                 .next_batch()
@@ -445,7 +449,8 @@ mod tests {
                 .is_none()
         );
         timeout(Duration::from_secs(5), entered.notified()).await?;
-        drop(stream);
+        let unrelated = Collector::new(tracing::Level::INFO);
+        tracing::subscriber::with_default(unrelated.clone(), || drop(stream));
         assert!(cancellation.is_cancelled());
         assert!(!finished.load(Ordering::SeqCst));
         assert_eq!(limiter.active_file_reads(), 1);
@@ -458,13 +463,16 @@ mod tests {
         .await?;
         assert!(finished.load(Ordering::SeqCst));
         let events = collector.events();
-        assert_eq!(events.len(), 2, "{events:?}");
-        assert_eq!(events[1].fields["event"], "scan_execution.dropped");
-        assert_eq!(events[1].fields["backend"], "DeltaKernel");
-        assert_eq!(events[1].fields["output_started"], false);
+        assert_eq!(events.len(), 4, "{events:?}");
+        assert_eq!(events[1].fields["event"], "kernel.producer.started");
+        assert_eq!(events[2].fields["event"], "scan_execution.dropped");
+        assert_eq!(events[2].fields["backend"], "DeltaKernel");
+        assert_eq!(events[2].fields["output_started"], false);
+        assert_eq!(events[3].fields["event"], "kernel.producer.finished");
+        assert!(unrelated.records().is_empty());
         assert_eq!(
             events[0].fields["operation_id"],
-            events[1].fields["operation_id"]
+            events[2].fields["operation_id"]
         );
         Ok(())
     }

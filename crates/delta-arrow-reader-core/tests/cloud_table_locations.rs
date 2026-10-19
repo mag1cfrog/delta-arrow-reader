@@ -24,7 +24,6 @@ use url::Url;
 mod support;
 use support::RealParquetDeltaTable;
 
-#[allow(dead_code)]
 #[path = "support/tracing.rs"]
 mod capture;
 
