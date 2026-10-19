@@ -1,4 +1,6 @@
 mod predicates;
+#[cfg(unix)]
+mod unity_catalog;
 
 use std::{
     fs::{self, File},

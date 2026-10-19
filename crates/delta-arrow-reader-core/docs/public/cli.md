@@ -9,6 +9,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | Save selected rows as Arrow | [`dar scan`](#scan-rows) |
 | Select rows by a condition | [Filter rows](#filter-rows) |
 | Connect to remote storage | [Storage options file](#storage-options-file) |
+| Inspect a Unity Catalog table by name | [Databricks profile](#inspect-a-unity-catalog-table) |
 | Change parallel reads or buffering | [Execution options](#execution-options) |
 | Handle a command's result in a script | [Inspection JSON](#inspection-json) and [exit statuses](#errors-and-process-status) |
 
@@ -19,8 +20,10 @@ For packages and runtime requirements, see [Installation](installation.md).
 ## Inspect a snapshot
 
 `inspect` returns the table version and column schema as JSON. It reads Delta
-metadata without reading row data or deletion-vector files. A table whose scan
-protocol is unsupported can still be inspected if its snapshot and schema load.
+metadata without reading row data or deletion-vector files. For a direct path or
+storage URL, a table whose scan protocol is unsupported can still be inspected
+if its snapshot and schema load. Unity Catalog targets require a supported read
+protocol.
 
 ```sh
 dar inspect /data/orders
@@ -35,13 +38,14 @@ spaces; each must arrive as one command-line argument. `--` ends option
 parsing and allows a table name beginning with `-`.
 
 ```text
-dar inspect [--table-version N] [--storage-options-file PATH] [--] TABLE
+dar inspect [--table-version N] [--storage-options-file PATH]
+            [--databricks-profile PROFILE] [--] TABLE
 ```
 
 <details markdown="1">
 <summary>Version bounds and argument parsing</summary>
 
-Both options may appear once. Omit `--table-version` to select the latest
+Each option may appear once. Omit `--table-version` to select the latest
 snapshot, or pass unsigned decimal digits from `0` through
 `18446744073709551615`. Signs, whitespace, fractions, exponents, and overflow
 are rejected. Missing values, unknown options, and extra arguments are errors.
@@ -55,6 +59,76 @@ requested version. Kernel validates the commits and checkpoints in that listing.
 Discovery does not search numeric version gaps.
 
 </details>
+
+## Inspect a Unity Catalog table
+
+Use an existing Databricks CLI workspace profile to resolve a table name and
+obtain temporary cloud credentials. DAR then reads the Delta log directly from
+S3 or Azure on your machine. It returns the snapshot's schema and version;
+Unity Catalog column metadata does not determine the output schema. This
+command does not submit SQL or start a cluster or SQL warehouse.
+
+```sh
+dar inspect uc://main.sales.orders --databricks-profile work
+dar inspect uc://main.sales.orders --databricks-profile work --table-version 0
+```
+
+Install the Databricks CLI in the same environment as DAR and make it available
+on `PATH`. DAR binaries, wheels, and images do not bundle it. The required
+commands and flags were checked with Databricks CLI 1.6.0; earlier versions and
+live workspace compatibility have not been validated. The CLI must support
+`tables get --include-manifest-capabilities` and
+`temporary-table-credentials generate-temporary-table-credentials --operation READ`.
+It handles the selected profile's PAT, user OAuth, or service-principal OAuth
+authentication. DAR does not start a login flow or read the CLI's token cache.
+
+An administrator must enable external data access on the metastore. The
+requesting principal needs `USE CATALOG`, `USE SCHEMA`, `SELECT`, and explicit
+`EXTERNAL USE SCHEMA`. Both the workspace and storage endpoint must be reachable.
+See [Databricks external access setup](https://docs.databricks.com/aws/en/external-access/admin).
+Selecting a profile does not grant additional permissions.
+
+For S3, supply the bucket's region through the existing storage options file.
+The credential response does not include it, and DAR does not assume a default:
+
+```json
+{"aws_region": "eu-west-1"}
+```
+
+```sh
+dar inspect uc://main.sales.orders --databricks-profile work \
+  --storage-options-file ./storage.json
+```
+
+These rules apply to Unity Catalog targets:
+
+- Use exactly three unquoted name components, separated by dots. Each component
+  contains ASCII letters, digits, underscores, or hyphens and cannot start with
+  a hyphen. Quoted identifiers, URL escapes, query strings, and fragments are
+  unsupported. The profile must be explicit and nonempty. Quote profile names
+  containing spaces. `--databricks-profile` is invalid for direct paths or URLs.
+- Only ordinary managed or external Delta tables with a supported read
+  protocol are admitted. Views, pipeline tables, shallow clones, row filters,
+  column masks, catalog commits (`catalogManaged`), and coordinated commits
+  are unsupported. Authorization failures never fall back to cloud credentials
+  from the environment.
+- Supported credentials are S3 temporary key/secret/session-token credentials
+  and Azure user-delegation SAS. Azure locations must identify the account and
+  container using `abfss://` or an Azure Blob/DFS HTTPS URL. Other credential
+  types, S3 access points, and other Azure endpoints are unsupported.
+- Storage options may supply supported region and transport settings, including
+  endpoints, timeouts, and proxies. Credential, bucket, account, container,
+  authentication-source, and unsigned-access overrides are rejected, including
+  their aliases. S3 needs one nonempty region setting. Unknown options fail.
+- Credentials remain in memory and are acquired once. If they expire while
+  metadata is loading, the command fails; rerun it for fresh credentials.
+  `scan` does not yet accept Unity Catalog targets.
+
+Each Databricks subprocess has a 30-second timeout, no interactive stdin, and
+a 1 MiB limit on each output stream. DAR captures and discards child diagnostics
+instead of forwarding them. Errors use fixed JSON messages without profile
+names, table names, storage URLs, or credentials. Check the selected profile's
+login and permissions separately when a metadata or credential request fails.
 
 ## Scan rows
 
@@ -459,6 +533,16 @@ its exit status before accepting the result.
 | `execution` | `runtime_initialization` | Runtime creation failed or reader execution panicked |
 | `execution` | `output_write` | stdout could not be written or flushed |
 | `execution` | `arrow_ipc` | Arrow IPC encoding failed |
+| `configuration` | `invalid_uc_reference` | Invalid UC name/profile, or a profile on a direct path |
+| `configuration` | `unsupported_uc_scan` | UC targets currently support inspection only |
+| `configuration` | `invalid_uc_storage_options` | Unsupported, conflicting, or duplicate region options |
+| `configuration` | `uc_s3_region_required` | S3 needs an explicit region |
+| `configuration` | `databricks_cli_missing` | Databricks CLI is unavailable on PATH |
+| `execution` | `databricks_cli_failed`, `databricks_cli_timeout` | Child process failed or exceeded its timeout |
+| `execution` | `uc_table_request_failed`, `uc_credential_request_failed` | Metadata or credential request failed; check login and permissions |
+| `execution` | `invalid_databricks_response`, `unsupported_uc_table` | Response is malformed, oversized, or unsupported |
+| `execution` | `uc_credentials_expired` | Credentials expired before inspection finished |
+| `execution` | `uc_cancelled` | UC inspection was interrupted |
 
 Provider configuration rejected during table loading is a reader failure
 (status 1), even if the option came from a valid local JSON file.
@@ -473,7 +557,8 @@ failure. Status 3 is preserved even when stderr cannot be written.
 <details markdown="1">
 <summary>Threads, blocked output, cancellation, and signals</summary>
 
-Each command runs in one process. The CLI drives its asynchronous runtime on
+Direct-path commands run in one process. UC inspection also starts bounded
+Databricks CLI subprocesses. The CLI drives its asynchronous runtime on
 the main thread and ignores `TOKIO_WORKER_THREADS`. Scans use a separate output
 thread so a blocked stdout pipe does not stall network reads. The output thread
 finishes writing and flushing each batch before requesting another. The core
@@ -485,8 +570,16 @@ the process with status 1 and a synchronous ERROR with code
 `runtime_initialization` and reason `process_panicked`. Panic payloads and
 backtraces are omitted. Runtime setup failures have their own reason and safe
 I/O category.
-Outside PID 1, Linux signals keep their normal termination behavior: a killed
-process is unsuccessful and need not emit an error event. This applies while loading,
+
+UC inspection handles SIGINT/SIGTERM while resolving and loading metadata,
+terminates any pending Databricks child, and exits 130/143. Cancellation emits
+an INFO `cli.cancelled` event with code `uc_cancelled`, visible with
+`RUST_LOG=info`. It keeps cancellation responsive during stdout writes. On
+Windows, Ctrl+C exits 130.
+
+For direct-path commands outside PID 1, Linux signals keep their normal
+termination behavior: a killed process is unsuccessful and need not emit an
+error event. This applies while loading,
 waiting for a batch, or writing to a blocked pipe. A parent that cancels the
 child must also wait for it to exit and reap it.
 

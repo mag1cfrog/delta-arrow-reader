@@ -4,6 +4,7 @@ mod input;
 mod predicate;
 #[cfg(target_os = "linux")]
 mod signals;
+mod unity_catalog;
 
 use std::{
     fmt,
@@ -67,7 +68,8 @@ enum Command {
 
 #[derive(Args)]
 struct TableArgs {
-    /// UTF-8 local path or URL; relative paths use the working directory.
+    /// UTF-8 local path, storage URL, or uc://catalog.schema.table for inspection.
+    /// Relative paths use the working directory.
     /// Use '--' before a table path beginning with '-'.
     table: String,
     /// Unsigned decimal snapshot version; default: latest.
@@ -77,6 +79,9 @@ struct TableArgs {
     /// At most 1 MiB; '-' is a filename, not stdin.
     #[arg(long, value_name = "PATH")]
     storage_options_file: Option<String>,
+    /// Existing Databricks CLI profile; required for uc:// inspection.
+    #[arg(long, value_name = "PROFILE")]
+    databricks_profile: Option<String>,
 }
 
 #[derive(Snafu)]
@@ -107,6 +112,8 @@ enum Error {
     Reader { source: DeltaReaderError },
     #[snafu(display("{source}"))]
     Configuration { source: DeltaReaderError },
+    #[snafu(display("{source}"))]
+    UnityCatalog { source: unity_catalog::Error },
 }
 
 impl From<ArrowError> for Error {
@@ -126,6 +133,17 @@ impl fmt::Debug for Error {
 
 impl Error {
     fn log_failure(&self) {
+        if let Self::UnityCatalog {
+            source: unity_catalog::Error::Cancelled(status),
+        } = self
+        {
+            tracing::info!(target: "delta_arrow_reader_cli",
+                event = "cli.cancelled", operation = "cli_command", outcome = "cancelled",
+                error_phase = "execution", error_code = "uc_cancelled", exit_status = status,
+                "Unity Catalog inspection cancelled"
+            );
+            return;
+        }
         let (phase, code, reason, source_kind) = match self {
             // These API boundaries already emit their terminal core event.
             Self::Reader { .. } => return,
@@ -180,6 +198,7 @@ impl Error {
                 "arrow_ipc_encode_failed",
                 Some(error_source_kind(source)),
             ),
+            Self::UnityCatalog { source } => (source.phase(), source.code(), source.code(), None),
         };
         let argument_kind = match self {
             Self::Argument { kind } => Some(tracing::field::debug(kind)),
@@ -200,11 +219,15 @@ impl Error {
             ),
             _ => (None, None),
         };
+        let message: &dyn fmt::Display = match self {
+            Self::UnityCatalog { source } => source,
+            _ => &"CLI command failed",
+        };
         tracing::error!(target: "delta_arrow_reader_cli",
             event = "cli.failed", operation = "cli_command", outcome = "failed",
             error_phase = phase, error_code = code, error_reason = reason,
             error_source_kind = source_kind, argument_kind, json_kind, json_line, json_column, io_kind, os_error,
-            "CLI command failed"
+            "{message}"
         );
     }
 
@@ -218,6 +241,7 @@ impl Error {
             | Self::Configuration { .. } => 2,
             Self::Runtime { .. } | Self::Reader { .. } | Self::ArrowIpc { .. } => 1,
             Self::Output { .. } => 3,
+            Self::UnityCatalog { source } => source.exit_status(),
         })
     }
 }
@@ -287,6 +311,12 @@ fn run() -> Result<(), Error> {
     let table_args = match &command {
         Command::Inspect(table) | Command::Scan { table, .. } => table,
     };
+    let uc_reference = unity_catalog::Reference::parse(
+        &table_args.table,
+        table_args.databricks_profile.as_deref(),
+        matches!(command, Command::Scan { .. }),
+    )
+    .context(UnityCatalogSnafu)?;
     let storage_options = match &table_args.storage_options_file {
         Some(path) => input::read_json_file::<input::StorageOptionsInput>(path)?.0,
         None => Default::default(),
@@ -315,14 +345,6 @@ fn run() -> Result<(), Error> {
         }
         _ => None,
     };
-    // Inspect needs only metadata. Scan planning happens explicitly below.
-    let builder = DeltaTableBuilder::new(&table_args.table)
-        .with_warmup(WarmupMode::None)
-        .with_snapshot_selection(table_args.table_version.map_or(
-            DeltaSnapshotSelection::Latest,
-            DeltaSnapshotSelection::Version,
-        ))
-        .with_storage_options(storage_options);
     // Drive async work on the calling thread. A dedicated Tokio worker can
     // occupy the last OS thread and leave blocking loads queued forever.
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -331,13 +353,51 @@ fn run() -> Result<(), Error> {
         .context(RuntimeSnafu {
             reason: "runtime_build_failed",
         })?;
-    let result = runtime.block_on(async {
-        let table = builder.load_table().await.context(ReaderSnafu)?;
-        match command {
-            Command::Inspect(_) => write_stdout(&encode_inspection_json(
-                table.version(),
-                table.schema().as_ref(),
-            )),
+    let work = async {
+        let resolved = match uc_reference {
+            Some(reference) => Some(
+                reference
+                    .resolve(storage_options.clone())
+                    .await
+                    .context(UnityCatalogSnafu)?,
+            ),
+            None => None,
+        };
+        // Inspect needs only metadata. Scan planning happens explicitly below.
+        let builder = DeltaTableBuilder::new(
+            resolved
+                .as_ref()
+                .map_or(table_args.table.as_str(), |table| table.location.as_str()),
+        )
+        .with_warmup(WarmupMode::None)
+        .with_snapshot_selection(table_args.table_version.map_or(
+            DeltaSnapshotSelection::Latest,
+            DeltaSnapshotSelection::Version,
+        ))
+        .with_storage_options(
+            resolved
+                .as_ref()
+                .map_or(storage_options, |table| table.storage_options.clone()),
+        );
+        let table = match &resolved {
+            Some(resolved) => resolved.load(builder).await?,
+            None => builder.load_table().await.context(ReaderSnafu)?,
+        };
+        match &command {
+            Command::Inspect(_) => {
+                let output = encode_inspection_json(table.version(), table.schema().as_ref());
+                if resolved.is_some() {
+                    // Keep the UC cancellation handler responsive when stdout is blocked.
+                    tokio::task::spawn_blocking(move || write_stdout(&output))
+                        .await
+                        .map_err(io::Error::other)
+                        .context(RuntimeSnafu {
+                            reason: "inspection_output_task_failed",
+                        })?
+                } else {
+                    write_stdout(&output)
+                }
+            }
             Command::Scan {
                 columns,
                 no_columns,
@@ -346,11 +406,11 @@ fn run() -> Result<(), Error> {
                 ..
             } => {
                 let mut builder = table.scan();
-                if no_columns || !columns.is_empty() {
-                    builder = builder.with_projection(columns);
+                if *no_columns || !columns.is_empty() {
+                    builder = builder.with_projection(columns.iter().cloned());
                 }
                 if let Some(limit) = limit {
-                    builder = builder.with_limit(limit);
+                    builder = builder.with_limit(*limit);
                 }
                 if let Some(predicate) = predicate {
                     builder = builder.with_predicate(predicate);
@@ -366,7 +426,12 @@ fn run() -> Result<(), Error> {
                 write_arrow_stream(builder.build().await.context(ReaderSnafu)?).await
             }
         }
-    });
+    };
+    let result = if uc_reference.is_some() {
+        runtime.block_on(unity_catalog::cancellable(work))
+    } else {
+        runtime.block_on(work)
+    };
     // Blocking core work must not delay process shutdown after this command finishes.
     runtime.shutdown_background();
     result
