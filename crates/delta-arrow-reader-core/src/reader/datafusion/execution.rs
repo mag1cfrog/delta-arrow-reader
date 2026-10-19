@@ -1207,6 +1207,129 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn provider_recovery_warns_once_and_preserves_results() -> TestResult {
+        use crate::reader::backend::direct_parquet::tests::network_warmup_fixture;
+        use crate::test_tracing::Collector;
+        use tracing::{Level, instrument::WithSubscriber};
+
+        for level in [Level::WARN, Level::INFO] {
+            let fixture = TestTable::partitioned("provider-recovery-warning")?;
+            let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
+            let original = table.range_read_estimator();
+            let (warmup, probe) = network_warmup_fixture().await?;
+            probe.fail_range(1);
+            table.range_read_state.defer_network_warmup(warmup).await;
+            let provider = DeltaTableProvider::try_new(table.clone(), ScanOptions::default())?;
+            let context = SessionContext::new();
+            let collector = Collector::new(level);
+            let mut previous_requests = None;
+            for _ in 0..2 {
+                let plan = provider
+                    .scan(&context.state(), None, &[col("id").gt(lit(1_i32))], None)
+                    .with_subscriber(collector.clone())
+                    .await?;
+                let mut actual =
+                    ids(&datafusion::physical_plan::collect(plan, context.task_ctx()).await?);
+                actual.sort_unstable();
+                assert_eq!(actual, [2, 3, 4]);
+                if let Some(previous) = previous_requests {
+                    assert_eq!(probe.range_call_count(), previous);
+                }
+                previous_requests = Some(probe.range_call_count());
+            }
+            assert!(Arc::ptr_eq(&original, &table.range_read_estimator()));
+            let events = collector.events();
+            assert!(events.iter().all(|event| event.level != Level::ERROR));
+            let warnings: Vec<_> = events
+                .iter()
+                .filter(|event| event.level == Level::WARN)
+                .collect();
+            assert_eq!(warnings.len(), 1, "{events:?}");
+            let warning = warnings[0];
+            assert_eq!(warning.fields["event"], "network_warmup.degraded");
+            assert_eq!(warning.fields["operation"], "provider_scan");
+            assert_eq!(warning.fields["phase"], "recovery");
+            assert_eq!(warning.fields["status"], "read_failed");
+            assert_eq!(warning.fields["snapshot_version"], 0);
+            assert_eq!(warning.fields["backend"], "Direct");
+            assert_eq!(warning.fields["plan_id"], warning.fields["operation_id"]);
+            assert_eq!(warning.fields["error_source_kind"], "unknown");
+            if level == Level::INFO {
+                assert!(
+                    events
+                        .iter()
+                        .any(|event| event.fields["event"] == "provider_scan.completed"
+                            && event.fields["operation_id"] == warning.fields["operation_id"])
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn provider_recovery_setup_panic_retains_partition_context_and_join_error() -> TestResult
+    {
+        use crate::reader::backend::direct_parquet::tests::network_warmup_fixture;
+        use crate::test_tracing::Collector;
+        use tracing::{Level, instrument::WithSubscriber};
+
+        let fixture = TestTable::partitioned("provider-recovery-setup-failure")?;
+        let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
+        let (warmup, probe) = network_warmup_fixture().await?;
+        probe.fail_range(1);
+        table.range_read_state.defer_network_warmup(warmup).await;
+        let provider = DeltaTableProvider::try_new(table, ScanOptions::default())?;
+        let context = SessionContext::new();
+        let mut collector = Collector::new(Level::DEBUG);
+        let observed = collector.clone();
+        collector.probe = Some(Arc::new(move || {
+            assert!(
+                !observed.records().last().is_some_and(
+                    |record| record.is_span && record.name == "Delta scan execution setup"
+                ),
+                "injected setup panic"
+            );
+        }));
+        let error = provider
+            .scan(&context.state(), None, &[col("id").gt(lit(1_i32))], None)
+            .with_subscriber(collector.clone())
+            .await
+            .expect_err("setup worker must fail");
+        let DataFusionError::External(source) = error else {
+            return Err("missing typed reader error".into());
+        };
+        let reader = source
+            .downcast_ref::<DeltaReaderError>()
+            .ok_or("missing reader error")?;
+        assert_eq!(
+            reader.reason(),
+            "datafusion_scan_execution_setup_task_failed"
+        );
+        assert!(
+            reader
+                .source()
+                .and_then(|source| source.downcast_ref::<tokio::task::JoinError>())
+                .is_some_and(tokio::task::JoinError::is_panic)
+        );
+        let events = collector.events();
+        let failures: Vec<_> = events
+            .iter()
+            .filter(|event| event.level == Level::ERROR)
+            .collect();
+        assert_eq!(failures.len(), 1);
+        assert_eq!(failures[0].fields["event"], "provider_scan.failed");
+        assert_eq!(failures[0].fields["error_source_kind"], "worker_panicked");
+        assert_eq!(failures[0].fields["partition_count"], 2);
+        assert!(
+            !events
+                .iter()
+                .any(|event| event.fields.get("event") == Some(&json!("provider_scan.completed")))
+        );
+        collector.assert_balanced();
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn table_scopes_the_range_estimator_and_repartitioning_creates_a_metadata_cache()
     -> TestResult {
         let fixture = TestTable::partitioned("shared-range-read-estimator")?;

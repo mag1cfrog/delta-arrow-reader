@@ -36,15 +36,15 @@ use crate::{
     DeltaReaderError, DeltaScanExecutionOptions, DeltaTable, ParquetReaderBackend,
     delta::kernel::{DeltaKernelPredicate, kernel_pruning_predicate},
     error::ScanPlanningSnafu,
+    operation_tracing::{Operation, OperationContext, OperationFields, OperationKind},
     reader::{
+        DELTA_LOG_SCAN_METADATA_SOURCE, QUERY_PLANNING_CACHE_SCAN_METADATA_SOURCE,
         planning::{
             DeltaScanPartitionTargetOptions, DeltaScanPlan, build_physical_row_predicate, plan_scan,
         },
         transform::schema_with_view_types,
     },
 };
-
-const TRACING_TARGET: &str = "delta_arrow_reader::datafusion";
 
 enum ScanPreparation {
     Ready(Arc<dyn ExecutionPlan>),
@@ -115,7 +115,15 @@ pub struct DeltaTableProvider {
 impl DeltaTableProvider {
     /// Creates a provider after validating its options and table protocol.
     pub fn try_new(table: DeltaTable, options: ScanOptions) -> Result<Self, DeltaReaderError> {
-        Self::try_new_with_registration_name(table, options, None)
+        let operation = Operation::start(
+            OperationKind::ProviderCreation,
+            OperationFields {
+                snapshot_version: Some(table.version()),
+                backend: Some(options.execution_options.parquet_backend()),
+                ..OperationFields::default()
+            },
+        );
+        operation.finish(Self::try_new_with_registration_name(table, options, None))
     }
 
     /// Returns a new provider backed by the latest Delta table version.
@@ -124,22 +132,39 @@ impl DeltaTableProvider {
     /// remain unchanged. Scan options and range-read estimates are retained by
     /// the returned provider.
     pub async fn refresh(&self) -> Result<Self, DeltaReaderError> {
-        let table = self.table.refresh().await?;
-        table.validate_protocol()?;
-        if table.version() == self.table.version() {
-            return Ok(self.clone());
-        }
+        async {
+            // Core owns snapshot refresh; the provider owns validation of the refreshed table.
+            let table = self.table.refresh().await?;
+            let operation = Operation::start(
+                OperationKind::ProviderRefresh,
+                OperationFields {
+                    previous_snapshot_version: Some(self.table.version()),
+                    snapshot_version: Some(table.version()),
+                    backend: Some(self.options.execution_options.parquet_backend()),
+                    ..OperationFields::default()
+                },
+            );
+            operation.finish((|| {
+                table.validate_protocol()?;
+                if table.version() == self.table.version() {
+                    return Ok(self.clone());
+                }
 
-        let partition_columns = table.partition_columns().iter().cloned().collect();
-        let schema = build_provider_schema(
-            &table.schema(),
-            &partition_columns,
-            self.options.use_arrow_view_types,
-        );
-        let mut provider = self.clone();
-        provider.table = table;
-        provider.schema = schema;
-        Ok(provider)
+                let partition_columns = table.partition_columns().iter().cloned().collect();
+                let schema = build_provider_schema(
+                    &table.schema(),
+                    &partition_columns,
+                    self.options.use_arrow_view_types,
+                );
+                let mut provider = self.clone();
+                provider.table = table;
+                provider.schema = schema;
+                Ok(provider)
+            })())
+        }
+        .in_current_span()
+        .with_current_subscriber()
+        .await
     }
 
     fn try_new_with_registration_name(
@@ -173,6 +198,7 @@ impl DeltaTableProvider {
         projection: Option<&[usize]>,
         filters: &[Expr],
         limit: Option<usize>,
+        operation_context: &OperationContext,
     ) -> Result<ScanPreparation, DeltaReaderError> {
         let _planning = tracing::debug_span!(
             target: "delta_arrow_reader::profile",
@@ -246,6 +272,8 @@ impl DeltaTableProvider {
                 datafusion_target_partitions: Some(session_target_partitions),
             },
         )?;
+        // DataFusion keeps one executable partition even for an empty reader plan.
+        operation_context.planned(reader_plan.partitions.len().max(1));
         reader_plan.logical_schema = build_provider_schema(
             &reader_plan.logical_schema,
             &partition_columns,
@@ -378,11 +406,27 @@ impl TableProvider for DeltaTableProvider {
         filters: &[Expr],
         limit: Option<usize>,
     ) -> DataFusionResult<Arc<dyn ExecutionPlan>> {
+        let operation = Operation::start(
+            OperationKind::ProviderScan,
+            OperationFields {
+                snapshot_version: Some(self.table.version()),
+                backend: Some(self.options.execution_options.parquet_backend()),
+                scan_metadata_source: Some(
+                    if self.table.snapshot().eager_scan_metadata().is_some() {
+                        QUERY_PLANNING_CACHE_SCAN_METADATA_SOURCE
+                    } else {
+                        DELTA_LOG_SCAN_METADATA_SOURCE
+                    },
+                ),
+                ..OperationFields::default()
+            },
+        );
         let session_target_partitions = state.config().target_partitions();
         let provider = self.clone();
         let projection = projection.cloned();
         let filters = filters.to_vec();
-        async {
+        let result = async {
+            let operation_context = operation.context();
             let dispatch = tracing::dispatcher::get_default(Clone::clone);
             let span = tracing::Span::current();
             let result = tokio::task::spawn_blocking(move || {
@@ -393,6 +437,7 @@ impl TableProvider for DeltaTableProvider {
                             projection.as_deref(),
                             &filters,
                             limit,
+                            &operation_context,
                         )
                     })
                 })
@@ -404,7 +449,7 @@ impl TableProvider for DeltaTableProvider {
             })
             .and_then(|result| result);
 
-            let result = match result {
+            match result {
                 Ok(ScanPreparation::Ready(plan)) => Ok(plan),
                 Ok(ScanPreparation::NeedsNetworkWarmup(pending)) => {
                     let ExecutionPlanInputs {
@@ -412,9 +457,13 @@ impl TableProvider for DeltaTableProvider {
                         datafusion_plan,
                         exact_row_predicate,
                     } = *pending;
-                    self.table
+                    if let Some(outcome) = self
+                        .table
                         .recover_network_warmup(self.options.execution_options)
-                        .await;
+                        .await
+                    {
+                        outcome.warn("recovery", &operation);
+                    }
                     let provider = self.clone();
                     let dispatch = tracing::dispatcher::get_default(Clone::clone);
                     let span = tracing::Span::current();
@@ -436,34 +485,14 @@ impl TableProvider for DeltaTableProvider {
                     })
                 }
                 Err(error) => Err(error),
-            };
-
-            match result {
-                Ok(plan) => {
-                    tracing::debug!(
-                        target: TRACING_TARGET,
-                        event = "provider_scan.planned",
-                        snapshot_version = self.table.version(),
-                        partition_count = plan.properties().output_partitioning().partition_count(),
-                        backend = ?self.options.execution_options.parquet_backend(),
-                        outcome = "planned"
-                    );
-                    Ok(plan)
-                }
-                Err(error) => {
-                    trace_failure(
-                        "provider_scan.failed",
-                        self.table.version(),
-                        self.options.execution_options.parquet_backend(),
-                        &error,
-                    );
-                    Err(DataFusionError::External(Box::new(error)))
-                }
             }
         }
         .in_current_span()
         .with_current_subscriber()
-        .await
+        .await;
+        operation
+            .finish(result)
+            .map_err(|error| DataFusionError::External(Box::new(error)))
     }
 
     fn supports_filters_pushdown(
@@ -537,7 +566,14 @@ pub fn register_table(
 ) -> Result<TableRegistration, DeltaReaderError> {
     let name = name.into();
     let snapshot_version = table.version();
-    let backend = options.execution_options.parquet_backend();
+    let operation = Operation::start(
+        OperationKind::ProviderRegistration,
+        OperationFields {
+            snapshot_version: Some(snapshot_version),
+            backend: Some(options.execution_options.parquet_backend()),
+            ..OperationFields::default()
+        },
+    );
     let result = (|| {
         validate_registration_name(&name)?;
         let provider =
@@ -553,28 +589,7 @@ pub fn register_table(
             snapshot_version,
         })
     })();
-    match result {
-        Ok(registration) => {
-            tracing::debug!(
-                target: TRACING_TARGET,
-                event = "provider_registration.registered",
-                snapshot_version,
-                partition_count = tracing::field::Empty,
-                backend = ?backend,
-                outcome = "registered"
-            );
-            Ok(registration)
-        }
-        Err(error) => {
-            trace_failure(
-                "provider_registration.failed",
-                snapshot_version,
-                backend,
-                &error,
-            );
-            Err(error)
-        }
-    }
+    operation.finish(result)
 }
 
 fn validate_registration_name(name: &str) -> Result<(), DeltaReaderError> {
@@ -681,26 +696,6 @@ fn is_reserved_sql_keyword(name: &str) -> bool {
     KEYWORDS
         .iter()
         .any(|keyword| name.eq_ignore_ascii_case(keyword))
-}
-
-fn trace_failure(
-    event: &'static str,
-    snapshot_version: u64,
-    backend: ParquetReaderBackend,
-    error: &DeltaReaderError,
-) {
-    tracing::debug!(
-        target: TRACING_TARGET,
-        event,
-        snapshot_version,
-        partition_count = tracing::field::Empty,
-        backend = ?backend,
-        outcome = "failed",
-        error_code = error.code(),
-        error_phase = error.phase().as_str(),
-        error_reason = error.reason(),
-        error_source_kind = error.source_kind()
-    );
 }
 
 #[cfg(test)]

@@ -19,6 +19,10 @@ The event name is the family in the table followed by that outcome, for example
 | `DeltaTableSnapshot::into_table` | `into_table` | `table_conversion` | Separately requested Arrow schema conversion |
 | `DeltaTable::refresh` | `refresh` | `table_refresh` | Snapshot, schema, retained metadata, and worker completion; failure leaves the original table intact |
 | `DeltaScanBuilder::build` | `scan_planning` | `scan_planning` | Protocol/predicate validation, projection, metadata and physical planning, and optional network recovery |
+| `DeltaTableProvider::try_new` | `provider_creation` | `provider_creation` | Provider options and protocol validation |
+| `datafusion::register_table` | `provider_registration` | `provider_registration` | Registration name, internal provider construction, and DataFusion catalog registration |
+| `DeltaTableProvider::refresh`, after core refresh succeeds | `provider_refresh` | `provider_refresh` | Refreshed protocol validation and provider schema update |
+| `DeltaTableProvider::scan` | `provider_scan` | `provider_scan` | Projection/filter validation, metadata planning, optional network recovery, and initial physical-plan construction |
 
 Async operations start on their first poll. Creating and dropping an unpolled
 future emits nothing. Dropping a pending operation records `abandoned`; it does
@@ -41,7 +45,7 @@ that treats a helper failure as a failed command can use the error fields below.
 | --- | --- | --- |
 | `operation`, `event`, `outcome` | String | Public boundary, lifecycle event, and result |
 | `operation_id` | Unsigned 64-bit integer | Opaque process-local invocation identity; retries and concurrent calls have distinct IDs |
-| `plan_id` | Optional unsigned 64-bit integer | Planning operation's ID, also carried by its ordinary stream's `scan_execution.*` events |
+| `plan_id` | Optional unsigned 64-bit integer | Ordinary or provider planning operation's ID; ordinary streams carry it in `scan_execution.*` events |
 | `elapsed_micros` | Unsigned 128-bit integer | Monotonic wall time in microseconds since operation entry/first poll, including time waiting for workers and I/O |
 | `selection` | Optional string | `latest` or `version` for a load or refresh |
 | `requested_snapshot_version` | Optional unsigned 64-bit integer | Explicit version requested by a builder |
@@ -49,7 +53,7 @@ that treats a helper failure as a failed command can use the error fields below.
 | `previous_snapshot_version` | Optional unsigned 64-bit integer | Original table version during refresh |
 | `backend` | Optional string | Configured scan backend: `Direct` or `DeltaKernel`; snapshot loading itself uses Kernel in both cases |
 | `scan_metadata_source` | Optional string | Planning uses `delta_log` or `query_planning_cache` |
-| `partition_count` | Optional unsigned integer | Known planned partition count, including zero for an empty plan |
+| `partition_count` | Optional unsigned integer | Known planned partition count; an empty ordinary plan has zero, while DataFusion requires one executable partition even with no files |
 
 Unavailable fields are not recorded as zero or the string `None`. A failed request
 for version 99 can carry `requested_snapshot_version = 99` with no resolved
@@ -61,6 +65,45 @@ WARN/ERROR, or ERROR alone, does not need a DEBUG/INFO parent span to interpret
 it. Event names and the field meanings in these tables form the lifecycle
 contract. Consumers ignore additional fields; detailed profiling records and
 human message wording are not a second stable interface.
+
+## DataFusion provider operations
+
+Provider events require the `datafusion` feature. They use the same
+`delta_arrow_reader` target, levels, safe error fields, and operation identities
+as ordinary reader events. `provider_scan.completed` means a physical plan was
+returned. It does not report execution or whole-query success. Repeated and
+concurrent calls to `scan` receive distinct operation and plan IDs.
+
+Each boundary records only the failures it owns:
+
+- `register_table` owns its internal provider validation. It does not emit a
+  second `provider_creation.failed` event for the same error.
+- `refresh` first delegates snapshot, schema, and retained metadata loading to
+  `DeltaTable::refresh`. That operation owns `table_refresh.*`, including a
+  failure or abandonment during the await. The provider forwards its error
+  without another ERROR. After successful core refresh, `provider_refresh.*`
+  covers protocol validation and the schema update. Its elapsed time covers
+  this second stage only. Both stages leave the original provider intact.
+- `scan` owns its blocking planning and initial setup workers. Failures retain
+  the original `DeltaReaderError` inside `DataFusionError::External`. A worker
+  panic retains its `JoinError`; a known partition count survives setup failure.
+  Dropping pending planning emits `provider_scan.abandoned`, even if a blocking
+  worker finishes afterward.
+- `supports_filters_pushdown` is a capability probe. Unsupported filters are a
+  normal answer. Passing an unsupported filter to `scan` instead fails the
+  requested operation and emits ERROR.
+
+An error's Rust type does not say whether it has already been recorded. Ownership
+comes from the API boundary above, not a flag on the error or parsing log text.
+The host owns SQL parsing and operators outside DAR. Calling DataFusion's
+`SessionContext::register_table` directly also leaves registration diagnostics
+with the host.
+
+Provider diagnostics omit registration names, SQL, table/object paths, column
+names, predicate values, and dependency error messages, including at DEBUG.
+Catalog errors from DataFusion sometimes expose only an error variant and a
+message. Those retain `table_registration_failed` and the variant's safe source
+kind; the core does not parse the message to infer a more specific cause.
 
 ## Ordinary stream execution
 
@@ -306,18 +349,22 @@ if let Err(error) = DeltaTableBuilder::new("/tmp/table").load_table().await {
 | Refresh snapshot/schema/cache and task-join errors | Public refresh; previous and resolved versions remain distinct | Failed schema/cache refresh preserves the original table and its scans; successful retry remains possible |
 | Protocol/predicate/projection and physical planning | Public planning; plan identity, version, backend, metadata source | Early validation and projection failures; concurrent planning IDs linked to their streams |
 | Pure validation/configuration helpers | Return-only; fixed error reason | Invalid column/partition options and protocol checks stay quiet |
-| Optional network sampling | Enclosing load or ordinary plan; bounded warning and typed read/transport cause | Initial S3 sample failure and retained transport-initialization errors; failed/timed-out recovery warns once without changing rows or published estimator; concurrent recovery and cancellation tests |
+| Optional network sampling | Enclosing load, ordinary plan, or provider plan; bounded warning and typed read/transport cause | Initial S3 sample failure and retained transport-initialization errors; failed/timed-out recovery warns once without changing rows or published estimator; concurrent recovery and cancellation tests; provider recovery preserves query results and does not retry sampling |
 | `snapshot_load.*`, `snapshot_refresh.*`, `scan_metadata_cache_build.*` | Internal DEBUG phases; enclosing public operation owns ERROR | Existing phase-field tests, eager metadata tracing, source preservation |
 | Planning/transport profiling spans, automatic range planning, network sample details | DEBUG details; fixed names, numeric measurements, bounded status; TRACE cost/calibration details | Existing planning/range tests and recovery callback lock-reentry test |
 | Ordinary storage reads, Parquet decoding, deletion vectors, physical-to-logical transforms, and final row filtering/projection | Public stream; execution/plan identities, version/backend, partition, partial-output flag, typed cause | Both backends report failure after partial output at WARN/ERROR; focused DV/transform and finalization fixtures retain the error and stop the stream |
 | Scheduler admission, capacity, and worker-join failures | Public stream owns ERROR; explicit cancellation owns INFO | Worker panic versus unexpected abort retain distinct causes; internal capacity errors remain failures; permits are released |
 | `scan_execution.*` success, cancellation, and drop | Public stream owns bounded INFO milestones; no event per batch | EOF and zero/positive limits, concurrent IDs, unpolled drop, resumable pending waits, drop under another subscriber, blocking producer finishing after drop, subscriber panic |
 | Disabled/filtered execution diagnostics | Same reader operations and lazy error classification; no diagnostic I/O | No-subscriber and WARN runs preserve rows and scan metrics, including Direct request counts; controlled scheduling tests retain read bounds and cleanup |
-| `provider_scan.*`, `provider_registration.*` | Existing DataFusion DEBUG callbacks | Shared classification through typed DataFusion wrappers; optional build compatibility |
+| `provider_creation.*`, `provider_registration.*` | Public provider creation or registration owns INFO/ERROR; version/backend and safe error fields | Both backends at WARN/ERROR: invalid options/protocol/name and duplicate registration; one failure record, original registration preserved |
+| `provider_refresh.*` | Core owns snapshot refresh; provider owns subsequent protocol validation/schema update, with previous and resolved versions | Both backends distinguish delegated corruption from a newly unsupported protocol; original provider remains usable and refresh can be retried |
+| `provider_scan.*` | Public provider planning owns INFO/ERROR and optional warmup WARN; fresh IDs, version/backend, metadata source, known partition count | Both backends at WARN/ERROR distinguish invalid projections, unsupported requested filters, missing/corrupt metadata; worker panics before and after recovery retain sources; abandonment cannot become late success; INFO IDs and DEBUG redaction |
+| DataFusion filter/projection profiling and capability probes | Internal DEBUG details with counts only; unsupported pushdown is not a failed operation | Unsupported probe produces no WARN/ERROR; sensitive columns, predicates, registration names, and raw sources stay out of DEBUG |
 
 The shared S3 HTTP connection driver records `error_source_kind` on its own
 target without formatting the dependency error.
 
-DataFusion provider/physical-plan lifecycle levels and terminal outcomes remain
-separate work. Context propagation covers their planning and execution handoffs;
-it does not add the ordinary reader's lifecycle contract to DataFusion.
+DataFusion physical-plan callbacks after construction and returned partition
+streams do not yet emit lifecycle outcomes. Their context propagation is covered,
+but ordinary stream guarantees below `execute`, including execution identities,
+EOF, partial-output failure, and early drop, remain separate work.

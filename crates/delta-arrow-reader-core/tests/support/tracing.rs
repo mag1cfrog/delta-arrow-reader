@@ -37,6 +37,8 @@ pub struct Collector {
     records: Arc<Mutex<Vec<Captured>>>,
     spans: Arc<Mutex<Spans>>,
     lifetime: Arc<()>,
+    // Keep untraced threads from caching disabled callsites for a scoped collector.
+    _untraced: tracing::Dispatch,
     pub probe: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
@@ -47,6 +49,7 @@ impl Collector {
             records: Arc::default(),
             spans: Arc::default(),
             lifetime: Arc::new(()),
+            _untraced: tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default()),
             probe: None,
         }
     }
