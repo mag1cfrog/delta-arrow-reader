@@ -45,7 +45,7 @@ that treats a helper failure as a failed command can use the error fields below.
 | --- | --- | --- |
 | `operation`, `event`, `outcome` | String | Public boundary, lifecycle event, and result |
 | `operation_id` | Unsigned 64-bit integer | Opaque process-local invocation identity; retries and concurrent calls have distinct IDs |
-| `plan_id` | Optional unsigned 64-bit integer | Ordinary or provider planning operation's ID; ordinary streams carry it in `scan_execution.*` events |
+| `plan_id` | Optional unsigned 64-bit integer | Ordinary or provider planning operation's ID; stream execution records carry it, including after DataFusion plan cloning or repartitioning |
 | `elapsed_micros` | Unsigned 128-bit integer | Monotonic wall time in microseconds since operation entry/first poll, including time waiting for workers and I/O |
 | `selection` | Optional string | `latest` or `version` for a load or refresh |
 | `requested_snapshot_version` | Optional unsigned 64-bit integer | Explicit version requested by a builder |
@@ -148,6 +148,45 @@ abort/panic and internal capacity failures remain ERROR failures, even when
 their compatibility error code is `cancelled`. Returned errors and cleanup
 behavior are unchanged.
 
+## DataFusion partition execution
+
+Each `DeltaScanExec::execute(partition, context)` call starts a fresh
+`datafusion_partition_execution` operation. It owns setup and the returned
+partition stream. Cloning, repartitioning, and reusing a physical plan preserve
+`plan_id`; every execution receives its own `operation_id`, including concurrent
+calls for the same partition. A reusable plan stores no execution outcome or
+subscriber.
+
+These records use the ordinary stream's levels, safe error fields, and
+`output_started` semantics. Every record also carries `plan_id`,
+`snapshot_version`, `backend`, `partition_count`, and the requested `partition`.
+Elapsed time starts at `execute` and includes consumer waiting between polls.
+
+| Event | Level | Meaning |
+| --- | --- | --- |
+| `datafusion_partition_execution.started` | INFO | A partition execution was requested, before setup validation or I/O |
+| `datafusion_partition_execution.completed` | INFO | The consumer observed this partition's EOF; `completion_reason` is `eof` |
+| `datafusion_partition_execution.failed` | ERROR | Setup, reading, decoding, deletion-vector processing, transformation, output projection, or a worker failed |
+| `datafusion_partition_execution.cancelled` | INFO | The scheduler observed explicit cancellation |
+| `datafusion_partition_execution.dropped` | INFO | The returned stream was dropped before a terminal result, including without polling |
+
+An empty plan still has one executable partition. Its stream completes on the
+first poll without reading data. Returning the last batch alone does not report
+EOF. An upstream DataFusion `LIMIT` may drop the partition stream after receiving
+enough rows; that records `dropped`, even when the query succeeds.
+
+Failure is recorded before wrapping the original `DeltaReaderError` in
+`DataFusionError::External`. Source chains, including task `JoinError` values,
+remain available. Each execution reports at most one terminal failure. Separate
+partitions that fail each report their own failure. Re-polling a terminal stream
+returns EOF without another event, and releasing execution resources does not
+require another poll after an error.
+
+The lifecycle guard records through the caller captured at `execute`, including
+out-of-scope drop. Detailed work still uses the active polling context described
+below. A partition outcome does not report whole-query success or failures in
+other DataFusion operators. The host owns those query-level outcomes.
+
 ## Recoverable network warmup
 
 Optional network sampling can fail while the load or plan succeeds. A timed-out
@@ -218,14 +257,14 @@ span or default-dispatch guard crosses an await.
 | Lazy partition startup and Direct reads | Partition tasks inherit the polling caller's subscriber. Their profiling spans retain the existing causal link to the caller. |
 | DeltaKernel file producer | The blocking producer inherits the invoking partition task's context. |
 | DataFusion provider scan | Native adapters carry the planning caller through warmup and blocking setup. The returned plan retains no planning subscriber. |
-| DataFusion execution | Polling uses the consumer's active context. Reusing a plan does not reuse its planning caller. |
+| DataFusion execution | Lifecycle records use the caller at `execute`; detailed polling work uses the consumer's active context. Reusing a plan does not reuse its planning caller. |
 | Pooled S3 connection driver, pool cleanup, and shared Kernel-engine shutdown | Shared background work uses the worker's ambient/global subscriber, if any. It does not capture the first request's context. |
 
 When using a scoped subscriber, keep it active while consuming the stream and
 performing cleanup. `into_stream` and DataFusion `execute` do not bind later
 polling to their creation scope. Native span nesting and filtering rules apply;
 the reader does not reset the caller's span stack. Lifecycle records carry
-`operation_id` and, for ordinary streams, `plan_id` independently of span filtering.
+`operation_id` and stream `plan_id` independently of span filtering.
 
 Dropping a started operation or stream still records abandonment or early drop
 through its lifecycle guard. This does not promise that every destructor in the
@@ -360,11 +399,11 @@ if let Err(error) = DeltaTableBuilder::new("/tmp/table").load_table().await {
 | `provider_refresh.*` | Core owns snapshot refresh; provider owns subsequent protocol validation/schema update, with previous and resolved versions | Both backends distinguish delegated corruption from a newly unsupported protocol; original provider remains usable and refresh can be retried |
 | `provider_scan.*` | Public provider planning owns INFO/ERROR and optional warmup WARN; fresh IDs, version/backend, metadata source, known partition count | Both backends at WARN/ERROR distinguish invalid projections, unsupported requested filters, missing/corrupt metadata; worker panics before and after recovery retain sources; abandonment cannot become late success; INFO IDs and DEBUG redaction |
 | DataFusion filter/projection profiling and capability probes | Internal DEBUG details with counts only; unsupported pushdown is not a failed operation | Unsupported probe produces no WARN/ERROR; sensitive columns, predicates, registration names, and raw sources stay out of DEBUG |
+| `datafusion_partition_execution.*` | One execution owns setup and stream INFO/ERROR; retained plan ID, fresh execution ID, requested partition, version/backend, partial-output flag, typed cause | Both backends: empty/EOF/drop/LIMIT, WARN/ERROR after partial output from missing/corrupt data or missing DV, typed transform/projection failures and DEBUG redaction, resource release without another poll, independent concurrent/repeated failures; task panic; clone/repartition identities; disabled/WARN rows and metrics |
 
 The shared S3 HTTP connection driver records `error_source_kind` on its own
 target without formatting the dependency error.
 
-DataFusion physical-plan callbacks after construction and returned partition
-streams do not yet emit lifecycle outcomes. Their context propagation is covered,
-but ordinary stream guarantees below `execute`, including execution identities,
-EOF, partial-output failure, and early drop, remain separate work.
+DataFusion physical-plan preparation callbacks after initial construction,
+including `with_new_children` and `repartitioned`, do not yet emit lifecycle
+outcomes. Their failure ownership remains separate work.

@@ -199,6 +199,7 @@ impl DeltaTableProvider {
         filters: &[Expr],
         limit: Option<usize>,
         operation_context: &OperationContext,
+        plan_id: u64,
     ) -> Result<ScanPreparation, DeltaReaderError> {
         let _planning = tracing::debug_span!(
             target: "delta_arrow_reader::profile",
@@ -309,7 +310,8 @@ impl DeltaTableProvider {
                 },
             )));
         }
-        let plan = self.build_execution_plan(reader_plan, datafusion_plan, exact_row_predicate);
+        let plan =
+            self.build_execution_plan(reader_plan, datafusion_plan, exact_row_predicate, plan_id);
         Ok(ScanPreparation::Ready(plan))
     }
 
@@ -318,6 +320,7 @@ impl DeltaTableProvider {
         reader_plan: DeltaScanPlan,
         datafusion_plan: DataFusionScanPlan,
         exact_row_predicate: Option<DeltaKernelPredicate>,
+        plan_id: u64,
     ) -> Arc<dyn ExecutionPlan> {
         let _setup = tracing::debug_span!(
             target: "delta_arrow_reader::profile",
@@ -336,6 +339,7 @@ impl DeltaTableProvider {
             self.table.range_read_estimator(),
             metrics,
             self.options.intra_file_repartitioning,
+            plan_id,
         )
     }
 }
@@ -427,6 +431,7 @@ impl TableProvider for DeltaTableProvider {
         let filters = filters.to_vec();
         let result = async {
             let operation_context = operation.context();
+            let plan_id = operation.id();
             let dispatch = tracing::dispatcher::get_default(Clone::clone);
             let span = tracing::Span::current();
             let result = tokio::task::spawn_blocking(move || {
@@ -438,6 +443,7 @@ impl TableProvider for DeltaTableProvider {
                             &filters,
                             limit,
                             &operation_context,
+                            plan_id,
                         )
                     })
                 })
@@ -474,6 +480,7 @@ impl TableProvider for DeltaTableProvider {
                                     reader_plan,
                                     datafusion_plan,
                                     exact_row_predicate,
+                                    plan_id,
                                 )
                             })
                         })

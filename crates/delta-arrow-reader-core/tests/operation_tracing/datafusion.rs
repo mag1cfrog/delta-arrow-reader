@@ -11,16 +11,16 @@ use delta_arrow_reader::datafusion::{DeltaTableProvider, ScanOptions, register_t
 use futures_util::FutureExt;
 use tracing::{Instrument, instrument::WithSubscriber};
 
-fn options(backend: ParquetReaderBackend) -> ScanOptions {
+pub(super) fn options(backend: ParquetReaderBackend) -> ScanOptions {
     ScanOptions {
         execution_options: DeltaScanExecutionOptions::default().with_parquet_backend(backend),
         ..ScanOptions::default()
     }
 }
 
-fn reader_error(error: &DataFusionError) -> &DeltaReaderError {
+pub(super) fn reader_error(error: &DataFusionError) -> &DeltaReaderError {
     let DataFusionError::External(source) = error else {
-        panic!("provider must return a typed external error: {error:?}");
+        panic!("adapter must return a typed external error: {error:?}");
     };
     source.downcast_ref().expect("DeltaReaderError source")
 }
