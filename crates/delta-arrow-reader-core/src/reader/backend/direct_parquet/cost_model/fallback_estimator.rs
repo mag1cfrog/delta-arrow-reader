@@ -74,13 +74,19 @@ impl FallbackEstimator {
             let plan = Arc::clone(&plan);
             let permit = Arc::clone(&permit);
             let trials = worker * TRIALS / self.workers..(worker + 1) * TRIALS / self.workers;
+            let dispatch = tracing::dispatcher::get_default(Clone::clone);
+            let span = tracing::Span::current();
             jobs.push(tokio::task::spawn_blocking(move || {
-                // The jobs, not the awaiting query, own capacity during cancellation or failure.
-                let _permit = permit;
-                if Instant::now() >= deadline {
-                    return None;
-                }
-                sample_costs(&calibration, &plan, trials)
+                tracing::dispatcher::with_default(&dispatch, || {
+                    span.in_scope(|| {
+                        // The jobs, not the awaiting query, own capacity during cancellation or failure.
+                        let _permit = permit;
+                        if Instant::now() >= deadline {
+                            return None;
+                        }
+                        sample_costs(&calibration, &plan, trials)
+                    })
+                })
             }));
         }
         let mut trials = Vec::with_capacity(TRIALS);

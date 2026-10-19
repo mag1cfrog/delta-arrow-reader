@@ -17,7 +17,7 @@ use tokio::{
     sync::{Notify, OwnedSemaphorePermit, Semaphore, mpsc},
     task::JoinHandle,
 };
-use tracing::Instrument;
+use tracing::{Instrument, instrument::WithSubscriber};
 
 use super::planning::{DeltaScanFileTask, DeltaScanPlan};
 use crate::{
@@ -598,7 +598,8 @@ impl PartitionStream {
                     run_partition(output, scheduler, metrics, run_cancellation, prefetch_files)
                         .await;
                 }
-                .instrument(span),
+                .instrument(span.or_current())
+                .with_current_subscriber(),
             )
         });
 

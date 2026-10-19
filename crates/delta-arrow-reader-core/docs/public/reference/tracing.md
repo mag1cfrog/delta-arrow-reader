@@ -133,29 +133,71 @@ cannot change the diagnostics for that sampling attempt.
 
 ## Subscribe from Rust
 
-The application supplies its subscriber, including filtering and output policy.
-This example scopes it to one load without installing a global subscriber:
+The application chooses filtering, formatting, and output destinations. An
+application that owns the process can install one subscriber at startup:
 
 ```no_run
 use delta_arrow_reader::{DeltaReaderError, DeltaTable, DeltaTableBuilder};
-use tracing::{Subscriber, instrument::WithSubscriber};
+use tracing::Subscriber;
 
-async fn load_with_diagnostics(
+fn configure_diagnostics(
     subscriber: impl Subscriber + Send + Sync + 'static,
-) -> Result<DeltaTable, DeltaReaderError> {
-    DeltaTableBuilder::new("/tmp/table")
-        .load_table()
-        .with_subscriber(subscriber)
-        .await
+) -> Result<(), Box<dyn std::error::Error>> {
+    tracing::subscriber::set_global_default(subscriber)?;
+    Ok(())
+}
+
+async fn load_table() -> Result<DeltaTable, DeltaReaderError> {
+    DeltaTableBuilder::new("/tmp/table").load_table().await
 }
 ```
 
-Public operation terminal events retain the dispatch/span captured at entry or
-first poll, including on drop. Ordinary streams currently capture this context
-at their first poll. Creating a stream under a scoped subscriber alone does not
-capture it. The core does not install a global subscriber, write a file, or
-change the returned error. Nested worker diagnostics do not yet consistently
-inherit a scoped subscriber across task handoffs.
+Configure the subscriber once, before starting reader work. The core does not
+install a global subscriber, write a file, or change the returned error.
+Concurrent operations use spans and `operation_id` to distinguish their records.
+Tests and embedded applications can use tracing's scoped subscribers instead.
+
+## Task propagation and streaming
+
+The core uses tracing's native `Instrument` and `WithSubscriber` adapters for
+async work. Blocking handoffs capture the active dispatch and span, then use
+`dispatcher::with_default` and `Span::in_scope` inside the worker. A missing or
+filtered span does not disable dispatch propagation. These scopes restore the
+worker's previous subscriber after the synchronous call or poll; no entered
+span or default-dispatch guard crosses an await.
+
+| Boundary | Tracing behavior |
+| --- | --- |
+| Async load, snapshot load, refresh, and ordinary planning | Native adapters capture the caller on first poll. An unpolled future starts no diagnostic operation. |
+| Synchronous snapshot conversion and provider registration | Use the caller at entry. |
+| Ordinary stream | Creation starts no diagnostic operation. First poll starts `scan_execution`; each poll runs in the consumer's active context. |
+| Snapshot loading, refresh, eager metadata, scan planning, deletion-vector reads, and numeric cost estimation | Blocking workers inherit the context active at the handoff. |
+| Lazy partition startup and Direct reads | Partition tasks inherit the polling caller's subscriber. Their profiling spans retain the existing causal link to the caller. |
+| DeltaKernel file producer | The blocking producer inherits the invoking partition task's context. |
+| DataFusion provider scan | Native adapters carry the planning caller through warmup and blocking setup. The returned plan retains no planning subscriber. |
+| DataFusion execution | Polling uses the consumer's active context. Reusing a plan does not reuse its planning caller. |
+| Pooled S3 connection driver, pool cleanup, and shared Kernel-engine shutdown | Shared background work uses the worker's ambient/global subscriber, if any. It does not capture the first request's context. |
+
+When using a scoped subscriber, keep it active while consuming the stream and
+performing cleanup. `into_stream` and DataFusion `execute` do not bind later
+polling to their creation scope. Native span nesting and filtering rules apply;
+the reader does not reset the caller's span stack. Lifecycle records carry
+`operation_id` and, for ordinary streams, `plan_id` independently of span filtering.
+
+Dropping a started operation or stream still records abandonment or early drop
+through its lifecycle guard. This does not promise that every destructor in the
+reader or its dependencies runs under the same subscriber. `WithSubscriber`
+scopes polling, so applications using local subscribers should also scope
+cleanup. Cancellation requests cleanup without joining blocking workers.
+Workers that have already started may finish later and retain their tracing
+handles until then; their completion cannot report an abandoned public operation
+as successful. Tables, reusable plans, and cached data retain no request context.
+
+Subscriber callbacks run synchronously on the polling, worker, or dropping
+thread. Keep callbacks short; do not wait for or synchronously reenter the work
+that invoked them. The application owns subscriber shutdown and flushing, and
+must account for blocking work that continues after cancellation. Third-party
+threads and their diagnostics are outside the reader's task propagation.
 
 ## Error fields
 
@@ -276,7 +318,6 @@ if let Err(error) = DeltaTableBuilder::new("/tmp/table").load_table().await {
 The shared S3 HTTP connection driver records `error_source_kind` on its own
 target without formatting the dependency error.
 
-DataFusion provider/physical-plan lifecycles and propagation of nested diagnostic
-context across workers remain separate work, including capturing a stream's
-caller context at creation. The coverage table describes ordinary reader
-operations; it does not promise DataFusion lifecycle or task-handoff coverage.
+DataFusion provider/physical-plan lifecycle levels and terminal outcomes remain
+separate work. Context propagation covers their planning and execution handoffs;
+it does not add the ordinary reader's lifecycle contract to DataFusion.

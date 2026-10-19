@@ -3,6 +3,8 @@
 
 #[path = "support/tracing.rs"]
 mod capture;
+#[path = "operation_tracing/tasks.rs"]
+mod tasks;
 
 use capture::{Captured, Collector};
 use delta_arrow_reader::{

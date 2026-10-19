@@ -202,9 +202,15 @@ fn spawn_blocking_file_stream(
     + 'static,
 ) -> FileBatchStream {
     let (output, receiver) = mpsc::channel(output_buffer_batches);
+    let dispatch = tracing::dispatcher::get_default(Clone::clone);
+    let span = tracing::Span::current();
     let task = tokio::task::spawn_blocking(move || {
-        let _permit = permit;
-        producer(output, cancellation)
+        tracing::dispatcher::with_default(&dispatch, || {
+            span.in_scope(|| {
+                let _permit = permit;
+                producer(output, cancellation)
+            })
+        })
     });
     let state = DeltaKernelFileStreamState {
         receiver,
@@ -382,7 +388,7 @@ mod tests {
         };
         use futures_util::FutureExt;
         use std::{collections::VecDeque, sync::Mutex};
-        use tracing::instrument::WithSubscriber;
+        use tracing::{Instrument, instrument::WithSubscriber};
 
         let options = options()?;
         let limiter = ScanReadLimiter::new(options, 1, 1);
@@ -402,8 +408,8 @@ mod tests {
         let gate = Mutex::new(Some(gate));
         let producer_entered = entered.clone();
         let producer_finished = finished.clone();
-        let executor: FileExecutor<(), FileBatchStream> =
-            Arc::new(move |_, permit, cancellation| {
+        let executor: FileExecutor<(), FileBatchStream> = Arc::new(
+            move |_, permit, cancellation| {
                 let gate = gate.lock().unwrap().take().unwrap();
                 let entered = producer_entered.clone();
                 let finished = producer_finished.clone();
@@ -413,16 +419,19 @@ mod tests {
                         permit,
                         cancellation,
                         move |_, _| {
+                            tracing::info!(target: "delta_arrow_reader::test", event = "kernel.producer.started");
                             entered.notify_one();
                             gate.recv_timeout(Duration::from_secs(5))
                                 .expect("release blocked producer");
                             finished.store(true, Ordering::SeqCst);
+                            tracing::info!(target: "delta_arrow_reader::test", event = "kernel.producer.finished");
                             Ok(())
                         },
                     ))
                 }
                 .boxed()
-            });
+            },
+        );
         let partition = PartitionStream::new(
             vec![()],
             limiter.partition(0)?,
@@ -432,20 +441,26 @@ mod tests {
             metrics.clone(),
             cancellation.clone(),
         );
+        let collector = Collector::new(tracing::Level::INFO);
+        let parent = tracing::subscriber::with_default(
+            collector.clone(),
+            || tracing::info_span!(target: "delta_arrow_reader::test", "caller"),
+        );
+        let parent_id = parent.id().ok_or("caller span disabled")?.into_u64();
         let mut stream =
             crate::reader::tests::direct_stream(VecDeque::from([partition]), metrics, 1);
         stream.backend = ParquetReaderBackend::DeltaKernel;
         stream.partition_count = 1;
-        let collector = Collector::new(tracing::Level::INFO);
         assert!(
             stream
                 .next_batch()
+                .instrument(parent)
                 .with_subscriber(collector.clone())
                 .now_or_never()
                 .is_none()
         );
         timeout(Duration::from_secs(5), entered.notified()).await?;
-        drop(stream);
+        tracing::subscriber::with_default(collector.clone(), || drop(stream));
         assert!(cancellation.is_cancelled());
         assert!(!finished.load(Ordering::SeqCst));
         assert_eq!(limiter.active_file_reads(), 1);
@@ -458,14 +473,26 @@ mod tests {
         .await?;
         assert!(finished.load(Ordering::SeqCst));
         let events = collector.events();
-        assert_eq!(events.len(), 2, "{events:?}");
-        assert_eq!(events[1].fields["event"], "scan_execution.dropped");
-        assert_eq!(events[1].fields["backend"], "DeltaKernel");
-        assert_eq!(events[1].fields["output_started"], false);
+        assert_eq!(events.len(), 4, "{events:?}");
+        assert_eq!(events[1].fields["event"], "kernel.producer.started");
+        assert_eq!(events[2].fields["event"], "scan_execution.dropped");
+        assert_eq!(events[2].fields["backend"], "DeltaKernel");
+        assert_eq!(events[2].fields["output_started"], false);
+        assert_eq!(events[3].fields["event"], "kernel.producer.finished");
         assert_eq!(
             events[0].fields["operation_id"],
-            events[1].fields["operation_id"]
+            events[2].fields["operation_id"]
         );
+        // The DEBUG partition span is filtered out; producer events must keep the INFO caller.
+        assert!(
+            collector
+                .records()
+                .iter()
+                .all(|record| record.name != "Delta partition task")
+        );
+        for event in &events {
+            assert!(collector.linked_to(event, parent_id), "{event:?}");
+        }
         Ok(())
     }
 

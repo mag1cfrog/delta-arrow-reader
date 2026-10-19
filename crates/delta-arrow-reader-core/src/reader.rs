@@ -52,6 +52,8 @@ use self::{
     },
 };
 
+use tracing::{Instrument, instrument::WithSubscriber};
+
 use crate::{
     DeltaProtocol, DeltaReaderError,
     delta::{
@@ -286,6 +288,8 @@ impl DeltaTableBuilder {
             }
             Ok(table)
         }
+        .in_current_span()
+        .with_current_subscriber()
         .await;
         operation.finish(result)
     }
@@ -324,6 +328,8 @@ impl DeltaTableBuilder {
             .await?;
             Ok(DeltaTableSnapshot::new(snapshot, self.execution_options))
         }
+        .in_current_span()
+        .with_current_subscriber()
         .await;
         operation.finish(result)
     }
@@ -332,12 +338,18 @@ impl DeltaTableBuilder {
 async fn materialize_eager_scan_metadata(
     snapshot: ArrowTableSnapshot,
 ) -> Result<ArrowTableSnapshot, DeltaReaderError> {
-    tokio::task::spawn_blocking(move || snapshot.materialize_eager_scan_metadata())
-        .await
-        .boxed()
-        .context(ScanPlanningSnafu {
-            reason: "query_planning_warmup_task_failed",
-        })?
+    let dispatch = tracing::dispatcher::get_default(Clone::clone);
+    let span = tracing::Span::current();
+    tokio::task::spawn_blocking(move || {
+        tracing::dispatcher::with_default(&dispatch, || {
+            span.in_scope(|| snapshot.materialize_eager_scan_metadata())
+        })
+    })
+    .await
+    .boxed()
+    .context(ScanPlanningSnafu {
+        reason: "query_planning_warmup_task_failed",
+    })?
 }
 
 impl fmt::Debug for DeltaTableBuilder {
@@ -522,10 +534,16 @@ impl DeltaTable {
         let result = async {
             let snapshot = Arc::clone(&self.snapshot);
             let range_read_estimator = self.range_read_estimator();
+            let dispatch = tracing::dispatcher::get_default(Clone::clone);
+            let span = tracing::Span::current();
             let snapshot = tokio::task::spawn_blocking(move || {
-                // Refresh may keep reading metadata after its async caller is dropped.
-                let _active_read = range_read_estimator.start_read();
-                snapshot.refresh(&context)
+                tracing::dispatcher::with_default(&dispatch, || {
+                    span.in_scope(|| {
+                        // Refresh may keep reading metadata after its async caller is dropped.
+                        let _active_read = range_read_estimator.start_read();
+                        snapshot.refresh(&context)
+                    })
+                })
             })
             .await
             .boxed()
@@ -539,6 +557,8 @@ impl DeltaTable {
                 range_read_state: Arc::clone(&self.range_read_state),
             })
         }
+        .in_current_span()
+        .with_current_subscriber()
         .await;
         operation.finish(result)
     }
@@ -666,34 +686,41 @@ impl<'table> DeltaScanBuilder<'table> {
             let include_stats = kernel_predicate.is_some();
             let execution_options = self.execution_options;
             let target_partitions = self.target_partitions;
+            let dispatch = tracing::dispatcher::get_default(Clone::clone);
+            let span = tracing::Span::current();
             let (plan, physical_row_predicate) = tokio::task::spawn_blocking(move || {
-                // Reuse the already-mapped predicate for ordinary data-only filters.
-                let same_predicate = row_predicate.is_some() && row_predicate == kernel_predicate;
-                let plan = plan_scan(
-                    snapshot.as_ref(),
-                    projection.as_deref(),
-                    &hidden_columns,
-                    kernel_predicate,
-                    include_stats,
-                    execution_options,
-                    DeltaScanPartitionTargetOptions {
-                        explicit_target_partitions: target_partitions,
-                        datafusion_target_partitions: None,
-                    },
-                )?;
-                let physical_row_predicate = if plan.partitions.is_empty() {
-                    None
-                } else if same_predicate {
-                    plan.physical_predicate.clone()
-                } else {
-                    build_physical_row_predicate(
-                        snapshot.as_ref(),
-                        projection.as_deref(),
-                        &hidden_columns,
-                        row_predicate,
-                    )?
-                };
-                Ok((plan, physical_row_predicate))
+                tracing::dispatcher::with_default(&dispatch, || {
+                    span.in_scope(|| {
+                        // Reuse the already-mapped predicate for ordinary data-only filters.
+                        let same_predicate =
+                            row_predicate.is_some() && row_predicate == kernel_predicate;
+                        let plan = plan_scan(
+                            snapshot.as_ref(),
+                            projection.as_deref(),
+                            &hidden_columns,
+                            kernel_predicate,
+                            include_stats,
+                            execution_options,
+                            DeltaScanPartitionTargetOptions {
+                                explicit_target_partitions: target_partitions,
+                                datafusion_target_partitions: None,
+                            },
+                        )?;
+                        let physical_row_predicate = if plan.partitions.is_empty() {
+                            None
+                        } else if same_predicate {
+                            plan.physical_predicate.clone()
+                        } else {
+                            build_physical_row_predicate(
+                                snapshot.as_ref(),
+                                projection.as_deref(),
+                                &hidden_columns,
+                                row_predicate,
+                            )?
+                        };
+                        Ok((plan, physical_row_predicate))
+                    })
+                })
             })
             .await
             .boxed()
@@ -722,6 +749,8 @@ impl<'table> DeltaScanBuilder<'table> {
                 range_read_estimator: self.table.range_read_estimator(),
             })
         }
+        .in_current_span()
+        .with_current_subscriber()
         .await;
         operation.finish(result)
     }
