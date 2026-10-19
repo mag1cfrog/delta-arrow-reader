@@ -83,6 +83,68 @@ fn unparented_stream_does_not_inherit_a_later_request() -> TestResult {
 }
 
 #[test]
+fn stream_keeps_its_parent_beneath_a_later_registry_scope() -> TestResult {
+    use tracing_subscriber::{Layer, layer::Context, prelude::*, registry::LookupSpan};
+
+    #[derive(Clone, Default)]
+    struct EventParents(Arc<Mutex<Vec<Option<tracing::span::Id>>>>);
+    impl<S: tracing::Subscriber + for<'a> LookupSpan<'a>> Layer<S> for EventParents {
+        fn on_event(&self, event: &tracing::Event<'_>, context: Context<'_, S>) {
+            if event.metadata().target() == "delta_arrow_reader" {
+                self.0
+                    .lock()
+                    .unwrap()
+                    .push(context.event_span(event).map(|span| span.id()));
+            }
+        }
+    }
+
+    for backend in [
+        ParquetReaderBackend::Direct,
+        ParquetReaderBackend::DeltaKernel,
+    ] {
+        for complete in [false, true] {
+            let runtime = runtime()?;
+            let fixture = LogTable::new()?;
+            fixture.write(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+            let table = runtime.block_on(fixture.builder(backend).load_table())?;
+            let plan = runtime.block_on(table.scan().build())?;
+            let parents = EventParents::default();
+            let subscriber = tracing_subscriber::Registry::default().with(parents.clone());
+            with_default(subscriber, || -> TestResult {
+                let owner = tracing::info_span!(parent: None, "owner");
+                let entered_owner = owner.enter();
+                let mut stream = plan.into_stream();
+                let later = tracing::info_span!(parent: None, "later caller");
+                let entered_later = later.enter();
+                assert_eq!(
+                    runtime.block_on(stream.next_batch())?.unwrap().num_rows(),
+                    2
+                );
+                if complete {
+                    assert!(runtime.block_on(stream.next_batch())?.is_none());
+                }
+                drop(stream);
+                assert_eq!(tracing::Span::current().id(), later.id());
+                drop(entered_later);
+                assert_eq!(tracing::Span::current().id(), owner.id());
+                drop(entered_owner);
+                assert!(tracing::Span::current().is_none());
+                let parents = parents.0.lock().unwrap();
+                assert_eq!(parents.len(), 2, "start and terminal events expected");
+                assert!(
+                    parents.iter().all(|parent| *parent == owner.id()),
+                    "expected parent {:?}, got {parents:?}",
+                    owner.id()
+                );
+                Ok(())
+            })?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn public_operations_propagate_dispatch_and_parent_to_workers() -> TestResult {
     for multi_thread in [false, true] {
         let runtime = if multi_thread {

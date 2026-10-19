@@ -25,13 +25,9 @@ impl TracingContext {
 
     pub(crate) fn in_scope<T>(&self, work: impl FnOnce() -> T) -> T {
         tracing::dispatcher::with_default(&self.dispatch, || {
-            if self.span.is_none() {
-                // Entering Span::none() does not clear an unrelated caller's active spans.
-                let _suspended = SuspendedSpans::new(&self.dispatch);
-                work()
-            } else {
-                self.span.in_scope(work)
-            }
+            // A missing or already active span may not override a later caller's current span.
+            let _suspended = SuspendedSpans::new(&self.dispatch, &self.span);
+            self.span.in_scope(work)
         })
     }
 
@@ -50,17 +46,21 @@ struct SuspendedSpans<'a> {
 }
 
 impl<'a> SuspendedSpans<'a> {
-    fn new(dispatch: &'a Dispatch) -> Self {
+    fn new(dispatch: &'a Dispatch, parent: &Span) -> Self {
         let mut suspended = Self {
             dispatch,
             spans: Vec::new(),
             _thread_bound: PhantomData,
         };
+        let parent_id = parent.id();
         loop {
             let span = Span::current();
             let Some(id) = span.id() else {
                 return suspended;
             };
+            if Some(&id) == parent_id.as_ref() {
+                return suspended;
+            }
             // Keep the span alive until it has been re-entered, including during unwind.
             suspended.spans.push(span);
             dispatch.exit(&id);
@@ -248,6 +248,69 @@ mod tests {
             drop(entered_outer);
             assert!(Span::current().is_none());
         });
+    }
+
+    #[test]
+    fn captured_parent_survives_polling_cleanup_and_unwind_with_registry() {
+        struct CleanupInSpan(Span);
+        impl Drop for CleanupInSpan {
+            fn drop(&mut self) {
+                assert_eq!(Span::current().id(), self.0.id());
+            }
+        }
+
+        for owner_stays_entered in [false, true] {
+            for pending in [false, true] {
+                let dispatch = Dispatch::new(tracing_subscriber::Registry::default());
+                tracing::dispatcher::with_default(&dispatch, || {
+                    let owner = tracing::info_span!(parent: None, "owner");
+                    let context = owner.in_scope(TracingContext::capture);
+                    let entered_owner = owner_stays_entered.then(|| owner.enter());
+                    let mut work = context.bind(async {
+                        assert_eq!(Span::current().id(), owner.id());
+                        let _cleanup = CleanupInSpan(owner.clone());
+                        let child = tracing::info_span!("work child");
+                        child.in_scope(|| {
+                            context.in_scope(|| assert_eq!(Span::current().id(), owner.id()));
+                            assert_eq!(Span::current().id(), child.id());
+                        });
+                        if pending {
+                            std::future::pending::<()>().await;
+                        }
+                    });
+                    let later = tracing::info_span!(parent: None, "later caller");
+                    let entered_later = later.enter();
+                    let repeated_owner = owner_stays_entered.then(|| owner.enter());
+                    let repeated_later = later.enter();
+                    assert_eq!(Pin::new(&mut work).now_or_never().is_none(), pending);
+                    assert_eq!(Span::current().id(), later.id());
+                    drop(work);
+                    assert_eq!(Span::current().id(), later.id());
+                    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        context.in_scope(|| {
+                            assert_eq!(Span::current().id(), owner.id());
+                            panic!("work panicked");
+                        });
+                    }));
+                    assert_eq!(
+                        panic.unwrap_err().downcast_ref::<&str>(),
+                        Some(&"work panicked")
+                    );
+                    assert_eq!(Span::current().id(), later.id());
+                    drop(repeated_later);
+                    assert_eq!(Span::current().id(), later.id());
+                    drop(repeated_owner);
+                    assert_eq!(Span::current().id(), later.id());
+                    drop(entered_later);
+                    assert_eq!(
+                        Span::current().id(),
+                        owner_stays_entered.then(|| owner.id()).flatten()
+                    );
+                    drop(entered_owner);
+                    assert!(Span::current().is_none());
+                });
+            }
+        }
     }
 
     #[test]
