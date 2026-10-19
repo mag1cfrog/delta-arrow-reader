@@ -118,8 +118,12 @@ impl<T: Future> Future for WithContext<T> {
     }
 }
 
-impl<T: Stream> Stream for WithContext<T> {
-    type Item = T::Item;
+// Reader streams end on their first error, even if the caller never polls for EOF.
+impl<S, T, E> Stream for WithContext<S>
+where
+    S: Stream<Item = Result<T, E>>,
+{
+    type Item = Result<T, E>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -127,7 +131,7 @@ impl<T: Stream> Stream for WithContext<T> {
             return Poll::Ready(None);
         };
         let result = context.in_scope(|| inner.as_mut().poll_next(cx));
-        if matches!(result, Poll::Ready(None)) {
+        if matches!(result, Poll::Ready(None | Some(Err(_)))) {
             this.clear();
         }
         result
@@ -303,5 +307,34 @@ mod tests {
         });
         assert!(owner.records().is_empty());
         other.assert_balanced();
+    }
+
+    #[test]
+    fn terminal_stream_error_drops_inner_in_context_and_releases_the_subscriber() {
+        use futures_util::{StreamExt, stream};
+
+        let owner = Collector::new(Level::INFO);
+        let other = Collector::new(Level::INFO);
+        let mut work = with_default(owner.clone(), || {
+            TracingContext::capture().bind(stream::unfold(Cleanup, |cleanup| async move {
+                Some((Err::<(), _>("terminal error"), cleanup))
+            }))
+        });
+        with_default(other.clone(), || {
+            assert_eq!(
+                work.next().now_or_never(),
+                Some(Some(Err("terminal error")))
+            );
+            tracing::info!(target: "delta_arrow_reader::test", event = "unrelated.probe");
+        });
+        let events = owner.events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].fields["event"], "work.cleanup");
+        assert_eq!(other.events().len(), 1);
+        let lifetime = owner.lifetime();
+        drop(owner);
+        assert!(lifetime.upgrade().is_none());
+        assert_eq!(work.next().now_or_never(), Some(None));
+        assert_eq!(work.next().now_or_never(), Some(None));
     }
 }

@@ -433,6 +433,60 @@ fn pending_load_and_refresh_keep_context_when_resumed_or_dropped() -> TestResult
 
 #[cfg(feature = "datafusion")]
 #[test]
+fn datafusion_terminal_error_releases_context_without_an_extra_poll() -> TestResult {
+    use datafusion::{datasource::TableProvider, prelude::SessionContext};
+    use delta_arrow_reader::datafusion::{DeltaTableProvider, ScanOptions};
+    use futures_util::{FutureExt, StreamExt};
+
+    for backend in [
+        ParquetReaderBackend::Direct,
+        ParquetReaderBackend::DeltaKernel,
+    ] {
+        for level in [Level::TRACE, Level::ERROR] {
+            let runtime = runtime()?;
+            let fixture = LogTable::new()?;
+            fixture.write(1, &[fixture.parquet("secret-missing.parquet", &[1, 2])?])?;
+            let table = runtime.block_on(fixture.builder(backend).load_table())?;
+            let provider = DeltaTableProvider::try_new(
+                table,
+                ScanOptions {
+                    execution_options: DeltaScanExecutionOptions::default()
+                        .with_parquet_backend(backend),
+                    ..ScanOptions::default()
+                },
+            )?;
+            let session = SessionContext::new();
+            let plan = runtime.block_on(provider.scan(&session.state(), None, &[], None))?;
+            fs::remove_file(fixture.0.join("secret-missing.parquet"))?;
+            let owner = Collector::new(level);
+            let other = Collector::new(Level::TRACE);
+            let parent = caller(&owner);
+            let mut stream = with_default(owner.clone(), || {
+                parent.in_scope(|| plan.execute(0, session.task_ctx()))
+            })?;
+            drop(parent);
+            let error = runtime
+                .block_on(stream.next().with_subscriber(other.clone()))
+                .unwrap();
+            assert!(error.is_err());
+            // Outstanding workers may retain context until they finish; keep the stream alive.
+            drop(runtime);
+            assert!(other.records().is_empty());
+            owner.assert_balanced();
+            let lifetime = owner.lifetime();
+            drop(owner);
+            assert!(
+                lifetime.upgrade().is_none(),
+                "terminal DataFusion stream retained its subscriber"
+            );
+            assert!(matches!(stream.next().now_or_never(), Some(None)));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "datafusion")]
+#[test]
 fn reusable_datafusion_plan_captures_each_execution_caller() -> TestResult {
     use datafusion::{datasource::TableProvider, prelude::SessionContext};
     use delta_arrow_reader::datafusion::{DeltaTableProvider, ScanOptions};

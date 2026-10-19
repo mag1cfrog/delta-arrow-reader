@@ -183,8 +183,10 @@ active spans in that subscriber and restores them afterward, including on unwind
 Subscribers can observe these exit/enter pairs; the spans remain open. This keeps
 work without a parent from inheriting a later caller's span in the same subscriber.
 No entered span or default-dispatch guard is held across an await. Finished
-operations and exhausted streams release their context; outstanding workers
-retain their own references until they finish. An unpolled ordinary stream
+operations and exhausted streams release their context. DataFusion streams also
+release it on their first error, even if the caller retains the stream without
+polling again. Outstanding workers retain their own references until they finish.
+An unpolled ordinary stream
 retains its creation context until dropped, but emits no lifecycle events.
 Drop requests cleanup without joining blocking workers.
 
