@@ -36,6 +36,12 @@ Older Daft references, page settings, and pending-work notes are historical;
 use the [reproduction guide](EVIDENCE.md) and public report for revision 6.
 Keep the frozen documents unchanged when checking recorded hashes.
 
+The current checkout provides DAR, delta-rs, DuckDB, Polars, and Spark adapters.
+The Daft adapter, dependency lock, and checks are available in the
+[historical reader checkout](https://github.com/mag1cfrog/delta-arrow-reader/tree/eb1f58b4be8dc0d8ec3bee1615f1777a4c41bd9f/benches/selective_read/runners/daft).
+Use the matching frozen harness for older comparisons. Their reader identities,
+expression snapshots, and published results remain available for validation.
+
 - [Table layouts and queries](../../docs/content/benchmarks/selective-read-production-shapes.md)
 - [Execution contract](../../docs/content/benchmarks/selective-read-production-workloads.md)
 - [Spark comparison contract](../../docs/content/benchmarks/selective-read-spark-matrix.md)

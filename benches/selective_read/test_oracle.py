@@ -182,6 +182,17 @@ class OracleTests(unittest.TestCase):
             self.assertEqual(oracle.prefix_matches({"l_shipdate": day}, predicates) == 2, matches)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            # Keep legacy oracle coverage independent of retired reader dependencies.
+            harness = root / "harness"
+            sources = tuple(harness / p.relative_to(large.HERE) for p in large.SOURCES)
+            for source, target in zip(large.SOURCES, sources):
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, target)
+            for reader in ("polars", "daft"):
+                lock = harness / "runners" / reader / "lock.json"
+                lock.parent.mkdir(parents=True)
+                write_json(lock, {"reader_id": reader})
+            self.enterContext(patch.multiple(large, HERE=harness, SOURCES=sources))
             # Rust formats integral large scales as "1"; JSON preserves 1.0 and
             # the exact oracle decodes it as Decimal("1.0"). Check the real logs.
             metadata_root = root / "metadata"
@@ -237,6 +248,12 @@ class OracleTests(unittest.TestCase):
             workload = root / "workload.json"
             write_json(workload, value)
             self.assertEqual(len(large.load(workload)["cases"]), 18)
+            lock = harness / "runners/daft/lock.json"
+            saved_lock = lock.read_bytes()
+            lock.write_text("{}")
+            with self.assertRaisesRegex(ValueError, "translation lock changed"):
+                large.load(workload)
+            lock.write_bytes(saved_lock)
             for case in ("large.wide.clustered.date30-wide", "large.wide.shuffled.date7-wide", "scale-control.wide.clustered.eq2-in20"):
                 reference = root / case
                 metadata = oracle.prepare(fixtures, case, reference, workload=workload)
