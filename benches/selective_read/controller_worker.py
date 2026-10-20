@@ -7,8 +7,6 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE / "runners")]
-import large_workloads
-import matrix
 import metadata_cache
 import run
 
@@ -92,15 +90,6 @@ def dispatch(value):
                                    workload=Path(value["workload"]) if value.get("workload") else None))
         oracle.check_reference_build(metadata)
         return metadata
-    if action == "load":
-        workload = Path(value["workload"]) if value["workload"] else None
-        return {"matrix": matrix.load(Path(value["matrix"]), fixtures) if value["matrix"] else None,
-                "workload": large_workloads.load(workload) if workload else None,
-                "comparison": large_workloads.identity(workload) if workload else
-                    {"comparison_revision": 2, "protocol_sha256": run.digest(run.PROTOCOL)}}
-    if action == "request":
-        return run.request(fixtures, value["case_id"], value["execution_mode"], "validation", "pending",
-                           workload=Path(value["workload"]) if value["workload"] else None)
     if action == "check":
         record = value["record"]
         run.check_result(record, Path(value["output"]), fixtures, Path(value["reference"]), value["payload"])

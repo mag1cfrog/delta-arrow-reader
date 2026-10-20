@@ -38,14 +38,6 @@ def catalog():
     return native.call("matrix", {"action": "catalog", "harness": str(HERE)})
 
 
-def load(path, fixtures):
-    value = native.call("matrix", {"action": "load", "path": str(path), "fixtures": str(fixtures), "harness": str(HERE)})
-    import oracle
-    for row in value["cases"]:
-        if row["status"] == "prepared":
-            oracle.check_reference_build(json.loads((Path(row["reference"]) / "reference.json").read_text()))
-    return value
-
 
 if __name__ == "__main__":
     if sys.argv[1:2] in (["prepare"], ["report"]):

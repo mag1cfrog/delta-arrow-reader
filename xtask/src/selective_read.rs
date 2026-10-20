@@ -6,6 +6,7 @@ mod network;
 mod observe;
 mod pairs;
 mod report;
+mod request;
 mod storage;
 mod supervise;
 mod validation;
@@ -24,6 +25,8 @@ pub(crate) enum Task {
     Supervise,
     /// Invoke a reader and retain its process evidence. Read JSON from stdin.
     Invoke,
+    /// Bind a reader request to verified fixture and workload metadata.
+    ReaderRequest,
     /// Schedule and summarize a campaign. Read the operation as JSON from stdin.
     Campaign,
     /// Execute a frozen campaign, using Python only for independent data validation.
@@ -269,6 +272,7 @@ impl Task {
         let result = match self {
             Self::Supervise => supervise::launch(serde_json::from_value(input)?)?,
             Self::Invoke => invoke::run(&serde_json::from_value(input)?)?,
+            Self::ReaderRequest => request::run(serde_json::from_value(input)?)?,
             Self::Campaign => campaign::run(serde_json::from_value(input)?)?,
             Self::Storage => storage::run(serde_json::from_value(input)?)?,
             Self::Observe => observe::run(serde_json::from_value(input)?)?,

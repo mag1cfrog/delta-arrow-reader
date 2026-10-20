@@ -47,8 +47,9 @@ The `campaign.py` entry point forwards its arguments and Python interpreter to
 plus `--python PATH` for the pinned oracle environment. Run it from the repository
 root, or pass `--harness PATH` to the `benches/selective_read` directory.
 
-Python runs in one persistent validation process outside the measured reader
-intervals. Its checksum and metadata caches survive across gates. The controller
+Rust loads the frozen matrix or workload and binds each reader request to its
+fixture and query. Python runs in one persistent validation process outside
+the measured reader intervals. Its checksum and metadata caches survive across gates. The controller
 retains validation errors in the campaign artifacts and stops launching readers
 if an invocation cannot prove cleanup.
 

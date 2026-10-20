@@ -135,40 +135,14 @@ def fixture_tables(manifest):
 
 
 def request(fixtures, case_id, execution_mode, purpose, run_id, table_uri=None, correctness=None, *, workload=None):
-    manifest_path = fixtures / "manifest.json"
-    manifest = json.loads(manifest_path.read_text())
-    tables = fixture_tables(manifest)
-    comparison = {"comparison_revision": 2, "protocol_sha256": digest(PROTOCOL)}
-    if workload is not None:
-        sys.path.insert(0, str(HERE.parent))
-        import large_workloads
-        frozen = large_workloads.load(workload)
-        row = large_workloads.binding(frozen, fixtures, case_id)
-        comparison = large_workloads.identity(workload)
-        table = next(t for t in tables if t["id"] == row["fixture_id"])
-        sql = row["canonical_sql"]
-    else:
-        if manifest["protocol"] != "selective-read-v1" or manifest["profile"] == "large":
-            raise ValueError("large fixtures require an explicit workload manifest")
-        fixture_id, query = case_id.rsplit(".", 1)
-        table = next((t for t in manifest["tables"] if case_id in t.get("queries", {})), None)
-    if workload is None and table is not None:
-        sql = table["queries"][case_id]
-    elif workload is None:
-        table = next(t for t in manifest["tables"] if t["id"] == fixture_id)
-        source = next(s for s in manifest["sources"] if s["scale_factor"] == table["scale_factor"])
-        sql = source["wide_queries" if fixture_id.startswith("wide.") else "queries"][query]
-    location = (fixtures / table["path"]).resolve()
-    if not location.is_relative_to(fixtures.resolve()):
-        raise ValueError("table path escapes fixture root")
-    return {
-        "table_uri": table_uri or location.as_uri(), "snapshot_version": table["snapshot_version"],
-        "case_id": case_id, "canonical_sql": sql, **comparison,
-        "fixture_manifest_sha256": digest(manifest_path),
-        "profile": manifest.get("profile", "production-" + manifest.get("mode", "unknown")), "execution_mode": execution_mode, "purpose": purpose,
-        "resource_budget": BUDGET, "correctness_file": str(correctness.resolve()) if correctness else None,
-        "campaign_id": None, "run_id": run_id, "repetition": None, "order": None,
-    }
+    sys.path.insert(0, str(HERE.parent))
+    import large_workloads
+    import native
+    payload = native.call("reader-request", {"fixtures": str(fixtures), "case_id": case_id,
+        "execution_mode": execution_mode, "workload": str(workload) if workload else None,
+        "harness": str(large_workloads.HERE)})
+    return payload | {"purpose": purpose, "run_id": run_id, "table_uri": table_uri or payload["table_uri"],
+                      "correctness_file": str(correctness.resolve()) if correctness else None}
 
 
 def check_result(record, output, fixtures, reference, payload):

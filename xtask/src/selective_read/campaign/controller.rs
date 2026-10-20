@@ -12,8 +12,9 @@ use crate::{
     Result,
     repository::files,
     selective_read::{
-        network, observe, storage,
+        network, observe, request, storage,
         validation::{Affinity, Worker},
+        workload,
     },
     selective_read_build::digest,
 };
@@ -530,8 +531,13 @@ impl Campaign {
                             .unwrap_or("missing matrix reference"),
                     )?;
                 }
-                let payload = self.worker.call(&json!({"action":"request", "fixtures":self.args.fixtures,
-                    "case_id":case, "execution_mode":job["execution_mode"], "workload":self.args.workload}))?;
+                let payload = request::run(request::Request {
+                    fixtures: self.args.fixtures.clone(),
+                    case_id: case.into(),
+                    execution_mode: text(&job["execution_mode"])?.into(),
+                    workload: self.args.workload.clone(),
+                    harness: self.args.harness.clone(),
+                })?;
                 let reference = self
                     .selection
                     .references
@@ -741,8 +747,29 @@ pub(in crate::selective_read) fn run(mut args: Args) -> Result<()> {
         binaries.insert(reader.clone(), binary);
         builds.insert(reader, build);
     }
-    let loaded = worker.call(&json!({"action":"load", "fixtures":args.fixtures, "matrix":args.matrix, "workload":args.workload}))?;
-    let comparison = evidence::comparison(&loaded["comparison"], &protocols)?;
+    let prepared = if let Some(path) = &args.matrix {
+        let value = workload::matrix::load(path, &args.fixtures, &args.harness)?;
+        for row in array(&value["cases"])? {
+            if row["status"] == "prepared" {
+                worker.call(
+                    &json!({"action":"prepare-reference","fixtures":args.fixtures,
+                    "case_id":row["case_id"],"reference":row["reference"],"reuse":true}),
+                )?;
+            }
+        }
+        value
+    } else {
+        Value::Null
+    };
+    let (frozen, comparison) = if let Some(path) = &args.workload {
+        workload::load(path, &args.harness)?
+    } else {
+        (
+            Value::Null,
+            json!({"comparison_revision":2,"protocol_sha256":digest(&protocols.join("selective-read-protocol.md"))?}),
+        )
+    };
+    let comparison = evidence::comparison(&comparison, &protocols)?;
     let mut config = modes(&args, &comparison, &protocols)?;
     require(
         binaries
@@ -752,8 +779,8 @@ pub(in crate::selective_read) fn run(mut args: Args) -> Result<()> {
     )?;
     let selection = select(
         &args,
-        &loaded["matrix"],
-        &loaded["workload"],
+        &prepared,
+        &frozen,
         &json!(builds),
         text(&receipt["fixture_manifest_sha256"])?,
     )?;

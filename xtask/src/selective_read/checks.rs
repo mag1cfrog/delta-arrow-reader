@@ -34,6 +34,7 @@ struct Checker {
     fixtures: PathBuf,
     output: PathBuf,
     protocols: PathBuf,
+    harness: PathBuf,
     worker: Worker,
 }
 
@@ -49,6 +50,7 @@ impl Checker {
             output,
             protocols: harness.join("../../docs/content/benchmarks"),
             worker,
+            harness,
         })
     }
 
@@ -66,10 +68,13 @@ impl Checker {
     }
 
     fn request(&mut self, case: &str, mode: &str, purpose: &str, name: &str) -> Result<Value> {
-        let mut payload = self
-            .worker
-            .call(&json!({"action":"request","fixtures":self.fixtures,
-            "case_id":case,"execution_mode":mode,"workload":null}))?;
+        let mut payload = super::request::run(super::request::Request {
+            fixtures: self.fixtures.clone(),
+            case_id: case.into(),
+            execution_mode: mode.into(),
+            workload: None,
+            harness: self.harness.clone(),
+        })?;
         payload["purpose"] = json!(purpose);
         payload["run_id"] = json!(name);
         Ok(payload)

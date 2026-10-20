@@ -317,7 +317,11 @@ fn check_loaded(
     Ok(())
 }
 
-fn load(path: &Path, fixtures: &Path, harness: &Path) -> Result<Value> {
+pub(in crate::selective_read) fn load(
+    path: &Path,
+    fixtures: &Path,
+    harness: &Path,
+) -> Result<Value> {
     let frozen = catalog(harness)?;
     let manifest_path = fixtures.join("manifest.json");
     let value = read_json(path)?;

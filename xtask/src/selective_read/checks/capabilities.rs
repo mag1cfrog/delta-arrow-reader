@@ -52,6 +52,7 @@ impl Capabilities {
                 "../../crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus",
             ))?,
             check: Checker {
+                harness: harness.clone(),
                 fixtures: fs::canonicalize(&args.fixtures)?,
                 output: output.clone(),
                 protocols: harness.join("../../docs/content/benchmarks"),

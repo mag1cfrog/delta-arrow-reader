@@ -171,7 +171,9 @@ class OracleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             # Keep legacy oracle coverage independent of retired reader dependencies.
-            harness = root / "harness"
+            harness = root / "harness/benches/selective_read"
+            protocols = harness.parents[1] / "docs/content/benchmarks"
+            shutil.copytree(run.PROTOCOL.parent, protocols)
             sources = tuple(harness / p.relative_to(large.HERE) for p in large.SOURCES)
             for source, target in zip(large.SOURCES, sources):
                 target.parent.mkdir(parents=True, exist_ok=True)
