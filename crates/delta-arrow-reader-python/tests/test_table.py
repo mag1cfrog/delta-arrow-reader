@@ -60,12 +60,38 @@ class TableTests(unittest.TestCase):
 
     def write_parquet(self, name, values, **options):
         path = self.location / name
-        schema = pa.schema([pa.field("id", pa.int64(), nullable=False)])
-        pq.write_table(pa.table({"id": values}, schema=schema), path, **options)
+        if not isinstance(values, pa.Table):
+            schema = pa.schema([pa.field("id", pa.int64(), nullable=False)])
+            values = pa.table({"id": values}, schema=schema)
+        pq.write_table(values, path, **options)
         return {"add": {
             "path": name, "partitionValues": {}, "size": path.stat().st_size,
             "modificationTime": 0, "dataChange": True,
         }}
+
+    def assert_filter_cases(self, table, column, cases, projection="id"):
+        for method, backend, (index, (symbol, scalar, expected)) in product(
+            ("scan", "to_reader"), ("direct", "delta_kernel"), enumerate(cases),
+        ):
+            with self.subTest(column=column, method=method, backend=backend, index=index):
+                result = getattr(table, method)(
+                    columns=[projection], filters=[(column, symbol, scalar)],
+                    execution_options=ScanExecutionOptions(parquet_backend=backend),
+                )
+                reader = pa.RecordBatchReader.from_stream(result) if method == "scan" else result
+                with reader:
+                    self.assertCountEqual(reader.read_all().column(projection).to_pylist(), expected)
+
+    def assert_invalid_filter_values(self, table, column, cases):
+        for method in (table.scan, table.to_reader):
+            for index, (value, error_type) in enumerate(cases):
+                with self.subTest(column=column, method=method.__name__, index=index):
+                    with self.assertRaises(error_type) as caught:
+                        method(filters=[(column, "==", value)])
+                    self.assertIs(type(caught.exception), error_type)
+                    self.assertNotIn("secret", str(caught.exception))
+                    self.assertIsNone(caught.exception.__cause__)
+                    self.assertIsNone(caught.exception.__context__)
 
     def http_support(self):
         support = Path(__file__).with_name("_http.py")
@@ -498,12 +524,9 @@ class TableTests(unittest.TestCase):
             ],
         })
         schema = pa.schema([pa.field(name, data_type) for name, data_type, _ in types])
-        path = self.location / "integers.parquet"
-        pq.write_table(pa.table({name: values for name, _, values in types}, schema=schema), path)
-        self.write_log(1, {"metaData": self.metadata}, {"add": {
-            "path": path.name, "partitionValues": {}, "size": path.stat().st_size,
-            "modificationTime": 0, "dataChange": True,
-        }})
+        self.write_log(1, {"metaData": self.metadata}, self.write_parquet(
+            "integers.parquet", pa.table({name: values for name, _, values in types}, schema=schema),
+        ))
         table = DeltaTable(self.location)
         comparisons = {
             "==": operator.eq, "!=": operator.ne, "<": operator.lt,
@@ -512,22 +535,10 @@ class TableTests(unittest.TestCase):
         for name, _, values in types:
             is_boolean = name == "boolean"
             scalars = [False, True] if is_boolean else [values[0], Integer(-1), 0, values[-2]]
-            for method, backend, symbol, scalar in product(
-                ("scan", "to_reader"), ("direct", "delta_kernel"), comparisons, scalars,
-            ):
-                with self.subTest(column=name, method=method, backend=backend,
-                                  operator=symbol, scalar=scalar):
-                    result = getattr(table, method)(
-                        columns=[name], filters=[(name, symbol, scalar)],
-                        execution_options=ScanExecutionOptions(parquet_backend=backend),
-                    )
-                    reader = (pa.RecordBatchReader.from_stream(result)
-                              if method == "scan" else result)
-                    with reader:
-                        actual = reader.read_all().column(name).to_pylist()
-                    expected = [item for item in values
-                                if item is not None and comparisons[symbol](item, scalar)]
-                    self.assertCountEqual(actual, expected)
+            cases = [(symbol, scalar, [
+                item for item in values if item is not None and compare(item, scalar)
+            ]) for (symbol, compare), scalar in product(comparisons.items(), scalars)]
+            self.assert_filter_cases(table, name, cases, projection=name)
 
             wrong_types = [0, 1, -1] if is_boolean else [True, False]
             wrong_types += [1.0, "secret-value", b"secret-value", Decimal("1"), [], object()]
@@ -537,12 +548,7 @@ class TableTests(unittest.TestCase):
                     values[0] - 1, values[-2] + 1, -(2**100), 2**100,
                     Integer(values[0] - 1), Integer(values[-2] + 1),
                 )]
-            for method in (table.scan, table.to_reader):
-                for value, error_type in invalid:
-                    with self.subTest(column=name, method=method.__name__, value=value):
-                        with self.assertRaises(error_type) as caught:
-                            method(filters=[(name, "==", value)])
-                        self.assertNotIn("secret", str(caught.exception))
+            self.assert_invalid_filter_values(table, name, invalid)
 
     def test_float_filters_convert_values_and_reject_invalid_inputs_before_planning(self):
         class FloatWithOverride(float):
@@ -568,12 +574,9 @@ class TableTests(unittest.TestCase):
                            + [pa.field(name, data_type) for name, data_type, _, _ in types])
         values = {name: [-maximum, maximum, -1.5, 1.5, -0.0, 0.0, 0.1, minimum, None]
                   for name, _, maximum, minimum in types}
-        path = self.location / "floats.parquet"
-        pq.write_table(pa.table({"id": range(9), **values}, schema=schema), path)
-        self.write_log(1, {"metaData": self.metadata}, {"add": {
-            "path": path.name, "partitionValues": {}, "size": path.stat().st_size,
-            "modificationTime": 0, "dataChange": True,
-        }})
+        self.write_log(1, {"metaData": self.metadata}, self.write_parquet(
+            "floats.parquet", pa.table({"id": range(9), **values}, schema=schema),
+        ))
         table = DeltaTable(self.location)
         for name, _, maximum, minimum in types:
             cases = [
@@ -586,18 +589,7 @@ class TableTests(unittest.TestCase):
                     (math.nextafter(maximum, math.inf), [1]),
                     (-minimum / 2, [4]), (minimum / 2, [5]),
                 ]
-            for method, backend, (scalar, expected_ids) in product(
-                ("scan", "to_reader"), ("direct", "delta_kernel"), cases,
-            ):
-                with self.subTest(column=name, method=method, backend=backend, scalar=scalar):
-                    result = getattr(table, method)(
-                        columns=["id"], filters=[(name, "==", scalar)],
-                        execution_options=ScanExecutionOptions(parquet_backend=backend),
-                    )
-                    reader = (pa.RecordBatchReader.from_stream(result)
-                              if method == "scan" else result)
-                    with reader:
-                        self.assertCountEqual(reader.read_all().column("id").to_pylist(), expected_ids)
+            self.assert_filter_cases(table, name, [("==", scalar, ids) for scalar, ids in cases])
 
         for version in (0, 1):
             (self.log / f"{version:020}.json").unlink()
@@ -614,12 +606,7 @@ class TableTests(unittest.TestCase):
                     2.0**128, -(2.0**128), sys.float_info.max, -sys.float_info.max,
                     2.0**128 - 2.0**103, -(2.0**128 - 2.0**103),
                 )]
-            for method in (table.scan, table.to_reader):
-                for index, (value, error_type) in enumerate(invalid):
-                    with self.subTest(column=name, method=method.__name__, index=index):
-                        with self.assertRaises(error_type) as caught:
-                            method(filters=[(name, "==", value)])
-                        self.assertNotIn("secret", str(caught.exception))
+            self.assert_invalid_filter_values(table, name, invalid)
 
     def test_string_and_binary_filters_preserve_literal_values(self):
         class StringWithOverrides(str):
@@ -655,33 +642,20 @@ class TableTests(unittest.TestCase):
         schema = pa.schema([pa.field("id", pa.int64(), nullable=False)]
                            + [pa.field(name, data_type) for name, data_type, _ in types])
         values = {name: items for name, _, items in types}
-        path = self.location / "strings-and-bytes.parquet"
-        pq.write_table(pa.table({"id": range(6), **values}, schema=schema), path)
-        self.write_log(1, {"metaData": self.metadata}, {"add": {
-            "path": path.name, "partitionValues": {}, "size": path.stat().st_size,
-            "modificationTime": 0, "dataChange": True,
-        }})
+        self.write_log(1, {"metaData": self.metadata}, self.write_parquet(
+            "strings-and-bytes.parquet", pa.table({"id": range(6), **values}, schema=schema),
+        ))
         table = DeltaTable(self.location)
         for name, _, items in types:
             subclass_value = (StringWithOverrides("a\0b") if name == "string"
                               else BytesWithOverrides(b"a\0b"))
             scalars = items[:-1] + [subclass_value]
-            for method, backend, (symbol, compare), (index, scalar) in product(
-                ("scan", "to_reader"), ("direct", "delta_kernel"),
-                (("==", operator.eq), ("<", operator.lt)), enumerate(scalars),
-            ):
-                with self.subTest(column=name, method=method, backend=backend,
-                                  operator=symbol, index=index):
-                    result = getattr(table, method)(
-                        columns=["id"], filters=[(name, symbol, scalar)],
-                        execution_options=ScanExecutionOptions(parquet_backend=backend),
-                    )
-                    reader = (pa.RecordBatchReader.from_stream(result)
-                              if method == "scan" else result)
-                    expected_ids = [row for row, item in enumerate(items)
-                                    if item is not None and compare(item, scalar)]
-                    with reader:
-                        self.assertCountEqual(reader.read_all().column("id").to_pylist(), expected_ids)
+            cases = [(symbol, scalar, [
+                row for row, item in enumerate(items) if item is not None and compare(item, scalar)
+            ]) for (symbol, compare), scalar in product(
+                (("==", operator.eq), ("<", operator.lt)), scalars,
+            )]
+            self.assert_filter_cases(table, name, cases)
 
         for version in (0, 1):
             (self.log / f"{version:020}.json").unlink()
@@ -695,15 +669,7 @@ class TableTests(unittest.TestCase):
                 invalid += [(value, ValueError) for value in (
                     "\ud800secret", "secret\udfff", StringWithOverrides("\ud800secret"),
                 )]
-            for method in (table.scan, table.to_reader):
-                for index, (value, error_type) in enumerate(invalid):
-                    with self.subTest(column=name, method=method.__name__, index=index):
-                        with self.assertRaises(error_type) as caught:
-                            method(filters=[(name, "==", value)])
-                        self.assertIs(type(caught.exception), error_type)
-                        self.assertNotIn("secret", str(caught.exception))
-                        self.assertIsNone(caught.exception.__cause__)
-                        self.assertIsNone(caught.exception.__context__)
+            self.assert_invalid_filter_values(table, name, invalid)
 
     def test_decimal_filters_are_exact_and_independent_of_context(self):
         class DecimalWithOverrides(Decimal):
@@ -742,12 +708,9 @@ class TableTests(unittest.TestCase):
         ])
         values = {name: [Decimal(item) if item is not None else None for item in items]
                   for name, _, _, items in types}
-        path = self.location / "decimals.parquet"
-        pq.write_table(pa.table({"id": range(5), **values}, schema=schema), path)
-        self.write_log(1, {"metaData": self.metadata}, {"add": {
-            "path": path.name, "partitionValues": {}, "size": path.stat().st_size,
-            "modificationTime": 0, "dataChange": True,
-        }})
+        self.write_log(1, {"metaData": self.metadata}, self.write_parquet(
+            "decimals.parquet", pa.table({"id": range(5), **values}, schema=schema),
+        ))
         table = DeltaTable(self.location)
         with localcontext() as context:
             context.prec = 1
@@ -770,18 +733,7 @@ class TableTests(unittest.TestCase):
                     cases.append(("==", Decimal("1.2300E2"), [2]))
                 if name == "wide":
                     cases.append(("==", Decimal("9" * 38 + "0" * 200 + "E-200"), [3]))
-                for method, backend, (index, (symbol, scalar, expected_ids)) in product(
-                    ("scan", "to_reader"), ("direct", "delta_kernel"), enumerate(cases),
-                ):
-                    with self.subTest(column=name, method=method, backend=backend, index=index):
-                        result = getattr(table, method)(
-                            columns=["id"], filters=[(name, symbol, scalar)],
-                            execution_options=ScanExecutionOptions(parquet_backend=backend),
-                        )
-                        reader = (pa.RecordBatchReader.from_stream(result)
-                                  if method == "scan" else result)
-                        with reader:
-                            self.assertCountEqual(reader.read_all().column("id").to_pylist(), expected_ids)
+                self.assert_filter_cases(table, name, cases)
 
             for version in (0, 1):
                 (self.log / f"{version:020}.json").unlink()
@@ -804,15 +756,7 @@ class TableTests(unittest.TestCase):
                     Decimal("1E999999999999999999"), Decimal("-1E999999999999999999"),
                     Decimal(2**127), Decimal(-(2**127) - 1), Decimal("9" * 200),
                 )]
-                for method in (table.scan, table.to_reader):
-                    for index, (value, error_type) in enumerate(invalid):
-                        with self.subTest(column=name, method=method.__name__, index=index):
-                            with self.assertRaises(error_type) as caught:
-                                method(filters=[(name, "==", value)])
-                            self.assertIs(type(caught.exception), error_type)
-                            self.assertNotIn("secret", str(caught.exception))
-                            self.assertIsNone(caught.exception.__cause__)
-                            self.assertIsNone(caught.exception.__context__)
+                self.assert_invalid_filter_values(table, name, invalid)
             self.assertFalse(any(context.flags.values()))
 
     def test_date_filters_preserve_calendar_dates_and_reject_datetimes(self):
@@ -850,12 +794,9 @@ class TableTests(unittest.TestCase):
         fields.append({"name": "day", "type": "date", "nullable": True, "metadata": {}})
         self.metadata["schemaString"] = json.dumps({"type": "struct", "fields": fields})
         schema = pa.schema([pa.field("id", pa.int64(), nullable=False), pa.field("day", pa.date32())])
-        path = self.location / "dates.parquet"
-        pq.write_table(pa.table({"id": range(len(values)), "day": values}, schema=schema), path)
-        self.write_log(1, {"metaData": self.metadata}, {"add": {
-            "path": path.name, "partitionValues": {}, "size": path.stat().st_size,
-            "modificationTime": 0, "dataChange": True,
-        }})
+        self.write_log(1, {"metaData": self.metadata}, self.write_parquet(
+            "dates.parquet", pa.table({"id": range(len(values)), "day": values}, schema=schema),
+        ))
         table = DeltaTable(self.location)
         cases = [("==", value, [row]) for row, value in enumerate(values[:-1])]
         cases += [
@@ -863,17 +804,7 @@ class TableTests(unittest.TestCase):
             ("<", date(1970, 1, 1), [0, 1, 2]),
             (">=", date(2000, 2, 29), [4, 5]),
         ]
-        for method, backend, (index, (symbol, scalar, expected_ids)) in product(
-            ("scan", "to_reader"), ("direct", "delta_kernel"), enumerate(cases),
-        ):
-            with self.subTest(method=method, backend=backend, index=index):
-                result = getattr(table, method)(
-                    columns=["id"], filters=[("day", symbol, scalar)],
-                    execution_options=ScanExecutionOptions(parquet_backend=backend),
-                )
-                reader = pa.RecordBatchReader.from_stream(result) if method == "scan" else result
-                with reader:
-                    self.assertCountEqual(reader.read_all().column("id").to_pylist(), expected_ids)
+        self.assert_filter_cases(table, "day", cases)
 
         for version in (0, 1):
             (self.log / f"{version:020}.json").unlink()
@@ -882,15 +813,7 @@ class TableTests(unittest.TestCase):
             datetime(1970, 1, 1), datetime(1970, 1, 1, tzinfo=timezone.utc),
             DateTimeSubclass(1970, 1, 1),
         )] + [(None, ValueError)]
-        for method in (table.scan, table.to_reader):
-            for index, (value, error_type) in enumerate(invalid):
-                with self.subTest(method=method.__name__, index=index):
-                    with self.assertRaises(error_type) as caught:
-                        method(filters=[("day", "==", value)])
-                    self.assertIs(type(caught.exception), error_type)
-                    self.assertNotIn("secret", str(caught.exception))
-                    self.assertIsNone(caught.exception.__cause__)
-                    self.assertIsNone(caught.exception.__context__)
+        self.assert_invalid_filter_values(table, "day", invalid)
 
     def test_naive_timestamp_filters_preserve_microseconds_and_validate_offsets(self):
         class DateTimeWithOverrides(datetime):
@@ -938,17 +861,12 @@ class TableTests(unittest.TestCase):
         schema = pa.schema([
             pa.field("id", pa.int64(), nullable=False), pa.field("local_ts", pa.timestamp("us")),
         ])
-        path = self.location / "timestamps.parquet"
-        pq.write_table(pa.table({
-            "id": range(len(values) + 1), "local_ts": [micros for _, micros in values] + [None],
-        }, schema=schema), path)
         self.write_log(1, {"protocol": {
             "minReaderVersion": 3, "minWriterVersion": 7,
             "readerFeatures": ["timestampNtz"], "writerFeatures": ["timestampNtz"],
-        }}, {"metaData": self.metadata}, {"add": {
-            "path": path.name, "partitionValues": {}, "size": path.stat().st_size,
-            "modificationTime": 0, "dataChange": True,
-        }})
+        }}, {"metaData": self.metadata}, self.write_parquet("timestamps.parquet", pa.table({
+            "id": range(len(values) + 1), "local_ts": [micros for _, micros in values] + [None],
+        }, schema=schema)))
         table = DeltaTable(self.location)
         comparisons = [
             ("==", operator.eq), ("!=", operator.ne), ("<", operator.lt),
@@ -961,17 +879,7 @@ class TableTests(unittest.TestCase):
             ("==", datetime(1970, 1, 1, tzinfo=NoOffset()), [3]),
             ("==", datetime(1970, 1, 1, fold=1), [3]),
         ]
-        for method, backend, (index, (symbol, scalar, expected_ids)) in product(
-            ("scan", "to_reader"), ("direct", "delta_kernel"), enumerate(cases),
-        ):
-            with self.subTest(method=method, backend=backend, index=index):
-                result = getattr(table, method)(
-                    columns=["id"], filters=[("local_ts", symbol, scalar)],
-                    execution_options=ScanExecutionOptions(parquet_backend=backend),
-                )
-                reader = pa.RecordBatchReader.from_stream(result) if method == "scan" else result
-                with reader:
-                    self.assertCountEqual(reader.read_all().column("id").to_pylist(), expected_ids)
+        self.assert_filter_cases(table, "local_ts", cases)
 
         for version in (0, 1):
             (self.log / f"{version:020}.json").unlink()
@@ -987,15 +895,7 @@ class TableTests(unittest.TestCase):
             ValueError("secret-offset"), RuntimeError("secret-offset"),
         )]
         invalid.append((datetime(1970, 1, 1, tzinfo=InvalidOffset(KeyboardInterrupt())), KeyboardInterrupt))
-        for method in (table.scan, table.to_reader):
-            for index, (value, error_type) in enumerate(invalid):
-                with self.subTest(method=method.__name__, index=index):
-                    with self.assertRaises(error_type) as caught:
-                        method(filters=[("local_ts", "==", value)])
-                    self.assertIs(type(caught.exception), error_type)
-                    self.assertNotIn("secret", str(caught.exception))
-                    self.assertIsNone(caught.exception.__cause__)
-                    self.assertIsNone(caught.exception.__context__)
+        self.assert_invalid_filter_values(table, "local_ts", invalid)
 
     def test_aware_timestamp_filters_preserve_instants_offsets_and_fold(self):
         class FoldOffset(tzinfo):
@@ -1048,14 +948,9 @@ class TableTests(unittest.TestCase):
         schema = pa.schema([
             pa.field("id", pa.int64(), nullable=False), pa.field("event_ts", pa.timestamp("us", tz="UTC")),
         ])
-        path = self.location / "timestamps.parquet"
-        pq.write_table(pa.table({
+        self.write_log(1, {"metaData": self.metadata}, self.write_parquet("timestamps.parquet", pa.table({
             "id": range(len(values) + 1), "event_ts": [micros for _, micros in values] + [None],
-        }, schema=schema), path)
-        self.write_log(1, {"metaData": self.metadata}, {"add": {
-            "path": path.name, "partitionValues": {}, "size": path.stat().st_size,
-            "modificationTime": 0, "dataChange": True,
-        }})
+        }, schema=schema)))
         table = DeltaTable(self.location)
         cases = [("==", scalar, [row]) for row, (scalar, _) in enumerate(values)] + [
             ("<", datetime(1970, 1, 1, tzinfo=timezone.utc), [0, 1, 2]),
@@ -1096,15 +991,7 @@ class TableTests(unittest.TestCase):
             ValueError("secret-offset"), RuntimeError("secret-offset"),
         )]
         invalid.append((datetime(1970, 1, 1, tzinfo=InvalidOffset(KeyboardInterrupt())), KeyboardInterrupt))
-        for method in (table.scan, table.to_reader):
-            for index, (value, error_type) in enumerate(invalid):
-                with self.subTest(method=method.__name__, index=index):
-                    with self.assertRaises(error_type) as caught:
-                        method(filters=[("event_ts", "==", value)])
-                    self.assertIs(type(caught.exception), error_type)
-                    self.assertNotIn("secret", str(caught.exception))
-                    self.assertIsNone(caught.exception.__cause__)
-                    self.assertIsNone(caught.exception.__context__)
+        self.assert_invalid_filter_values(table, "event_ts", invalid)
 
     def test_filter_validation_is_shared_and_redacted_before_planning(self):
         class SecretValue:
