@@ -10,6 +10,7 @@ use super::{array, field, fixture_tables, object, require, text};
 use crate::{Result, artifacts::reader_sha256, selective_read_build::digest};
 
 pub(super) mod fixtures;
+mod large;
 pub(super) mod matrix;
 pub(super) mod planner;
 pub(super) mod production;
@@ -56,6 +57,24 @@ pub(super) enum Request {
         write_batch_rows: u64,
     },
     Cases,
+    LargeShapes,
+    LargeDefinitions {
+        family: String,
+        pilot_case: Option<String>,
+    },
+    LargeQuery {
+        case: String,
+        manifest: Value,
+    },
+    LargeLoad {
+        value: Value,
+        harness: PathBuf,
+    },
+    LargeBinding {
+        value: Value,
+        fixtures: PathBuf,
+        case: String,
+    },
     Query {
         case: String,
         manifest: Value,
@@ -85,6 +104,17 @@ pub(super) fn run(request: Request) -> Result<Value> {
             write_batch_rows,
         } => shapes(file_target_mib, page_rows, page_bytes, write_batch_rows),
         Request::Cases => Ok(cases()),
+        Request::LargeShapes => Ok(large::shapes()),
+        Request::LargeDefinitions { family, pilot_case } => {
+            large::definitions(&family, pilot_case.as_deref())
+        }
+        Request::LargeQuery { case, manifest } => large::query(&case, &manifest),
+        Request::LargeLoad { value, harness } => large::load(value, &harness),
+        Request::LargeBinding {
+            value,
+            fixtures,
+            case,
+        } => large::binding(&value, &fixtures, &case),
         Request::Query {
             case,
             manifest,
