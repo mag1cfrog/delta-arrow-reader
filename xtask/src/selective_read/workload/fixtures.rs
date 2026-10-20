@@ -146,25 +146,23 @@ struct Inputs {
     files: Vec<Value>,
 }
 
-fn inputs(args: &Args, root: &Path, harness: &Path) -> Result<Inputs> {
+fn inputs(args: &Args, root: &Path) -> Result<Inputs> {
     let plan = read_json(&args.plan)?;
     require(
-        plan["status"] == "logical_geometry_checked"
+        plan["format"] == "selective-read-production-shape-plan-v1"
+            && plan["status"] == "logical_geometry_checked"
+            && plan["source_scale"] == 10
+            && plan["cases"] == cases()
             && plan["publication_ready"] == false
             && plan["native_campaign_ready"] == false,
         "expected an untimed production layout plan",
-    )?;
-    require(
-        plan["contract_sha256"] == digest(&contract(harness))?
-            && plan["planner_sha256"] == digest(&harness.join("production_shapes.py"))?
-            && plan["planner_controller_sha256"] == digest(&std::env::current_exe()?)?,
-        "layout definition changed",
     )?;
     require(
         plan["source_manifest_sha256"] == digest(&root.join("manifest.json"))?,
         "source manifest changed",
     )?;
     let (source, paths) = source(root, digest)?;
+    planner::check_counts(&plan["predicate_stage_rows"], &source)?;
     let shape = field(&plan["shapes"], &args.shape)?.clone();
     let definitions = shapes(
         count(&plan["file_target_mib"])?,
@@ -186,6 +184,12 @@ fn inputs(args: &Args, root: &Path, harness: &Path) -> Result<Inputs> {
         "logical file geometry changed",
     )?;
     let files = array(&read_json(&geometry_path)?)?.clone();
+    let (candidates, matching) =
+        planner::check_geometry(&json!(files), &shape, &plan["predicate_stage_rows"])?;
+    require(
+        shape["candidate_files"] == candidates && shape["matching_files"] == matching,
+        "file selection counts differ from the plan",
+    )?;
     let total = count(&shape["files"])?;
     let stripes = count(&shape["stripes"])?;
     require(
@@ -204,7 +208,10 @@ fn inputs(args: &Args, root: &Path, harness: &Path) -> Result<Inputs> {
             "wrong file membership order",
         )?;
         require(
-            (1..=1048576).contains(&count(&file["rows"])?) && file["candidate"].is_boolean(),
+            (1..=1048576).contains(&count(&file["rows"])?)
+                && file["candidate"].is_boolean()
+                && count(&file["matching_rows"])? <= count(&file["rows"])?
+                && (file["matching_rows"] == 0 || file["candidate"] == true),
             "invalid file boundaries",
         )?;
     }
@@ -215,6 +222,18 @@ fn inputs(args: &Args, root: &Path, harness: &Path) -> Result<Inputs> {
         shape,
         files,
     })
+}
+
+fn check_probe(probe: &Value, plan: &Value, shape: &Value, name: &str) -> Result<()> {
+    require(
+        probe["protocol"] == "selective-read-production-fixtures-v1"
+            && probe["mode"] == "probe"
+            && probe["status"] == "complete"
+            && probe["shape"] == name
+            && probe["source_parent_manifest_sha256"] == plan["source_manifest_sha256"]
+            && probe["shape_definition"] == *shape,
+        "capacity probe has incompatible source data or layout",
+    )
 }
 
 pub(super) fn contract(harness: &Path) -> PathBuf {
@@ -464,7 +483,7 @@ pub(crate) fn run(args: Args) -> Result<()> {
         paths,
         shape,
         files,
-    } = inputs(&args, &root, &harness)?;
+    } = inputs(&args, &root)?;
     let selected = if args.mode == "probe" {
         require(args.probe.is_none(), "invalid probe layout")?;
         probe_selection(&files, count(&shape["stripes"])?)?
@@ -495,16 +514,7 @@ pub(crate) fn run(args: Args) -> Result<()> {
             .as_deref()
             .ok_or("generate requires --probe and --layout")?;
         let probe = read_json(&probe_root.join("manifest.json"))?;
-        require(
-            probe["mode"] == "probe"
-                && probe["status"] == "complete"
-                && probe["shape"] == args.shape
-                && probe["plan_sha256"] == plan_hash
-                && probe["driver_sha256"] == driver_hash
-                && probe["controller_sha256"] == controller_hash
-                && probe["writer"]["generator"]["executable_sha256"] == writer_hash,
-            "stale or incompatible capacity probe",
-        )?;
+        check_probe(&probe, &plan, &shape, &args.shape)?;
         require(
             probe["writer_result_sha256"] == digest(&probe_root.join("writer-result.json"))?
                 && probe["writer"] == read_json(&probe_root.join("writer-result.json"))?,

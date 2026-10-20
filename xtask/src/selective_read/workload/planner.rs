@@ -114,7 +114,7 @@ pub(super) fn layout_geometry(shape: &Value, statistics: &Value) -> Result<Value
     Ok(json!(geometry))
 }
 
-fn check_counts(counts: &Value, source: &Value) -> Result<()> {
+pub(super) fn check_counts(counts: &Value, source: &Value) -> Result<()> {
     let counts: Vec<_> = array(counts)?.iter().map(count).collect::<Result<_>>()?;
     require(
         counts.len() == 4 && counts[0] == count(&source["rows"])?,
@@ -132,7 +132,11 @@ fn check_counts(counts: &Value, source: &Value) -> Result<()> {
     )
 }
 
-fn check_geometry(geometry: &Value, shape: &Value, counts: &Value) -> Result<(usize, usize)> {
+pub(super) fn check_geometry(
+    geometry: &Value,
+    shape: &Value,
+    counts: &Value,
+) -> Result<(usize, usize)> {
     let files = array(geometry)?;
     let total = count(&shape["files"])?;
     let stripes = count(&shape["stripes"])?;

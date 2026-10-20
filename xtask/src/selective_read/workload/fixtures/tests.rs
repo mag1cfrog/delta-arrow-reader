@@ -1,6 +1,89 @@
 use super::*;
 
 #[test]
+fn plans_and_probes_validate_layout_behavior_independently_of_tool_hashes() -> Result<()> {
+    let temporary = tempfile::tempdir()?;
+    let root = temporary.path();
+    fs::create_dir(root.join("source"))?;
+    fs::write(root.join("source/part.parquet"), "data")?;
+    fs::write(root.join("generator-Cargo.lock"), "lock")?;
+    let source = json!({"status":"complete","protocol":"selective-read-v1",
+        "generator":{"tpchgen":"3.0.0","tpchgen_git":"4f6bf4c5ab40511c8fdef5888fc8d022e5e546d7",
+            "lockfile_sha256":digest(&root.join("generator-Cargo.lock"))?},
+        "sources":[{"scale_factor":10,"path":"source","rows":6000,"file_count":1,"bytes":4,
+            "files":[{"path":"part.parquet","bytes":4,"sha256":digest(&root.join("source/part.parquet"))?}]}]});
+    save(&root.join("manifest.json"), &source)?;
+    let files: Vec<_> = (0..6)
+        .flat_map(|stripe| {
+            (0..10).map(move |index| {
+                json!({"stripe":stripe,"file_index":index,"rows":100,
+            "candidate":index == 0,"matching_rows":if index == 0 {50} else {0}})
+            })
+        })
+        .collect();
+    save(&root.join("q4-files.json"), &json!(files))?;
+    let mut definitions = shapes(512, 20000, 1048576, 1024)?;
+    let shape = &mut definitions["q4"];
+    shape["file_geometry_sha256"] = json!(digest(&root.join("q4-files.json"))?);
+    shape["output_rows"] = json!(300);
+    shape["candidate_files"] = json!(6);
+    shape["matching_files"] = json!(6);
+    let plan = json!({"format":"selective-read-production-shape-plan-v1","status":"logical_geometry_checked",
+        "source_scale":10,"cases":cases(),"publication_ready":false,"native_campaign_ready":false,
+        "contract_sha256":"old documentation","planner_sha256":"old Python","planner_controller_sha256":"old binary",
+        "source_manifest_sha256":digest(&root.join("manifest.json"))?,"predicate_stage_rows":[6000,1200,600,300],
+        "file_target_mib":512,"data_page_rows":20000,"data_page_bytes":1048576,"write_batch_rows":1024,"shapes":definitions});
+    let args = Args {
+        mode: "probe".into(),
+        source: root.into(),
+        plan: root.join("plan.json"),
+        shape: "q4".into(),
+        writer: root.join("unused-writer"),
+        output: root.join("output"),
+        python: root.join("unused-python"),
+        probe: None,
+        layout: None,
+        disk_limit_mib: 196608,
+        elapsed_limit_seconds: 3600,
+        harness: root.join("no-current-sources"),
+    };
+    save(&args.plan, &plan)?;
+    assert_eq!(inputs(&args, root)?.files, files);
+    for (pointer, value) in [
+        ("/format", json!("unknown")),
+        ("/source_scale", json!(1)),
+        ("/cases", json!({})),
+        ("/predicate_stage_rows", json!([6000, 1200, 600, 301])),
+        ("/shapes/q4/canonical_sql", json!("SELECT 1")),
+        ("/shapes/q4/projection", json!(["l_orderkey"])),
+        ("/shapes/q4/candidate_files", json!(7)),
+    ] {
+        let mut changed = plan.clone();
+        *changed.pointer_mut(pointer).ok_or("missing test field")? = value;
+        fs::write(&args.plan, serde_json::to_vec(&changed)?)?;
+        assert!(inputs(&args, root).is_err(), "{pointer}");
+    }
+    let probe = json!({"protocol":"selective-read-production-fixtures-v1","mode":"probe","status":"complete","shape":"q4",
+        "source_parent_manifest_sha256":plan["source_manifest_sha256"],"shape_definition":plan["shapes"]["q4"],
+        "plan_sha256":"old plan provenance","driver_sha256":"old Python","controller_sha256":"old binary",
+        "writer":{"generator":{"executable_sha256":"old writer"}}});
+    check_probe(&probe, &plan, &plan["shapes"]["q4"], "q4")?;
+    for (pointer, value) in [
+        ("/status", json!("incomplete")),
+        ("/source_parent_manifest_sha256", json!("different data")),
+        ("/shape_definition/data_page_rows", json!(2048)),
+    ] {
+        let mut changed = probe.clone();
+        *changed.pointer_mut(pointer).ok_or("missing test field")? = value;
+        assert!(
+            check_probe(&changed, &plan, &plan["shapes"]["q4"], "q4").is_err(),
+            "{pointer}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn probe_keeps_false_positives_and_capacity_covers_every_stripe() -> Result<()> {
     let files: Vec<_> = (0..2).flat_map(|stripe| (0..3).map(move |index|
         json!({"stripe":stripe,"file_index":index,"rows":11 + index,"candidate":index == 0,"matching_rows":0}))).collect();
