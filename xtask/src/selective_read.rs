@@ -1,4 +1,5 @@
 mod campaign;
+mod observe;
 mod storage;
 mod supervise;
 
@@ -16,6 +17,17 @@ pub(crate) enum Task {
     Campaign,
     /// Operate the dedicated benchmark storage. Read the operation as JSON from stdin.
     Storage,
+    /// Read or reconcile storage observations. Read the operation as JSON from stdin.
+    Observe,
+    /// Capture and reconcile MinIO requests, using a deadline sent on stdin.
+    Capture {
+        #[arg(long)]
+        state: PathBuf,
+        #[arg(long)]
+        request: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Build the pinned MinIO server in a new directory.
     PrepareStorage {
         #[arg(long)]
@@ -51,6 +63,11 @@ impl Task {
             Self::StartStorage { build, state, port } => {
                 return storage::service::start(&build, &state, port);
             }
+            Self::Capture {
+                state,
+                request,
+                output,
+            } => return observe::capture(&state, &request, &output),
             _ => {}
         }
         let input: Value = serde_json::from_reader(std::io::stdin().lock())?;
@@ -58,7 +75,11 @@ impl Task {
             Self::Supervise => supervise::launch(serde_json::from_value(input)?)?,
             Self::Campaign => campaign::run(serde_json::from_value(input)?)?,
             Self::Storage => storage::run(serde_json::from_value(input)?)?,
-            Self::ExecReader { .. } | Self::PrepareStorage { .. } | Self::StartStorage { .. } => {
+            Self::Observe => observe::run(serde_json::from_value(input)?)?,
+            Self::ExecReader { .. }
+            | Self::PrepareStorage { .. }
+            | Self::StartStorage { .. }
+            | Self::Capture { .. } => {
                 unreachable!()
             }
         };

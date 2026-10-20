@@ -236,6 +236,8 @@ cannot authorize the same query against S3.
 limits, server identity, capture status, and I/O totals. A sibling directory with
 the suffix `-io` holds the capture proof and sanitized `requests.jsonl`. Failed
 captures retain their artifacts and invalidate the storage observation.
+The capture process runs as `xtask selective-read capture`; its proof records
+the controller executable's SHA-256 and effective observer affinity.
 
 ## Observation boundary
 

@@ -345,6 +345,29 @@ pub(super) fn request(directory: &Path, path: &str, options: &[&str]) -> Result<
     response(curl(directory, path, &arguments)?)
 }
 
+pub(super) fn http(url: &str, method: &str, timeout: f64) -> Result<Vec<u8>> {
+    require(timeout.is_finite() && timeout > 0.0, "invalid HTTP timeout")?;
+    response(
+        Command::new("curl")
+            .args([
+                "--disable",
+                "--silent",
+                "--show-error",
+                "--noproxy",
+                "*",
+                "--fail",
+                "--max-time",
+                &timeout.to_string(),
+                "-X",
+                method,
+                url,
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?,
+    )
+}
+
 fn object_path(key: &str) -> String {
     let mut result = format!("/{BUCKET}/");
     for byte in key.bytes() {
