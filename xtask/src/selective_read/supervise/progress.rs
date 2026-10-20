@@ -15,7 +15,7 @@ fn fields(value: &Value, expected: &[&str]) -> bool {
     })
 }
 
-fn count(payload: &Value) -> io::Result<usize> {
+pub(in crate::selective_read) fn count(payload: &Value) -> io::Result<usize> {
     let reuse = payload["execution_mode"] == "reuse";
     if !payload["concurrent_queries"].is_null() {
         let count = payload["concurrent_queries"].as_u64();

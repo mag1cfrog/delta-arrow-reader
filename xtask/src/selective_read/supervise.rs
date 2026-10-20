@@ -1,4 +1,4 @@
-mod progress;
+pub(super) mod progress;
 
 use std::{
     collections::BTreeMap,
@@ -40,7 +40,7 @@ pub(super) struct Launch {
     cleanup_seconds: f64,
 }
 
-fn monotonic_ns() -> io::Result<u64> {
+pub(super) fn monotonic_ns() -> io::Result<u64> {
     let mut time = MaybeUninit::<libc::timespec>::uninit();
     // SAFETY: clock_gettime initializes the supplied timespec on success.
     if unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, time.as_mut_ptr()) } != 0 {

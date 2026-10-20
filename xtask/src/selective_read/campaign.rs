@@ -1,10 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
 
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use super::{array, field, object, require, text};
 use crate::{Result, scan_scheduling::balanced_orders};
+
+mod evidence;
 
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "kebab-case", deny_unknown_fields)]
@@ -27,10 +30,34 @@ pub(super) enum Request {
     Distribution {
         values: Vec<f64>,
     },
-    WarmedGate {
-        gate: Value,
-        observations: BTreeMap<String, Value>,
+    Mode {
+        config: Value,
+        mode: evidence::Mode,
+        protocols: PathBuf,
     },
+    PlanEvidence {
+        record: Value,
+        artifacts: PathBuf,
+    },
+    ValidateDiagnostics {
+        config: Value,
+        inventory: Vec<(String, Value)>,
+        slots: Vec<Value>,
+        observations: Vec<Value>,
+        protocols: PathBuf,
+    },
+    Validate {
+        record: Value,
+        payload: Value,
+        reader: String,
+        gate: Option<Value>,
+        protocols: PathBuf,
+    },
+    ReadResults {
+        directory: PathBuf,
+        frozen_error: String,
+    },
+    TimerResolution,
 }
 
 pub(super) fn run(request: Request) -> Result<Value> {
@@ -58,7 +85,37 @@ pub(super) fn run(request: Request) -> Result<Value> {
             integrity,
         } => summarize(&inventory, &slots, &rows, resolution, integrity),
         Request::Distribution { values } => distribution(values),
-        Request::WarmedGate { gate, observations } => Ok(json!(warmed_gate(&gate, &observations))),
+        Request::Mode {
+            config,
+            mode,
+            protocols,
+        } => Ok(json!(mode.enabled(&config, &protocols)?)),
+        Request::PlanEvidence { record, artifacts } => evidence::plans(&record, &artifacts),
+        Request::ValidateDiagnostics {
+            config,
+            inventory,
+            slots,
+            observations,
+            protocols,
+        } => {
+            evidence::diagnostics(&config, &inventory, &slots, &observations, &protocols)?;
+            Ok(Value::Null)
+        }
+        Request::Validate {
+            record,
+            payload,
+            reader,
+            gate,
+            protocols,
+        } => {
+            evidence::validate(&record, &payload, &reader, gate.as_ref(), &protocols)?;
+            Ok(Value::Null)
+        }
+        Request::ReadResults {
+            directory,
+            frozen_error,
+        } => evidence::read_results(&directory, &frozen_error),
+        Request::TimerResolution => evidence::timer_resolution(),
     }
 }
 

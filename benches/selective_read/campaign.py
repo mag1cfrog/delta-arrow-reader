@@ -1,9 +1,7 @@
 """Run the frozen selective-read schedule against one prepared MinIO server."""
 
 import argparse
-import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import sys
@@ -19,7 +17,7 @@ import large_workloads
 import metadata_cache
 import native
 from run import digest, save
-from supervise import integer, require
+from supervise import require
 
 HERE = Path(__file__).resolve().parent
 
@@ -33,41 +31,18 @@ GATE_DIAGNOSTICS = run.PROTOCOL.with_name("selective-read-gate-diagnostics.md")
 
 
 def validation_warmup(config):
-    enabled = config.get("gate_warmup", False)
-    require(type(enabled) is bool, "gate warmup must be a boolean")
-    if enabled:
-        require(config.get("comparison_revision") == 6 and
-                config.get("warmup_amendment_sha256") == digest(GATE_WARMUP),
-                "missing or stale gate-warmup amendment")
-    else:
-        require(config.get("warmup_amendment_sha256") is None, "standalone warmup cannot carry the amendment")
-    return enabled
+    return native.call("campaign", {"action": "mode", "config": config, "mode": "gate-warmup",
+                                    "protocols": str(run.PROTOCOL.parent)})
 
 
 def combined_diagnostics(config):
-    enabled = config.get("combined_diagnostics", False)
-    require(type(enabled) is bool, "combined diagnostics must be a boolean")
-    if enabled:
-        require(config.get("comparison_revision") == 6 and
-                config.get("diagnostics_amendment_sha256") == digest(COMBINED_DIAGNOSTICS),
-                "missing or stale combined-diagnostic amendment")
-    else:
-        require(config.get("diagnostics_amendment_sha256") is None, "separate diagnostics cannot carry the amendment")
-    return enabled
+    return native.call("campaign", {"action": "mode", "config": config, "mode": "combined-diagnostics",
+                                    "protocols": str(run.PROTOCOL.parent)})
 
 
 def validation_diagnostics(config):
-    enabled = config.get("gate_diagnostics", False)
-    require(type(enabled) is bool, "gate diagnostics must be a boolean")
-    if enabled:
-        require(config.get("comparison_revision") == 6 and config.get("combined_diagnostics") is True
-                and config.get("gate_warmup") is True
-                and config.get("gate_diagnostics_amendment_sha256") == digest(GATE_DIAGNOSTICS),
-                "missing or stale gate-diagnostic mode/amendment")
-    else:
-        require(config.get("gate_diagnostics_amendment_sha256") is None,
-                "separate gate diagnostics cannot carry the amendment")
-    return enabled
+    return native.call("campaign", {"action": "mode", "config": config, "mode": "gate-diagnostics",
+                                    "protocols": str(run.PROTOCOL.parent)})
 
 
 def slot_purpose(slot, combined=False):
@@ -81,15 +56,7 @@ def slot_purpose(slot, combined=False):
 
 
 def plan_evidence(record, artifacts):
-    evidence = []
-    for query in record["queries"]:
-        name = query["physical_plan"]
-        require(isinstance(name, str) and Path(name).name == name, "missing or invalid native plan")
-        path = artifacts / "reader" / name
-        require(not path.is_symlink() and path.is_file() and path.stat().st_size > 0,
-                "native plan export is empty or missing")
-        evidence.append({"query_index": query["query_index"], "path": str(path), "sha256": digest(path)})
-    return evidence
+    return native.call("campaign", {"action": "plan-evidence", "record": record, "artifacts": str(artifacts)})
 
 
 def schedule(inventory, campaign_id, comparison=None, *, combined=None, gate_warmup=None, gate_diagnostics=None):
@@ -99,54 +66,9 @@ def schedule(inventory, campaign_id, comparison=None, *, combined=None, gate_war
 
 
 def validate_diagnostics(config, inventory, slots, observations):
-    combined = combined_diagnostics(config)
-    gate_warmup = validation_warmup(config)
-    gate_diagnostics = validation_diagnostics(config)
-    require(slots == schedule(inventory, config["campaign_id"], run.comparison_identity(config),
-                             combined=combined, gate_warmup=gate_warmup, gate_diagnostics=gate_diagnostics),
-            "schedule differs from the declared diagnostic mode")
-    if gate_diagnostics:
-        require(all(entry.get("gate_diagnostics") is True for entries in inventory.values() for entry in entries.values()),
-                "gate diagnostics were not declared in the frozen inventory")
-    if gate_warmup:
-        require(all(entry.get("gate_warmup") is True for entries in inventory.values() for entry in entries.values()),
-                "gate warmup was not declared in the frozen inventory")
-        by_id = {row["run_id"]: row for row in observations}
-        for entries in inventory.values():
-            for gate in entries.values():
-                if gate["runnable"]:
-                    require(warmed_gate(gate, by_id), "storage-warmup gate is missing or incomplete")
-    if not combined:
-        return
-    require(all(entry.get("combined_diagnostics") is True for entries in inventory.values() for entry in entries.values()),
-            "combined diagnostics were not declared in the frozen inventory")
-    by_id = {slot["run_id"]: slot for slot in slots}
-    require({row["run_id"] for row in observations if row["stage"] != "gate"} == set(by_id),
-            "combined diagnostic schedule has missing or extra observations")
-    for row in observations:
-        if row["stage"] != "gate":
-            require(all(row[key] == value for key, value in by_id[row["run_id"]].items()),
-                    "observation differs from the declared diagnostic schedule")
-        require(row["request"]["purpose"] == slot_purpose(row, combined), "diagnostic purpose changed")
-        if gate_diagnostics:
-            is_gate = row["stage"] == "gate"
-            require(row["request"].get("validation_diagnostics", False) is is_gate and
-                    (not is_gate or row["traced"] is True), "gate diagnostic request/tracing changed")
-        record = row["observation"]
-        if record["status"] != "success":
-            continue
-        if row["request"]["purpose"] == "diagnostic" or (
-                gate_diagnostics and row["stage"] == "gate" and row["reader_id"] != "duckdb"):
-            require(record.get("plan_artifacts") == plan_evidence(record, Path(row["artifacts"])),
-                    "native plan artifacts changed")
-        if row["stage"] == "diagnostic" or gate_diagnostics and row["stage"] == "gate":
-            require(record["storage_capture"]["status"] == "passed" and
-                    record["storage_environment"]["trace_enabled"] and record.get("storage_io") is not None,
-                    "combined diagnostic lacks reconciled I/O")
-
-
-def warmed_gate(gate, observations):
-    return native.call("campaign", {"action": "warmed-gate", "gate": gate, "observations": observations})
+    native.call("campaign", {"action": "validate-diagnostics", "config": config,
+        "inventory": list(inventory.items()), "slots": slots, "observations": observations,
+        "protocols": str(run.PROTOCOL.parent)})
 
 
 def distribution(values):
@@ -154,81 +76,12 @@ def distribution(values):
 
 
 def timer_resolution():
-    previous = time.perf_counter_ns()
-    ticks = []
-    for _ in range(10000):
-        current = time.perf_counter_ns()
-        if current > previous:
-            ticks.append(current - previous)
-        previous = current
-    nominal = math.ceil(time.get_clock_info("perf_counter").resolution * 10**9)
-    return {"clock": "Linux CLOCK_MONOTONIC (Rust Instant/Python perf_counter)",
-            "nominal_ns": nominal, "minimum_observed_tick_ns": min(ticks),
-            "ratio_floor_ns": max(nominal, min(ticks))}
+    return native.call("campaign", {"action": "timer-resolution"})
 
 
 def validate(record, payload, reader, gate=None):
-    """Reject incomplete successful records before admitting any sample."""
-    if record["status"] != "success":
-        return
-    identity = record["identity"]
-    comparison = run.comparison_identity(payload)
-    require(identity["reader_id"] == reader, "reader identity changed")
-    for key in (*comparison, "fixture_manifest_sha256", "case_id", "snapshot_version"):
-        require(identity[key] == payload[key], "observation identity differs: " + key)
-    require(identity["canonical_sql_sha256"] == hashlib.sha256(payload["canonical_sql"].encode()).hexdigest(), "SQL hash differs")
-    for key in ("campaign_id", "run_id", "purpose", "execution_mode", "repetition", "order", "table_uri", "profile", "canonical_sql"):
-        require(record[key] == payload[key], "observation request differs: " + key)
-    require(record["capability"]["status"] == "supported" and record["cleanup"]["status"] == "passed", "incomplete capability or cleanup")
-    require(record["external_resource_limits"]["process_memory_bytes"] == run.BUDGET["process_memory_bytes"], "missing enforced memory limit")
-    if payload["comparison_revision"] in (3, 4, 5, 6) and payload["purpose"] == "validation":
-        require(record["external_resource_limits"]["max_file_size_bytes"] == record["validation_export_limit_bytes_per_file"],
-                "validation export limit was not inherited by the reader")
-    queries = record["queries"]
-    count = run.query_count(payload)
-    require(isinstance(queries, list) and len(queries) == count, "incomplete query count")
-    for index, query in enumerate(queries):
-        require(query["query_index"] == index and integer(query["output_rows"]) and integer(query["output_batches"]), "invalid query counts")
-    if gate is not None:
-        require(identity == gate["identity"], "validated build/configuration changed")
-    if payload["purpose"] in ("validation", "timing"):
-        require(record["correctness"]["status"] == "passed", "missing correctness gate")
-    if payload.get("validation_diagnostics"):
-        require(payload["validation_diagnostics"] is True and payload["purpose"] == "validation"
-                and payload["comparison_revision"] == 6 and record.get("validation_diagnostics") is True,
-                "undeclared native gate diagnostics")
-        require(record.get("storage_capture", {}).get("status") == "passed"
-                and record.get("storage_environment", {}).get("trace_enabled") is True
-                and isinstance(record.get("storage_io"), dict)
-                and integer(record.get("diagnostic_session_ns")), "missing reconciled gate I/O")
-        require(len([e for e in record.get("diagnostic_events", []) if e["event"] == "stream_complete"]) == count,
-                "missing gate stream boundaries")
-        require(all(q["completion_ns"] is None and q["first_batch_ns"] is None for q in queries)
-                and record["open_query_ns"] is None and record["session_elapsed_ns"] is None,
-                "diagnostic gate contains timing samples")
-        if reader != "duckdb":
-            require(len(record.get("plan_artifacts", [])) == count, "missing gate native plans")
-        else:
-            require(all(q["physical_plan"] is None for q in queries), "DuckDB EXPLAIN entered gate I/O")
-    if payload["purpose"] != "timing":
-        return
-    for query in queries:
-        require(integer(query["completion_ns"]), "invalid completion time")
-        first = query["first_batch_ns"]
-        require((first is None and bool(query["first_batch_unavailable_reason"])) or
-                (integer(first) and first <= query["completion_ns"]), "invalid first-batch time")
-    require(integer(record["cleanup_ns"]) and integer(record["session_elapsed_ns"]), "missing lifecycle clocks")
-    if count == 1:
-        require(record["open_query_ns"] == queries[0]["completion_ns"], "open/query clocks disagree")
-    else:
-        init = record["initialization_ns"]
-        require(integer(init), "missing initialization time")
-        require(record["initialization_plus_query1_ns"] == init + queries[0]["completion_ns"] and
-                record["initialization_plus_all_queries_ns"] == init + sum(q["completion_ns"] for q in queries), "session totals disagree")
-        require(record["session_elapsed_ns"] >= record["initialization_plus_all_queries_ns"], "enclosing session is shorter than its intervals")
-    for key in ("process_user_cpu_ns", "process_system_cpu_ns", "process_cpu_ns", "peak_rss_bytes", "process_elapsed_ns"):
-        require(integer(record["external_metrics"][key]), "missing process resource: " + key)
-
+    native.call("campaign", {"action": "validate", "record": record, "payload": payload,
+        "reader": reader, "gate": gate, "protocols": str(run.PROTOCOL.parent)})
 
 
 def summarize(inventory, slots, rows, resolution, integrity=True):
@@ -237,15 +90,8 @@ def summarize(inventory, slots, rows, resolution, integrity=True):
 
 
 def read_results(directory, frozen_error="frozen campaign inputs changed"):
-    """Load frozen campaign results and verify their summary against the journal."""
-    frozen = json.loads((directory / "frozen.json").read_text())
-    require(frozen == {name: digest(directory / name) for name in ("campaign.json", "inventory.json", "schedule.json")}, frozen_error)
-    inventory, summary, slots = (json.loads((directory / (name + ".json")).read_text())
-                                 for name in ("inventory", "summary", "schedule"))
-    observations = [json.loads(line) for line in (directory / "observations.jsonl").read_text().splitlines()]
-    require(summary["jobs"] == summarize(inventory, slots, observations,
-            summary["timer_resolution"]["ratio_floor_ns"], summary["integrity_passed"]), "summary differs from raw observations")
-    return inventory, summary, observations, slots
+    return native.call("campaign", {"action": "read-results", "directory": str(directory),
+                                    "frozen_error": frozen_error})
 
 
 def execute(args):

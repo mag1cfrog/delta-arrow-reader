@@ -70,7 +70,7 @@ fn file_identity(metadata: &fs::Metadata) -> (u64, u64, u64, i64, i64, i64, i64)
     )
 }
 
-fn digest(path: &Path) -> Result<String> {
+pub(crate) fn digest(path: &Path) -> Result<String> {
     let mut file = fs::File::open(path)?;
     let before = file_identity(&file.metadata()?);
     let hash = reader_sha256(&mut file)?;
