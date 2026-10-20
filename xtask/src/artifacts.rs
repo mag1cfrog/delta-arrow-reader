@@ -176,7 +176,7 @@ pub(crate) fn archive_name(version: &str, architecture: Architecture) -> String 
     format!("dar-v{}-linux-{}-gnu.tar.gz", version, architecture.name())
 }
 
-fn reader_sha256(mut reader: impl Read) -> io::Result<String> {
+pub(crate) fn reader_sha256(mut reader: impl Read) -> io::Result<String> {
     let mut hash = Sha256::new();
     let mut buffer = [0; 64 * 1024];
     loop {

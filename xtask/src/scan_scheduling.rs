@@ -19,7 +19,7 @@ use crate::{
     Result,
     artifacts::{create_directory, file_sha256},
     command::{command_output, output_with_timeout},
-    repository::cargo_workspace_root,
+    repository::{cargo_workspace_root, files},
 };
 
 #[derive(Args)]
@@ -236,21 +236,6 @@ fn ordered_cases(cases: &[Case], repetition: u32) -> Vec<usize> {
         Sha256::digest(format!("{}:{}", 122 + repetition, cases[*index].name()))
     });
     indices
-}
-
-fn files(root: &Path) -> Result<Vec<PathBuf>> {
-    let mut result = Vec::new();
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
-        let path = entry.path();
-        if entry.file_type()?.is_dir() {
-            result.extend(files(&path)?);
-        } else if path.is_file() {
-            result.push(path);
-        }
-    }
-    result.sort();
-    Ok(result)
 }
 
 fn tree_hash(root: &Path) -> Result<String> {

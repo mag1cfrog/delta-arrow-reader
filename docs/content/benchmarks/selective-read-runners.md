@@ -36,9 +36,9 @@ Missing external observations remain null in the record.
 Use Linux x86-64 and Rust 1.98.1. Run from the repository root:
 
 ```sh
-python3 benches/selective_read/runners/build.py \
+cargo xtask build-selective-read \
   --reader dar --output ../selective-read-dar-build
-python3 benches/selective_read/runners/build.py \
+cargo xtask build-selective-read \
   --reader delta-rs --output ../selective-read-delta-rs-build
 ```
 
@@ -49,7 +49,8 @@ The runner verifies its actual executable and compiled lockfile hashes before
 opening a table.
 
 Build artifacts include the lockfile, complete Cargo metadata and enabled
-features, Cargo dependency tree, source hashes, checkout commit and dirty status,
+features, Cargo dependency tree, source hashes (including xtask), the build helper's
+executable hash, checkout commit and dirty status,
 compiler/Cargo/linker versions, command, and executable hash. A source change
 during compilation fails the build helper. Use a clean committed checkout for
 measurement artifacts; development builds retain their dirty status.
