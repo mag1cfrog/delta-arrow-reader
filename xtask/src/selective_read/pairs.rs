@@ -12,7 +12,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::{array, field, require, storage, text};
+use super::{array, field, fixture_tables, require, storage, text, workload};
 use crate::{
     Result, artifacts::reader_sha256, command::wait_with_timeout, selective_read_build::digest,
 };
@@ -35,6 +35,54 @@ pub(super) struct Request {
     layout: Option<String>,
     contract_sha256: String,
     driver_sha256: String,
+}
+
+#[derive(clap::Args)]
+pub(crate) struct Args {
+    #[arg(long, required = true)]
+    fixtures: Vec<PathBuf>,
+    #[arg(long)]
+    binary: PathBuf,
+    #[arg(long)]
+    output: PathBuf,
+    #[arg(long)]
+    disk_limit_gib: u64,
+    #[arg(long, default_value_t = 1800)]
+    elapsed_limit_seconds: u32,
+    #[arg(long, value_parser = ["localized", "scattered"])]
+    layout: Option<String>,
+    #[arg(long, default_value = "benches/selective_read")]
+    harness: PathBuf,
+}
+
+pub(super) fn prepare(args: Args) -> Result<Value> {
+    let protocols = fs::canonicalize(args.harness.join("../../docs/content/benchmarks"))?;
+    let fixtures = args
+        .fixtures
+        .iter()
+        .map(|root| {
+            let path = fs::canonicalize(root)?;
+            let bytes = fs::read(path.join("manifest.json"))?;
+            let manifest: Value = serde_json::from_slice(&bytes)?;
+            for table in fixture_tables(&manifest)? {
+                workload::query(text(&table["id"])?, &manifest, &protocols)?;
+            }
+            Ok(Fixture {
+                path,
+                manifest_sha256: reader_sha256(bytes.as_slice())?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    run(Request {
+        fixtures,
+        binary: args.binary,
+        output: args.output,
+        disk_gib: args.disk_limit_gib,
+        seconds: args.elapsed_limit_seconds,
+        layout: args.layout,
+        contract_sha256: digest(&protocols.join("selective-read-production-shapes.md"))?,
+        driver_sha256: reader_sha256(include_bytes!("pairs.rs").as_slice())?,
+    })
 }
 
 fn objects(table: &Value) -> Result<Vec<&Value>> {

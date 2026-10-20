@@ -64,6 +64,8 @@ pub(crate) enum Task {
     PlanProduction(workload::planner::Args),
     /// Pair independently validated production fixtures. Read JSON from stdin.
     ProductionPairs,
+    /// Validate production layouts and prepare immutable base/DV pairs.
+    PairProduction(pairs::Args),
     /// Run a numeric-page or Delta-length diagnostic process. Read JSON from stdin.
     Experiment,
     /// Compare partial-page policies or reader builds. Read one invocation as JSON.
@@ -137,6 +139,14 @@ impl Task {
             Self::CheckStorage(args) => return checks::remote::run(args),
             Self::ProductionFixtures(args) => return workload::fixtures::run(*args),
             Self::PlanProduction(args) => return workload::planner::run(args),
+            Self::PairProduction(args) => {
+                let value = pairs::prepare(args)?;
+                println!(
+                    "{}",
+                    serde_json::json!({"status":value["status"],"tables":array(&value["writer"]["tables"])?.len()})
+                );
+                return Ok(());
+            }
             Self::PrepareMatrix(args) => {
                 let result = workload::matrix::prepare(args)?;
                 require(
@@ -240,6 +250,7 @@ impl Task {
             | Self::FreezeWorkload(_)
             | Self::ProductionFixtures(_)
             | Self::PlanProduction(_)
+            | Self::PairProduction(_)
             | Self::PrepareMatrix(_)
             | Self::ReportMatrix(_)
             | Self::PrepareFiles(_)

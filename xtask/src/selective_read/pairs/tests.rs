@@ -125,6 +125,23 @@ fn pairing_requires_complete_inputs_and_preserves_writer_identity_and_layout() -
     let root = tempfile::tempdir()?;
     let localized = fixture(root.path(), "localized")?;
     let scattered = fixture(root.path(), "scattered")?;
+    let rejected = root.path().join("invalid-definition");
+    assert!(
+        prepare(Args {
+            fixtures: vec![localized.path.clone(), scattered.path.clone()],
+            binary: PathBuf::from("/bin/false"),
+            output: rejected.clone(),
+            disk_limit_gib: 1,
+            elapsed_limit_seconds: 10,
+            layout: None,
+            harness: Path::new(env!("CARGO_MANIFEST_DIR")).join("../benches/selective_read"),
+        })
+        .is_err()
+    );
+    assert!(
+        !rejected.exists(),
+        "invalid queries must fail before staging"
+    );
     let binary = root.path().join("writer");
     fs::write(
         &binary,

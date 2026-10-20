@@ -204,7 +204,7 @@ fn table<'a>(manifest: &'a Value, case: &str) -> Result<&'a Value> {
         .ok_or_else(|| format!("missing production table: {case}").into())
 }
 
-fn query(case: &str, manifest: &Value, protocols: &Path) -> Result<Value> {
+pub(super) fn query(case: &str, manifest: &Value, protocols: &Path) -> Result<Value> {
     let all = cases();
     let definition = field(&all, case)?;
     let shape_name = text(&definition["shape"])?;

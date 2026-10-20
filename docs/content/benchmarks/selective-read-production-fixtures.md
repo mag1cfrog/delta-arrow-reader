@@ -152,16 +152,15 @@ same engine locks. Older executables reject revision 5 requests.
 Pair the localized and scattered layouts of one shape at a time. For Q4:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B \
-  benches/selective_read/production_pairs.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read pair-production \
   --fixtures ../production-q4-localized --fixtures ../production-q4-scattered \
   --binary target/selective-read/release/selective-read-fixtures \
   --output ../production-q4-pairs --disk-limit-gib 192
 ```
 
 Each supplied shape must include both layouts, from the same source and plan
-settings. Python validates the fixture definitions; the Rust controller budgets
-disk space, stages immutable files and invokes the DV writer. The helper
+settings. The Rust controller validates the fixture definitions, budgets disk
+space, stages immutable files and invokes the DV writer. It
 preserves Parquet bytes and computes one shared logical
 deletion union across the supplied base inventory, recorded in the manifest.
 Both layouts therefore delete the same logical rows. Q2 can be paired later;
@@ -171,8 +170,7 @@ use complete full no-DV/DV pairs before every layout is resident.
 For staged execution, supply one complete layout and select it explicitly:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B \
-  benches/selective_read/production_pairs.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read pair-production \
   --fixtures ../production-q2-localized --layout localized \
   --binary target/selective-read/release/selective-read-fixtures \
   --output ../production-q2-localized-pair --disk-limit-gib 192
