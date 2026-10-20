@@ -20,6 +20,8 @@ def check_intra(value):
     record = value["record"]
     metadata = json.loads((reference / "reference.json").read_text())
     for field in oracle.IDENTITY_FIELDS:
+        if field == "protocol_sha256":
+            continue
         oracle.require(record["identity"][field] == metadata[field], "reference identity mismatch: " + field)
     checks = []
     for query in record["queries"]:

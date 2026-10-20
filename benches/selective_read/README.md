@@ -15,7 +15,19 @@ The archive audit regenerates the published report and CSVs without the full tab
 
 Run commands from the repository root and keep generated tables outside Git.
 The recorded runs use pinned inputs, reader builds, and execution contracts.
-Follow the version and hash requirements in each guide.
+Follow the version, input, and execution requirements in each guide.
+
+The current tools check compatibility through format and comparison revisions,
+queries, projections, layout settings, and independently verified Arrow values.
+Source, controller, and protocol-document hashes record provenance; editing a
+comment or rebuilding the controller does not invalidate an otherwise compatible
+plan, workload, or reference. Historical guides describe the checks used for
+their recorded runs.
+
+Checksums still verify data files, exports, and packaged reader artifacts.
+A timing certificate applies to the reader build, configuration, query, and
+inputs that passed validation. A different reader build must pass validation
+before its timings can be accepted.
 
 Build the native controller before preparing references, running readers or
 checking the independent Python oracle:
@@ -48,7 +60,7 @@ the reader and harness revisions and records the extent of delivery checks.
 These contracts preserve earlier revisions as well as the final comparison.
 Older Daft references, page settings, and pending-work notes are historical;
 use the [reproduction guide](EVIDENCE.md) and public report for revision 6.
-Keep the frozen documents unchanged when checking recorded hashes.
+The frozen documents remain part of the historical evidence archive.
 
 The current checkout provides DAR, delta-rs, DuckDB, Polars, and Spark adapters.
 The Daft adapter, dependency lock, and checks are available in the
@@ -71,8 +83,8 @@ commands live in the archived harness. Export audited batches with
 Frozen case IDs use `production.q2.*` for the 416-column table and
 `production.q4.*` for the 90-column table. The `localized` layout is called
 "grouped" in the public reports; `scattered` keeps the same name. Keep these
-IDs, document bytes, and source paths unchanged when replaying recorded runs:
-the harness binds them by hash. Use table width, match layout, and
+case IDs and workload contents unchanged when replaying recorded runs.
+Use table width, match layout, and
 deletion-vector state as names in current explanations.
 
 ## Additional experiments

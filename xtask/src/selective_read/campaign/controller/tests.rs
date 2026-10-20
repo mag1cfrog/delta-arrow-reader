@@ -30,6 +30,49 @@ fn args(root: &Path) -> Args {
 }
 
 #[test]
+fn campaign_input_integrity_is_independent_of_tool_source_provenance() -> Result<()> {
+    let temporary = tempfile::tempdir()?;
+    let root = temporary.path();
+    let mut args = args(root);
+    args.harness = root.join("project/benches/selective_read");
+    let protocols = root.join("project/docs/content/benchmarks");
+    for path in [
+        args.harness.join("controller_worker.py"),
+        args.harness.join("oracle.py"),
+        args.harness.join("runners/run.py"),
+        args.harness.join("runners/python_common.py"),
+        args.harness.join("metadata_cache.py"),
+        args.harness.join("runners/native.py"),
+        root.join("project/Cargo.lock"),
+        root.join("project/xtask/Cargo.toml"),
+        root.join("project/xtask/src/main.rs"),
+        protocols.join("selective-read-protocol.md"),
+        args.fixtures.join("manifest.json"),
+        args.upload.clone(),
+    ] {
+        fs::create_dir_all(path.parent().unwrap())?;
+        fs::write(path, "original")?;
+    }
+    let config = json!({});
+    let (before_sources, before_inputs) = source_hashes(&args, &config, &protocols)?;
+    assert_eq!(object(&before_inputs)?.len(), 2);
+    fs::write(args.harness.join("oracle.py"), "original\n# new comment\n")?;
+    fs::write(
+        protocols.join("selective-read-protocol.md"),
+        "reworded documentation",
+    )?;
+    let (after_sources, after_inputs) = source_hashes(&args, &config, &protocols)?;
+    assert_ne!(before_sources, after_sources);
+    assert_eq!(before_inputs, after_inputs);
+    fs::write(
+        args.fixtures.join("manifest.json"),
+        "changed data inventory",
+    )?;
+    assert_ne!(source_hashes(&args, &config, &protocols)?.1, before_inputs);
+    Ok(())
+}
+
+#[test]
 fn selection_keeps_job_order_and_rejects_unknown_cases_sessions_and_locks() -> Result<()> {
     let temporary = tempfile::tempdir()?;
     let mut args = args(temporary.path());
@@ -222,7 +265,7 @@ fn preparation_failures_launch_no_readers_and_aborts_keep_scheduled_rows() -> Re
         },
         protocols: root.to_path_buf(),
         comparison: json!({"comparison_revision":2}),
-        config: json!({"campaign_id":"check", "source_sha256":{}, "timer_resolution":{"ratio_floor_ns":1}}),
+        config: json!({"campaign_id":"check", "input_sha256":{}, "timer_resolution":{"ratio_floor_ns":1}}),
         binaries: BTreeMap::new(),
         templates: BTreeMap::new(),
         rows: vec![],

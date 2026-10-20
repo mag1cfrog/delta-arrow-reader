@@ -809,12 +809,12 @@ def check_rows(reference, fixtures, result, identity, quota):
     metadata = load_json(reference / "reference.json")
     check_reference_build(metadata)
     sys.path.insert(0, str(Path(__file__).resolve().parent / "runners"))
-    from run import comparison_identity, reader_roster
+    from run import comparison_identity, comparison_contract, reader_roster
     comparison = comparison_identity(metadata)
     if metadata["comparison_revision"] in (3, 4, 5, 6):
         import large_workloads
         path = Path(metadata["workload_manifest"])
-        require(comparison == large_workloads.identity(path), "stale workload manifest")
+        require(comparison_contract(comparison) == comparison_contract(large_workloads.identity(path)), "stale workload manifest")
         row = large_workloads.binding(large_workloads.load(path), fixtures, metadata["case_id"])
         require(metadata["canonical_sql"] == row["canonical_sql"] and metadata["projection"] == row["projection"], "reference workload query changed")
     require(metadata["fixture_manifest_sha256"] == digest_file(fixtures / "manifest.json"), "stale fixture manifest")
@@ -823,7 +823,8 @@ def check_rows(reference, fixtures, result, identity, quota):
         verify_object(fixtures, item)
     provenance = load_json(identity)
     require(provenance["reader_id"] in (set(reader_roster(metadata)) if metadata["comparison_revision"] == 6 else READERS), "unknown reader identity")
-    identity_fields = tuple(dict.fromkeys((*IDENTITY_FIELDS, *comparison)))
+    identity_fields = tuple(name for name in dict.fromkeys((*IDENTITY_FIELDS, *comparison))
+                           if name not in ("protocol_sha256", "base_protocol_sha256", "sampling_sha256"))
     for name in identity_fields:
         require(type(provenance[name]) is type(metadata[name]) and provenance[name] == metadata[name], f"result identity mismatch: {name}")
     for name in ("reader_build_sha256", "reader_config_sha256", "result_sha256"):
@@ -850,7 +851,7 @@ def check_rows(reference, fixtures, result, identity, quota):
     return {
         "status": "passed", **{name: metadata[name] for name in identity_fields},
         **{name: provenance[name] for name in ("reader_id", "reader_build_sha256", "reader_config_sha256", "native_expression_sha256", "result_sha256")},
-        "oracle_sha256": metadata["oracle_sha256"], "reference_sha256": metadata["reference_sha256"],
+        "oracle_sha256": digest_file(__file__), "reference_sha256": metadata["reference_sha256"],
         "identity_sha256": digest_file(identity), "output_rows": count,
         "qualifying_rows": metadata["qualifying_rows"], "reported_nullability": reported_nullability,
     }

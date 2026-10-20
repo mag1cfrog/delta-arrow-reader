@@ -20,8 +20,10 @@ class ReaderBookkeeping(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "correctness.json"
             identity = {"reader_id": "test", "reader_build_sha256": "build",
-                        "reader_config_sha256": "config", "canonical_sql_sha256": "query"}
-            check = identity | {"status": "passed", "output_rows": 3, "oracle_sha256": "older source"}
+                        "reader_config_sha256": "config", "canonical_sql_sha256": "query",
+                        "protocol_sha256": "current documentation"}
+            check = identity | {"status": "passed", "output_rows": 3, "oracle_sha256": "older source",
+                                "protocol_sha256": "older documentation"}
             request = {"purpose": "timing", "execution_mode": "open", "correctness_file": str(path)}
             path.write_text(json.dumps({"status": "passed", "checks": [check]}))
             self.assertEqual(common.correctness(request, identity)["expected_output_rows"], [3])
@@ -63,8 +65,12 @@ class ReaderBookkeeping(unittest.TestCase):
         for revision in range(2, 7):
             self.assertEqual(run.reader_roster({"comparison_revision": revision}),
                 ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "spark" if revision == 6 else "daft"))
-        for change in ({"protocol_sha256": run.digest(run.PRODUCTION)}, {"sampling_stage": None},
-                       {"sampling_sha256": "0" * 64}, {"comparison_revision": 5}):
+        for change in ({"protocol_sha256": run.digest(run.PRODUCTION)},
+                       {"base_protocol_sha256": "0" * 64}, {"sampling_sha256": "0" * 64}):
+            self.assertEqual(run.comparison_contract(run.comparison_identity(identity | change)),
+                             run.comparison_contract(identity))
+        for change in ({"sampling_stage": None}, {"comparison_revision": 7},
+                       {"workload_manifest_sha256": None}):
             with self.assertRaises(ValueError):
                 run.comparison_identity(identity | change)
         for revision in (1, 7, True, "6"):

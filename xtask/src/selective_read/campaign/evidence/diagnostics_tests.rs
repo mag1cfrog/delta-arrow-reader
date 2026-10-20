@@ -3,7 +3,7 @@ use super::*;
 use crate::selective_read::campaign::{roster, tests::observation};
 
 #[test]
-fn diagnostic_modes_require_their_frozen_amendments_and_valid_dependencies() -> Result<()> {
+fn diagnostic_modes_require_valid_dependencies_independently_of_documentation() -> Result<()> {
     let comparison = identity(6)?;
     for (mode, key, hash, name) in [
         (
@@ -34,16 +34,17 @@ fn diagnostic_modes_require_their_frozen_amendments_and_valid_dependencies() -> 
             &protocols().join(format!("selective-read-{name}.md"))
         )?);
         assert!(mode.enabled(&config, &protocols())?);
-        for (key, value) in [
-            (key, json!(1)),
-            (key, json!(false)),
-            ("comparison_revision", json!(5)),
-            (hash, Value::Null),
-            (hash, json!("0".repeat(64))),
-        ] {
+        for (key, value) in [(key, json!(1)), ("comparison_revision", json!(5))] {
             let mut changed = config.clone();
             changed[key] = value;
             assert!(mode.enabled(&changed, &protocols()).is_err());
+        }
+        for provenance in [Value::Null, json!("older documentation")] {
+            let mut changed = config.clone();
+            changed[hash] = provenance;
+            assert!(mode.enabled(&changed, Path::new("no-documents"))?);
+            changed[key] = json!(false);
+            assert!(!mode.enabled(&changed, Path::new("no-documents"))?);
         }
         if matches!(mode, Mode::GateDiagnostics) {
             for key in ["combined_diagnostics", "gate_warmup"] {

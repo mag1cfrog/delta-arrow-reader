@@ -72,28 +72,25 @@ def comparison_identity(value):
     if type(revision) is not int or revision not in (2, 3, 4, 5, 6):
         raise ValueError("unknown comparison revision")
     fields = COMPARISON_FIELDS + (LARGE_IDENTITY_FIELDS if revision >= 3 else ())
-    expected = digest(SPARK_MATRIX if revision == 6 else PRODUCTION if revision == 5 else AMENDMENT if revision >= 3 else PROTOCOL)
-    if value["protocol_sha256"] != expected:
-        raise ValueError("stale comparison protocol")
     if revision >= 3:
-        if value.get("base_protocol_sha256") != digest(PROTOCOL) or not isinstance(value.get("workload_manifest_sha256"), str) or not re.fullmatch(
+        if not isinstance(value.get("workload_manifest_sha256"), str) or not re.fullmatch(
                 "[0-9a-f]{64}", value["workload_manifest_sha256"]):
             raise ValueError("missing or stale large-workload identity")
-    elif any(value.get(key) is not None for key in LARGE_IDENTITY_FIELDS):
+    elif value.get("workload_manifest_sha256") is not None:
         raise ValueError("revision 2 cannot carry large-workload identities")
     if revision >= 4:
-        if value.get("sampling_sha256") != digest(SAMPLING):
-            raise ValueError("missing or stale sampling identity")
         fields += SAMPLING_IDENTITY_FIELDS
-    elif value.get("sampling_sha256") is not None:
-        raise ValueError("historical revisions cannot carry a sampling amendment")
     if revision >= 5:
         if value.get("sampling_stage") not in ("pilot", "formal"):
             raise ValueError("missing or invalid production sampling stage")
         fields += PRODUCTION_IDENTITY_FIELDS
     elif value.get("sampling_stage") is not None:
         raise ValueError("historical revisions cannot carry a production sampling stage")
-    return {key: value[key] for key in fields}
+    return {key: value.get(key) for key in fields}
+
+
+def comparison_contract(value):
+    return tuple(value.get(key) for key in ("comparison_revision", "workload_manifest_sha256", "sampling_stage"))
 
 
 HISTORICAL_READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft")

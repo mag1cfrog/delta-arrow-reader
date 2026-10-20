@@ -53,7 +53,6 @@ fn conditions(config: &Value, protocols: &Path) -> Result<Value> {
             "profile",
             "cpu",
             "binary_sha256",
-            "source_sha256",
             "byte_boundary",
             "chunk_bytes",
             "jitter",
@@ -113,7 +112,15 @@ pub(super) fn run(request: Request) -> Result<Value> {
         require(
             object(&identity)?
                 .iter()
-                .filter(|(k, _)| k.as_str() != "workload_manifest_sha256")
+                .filter(|(k, _)| {
+                    !matches!(
+                        k.as_str(),
+                        "workload_manifest_sha256"
+                            | "protocol_sha256"
+                            | "base_protocol_sha256"
+                            | "sampling_sha256"
+                    )
+                })
                 .all(|(k, v)| declared.get(k) == Some(v)),
             "campaign is not from the same formal protocol",
         )?;

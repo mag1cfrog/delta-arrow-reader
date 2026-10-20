@@ -11,7 +11,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::{
-    campaign::evidence::comparison,
+    campaign::evidence::{comparison, comparison_contract},
     require,
     storage::{read_json, save, timestamp_ns},
     supervise::{self, progress},
@@ -46,7 +46,8 @@ fn export_limit(request: &Request) -> Result<Option<u64>> {
         .ok_or("validation requires a reference")?;
     let metadata = read_json(&reference.join("reference.json"))?;
     require(
-        comparison(&metadata, &request.protocols)? == comparison(payload, &request.protocols)?,
+        comparison_contract(&comparison(&metadata, &request.protocols)?)
+            == comparison_contract(&comparison(payload, &request.protocols)?),
         "export/reference workload mismatch",
     )?;
     // Half covers session exports; the other half covers the reference and sort spill.

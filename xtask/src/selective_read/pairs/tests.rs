@@ -205,7 +205,6 @@ echo writer output
         ("disk_gib", json!(193)),
         ("seconds", json!(0)),
         ("layout", json!("unknown")),
-        ("contract_sha256", json!("wrong")),
     ] {
         let mut bad = input.clone();
         bad[key] = value;

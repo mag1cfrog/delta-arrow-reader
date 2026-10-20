@@ -206,7 +206,8 @@ pub(in crate::selective_read) fn run(mut args: Args) -> Result<()> {
     }
     let metadata = storage::read_json(&args.reference.join("reference.json"))?;
     require(
-        evidence::comparison(&metadata, &protocols)? == evidence::comparison(&request, &protocols)?,
+        evidence::comparison_contract(&evidence::comparison(&metadata, &protocols)?)
+            == evidence::comparison_contract(&evidence::comparison(&request, &protocols)?),
         "reference comparison identity mismatch",
     )?;
     require(

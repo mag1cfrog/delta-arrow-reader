@@ -251,7 +251,7 @@ fn table<'a>(manifest: &'a Value, case: &str) -> Result<&'a Value> {
         .ok_or_else(|| format!("missing production table: {case}").into())
 }
 
-pub(super) fn query(case: &str, manifest: &Value, protocols: &Path) -> Result<Value> {
+pub(super) fn query(case: &str, manifest: &Value, _protocols: &Path) -> Result<Value> {
     let all = cases();
     let definition = field(&all, case)?;
     let shape_name = text(&definition["shape"])?;
@@ -286,9 +286,7 @@ pub(super) fn query(case: &str, manifest: &Value, protocols: &Path) -> Result<Va
         matches!(
             manifest["protocol"].as_str(),
             Some("selective-read-production-fixtures-v1" | "selective-read-production-pairs-v1")
-        ) && manifest["contract_sha256"]
-            == digest(&protocols.join("selective-read-production-shapes.md"))?
-            && matches!(manifest["mode"].as_str(), Some("probe" | "generate")),
+        ) && matches!(manifest["mode"].as_str(), Some("probe" | "generate")),
         "unknown production fixture/definition",
     )?;
     let source = array(&manifest["sources"])?

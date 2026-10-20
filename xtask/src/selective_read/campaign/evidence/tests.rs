@@ -28,17 +28,27 @@ pub(super) fn identity(revision: u64) -> Result<Value> {
 }
 
 #[test]
-fn protocol_revisions_reject_stale_and_incompatible_identities() -> Result<()> {
+fn protocol_revisions_validate_behavior_without_document_byte_identity() -> Result<()> {
     for revision in 2..=6 {
         let value = identity(revision)?;
         assert_eq!(comparison(&value, &protocols())?, value);
         for key in value.as_object().unwrap().keys() {
             let mut changed = value.clone();
             changed[key] = Value::Null;
-            assert!(
-                comparison(&changed, &protocols()).is_err(),
-                "{revision} {key}"
-            );
+            if matches!(
+                key.as_str(),
+                "protocol_sha256" | "base_protocol_sha256" | "sampling_sha256"
+            ) {
+                assert_eq!(
+                    comparison_contract(&comparison(&changed, Path::new("no-documents"))?),
+                    comparison_contract(&value),
+                );
+            } else {
+                assert!(
+                    comparison(&changed, &protocols()).is_err(),
+                    "{revision} {key}"
+                );
+            }
         }
     }
     let mut value = identity(2)?;
@@ -77,6 +87,30 @@ fn incomplete_successes_and_unenforced_limits_are_rejected() -> Result<()> {
             "peak_rss_bytes": 4096, "process_elapsed_ns": 11},
     }))?.clone());
     validate(&record, &request, "delta-arrow-reader", None, &protocols())?;
+    let mut gate = json!({"identity":record["identity"]});
+    gate["identity"]["protocol_sha256"] = json!("older documentation");
+    gate["identity"]
+        .as_object_mut()
+        .unwrap()
+        .remove("sampling_sha256");
+    validate(
+        &record,
+        &request,
+        "delta-arrow-reader",
+        Some(&gate),
+        &protocols(),
+    )?;
+    gate["identity"]["case_id"] = json!("different query");
+    assert!(
+        validate(
+            &record,
+            &request,
+            "delta-arrow-reader",
+            Some(&gate),
+            &protocols()
+        )
+        .is_err()
+    );
     for (pointer, changed) in [
         ("/identity/case_id", json!("another")),
         ("/canonical_sql", json!("SELECT * FROM t")),

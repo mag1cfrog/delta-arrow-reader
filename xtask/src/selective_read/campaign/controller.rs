@@ -234,7 +234,7 @@ fn modes(args: &Args, comparison: &Value, protocols: &Path) -> Result<Value> {
     Ok(config)
 }
 
-fn source_hashes(args: &Args, config: &Value, protocols: &Path) -> Result<Value> {
+fn source_hashes(args: &Args, config: &Value, protocols: &Path) -> Result<(Value, Value)> {
     let root = args
         .harness
         .parent()
@@ -262,8 +262,9 @@ fn source_hashes(args: &Args, config: &Value, protocols: &Path) -> Result<Value>
             .into_iter()
             .filter(|p| p.extension().is_some_and(|e| e == "rs")),
     );
+    let mut inputs = vec![args.fixtures.join("manifest.json"), args.upload.clone()];
     if !config["server"]["network"].is_null() {
-        sources.push(args.state.join("network.json"));
+        inputs.push(args.state.join("network.json"));
     }
     for (enabled, name) in [
         (
@@ -278,17 +279,17 @@ fn source_hashes(args: &Args, config: &Value, protocols: &Path) -> Result<Value>
         }
     }
     if let Some(matrix) = &args.matrix {
-        sources.extend([
-            args.harness.join("matrix.py"),
+        sources.push(args.harness.join("matrix.py"));
+        inputs.extend([
             args.harness.join("query-matrix.json"),
             args.harness.join("native-expressions.jsonl"),
             matrix.clone(),
         ]);
     }
     if let Some(workload) = &args.workload {
+        inputs.push(workload.clone());
         sources.extend([
             args.harness.join("large_workloads.py"),
-            workload.clone(),
             protocols.join("selective-read-large-workloads.md"),
         ]);
         if config["comparison_revision"].as_u64().unwrap_or(0) >= 4 {
@@ -305,7 +306,7 @@ fn source_hashes(args: &Args, config: &Value, protocols: &Path) -> Result<Value>
             ]);
         }
     }
-    hashes(&sources)
+    Ok((hashes(&sources)?, hashes(&inputs)?))
 }
 
 fn hashes(paths: &[PathBuf]) -> Result<Value> {
@@ -346,7 +347,6 @@ fn remote_request(
         metadata["status"] == "complete"
             && [
                 "fixture_manifest_sha256",
-                "protocol_sha256",
                 "canonical_sql",
                 "snapshot_version",
             ]
@@ -355,7 +355,8 @@ fn remote_request(
         "reference differs from request",
     )?;
     require(
-        evidence::comparison(&metadata, protocols)? == *comparison,
+        evidence::comparison_contract(&evidence::comparison(&metadata, protocols)?)
+            == evidence::comparison_contract(comparison),
         "reference comparison/workload identity differs",
     )?;
     Ok(payload)
@@ -635,7 +636,7 @@ impl Campaign {
             self.invoke(slot, &job, Some(gate))?;
         }
         let mut intact = true;
-        for (path, hash) in object(&self.config["source_sha256"])? {
+        for (path, hash) in object(&self.config["input_sha256"])? {
             intact &= digest(Path::new(path)).is_ok_and(|actual| *hash == actual);
         }
         for (name, hash) in &frozen {
@@ -785,7 +786,9 @@ pub(in crate::selective_read) fn run(mut args: Args) -> Result<()> {
         "cache_policy":"fresh clients, reused MinIO/OS caches, no flushes; complete warmup/run history in observations.jsonl",
         "scope":"requested cases/sessions only; not a complete publication campaign"
     }))?.clone());
-    config["source_sha256"] = source_hashes(&args, &config, &protocols)?;
+    let (sources, inputs) = source_hashes(&args, &config, &protocols)?;
+    config["source_sha256"] = sources;
+    config["input_sha256"] = inputs;
     save(&args.output.join("campaign.json"), &config)?;
     let journal = File::create_new(args.output.join("observations.jsonl"))?;
     let mut campaign = Campaign {

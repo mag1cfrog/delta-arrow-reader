@@ -269,7 +269,7 @@ class OracleTests(unittest.TestCase):
                     write_json(identity, provenance | {"result_sha256": run.digest(result)})
                 export(table)
                 self.assertEqual(oracle.check(reference, fixtures, result, identity)["status"], "passed")
-                for field in ("base_protocol_sha256", "workload_manifest_sha256", "sampling_sha256"):
+                for field in ("workload_manifest_sha256",):
                     altered = json.loads(identity.read_text()) | {field: "0" * 64}
                     write_json(identity, altered)
                     with self.assertRaisesRegex(ValueError, "identity mismatch"):
@@ -288,8 +288,7 @@ class OracleTests(unittest.TestCase):
                         stream.truncate(value["oracle_limits"]["disk_bytes"] // 2)
                     with self.assertRaisesRegex(ValueError, "session exports"):
                         oracle.check(reference, fixtures, session / "query-0.arrow", identity)
-            for change in ({"base_protocol_sha256": "0" * 64}, {"sampling_sha256": "0" * 64},
-                           {"comparison_revision": 3}, {"scales": {"data": 10, "control": 10}}, {"cases": cases[:-1]}):
+            for change in ({"comparison_revision": 7}, {"scales": {"data": 10, "control": 10}}, {"cases": cases[:-1]}):
                 write_json(workload, value | change)
                 with self.assertRaises(ValueError):
                     large.load(workload)
@@ -583,7 +582,9 @@ class OracleTests(unittest.TestCase):
             stream.write(b"extra")
         with self.assertRaisesRegex(ValueError, "checksum"):
             oracle.check(*args)
-        for field, value in (("protocol_sha256", "bad"), ("duckdb_sort", "bad"),
+        args = self.export("li.clustered.all-full")
+        for field, value in (("format", "unknown"), ("duckdb_sort", "bad"),
+                             ("pyarrow", "bad"), ("snapshot_version", 1),
                              ("fixture_manifest_sha256", "bad"), ("reference_sha256", "bad")):
             path = args[0] / "reference.json"
             original = path.read_bytes()
@@ -603,9 +604,12 @@ class OracleTests(unittest.TestCase):
         try:
             metadata = json.loads(original)
             metadata.update(oracle_sha256="old source", production_oracle_sha256="old producer",
-                            oracle_dependencies_sha256="old requirements text")
+                            oracle_dependencies_sha256="old requirements text",
+                            protocol_sha256="old documentation")
             write_json(path, metadata)
-            self.assertEqual(oracle.check(*args)["status"], "passed")
+            checked = oracle.check(*args)
+            self.assertEqual(checked["status"], "passed")
+            self.assertEqual(checked["oracle_sha256"], oracle.digest_file(oracle.__file__))
             corrupted = self.result_table("li.clustered.all-full").to_pylist()
             corrupted[0]["l_comment"] = "wrong value with the same row count"
             args = self.export("li.clustered.all-full", pa.Table.from_pylist(

@@ -298,6 +298,21 @@ pub(super) fn schedule(
     Ok(json!(slots))
 }
 
+fn same_reader_identity(left: &Value, right: &Value) -> bool {
+    let (Some(left), Some(right)) = (left.as_object(), right.as_object()) else {
+        return false;
+    };
+    let behavioral = |key: &str| {
+        !matches!(
+            key,
+            "protocol_sha256" | "base_protocol_sha256" | "sampling_sha256"
+        )
+    };
+    left.iter()
+        .filter(|(key, _)| behavioral(key))
+        .eq(right.iter().filter(|(key, _)| behavioral(key)))
+}
+
 fn warmed_gate(gate: &Value, observations: &BTreeMap<String, Value>) -> bool {
     let row = gate["run_id"]
         .as_str()
@@ -309,7 +324,7 @@ fn warmed_gate(gate: &Value, observations: &BTreeMap<String, Value>) -> bool {
         && gate["status"] == "success"
         && gate["identity"].is_object()
         && record["status"] == "success"
-        && record["identity"] == gate["identity"]
+        && same_reader_identity(&record["identity"], &gate["identity"])
         && record["correctness"]["status"] == "passed"
         && record["cleanup"]["status"] == "passed"
         && (gate["gate_diagnostics"] != true

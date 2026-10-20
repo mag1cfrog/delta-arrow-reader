@@ -23,20 +23,12 @@ impl Mode {
     pub(in crate::selective_read) fn enabled(
         &self,
         config: &Value,
-        protocols: &Path,
+        _protocols: &Path,
     ) -> Result<bool> {
-        let (key, amendment, file) = match self {
-            Self::CombinedDiagnostics => (
-                "combined_diagnostics",
-                "diagnostics_amendment_sha256",
-                "combined-diagnostics",
-            ),
-            Self::GateWarmup => ("gate_warmup", "warmup_amendment_sha256", "gate-warmup"),
-            Self::GateDiagnostics => (
-                "gate_diagnostics",
-                "gate_diagnostics_amendment_sha256",
-                "gate-diagnostics",
-            ),
+        let key = match self {
+            Self::CombinedDiagnostics => "combined_diagnostics",
+            Self::GateWarmup => "gate_warmup",
+            Self::GateDiagnostics => "gate_diagnostics",
         };
         let enabled = config
             .get(key)
@@ -46,66 +38,39 @@ impl Mode {
         if enabled {
             require(
                 config["comparison_revision"] == 6
-                    && config[amendment]
-                        == digest(&protocols.join(format!("selective-read-{file}.md")))?
                     && (!matches!(self, Self::GateDiagnostics)
                         || config["combined_diagnostics"] == true && config["gate_warmup"] == true),
-                &format!("missing or stale {key} mode/amendment"),
-            )?;
-        } else {
-            require(
-                config[amendment].is_null(),
-                &format!("disabled {key} cannot carry the amendment"),
+                &format!("incompatible {key} mode"),
             )?;
         }
         Ok(enabled)
     }
 }
 
-pub(in crate::selective_read) fn comparison(value: &Value, protocols: &Path) -> Result<Value> {
+pub(in crate::selective_read) fn comparison(value: &Value, _protocols: &Path) -> Result<Value> {
     let revision = value["comparison_revision"]
         .as_u64()
         .ok_or("unknown comparison revision")?;
     require((2..=6).contains(&revision), "unknown comparison revision")?;
-    let name = match revision {
-        6 => "spark-matrix",
-        5 => "production-workloads",
-        3 | 4 => "large-workloads",
-        _ => "protocol",
-    };
-    require(
-        value["protocol_sha256"] == digest(&protocols.join(format!("selective-read-{name}.md")))?,
-        "stale comparison protocol",
-    )?;
     let mut keys = vec!["comparison_revision", "protocol_sha256"];
     if revision >= 3 {
         require(
-            value["base_protocol_sha256"] == digest(&protocols.join("selective-read-protocol.md"))?
-                && value["workload_manifest_sha256"].as_str().is_some_and(|s| {
-                    s.len() == 64
-                        && s.bytes()
-                            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
-                }),
+            value["workload_manifest_sha256"].as_str().is_some_and(|s| {
+                s.len() == 64
+                    && s.bytes()
+                        .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+            }),
             "missing or stale large-workload identity",
         )?;
         keys.extend(["base_protocol_sha256", "workload_manifest_sha256"]);
     } else {
         require(
-            value["base_protocol_sha256"].is_null() && value["workload_manifest_sha256"].is_null(),
+            value["workload_manifest_sha256"].is_null(),
             "revision 2 cannot carry large-workload identities",
         )?;
     }
     if revision >= 4 {
-        require(
-            value["sampling_sha256"] == digest(&protocols.join("selective-read-sampling.md"))?,
-            "missing or stale sampling identity",
-        )?;
         keys.push("sampling_sha256");
-    } else {
-        require(
-            value["sampling_sha256"].is_null(),
-            "historical revisions cannot carry a sampling amendment",
-        )?;
     }
     if revision >= 5 {
         require(
@@ -124,6 +89,14 @@ pub(in crate::selective_read) fn comparison(value: &Value, protocols: &Path) -> 
             .map(|key| (key.into(), value[key].clone()))
             .collect(),
     ))
+}
+
+pub(in crate::selective_read) fn comparison_contract(value: &Value) -> [&Value; 3] {
+    [
+        &value["comparison_revision"],
+        &value["workload_manifest_sha256"],
+        &value["sampling_stage"],
+    ]
 }
 
 pub(super) fn plans(record: &Value, artifacts: &Path) -> Result<Value> {
@@ -282,11 +255,17 @@ pub(in crate::selective_read) fn validate(
     let identity = field(record, "identity")?;
     let comparison = comparison(payload, protocols)?;
     require(identity["reader_id"] == reader, "reader identity changed")?;
-    for key in object(&comparison)?.keys().map(String::as_str).chain([
-        "fixture_manifest_sha256",
-        "case_id",
-        "snapshot_version",
-    ]) {
+    for key in object(&comparison)?
+        .keys()
+        .map(String::as_str)
+        .filter(|key| {
+            !matches!(
+                *key,
+                "protocol_sha256" | "base_protocol_sha256" | "sampling_sha256"
+            )
+        })
+        .chain(["fixture_manifest_sha256", "case_id", "snapshot_version"])
+    {
         require(
             field(identity, key)? == field(payload, key)?,
             &format!("observation identity differs: {key}"),
@@ -345,7 +324,7 @@ pub(in crate::selective_read) fn validate(
     }
     if let Some(gate) = gate {
         require(
-            identity == field(gate, "identity")?,
+            super::same_reader_identity(identity, field(gate, "identity")?),
             "validated build/configuration changed",
         )?;
     }

@@ -24,16 +24,6 @@ use sha2::{Digest, Sha256};
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 pub const TABLE: &str = "bench";
-const PROTOCOL: &[u8] =
-    include_bytes!("../../../docs/content/benchmarks/selective-read-protocol.md");
-const AMENDMENT: &[u8] =
-    include_bytes!("../../../docs/content/benchmarks/selective-read-large-workloads.md");
-const SAMPLING: &[u8] =
-    include_bytes!("../../../docs/content/benchmarks/selective-read-sampling.md");
-const PRODUCTION: &[u8] =
-    include_bytes!("../../../docs/content/benchmarks/selective-read-production-workloads.md");
-const SPARK_MATRIX: &[u8] =
-    include_bytes!("../../../docs/content/benchmarks/selective-read-spark-matrix.md");
 const LOCK: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.lock"));
 
 #[derive(Deserialize)]
@@ -127,34 +117,46 @@ impl Request {
             return false;
         }
         match self.comparison_revision {
-            2 => {
-                self.protocol_sha256 == digest(PROTOCOL)
-                    && self.base_protocol_sha256.is_none()
-                    && self.workload_manifest_sha256.is_none()
-                    && self.sampling_sha256.is_none()
-            }
-            3..=6 => {
-                self.protocol_sha256
-                    == digest(if self.comparison_revision == 6 {
-                        SPARK_MATRIX
-                    } else if self.comparison_revision == 5 {
-                        PRODUCTION
-                    } else {
-                        AMENDMENT
-                    })
-                    && self.base_protocol_sha256.as_deref() == Some(digest(PROTOCOL).as_str())
-                    && self
-                        .workload_manifest_sha256
-                        .as_deref()
-                        .is_some_and(is_hash)
-                    && if self.comparison_revision >= 4 {
-                        self.sampling_sha256.as_deref() == Some(digest(SAMPLING).as_str())
-                    } else {
-                        self.sampling_sha256.is_none()
-                    }
-            }
+            2 => self.workload_manifest_sha256.is_none(),
+            3..=6 => self
+                .workload_manifest_sha256
+                .as_deref()
+                .is_some_and(is_hash),
             _ => false,
         }
+    }
+}
+
+#[cfg(test)]
+mod contract_tests {
+    use super::*;
+
+    #[test]
+    fn comparison_uses_revisions_and_sampling_not_bundled_document_hashes() -> Result<()> {
+        for revision in 2..=6 {
+            let value = json!({
+                "table_uri":"file:///fixture", "snapshot_version":0, "case_id":"case",
+                "canonical_sql":"SELECT id FROM bench", "comparison_revision":revision,
+                "protocol_sha256":"older documentation", "base_protocol_sha256":"older base",
+                "sampling_sha256":"older sampling",
+                "workload_manifest_sha256":if revision >= 3 {json!("1".repeat(64))} else {Value::Null},
+                "sampling_stage":if revision >= 5 {json!("formal")} else {Value::Null},
+                "fixture_manifest_sha256":"2".repeat(64), "profile":"smoke", "execution_mode":"open",
+                "purpose":"validation", "resource_budget":budget(), "run_id":"run"
+            });
+            let mut request: Request = serde_json::from_value(value)?;
+            request.validate()?;
+            if revision >= 3 {
+                request.workload_manifest_sha256 = Some("invalid input identity".into());
+                assert!(request.validate().is_err());
+                request.workload_manifest_sha256 = Some("1".repeat(64));
+            }
+            request.sampling_stage = Some("unknown".into());
+            assert!(request.validate().is_err());
+            request.comparison_revision = 7;
+            assert!(request.validate().is_err());
+        }
+        Ok(())
     }
 }
 
@@ -272,6 +274,12 @@ fn correctness(request: &Request, identity: &Value) -> Result<Value> {
             return Err("failed oracle check".into());
         }
         for (key, value) in identity.as_object().ok_or("invalid identity")? {
+            if matches!(
+                key.as_str(),
+                "protocol_sha256" | "base_protocol_sha256" | "sampling_sha256"
+            ) {
+                continue;
+            }
             if check.get(key) != Some(value) {
                 return Err(format!("stale correctness field: {key}").into());
             }

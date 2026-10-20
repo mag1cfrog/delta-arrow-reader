@@ -55,7 +55,7 @@ class ProductionContract(unittest.TestCase):
                     "base_protocol_sha256": run.digest(run.PROTOCOL), "sampling_sha256": run.digest(run.SAMPLING),
                     "workload_manifest_sha256": "1" * 64, "sampling_stage": "pilot"}
         self.assertEqual(run.comparison_identity(identity), identity)
-        for change in ({"comparison_revision": 4}, {"sampling_stage": None}, {"sampling_sha256": "0" * 64}):
+        for change in ({"comparison_revision": 4}, {"sampling_stage": None}):
             with self.assertRaises(ValueError):
                 run.comparison_identity(identity | change)
         for stage in ("pilot", "formal"):

@@ -269,8 +269,7 @@ pub(super) fn run(request: Request) -> Result<Value> {
         require(
             manifest["protocol"] == "selective-read-production-fixtures-v1"
                 && manifest["status"] == "complete"
-                && manifest["writer"]["status"] == "complete"
-                && manifest["contract_sha256"] == request.contract_sha256,
+                && manifest["writer"]["status"] == "complete",
             "expected original production fixtures",
         )?;
         modes.insert(text(&manifest["mode"])?.to_owned());

@@ -68,17 +68,11 @@ pub(crate) struct Report {
     harness: PathBuf,
 }
 
-fn protocol(harness: &Path) -> PathBuf {
-    harness.join("../../docs/content/benchmarks/selective-read-protocol.md")
-}
-
 fn catalog(harness: &Path) -> Result<Value> {
     let value = read_json(&harness.join("query-matrix.json"))?;
     require(
-        value["format"] == "selective-read-query-matrix-v1"
-            && value["comparison_revision"] == 2
-            && value["protocol_sha256"] == digest(&protocol(harness))?,
-        "stale query catalog",
+        value["format"] == "selective-read-query-matrix-v1" && value["comparison_revision"] == 2,
+        "unsupported query catalog",
     )?;
     let path = harness.join("native-expressions.jsonl");
     require(
@@ -248,7 +242,6 @@ fn check_loaded(
     require(
         value["format"] == "selective-read-prepared-matrix-v1"
             && value["catalog_sha256"] == digest(&harness.join("query-matrix.json"))?
-            && value["protocol_sha256"] == digest(&protocol(harness))?
             && value["fixture_manifest_sha256"] == manifest_hash
             && value["profile"] == manifest["profile"]
             && value["translation_locks"] == frozen["translation_locks"],
@@ -289,7 +282,6 @@ fn check_loaded(
                 reference_build(&metadata)?;
                 require(
                     metadata["fixture_manifest_sha256"] == value["fixture_manifest_sha256"]
-                        && metadata["protocol_sha256"] == value["protocol_sha256"]
                         && [
                             "case_id",
                             "snapshot_version",
@@ -362,7 +354,6 @@ pub(crate) fn prepare(args: Prepare) -> Result<Value> {
                 metadata["case_id"] == case
                     && metadata["canonical_sql"] == row["canonical_sql"]
                     && metadata["fixture_manifest_sha256"] == manifest_hash
-                    && metadata["protocol_sha256"] == frozen["protocol_sha256"]
                     && metadata["reference_sha256"]
                         == digest(&reference.join("reference.parquet"))?,
                 "stale independent reference",
