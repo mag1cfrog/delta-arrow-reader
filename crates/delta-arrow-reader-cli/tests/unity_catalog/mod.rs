@@ -1,5 +1,7 @@
+mod scans;
+
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     fs,
     io::{Read, Write},
     net::TcpListener,
@@ -33,6 +35,38 @@ enum StorageCredentialKind {
     AzureSas,
     AzureBearer,
     Gcs,
+}
+
+impl StorageCredentialKind {
+    fn rotate_credentials(self, response: &mut Value) {
+        match self {
+            Self::S3 | Self::R2 => {
+                let field = if self == Self::S3 {
+                    "aws_temp_credentials"
+                } else {
+                    "r2_temp_credentials"
+                };
+                response[field] = json!({
+                    "access_key_id": "renewed-key", "secret_access_key": "renewed-secret", "session_token": "renewed-session"
+                });
+            }
+            Self::AzureSas => {
+                response["azure_user_delegation_sas"] =
+                    json!({"sas_token":"sig=renewed%2Bsignature"})
+            }
+            Self::AzureBearer => response["azure_aad"] = json!({"aad_token":"renewed-azure-token"}),
+            Self::Gcs => response["gcp_oauth_token"] = json!({"oauth_token":"renewed-gcp-token"}),
+        }
+    }
+
+    fn renewed_authorization(self) -> &'static str {
+        match self {
+            Self::S3 | Self::R2 => "credential=renewed-key/",
+            Self::AzureSas => "sig=renewed%2bsignature",
+            Self::AzureBearer => "authorization: bearer renewed-azure-token",
+            Self::Gcs => "authorization: bearer renewed-gcp-token",
+        }
+    }
 }
 
 /// A fake Databricks executable with controllable table metadata and credential responses.
@@ -138,6 +172,7 @@ case "$1" in
       : > "$DAR_TEST_DIR/initial_grant_issued"
     fi
     /bin/cat "$DAR_TEST_DIR/credentials.json"
+    if [ "${DAR_TEST_REFRESH:-}" = missing ]; then /bin/mv "$0" "$0.unavailable"; fi
     ;;
   *) exit 97 ;;
 esac
@@ -167,8 +202,16 @@ esac
     }
 
     fn inspect(&self) -> Command {
+        self.table_command("inspect")
+    }
+
+    fn scan(&self) -> Command {
+        self.table_command("scan")
+    }
+
+    fn table_command(&self, operation: &str) -> Command {
         let mut command = self.command(&[
-            "inspect",
+            operation,
             "uc://main.sales.orders",
             "--databricks-profile",
             PROFILE,
@@ -201,12 +244,10 @@ esac
         Ok(())
     }
 
-    /// Let the initial grant expire while the first storage response is pending.
-    fn storage_with_expiring_credentials(
+    fn prepare_credential_renewal(
         &self,
-        kind: StorageCredentialKind,
         update_replacement: impl FnOnce(&mut Value),
-    ) -> Result<MockCloudStorageServer, Box<dyn std::error::Error>> {
+    ) -> Result<SystemTime, Box<dyn std::error::Error>> {
         let credentials_path = self.directory.path().join("credentials.json");
         let mut initial: Value = serde_json::from_slice(&fs::read(&credentials_path)?)?;
         let mut replacement = initial.clone();
@@ -219,6 +260,16 @@ esac
         initial["expiration_time"] =
             json!(expires_at.duration_since(UNIX_EPOCH)?.as_millis() as u64);
         fs::write(credentials_path, serde_json::to_vec(&initial)?)?;
+        Ok(expires_at)
+    }
+
+    /// Let the initial grant expire while the first storage response is pending.
+    fn storage_with_expiring_credentials(
+        &self,
+        kind: StorageCredentialKind,
+        update_replacement: impl FnOnce(&mut Value),
+    ) -> Result<MockCloudStorageServer, Box<dyn std::error::Error>> {
+        let expires_at = self.prepare_credential_renewal(update_replacement)?;
         let log = fs::read(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
             "../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned/table/_delta_log/00000000000000000000.json",
         ))?;
@@ -448,7 +499,8 @@ fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResul
         vec!["inspect", "--help"],
         vec!["inspect", "uc://a.b.c"],
         vec!["inspect", "uc://a.b", "--databricks-profile", "work"],
-        vec!["scan", "uc://a.b.c", "--databricks-profile", "work"],
+        vec!["scan", "uc://a.b.c"],
+        vec!["scan", "uc://a.b", "--databricks-profile", "work"],
         vec!["inspect", "local", "--databricks-profile", "work"],
     ] {
         let output = run_with_timeout(&mut fixture.command(&args))?;
@@ -507,29 +559,8 @@ fn inspection_renews_expired_grants_without_resolving_the_table_name_again() -> 
         StorageCredentialKind::Gcs,
     ] {
         let fixture = DatabricksCliFixture::new(kind)?;
-        let server = fixture.storage_with_expiring_credentials(kind, |replacement| match kind {
-            StorageCredentialKind::S3 | StorageCredentialKind::R2 => {
-                let field = if kind == StorageCredentialKind::S3 {
-                    "aws_temp_credentials"
-                } else {
-                    "r2_temp_credentials"
-                };
-                replacement[field] = json!({
-                    "access_key_id": "renewed-key",
-                    "secret_access_key": "renewed-secret",
-                    "session_token": "renewed-session"
-                });
-            }
-            StorageCredentialKind::AzureSas => {
-                replacement["azure_user_delegation_sas"] =
-                    json!({"sas_token":"sig=renewed%2Bsignature"});
-            }
-            StorageCredentialKind::AzureBearer => {
-                replacement["azure_aad"] = json!({"aad_token":"renewed-azure-token"});
-            }
-            StorageCredentialKind::Gcs => {
-                replacement["gcp_oauth_token"] = json!({"oauth_token":"renewed-gcp-token"});
-            }
+        let server = fixture.storage_with_expiring_credentials(kind, |replacement| {
+            kind.rotate_credentials(replacement);
         })?;
         let output = run_with_timeout(
             fixture
@@ -567,12 +598,7 @@ fn inspection_renews_expired_grants_without_resolving_the_table_name_again() -> 
             3
         );
         let requests = server.requests.lock().unwrap();
-        let renewed_auth = match kind {
-            StorageCredentialKind::S3 | StorageCredentialKind::R2 => "credential=renewed-key/",
-            StorageCredentialKind::AzureSas => "sig=renewed%2bsignature",
-            StorageCredentialKind::AzureBearer => "authorization: bearer renewed-azure-token",
-            StorageCredentialKind::Gcs => "authorization: bearer renewed-gcp-token",
-        };
+        let renewed_auth = kind.renewed_authorization();
         assert!(
             requests
                 .iter()
@@ -993,9 +1019,7 @@ fn pid_one_cancellation_preserves_uc_diagnostic() -> TestResult {
     Ok(())
 }
 
-/// A local server that serves Delta logs as S3/Azure objects and records requests.
-///
-/// Only GET/HEAD and log listing are needed, following the core cloud-location fixture.
+/// A local S3/Azure/GCS server for log listings and ranged object reads.
 struct MockCloudStorageServer {
     endpoint: String,
     requests: Arc<Mutex<Vec<String>>>,
@@ -1012,6 +1036,18 @@ impl MockCloudStorageServer {
         credential_kind: StorageCredentialKind,
         log: Vec<u8>,
         mut on_request: impl FnMut(&str) + Send + 'static,
+    ) -> std::io::Result<Self> {
+        Self::with_objects(
+            credential_kind,
+            BTreeMap::from([("table/_delta_log/00000000000000000000.json".into(), log)]),
+            move |request, _| on_request(request),
+        )
+    }
+
+    fn with_objects(
+        credential_kind: StorageCredentialKind,
+        mut objects: BTreeMap<String, Vec<u8>>,
+        mut on_request: impl FnMut(&str, &mut BTreeMap<String, Vec<u8>>) + Send + 'static,
     ) -> std::io::Result<Self> {
         let is_azure = matches!(
             credential_kind,
@@ -1043,7 +1079,7 @@ impl MockCloudStorageServer {
                 }
                 let request = String::from_utf8(request).unwrap();
                 recorded.lock().unwrap().push(request.clone());
-                on_request(&request);
+                on_request(&request, &mut objects);
                 let Some(target) = request.split_whitespace().nth(1) else {
                     continue;
                 };
@@ -1053,46 +1089,79 @@ impl MockCloudStorageServer {
                 let query = url.query_pairs().collect::<HashMap<_, _>>();
                 let listing = query.contains_key("list-type")
                     || query.get("comp").is_some_and(|v| v == "list");
-                let key = "table/_delta_log/00000000000000000000.json";
-                let (status, mut body) = if listing {
-                    let include = key.starts_with(query.get("prefix").map_or("", |v| v.as_ref()))
-                        && key > query.get("start-after").map_or("", |v| v.as_ref());
-                    let entry = if !include {
-                        String::new()
-                    } else if is_azure {
-                        format!(
-                            "<Blob><Name>{key}</Name><Properties><Last-Modified>Wed, 01 Jan 2020 00:00:00 GMT</Last-Modified><Etag>test</Etag><Content-Length>{}</Content-Length><Content-Type>application/octet-stream</Content-Type><BlobType>BlockBlob</BlobType></Properties></Blob>",
-                            log.len()
-                        )
-                    } else {
-                        format!(
-                            "<Contents><Key>{key}</Key><LastModified>2020-01-01T00:00:00Z</LastModified><Size>{}</Size></Contents>",
-                            log.len()
-                        )
-                    };
+                let (mut status, mut body) = if listing {
+                    let mut entries = String::new();
+                    for (key, bytes) in &objects {
+                        if !key.starts_with(query.get("prefix").map_or("", |v| v.as_ref()))
+                            || key.as_str() <= query.get("start-after").map_or("", |v| v.as_ref())
+                        {
+                            continue;
+                        }
+                        let entry = if is_azure {
+                            format!(
+                                "<Blob><Name>{key}</Name><Properties><Last-Modified>Wed, 01 Jan 2020 00:00:00 GMT</Last-Modified><Etag>test</Etag><Content-Length>{}</Content-Length><Content-Type>application/octet-stream</Content-Type><BlobType>BlockBlob</BlobType></Properties></Blob>",
+                                bytes.len()
+                            )
+                        } else {
+                            format!(
+                                "<Contents><Key>{key}</Key><LastModified>2020-01-01T00:00:00Z</LastModified><Size>{}</Size></Contents>",
+                                bytes.len()
+                            )
+                        };
+                        entries.push_str(&entry);
+                    }
                     let xml = if is_azure {
                         format!(
-                            "<EnumerationResults><Blobs>{entry}</Blobs><NextMarker /></EnumerationResults>"
+                            "<EnumerationResults><Blobs>{entries}</Blobs><NextMarker /></EnumerationResults>"
                         )
                     } else {
                         format!(
-                            "<ListBucketResult><IsTruncated>false</IsTruncated>{entry}</ListBucketResult>"
+                            "<ListBucketResult><IsTruncated>false</IsTruncated>{entries}</ListBucketResult>"
                         )
                     };
                     (200, xml.into_bytes())
-                } else if request_path.as_ref()
-                    == format!("{}/{key}", if is_azure { "container" } else { "bucket" })
+                } else if let Some(bytes) = request_path
+                    .as_ref()
+                    .strip_prefix(if is_azure { "container/" } else { "bucket/" })
+                    .and_then(|key| objects.get(key))
                 {
-                    (200, log.clone())
+                    (200, bytes.clone())
                 } else {
                     (404, Vec::new())
                 };
+                let mut content_range = String::new();
+                if status == 200 && !listing && !request.starts_with("HEAD ") {
+                    let range = request.lines().find_map(|line| {
+                        let (name, value) = line.split_once(':')?;
+                        (name.eq_ignore_ascii_case("range")
+                            || name.eq_ignore_ascii_case("x-ms-range"))
+                        .then(|| value.trim().strip_prefix("bytes="))
+                        .flatten()
+                    });
+                    if let Some(range) = range {
+                        let (start, end) = range.split_once('-').unwrap();
+                        let start: usize = start.parse().unwrap();
+                        let end = if end.is_empty() {
+                            body.len() - 1
+                        } else {
+                            end.parse().unwrap()
+                        };
+                        assert!(
+                            start <= end && end < body.len(),
+                            "invalid fixture range {range}"
+                        );
+                        content_range =
+                            format!("Content-Range: bytes {start}-{end}/{}\r\n", body.len());
+                        body = body[start..=end].to_vec();
+                        status = 206;
+                    }
+                }
                 let length = body.len();
                 if request.starts_with("HEAD ") {
                     body.clear();
                 }
                 let headers = format!(
-                    "HTTP/1.1 {status} OK\r\nContent-Length: {length}\r\nContent-Type: {}\r\nLast-Modified: Wed, 01 Jan 2020 00:00:00 GMT\r\nETag: test\r\nConnection: close\r\n\r\n",
+                    "HTTP/1.1 {status} OK\r\n{content_range}Content-Length: {length}\r\nContent-Type: {}\r\nLast-Modified: Wed, 01 Jan 2020 00:00:00 GMT\r\nETag: test\r\nConnection: close\r\n\r\n",
                     if listing {
                         "application/xml"
                     } else {

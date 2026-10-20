@@ -105,15 +105,14 @@ interface; scripts should use machine diagnostics and the exit status.
 | `execution` | `output_write` | stdout could not be written or flushed |
 | `execution` | `arrow_ipc` | Arrow IPC encoding failed |
 | `configuration` | `invalid_uc_reference` | Invalid UC name/profile, or a profile on a direct path |
-| `configuration` | `unsupported_uc_scan` | UC targets currently support inspection only |
 | `configuration` | `invalid_uc_storage_options` | Unsupported, conflicting, or duplicate region options |
 | `configuration` | `uc_s3_region_required` | S3 needs an explicit region |
 | `configuration` | `databricks_cli_missing` | Databricks CLI is unavailable on PATH |
 | `execution` | `databricks_cli_failed`, `databricks_cli_timeout` | Child process failed or exceeded its timeout |
 | `execution` | `uc_table_request_failed`, `uc_credential_request_failed` | Metadata or credential request failed; check login and permissions |
 | `execution` | `invalid_databricks_response`, `unsupported_uc_table` | Response is malformed, oversized, or unsupported |
-| `execution` | `uc_credentials_expired` | Credentials expired before inspection finished |
-| `execution` | `uc_cancelled` | UC inspection was interrupted |
+| `execution` | `uc_credentials_expired` | An initial or renewed grant is already expired |
+| `execution` | `uc_cancelled` | A UC command was interrupted |
 
 Diagnostics omit argument values, file paths, URLs, input contents, credential
 names and values, and dependency messages. Argument failures include the
@@ -135,7 +134,7 @@ failure. Status 3 is preserved even when stderr cannot be written.
 
 ## Threads, cancellation, and signals
 
-Direct-path commands run in one process. UC inspection also starts bounded
+Direct-path commands run in one process. UC commands also start bounded
 Databricks CLI subprocesses. The CLI drives its asynchronous runtime on
 the main thread and ignores `TOKIO_WORKER_THREADS`. Scans use a separate output
 thread so a blocked stdout pipe does not stall network reads. The output thread
@@ -149,12 +148,17 @@ the process with status 1 and a synchronous diagnostic with code
 backtraces are omitted. Runtime setup failures have their own reason and safe
 I/O category.
 
-UC inspection handles SIGINT/SIGTERM while resolving and loading metadata,
-terminates any pending Databricks child, and exits 130/143. In text mode,
+UC commands handle SIGINT/SIGTERM during authorization, metadata loading, and
+scanning, terminate any pending Databricks child, and exit 130/143. In text mode,
 cancellation emits an INFO `cli.cancelled` event with code `uc_cancelled`,
 visible with `RUST_LOG=info`. Machine mode emits a terminal diagnostic with
 that code, including with `RUST_LOG=off`. Cancellation remains responsive
 during stdout writes. On Windows, Ctrl+C exits 130.
+
+On Unix, UC scans also detect a closed stdout pipe while waiting for credentials
+or storage. They terminate pending Databricks work and exit 3 without finishing
+the Arrow stream. On other platforms, a closed pipe is detected at the next
+stdout write; a pending credential command still has its 30-second timeout.
 
 For direct-path commands outside PID 1, Linux signals keep their normal
 termination behavior: a killed process is unsuccessful and need not emit an

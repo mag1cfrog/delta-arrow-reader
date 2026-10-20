@@ -9,7 +9,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | Save selected rows as Arrow | [`dar scan`](#scan-rows) |
 | Select rows by a condition | [Filter rows](#filter-rows) |
 | Connect to remote storage | [Storage options file](#storage-options-file) |
-| Inspect a Unity Catalog table by name | [Databricks profile](#inspect-a-unity-catalog-table) |
+| Read a Unity Catalog table by name | [Databricks profile](#read-a-unity-catalog-table) |
 | Change parallel reads or buffering | [Execution options](#execution-options) |
 | Handle a command's result in a script | [Inspection JSON](#inspection-json) and [exit statuses](#exit-statuses-for-scripts) |
 
@@ -60,17 +60,20 @@ Discovery does not search numeric version gaps.
 
 </details>
 
-## Inspect a Unity Catalog table
+## Read a Unity Catalog table
 
 Use an existing Databricks CLI workspace profile to resolve a table name and
-obtain temporary cloud credentials. DAR then reads the Delta log directly from
-S3, Azure, or R2 on your machine. It returns the snapshot's schema and version;
-Unity Catalog column metadata does not determine the output schema. This
-command does not submit SQL or start a cluster or SQL warehouse.
+obtain temporary cloud credentials. DAR reads the Delta log and data files from
+S3, Azure, GCS, or R2 using local compute. `inspect` returns the snapshot's schema
+and version; `scan` streams its rows as Arrow IPC. Unity Catalog column metadata
+does not determine the output schema. Neither command submits SQL or starts a
+cluster or SQL warehouse.
 
 ```sh
 dar inspect uc://main.sales.orders --databricks-profile work
 dar inspect uc://main.sales.orders --databricks-profile work --table-version 0
+dar scan uc://main.sales.orders --databricks-profile work \
+  --column customer_id --limit 100 > orders.arrow
 ```
 
 Install the Databricks CLI in the same environment as DAR and make it available
@@ -132,7 +135,12 @@ These rules apply to Unity Catalog targets:
   table ID and profile. Concurrent requests share one refresh. Every replacement
   must keep the same storage root and credential type and have a future expiry.
   If renewal fails, the command fails without using the old grant or falling
-  back to another identity. `scan` does not yet accept Unity Catalog targets.
+  back to another identity. Renewal keeps the selected Delta snapshot and does
+  not restart a scan or repeat rows already written.
+
+UC scans accept the same projection, predicate, limit, snapshot-version, and
+execution options as direct-path scans. If renewal fails after output starts,
+the process exits unsuccessfully and leaves an incomplete Arrow stream.
 
 Each Databricks subprocess has a 30-second timeout, no interactive stdin, and
 a 1 MiB limit on each output stream. DAR captures and discards child diagnostics
@@ -157,6 +165,7 @@ before table loading, including for `--limit 0`.
 
 ```text
 dar scan [--table-version N] [--storage-options-file PATH]
+         [--databricks-profile PROFILE]
          [--predicate-file PATH] [--column NAME ... | --no-columns]
          [--execution-options-file PATH] [--target-partitions N] [--limit N] [--] TABLE
 ```

@@ -6,7 +6,8 @@ use std::{
 };
 
 use delta_arrow_reader::{
-    DeltaSnapshotSelection, DeltaStorageOptions, DeltaTable, DeltaTableBuilder, WarmupMode,
+    DeltaReaderError, DeltaSnapshotSelection, DeltaStorageOptions, DeltaTable, DeltaTableBuilder,
+    WarmupMode,
 };
 use object_store::{
     ObjectStoreScheme,
@@ -438,27 +439,19 @@ impl AuthorizedTableAccess {
 
     /// Loads the requested snapshot with credentials renewed on demand by the storage clients.
     ///
-    /// UC inspection also requires a read protocol supported by the local reader.
-    pub(crate) async fn load_table_for_inspection(
-        self,
+    /// Both UC commands require a read protocol supported by the local reader.
+    pub(crate) async fn load_table(
+        &self,
         snapshot_selection: DeltaSnapshotSelection,
     ) -> Result<DeltaTable, crate::Error> {
         let builder = DeltaTableBuilder::new(self.storage_url.as_str())
             .with_warmup(WarmupMode::None)
             .with_snapshot_selection(snapshot_selection)
             .with_credential_provider(self.credential_cache.provider())
-            .with_storage_options(self.storage_options);
+            .with_storage_options(self.storage_options.clone());
         let table = match builder.load_table().await {
             Ok(table) => table,
-            Err(source) => {
-                return Err(self
-                    .credential_cache
-                    .refresh_failure()
-                    .await
-                    .map_or(crate::Error::Reader { source }, |source| {
-                        crate::Error::UnityCatalog { source }
-                    }));
-            }
+            Err(source) => return Err(self.map_reader_error(source).await),
         };
         // The Delta log can declare unsupported features even when UC metadata passed validation.
         let protocol = table.protocol();
@@ -474,6 +467,16 @@ impl AuthorizedTableAccess {
             });
         }
         Ok(table)
+    }
+
+    /// Preserves UC authorization failures through snapshot, planning, and streaming errors.
+    pub(crate) async fn map_reader_error(&self, source: DeltaReaderError) -> crate::Error {
+        self.credential_cache
+            .refresh_failure()
+            .await
+            .map_or(crate::Error::Reader { source }, |source| {
+                crate::Error::UnityCatalog { source }
+            })
     }
 }
 
