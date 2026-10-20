@@ -11,6 +11,7 @@ use std::{
     sync::LazyLock,
 };
 
+mod check;
 mod session;
 mod trace;
 pub(super) use trace::capture;
@@ -18,6 +19,10 @@ pub(super) use trace::capture;
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "kebab-case", deny_unknown_fields)]
 pub(super) enum Request {
+    CheckRequests {
+        directory: PathBuf,
+        output: PathBuf,
+    },
     Invoke(session::Request),
     Metrics {
         directory: PathBuf,
@@ -37,6 +42,7 @@ pub(super) enum Request {
 
 pub(super) fn run(request: Request) -> Result<Value> {
     match request {
+        Request::CheckRequests { directory, output } => check::known_requests(&directory, &output),
         Request::Invoke(request) => session::run(request),
         Request::Metrics { directory, timeout } => metrics(&directory, timeout),
         Request::Reconcile {

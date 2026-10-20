@@ -343,7 +343,7 @@ pub(super) fn curl(directory: &Path, path: &str, options: &[&str]) -> Result<Chi
     Ok(child)
 }
 
-fn response(child: Child) -> Result<Vec<u8>> {
+pub(super) fn response(child: Child) -> Result<Vec<u8>> {
     let output = child.wait_with_output()?;
     require(
         output.status.success(),

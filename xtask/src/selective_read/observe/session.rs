@@ -35,13 +35,13 @@ pub(in crate::selective_read) struct Request {
     traced: Option<bool>,
 }
 
-struct Observer {
+pub(super) struct Observer {
     child: Child,
     finished: bool,
 }
 
 impl Observer {
-    fn start(directory: &Path, output: &Path) -> Result<Self> {
+    pub(super) fn start(directory: &Path, output: &Path) -> Result<Self> {
         let child = Command::new(std::env::current_exe()?)
             .args(["selective-read", "capture", "--state"])
             .arg(fs::canonicalize(directory)?)
@@ -99,7 +99,7 @@ impl Observer {
         Ok(observer)
     }
 
-    fn finish(&mut self, deadline: u64) -> Result<()> {
+    pub(super) fn finish(&mut self, deadline: u64) -> Result<()> {
         let control = json!({"deadline":deadline as f64 / 1e9});
         let mut input = self.child.stdin.take().ok_or("missing observer stdin")?;
         writeln!(input, "{control}")?;

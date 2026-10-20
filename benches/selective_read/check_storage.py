@@ -4,12 +4,9 @@ Run explicitly on a dedicated server. This is not a performance campaign or CI j
 """
 
 import argparse
-from collections import Counter
 import json
 from pathlib import Path
-import secrets
 import statistics
-import time
 
 import observe
 import storage
@@ -19,117 +16,8 @@ import oracle
 from capabilities import CORPUS
 
 
-def rejected(call):
-    try:
-        call()
-    except (ValueError, AssertionError):
-        return
-    raise AssertionError("invalid observation was accepted")
-
-
 def known_requests(directory, output):
-    output.mkdir()
-    scope = "_checks/" + secrets.token_hex(8) + "/"
-    body = bytes(range(256)) * 256
-    small = output / "small.parquet"
-    small.write_bytes(body)
-    large = output / "large.bin"
-    with large.open("xb") as target:
-        target.truncate(64 * 1024**2)
-    with storage.exclusive(directory):
-        for name, source in (("small.parquet", small), ("large.bin", large),
-                             ("deletion_vector_known.bin", small), ("_delta_log/checkpoint.parquet", small)):
-            storage.put_verified(directory, scope + name, source, digest(source))
-        # Repeat upload must keep the object and still verify its returned bytes.
-        storage.put_verified(directory, scope + "small.parquet", small, digest(small))
-        rejected(lambda: storage.put_verified(directory, scope + "small.parquet", small, "00" * 32))
-        assert storage.put_verified(directory, scope + "checksum.parquet", small, digest(small), checksum=True) == "server-sha256"
-        assert storage.put_verified(directory, scope + "checksum.parquet", small, digest(small), checksum=True) == "server-sha256"
-        rejected(lambda: storage.put_verified(directory, scope + "bad-checksum.parquet", small, "00" * 32, checksum=True))
-        rejected(lambda: storage.put_verified(directory, scope + "checksum.parquet", small, "00" * 32, checksum=True))
-        trace = observe.Trace(directory, output, scope, "known", "known-requests")
-        expected = []
-        def get(name, *, method="GET", range_=None, attempt=None, failed=False):
-            options = ["--max-time", "10"]
-            if method == "HEAD": options += ["--head"]
-            if range_: options += ["--header", "Range: " + range_]
-            if attempt:
-                options += ["--header", "amz-sdk-invocation-id: known-retry", "--header", f"amz-sdk-request: attempt={attempt}"]
-            process = storage.curl(directory, "/" + storage.BUCKET + "/" + scope + name, *options)
-            value, error = process.communicate()
-            assert process.returncode == 0, error
-            if failed: assert b"NoSuchKey" in value
-            expected.append((method, scope + name, range_, attempt, 0 if method == "HEAD" else len(value)))
-            return value
-        try:
-            trace.begin()
-            assert get("small.parquet") == body
-            assert get("small.parquet", range_="bytes=11-23") == body[11:24]
-            assert get("small.parquet", range_="bytes=-8") == body[-8:]
-            get("small.parquet", method="HEAD")
-            get("deletion_vector_known.bin")
-            get("_delta_log/checkpoint.parquet")
-            for attempt in (1, 2): get("absent.bin", attempt=attempt, failed=True)
-            listing = storage.request(directory, f"/{storage.BUCKET}?list-type=2&prefix={scope}")
-            # Emulate a consumer's completed stream while a separate request is
-            # still running, then close that client before draining the capture.
-            stream_complete = time.time_ns()
-            process = storage.curl(directory, "/" + storage.BUCKET + "/" + scope + "large.bin",
-                                   "--limit-rate", "16k", "--max-time", "0.3")
-            partial, _ = process.communicate()
-            client_exited = time.time_ns()
-            assert process.returncode == 28 and 0 < len(partial) < large.stat().st_size
-            proof = trace.finish()
-        finally:
-            trace.close()
-        records = [json.loads(line) for line in (output / "requests.jsonl").read_text().splitlines()]
-        assert len(records) == len(expected) + 2
-        for method, key, range_, attempt, size in expected:
-            record, = [r for r in records if (r["method"], r["object"], r["range"], r["sdk_attempt"]) == (method, key, range_, attempt)]
-            assert record["response_bytes"] == size and not record["incomplete_body"], record
-            assert record["status"] == (404 if attempt else 206 if range_ else 200)
-            if method == "HEAD": assert record["advertised_content_length"] == len(body)
-            if attempt: assert record["sdk_invocation_id"] == "known-retry"
-        listed, = [r for r in records if r["api"] == "ListObjectsV2"]
-        assert listed["response_bytes"] == len(listing)
-        interrupted, = [r for r in records if r["object"].endswith("large.bin")]
-        assert interrupted["incomplete_body"] and len(partial) <= interrupted["response_bytes"] < large.stat().st_size
-        assert proof["drained_ns"] > client_exited
-        io = observe.summarize(output, {"diagnostic_events": [{"event": "stream_complete", "time_ns": stream_complete}]})
-        assert io["requests"] == 10 and io["explicit_retry_attempts"] == 1 and io["incomplete_responses"] == 1
-        assert io["started_after_final_stream"] == 1 and io["ended_after_final_stream"] >= 1
-        assert io["touched_parquet_objects"] == [scope + "small.parquet"]
-        assert io["by_class"]["deletion_vector"]["requests"] == io["by_class"]["delta_log"]["requests"] == 1
-        counts = Counter(r["api"] for r in records)
-        counts["HeadObject"] += 1  # End marker is included in native counter deltas.
-        size = sum(r["response_bytes"] for r in records)
-        observe.reconcile(proof["before"], proof["after"], counts, size)
-        for difference in (-1, 1):
-            altered = counts.copy()
-            altered["GetObject"] += difference
-            rejected(lambda: observe.reconcile(proof["before"], proof["after"], altered, size))
-        rejected(lambda: observe.reconcile(proof["before"], proof["after"], counts, size + 1))
-        rejected(lambda: observe.reconcile(proof["before"], proof["after"] | {"active": 1}, counts, size))
-        rejected(lambda: observe.reconcile(proof["before"], proof["after"] | {"rejected": proof["after"]["rejected"] + 1}, counts, size))
-        unrelated = output / "unrelated"
-        unrelated.mkdir()
-        trace = observe.Trace(directory, unrelated, scope + "different/", "unrelated", "rejected")
-        try:
-            trace.begin()
-            storage.request(directory, "/" + storage.BUCKET + "/" + scope + "small.parquet")
-            try:
-                trace.finish()
-            except RuntimeError as error:
-                assert str(error) == "unrelated object request"
-            else:
-                raise AssertionError("unrelated traffic was accepted")
-        finally:
-            trace.close()
-        assert (unrelated / "requests.jsonl").read_text() == ""
-    result = {"status": "passed", "capture": proof, "io": io, "client_received_partial_bytes": len(partial),
-              "server_accepted_partial_bytes": interrupted["response_bytes"], "advertised_partial_bytes": large.stat().st_size}
-    save(output / "checks.json", result)
-    return result
+    return storage.native.call("observe", {"action": "check-requests", "directory": str(directory), "output": str(output)})
 
 
 def check(directory, binaries, fixtures, output):

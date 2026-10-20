@@ -1,7 +1,6 @@
 """Prepare and operate the dedicated, pinned loopback MinIO benchmark server."""
 
 import argparse
-import base64
 from collections import Counter
 from contextlib import contextmanager
 import fcntl
@@ -53,25 +52,6 @@ def exclusive(directory):
 
 def credentials(directory):
     return native.call("storage", {"action": "credentials", "directory": str(directory)})
-
-
-def curl(directory, path, *options, stdout=subprocess.PIPE, stderr=subprocess.PIPE):
-    config = state(directory)
-    secret = credentials(directory)
-    # curl's native SigV4 signer avoids another SDK. Secrets travel on stdin,
-    # never in argv, observation records, request URLs or a curl configuration file.
-    text = f'user = "{secret["access_key"]}:{secret["secret_key"]}"\naws-sigv4 = "aws:amz:us-east-1:s3"\n'
-    process = subprocess.Popen(["curl", "--disable", "--silent", "--show-error", "--noproxy", "*", "--config", "-",
-        config["endpoint"] + path, *options], stdin=subprocess.PIPE, stdout=stdout, stderr=stderr)
-    process.stdin.write(text.encode())
-    process.stdin.close()
-    process.stdin = None
-    return process
-
-
-def request(directory, path, *options):
-    return base64.b64decode(native.call("storage", {"action": "request", "directory": str(directory),
-                                                  "path": path, "options": options}))
 
 
 def start(build, directory, port):

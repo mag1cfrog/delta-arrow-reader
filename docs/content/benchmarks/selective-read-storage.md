@@ -313,7 +313,8 @@ Use the smoke fixture to check the entire path without a report-scale campaign:
 
 The check validates uploads, known request bytes, a canceled download, explicit
 retry metadata, trace completeness, and output from every remote reader against
-the independent oracle. It covers compound predicates in both layouts, an empty
+the independent oracle. Rust runs the storage boundary checks; Python prepares
+references and checks each reader's exported values. It covers compound predicates in both layouts, an empty
 result, LIMIT, wide projection, and ten-query reuse. The pinned Spark DV fixture
 checks real sidecar traffic for the four supporting readers and Daft's explicit
 unsupported result. It does not change the later report-scale DV scenarios.
