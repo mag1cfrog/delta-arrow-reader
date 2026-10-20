@@ -337,6 +337,10 @@ fn sort_by_id(batch: &RecordBatch) -> Result<RecordBatch, arrow::error::ArrowErr
 }
 
 fn run_with_timeout(command: &mut Command) -> io::Result<Output> {
+    // Shell logging settings must not change a fixture's expected stderr.
+    if !command.get_envs().any(|(key, _)| key == "RUST_LOG") {
+        command.env_remove("RUST_LOG");
+    }
     let mut child = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
