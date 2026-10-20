@@ -5,7 +5,7 @@ description: Validate all five readers, freeze their schedule, and retain timing
 
 # Run a selective-read campaign
 
-The campaign script runs the prepared readers sequentially against one dedicated
+The Rust campaign controller runs the prepared readers sequentially against one dedicated
 MinIO server. It checks each case and execution mode against the independent
 oracle, saves the runnable subset and full schedule, then runs warmups, timing
 samples and separate diagnostics. All five readers remain in the inventory.
@@ -42,6 +42,15 @@ generation and reference preparation must finish before timing starts.
 Build the [native controller](../../../benches/selective_read/README.md#reproduce-a-run)
 before starting the campaign. Its executable and Rust sources are recorded with
 the campaign inputs; each watchdog result also identifies the controller binary.
+The `campaign.py` entry point forwards its arguments and Python interpreter to
+`xtask selective-read run-campaign`. The native command accepts the same options
+plus `--python PATH` for the pinned oracle environment. Run it from the repository
+root, or pass `--harness PATH` to the `benches/selective_read` directory.
+
+Python runs in one persistent validation process outside the measured reader
+intervals. Its checksum and metadata caches survive across gates. The controller
+retains validation errors in the campaign artifacts and stops launching readers
+if an invocation cannot prove cleanup.
 
 For the default compound-query smoke cases, prepare these references from the
 repository root. Each output directory must be new:
@@ -68,7 +77,7 @@ For a new campaign, add `--upload-table NATIVE_TABLE_ID` and point `--upload`
 to a new receipt path. Repeat `--upload-table` to stage multiple native tables.
 The controller uploads them with server SHA-256 verification before creating
 reader requests. Upload and campaign checks share the existing local checksum
-cache in that process, so an unchanged file is hashed once. The cache checks
+cache in the validation process, so an unchanged file is hashed once. The cache checks
 device/inode, size, mtime and ctime; changed files receive a fresh hash.
 An existing receipt is rejected in this mode. Omit `--upload-table` to consume
 an already verified receipt through the existing path.

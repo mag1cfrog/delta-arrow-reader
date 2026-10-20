@@ -23,6 +23,8 @@ pub(crate) enum Task {
     Invoke,
     /// Schedule and summarize a campaign. Read the operation as JSON from stdin.
     Campaign,
+    /// Execute a frozen campaign, using Python only for independent data validation.
+    RunCampaign(Box<campaign::controller::Args>),
     /// Operate the dedicated benchmark storage. Read the operation as JSON from stdin.
     Storage,
     /// Read or reconcile storage observations. Read the operation as JSON from stdin.
@@ -97,6 +99,7 @@ pub(crate) enum Task {
 impl Task {
     pub(crate) fn run(self) -> Result<()> {
         match self {
+            Self::RunCampaign(args) => return campaign::controller::run(*args),
             Self::ZstdProbe(args) => return zstd_probe::run(args),
             Self::CheckNetwork { state, output } => return network::calibrate(&state, &output),
             Self::StartNetwork(arguments) => return network::start(arguments),
@@ -147,6 +150,7 @@ impl Task {
             Self::Experiment => experiment::run(serde_json::from_value(input)?)?,
             Self::IntraPage => experiment::intra_page::run(serde_json::from_value(input)?)?,
             Self::ExecReader { .. }
+            | Self::RunCampaign(_)
             | Self::ZstdProbe(_)
             | Self::CheckNetwork { .. }
             | Self::PrepareStorage { .. }

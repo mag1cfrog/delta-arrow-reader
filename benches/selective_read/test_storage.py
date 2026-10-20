@@ -1,6 +1,5 @@
 """Check staged uploads without starting a server or reader."""
 
-from argparse import Namespace
 from contextlib import nullcontext
 import hashlib
 import json
@@ -10,7 +9,6 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import campaign
 import run
 import storage
 
@@ -31,9 +29,7 @@ class StagedUpload(unittest.TestCase):
             (fixtures / "manifest.json").write_text(json.dumps({"status": "complete", "protocol": "selective-read-v1",
                 "tables": [{"id": "base", "path": "base", "delta_log": item(log), "files": [item(part)]}]}))
             (state / "server.json").write_text("{}")
-            args = Namespace(output=root / "campaign", fixtures=fixtures, state=state, upload=root / "upload.json",
-                             upload_table=["base"], binary=[], matrix=None, workload=None, case=["base.query"],
-                             reference=[], no_sessions=True, session=None)
+            upload = root / "upload.json"
             scans = []
             original = run.hashlib.file_digest
             def digest(source, algorithm):
@@ -41,17 +37,12 @@ class StagedUpload(unittest.TestCase):
                 return original(source, algorithm)
             with patch.object(storage, "verify_server"), patch.object(storage, "exclusive", side_effect=lambda _: nullcontext()), \
                     patch.object(storage, "put_verified", return_value="server-sha256"), \
-                    patch.object(storage, "state", return_value={"cpus": {"observer": [0]}}), \
-                    patch.object(campaign.os, "sched_setaffinity"), patch.object(campaign.observe, "invoke") as invoke, \
                     patch.object(run.hashlib, "file_digest", side_effect=digest):
-                self.assertEqual(campaign.execute(args), 1)  # No reference: no native reader may launch.
-                invoke.assert_not_called()
+                storage.upload(state, fixtures, upload, ["base"], checksum=True)
+                storage.inventory(fixtures, ["base"])
             self.assertEqual(scans.count(str(part)), 1)
-            receipt = json.loads(args.upload.read_text())
+            receipt = json.loads(upload.read_text())
             self.assertEqual(receipt["verification"], {"requested": "server-sha256", "methods": {"server-sha256": 2}})
-            args.output = root / "existing-receipt"
-            with self.assertRaisesRegex(ValueError, "new receipt path"):
-                campaign.execute(args)
             stamp = part.stat()
             part.write_bytes(b"bad!")
             os.utime(part, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
@@ -87,34 +78,6 @@ class StagedUpload(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 storage.inventory(fixtures)
 
-            (state / "server.json").write_text("{}")
-            prefix = storage.digest(fixtures / "manifest.json")
-            receipt = {"status": "verified", "server_sha256": storage.digest(state / "server.json"),
-                       "fixture_manifest_sha256": prefix, "table_root": f"s3://{storage.BUCKET}/{prefix}",
-                       "table_ids": ["base"], "objects": selected}
-            upload = root / "upload.json"
-            upload.write_text(json.dumps(receipt))
-            args = Namespace(output=root / "campaign", fixtures=fixtures, state=state, upload=upload,
-                             binary=[], matrix=None, workload=None, case=["base.dv.query"],
-                             reference=[], no_sessions=True, session=None)
-            with patch.object(storage, "state", return_value={"cpus": {"observer": [0]}}), \
-                    patch.object(storage, "exclusive", return_value=nullcontext()), \
-                    patch.object(campaign.os, "sched_setaffinity"), \
-                    patch.object(campaign.run, "request", return_value={"table_uri": (fixtures / "base.dv").as_uri()}), \
-                    patch.object(campaign.observe, "invoke") as invoke:
-                self.assertEqual(campaign.execute(args), 1)
-                invoke.assert_not_called()
-            inventory = json.loads((args.output / "inventory.json").read_text())
-            entries = inventory["base.dv.query"]
-            self.assertEqual(set(entries), set(campaign.READERS))
-            self.assertTrue(all(row["status"] == "preparation_failed"
-                                and "table is absent from verified upload" in row["failure_reason"]
-                                for row in entries.values()))
-            args.output = root / "forged-campaign"
-            receipt["objects"].append({"path": "base.dv/sidecar.bin"})
-            upload.write_text(json.dumps(receipt))
-            with self.assertRaisesRegex(ValueError, "objects differ from verified upload"):
-                campaign.execute(args)
             (fixtures / "base/part.parquet").write_bytes(b"changed")
             with self.assertRaises(AssertionError):
                 storage.inventory(fixtures, ["base"])
