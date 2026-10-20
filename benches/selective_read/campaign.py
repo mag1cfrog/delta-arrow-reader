@@ -65,12 +65,6 @@ def schedule(inventory, campaign_id, comparison=None, *, combined=None, gate_war
         "gate_warmup": gate_warmup, "gate_diagnostics": gate_diagnostics})
 
 
-def validate_diagnostics(config, inventory, slots, observations):
-    native.call("campaign", {"action": "validate-diagnostics", "config": config,
-        "inventory": list(inventory.items()), "slots": slots, "observations": observations,
-        "protocols": str(run.PROTOCOL.parent)})
-
-
 def timer_resolution():
     return native.call("campaign", {"action": "timer-resolution"})
 
@@ -83,11 +77,6 @@ def validate(record, payload, reader, gate=None):
 def summarize(inventory, slots, rows, resolution, integrity=True):
     return native.call("campaign", {"action": "summarize", "inventory": inventory, "slots": slots,
         "rows": rows, "resolution": resolution, "integrity": integrity})
-
-
-def read_results(directory, frozen_error="frozen campaign inputs changed"):
-    return native.call("campaign", {"action": "read-results", "directory": str(directory),
-                                    "frozen_error": frozen_error})
 
 
 def execute(args):

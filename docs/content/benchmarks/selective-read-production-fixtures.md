@@ -240,6 +240,8 @@ and selects five independent samples per runnable reader and execution mode.
 Keep all eight cases and native reuse profiles in the complete publication
 inventory. Inputs outside a batch remain `not_prepared`, and a batch report
 keeps `publication_ready: false`. The existing `large_workloads.py report`
-command audits both revisions. Follow the
+command checks query bindings in Python and audits both revisions in Rust.
+Build its controller with `cargo build --locked -p xtask` before exporting.
+Follow the
 [execution contract](selective-read-production-workloads.md) for the final main
 geometry, emulated transport and formal deadlines.

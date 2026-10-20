@@ -19,6 +19,8 @@ use std::{
 
 const MODES: [&str; 2] = ["open", "reuse"];
 
+pub(super) mod batch;
+
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Request {

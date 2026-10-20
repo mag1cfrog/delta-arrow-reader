@@ -36,23 +36,12 @@ pub(super) enum Request {
         record: Value,
         artifacts: PathBuf,
     },
-    ValidateDiagnostics {
-        config: Value,
-        inventory: Vec<(String, Value)>,
-        slots: Vec<Value>,
-        observations: Vec<Value>,
-        protocols: PathBuf,
-    },
     Validate {
         record: Value,
         payload: Value,
         reader: String,
         gate: Option<Value>,
         protocols: PathBuf,
-    },
-    ReadResults {
-        directory: PathBuf,
-        frozen_error: String,
     },
     TimerResolution,
 }
@@ -87,16 +76,6 @@ pub(super) fn run(request: Request) -> Result<Value> {
             protocols,
         } => Ok(json!(mode.enabled(&config, &protocols)?)),
         Request::PlanEvidence { record, artifacts } => evidence::plans(&record, &artifacts),
-        Request::ValidateDiagnostics {
-            config,
-            inventory,
-            slots,
-            observations,
-            protocols,
-        } => {
-            evidence::diagnostics(&config, &inventory, &slots, &observations, &protocols)?;
-            Ok(Value::Null)
-        }
         Request::Validate {
             record,
             payload,
@@ -107,10 +86,6 @@ pub(super) fn run(request: Request) -> Result<Value> {
             evidence::validate(&record, &payload, &reader, gate.as_ref(), &protocols)?;
             Ok(Value::Null)
         }
-        Request::ReadResults {
-            directory,
-            frozen_error,
-        } => evidence::read_results(&directory, &frozen_error),
         Request::TimerResolution => evidence::timer_resolution(),
     }
 }
@@ -158,7 +133,7 @@ pub(super) fn roster(comparison: &Value) -> Result<[&'static str; 5]> {
     ])
 }
 
-fn schedule(
+pub(super) fn schedule(
     inventory: &[(String, Value)],
     campaign: &str,
     comparison: &Value,

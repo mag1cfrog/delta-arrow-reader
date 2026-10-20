@@ -1,7 +1,6 @@
 """Freeze, prepare and report the 30 public predicate/projection cases."""
 
 import argparse
-import csv
 import hashlib
 import json
 from pathlib import Path
@@ -12,6 +11,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
 from run import PROTOCOL, digest, save
 from python_common import require
+import native
 
 CATALOG = HERE / "query-matrix.json"
 EXPRESSIONS = HERE / "native-expressions.jsonl"
@@ -164,53 +164,11 @@ def check_translation(record, case):
 
 
 def report(campaign, output):
-    from campaign import READERS, read_results
     config = json.loads((campaign / "campaign.json").read_text())
     require(config.get("matrix") is not None, "campaign did not use a prepared query matrix")
     prepared = load(Path(config["matrix"]["path"]), Path(config["fixtures"]))
-    require(digest(Path(config["matrix"]["path"])) == config["matrix"]["sha256"], "campaign matrix changed")
-    inventory, summary, observations, _ = read_results(campaign)
-    output.mkdir()
-    rows = []
-    for case in prepared["cases"]:
-        case_id = case["case_id"]
-        for reader in READERS:
-            gate = inventory[case_id][reader]
-            result = summary["jobs"][case_id][reader]
-            plans = [{"run_id": r["run_id"], "status": r["status"], "artifacts": r["artifacts"]}
-                     for r in observations if r["job_id"] == case_id and r["reader_id"] == reader and r["stage"] == "plan"]
-            row = {"case": case, "reader_id": reader, "gate": gate, "timing": {k: result[k] for k in (
-                   "eligible", "scheduled_samples", "sample_statuses", "metrics", "speedup_vs_dar", "first_batch_unavailable")},
-                   "planning": {"candidate_files": None, "unavailable_reason": "adapters retain native plans without a normalized file-selection counter", "plans": plans},
-                   "diagnostics": result["diagnostics"], "observer_overhead": result.get("observer_overhead")}
-            rows.append(row)
-    save(output / "matrix-report.json", {"status": summary["status"], "profile": prepared["profile"],
-         "campaign_id": summary["campaign_id"], "campaign_summary_sha256": digest(campaign / "summary.json"),
-         "observations_sha256": digest(campaign / "observations.jsonl"),
-         "scope": "30 TPC-H-derived scan cases, not an official TPC-H result or the full 46-case report", "rows": rows})
-    fields = ("case_id", "reader", "profile", "scale", "layout", "predicate_columns", "projected_columns", "hidden_predicate_columns",
-              "qualifying_rows", "output_rows", "selectivity", "active_files", "oracle_candidate_files", "oracle_matching_files",
-              "gate_status", "eligible", "scheduled_samples", "sample_statuses", "median_ns", "q1_ns", "q3_ns", "iqr_ns", "comparator_over_dar",
-              "diagnostic_touched_files", "diagnostic_response_bytes", "diagnostic_requests")
-    with (output / "matrix-report.csv").open("x", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=fields)
-        writer.writeheader()
-        for row in rows:
-            case, timing = row["case"], row["timing"]
-            expected = case.get("oracle", {})
-            clocks = timing["metrics"].get("open_query_ns", {})
-            io = [r["io"] for r in row["diagnostics"]["diagnostic"] if r["status"] == "success" and r["io"] is not None]
-            writer.writerow(dict(case_id=case["case_id"], reader=row["reader_id"], profile=prepared["profile"], scale=case.get("scale"), layout=case["layout"],
-                predicate_columns=json.dumps(case["predicate_columns"]), projected_columns=case["projection_columns"], hidden_predicate_columns=json.dumps(case["predicate_only_columns"]),
-                qualifying_rows=expected.get("qualifying_rows"), output_rows=expected.get("output_rows"), selectivity=expected.get("qualifying_selectivity"),
-                active_files=expected.get("active_files"), oracle_candidate_files=len(expected["candidate_files"]) if expected else None,
-                oracle_matching_files=len(expected["matching_files"]) if expected else None, gate_status=row["gate"]["status"], eligible=timing["eligible"],
-                scheduled_samples=timing["scheduled_samples"], sample_statuses=json.dumps(timing["sample_statuses"]),
-                median_ns=clocks.get("median"), q1_ns=clocks.get("q1"), q3_ns=clocks.get("q3"), iqr_ns=clocks.get("iqr"),
-                comparator_over_dar=timing["speedup_vs_dar"].get("open_query_ns", {}).get("value"),
-                diagnostic_touched_files=json.dumps([len(i["touched_parquet_objects"]) for i in io]),
-                diagnostic_response_bytes=json.dumps([i["response_bytes"] for i in io]), diagnostic_requests=json.dumps([i["requests"] for i in io])))
-    return {"status": summary["status"], "entries": len(rows)}
+    return native.call("campaign-report", {"campaign": str(campaign), "output": str(output),
+        "format": {"kind": "matrix", "prepared": prepared}})
 
 
 if __name__ == "__main__":

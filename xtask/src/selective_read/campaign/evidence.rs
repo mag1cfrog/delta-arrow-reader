@@ -155,7 +155,7 @@ fn purpose(slot: &Value, combined: bool) -> &'static str {
     }
 }
 
-pub(super) fn diagnostics(
+pub(in crate::selective_read) fn diagnostics(
     config: &Value,
     inventory: &[(String, Value)],
     slots: &[Value],
@@ -269,7 +269,7 @@ fn integer(value: &Value) -> Result<u64> {
         .ok_or_else(|| "expected a nonnegative integer".into())
 }
 
-pub(super) fn validate(
+pub(in crate::selective_read) fn validate(
     record: &Value,
     payload: &Value,
     reader: &str,
@@ -457,7 +457,10 @@ pub(super) fn validate(
     Ok(())
 }
 
-pub(super) fn read_results(directory: &Path, frozen_error: &str) -> Result<Value> {
+pub(in crate::selective_read) fn read_results(
+    directory: &Path,
+    frozen_error: &str,
+) -> Result<Value> {
     let read = |name: &str| -> Result<Value> {
         Ok(serde_json::from_reader(fs::File::open(
             directory.join(name),

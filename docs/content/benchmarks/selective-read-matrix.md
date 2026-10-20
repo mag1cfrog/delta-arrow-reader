@@ -103,6 +103,10 @@ MinIO service when finished. All commands here are manual; they add no CI work.
 
 ## Read the report
 
+Build the controller with `cargo build --locked -p xtask` before exporting.
+The Python entry point checks the independent query references, then Rust
+audits the campaign and writes the JSON and CSV reports.
+
 `matrix-report.json` and `matrix-report.csv` retain 150 entries, including
 preparation failures, unsupported readers, failed samples, ties and losses.
 The exporter verifies the frozen campaign inputs and recomputes summary values

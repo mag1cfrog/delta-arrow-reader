@@ -31,6 +31,8 @@ pub(crate) enum Task {
     Network,
     /// Combine audited formal batches. Read the report inputs as JSON from stdin.
     ProductionReport,
+    /// Export audited matrix, file-organization or workload results as JSON/CSV.
+    CampaignReport,
     /// Pair independently validated production fixtures. Read JSON from stdin.
     ProductionPairs,
     /// Run a numeric-page or Delta-length diagnostic process. Read JSON from stdin.
@@ -140,6 +142,7 @@ impl Task {
             Self::Observe => observe::run(serde_json::from_value(input)?)?,
             Self::Network => network::run(serde_json::from_value(input)?)?,
             Self::ProductionReport => report::run(serde_json::from_value(input)?)?,
+            Self::CampaignReport => report::batch::run(serde_json::from_value(input)?)?,
             Self::ProductionPairs => pairs::run(serde_json::from_value(input)?)?,
             Self::Experiment => experiment::run(serde_json::from_value(input)?)?,
             Self::IntraPage => experiment::intra_page::run(serde_json::from_value(input)?)?,

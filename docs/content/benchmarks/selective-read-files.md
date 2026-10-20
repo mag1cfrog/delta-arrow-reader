@@ -118,6 +118,10 @@ campaign, with two separate diagnostic observations per reader and job.
 
 ## Inspect the comparison
 
+Build the controller with `cargo build --locked -p xtask` before exporting.
+Python verifies the independent references and pruning geometry; Rust audits
+the campaign and writes the JSON and CSV reports.
+
 ```sh
 ../selective-read-oracle-venv/bin/python -B \
   benches/selective_read/file_organizations.py report \

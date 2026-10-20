@@ -1,13 +1,13 @@
 """Verify repacked rows and pruning geometry, then prepare the four public references."""
 
 import argparse
-import csv
 import json
 from pathlib import Path
 
 import pyarrow.parquet as pq
 
 import oracle
+import native
 from oracle import digest_file, inside, load_json, require, same_rows, verify_object
 
 
@@ -80,7 +80,6 @@ def prepare(parent, fixtures, output):
 
 
 def report(campaign, references, output):
-    from campaign import READERS, read_results
     config = json.loads((campaign / "campaign.json").read_text())
     checked = json.loads((references / "file-organizations.json").read_text())
     require(checked["status"] == "complete" and checked["fixture_manifest_sha256"] == digest_file(Path(config["fixtures"]) / "manifest.json"),
@@ -92,47 +91,8 @@ def report(campaign, references, output):
         actual = json.loads((references / case / "reference.json").read_text())
         require(all(actual[key] == value for key, value in metadata.items() if key != "reference_metadata_sha256"), "verification counts differ from reference")
         pruning(actual)
-    inventory, summary, observations, _ = read_results(campaign, "frozen campaign changed")
-    require({(j["id"], j["case_id"], j["execution_mode"]) for j in config["jobs"]}
-            == {(case, case, "open") for case in CASES} | {("reuse.files4096", "files4096.eq2-in20", "reuse")}, "wrong file-organization campaign jobs")
-    rows = []
-    for job in config["jobs"]:
-        for reader in READERS:
-            gate = inventory[job["id"]][reader]
-            if gate["runnable"]:
-                require(gate["reference_sha256"] == expected[job["case_id"]]["reference_metadata_sha256"], "gate used a different reference")
-            plans = []
-            for observation in observations:
-                if (observation["job_id"], observation["reader_id"], observation["stage"]) != (job["id"], reader, "plan"):
-                    continue
-                record = observation["observation"]
-                events = record.get("diagnostic_events", [])
-                opened = next((e["time_ns"] for e in events if e["event"] == "snapshot_open"), None)
-                query = next((e["time_ns"] for e in events if e["event"] == "query_start"), None)
-                plans.append({"status": observation["status"], "artifacts": observation["artifacts"],
-                              "diagnostic_snapshot_open_ns": query - opened if query is not None and opened is not None else None})
-            rows.append({"job": job, "reader_id": reader, "oracle": expected[job["case_id"]], "gate": gate,
-                         "result": summary["jobs"][job["id"]][reader],
-                         "planning": {"plans": plans, "candidate_files": None, "planning_ns": None,
-                                      "unavailable_reason": "native plans retained; adapters do not expose comparable file-selection or isolated planning counters"}})
-    output.mkdir(parents=True)
-    (output / "file-organizations-report.json").write_bytes(oracle.json_bytes({"status": summary["status"], "profile": checked["profile"],
-        "campaign_summary_sha256": digest_file(campaign / "summary.json"), "observations_sha256": digest_file(campaign / "observations.jsonl"),
-        "verification_sha256": digest_file(references / "file-organizations.json"), "tables": checked["tables"], "rows": rows}))
-    clocks = ("open_query_ns", "initialization_ns", "initialization_plus_query1_ns", "initialization_plus_all_queries_ns")
-    with (output / "file-organizations-report.csv").open("x", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=("job", "reader", "gate_status", "eligible", "samples", "active_files", "oracle_candidates",
-            "matching_files", *clocks, "touched_parquet_objects", "traffic_by_class"))
-        writer.writeheader()
-        for row in rows:
-            result = row["result"]
-            io = [r["io"] for r in result["diagnostics"]["diagnostic"] if r["status"] == "success" and r["io"] is not None]
-            writer.writerow({"job": row["job"]["id"], "reader": row["reader_id"], "gate_status": row["gate"]["status"], "eligible": result["eligible"],
-                "samples": result["scheduled_samples"], "active_files": row["oracle"]["active_files"], "oracle_candidates": len(row["oracle"]["candidate_files"]),
-                "matching_files": len(row["oracle"]["matching_files"]), **{key: result["metrics"].get(key, {}).get("median") for key in clocks},
-                "touched_parquet_objects": json.dumps([len(r["touched_parquet_objects"]) for r in io]),
-                "traffic_by_class": json.dumps([r["by_class"] for r in io])})
-    return {"status": summary["status"], "entries": len(rows)}
+    return native.call("campaign-report", {"campaign": str(campaign), "output": str(output),
+        "format": {"kind": "files", "references": str(references), "checked": checked}})
 
 
 if __name__ == "__main__":

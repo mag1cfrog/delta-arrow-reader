@@ -8,8 +8,9 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
-from run import reader_roster, AMENDMENT, PROTOCOL, SAMPLING, comparison_identity, digest, save
+from run import AMENDMENT, PROTOCOL, SAMPLING, comparison_identity, digest, save
 from python_common import require
+import native
 
 SCALES = (1, 10, 30, 100, 300)
 READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft")
@@ -253,60 +254,17 @@ def binding(value, fixtures, case_id):
 
 
 def report(campaign, output):
-    """Audit the existing campaign artifacts, including every failed reader slot."""
-    import campaign as runner
+    """Bind independent queries before the native campaign evidence audit."""
     config = json.loads((campaign / "campaign.json").read_text())
     path = Path(config["workload"])
     frozen = load(path)
-    comparison = identity(path)
-    readers = reader_roster(comparison)
-    require(comparison_identity(config) == comparison, "campaign workload changed")
-    inventory, summary, observations, slots = runner.read_results(campaign)
-    require(comparison_identity(summary) == comparison and all(comparison_identity(s) == comparison for s in slots),
-            "schedule/summary workload changed")
-    require(slots == runner.schedule(inventory, config["campaign_id"], comparison), "schedule differs from the frozen ordering rules")
-    runner.validate_diagnostics(config, inventory, slots, observations)
-    jobs = {j["id"]: j for j in config["jobs"]}
-    require(set(jobs) == set(inventory) == set(summary["jobs"]), "campaign inventory differs from jobs")
-    for job, entries in inventory.items():
-        require(set(entries) == set(readers), "all five reader statuses are required")
-        case = jobs[job]["case_id"]
-        require(case in definitions(frozen.get("family", "data"), frozen.get("pilot_case")) and (jobs[job]["execution_mode"] == "open" and job == case or
-                jobs[job]["execution_mode"] == "reuse" and frozen["sessions"].get(job) == case), "unknown workload job")
-    require(len({r["run_id"] for r in observations}) == len(observations), "duplicate observation")
-    for row in observations:
-        require(comparison_identity(row) == comparison and comparison_identity(row["request"]) == comparison, "observation workload changed")
-        job = jobs[row["job_id"]]
-        expected = binding(frozen, Path(config["fixtures"]), job["case_id"])
-        require(row["request"]["canonical_sql"] == expected["canonical_sql"]
-                and row["request"]["execution_mode"] == job["execution_mode"], "observation query changed")
-        gate = inventory[row["job_id"]][row["reader_id"]]
-        runner.validate(row["observation"], row["request"], row["reader_id"], gate if row["stage"] != "gate" else None)
-    output.mkdir()
-    rows = [{"job": job, "case": next(r for r in frozen["cases"] if r["case_id"] == job["case_id"]),
-             "reader_id": reader, "gate": inventory[job["id"]][reader],
-             "measurements": summary["jobs"][job["id"]][reader],
-             "native_phases": {"planning_ns": None, "scan_ns": None,
-                               "unavailable_reason": "adapters do not expose comparable separate phase clocks"}}
-            for job in config["jobs"] for reader in readers]
-    for row in rows:
-        gate = row["gate"]
-        row["oracle"] = None
-        if gate.get("reference"):
-            reference = Path(gate["reference"]) / "reference.json"
-            require(digest(reference) == gate["reference_sha256"], "reference metadata changed")
-            metadata = json.loads(reference.read_text())
-            require(comparison_identity(metadata) == comparison, "reference workload changed")
-            row["oracle"] = {k: metadata[k] for k in ("source_rows", "physical_qualifying_rows", "qualifying_rows",
-                "deleted_qualifying_rows", "output_rows", "projected_logical_bytes", "candidate_files", "matching_files", "wide_file_geometry",
-                "within_file_geometry", "physical_rows", "derived_value_checks") if k in metadata}
-    result = {"status": summary["status"], **comparison, "campaign_id": config["campaign_id"],
-              "scope": frozen["scope"], "publication_ready": False, "rows": rows,
-              **({"core_inventory": frozen["inventory"]} if frozen["comparison_revision"] in (5, 6) else {}),
-              "observations_sha256": digest(campaign / "observations.jsonl"),
-              "summary_sha256": digest(campaign / "summary.json")}
-    save(output / "large-workload-report.json", result)
-    return result
+    jobs = {job["id"]: job for job in config["jobs"]}
+    observed = {json.loads(line)["job_id"] for line in (campaign / "observations.jsonl").read_text().splitlines()}
+    cases = {jobs[job]["case_id"] for job in observed}
+    bindings = {case: binding(frozen, Path(config["fixtures"]), case) for case in cases}
+    return native.call("campaign-report", {"campaign": str(campaign), "output": str(output),
+        "format": {"kind": "workload", "frozen": frozen, "identity": identity(path),
+                   "bindings": bindings, "protocols": str(PROTOCOL.parent)}})
 
 
 if __name__ == "__main__":
