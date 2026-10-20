@@ -1,4 +1,4 @@
-use std::{future::Future, pin::pin, sync::mpsc::Receiver, time::Duration};
+use std::{future::Future, pin::pin, time::Duration};
 
 use pyo3::prelude::*;
 use tracing::instrument::WithSubscriber;
@@ -22,16 +22,6 @@ impl Runtime {
             .block_on(future)
     }
 
-    /// Check signals on the calling Python thread between waits without the GIL.
-    /// Returning a signal error drops the owned future, cancelling further polling.
-    pub(crate) fn wait<F>(&self, py: Python<'_>, future: F) -> PyResult<F::Output>
-    where
-        F: Future + Send,
-        F::Output: Send,
-    {
-        self.wait_with_interrupts(py, future, None)
-    }
-
     pub(crate) fn wait_logged<F>(&self, py: Python<'_>, future: F) -> PyResult<F::Output>
     where
         F: Future + Send,
@@ -39,41 +29,42 @@ impl Runtime {
     {
         crate::logging::check_reentry()?;
         let (dispatch, interrupts) = crate::logging::dispatch()?;
-        self.wait_with_interrupts(py, future.with_subscriber(dispatch), Some(&interrupts))
+        self.wait(py, future.with_subscriber(dispatch), || {
+            interrupts.try_recv().ok()
+        })
     }
 
-    fn wait_with_interrupts<F>(
+    /// Check signals and handler interruptions between waits without the GIL.
+    /// Returning an error drops the owned future, cancelling further polling.
+    pub(crate) fn wait<F>(
         &self,
         py: Python<'_>,
         future: F,
-        interrupts: Option<&Receiver<PyErr>>,
+        handler_interrupt: impl Fn() -> Option<PyErr>,
     ) -> PyResult<F::Output>
     where
         F: Future + Send,
         F::Output: Send,
     {
         crate::logging::check_reentry()?;
+        let check_interrupts = || match handler_interrupt() {
+            Some(error) => Err(error),
+            None => py.check_signals(),
+        };
         let mut future = pin!(future);
-        check_interrupts(py, interrupts)?;
+        check_interrupts()?;
         loop {
             let result = py.detach(|| {
                 self.block_on(async {
                     tokio::time::timeout(Duration::from_millis(100), future.as_mut()).await
                 })
             });
-            check_interrupts(py, interrupts)?;
+            check_interrupts()?;
             if let Ok(result) = result {
                 return Ok(result);
             }
         }
     }
-}
-
-fn check_interrupts(py: Python<'_>, interrupts: Option<&Receiver<PyErr>>) -> PyResult<()> {
-    if let Some(error) = interrupts.and_then(|receiver| receiver.try_recv().ok()) {
-        return Err(error);
-    }
-    py.check_signals()
 }
 
 impl Drop for Runtime {
@@ -131,19 +122,23 @@ mod tests {
             let (release, pending) = tokio::sync::oneshot::channel::<()>();
             let (admit, work) = mpsc::channel();
             let error = runtime
-                .wait(py, async move {
-                    // SAFETY: PyErr_SetInterrupt may be called without the GIL.
-                    unsafe { pyo3::ffi::PyErr_SetInterrupt() };
-                    // Bound the test if signal handling regresses.
-                    let _ = tokio::time::timeout(TIMEOUT, pending).await;
-                    admit.send(()).unwrap();
-                })
+                .wait(
+                    py,
+                    async move {
+                        // SAFETY: PyErr_SetInterrupt may be called without the GIL.
+                        unsafe { pyo3::ffi::PyErr_SetInterrupt() };
+                        // Bound the test if signal handling regresses.
+                        let _ = tokio::time::timeout(TIMEOUT, pending).await;
+                        admit.send(()).unwrap();
+                    },
+                    || None,
+                )
                 .unwrap_err();
             assert!(error.is_instance_of::<PyKeyboardInterrupt>(py));
             // Both channel endpoints owned by the future must be gone already.
             assert!(release.send(()).is_err());
             assert_eq!(work.try_recv(), Err(mpsc::TryRecvError::Disconnected));
-            assert_eq!(runtime.wait(py, async { 42 }).unwrap(), 42);
+            assert_eq!(runtime.wait(py, async { 42 }, || None).unwrap(), 42);
 
             signal.call_method1("signal", (sigint, previous)).unwrap();
         });

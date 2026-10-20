@@ -14,9 +14,10 @@ around iteration or `read_all()` as well.
 
 ## Configure diagnostic logging
 
-Table loading, refresh, scan planning, and SQL table registration forward core
-tracing events to the `delta_arrow_reader` Python logger. SQL logical planning
-failures use the same logger. Configure logging in your application:
+Table loading, refresh, ordinary scan planning and consumption, and SQL table
+registration forward core tracing events to the `delta_arrow_reader` Python
+logger. SQL logical planning failures use the same logger. Configure logging in
+your application:
 
 ```python
 import logging
@@ -37,8 +38,8 @@ The package adds a `NullHandler` to its own logger so an unconfigured applicatio
 stays quiet, including when it catches a reader exception. It does not configure
 the root logger or install console or file handlers. Existing application
 handlers receive records through normal propagation. Logger and handler level
-changes take effect on later events, including calls on an existing table or
-session.
+changes take effect on later events, including calls on an existing table,
+session, or partially consumed ordinary scan.
 
 | Core level | Python level |
 | --- | --- |
@@ -60,7 +61,9 @@ their types. Each dictionary contains at most 64 fields; text values are limited
 to 1,024 characters. See the [core tracing reference](../reference/tracing.md)
 for event meanings and redaction rules.
 
-Core failures still raise `DeltaReaderError`; converting an error does not emit
+Core failures during loading or planning still raise `DeltaReaderError`.
+Failures during Arrow consumption raise the consumer's exception, such as
+`pyarrow.ArrowInvalid`. Converting or replaying a failed read does not emit
 another failure record. Registration records retain the core's
 `error_code = "datafusion_adapter"`, while the Python exception keeps its existing
 `code = "sql_registration"`.
@@ -73,8 +76,15 @@ literal values, paths, and dependency error messages are omitted at all levels.
 Planning success means a reader is ready for consumption; execution starts when
 the consumer requests batches.
 
-Python argument validation, schema export, and deferred batch consumption are
-not yet forwarded by the Python bridge.
+Ordinary scan execution starts with the first batch request. Its INFO records
+report start, completion, or an unfinished stream being dropped. Completion
+distinguishes EOF from a row limit. A failure produces one ERROR record with
+its plan and execution identities and whether output has already started.
+Closing an unused stream produces no execution record. There is no lifecycle
+record per batch.
+
+Python argument validation, schema export, and deferred SQL execution are not
+yet forwarded by the Python bridge.
 
 Handlers run synchronously on the calling thread or a reader worker. They must
 not start reader work or wait for another thread to finish reader work. Calls
@@ -87,9 +97,16 @@ callback to return; the current batch can still be returned. Further reads see
 a closed stream. This does not make Arrow consumers safe for concurrent reads
 and closes; follow the consumer's threading rules.
 
-Ordinary handler exceptions are ignored; control-flow exceptions such as `KeyboardInterrupt` and
-`SystemExit` propagate to the waiting caller. Logging callbacks use PyO3's best-effort
-interpreter shutdown check; delivery during finalization is not guaranteed.
+Ordinary handler exceptions are ignored. Control-flow exceptions such as
+`KeyboardInterrupt` and `SystemExit` propagate to the waiting caller during
+loading or planning. During batch consumption, they interrupt the read with
+the Arrow error `phase=execution code=python_signal reason=reader_wait_interrupted`.
+The reader repeats that safe error on subsequent reads and does not retain the
+Python exception or its traceback. A handler exception raised during an Arrow
+release callback has no return channel to the consumer.
+
+Logging callbacks use PyO3's best-effort interpreter shutdown check; delivery
+during finalization is not guaranteed.
 The bridge uses a scoped Rust subscriber and leaves other native extensions'
 global tracing configuration intact.
 

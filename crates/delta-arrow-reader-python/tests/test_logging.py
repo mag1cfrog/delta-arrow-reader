@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+import gc
 import logging
 from pathlib import Path
 import shutil
@@ -9,10 +10,11 @@ import tempfile
 import threading
 import time
 import unittest
+import weakref
 
 import pyarrow as pa
 
-from delta_arrow_reader import DeltaReaderError, DeltaTable, Session
+from delta_arrow_reader import DeltaReaderError, DeltaTable, ScanExecutionOptions, Session
 
 
 FIXTURE = (Path(__file__).resolve().parents[3]
@@ -247,6 +249,122 @@ class LoggingTests(unittest.TestCase):
         table.refresh()
         self.assertEqual(self.events(), ["table_refresh.started", "table_refresh.completed"])
 
+    def test_streams_start_on_consumption_and_keep_distinct_contexts_across_threads(self):
+        table = DeltaTable(FIXTURE, warmup="none")
+        for backend in ["direct", "delta_kernel"]:
+            with self.subTest(backend=backend):
+                options = ScanExecutionOptions(parquet_backend=backend)
+                first = table.to_reader(target_partitions=1, execution_options=options)
+                second = table.to_reader(target_partitions=1, execution_options=options)
+                self.collect.records.clear()
+                self.assertEqual(first.schema, second.schema)
+                self.assertEqual(self.collect.records, [])
+                try:
+                    with ThreadPoolExecutor(max_workers=2) as pool:
+                        batches = list(pool.map(lambda r: r.read_next_batch(), [first, second]))
+                    self.assertEqual(self.events(), ["scan_execution.started"] * 2)
+                    self.assertTrue(all(r.thread != threading.get_ident() for r in self.collect.records))
+                    for reader, batch in zip([first, second], batches):
+                        self.assertEqual(batch.num_rows + reader.read_all().num_rows, 360)
+                        with self.assertRaises(StopIteration):
+                            reader.read_next_batch()
+                finally:
+                    first.close()
+                    second.close()
+                by_operation = {}
+                for record in self.collect.records:
+                    by_operation.setdefault(record.dar_fields["operation_id"], []).append(record)
+                self.assertEqual(len(by_operation), 2)
+                self.assertEqual(len({r.dar_fields["plan_id"] for r in self.collect.records}), 2)
+                for records in by_operation.values():
+                    self.assertEqual([r.msg for r in records],
+                                     ["scan_execution.started", "scan_execution.completed"])
+                    start, end = records
+                    self.assertEqual(start.dar_fields["plan_id"], end.dar_fields["plan_id"])
+                    self.assertEqual(end.dar_fields["completion_reason"], "eof")
+                    self.assertTrue(end.dar_fields["output_started"])
+                    self.assertTrue(all(r.levelno == logging.INFO for r in records))
+                    expected_backend = {"direct": "Direct", "delta_kernel": "DeltaKernel"}[backend]
+                    self.assertTrue(all(r.dar_fields["backend"] == expected_backend for r in records))
+
+    def test_stream_close_limits_and_live_levels(self):
+        table = DeltaTable(FIXTURE, warmup="none")
+        unused = table.to_reader()
+        self.collect.records.clear()
+        unused.close()
+        self.assertEqual(self.collect.records, [])
+        for backend in ["direct", "delta_kernel"]:
+            options = ScanExecutionOptions(parquet_backend=backend)
+            reader = table.to_reader(target_partitions=1, execution_options=options)
+            self.collect.records.clear()
+            self.logger.setLevel(logging.ERROR)
+            batch = reader.read_next_batch()
+            self.assertEqual(self.collect.records, [])
+            self.logger.setLevel(logging.INFO)
+            reader.close()
+            reader.close()
+            self.assertEqual(self.events(), ["scan_execution.dropped"])
+            self.assertEqual(self.collect.records[0].levelno, logging.INFO)
+            self.assertTrue(self.collect.records[0].dar_fields["output_started"])
+            self.assertGreater(batch.num_rows, 0)
+            self.assertLess(batch.num_rows, 360)
+            for limit in [0, 1]:
+                reader = table.to_reader(limit=limit, execution_options=options)
+                self.collect.records.clear()
+                with reader:
+                    self.assertEqual(reader.read_all().num_rows, limit)
+                self.assertEqual(self.events(), ["scan_execution.started", "scan_execution.completed"])
+                self.assertEqual(self.collect.records[-1].dar_fields["completion_reason"], "row_limit")
+
+    def test_stream_failures_log_once_even_when_arrow_replays_the_error(self):
+        with tempfile.TemporaryDirectory(prefix="private-stream-") as temporary:
+            location = Path(temporary) / "private-table"
+            shutil.copytree(FIXTURE, location)
+            for path in location.rglob("*.parquet"):
+                path.unlink()
+            table = DeltaTable(location, warmup="none")
+            for backend in ["direct", "delta_kernel"]:
+                options = ScanExecutionOptions(parquet_backend=backend)
+                for level in [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, 5]:
+                    with self.subTest(backend=backend, level=level):
+                        self.logger.setLevel(level)
+                        reader = table.to_reader(target_partitions=1, execution_options=options)
+                        self.collect.records.clear()
+                        messages = []
+                        with reader:
+                            for _ in range(3):
+                                with self.assertRaises(pa.ArrowInvalid) as caught:
+                                    reader.read_next_batch()
+                                messages.append(str(caught.exception))
+                        self.assertEqual(len(set(messages)), 1)
+                        failures = [r for r in self.collect.records if r.levelno >= logging.ERROR]
+                        self.assertEqual(len(failures), 1)
+                        failure = failures[0]
+                        self.assertEqual(failure.msg, "scan_execution.failed")
+                        self.assertEqual(failure.dar_fields["error_phase"], "data_file_read")
+                        self.assertEqual(failure.dar_fields["error_code"], "data_file_read")
+                        self.assertIn("error_reason", failure.dar_fields)
+                        self.assertIn("error_source_kind", failure.dar_fields)
+                        self.assertFalse(failure.dar_fields["output_started"])
+                        rendered = repr([r.__dict__ for r in self.collect.records]) + repr(messages)
+                        self.assertNotIn(temporary, rendered)
+                        self.assertNotIn("private-table", rendered)
+                        self.assertNotIn(".parquet", rendered)
+                        self.assertNotIn("scan_execution.completed", self.events())
+                        self.assertNotIn("scan_execution.dropped", self.events())
+
+    def test_stream_callbacks_can_interrupt_later_pulls_without_retaining_tracebacks(self):
+        result = subprocess.run([sys.executable, "-I", __file__, "stream-interrupt"],
+                                capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+
+    def test_stream_callbacks_can_close_and_reject_recursive_reads(self):
+        result = subprocess.run([sys.executable, "-I", __file__, "stream-close"],
+                                capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+
     def test_worker_events_and_concurrent_refreshes_keep_distinct_ids(self):
         self.logger.setLevel(logging.DEBUG)
         table = DeltaTable(FIXTURE, warmup="query_planning")
@@ -274,6 +392,8 @@ class LoggingTests(unittest.TestCase):
         with self.assertRaises(DeltaReaderError):
             DeltaTable(FIXTURE / "private-missing", warmup="none")
         table.scan(limit=0).close()
+        with table.to_reader() as reader:
+            self.assertEqual(reader.read_all().num_rows, 360)
         session = Session()
         session.register_table("events", table)
         with self.assertRaises(DeltaReaderError):
@@ -310,6 +430,8 @@ for operation in [lambda: table.scan(columns=['private_missing']),
     else:
         raise AssertionError('invalid operation was accepted')
 assert (root.handlers, root.level) == previous
+with table.to_reader() as reader:
+    assert reader.read_all().num_rows == 360
 """, str(FIXTURE)], capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "")
@@ -515,6 +637,111 @@ def check_interrupt():
     assert DeltaTable(FIXTURE, warmup="none").version == 0
 
 
+def check_stream_interrupt():
+    table = DeltaTable(FIXTURE, warmup="none")
+    logger = logging.getLogger("delta_arrow_reader")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    class Marker:
+        pass
+
+    for exception in [KeyboardInterrupt, SystemExit]:
+        for event in ["scan_execution.started", "scan_execution.completed"]:
+            reader = table.to_reader(target_partitions=1)
+            references = []
+            events = []
+            if event.endswith("completed"):
+                assert reader.read_next_batch().num_rows > 0
+
+            class Interrupt(logging.Handler):
+                def emit(self, record):
+                    events.append(record.msg)
+                    if record.msg == event:
+                        marker = Marker()
+                        references.append(weakref.ref(marker))
+                        # A retained traceback would keep both the marker and reader alive.
+                        current_reader = reader
+                        raise exception("private handler control flow")
+
+            logger.handlers = [Interrupt()]
+            try:
+                for _ in range(3):
+                    try:
+                        reader.read_all()
+                    except pa.ArrowInvalid as error:
+                        assert "phase=execution code=python_signal reason=reader_wait_interrupted" in str(error)
+                        assert "private" not in str(error)
+                    else:
+                        raise AssertionError("stream swallowed a handler interruption")
+                assert events.count(event) == 1, events
+                assert not any(name.endswith("failed") for name in events), events
+                gc.collect()
+                assert len(references) == 1 and references[0]() is None
+            finally:
+                logger.handlers = [logging.NullHandler()]
+                reader.close()
+    with table.to_reader() as reader:
+        assert reader.read_all().num_rows == 360
+
+
+def check_stream_close():
+    table = DeltaTable(FIXTURE, warmup="none")
+    logger = logging.getLogger("delta_arrow_reader")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    for worker in [False, True]:
+        reader = table.to_reader(target_partitions=1)
+        idle = table.to_reader()
+        rejected = []
+        unexpected = []
+        calls = []
+
+        class Close(logging.Handler):
+            def emit(self, record):
+                if record.msg != "scan_execution.started":
+                    return
+                calls.append(record.thread)
+                for target in [reader, idle]:
+                    try:
+                        target.read_next_batch()
+                    except pa.ArrowInvalid as error:
+                        rejected.append(str(error))
+                    except BaseException as error:
+                        unexpected.append(repr(error))
+                    else:
+                        unexpected.append("recursive read succeeded")
+                reader.close()
+                idle.close()
+
+        logger.handlers = [Close()]
+        try:
+            if worker:
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    batch = pool.submit(reader.read_next_batch).result(10)
+            else:
+                batch = reader.read_next_batch()
+            assert 0 < batch.num_rows < 360
+            assert batch.to_pylist()
+            assert len(rejected) == 2 and not unexpected, (rejected, unexpected)
+            assert all("reader operations cannot be called from a logging callback" in x for x in rejected)
+            assert len(calls) == 1
+            assert (calls[0] != threading.get_ident()) == worker
+            for target in [reader, idle]:
+                try:
+                    target.read_next_batch()
+                except pa.ArrowInvalid as error:
+                    assert "closed" in str(error)
+                else:
+                    raise AssertionError("closed reader was still readable")
+        finally:
+            logger.handlers = [logging.NullHandler()]
+            reader.close()
+            idle.close()
+    with table.to_reader() as reader:
+        assert reader.read_all().num_rows == 360
+
+
 if __name__ == "__main__":
     if sys.argv[1:] == ["reentry"]:
         check_reentry()
@@ -522,5 +749,9 @@ if __name__ == "__main__":
         check_interrupt()
     elif sys.argv[1:] == ["registration"]:
         check_concurrent_registration()
+    elif sys.argv[1:] == ["stream-interrupt"]:
+        check_stream_interrupt()
+    elif sys.argv[1:] == ["stream-close"]:
+        check_stream_close()
     else:
         unittest.main()

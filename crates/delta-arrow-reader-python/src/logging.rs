@@ -1,6 +1,14 @@
 //! Forward scoped core events to the application's Python logging configuration.
 
-use std::{cell::Cell, fmt, sync::mpsc};
+use std::{
+    cell::Cell,
+    fmt,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
+};
 
 use pyo3::{
     exceptions::{PyException, PyRuntimeError},
@@ -78,7 +86,21 @@ pub(crate) fn initialize() -> PyResult<()> {
 
 pub(crate) fn dispatch() -> PyResult<(Dispatch, mpsc::Receiver<PyErr>)> {
     let (interrupts, receiver) = mpsc::sync_channel(1);
-    let dispatch = python_callback(|py| {
+    Ok((new_dispatch(HandlerInterrupts::Call(interrupts))?, receiver))
+}
+
+pub(crate) fn stream_dispatch(interrupted: Arc<AtomicBool>) -> PyResult<Dispatch> {
+    new_dispatch(HandlerInterrupts::Stream(interrupted))
+}
+
+enum HandlerInterrupts {
+    Call(mpsc::SyncSender<PyErr>),
+    // A traceback can refer back to the reader and form an uncollectable cycle.
+    Stream(Arc<AtomicBool>),
+}
+
+fn new_dispatch(interrupts: HandlerInterrupts) -> PyResult<Dispatch> {
+    Ok(python_callback(|py| {
         let logger = py
             .import("logging")?
             .call_method1("getLogger", (LOGGER_NAME,))?;
@@ -89,13 +111,12 @@ pub(crate) fn dispatch() -> PyResult<(Dispatch, mpsc::Receiver<PyErr>)> {
             },
         )))
     })?
-    .unwrap_or_else(Dispatch::none);
-    Ok((dispatch, receiver))
+    .unwrap_or_else(Dispatch::none))
 }
 
 struct PythonLogging {
     logger: Py<PyAny>,
-    interrupts: mpsc::SyncSender<PyErr>,
+    interrupts: HandlerInterrupts,
 }
 
 impl PythonLogging {
@@ -103,8 +124,15 @@ impl PythonLogging {
         match python_callback(callback) {
             Ok(value) => value,
             Err(error) => {
-                // The wait owns the receiver; late workers cannot retain a traceback.
-                let _ = self.interrupts.try_send(error);
+                match &self.interrupts {
+                    HandlerInterrupts::Call(sender) => {
+                        // Late workers cannot retain a traceback after the wait ends.
+                        let _ = sender.try_send(error);
+                    }
+                    HandlerInterrupts::Stream(interrupted) => {
+                        interrupted.store(true, Ordering::Relaxed);
+                    }
+                }
                 None
             }
         }
@@ -246,9 +274,10 @@ logger.addHandler(Collect())
         .unwrap();
         let logger = locals.get_item("logger").unwrap().unwrap().unbind();
         let (interrupts, _) = mpsc::sync_channel(1);
-        let dispatch = Dispatch::new(
-            tracing_subscriber::registry().with(PythonLogging { logger, interrupts }),
-        );
+        let dispatch = Dispatch::new(tracing_subscriber::registry().with(PythonLogging {
+            logger,
+            interrupts: HandlerInterrupts::Call(interrupts),
+        }));
         (dispatch, locals)
     }
 

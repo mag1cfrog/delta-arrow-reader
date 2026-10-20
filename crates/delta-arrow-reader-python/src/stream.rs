@@ -1,7 +1,10 @@
 use std::{
     error::Error,
     fmt,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use arrow::{
@@ -14,10 +17,13 @@ use datafusion::{common::DataFusionError, dataframe::DataFrame};
 use delta_arrow_reader::{DeltaBatchStream, DeltaReaderError};
 use futures_util::{StreamExt, TryStreamExt, stream::BoxStream};
 use pyo3::{
-    exceptions::{PyNotImplementedError, PyRuntimeError, PyTypeError, PyValueError},
+    exceptions::{
+        PyKeyboardInterrupt, PyNotImplementedError, PyRuntimeError, PyTypeError, PyValueError,
+    },
     prelude::*,
     types::PyCapsule,
 };
+use tracing::{Dispatch, instrument::WithSubscriber};
 
 use crate::runtime::Runtime;
 use crate::session::SessionState;
@@ -77,6 +83,8 @@ impl RecordBatchStream {
                 stream: Some(stream),
                 runtime,
                 terminal_error: None,
+                dispatch: None,
+                interrupted: Arc::new(AtomicBool::new(false)),
             })),
         }
     }
@@ -311,6 +319,9 @@ struct BlockingBatchReader {
     runtime: Arc<Runtime>,
     // Repeat failures so a failed scan never appears successfully exhausted.
     terminal_error: Option<Arc<BatchReadError>>,
+    // Reuse the first pull's subscriber, including for later worker events.
+    dispatch: Option<Dispatch>,
+    interrupted: Arc<AtomicBool>,
 }
 
 impl Iterator for BlockingBatchReader {
@@ -322,20 +333,44 @@ impl Iterator for BlockingBatchReader {
         }
         let stream = self.stream.as_mut()?;
         let result = Python::attach(|py| {
-            // Do not retain a signal exception's traceback through the Arrow reader.
-            self.runtime
-                .wait(py, stream.next_batch())
-                .map_err(|_| BatchReadError::Interrupted)
+            let mut read = || {
+                // shortcut: SQL needs DataFusion task propagation before enabling stream logging (#515).
+                if matches!(stream, BatchStream::Sql { .. }) {
+                    return self.runtime.wait(py, stream.next_batch(), || None);
+                }
+                if self.dispatch.is_none() {
+                    self.dispatch = Some(crate::logging::stream_dispatch(Arc::clone(
+                        &self.interrupted,
+                    ))?);
+                }
+                let dispatch = self
+                    .dispatch
+                    .as_ref()
+                    .expect("stream subscriber initialized");
+                self.runtime.wait(
+                    py,
+                    stream.next_batch().with_subscriber(dispatch.clone()),
+                    || {
+                        self.interrupted
+                            .load(Ordering::Relaxed)
+                            .then(|| PyKeyboardInterrupt::new_err(()))
+                    },
+                )
+            };
+            // Arrow reports control flow as a safe error, without retaining a traceback.
+            read().map_err(|_| BatchReadError::Interrupted)
         })
         .flatten();
         match result {
             Ok(Some(batch)) => Some(Ok(batch)),
             Ok(None) => {
                 self.stream = None;
+                self.dispatch = None;
                 None
             }
             Err(error) => {
                 self.stream = None;
+                self.dispatch = None;
                 let error = Arc::new(error);
                 self.terminal_error = Some(Arc::clone(&error));
                 Some(Err(ArrowError::ExternalError(Box::new(error))))
@@ -363,6 +398,8 @@ mod tests {
             stream: None,
             runtime: Arc::clone(runtime),
             terminal_error: Some(Arc::new(error)),
+            dispatch: None,
+            interrupted: Arc::new(AtomicBool::new(false)),
         }
     }
 
