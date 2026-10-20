@@ -294,6 +294,24 @@ fn input_schema_corrections_omit_unknown_keys_and_values() -> Result<(), Box<dyn
                     "from 0 to 255",
                     "expected format",
                 ),
+                (
+                    r#"{"op":"not","arg":{"op":"eq","column":"secret-column","value":{"type":"binary","value":[0,255,"secret-byte"]}}}"#,
+                    "/arg/value/value/2",
+                    "from 0 to 255",
+                    "expected format",
+                ),
+                (
+                    r#"{"op":"eq","column":"secret-column","value":{"type":"int8","value":"1","secret/key~\n":false}}"#,
+                    "/value",
+                    "object fields: type, value",
+                    "unsupported fields",
+                ),
+                (
+                    r#"{"op":"not","arg":{"op":"eq","column":"secret-column","value":{"type":"int8","value":"1","\u0076alue":"secret-value"}}}"#,
+                    "/arg/value/value",
+                    "one occurrence",
+                    "duplicate field",
+                ),
             ][..],
         ),
         (

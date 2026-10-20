@@ -1,46 +1,18 @@
-use std::{collections::HashSet, fmt, marker::PhantomData, str::FromStr};
+use std::{fmt, marker::PhantomData};
 
 use serde::{
     Deserialize, Deserializer,
-    de::{DeserializeOwned, MapAccess, Visitor, value::MapDeserializer},
+    de::{
+        DeserializeOwned, IgnoredAny, MapAccess, Visitor,
+        value::{MapDeserializer, StringDeserializer},
+    },
 };
 use serde_json::value::RawValue;
 use serde_value::DeserializerError;
+use strum::VariantNames;
 
 use super::{JsonInputSource, StorageOptionsInput};
 use crate::{diagnostics::InputCorrection, execution_options, predicate};
-
-const PREDICATE_OPERATORS: &[&str] = &[
-    "constant",
-    "eq",
-    "ne",
-    "lt",
-    "le",
-    "gt",
-    "ge",
-    "is_null",
-    "is_not_null",
-    "and",
-    "or",
-    "not",
-];
-const SCALAR_TYPES: &[&str] = &[
-    "boolean",
-    "int8",
-    "int16",
-    "int32",
-    "int64",
-    "float32",
-    "float64",
-    "utf8",
-    "large_utf8",
-    "binary",
-    "large_binary",
-    "fixed_size_binary",
-    "date32",
-    "timestamp_us",
-    "decimal128",
-];
 
 pub(crate) fn correction(bytes: &[u8], input: JsonInputSource) -> Option<InputCorrection> {
     // Analyze only rejected input; raw values preserve duplicate keys and numeric token types.
@@ -129,29 +101,6 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for ObjectFields<T> {
 }
 
 impl<'de> ObjectFields<&'de RawValue> {
-    fn check_fields(
-        &self,
-        allowed: &[&'static str],
-        location: &FieldLocation,
-    ) -> Result<(), InputCorrection> {
-        let mut seen = HashSet::new();
-        for (name, _) in &self.0 {
-            let Some(known) = allowed.iter().copied().find(|field| field == name) else {
-                return Err(location.invalid(
-                    format!("object fields: {}", allowed.join(", ")),
-                    "Remove unsupported fields; use only the listed fields.",
-                ));
-            };
-            if !seen.insert(known) {
-                return Err(location.field(known).invalid(
-                    "one occurrence of this field",
-                    "Remove the duplicate field.",
-                ));
-            }
-        }
-        Ok(())
-    }
-
     fn required(
         &self,
         name: &'static str,
@@ -168,27 +117,47 @@ impl<'de> ObjectFields<&'de RawValue> {
             })
     }
 
-    fn tag(
+    fn tag<T: DeserializeOwned + VariantNames>(
         &self,
         name: &'static str,
-        choices: &[&'static str],
         location: &FieldLocation,
-    ) -> Result<&'static str, InputCorrection> {
-        let expected = format!("one of: {}", choices.join(", "));
+    ) -> Result<T, InputCorrection> {
+        let expected = format!("one of: {}", T::VARIANTS.join(", "));
         let value = self.required(name, location).map_err(|mut correction| {
             correction.expected.clone_from(&expected);
             correction
         })?;
+        if self.0.iter().filter(|(field, _)| field == name).count() > 1 {
+            return Err(location.field(name).invalid(
+                "one occurrence of this field",
+                "Remove the duplicate field.",
+            ));
+        }
         let tag = serde_json::from_str::<String>(value.get()).ok();
-        let selected = choices
+        tag.and_then(|tag| T::deserialize(StringDeserializer::<DeserializerError>::new(tag)).ok())
+            .ok_or_else(|| {
+                location
+                    .field(name)
+                    .invalid(expected, "Use one of the listed values.")
+            })
+    }
+
+    fn deserialize_payload<T: DeserializeOwned>(
+        &self,
+        tag: &'static str,
+        location: &FieldLocation,
+    ) -> Result<(), InputCorrection> {
+        let fields = self
+            .0
             .iter()
-            .copied()
-            .find(|choice| Some(*choice) == tag.as_deref());
-        selected.ok_or_else(|| {
-            location
-                .field(name)
-                .invalid(expected, "Use one of the listed values.")
-        })
+            .filter(|(name, _)| name != tag)
+            .map(|(name, raw)| {
+                serde_json::from_str::<serde_value::Value>(raw.get())
+                    .map(|value| (name.clone(), value))
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| location.input.correction(location.input.schema_hint()))?;
+        deserialize_fields::<T>(ObjectFields(fields), location, Some(tag))
     }
 }
 
@@ -208,18 +177,28 @@ fn deserialize_flat_input<T: DeserializeOwned>(
         // shortcut: deeply nested invalid values keep the generic hint; revisit for nested options.
         Err(_) => return Ok(()),
     };
-    let mut field = String::new();
-    let entries = fields
-        .0
-        .into_iter()
-        .inspect(|(name, _)| field.clone_from(name));
-    let error = match T::deserialize(MapDeserializer::<_, DeserializerError>::new(entries)) {
-        Ok(_) => return Ok(()),
-        Err(error) => error,
-    };
+    deserialize_fields::<T>(fields, location, None)
+}
+
+fn deserialize_fields<T: DeserializeOwned>(
+    fields: ObjectFields<serde_value::Value>,
+    location: &FieldLocation,
+    tag: Option<&'static str>,
+) -> Result<(), InputCorrection> {
+    let error =
+        match serde_path_to_error::deserialize::<_, T>(
+            MapDeserializer::<_, DeserializerError>::new(fields.0.into_iter()),
+        ) {
+            Ok(_) => return Ok(()),
+            Err(error) => error,
+        };
     let storage = matches!(location.input, JsonInputSource::StorageOptions);
-    let (expected, hint) = match error {
+    let (mut expected, hint) = match error.inner() {
         DeserializerError::UnknownField(_, fields) => {
+            let fields = tag
+                .into_iter()
+                .chain(fields.iter().copied())
+                .collect::<Vec<_>>();
             return Err(location.invalid(
                 format!("object fields: {}", fields.join(", ")),
                 "Remove unsupported fields; use only the listed fields.",
@@ -235,27 +214,56 @@ fn deserialize_flat_input<T: DeserializeOwned>(
                 )
             });
         }
+        DeserializerError::MissingField(name) => {
+            return Err(location
+                .field(name)
+                .invalid("a required field", "Supply the missing field."));
+        }
         DeserializerError::UnknownVariant(_, choices) => (
             format!("one of: {}", choices.join(", ")),
             "Use one of the listed values.",
         ),
         DeserializerError::InvalidType(_, expected)
         | DeserializerError::InvalidValue(_, expected) => (
-            if storage {
-                "string storage option values".to_owned()
+            expected.clone(),
+            if expected.starts_with("canonical decimal integer string") {
+                "Use a decimal string within the allowed range, with no '+', leading zeros, or negative zero."
+            } else if expected == "null or a nonempty JSON string" {
+                "Supply null or a nonempty timezone string matching the column's timezone."
             } else {
-                execution_options::expected_integer(&field).unwrap_or(expected)
+                "Supply a value matching this field's expected format."
             },
-            "Supply a value matching this field's expected format.",
         ),
         _ => return Err(location.input.correction(location.input.schema_hint())),
     };
-    let mut correction = location.invalid(expected, hint);
-    if !storage {
-        // Execution options reject unknown keys before deserializing their values.
-        correction.field_path = Some(format!("/{field}"));
+    if storage {
+        return Err(location.invalid("string storage option values", hint));
     }
-    Err(correction)
+    // Unknown keys were handled above; these strict input structs expose only declared fields.
+    let mut path = location.path.clone();
+    for segment in error.path() {
+        use serde_path_to_error::Segment;
+        match segment {
+            Segment::Map { key } => path.push_str(&format!("/{key}")),
+            Segment::Seq { index } => path.push_str(&format!("/{index}")),
+            _ => return Err(location.input.correction(location.input.schema_hint())),
+        }
+    }
+    if matches!(location.input, JsonInputSource::ExecutionOptions) {
+        expected =
+            execution_options::expected_integer(path.trim_start_matches('/')).unwrap_or(expected);
+    } else {
+        expected = match expected.as_str() {
+            "u8" => "a JSON integer from 0 to 255".to_owned(),
+            "i8" => "a JSON integer from -128 to 127".to_owned(),
+            "i32" => "a JSON integer fitting i32".to_owned(),
+            _ => expected,
+        };
+    }
+    Err(InputCorrection {
+        field_path: Some(path),
+        ..location.invalid(expected, hint)
+    })
 }
 
 fn predicate_node(
@@ -273,22 +281,18 @@ fn predicate_node(
         ));
     }
     let fields: ObjectFields<&RawValue> = location.parse(raw, "a JSON predicate object")?;
-    let op = fields.tag("op", PREDICATE_OPERATORS, location)?;
-    let allowed: &[&str] = match op {
-        "constant" => &["op", "value"],
-        "is_null" | "is_not_null" => &["op", "column"],
-        "and" | "or" => &["op", "args"],
-        "not" => &["op", "arg"],
-        _ => &["op", "column", "value"],
+    use predicate::{
+        ColumnInput, ComparisonInput, PredicateChildInput, PredicateChildrenInput,
+        PredicateOperator, ScalarValueInput,
     };
-    fields.check_fields(allowed, location)?;
+    let op = fields.tag::<PredicateOperator>("op", location)?;
+    // Decode one node at a time; internally tagged enums otherwise erase nested error paths.
     match op {
-        "constant" => {
-            location
-                .field("value")
-                .parse::<bool>(fields.required("value", location)?, "a JSON boolean")?;
+        PredicateOperator::Constant => {
+            fields.deserialize_payload::<ScalarValueInput<bool>>("op", location)?
         }
-        "and" | "or" => {
+        PredicateOperator::And | PredicateOperator::Or => {
+            fields.deserialize_payload::<PredicateChildrenInput<IgnoredAny>>("op", location)?;
             let args = location.field("args");
             let children: Vec<&RawValue> = args.parse(
                 fields.required("args", location)?,
@@ -298,108 +302,70 @@ fn predicate_node(
                 predicate_node(child, &args.index(index), depth + 1)?;
             }
         }
-        "not" => predicate_node(
-            fields.required("arg", location)?,
-            &location.field("arg"),
-            depth + 1,
-        )?,
-        _ => {
-            location.field("column").parse::<String>(
-                fields.required("column", location)?,
-                "a logical column name as a JSON string",
+        PredicateOperator::Not => {
+            fields.deserialize_payload::<PredicateChildInput<IgnoredAny>>("op", location)?;
+            predicate_node(
+                fields.required("arg", location)?,
+                &location.field("arg"),
+                depth + 1,
             )?;
-            if !matches!(op, "is_null" | "is_not_null") {
-                scalar(
-                    fields.required("value", location)?,
-                    &location.field("value"),
-                )?;
-            }
+        }
+        PredicateOperator::IsNull | PredicateOperator::IsNotNull => {
+            fields.deserialize_payload::<ColumnInput>("op", location)?
+        }
+        PredicateOperator::Eq
+        | PredicateOperator::Ne
+        | PredicateOperator::Lt
+        | PredicateOperator::Le
+        | PredicateOperator::Gt
+        | PredicateOperator::Ge => {
+            fields.deserialize_payload::<ComparisonInput<IgnoredAny>>("op", location)?;
+            scalar(
+                fields.required("value", location)?,
+                &location.field("value"),
+            )?;
         }
     }
     Ok(())
-}
-
-fn integer_string<T: FromStr + fmt::Display>(
-    raw: &RawValue,
-    location: &FieldLocation,
-    minimum: T,
-    maximum: T,
-) -> Result<(), InputCorrection> {
-    predicate::deserialize_integer_string::<_, T>(&mut serde_json::Deserializer::from_str(raw.get()))
-        .map(|_| ())
-        .map_err(|_| location.invalid(
-            format!("canonical decimal integer string from {minimum} to {maximum}"),
-            "Use a decimal string within the allowed range, with no '+', leading zeros, or negative zero.",
-        ))
 }
 
 fn scalar(raw: &RawValue, location: &FieldLocation) -> Result<(), InputCorrection> {
-    let fields: ObjectFields<&RawValue> = location.parse(raw, "a typed JSON scalar object")?;
-    let kind = fields.tag("type", SCALAR_TYPES, location)?;
-    let allowed: &[&str] = match kind {
-        "fixed_size_binary" => &["type", "value", "size"],
-        "timestamp_us" => &["type", "value", "timezone"],
-        "decimal128" => &["type", "value", "precision", "scale"],
-        _ => &["type", "value"],
+    use predicate::{
+        DecimalScalarInput, FixedSizeBinaryScalarInput, IntegerScalarInput, ScalarType,
+        ScalarValueInput, TimestampScalarInput,
     };
-    fields.check_fields(allowed, location)?;
-    let raw_value = fields.required("value", location)?;
-    let value = location.field("value");
-    match kind {
-        "boolean" => {
-            value.parse::<bool>(raw_value, "a JSON boolean")?;
+    let fields: ObjectFields<&RawValue> = location.parse(raw, "a typed JSON scalar object")?;
+    match fields.tag::<ScalarType>("type", location)? {
+        ScalarType::Boolean => {
+            fields.deserialize_payload::<ScalarValueInput<bool>>("type", location)
         }
-        "int8" => integer_string(raw_value, &value, i8::MIN, i8::MAX)?,
-        "int16" => integer_string(raw_value, &value, i16::MIN, i16::MAX)?,
-        "int32" | "date32" => integer_string(raw_value, &value, i32::MIN, i32::MAX)?,
-        "int64" | "timestamp_us" => integer_string(raw_value, &value, i64::MIN, i64::MAX)?,
-        "decimal128" => integer_string(raw_value, &value, i128::MIN, i128::MAX)?,
-        "float32" | "float64" => {
-            value.parse::<f64>(raw_value, "a JSON number")?;
+        ScalarType::Int8 => fields.deserialize_payload::<IntegerScalarInput<i8>>("type", location),
+        ScalarType::Int16 => {
+            fields.deserialize_payload::<IntegerScalarInput<i16>>("type", location)
         }
-        "utf8" | "large_utf8" => {
-            value.parse::<String>(raw_value, "a JSON string")?;
+        ScalarType::Int32 | ScalarType::Date32 => {
+            fields.deserialize_payload::<IntegerScalarInput<i32>>("type", location)
         }
-        "binary" | "large_binary" | "fixed_size_binary" => {
-            let bytes: Vec<&RawValue> = value.parse(raw_value, "an array of JSON byte integers")?;
-            for (index, byte) in bytes.into_iter().enumerate() {
-                value
-                    .index(index)
-                    .parse::<u8>(byte, "a JSON integer from 0 to 255")?;
-            }
+        ScalarType::Int64 => {
+            fields.deserialize_payload::<IntegerScalarInput<i64>>("type", location)
         }
-        _ => {}
+        ScalarType::Float32 | ScalarType::Float64 => {
+            fields.deserialize_payload::<ScalarValueInput<f64>>("type", location)
+        }
+        ScalarType::Utf8 | ScalarType::LargeUtf8 => {
+            fields.deserialize_payload::<ScalarValueInput<String>>("type", location)
+        }
+        ScalarType::Binary | ScalarType::LargeBinary => {
+            fields.deserialize_payload::<ScalarValueInput<Vec<u8>>>("type", location)
+        }
+        ScalarType::FixedSizeBinary => {
+            fields.deserialize_payload::<FixedSizeBinaryScalarInput>("type", location)
+        }
+        ScalarType::TimestampUs => {
+            fields.deserialize_payload::<TimestampScalarInput>("type", location)
+        }
+        ScalarType::Decimal128 => {
+            fields.deserialize_payload::<DecimalScalarInput>("type", location)
+        }
     }
-    match kind {
-        "fixed_size_binary" => {
-            location.field("size").parse::<i32>(
-                fields.required("size", location)?,
-                "a JSON integer fitting i32",
-            )?;
-        }
-        "timestamp_us" => {
-            let timezone = fields.required("timezone", location)?;
-            predicate::deserialize_timezone(&mut serde_json::Deserializer::from_str(
-                timezone.get(),
-            ))
-            .map_err(|_| {
-                location.field("timezone").invalid(
-                    "null or a nonempty JSON string",
-                    "Supply null or a nonempty timezone string matching the column's timezone.",
-                )
-            })?;
-        }
-        "decimal128" => {
-            location.field("precision").parse::<u8>(
-                fields.required("precision", location)?,
-                "a JSON integer from 0 to 255",
-            )?;
-            location.field("scale").parse::<i8>(
-                fields.required("scale", location)?,
-                "a JSON integer from -128 to 127",
-            )?;
-        }
-        _ => {}
-    }
-    Ok(())
 }

@@ -20,11 +20,14 @@ arrow = "58.3.0"
 arrow-schema = { version = "58.3.0", features = ["serde"] }
 clap = { version = "4", default-features = false, features = ["derive", "std", "help", "usage", "error-context"] }
 delta-arrow-reader = { path = "../delta-arrow-reader-core" }
+num-traits = "0.2"
 object_store = { version = "0.13.2", features = ["aws", "azure"] }
 serde = { version = "1", features = ["derive"] }
 serde-value = "0.7.0"
 serde_json = { version = "1", features = ["float_roundtrip", "raw_value"] }
+serde_path_to_error = "0.1"
 snafu = "0.9"
+strum = { version = "0.27", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "process", "io-util", "signal", "macros"] }
 url = "2"
 tracing = "0.1"
