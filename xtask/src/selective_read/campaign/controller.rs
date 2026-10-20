@@ -318,22 +318,6 @@ fn hashes(paths: &[PathBuf]) -> Result<Value> {
     ))
 }
 
-fn verified_receipt(args: &Args, prepared: &Value) -> Result<()> {
-    let receipt = &prepared["receipt"];
-    let manifest = digest(&args.fixtures.join("manifest.json"))?;
-    require(
-        receipt["status"] == "verified"
-            && receipt["server_sha256"] == digest(&args.state.join("server.json"))?
-            && receipt["fixture_manifest_sha256"] == manifest
-            && receipt["table_root"] == format!("s3://{}/{manifest}", storage::BUCKET),
-        "upload receipt differs from server/fixtures",
-    )?;
-    require(
-        receipt["objects"] == prepared["objects"],
-        "fixture objects differ from verified upload",
-    )
-}
-
 fn remote_request(
     mut payload: Value,
     fixtures: &Path,
@@ -447,9 +431,12 @@ impl Campaign {
                     "output":destination, "traced":slot["traced"], "reference":reference, "protocols":self.protocols}),
                 )?)?;
                 if record["status"] == "success" && purpose == "validation" {
-                    record = self.worker.call(
-                        &json!({"action":"check", "record":record, "output":destination,
-                        "fixtures":self.args.fixtures, "reference":reference, "payload":payload}),
+                    record = self.worker.check(
+                        record,
+                        &payload,
+                        &destination,
+                        &self.args.fixtures,
+                        reference,
                     )?;
                 }
                 save(&destination.join("storage-observation.json"), &record)?;
@@ -718,7 +705,7 @@ pub(in crate::selective_read) fn run(mut args: Args) -> Result<()> {
                 .collect()
         },
     )?;
-    verified_receipt(&args, &preparation)?;
+    storage::upload::verified(&args.state, &args.fixtures, &preparation)?;
     args.upload = fs::canonicalize(&args.upload)?;
     let receipt = &preparation["receipt"];
     let mut binaries = BTreeMap::new();

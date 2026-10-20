@@ -90,10 +90,10 @@ def dispatch(value):
                                    workload=Path(value["workload"]) if value.get("workload") else None))
         oracle.check_reference_build(metadata)
         return metadata
-    if action == "check":
-        record = value["record"]
-        run.check_result(record, Path(value["output"]), fixtures, Path(value["reference"]), value["payload"])
-        return record
+    if action == "spark-pilot":
+        import oracle
+        oracle.READERS.add("spark")
+        return None
     raise ValueError("unknown controller worker operation")
 
 

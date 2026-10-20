@@ -172,6 +172,26 @@ pub(in crate::selective_read) fn prepare(
     Ok(json!({"receipt":receipt, "objects":objects}))
 }
 
+pub(in crate::selective_read) fn verified(
+    directory: &Path,
+    fixtures: &Path,
+    prepared: &Value,
+) -> Result<()> {
+    let receipt = &prepared["receipt"];
+    let manifest = digest(&fixtures.join("manifest.json"))?;
+    require(
+        receipt["status"] == "verified"
+            && receipt["server_sha256"] == digest(&directory.join("server.json"))?
+            && receipt["fixture_manifest_sha256"] == manifest
+            && receipt["table_root"] == format!("s3://{}/{manifest}", BUCKET),
+        "upload receipt differs from server/fixtures",
+    )?;
+    require(
+        receipt["objects"] == prepared["objects"],
+        "fixture objects differ from verified upload",
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

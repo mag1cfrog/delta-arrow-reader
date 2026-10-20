@@ -1,9 +1,5 @@
-"""Create one public-case request, invoke a reader, and optionally validate every export.
+"""Shared Python adapter identities, protocol checks and immutable artifacts."""
 
-This is a single invocation, not a performance campaign or resource scheduler.
-"""
-
-import argparse
 import hashlib
 import json
 import os
@@ -143,61 +139,3 @@ def request(fixtures, case_id, execution_mode, purpose, run_id, table_uri=None, 
         "harness": str(large_workloads.HERE)})
     return payload | {"purpose": purpose, "run_id": run_id, "table_uri": table_uri or payload["table_uri"],
                       "correctness_file": str(correctness.resolve()) if correctness else None}
-
-
-def check_result(record, output, fixtures, reference, payload):
-    sys.path.insert(0, str(HERE.parent))
-    import oracle
-    checks = []
-    try:
-        if [q["query_index"] for q in record["queries"]] != list(range(query_count(payload))):
-            raise ValueError("incomplete validation query sequence")
-        for query in record["queries"]:
-            checks.append(oracle.check(reference, fixtures,
-                output / "reader" / query["result"], output / "reader" / query["identity"]))
-        proof = {"status": "passed", "checks": checks}
-    except (OSError, ValueError, KeyError, TypeError) as error:
-        proof = {"status": "validation_failed", "checks": checks, "failure_reason": str(error)}
-        record.update(status="validation_failed", failure_reason=str(error))
-    save(output / "correctness.json", proof)
-    record["correctness"] = {"status": proof["status"], "path": str((output / "correctness.json").resolve()),
-                             "artifact_sha256": digest(output / "correctness.json")}
-
-
-def invoke(binary, payload, output, fixtures=None, reference=None, *, env=None, command_prefix=(), supervised=False, defer_validation=False):
-    import native
-    record = native.call("invoke", {"binary": str(binary), "payload": payload, "output": str(output),
-        "reference": str(reference) if reference is not None else None, "env": env,
-        "command_prefix": list(command_prefix), "supervised": supervised, "protocols": str(PROTOCOL.parent)})
-    if record["status"] == "success" and payload["purpose"] == "validation" and not defer_validation:
-        check_result(record, output, fixtures, reference, payload)
-    save(output / "observation.json", record)
-    return record
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--binary", type=Path, required=True)
-    parser.add_argument("--fixtures", type=Path, required=True)
-    parser.add_argument("--case", required=True)
-    parser.add_argument("--workload", type=Path, help="explicit workload manifest")
-    parser.add_argument("--execution", choices=("open", "reuse"), default="open")
-    parser.add_argument("--purpose", choices=("validation", "timing", "diagnostic", "io"), required=True)
-    parser.add_argument("--reference", type=Path)
-    parser.add_argument("--correctness", type=Path)
-    parser.add_argument("--table-uri")
-    parser.add_argument("--output", type=Path, required=True)
-    args = parser.parse_args()
-    if args.purpose == "validation" and args.reference is None:
-        parser.error("validation requires --reference")
-    if args.purpose == "timing" and args.correctness is None:
-        parser.error("timing requires --correctness")
-    payload = request(args.fixtures, args.case, args.execution, args.purpose, args.output.name,
-                      args.table_uri, args.correctness, workload=args.workload)
-    record = invoke(args.binary, payload, args.output, args.fixtures, args.reference)
-    print(json.dumps({"status": record["status"], "observation": str(args.output / "observation.json")}))
-    return 0 if record["status"] == "success" else 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())

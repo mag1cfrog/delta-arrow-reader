@@ -135,9 +135,8 @@ PYTHONDONTWRITEBYTECODE=1 ../selective-read-oracle-venv/bin/python \
 Export the reader's complete output and validate it:
 
 ```sh
-cargo build --locked -p xtask
-PYTHONDONTWRITEBYTECODE=1 ../selective-read-oracle-venv/bin/python \
-  benches/selective_read/runners/run.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read run-reader \
+  --python ../selective-read-oracle-venv/bin/python \
   --binary ../selective-read-dar-build/selective-read-dar \
   --fixtures ../selective-read-smoke --case li.clustered.eq2-in20 \
   --purpose validation --reference ../reference-li-clustered \
@@ -152,9 +151,9 @@ Use `li.shuffled.eq2-in20` with its own reference to check the paired layout.
 Development/report fixtures contain the frozen 20-value IN list;
 the smoke profile retains its documented shorter-list exception.
 
-The Python helper reads the saved SQL from the fixture manifest and calls the
-compiled Rust controller to launch the reader and record its exit and limits.
-Set `SELECTIVE_READ_XTASK` if the controller is outside the default target directory.
+The Rust controller binds the saved SQL to the fixture or frozen workload,
+launches the reader and records its exit and limits. Python checks the exported
+values outside the reader interval.
 The Rust and DuckDB
 executables register the selected snapshot as `bench` and execute that SQL.
 Polars translates the scan shape to native filter, projection, and limit
@@ -166,7 +165,7 @@ After validation, a timing invocation consumes batches without writing,
 hashing, or retaining their values:
 
 ```sh
-python3 benches/selective_read/runners/run.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read run-reader \
   --binary ../selective-read-dar-build/selective-read-dar \
   --fixtures ../selective-read-smoke --case li.clustered.eq2-in20 \
   --purpose timing --correctness ../dar-li-clustered-validation/correctness.json \

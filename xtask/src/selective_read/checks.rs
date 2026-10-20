@@ -111,8 +111,13 @@ impl Checker {
         reference: Option<&Path>,
     ) -> Result<Value> {
         if record["status"] == "success" && payload["purpose"] == "validation" {
-            record = self.worker.call(&json!({"action":"check","record":record,"output":output,
-                "fixtures":self.fixtures,"reference":reference.ok_or("missing independent reference")?,"payload":payload}))?;
+            record = self.worker.check(
+                record,
+                payload,
+                output,
+                &self.fixtures,
+                reference.ok_or("missing independent reference")?,
+            )?;
         }
         Ok(record)
     }

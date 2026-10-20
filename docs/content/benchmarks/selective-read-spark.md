@@ -56,7 +56,8 @@ rejected. These bounded checks do not establish workload performance.
 Use a verified selected-snapshot upload and an independent reference:
 
 ```sh
-"$BENCH_PYTHON" -B benches/selective_read/runners/spark/pilot.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read run-reader \
+  --spark-pilot --python "$BENCH_PYTHON" \
   --binary /path/to/build-spark/selective-read-spark \
   --state /path/to/minio-state \
   --fixtures /path/to/production-pair \

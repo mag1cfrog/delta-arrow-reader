@@ -97,9 +97,9 @@ fn receipt_and_reference_must_match_the_selected_remote_table() -> Result<()> {
     let mut prepared = json!({"objects":objects, "receipt":{"status":"verified",
         "server_sha256":digest(&args.state.join("server.json"))?, "fixture_manifest_sha256":manifest,
         "table_root":format!("s3://selective-read/{manifest}"), "objects":objects}});
-    verified_receipt(&args, &prepared)?;
+    storage::upload::verified(&args.state, &args.fixtures, &prepared)?;
     prepared["receipt"]["objects"][0]["bytes"] = json!(4);
-    assert!(verified_receipt(&args, &prepared).is_err());
+    assert!(storage::upload::verified(&args.state, &args.fixtures, &prepared).is_err());
     prepared["receipt"]["objects"] = objects;
     let protocol = root.join("protocols");
     fs::create_dir(&protocol)?;
@@ -165,7 +165,7 @@ fn receipt_and_reference_must_match_the_selected_remote_table() -> Result<()> {
         .is_err()
     );
     prepared["receipt"]["server_sha256"] = json!("changed");
-    assert!(verified_receipt(&args, &prepared).is_err());
+    assert!(storage::upload::verified(&args.state, &args.fixtures, &prepared).is_err());
     Ok(())
 }
 

@@ -27,6 +27,8 @@ pub(crate) enum Task {
     Invoke,
     /// Bind a reader request to verified fixture and workload metadata.
     ReaderRequest,
+    /// Invoke one local or remote reader and validate its independent exports.
+    RunReader(Box<invoke::controller::Args>),
     /// Schedule and summarize a campaign. Read the operation as JSON from stdin.
     Campaign,
     /// Execute a frozen campaign, using Python only for independent data validation.
@@ -145,6 +147,7 @@ pub(crate) enum Task {
 impl Task {
     pub(crate) fn run(self) -> Result<()> {
         match self {
+            Self::RunReader(args) => return invoke::controller::run(*args),
             Self::RunCampaign(args) => return campaign::controller::run(*args),
             Self::CheckReaders(args) => return checks::local(args),
             Self::CheckStorage(args) => return checks::remote::run(args),
@@ -285,6 +288,7 @@ impl Task {
             Self::Experiment => experiment::run(serde_json::from_value(input)?)?,
             Self::IntraPage => experiment::intra_page::run(serde_json::from_value(input)?)?,
             Self::ExecReader { .. }
+            | Self::RunReader(_)
             | Self::RunCampaign(_)
             | Self::CheckReaders(_)
             | Self::CheckStorage(_)

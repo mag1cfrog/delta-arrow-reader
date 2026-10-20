@@ -12,11 +12,12 @@ use rustix::{
     process::{Pid, Signal, kill_process_group},
     thread::{CpuSet, sched_getaffinity, sched_setaffinity},
 };
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::{
     Result,
-    selective_read::{array, require},
+    selective_read::{array, require, storage::save, supervise::progress, text},
+    selective_read_build::digest,
 };
 
 pub(in crate::selective_read) struct Worker(Child);
@@ -85,6 +86,46 @@ impl Worker {
     pub(in crate::selective_read) fn call(&mut self, request: &Value) -> Result<Value> {
         // Each export also retains the oracle's own memory, disk and elapsed-time limits.
         self.exchange(request, Duration::from_secs(24 * 3600))
+    }
+
+    pub(in crate::selective_read) fn check(
+        &mut self,
+        mut record: Value,
+        payload: &Value,
+        output: &Path,
+        fixtures: &Path,
+        reference: &Path,
+    ) -> Result<Value> {
+        let mut checks = Vec::new();
+        let result = (|| -> Result<()> {
+            let queries = array(&record["queries"])?;
+            require(
+                queries.len() == progress::count(payload)?
+                    && queries
+                        .iter()
+                        .enumerate()
+                        .all(|(index, query)| query["query_index"].as_u64() == Some(index as u64)),
+                "incomplete validation query sequence",
+            )?;
+            for query in queries {
+                checks.push(self.call(&json!({"action":"check-export","reference":reference,
+                    "fixtures":fixtures,"result":output.join("reader").join(text(&query["result"])?),
+                    "identity":output.join("reader").join(text(&query["identity"])?)}))?);
+            }
+            Ok(())
+        })();
+        let mut proof = json!({"status":"passed","checks":checks});
+        if let Err(error) = result {
+            proof["status"] = json!("validation_failed");
+            proof["failure_reason"] = json!(error.to_string());
+            record["status"] = proof["status"].clone();
+            record["failure_reason"] = proof["failure_reason"].clone();
+        }
+        let path = output.join("correctness.json");
+        save(&path, &proof)?;
+        record["correctness"] = json!({"status":proof["status"],"path":std::fs::canonicalize(&path)?,
+            "artifact_sha256":digest(&path)?});
+        Ok(record)
     }
 
     fn exchange(&mut self, request: &Value, timeout: Duration) -> Result<Value> {
@@ -188,6 +229,36 @@ mod tests {
                 worker
                     .exchange(&Value::Null, Duration::from_millis(100))
                     .is_err()
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn validation_keeps_partial_checks_and_rejects_incomplete_sequences() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let root = temporary.path();
+        let mut worker = Worker::spawn(Command::new("python3").args(["-I", "-u", "-c",
+            "import json,sys\nfor line in sys.stdin:\n v=json.loads(line)\n print(json.dumps({'error':'wrong value'} if v['identity'].endswith('bad') else {'result':{'status':'passed'}}),flush=True)"]))?;
+        let payload = json!({"comparison_revision":6,"execution_mode":"reuse"});
+        for (name, indices, second, count, status) in [
+            ("success", vec![0, 1], "good", 2, "success"),
+            ("wrong", vec![0, 1], "bad", 1, "validation_failed"),
+            ("missing", vec![0], "good", 0, "validation_failed"),
+            ("reordered", vec![1, 0], "good", 0, "validation_failed"),
+        ] {
+            let output = root.join(name);
+            std::fs::create_dir(&output)?;
+            let record = json!({"status":"success","queries":indices.into_iter().enumerate().map(|(i,index)|
+                json!({"query_index":index,"result":"result.arrow","identity":if i==0 { "good" } else { second }})).collect::<Vec<_>>()});
+            let result = worker.check(record, &payload, &output, root, root)?;
+            let proof =
+                crate::selective_read::storage::read_json(&output.join("correctness.json"))?;
+            assert_eq!(result["status"], status);
+            assert_eq!(array(&proof["checks"])?.len(), count);
+            assert_eq!(
+                result["correctness"]["artifact_sha256"],
+                digest(&output.join("correctness.json"))?
             );
         }
         Ok(())

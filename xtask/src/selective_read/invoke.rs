@@ -18,6 +18,8 @@ use super::{
 };
 use crate::Result;
 
+pub(super) mod controller;
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Request {

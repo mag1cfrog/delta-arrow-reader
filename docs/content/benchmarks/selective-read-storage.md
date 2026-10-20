@@ -181,39 +181,30 @@ Both checks are manual. This transport adds no CI job or performance threshold.
 
 ## Validate, time and observe a remote case
 
-Use the oracle environment's Python for this example. All paths below are relative
-to the repository root. The output directories must be new:
+Build the controller and prepare an independent reference. All paths below are
+relative to the repository root. The output directories must be new:
 
-```python
-import json
-from pathlib import Path
-import sys
+```sh
+cargo +1.98.1 build --locked -p xtask
+../selective-read-oracle-venv/bin/python -B benches/selective_read/oracle.py prepare \
+  --fixtures ../selective-read-smoke --case li.clustered.eq2-in20 \
+  --output ../remote-reference
 
-sys.path.insert(0, "benches/selective_read")
-import observe
-import oracle
-import run
-
-state = Path("../selective-read-storage")
-fixtures = Path("../selective-read-smoke")
-binary = Path("../selective-read-dar-build/selective-read-dar")
-root = json.loads(Path("../selective-read-upload.json").read_text())["table_root"]
-case = "li.clustered.eq2-in20"
-reference = Path("../remote-reference")
-oracle.prepare(fixtures, case, reference)
-payload = run.request(fixtures, case, "open", "validation", "remote-validation",
-                      table_uri=root + "/li.clustered")
-validation = Path("../remote-validation")
-record = observe.invoke(state, binary, payload, validation, fixtures, reference)
-assert record["status"] == "success"
-
-timed = run.request(fixtures, case, "open", "timing", "remote-timing",
-                    table_uri=payload["table_uri"],
-                    correctness=validation / "correctness.json")
-assert observe.invoke(state, binary, timed, Path("../remote-timing"))["status"] == "success"
-io = dict(payload, purpose="io", run_id="remote-io")
-assert observe.invoke(state, binary, io, Path("../remote-io"))["status"] == "success"
+benchmark_reader() {
+  target/debug/xtask selective-read run-reader \
+    --state ../selective-read-storage --upload ../selective-read-upload.json \
+    --binary ../selective-read-dar-build/selective-read-dar \
+    --fixtures ../selective-read-smoke --case li.clustered.eq2-in20 "$@"
+}
+benchmark_reader --purpose validation --reference ../remote-reference \
+  --python ../selective-read-oracle-venv/bin/python --output ../remote-validation
+benchmark_reader --purpose timing --correctness ../remote-validation/correctness.json \
+  --output ../remote-timing
+benchmark_reader --purpose io --output ../remote-io
 ```
+
+The upload receipt binds the remote URI to the server, fixture manifest and
+selected objects. The controller verifies it before starting each invocation.
 
 Substitute any other prepared executable to use the same server and observer.
 The launcher removes inherited AWS profiles, endpoints and proxies, supplies the
@@ -224,13 +215,13 @@ invocations and uploads. Keep this server dedicated to the benchmark.
 For an existing saved request, the equivalent command is:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/observe.py run \
+target/debug/xtask selective-read run-reader \
   --state ../selective-read-storage \
   --binary ../selective-read-dar-build/selective-read-dar \
   --request ../remote-io/request.json --output ../remote-io-repeat
 ```
 
-Validation also requires `--fixtures` and `--reference`. Timing requires the
+Validation also requires `--fixtures`, `--reference` and the pinned `--python`. Timing requires the
 request's matching remote correctness certificate. A local-file certificate
 cannot authorize the same query against S3.
 
