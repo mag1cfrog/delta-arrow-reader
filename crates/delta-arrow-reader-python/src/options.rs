@@ -66,7 +66,7 @@ fn parquet_full_file_read_threshold(value: &Bound<'_, PyAny>) -> PyResult<Option
 
 fn option_error(error: DeltaReaderError) -> PyErr {
     Python::attach(|py| {
-        crate::logging::validation_error(
+        crate::diagnostics::validation_error(
             &error,
             "execution_options",
             crate::core_error::<PyValueError>(py, &error),

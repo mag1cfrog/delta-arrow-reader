@@ -1,6 +1,7 @@
 //! Python package entrypoint.
 
 mod arrow_stream;
+mod diagnostics;
 mod filters;
 mod logging;
 mod options;
@@ -85,7 +86,7 @@ fn binding_error(py: Python<'_>, message: String, phase: &str, code: &str) -> Py
 
 fn export_schema(py: Python<'_>, schema: &Schema) -> PyResult<FFI_ArrowSchema> {
     let export_error = |reason: &'static str, source: Option<&ArrowError>| {
-        logging::log_failure(
+        diagnostics::log_failure(
             binding_error(
                 py,
                 "delta reader error: phase=schema code=schema_conversion reason=arrow_schema_export_failed"
@@ -376,7 +377,7 @@ impl DeltaTable {
             builder = builder
                 .with_target_partitions(target_partitions.extract::<usize>()?)
                 .map_err(|error| {
-                    logging::validation_error(
+                    diagnostics::validation_error(
                         &error,
                         "target_partitions",
                         core_error::<DeltaReaderError>(py, &error),

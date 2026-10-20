@@ -17,7 +17,7 @@ impl Runtime {
 
     pub(crate) fn for_python(kind: &'static str) -> PyResult<Self> {
         Self::new().map_err(|error| {
-            crate::logging::log_failure(
+            crate::diagnostics::log_failure(
                 PyRuntimeError::new_err(format!("failed to create the {kind} runtime")),
                 || {
                     tracing::error!(target: "delta_arrow_reader_python",

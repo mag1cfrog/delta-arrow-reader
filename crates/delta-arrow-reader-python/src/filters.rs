@@ -68,7 +68,7 @@ fn parse_condition(table: &DeltaTable, condition: &Bound<'_, PyAny>) -> PyResult
         .map_err(|_| PyTypeError::new_err("filter operators must be strings"))?;
     let value = condition.get_item(2)?;
     let data_type = table.predicate_column_type(&column).map_err(|error| {
-        crate::logging::validation_error(
+        crate::diagnostics::validation_error(
             &error,
             "filters",
             core_error::<DeltaReaderError>(condition.py(), &error),
