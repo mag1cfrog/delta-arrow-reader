@@ -93,7 +93,10 @@ struct TableArgs {
 #[derive(Snafu)]
 enum Error {
     #[snafu(display("Invalid command-line arguments (kind={kind:?})."))]
-    Argument { kind: ErrorKind },
+    Argument {
+        kind: ErrorKind,
+        correction: Option<diagnostics::ArgumentCorrection>,
+    },
     #[snafu(display("Arrow IPC output requires redirected stdout."))]
     TerminalOutput,
     #[snafu(display(
@@ -219,9 +222,14 @@ impl Error {
             return;
         }
         let (phase, code, reason, source_kind) = self.classification();
-        let argument_kind = match self {
-            Self::Argument { kind } => Some(tracing::field::debug(kind)),
-            _ => None,
+        let (argument_kind, argument, expected, hint) = match self {
+            Self::Argument { kind, correction } => (
+                Some(tracing::field::debug(kind)),
+                correction.as_ref().map(|value| value.argument.as_str()),
+                correction.as_ref().map(|value| value.expected.as_str()),
+                Some(diagnostics::argument_error_hint(*kind)),
+            ),
+            _ => (None, None, None, None),
         };
         let (json_kind, json_line, json_column) = match self {
             Self::InputJson { source } => (
@@ -245,7 +253,8 @@ impl Error {
         tracing::error!(target: "delta_arrow_reader_cli",
             event = "cli.failed", operation = "cli_command", outcome = "failed",
             error_phase = phase, error_code = code, error_reason = reason,
-            error_source_kind = source_kind, argument_kind, json_kind, json_line, json_column, io_kind, os_error,
+            error_source_kind = source_kind, argument_kind, argument, expected, hint,
+            json_kind, json_line, json_column, io_kind, os_error,
             "{message}"
         );
     }
@@ -278,8 +287,13 @@ impl Error {
             "recovery": recovery,
         });
         match self {
-            Self::Argument { kind } => {
+            Self::Argument { kind, correction } => {
                 record["argument_kind"] = format!("{kind:?}").into();
+                record["hint"] = diagnostics::argument_error_hint(*kind).into();
+                if let Some(correction) = correction {
+                    record["argument"] = correction.argument.as_str().into();
+                    record["expected"] = correction.expected.as_str().into();
+                }
             }
             Self::InputJson { source } => {
                 record["json_kind"] = format!("{:?}", source.classify()).into();
@@ -324,12 +338,14 @@ fn parse_unsigned_decimal<T: FromStr>(value: &str) -> Result<T, Error> {
     ensure!(
         !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()),
         ArgumentSnafu {
-            kind: ErrorKind::ValueValidation
+            kind: ErrorKind::ValueValidation,
+            correction: None,
         }
     );
     value.parse().map_err(|_| {
         ArgumentSnafu {
             kind: ErrorKind::ValueValidation,
+            correction: None,
         }
         .build()
     })
@@ -412,7 +428,13 @@ fn run() -> Result<Value, Error> {
             ));
         }
         // Clap's other diagnostics may contain argument values. Emit our redacted error.
-        Err(error) => return ArgumentSnafu { kind: error.kind() }.fail(),
+        Err(error) => {
+            return ArgumentSnafu {
+                kind: error.kind(),
+                correction: diagnostics::ArgumentCorrection::from_clap(&error),
+            }
+            .fail();
+        }
         Ok(cli) => cli.command,
     };
 

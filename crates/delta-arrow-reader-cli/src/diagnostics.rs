@@ -3,7 +3,10 @@ use std::{
     sync::Mutex,
 };
 
-use clap::{Args, FromArgMatches, ValueEnum};
+use clap::{
+    Args, CommandFactory, FromArgMatches, ValueEnum,
+    error::{ContextKind, ContextValue, ErrorKind},
+};
 use serde_json::Value;
 use tracing::Subscriber;
 use tracing_subscriber::{
@@ -73,6 +76,77 @@ impl DiagnosticFormat {
                 *written = true;
             }
         }
+    }
+}
+
+pub(crate) struct ArgumentCorrection {
+    pub(crate) argument: String,
+    pub(crate) expected: String,
+}
+
+impl ArgumentCorrection {
+    pub(crate) fn from_clap(error: &clap::Error) -> Option<Self> {
+        if matches!(
+            error.kind(),
+            ErrorKind::UnknownArgument | ErrorKind::InvalidSubcommand | ErrorKind::InvalidUtf8
+        ) {
+            return None;
+        }
+        let mut command = crate::Cli::command();
+        command.build();
+        match error.get(ContextKind::InvalidArg)? {
+            ContextValue::String(argument) => Self::from_declaration(&command, argument),
+            ContextValue::Strings(arguments) => arguments
+                .iter()
+                .find_map(|argument| Self::from_declaration(&command, argument)),
+            _ => None,
+        }
+    }
+
+    fn from_declaration(command: &clap::Command, reported: &str) -> Option<Self> {
+        // Only return declaration text, never values copied from the failing invocation.
+        for argument in command.get_arguments() {
+            if argument.to_string() == reported {
+                let expected = match argument.get_id().as_str() {
+                    "limit" => format!("unsigned decimal integer from 0 to {}", usize::MAX),
+                    "target_partitions" => {
+                        format!("unsigned decimal integer from 1 to {}", usize::MAX)
+                    }
+                    "table_version" => format!("unsigned decimal integer from 0 to {}", u64::MAX),
+                    "diagnostic_format" => "json (use --diagnostics=json)".to_owned(),
+                    _ => argument.get_help()?.to_string(),
+                };
+                return Some(Self {
+                    argument: argument
+                        .get_long()
+                        .map_or_else(|| argument.get_id().to_string(), |name| format!("--{name}")),
+                    expected,
+                });
+            }
+        }
+        command
+            .get_subcommands()
+            .find_map(|command| Self::from_declaration(command, reported))
+    }
+}
+
+pub(crate) fn argument_error_hint(kind: ErrorKind) -> &'static str {
+    match kind {
+        ErrorKind::MissingRequiredArgument => "Supply the required argument.",
+        ErrorKind::ArgumentConflict => "Remove the conflicting or repeated argument.",
+        ErrorKind::NoEquals => "Attach the value to the option with '='.",
+        ErrorKind::InvalidUtf8 => "Use UTF-8 text for command-line arguments.",
+        ErrorKind::UnknownArgument | ErrorKind::InvalidSubcommand => {
+            "Use --help to choose a supported command or option."
+        }
+        ErrorKind::ValueValidation
+        | ErrorKind::InvalidValue
+        | ErrorKind::TooFewValues
+        | ErrorKind::TooManyValues
+        | ErrorKind::WrongNumberOfValues => {
+            "Supply a value matching the argument's expected format."
+        }
+        _ => "Use --help to check the command's arguments.",
     }
 }
 

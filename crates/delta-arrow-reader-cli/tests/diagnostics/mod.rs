@@ -35,6 +35,138 @@ pub(super) fn assert_single_terminal_record(stderr: &[u8], kind: &str) -> Value 
 }
 
 #[test]
+fn argument_errors_include_safe_corrections() -> Result<(), Box<dyn std::error::Error>> {
+    let limit_range = format!("unsigned decimal integer from 0 to {}", usize::MAX);
+    let partition_range = format!("unsigned decimal integer from 1 to {}", usize::MAX);
+    let version_range = format!("unsigned decimal integer from 0 to {}", u64::MAX);
+    for (args, kind, argument, expected, hint) in [
+        (
+            vec!["scan", "secret-table", "--limit", "secret-value"],
+            "ValueValidation",
+            "--limit",
+            limit_range.as_str(),
+            "Supply a value",
+        ),
+        (
+            vec!["scan", "secret-table", "--target-partitions", "0"],
+            "ValueValidation",
+            "--target-partitions",
+            partition_range.as_str(),
+            "Supply a value",
+        ),
+        (
+            vec![
+                "inspect",
+                "secret-table",
+                "--table-version",
+                "18446744073709551616",
+            ],
+            "ValueValidation",
+            "--table-version",
+            version_range.as_str(),
+            "Supply a value",
+        ),
+        (
+            vec!["scan", "secret-table", "--limit"],
+            "InvalidValue",
+            "--limit",
+            limit_range.as_str(),
+            "Supply a value",
+        ),
+        (
+            vec!["scan", "secret-table", "--limit", "1", "--limit", "2"],
+            "ArgumentConflict",
+            "--limit",
+            limit_range.as_str(),
+            "Remove",
+        ),
+        (
+            vec!["inspect"],
+            "MissingRequiredArgument",
+            "table",
+            "UTF-8 local path",
+            "Supply the required argument",
+        ),
+        (
+            vec!["--diagnostics=secret-format", "inspect", "secret-table"],
+            "InvalidValue",
+            "--diagnostics",
+            "json (use --diagnostics=json)",
+            "Supply a value",
+        ),
+        (
+            vec!["--diagnostics", "json", "inspect", "secret-table"],
+            "NoEquals",
+            "--diagnostics",
+            "json (use --diagnostics=json)",
+            "Attach",
+        ),
+    ] {
+        let output = run_with_timeout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .args(&args)
+                .arg("--diagnostics=json")
+                .env("RUST_LOG", "off"),
+        )?;
+        assert_eq!(output.status.code(), Some(2), "{args:?}: {output:?}");
+        assert!(output.stdout.is_empty());
+        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert_eq!(record["code"], "invalid_cli_argument");
+        assert_eq!(record["argument_kind"], kind, "{args:?}: {record}");
+        assert_eq!(record["argument"], argument, "{args:?}: {record}");
+        assert!(
+            record["expected"].as_str().unwrap().starts_with(expected),
+            "{record}"
+        );
+        assert!(
+            record["hint"].as_str().unwrap().starts_with(hint),
+            "{record}"
+        );
+        assert_eq!(record["recovery"], "fix_input");
+        assert_eq!(record["retryable"], false);
+
+        let output = run_with_timeout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .args(&args)
+                .env("RUST_LOG", "warn"),
+        )?;
+        assert_eq!(output.status.code(), Some(2));
+        let text = std::str::from_utf8(&output.stderr)?;
+        assert!(text.contains(&format!("argument=\"{argument}\"")), "{text}");
+        assert!(text.contains(expected), "{text}");
+        assert!(text.contains(hint), "{text}");
+        assert!(!text.contains("secret"), "{text}");
+    }
+    Ok(())
+}
+
+#[test]
+fn unknown_arguments_offer_help_without_echoing_names() -> Result<(), Box<dyn std::error::Error>> {
+    for args in [
+        vec!["--secret-token=secret-value"],
+        vec!["secret-command"],
+        vec!["scan", "secret-table", "--limit-secret=1"],
+    ] {
+        let output = run_with_timeout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .args(&args)
+                .arg("--diagnostics=json")
+                .env("RUST_LOG", "trace"),
+        )?;
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert!(record.get("argument").is_none(), "{record}");
+        assert!(record.get("expected").is_none(), "{record}");
+        assert_eq!(
+            record["hint"],
+            "Use --help to choose a supported command or option."
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn failures_stay_json_with_tracing_off_on_or_invalid() -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
     let malformed = directory.path().join("secret-malformed.json");
@@ -331,6 +463,7 @@ fn non_utf8_arguments_and_filters_do_not_escape_json() -> Result<(), Box<dyn std
     assert!(output.stdout.is_empty());
     let record = assert_single_terminal_record(&output.stderr, "diagnostic");
     assert_eq!(record["argument_kind"], "InvalidUtf8");
+    assert_eq!(record["hint"], "Use UTF-8 text for command-line arguments.");
     Ok(())
 }
 

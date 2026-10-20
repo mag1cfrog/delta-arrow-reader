@@ -39,6 +39,23 @@ Core failures retain their typed phase, code, reason, and source category.
 errors, input values, paths, credentials, or captured child output are included.
 `message` is fixed text; use the classification fields for decisions.
 
+Argument failures include a `hint` describing how to correct the invocation.
+When Clap identifies a declared argument, `argument` gives its name and
+`expected` describes the accepted format. Numeric options include their range:
+`--limit` and `--table-version` accept zero; `--target-partitions` requires at
+least one. Row and partition limits use the binary's native integer width.
+For example:
+
+```sh
+dar scan /path/to/table --limit invalid --diagnostics=json
+```
+
+This exits 2 and reports `argument: "--limit"` with its unsigned decimal range.
+Unknown command and option names are omitted; the hint directs callers to
+`--help`. These details never include supplied values. Treat `hint` and
+`expected` as guidance; use `code`, `argument_kind`, and `recovery` for decisions.
+The same correction fields appear in text-mode argument errors.
+
 `recovery` uses `fix_input` for invalid input, `authorize` for unauthenticated
 sources, `request_access` for permission failures, `retry` for known transient
 I/O failures, or `change_request` for unsupported operations. Unclassified
