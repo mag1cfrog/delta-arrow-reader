@@ -134,6 +134,7 @@ PYTHONDONTWRITEBYTECODE=1 ../selective-read-oracle-venv/bin/python \
 Export the reader's complete output and validate it:
 
 ```sh
+cargo build --locked -p xtask
 PYTHONDONTWRITEBYTECODE=1 ../selective-read-oracle-venv/bin/python \
   benches/selective_read/runners/run.py \
   --binary ../selective-read-dar-build/selective-read-dar \
@@ -150,7 +151,10 @@ Use `li.shuffled.eq2-in20` with its own reference to check the paired layout.
 Development/report fixtures contain the frozen 20-value IN list;
 the smoke profile retains its documented shorter-list exception.
 
-The helper reads the saved SQL from the fixture manifest. The Rust and DuckDB
+The Python helper reads the saved SQL from the fixture manifest and calls the
+compiled Rust controller to launch the reader and record its exit and limits.
+Set `SELECTIVE_READ_XTASK` if the controller is outside the default target directory.
+The Rust and DuckDB
 executables register the selected snapshot as `bench` and execute that SQL.
 Polars translates the scan shape to native filter, projection, and limit
 expressions. No adapter supplies a preselected file list. The oracle verifies

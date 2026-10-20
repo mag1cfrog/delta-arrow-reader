@@ -30,14 +30,16 @@ use progress::{Progress, require};
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Launch {
-    command: Vec<String>,
-    payload: Value,
-    output: PathBuf,
-    stdout: PathBuf,
-    stderr: PathBuf,
-    env: Option<BTreeMap<String, String>>,
-    query_seconds: f64,
-    cleanup_seconds: f64,
+    pub(super) command: Vec<String>,
+    pub(super) payload: Value,
+    pub(super) output: PathBuf,
+    pub(super) stdout: PathBuf,
+    pub(super) stderr: PathBuf,
+    pub(super) env: Option<BTreeMap<String, String>>,
+    pub(super) query_seconds: f64,
+    pub(super) cleanup_seconds: f64,
+    #[serde(default)]
+    pub(super) export_limit: Option<u64>,
 }
 
 pub(super) fn monotonic_ns() -> io::Result<u64> {
@@ -149,6 +151,7 @@ pub(super) fn launch(input: Launch) -> Result<Value> {
     if let Some(environment) = &input.env {
         command.env_clear().envs(environment);
     }
+    super::invoke::apply_export_limit(&mut command, input.export_limit);
     let (read, write) = pipe_with(PipeFlags::CLOEXEC)?;
     ioctl_fionbio(&read, true)?;
     command

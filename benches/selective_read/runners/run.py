@@ -4,16 +4,12 @@ This is a single invocation, not a performance campaign or resource scheduler.
 """
 
 import argparse
-from contextlib import contextmanager
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
-import resource
-import subprocess
 import sys
-import time
 
 
 HERE = Path(__file__).resolve().parent
@@ -179,81 +175,13 @@ def check_result(record, output, fixtures, reference, payload):
                              "artifact_sha256": digest(output / "correctness.json")}
 
 
-@contextmanager
-def export_limit(payload, reference):
-    if payload.get("comparison_revision") not in (3, 4, 5, 6) or payload["purpose"] != "validation":
-        yield None
-        return
-    metadata = json.loads((reference / "reference.json").read_text())
-    if comparison_identity(metadata) != comparison_identity(payload):
-        raise ValueError("export/reference workload mismatch")
-    # Half the allowance holds every export in this session; the other half
-    # holds the reference and sort spill.
-    limit = (metadata["oracle_limits"]["disk_bytes"] - 8 * 1024**2) // (2 * query_count(payload))
-    if limit <= 0:
-        raise ValueError("insufficient validation export allowance")
-    previous = resource.getrlimit(resource.RLIMIT_FSIZE)
-    if previous[0] != resource.RLIM_INFINITY:
-        limit = min(limit, previous[0])
-    resource.setrlimit(resource.RLIMIT_FSIZE, (limit, previous[1]))
-    try:
-        yield limit
-    finally:
-        resource.setrlimit(resource.RLIMIT_FSIZE, previous)
-
-
 def invoke(binary, payload, output, fixtures=None, reference=None, *, env=None, command_prefix=(), supervised=False, defer_validation=False):
-    output.mkdir()
-    save(output / "request.json", payload)
-    supervision = None
-    with (output / "stdout.jsonl").open("x") as stdout, (output / "stderr.log").open("x") as stderr, export_limit(payload, reference) as export_bytes:
-        started = time.time_ns()
-        command = [*command_prefix, str(binary.resolve()), str((output / "request.json").resolve()), str((output / "reader").resolve())]
-        if supervised:
-            import supervise
-            supervision = supervise.launch(command, payload, output, stdout, stderr, env)
-            returncode = supervision["returncode"]
-            save(output / "process.json", supervision)
-        else:
-            returncode = subprocess.run(command, stdout=stdout, stderr=stderr, env=env).returncode
-        exited = time.time_ns()
-    record_path = output / "reader/record.json"
-    if record_path.exists():
-        try:
-            record = json.loads(record_path.read_text())
-            if not isinstance(record, dict) or not isinstance(record.get("status"), str):
-                raise ValueError("missing observation status")
-        except (ValueError, TypeError) as error:
-            record = {"status": "operational_failure", "failure_reason": "malformed reader record: " + str(error)}
-    else:
-        error = (output / "stderr.log").read_text()
-        try:
-            rejected = json.loads(error).get("status") == "invalid_input"
-        except (ValueError, AttributeError):
-            rejected = False
-        record = {"status": "invalid_input" if rejected else "operational_failure",
-                  "failure_reason": error or "reader exited without an observation record"}
-    if returncode and record["status"] == "success":
-        record["status"] = "operational_failure"
-        record["failure_reason"] = f"reader exited with status {returncode} after writing its record"
-    if export_bytes is not None:
-        record["validation_export_limit_bytes_per_file"] = export_bytes
-    if supervision:
-        record["supervision"] = supervision
-        if supervision["status"] != "success":
-            record.update(status=supervision["status"], failure_reason=supervision["failure_reason"])
-        if record["status"] == "success" and (supervision["last_phase"] != "cleanup" or
-                len(supervision["completed_queries"]) != query_count(payload)):
-            record.update(status="operational_failure", failure_reason="reader did not complete the watchdog lifecycle")
-        if type(record.get("cleanup_ns")) is int and record["cleanup_ns"] > supervision["cleanup_deadline_seconds"] * 10**9:
-            record.update(status="timeout", failure_reason="reported cleanup exceeded its deadline")
-        record.setdefault("queries", supervision["completed_queries"])
-        record.setdefault("external_metrics", {}).update({k: supervision[k] for k in (
-            "process_user_cpu_ns", "process_system_cpu_ns", "process_cpu_ns", "peak_rss_bytes", "process_elapsed_ns")})
-    if returncode == 0 and record["status"] == "success" and payload["purpose"] == "validation" and not defer_validation:
+    import native
+    record = native.call("invoke", {"binary": str(binary), "payload": payload, "output": str(output),
+        "reference": str(reference) if reference is not None else None, "env": env,
+        "command_prefix": list(command_prefix), "supervised": supervised, "protocols": str(PROTOCOL.parent)})
+    if record["status"] == "success" and payload["purpose"] == "validation" and not defer_validation:
         check_result(record, output, fixtures, reference, payload)
-    if payload["purpose"] in ("diagnostic", "io") or payload.get("validation_diagnostics"):
-        record["diagnostic_process"] = {"started_ns": started, "exited_ns": exited}
     save(output / "observation.json", record)
     return record
 

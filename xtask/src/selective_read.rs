@@ -1,4 +1,5 @@
 mod campaign;
+mod invoke;
 mod network;
 mod observe;
 mod report;
@@ -15,6 +16,8 @@ use crate::Result;
 pub(crate) enum Task {
     /// Supervise a reader process. Read the launch request as JSON from stdin.
     Supervise,
+    /// Invoke a reader and retain its process evidence. Read JSON from stdin.
+    Invoke,
     /// Schedule and summarize a campaign. Read the operation as JSON from stdin.
     Campaign,
     /// Operate the dedicated benchmark storage. Read the operation as JSON from stdin.
@@ -111,6 +114,7 @@ impl Task {
         let input: Value = serde_json::from_reader(std::io::stdin().lock())?;
         let result = match self {
             Self::Supervise => supervise::launch(serde_json::from_value(input)?)?,
+            Self::Invoke => invoke::run(&serde_json::from_value(input)?)?,
             Self::Campaign => campaign::run(serde_json::from_value(input)?)?,
             Self::Storage => storage::run(serde_json::from_value(input)?)?,
             Self::Observe => observe::run(serde_json::from_value(input)?)?,
