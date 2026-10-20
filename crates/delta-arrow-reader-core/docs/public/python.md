@@ -182,7 +182,8 @@ registration rules and errors.
 ## Process a larger result in batches
 
 When the result may be too large to keep in memory, iterate over the reader
-instead of calling `read_all()`:
+instead of calling `read_all()`. Use the
+[table you opened earlier](#read-your-first-rows):
 
 ```python
 with table.to_reader() as reader:
@@ -197,8 +198,9 @@ a SQL reader. The `with` block closes the reader even if you `break` early.
 
 ## Read again or use newer data
 
-Reuse `table` for later queries. It stays on the version it opened, even when
-another process adds data. To load the latest version:
+Reuse the [table you opened earlier](#read-your-first-rows) for later queries.
+It stays on the version it opened, even when another process adds data.
+To load the latest version:
 
 ```python
 latest = table.refresh()
