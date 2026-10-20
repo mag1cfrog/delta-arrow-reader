@@ -1,12 +1,12 @@
 //! Forward scoped core events to the application's Python logging configuration.
 //!
-//! `PythonLoggingLayer` asks the named logger whether an event is enabled, converts
-//! its fields, and calls `logger.log(level, message, extra=...)`. Python's logging
-//! module owns handlers, formatting, and output.
+//! `PythonLoggingLayer` selects reader events and passes them to `log`, which
+//! collects their fields and calls Python's `logger.log(level, message, extra=...)`.
+//! The `callbacks` module handles reentry and exceptions when Python code runs.
 //!
 //! Each binding operation or stream attaches a local `Dispatch` to its work.
-//! The `callbacks` module handles reentry and exceptions when Python code runs;
-//! helpers for binding-owned failure diagnostics live in `crate::diagnostics`.
+//! Python owns handlers, formatting, and output; helpers for binding-owned failure
+//! diagnostics live in `crate::diagnostics`.
 
 use std::{
     fmt,
@@ -89,35 +89,49 @@ impl<S: Subscriber> Layer<S> for PythonLoggingLayer {
         {
             return false;
         }
+        self.is_enabled(python_level(metadata.level()))
+    }
+
+    fn on_event(&self, event: &Event<'_>, _: Context<'_, S>) {
+        self.log(event);
+    }
+}
+
+impl PythonLoggingLayer {
+    fn is_enabled(&self, level: u8) -> bool {
         self.callbacks
             .invoke(|py| {
                 self.logger
                     .bind(py)
-                    .call_method1("isEnabledFor", (python_level(metadata.level()),))?
+                    .call_method1("isEnabledFor", (level,))?
                     .extract::<bool>()
             })
+            // A skipped or failed logging callback disables this event.
             .unwrap_or(false)
     }
 
-    fn on_event(&self, event: &Event<'_>, _: Context<'_, S>) {
+    fn log(&self, event: &Event<'_>) {
         self.callbacks.invoke(|py| {
-            let fields = PyDict::new(py);
-            event.record(&mut PythonFields {
-                values: fields.clone(),
-            });
+            let metadata = event.metadata();
+            // Rejected recursive calls must not evaluate or format event fields.
+            let mut fields = PythonFields {
+                values: PyDict::new(py),
+            };
+            event.record(&mut fields);
+            let fields = fields.values;
             let message = fields
                 .get_item("event")?
                 .or(fields.get_item("message")?)
-                .unwrap_or_else(|| PyString::new(py, event.metadata().target()).into_any());
-            // Python's `extra` argument adds these attributes to the LogRecord.
+                .unwrap_or_else(|| PyString::new(py, metadata.target()).into_any());
+            // Python's extra argument attaches these attributes to the LogRecord.
             let extra = PyDict::new(py);
             extra.set_item("dar_fields", fields)?;
-            extra.set_item("dar_target", event.metadata().target())?;
+            extra.set_item("dar_target", metadata.target())?;
             let kwargs = PyDict::new(py);
             kwargs.set_item("extra", extra)?;
             self.logger.bind(py).call_method(
                 "log",
-                (python_level(event.metadata().level()), message),
+                (python_level(metadata.level()), message),
                 Some(&kwargs),
             )?;
             Ok(())
