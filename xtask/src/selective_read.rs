@@ -93,6 +93,13 @@ pub(crate) enum Task {
     RunNumericPages(Box<experiment::batch::Numeric>),
     /// Compare Delta-length policies and preserve all validation and timing samples.
     RunDeltaLength(Box<experiment::batch::Length>),
+    /// Upload verified Delta-length experiment objects to the dedicated server.
+    UploadDeltaLength {
+        #[arg(long)]
+        state: PathBuf,
+        #[arg(long)]
+        fixture: PathBuf,
+    },
     /// Measure raw Zstd block discovery against complete column reads.
     ZstdProbe(zstd_probe::Args),
     /// Calibrate the 200 +/- 20 ms, 150 Mbit/s proxy against signed MinIO reads.
@@ -153,6 +160,10 @@ impl Task {
         match self {
             Self::PrepareReference(args) => return validation::cli::prepare(args),
             Self::CheckExport(args) => return validation::cli::check(args),
+            Self::UploadDeltaLength { state, fixture } => {
+                println!("{}", experiment::batch::upload_length(&state, &fixture)?);
+                return Ok(());
+            }
             Self::RunReader(args) => return invoke::controller::run(*args),
             Self::RunCampaign(args) => return campaign::controller::run(*args),
             Self::CheckReaders(args) => return checks::local(args),
@@ -296,6 +307,7 @@ impl Task {
             Self::ExecReader { .. }
             | Self::PrepareReference(_)
             | Self::CheckExport(_)
+            | Self::UploadDeltaLength { .. }
             | Self::RunReader(_)
             | Self::RunCampaign(_)
             | Self::CheckReaders(_)

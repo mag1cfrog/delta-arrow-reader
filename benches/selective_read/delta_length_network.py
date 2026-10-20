@@ -2,7 +2,6 @@
 
 import argparse
 import json
-import os
 from pathlib import Path
 import random
 import sys
@@ -13,8 +12,8 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
-import storage
-from storage import digest, save
+sys.path.insert(0, str(Path(__file__).resolve().parent / "runners"))
+from run import digest, save
 
 CASES = {"long": 16384, "short": 65536, "selected-long": 8192,
     "selected-long-batch": 65536, "length-heavy": 262144,
@@ -105,10 +104,6 @@ def generate(output, case, binary, compression="NONE"):
 
 
 if __name__ == "__main__":
-    if sys.argv[1:2] == ["run"]:
-        executable = storage.native.executable()
-        os.execv(executable, [str(executable), "selective-read", "run-delta-length", "--python", sys.executable,
-            "--harness", str(Path(__file__).resolve().parent), *sys.argv[2:]])
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     gen = commands.add_parser("generate")
@@ -116,6 +111,5 @@ if __name__ == "__main__":
     gen.add_argument("--compression", choices=("NONE", "zstd"), default="NONE")
     for name in ("output", "binary"):
         gen.add_argument("--" + name, type=lambda p: Path(p).resolve(), required=True)
-    commands.add_parser("run", help="run the native Delta-length experiment", add_help=False)
     args = parser.parse_args()
     generate(args.output, args.case, args.binary, args.compression)

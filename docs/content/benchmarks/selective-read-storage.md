@@ -56,7 +56,6 @@ the complete GET verification. ETags are not used as content checksums.
 The receipt records the requested method, actual verification counts and
 uploader source hash. The default standalone upload uses complete GETs.
 Inventory selection, upload and receipt creation run in Rust.
-The existing `storage.py upload` command forwards to `upload-storage`.
 
 To avoid hashing local files again in a separate campaign process, use the
 campaign's `--upload-table` option described in the
@@ -174,7 +173,7 @@ The focused HTTP check can run without MinIO:
 GOTOOLCHAIN=go1.24.7 go test -race -v \
   benches/selective_read/network_proxy.go \
   benches/selective_read/network_proxy_test.go
-python3 -B benches/selective_read/test_network.py
+cargo +1.94.1 test --locked -p xtask --bin xtask selective_read::network::
 ```
 
 Both checks are manual. This transport adds no CI job or performance threshold.

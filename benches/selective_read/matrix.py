@@ -1,9 +1,7 @@
 """Prepare and report the 30 retained public predicate/projection cases."""
 
 import argparse
-import hashlib
 import json
-import os
 from pathlib import Path
 import sys
 
@@ -13,10 +11,6 @@ from run import digest, load_adapter, save
 from python_common import require
 import native
 
-
-
-def sha(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
 def translations(binary, request, output):
@@ -40,18 +34,10 @@ def catalog():
 
 
 if __name__ == "__main__":
-    if sys.argv[1:2] in (["prepare"], ["report"]):
-        binary = str(native.executable())
-        command = [binary, "selective-read", sys.argv[1] + "-matrix", *sys.argv[2:], "--harness", str(HERE)]
-        if sys.argv[1] == "prepare":
-            command += ["--python", sys.executable]
-        os.execv(binary, command)
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     p = commands.add_parser("translations", help=argparse.SUPPRESS)
     for name in ("binary", "request", "output"):
         p.add_argument("--" + name, type=Path, required=True)
-    commands.add_parser("prepare")
-    commands.add_parser("report")
     args = parser.parse_args()
     translations(args.binary, args.request, args.output)

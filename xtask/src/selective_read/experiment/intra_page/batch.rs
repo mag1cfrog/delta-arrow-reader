@@ -1,5 +1,6 @@
 use super::*;
 use crate::{
+    artifacts::reader_sha256,
     selective_read::{
         array,
         campaign::evidence,
@@ -272,7 +273,7 @@ pub(in crate::selective_read) fn run(mut args: Args) -> Result<()> {
         &json!({
         "source_request_sha256":digest(&args.request)?, "request":request, "build":builds[modes[1]], "builds":builds,
         "primary_metric":if args.baseline_binary.is_some() { "first query after initialization" } else { "session or open query" },
-        "reference":metadata, "network":profile, "harness_sha256":digest(&args.harness.join("intra_page.py"))?,
+        "reference":metadata, "network":profile, "harness_sha256":reader_sha256(include_bytes!("batch.rs").as_slice())?,
         "validation_sha256":digest(&args.harness.join("controller_worker.py"))?, "controller_sha256":digest(&std::env::current_exe()?)?,
         "samples_per_mode":args.samples, "network_warmup":args.network_warmup, "no_warmup":args.no_warmup, "concurrent_queries":args.concurrent_queries,
         "modes":modes, "session":session, "order":(0..args.samples).map(|n| if n % 2 == 0 { modes } else { [modes[1],modes[0]] }).collect::<Vec<_>>(),

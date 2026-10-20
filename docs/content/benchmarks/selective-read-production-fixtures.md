@@ -239,7 +239,6 @@ definition requires Daft and the archived harness; the current generator accepts
 only revision 6.
 Rust freezes and validates the workload metadata. Polars expression translation
 still runs in the supplied adapter's pinned Python environment.
-The `production_workloads.py` command remains a forwarding entry point.
 
 The workload always lists all eight core cases and all five readers. Inputs not
 supplied to this freeze remain `not_prepared`. Use the paired probe directory

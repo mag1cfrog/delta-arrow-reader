@@ -1,6 +1,5 @@
 """Independent Arrow reads for the native file-organization controller."""
 
-import os
 from pathlib import Path
 import sys
 
@@ -28,13 +27,3 @@ def boundaries(table):
 
 def geometry(table, files):
     native.call("workload", {"action": "file-geometry", "table": boundaries(table), "files": files})
-
-
-if __name__ == "__main__":
-    if sys.argv[1:2] not in (["prepare"], ["report"]):
-        raise SystemExit("usage: file_organizations.py {prepare,report} --help")
-    binary = str(native.executable())
-    command = [binary, "selective-read", sys.argv[1] + "-files", *sys.argv[2:]]
-    if sys.argv[1] == "prepare":
-        command += ["--python", sys.executable, "--harness", str(HERE)]
-    os.execv(binary, command)

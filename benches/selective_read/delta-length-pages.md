@@ -220,27 +220,16 @@ MinIO server. This uses the existing upload verification without re-reading
 whole files when MinIO provides a full-object checksum:
 
 ```sh
-python - "$experiment_root/long" "$experiment_root/storage" <<'PY'
-import json
-import sys
-from pathlib import Path
-import storage
-fixture, state = map(Path, sys.argv[1:])
-manifest = json.loads((fixture / "manifest.json").read_text())
-prefix = storage.digest(fixture / "manifest.json")
-with storage.exclusive(state):
-    storage.verify_server(state)
-    for item in manifest["objects"]:
-        storage.put_verified(state, prefix + "/" + item["path"],
-            fixture / item["path"], item["sha256"], checksum=True)
-print(f"s3://{storage.BUCKET}/{prefix}/")
-PY
+cargo +1.98.1 run --manifest-path ../../Cargo.toml --locked -p xtask -- selective-read upload-delta-length \
+  --fixture "$experiment_root/long" --state "$experiment_root/storage"
 ```
 
-Use the printed URI as `table_uri`, with the paced proxy running:
+Use the printed `table_root` URI as `table_uri`, with the paced proxy running:
 
 ```sh
-python delta_length_network.py run --fixture "$experiment_root/long" \
+cargo +1.98.1 run --manifest-path ../../Cargo.toml --locked -p xtask -- selective-read run-delta-length \
+  --python /path/to/oracle-venv/bin/python --harness . \
+  --fixture "$experiment_root/long" \
   --state "$experiment_root/storage" --table "$table_uri" --selection scattered \
   --binary "$experiment_root/target/release/delta-length-query" \
   --output "$experiment_root/slow-long-scattered"

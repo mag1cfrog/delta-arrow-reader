@@ -2,7 +2,6 @@
 
 from datetime import date
 import json
-import os
 from pathlib import Path
 import platform
 import sys
@@ -17,7 +16,7 @@ import production_shapes as shapes
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
-from run import PROTOCOL, digest, fixture_tables, save
+from run import digest, fixture_tables, save
 from oracle import require
 
 PREDICATES = [("l_shipdate", "=", date(1995, 3, 15)), ("l_shipmode", "=", "AIR"),
@@ -25,22 +24,6 @@ PREDICATES = [("l_shipdate", "=", date(1995, 3, 15)), ("l_shipmode", "=", "AIR")
 _SOURCE_SCANS = {}
 _PHYSICAL_SCANS = {}
 _EXTRA_KEY_SCANS = {}
-
-
-def query_fields(case, manifest):
-    return native.call("workload", {"action": "query", "case": case, "manifest": manifest,
-                                    "protocols": str(PROTOCOL.parent)})
-
-
-def check_sampling(stage, cases, modes):
-    native.call("workload", {"action": "sampling", "stage": stage,
-                            "cases": sorted(cases), "modes": sorted(modes)})
-
-
-def define(fixtures, binaries, output, stage="pilot", comparison_revision=6):
-    return native.call("workload", {"action": "define", "fixtures": [str(p) for p in fixtures],
-        "binaries": [str(p) for p in binaries], "output": str(output), "stage": stage,
-        "comparison_revision": comparison_revision, "harness": str(HERE)})
 
 
 def load(path, value):
@@ -292,8 +275,3 @@ def prepare_reference(fixtures, case, output, workload, quota):
                 "native_expression_sha256": row["native_expression_sha256"], "projected_logical_bytes": projected_bytes[0]}
     save(output / "reference.json", metadata)
     return metadata
-
-
-if __name__ == "__main__":
-    executable = native.executable()
-    os.execv(executable, [str(executable), "selective-read", "freeze-workload", "--harness", str(HERE), *sys.argv[1:]])

@@ -128,14 +128,3 @@ def fixture_tables(manifest):
             raise ValueError("incomplete production writer")
         return manifest["writer"]["tables"]
     raise ValueError("unknown fixture manifest")
-
-
-def request(fixtures, case_id, execution_mode, purpose, run_id, table_uri=None, correctness=None, *, workload=None):
-    sys.path.insert(0, str(HERE.parent))
-    import large_workloads
-    import native
-    payload = native.call("reader-request", {"fixtures": str(fixtures), "case_id": case_id,
-        "execution_mode": execution_mode, "workload": str(workload) if workload else None,
-        "harness": str(large_workloads.HERE)})
-    return payload | {"purpose": purpose, "run_id": run_id, "table_uri": table_uri or payload["table_uri"],
-                      "correctness_file": str(correctness.resolve()) if correctness else None}

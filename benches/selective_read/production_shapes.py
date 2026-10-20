@@ -6,7 +6,6 @@ a campaign manifest or certify Parquet page geometry or reader performance.
 
 from datetime import date
 import json
-import os
 import sys
 from pathlib import Path
 import tempfile
@@ -99,9 +98,6 @@ def analyze(output):
 
 
 if __name__ == "__main__":
-    if sys.argv[1:2] == ["--analyze"]:
-        analyze(Path(sys.argv[2]))
-    else:
-        binary = str(native.executable())
-        os.execv(binary, [binary, "selective-read", "plan-production", *sys.argv[1:],
-                         "--python", sys.executable, "--harness", str(HERE)])
+    if sys.argv[1:2] != ["--analyze"]:
+        raise SystemExit("use xtask selective-read plan-production")
+    analyze(Path(sys.argv[2]))

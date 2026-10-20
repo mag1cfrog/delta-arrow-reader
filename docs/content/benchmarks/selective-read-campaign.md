@@ -18,8 +18,9 @@ the adapters, watchdog, certificates and report. This schedule does not run
 paired tracing-overhead experiments; report that estimate as unavailable.
 The revision 2 examples and historical schedules below remain reproducible.
 
-For Q2/Q4 revision 5, `production_workloads.py --stage formal` accepts one or
-more complete no-DV/DV pairs of full fixtures. Each pair shares a query shape
+For Q2/Q4, `xtask selective-read freeze-workload --stage formal` accepts one or
+more complete no-DV/DV pairs of full fixtures. New definitions use revision 6;
+revision 5 creation uses the archived harness. Each pair shares a query shape
 and layout. Prepare pairs in batches to stay within the disk budget.
 Probe fixtures and missing pair members are rejected.
 Formal jobs use five independent samples and two queries per reuse invocation.
@@ -42,15 +43,14 @@ generation and reference preparation must finish before timing starts.
 Build the [native controller](../../../benches/selective_read/README.md#reproduce-a-run)
 before starting the campaign. Its executable and Rust sources are recorded with
 the campaign inputs; each watchdog result also identifies the controller binary.
-The `campaign.py` entry point forwards its arguments and Python interpreter to
-`xtask selective-read run-campaign`. The native command accepts the same options
-plus `--python PATH` for the pinned oracle environment. Run it from the repository
+Run `xtask selective-read run-campaign` with `--python PATH` for the pinned
+oracle environment. Run it from the repository
 root, or pass `--harness PATH` to the `benches/selective_read` directory.
 
 Rust loads the frozen matrix or workload and binds each reader request to its
 fixture and query. Python runs in one persistent validation process outside
-the measured reader intervals. Its checksum and metadata caches survive across gates. The controller
-retains validation errors in the campaign artifacts and stops launching readers
+the measured reader intervals. Its checksum and metadata caches survive across
+gates. The controller retains validation errors in the campaign artifacts and stops launching readers
 if an invocation cannot prove cleanup.
 
 For the default compound-query smoke cases, prepare these references from the
@@ -68,7 +68,7 @@ done
 References contain complete expected values and independently evaluated file
 sets. They must match the fixture manifest, snapshot, SQL and frozen protocol.
 The upload receipt must belong to the current server and those same fixtures.
-An upload made with `storage.py upload --table` covers only its declared native
+An upload made with `xtask selective-read upload-storage --table` covers only its declared native
 tables. Select the corresponding query with `--case`; its reuse session is
 included by default when using a production workload. Jobs whose tables are
 absent from the upload remain `preparation_failed` and launch no readers.
@@ -92,7 +92,8 @@ method per campaign. Keep the receipt and complete run history with the results.
 ## Run the smoke campaign
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/campaign.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read run-campaign \
+  --python ../selective-read-oracle-venv/bin/python \
   --state ../selective-read-storage --fixtures ../selective-read-smoke \
   --upload ../selective-read-upload.json --output ../campaign-smoke-001 \
   --binary ../selective-read-dar-build/selective-read-dar \

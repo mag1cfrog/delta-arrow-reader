@@ -63,6 +63,59 @@ fn verify(root: &Path, item: &Value) -> Result<()> {
     require(item["sha256"] == digest(&path)?, "fixture object changed")
 }
 
+fn length_objects(root: &Path, manifest: &Value) -> Result<Vec<PathBuf>> {
+    require(
+        manifest["format"] == "delta-length-network-v1",
+        "unknown Delta-length fixture",
+    )?;
+    let mut seen = std::collections::BTreeSet::new();
+    array(&manifest["objects"])?
+        .iter()
+        .map(|item| {
+            let relative = Path::new(text(&item["path"])?);
+            require(
+                !relative.as_os_str().is_empty()
+                    && relative
+                        .components()
+                        .all(|c| matches!(c, std::path::Component::Normal(_)))
+                    && seen.insert(relative),
+                "invalid or duplicate fixture object path",
+            )?;
+            verify(root, item)?;
+            let path = root.join(relative);
+            require(
+                item["bytes"] == fs::metadata(&path)?.len(),
+                "fixture object size changed",
+            )?;
+            Ok(path)
+        })
+        .collect()
+}
+
+pub(crate) fn upload_length(state: &Path, fixture: &Path) -> Result<Value> {
+    let fixture = fs::canonicalize(fixture)?;
+    let path = fixture.join("manifest.json");
+    let manifest = storage::read_json(&path)?;
+    let prefix = digest(&path)?;
+    let objects = length_objects(&fixture, &manifest)?;
+    let _lock = storage::exclusive(state)?;
+    storage::verify_server(state)?;
+    for (item, source) in array(&manifest["objects"])?.iter().zip(&objects) {
+        storage::put_verified(
+            state,
+            &format!("{prefix}/{}", text(&item["path"])?),
+            source,
+            text(&item["sha256"])?,
+            true,
+        )?;
+    }
+    require(
+        digest(&path)? == prefix,
+        "fixture manifest changed during upload",
+    )?;
+    Ok(json!({"table_root":format!("s3://{}/{prefix}/",storage::BUCKET),"objects":objects.len()}))
+}
+
 fn read_expected(
     worker: &mut Worker,
     args: &Common,
@@ -378,6 +431,33 @@ pub(in crate::selective_read) fn length(mut args: Length) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn delta_length_uploads_verify_all_objects_before_storage_access() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let root = temporary.path();
+        fs::write(root.join("part"), "fixture")?;
+        let item = json!({"path":"part","bytes":7,"sha256":digest(&root.join("part"))?});
+        let mut manifest = json!({"format":"delta-length-network-v1","objects":[item]});
+        assert_eq!(length_objects(root, &manifest)?, [root.join("part")]);
+        manifest["objects"] = json!([item, item]);
+        assert!(length_objects(root, &manifest).is_err());
+        for change in [
+            json!({"path":"../outside"}),
+            json!({"bytes":8}),
+            json!({"sha256":"0".repeat(64)}),
+        ] {
+            let mut bad = item.clone();
+            bad.as_object_mut()
+                .unwrap()
+                .extend(change.as_object().unwrap().clone());
+            manifest["objects"] = json!([bad]);
+            assert!(length_objects(root, &manifest).is_err());
+        }
+        manifest["format"] = json!("unknown");
+        assert!(length_objects(root, &manifest).is_err());
+        Ok(())
+    }
 
     #[test]
     fn typed_experiments_require_both_queries_and_exclude_validation_from_medians() -> Result<()> {

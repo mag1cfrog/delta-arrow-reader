@@ -76,11 +76,12 @@ the [dedicated MinIO server](selective-read-storage.md). Finish preparation and
 compilation before the timing campaign:
 
 ```sh
-python3 -B benches/selective_read/storage.py upload \
+cargo +1.98.1 run --locked -p xtask -- selective-read upload-storage \
   --state ../selective-read-storage --fixtures ../selective-read-controls \
   --output ../selective-read-controls-upload.json
 
-../selective-read-oracle-venv/bin/python -B benches/selective_read/campaign.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read run-campaign \
+  --python ../selective-read-oracle-venv/bin/python \
   --state ../selective-read-storage --fixtures ../selective-read-controls \
   --upload ../selective-read-controls-upload.json \
   --output ../selective-read-controls-campaign \

@@ -3,7 +3,6 @@
 import argparse
 from array import array
 import json
-import os
 from pathlib import Path
 import random
 import sys
@@ -12,8 +11,8 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
-import storage
-from storage import digest, save
+sys.path.insert(0, str(Path(__file__).resolve().parent / "runners"))
+from run import digest, save
 
 TYPES = {"int32": pa.int32(), "int64": pa.int64(), "float": pa.float32(), "double": pa.float64()}
 DECIMAL_TYPES = {"decimal20": pa.decimal128(20, 4), "decimal38": pa.decimal128(38, 10)}
@@ -88,15 +87,10 @@ def check(actual, expected):
 
 
 if __name__ == "__main__":
-    if sys.argv[1:2] == ["run"]:
-        executable = storage.native.executable()
-        os.execv(executable, [str(executable), "selective-read", "run-numeric-pages", "--python", sys.executable,
-            "--harness", str(Path(__file__).resolve().parent), *sys.argv[2:]])
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     generate_args = commands.add_parser("generate")
     generate_args.add_argument("--output", type=Path, required=True)
     generate_args.add_argument("--decimals", action="store_true", help="generate fixed-length decimal columns instead of the original numeric fixture")
-    commands.add_parser("run", help="run the native numeric experiment", add_help=False)
     args = parser.parse_args()
     generate(args.output, args.decimals)

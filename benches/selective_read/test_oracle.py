@@ -163,7 +163,6 @@ class OracleTests(unittest.TestCase):
 
     def test_large_query_identity_boundaries_and_exact_values(self):
         import large_workloads as large
-        import matrix
         from runners import run, python_common
         predicates = oracle.conditions("date30", [])
         for day, matches in ((date(1995, 2, 28), False), (date(1995, 3, 1), True),
@@ -222,10 +221,10 @@ class OracleTests(unittest.TestCase):
                 variant["queries"] = {f"wide.{layout}.date30-wide.dv": oracle.sql_for(oracle.WIDE69, "date30", None, [1])}
                 manifest["tables"].append(variant)
             write_json(fixtures / "manifest.json", manifest)
-            expressions = {case: {"native_expression": "unit", "sha256": matrix.sha("unit")} for case in large.definitions()}
+            expressions = {case: {"native_expression": "unit", "sha256": python_common.json_hash("unit")} for case in large.definitions()}
             cases = [large.query_fields(case, manifest) | {"fixtures": str(fixtures),
                      "fixture_manifest_sha256": run.digest(fixtures / "manifest.json"),
-                     "native_expression_sha256": dict.fromkeys(("polars", "daft"), matrix.sha("unit"))}
+                     "native_expression_sha256": dict.fromkeys(("polars", "daft"), python_common.json_hash("unit"))}
                      for case in large.definitions()]
             value = {"format": "selective-read-large-workload-v1", "comparison_revision": 4,
                      "protocol_sha256": run.digest(run.AMENDMENT), "base_protocol_sha256": run.digest(run.PROTOCOL),
@@ -248,7 +247,8 @@ class OracleTests(unittest.TestCase):
             for case in ("large.wide.clustered.date30-wide", "large.wide.shuffled.date7-wide", "scale-control.wide.clustered.eq2-in20"):
                 reference = root / case
                 metadata = oracle.prepare(fixtures, case, reference, workload=workload)
-                request = run.request(fixtures, case, "reuse", "validation", "unit", workload=workload)
+                request = native.call("reader-request", {"fixtures":str(fixtures), "case_id":case,
+                    "execution_mode":"reuse", "workload":str(workload), "harness":str(large.HERE)})
                 python_common.validate(request)
                 self.assertEqual(run.query_count(request), 2)
                 self.assertEqual(run.comparison_identity(request), run.comparison_identity(metadata))
@@ -306,7 +306,8 @@ class OracleTests(unittest.TestCase):
             self.assertEqual(len(large.load(workload)["cases"]), 1)
             metadata = oracle.prepare(fixtures, anchor, root / "pilot-reference", workload=workload)
             self.assertEqual(metadata["output_rows"], 144)
-            request = run.request(fixtures, anchor, "reuse", "validation", "pilot", workload=workload)
+            request = native.call("reader-request", {"fixtures":str(fixtures), "case_id":anchor,
+                "execution_mode":"reuse", "workload":str(workload), "harness":str(large.HERE)})
             python_common.validate(request)
             self.assertEqual(run.comparison_identity(request), run.comparison_identity(metadata))
             for change in ({"family": "data"}, {"scope": "candidate"}, {"publication_ready": True},
@@ -395,7 +396,8 @@ class OracleTests(unittest.TestCase):
                 tables.append(dict(id=fixture, path=fixture, snapshot_version=0, deletion_vectors=False, queries={case: sql}))
             write_json(root / "manifest.json", dict(status="complete", protocol="selective-read-v1", profile="smoke", tables=tables, sources=[]))
             for case, fixture in oracle.CONTROL_CASES.items():
-                request = run.request(root, case, "open", "validation", "check")
+                request = native.call("reader-request", {"fixtures":str(root), "case_id":case,
+                    "execution_mode":"open", "workload":None, "harness":str(Path(oracle.__file__).parent)})
                 self.assertEqual(request["table_uri"], (root / fixture).as_uri())
                 self.assertEqual(request["canonical_sql"], oracle.case_input(root, case)[-1])
         row = oracle.control_record(0)

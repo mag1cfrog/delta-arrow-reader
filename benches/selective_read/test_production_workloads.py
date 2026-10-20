@@ -10,7 +10,6 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 import production_workloads as production
-import campaign
 import run
 
 
@@ -59,13 +58,8 @@ class ProductionContract(unittest.TestCase):
         for change in ({"comparison_revision": 4}, {"sampling_stage": None}, {"sampling_sha256": "0" * 64}):
             with self.assertRaises(ValueError):
                 run.comparison_identity(identity | change)
-        inventory = {"production.q4.localized": {r: {"runnable": True} for r in campaign.READERS}}
-        for stage, expected in (("pilot", 2), ("formal", 5)):
-            slots = campaign.schedule(inventory, "check", identity | {"sampling_stage": stage})
-            for reader in campaign.READERS:
-                self.assertEqual(sum(s["reader_id"] == reader and s["stage"] == "timing" for s in slots), expected)
-                self.assertEqual(sum(s["reader_id"] == reader and s["stage"] == "warmup" for s in slots), 1)
-            self.assertEqual(run.query_count(identity | {"execution_mode": "reuse"}), 2)
+        for stage in ("pilot", "formal"):
+            self.assertEqual(run.query_count(identity | {"sampling_stage": stage, "execution_mode": "reuse"}), 2)
         self.assertEqual(run.query_count({"comparison_revision": 3, "execution_mode": "reuse"}), 10)
         with self.assertRaises(ValueError):
             run.fixture_tables({"status": "preparing", "protocol": "selective-read-production-fixtures-v1"})

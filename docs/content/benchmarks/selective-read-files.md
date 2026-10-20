@@ -88,11 +88,12 @@ current checkout and start the [pinned MinIO server](selective-read-storage.md).
 Upload this fixture directory once:
 
 ```sh
-python3 -B benches/selective_read/storage.py upload \
+cargo +1.98.1 run --locked -p xtask -- selective-read upload-storage \
   --state ../selective-read-storage --fixtures ../selective-read-files \
   --output ../selective-read-files-upload.json
 
-../selective-read-oracle-venv/bin/python -B benches/selective_read/campaign.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read run-campaign \
+  --python ../selective-read-oracle-venv/bin/python \
   --state ../selective-read-storage --fixtures ../selective-read-files \
   --upload ../selective-read-files-upload.json \
   --output ../selective-read-files-campaign \
@@ -253,7 +254,7 @@ feasibility and the final publication manifest are selected in
 [#345](https://github.com/mag1cfrog/delta-arrow-reader/issues/345).
 
 Upload the prepared tables with the existing storage command. Supply all five
-binaries and all four references to `campaign.py`, together with
+binaries and all four references to `xtask selective-read run-campaign`, together with
 `--workload ../wide-files-workload/workload.json`. Without case overrides it
 selects all four cases and both new reuse profiles. Use `--no-sessions` and
 the two explicit legacy case/reference arguments for a revision 2 campaign.

@@ -71,19 +71,14 @@ offset/size/cardinality, payload hashes, density, and file coverage.
 Use the [pinned oracle environment](selective-read-oracle.md):
 
 ```sh
-../selective-read-oracle-venv/bin/python -B - <<'PY'
-from pathlib import Path
-import sys
-sys.path.insert(0, "benches/selective_read")
-import oracle
-
-cases = (*oracle.DV_CASES, *(c + ".dv" for c in oracle.DV_CASES),
-         "row-groups.select.feature-only")
-for case in cases:
-    print(case, flush=True)
-    oracle.prepare(Path("../selective-read-dv"), case,
-                   Path("../selective-read-dv-references") / case)
-PY
+set -- --case row-groups.select.feature-only
+for base in li.clustered.date7-full li.shuffled.date7-full wide.clustered.eq2-in20 \
+  li.clustered.date7-limit row-groups.select pages.localized; do
+  set -- "$@" --case "$base" --case "$base.dv"
+done
+cargo +1.98.1 run --locked -p xtask -- selective-read prepare-reference \
+  --python ../selective-read-oracle-venv/bin/python --fixtures ../selective-read-dv \
+  --output ../selective-read-dv-references "$@"
 ```
 
 The oracle checks the versioned logs, protocol, metadata, unchanged Parquet
@@ -104,28 +99,25 @@ Prepare the [five builds](selective-read-runners.md), start
 [dedicated MinIO](selective-read-storage.md), and upload the complete fixture:
 
 ```sh
-python3 -B benches/selective_read/storage.py upload \
+cargo +1.98.1 run --locked -p xtask -- selective-read upload-storage \
   --state ../selective-read-storage --fixtures ../selective-read-dv \
   --output ../selective-read-dv-upload.json
 
-../selective-read-oracle-venv/bin/python -B - <<'PY'
-import subprocess
-import sys
-sys.path.insert(0, "benches/selective_read")
-import oracle
-
-command = [sys.executable, "-B", "benches/selective_read/campaign.py",
-           "--state", "../selective-read-storage",
-           "--fixtures", "../selective-read-dv",
-           "--upload", "../selective-read-dv-upload.json",
-           "--output", "../selective-read-dv-campaign", "--no-sessions"]
-for reader in ("dar", "delta-rs", "duckdb", "polars", "daft"):
-    command += ["--binary", f"../selective-read-{reader}-build/selective-read-{reader}"]
-for case in (*oracle.DV_CASES, *(c + ".dv" for c in oracle.DV_CASES),
-             "row-groups.select.feature-only"):
-    command += ["--case", case, "--reference", f"../selective-read-dv-references/{case}"]
-subprocess.run(command, check=True)
-PY
+set -- --state ../selective-read-storage --fixtures ../selective-read-dv \
+  --upload ../selective-read-dv-upload.json --output ../selective-read-dv-campaign \
+  --python ../selective-read-oracle-venv/bin/python --no-sessions
+for reader in dar delta-rs duckdb polars daft; do
+  set -- "$@" --binary "../selective-read-$reader-build/selective-read-$reader"
+done
+for base in li.clustered.date7-full li.shuffled.date7-full wide.clustered.eq2-in20 \
+  li.clustered.date7-limit row-groups.select pages.localized; do
+  for case in "$base" "$base.dv"; do
+    set -- "$@" --case "$case" --reference "../selective-read-dv-references/$case"
+  done
+done
+cargo +1.98.1 run --locked -p xtask -- selective-read run-campaign "$@" \
+  --case row-groups.select.feature-only \
+  --reference ../selective-read-dv-references/row-groups.select.feature-only
 ```
 
 Finish generation, reference checks, and compilation before timing. The

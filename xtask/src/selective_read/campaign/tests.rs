@@ -189,3 +189,36 @@ fn incompatible_rosters_and_inconsistent_diagnostic_modes_are_rejected() -> Resu
     );
     Ok(())
 }
+
+#[test]
+fn production_stages_keep_each_reader_sample_count_and_one_warmup() -> Result<()> {
+    for revision in [5, 6] {
+        for (stage, expected) in [("pilot", 2), ("formal", 5)] {
+            let jobs = inventory(revision, 31);
+            let slots = schedule(
+                &jobs,
+                "check",
+                &json!({"comparison_revision":revision,"sampling_stage":stage}),
+                None,
+                None,
+                None,
+            )?;
+            for (job, _) in &jobs {
+                for reader in roster(&json!({"comparison_revision":revision}))? {
+                    for (phase, count) in [("timing", expected), ("warmup", 1)] {
+                        assert_eq!(
+                            array(&slots)?
+                                .iter()
+                                .filter(|s| s["job_id"] == *job
+                                    && s["reader_id"] == reader
+                                    && s["stage"] == phase)
+                                .count(),
+                            count
+                        );
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}

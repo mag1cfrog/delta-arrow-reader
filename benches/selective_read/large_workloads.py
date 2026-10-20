@@ -6,7 +6,7 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
-from run import PROTOCOL, comparison_identity, digest
+from run import comparison_identity, digest
 import native
 
 READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft")

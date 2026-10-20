@@ -241,7 +241,6 @@ fn source_hashes(args: &Args, config: &Value, protocols: &Path) -> Result<Value>
         .and_then(Path::parent)
         .ok_or("invalid harness directory")?;
     let mut sources: Vec<_> = [
-        "campaign.py",
         "controller_worker.py",
         "oracle.py",
         "runners/run.py",

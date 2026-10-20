@@ -17,7 +17,8 @@ Run commands from the repository root and keep generated tables outside Git.
 The recorded runs use pinned inputs, reader builds, and execution contracts.
 Follow the version and hash requirements in each guide.
 
-Build the native controller before running the Python orchestration or its tests:
+Build the native controller before preparing references, running readers or
+checking the independent Python oracle:
 
 ```sh
 cargo build --locked -p xtask

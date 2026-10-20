@@ -150,8 +150,7 @@ request and its independently generated reference output. It does not run in CI
 or update the published five-reader results.
 Rust runs the validation gates, alternating samples and statistics, and supervises
 each invocation. A persistent Python process compares the exported Arrow values
-with the independent reference. The `intra_page.py` entry point forwards to the
-native command with its current Python interpreter.
+with the independent reference. Pass its pinned interpreter with `--python`.
 
 Build the [DAR runner](selective-read-runners.md), then prepare the original
 table and [MinIO network proxy](selective-read-storage.md). Use the Python

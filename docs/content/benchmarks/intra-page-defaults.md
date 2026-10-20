@@ -93,7 +93,7 @@ To select these defaults in the [DAR runner](selective-read-runners.md), set
 `DAR_INTRA_PAGE_READS=default` and `DAR_NETWORK_WARMUP=default`. The ordinary
 control uses `off` for both with a retained `execution_mode="reuse"` request.
 The runner records the resolved provider settings. Its other benchmark tuning
-remains unchanged, and the existing `intra_page.py` comparison still uses
+remains unchanged, and the existing `xtask selective-read run-intra-page` comparison still uses
 explicit modes. The acceptance driver selected the two new environment values
 before invoking that harness.
 

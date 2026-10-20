@@ -78,7 +78,8 @@ fail preparation. A failed case remains in `matrix.json` with its reason.
 Start MinIO and upload these same fixtures using the storage guide, then run:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/campaign.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read run-campaign \
+  --python ../selective-read-oracle-venv/bin/python \
   --state ../selective-read-storage --fixtures ../selective-read-smoke \
   --upload ../selective-read-upload.json --matrix ../matrix-smoke/matrix.json \
   --binary ../selective-read-dar-build/selective-read-dar \
@@ -106,7 +107,7 @@ MinIO service when finished. All commands here are manual; they add no CI work.
 ## Read the report
 
 Build the controller with `cargo build --locked -p xtask` before exporting.
-The Python entry point checks the independent query references, then Rust
+The Rust controller checks the independent query references, then
 audits the campaign and writes the JSON and CSV reports.
 
 `matrix-report.json` and `matrix-report.csv` retain 150 entries, including
