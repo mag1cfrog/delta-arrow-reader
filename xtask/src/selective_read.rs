@@ -1,4 +1,5 @@
 mod campaign;
+mod checks;
 mod experiment;
 mod invoke;
 mod network;
@@ -27,6 +28,8 @@ pub(crate) enum Task {
     Campaign,
     /// Execute a frozen campaign, using Python only for independent data validation.
     RunCampaign(Box<campaign::controller::Args>),
+    /// Check real local readers, correctness gates, clocks and failure propagation.
+    CheckReaders(checks::Args),
     /// Upload a verified fixture snapshot and save its immutable receipt.
     UploadStorage(storage::upload::Args),
     /// Operate the dedicated benchmark storage. Read the operation as JSON from stdin.
@@ -128,6 +131,7 @@ impl Task {
     pub(crate) fn run(self) -> Result<()> {
         match self {
             Self::RunCampaign(args) => return campaign::controller::run(*args),
+            Self::CheckReaders(args) => return checks::local(args),
             Self::ProductionFixtures(args) => return workload::fixtures::run(*args),
             Self::PlanProduction(args) => return workload::planner::run(args),
             Self::PrepareMatrix(args) => {
@@ -227,6 +231,7 @@ impl Task {
             Self::IntraPage => experiment::intra_page::run(serde_json::from_value(input)?)?,
             Self::ExecReader { .. }
             | Self::RunCampaign(_)
+            | Self::CheckReaders(_)
             | Self::RunIntraPage(_)
             | Self::FreezeWorkload(_)
             | Self::ProductionFixtures(_)

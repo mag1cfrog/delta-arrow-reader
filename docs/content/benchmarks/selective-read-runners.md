@@ -360,11 +360,12 @@ process exit. Polars' `cleanup_ns` covers object release, not process teardown.
 
 ## Check the adapters
 
-Run the bounded contract check with actual public smoke fixtures:
+Build the controller with `cargo build --locked -p xtask`, then run the contract
+check with actual public smoke fixtures:
 
 ```sh
-PYTHONDONTWRITEBYTECODE=1 ../selective-read-oracle-venv/bin/python \
-  benches/selective_read/runners/check.py \
+target/debug/xtask selective-read check-readers \
+  --python ../selective-read-oracle-venv/bin/python \
   --binary ../selective-read-dar-build/selective-read-dar \
   --binary ../selective-read-delta-rs-build/selective-read-delta-rs \
   --fixtures ../selective-read-smoke --output ../reader-contract-check
