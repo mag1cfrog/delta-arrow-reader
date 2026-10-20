@@ -1,3 +1,6 @@
+//! Container validation workflow permissions and artifact identity checks.
+
+#![allow(clippy::unwrap_used)]
 #![cfg(unix)]
 
 use std::{collections::BTreeMap, error::Error, fs, process::Command};

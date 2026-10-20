@@ -6,7 +6,7 @@ use std::{
 
 use flate2::read::DeflateDecoder;
 use rawzip::{CompressionMethod, ZipArchive};
-use snafu::{ResultExt, ensure};
+use snafu::{OptionExt, ResultExt, ensure};
 
 use crate::{
     artifacts,
@@ -41,19 +41,18 @@ pub(super) fn extract_artifact(
     while let Some(entry) = entries.next_entry().context(ArtifactZipSnafu)? {
         let position = remaining
             .iter()
-            .position(|name| name.as_bytes() == entry.file_path().as_bytes());
-        ensure!(
-            position.is_some()
-                && matches!(entry.mode().value() & 0o170000, 0 | 0o100000)
-                && !entry.flags().is_encrypted(),
-            InvalidInputSnafu {
+            .position(|name| name.as_bytes() == entry.file_path().as_bytes())
+            .filter(|_| {
+                matches!(entry.mode().value() & 0o170000, 0 | 0o100000)
+                    && !entry.flags().is_encrypted()
+            })
+            .context(InvalidInputSnafu {
                 message: format!(
                     "artifact {} ZIP has an unexpected, duplicate, encrypted, or non-regular entry",
                     artifact.id
                 ),
-            }
-        );
-        let name = remaining.remove(position.unwrap());
+            })?;
+        let name = remaining.remove(position);
         let local = archive
             .get_entry(entry.wayfinder())
             .context(ArtifactZipSnafu)?;

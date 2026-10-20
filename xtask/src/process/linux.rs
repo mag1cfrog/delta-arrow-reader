@@ -8,7 +8,7 @@ use std::{
 };
 
 use serde_json::{Value, json};
-use snafu::{ResultExt, ensure};
+use snafu::{OptionExt, ResultExt, ensure};
 
 use crate::{
     command::{output_with_timeout, run_with_timeout},
@@ -320,7 +320,9 @@ impl ProcessFixture<'_> {
             run_cli(
                 self.command()
                     .args(["inspect", "--"])
-                    .arg(table.file_name().unwrap()),
+                    .arg(table.file_name().context(InvalidInputSnafu {
+                        message: "table fixture path must have a name",
+                    })?),
             )?,
             run_cli(self.command().arg("inspect").arg(file_url(&table)?))?,
             run_cli(

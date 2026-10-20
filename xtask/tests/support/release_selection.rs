@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use crate::support::{Result, write_zip};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};

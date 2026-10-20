@@ -1,3 +1,5 @@
+//! Release note updates and publication state validation.
+
 #![cfg(target_os = "linux")]
 
 use std::{fs, os::unix::fs::PermissionsExt, path::Path, process::Command};

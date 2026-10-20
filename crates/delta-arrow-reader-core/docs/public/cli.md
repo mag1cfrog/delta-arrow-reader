@@ -9,6 +9,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | Save selected rows as Arrow | [`dar scan`](#scan-rows) |
 | Select rows by a condition | [Filter rows](#filter-rows) |
 | Connect to remote storage | [Storage options file](#storage-options-file) |
+| Inspect a Unity Catalog table by name | [Databricks profile](#inspect-a-unity-catalog-table) |
 | Change parallel reads or buffering | [Execution options](#execution-options) |
 | Handle a command's result in a script | [Inspection JSON](#inspection-json) and [exit statuses](#exit-statuses-for-scripts) |
 
@@ -19,8 +20,10 @@ For packages and runtime requirements, see [Installation](installation.md).
 ## Inspect a snapshot
 
 `inspect` returns the table version and column schema as JSON. It reads Delta
-metadata without reading row data or deletion-vector files. A table whose scan
-protocol is unsupported can still be inspected if its snapshot and schema load.
+metadata without reading row data or deletion-vector files. For a direct path or
+storage URL, a table whose scan protocol is unsupported can still be inspected
+if its snapshot and schema load. Unity Catalog targets require a supported read
+protocol.
 
 ```sh
 dar inspect /data/orders
@@ -35,13 +38,14 @@ spaces; each must arrive as one command-line argument. `--` ends option
 parsing and allows a table name beginning with `-`.
 
 ```text
-dar inspect [--table-version N] [--storage-options-file PATH] [--] TABLE
+dar inspect [--table-version N] [--storage-options-file PATH]
+            [--databricks-profile PROFILE] [--] TABLE
 ```
 
 <details markdown="1">
 <summary>Version bounds and argument parsing</summary>
 
-Both options may appear once. Omit `--table-version` to select the latest
+Each option may appear once. Omit `--table-version` to select the latest
 snapshot, or pass unsigned decimal digits from `0` through
 `18446744073709551615`. Signs, whitespace, fractions, exponents, and overflow
 are rejected. Missing values, unknown options, and extra arguments are errors.
@@ -55,6 +59,84 @@ requested version. Kernel validates the commits and checkpoints in that listing.
 Discovery does not search numeric version gaps.
 
 </details>
+
+## Inspect a Unity Catalog table
+
+Use an existing Databricks CLI workspace profile to resolve a table name and
+obtain temporary cloud credentials. DAR then reads the Delta log directly from
+S3, Azure, or R2 on your machine. It returns the snapshot's schema and version;
+Unity Catalog column metadata does not determine the output schema. This
+command does not submit SQL or start a cluster or SQL warehouse.
+
+```sh
+dar inspect uc://main.sales.orders --databricks-profile work
+dar inspect uc://main.sales.orders --databricks-profile work --table-version 0
+```
+
+Install the Databricks CLI in the same environment as DAR and make it available
+on `PATH`. DAR binaries, wheels, and images do not bundle it. The required
+commands and flags were checked with Databricks CLI 1.6.0; earlier versions and
+live workspace compatibility have not been validated. The CLI must support
+`tables get --include-manifest-capabilities` and
+`temporary-table-credentials generate-temporary-table-credentials --operation READ`.
+It handles the selected profile's PAT, user OAuth, or service-principal OAuth
+authentication. DAR does not start a login flow or read the CLI's token cache.
+
+An administrator must enable external data access on the metastore. The
+requesting principal needs `USE CATALOG`, `USE SCHEMA`, `SELECT`, and explicit
+`EXTERNAL USE SCHEMA`. Both the workspace and storage endpoint must be reachable.
+See [Databricks external access setup](https://docs.databricks.com/aws/en/external-access/admin).
+Selecting a profile does not grant additional permissions.
+
+For S3, supply the bucket's region through the existing storage options file.
+The credential response does not include it, and DAR does not assume a default:
+
+```json
+{"aws_region": "eu-west-1"}
+```
+
+```sh
+dar inspect uc://main.sales.orders --databricks-profile work \
+  --storage-options-file ./storage.json
+```
+
+These rules apply to Unity Catalog targets:
+
+- Use exactly three unquoted name components, separated by dots. Each component
+  contains ASCII letters, digits, underscores, or hyphens and cannot start with
+  a hyphen. Quoted identifiers, URL escapes, query strings, and fragments are
+  unsupported. The profile must be explicit and nonempty. Quote profile names
+  containing spaces. `--databricks-profile` is invalid for direct paths or URLs.
+- Only ordinary managed or external Delta tables with a supported read
+  protocol are admitted. Views, pipeline tables, shallow clones, row filters,
+  column masks, catalog commits (`catalogManaged`), and coordinated commits
+  are unsupported. Authorization failures never fall back to cloud credentials
+  from the environment.
+- Supported credentials are S3/R2 temporary key/secret/session-token credentials
+  and Azure user-delegation SAS or Azure AD bearer tokens. Azure locations must
+  identify the account and container using `abfss://` or an Azure Blob/DFS HTTPS
+  URL. R2 locations use `r2://bucket@account.r2.cloudflarestorage.com/path`
+  or the equivalent `https://account.r2.cloudflarestorage.com/bucket/path`.
+  Other credential types, S3 access points, and other Azure/R2 endpoints are
+  unsupported.
+- Storage options may supply supported region and transport settings, including
+  endpoints, timeouts, and proxies. Credential, bucket, account, container,
+  authentication-source, and unsigned-access overrides are rejected, including
+  their aliases. S3 needs one nonempty region setting. R2 uses `auto` and needs
+  no region option; an explicit region must be `auto`. To override the R2
+  transport endpoint, use `aws_endpoint_url_s3`; the generic endpoint option
+  is rejected because the R2 URL would override it. Unknown options fail.
+- Credentials remain in memory and are acquired once. If they expire while
+  metadata is loading, the command fails; rerun it for fresh credentials.
+  `scan` does not yet accept Unity Catalog targets.
+
+Each Databricks subprocess has a 30-second timeout, no interactive stdin, and
+a 1 MiB limit on each output stream. DAR captures and discards child diagnostics
+instead of forwarding them. Errors use tracing diagnostics on stderr with fixed
+messages that omit profile names, table names, storage URLs, and credentials.
+See [Errors and process status](#errors-and-process-status) for output and
+filtering rules. Check the selected profile's login and permissions separately
+when a metadata or credential request fails.
 
 ## Scan rows
 

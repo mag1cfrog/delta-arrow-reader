@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use snafu::{ResultExt, ensure};
+use snafu::{OptionExt, ResultExt, ensure};
 
 use super::TestImageArgs;
 use crate::{
@@ -75,7 +75,9 @@ pub(super) fn run(args: TestImageArgs) -> Result<()> {
         name: directory
             .path()
             .file_name()
-            .unwrap()
+            .context(InvalidInputSnafu {
+                message: "image fixture directory must have a name",
+            })?
             .to_string_lossy()
             .into_owned(),
         corpus,

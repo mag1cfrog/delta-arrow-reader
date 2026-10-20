@@ -142,7 +142,9 @@ impl RecordBatchStream {
         if let Some(requested) = requested_schema {
             validate_requested_schema(requested, &reader.schema)?;
         }
-        let reader = slot.take().expect("stream ownership checked under lock");
+        let reader = slot
+            .take()
+            .ok_or_else(|| PyRuntimeError::new_err("stream has already been exported or closed"))?;
         drop(slot);
         PyCapsule::new_with_value(
             py,
@@ -394,15 +396,12 @@ impl Iterator for BlockingBatchReader {
         let stream = self.stream.as_mut()?;
         let result = Python::attach(|py| {
             let mut read = || {
-                if self.dispatch.is_none() {
-                    self.dispatch = Some(crate::logging::stream_dispatch(Arc::clone(
+                let dispatch = match &mut self.dispatch {
+                    Some(dispatch) => dispatch,
+                    slot => slot.insert(crate::logging::stream_dispatch(Arc::clone(
                         &self.interrupted,
-                    ))?);
-                }
-                let dispatch = self
-                    .dispatch
-                    .as_ref()
-                    .expect("stream subscriber initialized");
+                    ))?),
+                };
                 self.runtime.wait(
                     py,
                     stream.next_batch().with_subscriber(dispatch.clone()),

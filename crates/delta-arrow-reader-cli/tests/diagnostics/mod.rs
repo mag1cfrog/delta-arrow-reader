@@ -16,7 +16,7 @@ fn partitioned_table_path() -> PathBuf {
     )
 }
 
-fn assert_single_terminal_record(stderr: &[u8], kind: &str) -> Value {
+pub(super) fn assert_single_terminal_record(stderr: &[u8], kind: &str) -> Value {
     let text = std::str::from_utf8(stderr).unwrap();
     assert!(text.ends_with('\n'), "{text}");
     assert!(!text.contains('\x1b'), "{text}");

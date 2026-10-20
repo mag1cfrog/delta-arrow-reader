@@ -1,3 +1,5 @@
+//! Python wheel and source distribution build failure handling.
+
 #![cfg(unix)]
 
 use std::{env, fs, os::unix::fs::PermissionsExt, path::Path, process::Command};

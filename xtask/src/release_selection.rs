@@ -5,7 +5,7 @@ use std::{env, num::NonZeroU64, path::PathBuf};
 
 use clap::Args;
 use serde::{Deserialize, Serialize};
-use snafu::{ResultExt, ensure};
+use snafu::{OptionExt, ResultExt, ensure};
 
 use crate::{
     artifacts::write_new_file,
@@ -221,13 +221,7 @@ impl ReleaseSelectionArgs {
             }
         }
         ensure!(
-            !candidates.is_empty(),
-            InvalidInputSnafu {
-                message: "no eligible CLI validation record for the merged release PR; missing or expired artifacts cannot be rebuilt by selection",
-            }
-        );
-        ensure!(
-            candidates.len() == 1,
+            candidates.len() <= 1,
             InvalidInputSnafu {
                 message: format!(
                     "multiple eligible CLI validation records: {}; specify --run-id and --record-artifact-id",
@@ -246,7 +240,9 @@ impl ReleaseSelectionArgs {
             schema_version: 1,
             repository: REPOSITORY.into(),
             release,
-            artifacts: candidates.pop().unwrap(),
+            artifacts: candidates.pop().context(InvalidInputSnafu {
+                message: "no eligible CLI validation record for the merged release PR; missing or expired artifacts cannot be rebuilt by selection",
+            })?,
         })
     }
 }

@@ -144,9 +144,7 @@ fn updated_body(body: &str, plan: &ReleasePlan, status: PublicationStatus) -> Re
             message: "release has malformed or duplicate CLI section markers"
         }
     );
-    let range = if start_count == 1 {
-        let start = body.find(START).unwrap();
-        let end = body.find(END).unwrap();
+    let range = if let (Some(start), Some(end)) = (body.find(START), body.find(END)) {
         ensure!(
             start < end,
             InvalidInputSnafu {

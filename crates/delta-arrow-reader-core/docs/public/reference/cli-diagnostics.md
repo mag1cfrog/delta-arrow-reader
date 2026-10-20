@@ -104,6 +104,16 @@ interface; scripts should use machine diagnostics and the exit status.
 | `execution` | `runtime_initialization` | Runtime creation failed or reader execution panicked |
 | `execution` | `output_write` | stdout could not be written or flushed |
 | `execution` | `arrow_ipc` | Arrow IPC encoding failed |
+| `configuration` | `invalid_uc_reference` | Invalid UC name/profile, or a profile on a direct path |
+| `configuration` | `unsupported_uc_scan` | UC targets currently support inspection only |
+| `configuration` | `invalid_uc_storage_options` | Unsupported, conflicting, or duplicate region options |
+| `configuration` | `uc_s3_region_required` | S3 needs an explicit region |
+| `configuration` | `databricks_cli_missing` | Databricks CLI is unavailable on PATH |
+| `execution` | `databricks_cli_failed`, `databricks_cli_timeout` | Child process failed or exceeded its timeout |
+| `execution` | `uc_table_request_failed`, `uc_credential_request_failed` | Metadata or credential request failed; check login and permissions |
+| `execution` | `invalid_databricks_response`, `unsupported_uc_table` | Response is malformed, oversized, or unsupported |
+| `execution` | `uc_credentials_expired` | Credentials expired before inspection finished |
+| `execution` | `uc_cancelled` | UC inspection was interrupted |
 
 Diagnostics omit argument values, file paths, URLs, input contents, credential
 names and values, and dependency messages. Argument failures include the
@@ -125,7 +135,8 @@ failure. Status 3 is preserved even when stderr cannot be written.
 
 ## Threads, cancellation, and signals
 
-Each command runs in one process. The CLI drives its asynchronous runtime on
+Direct-path commands run in one process. UC inspection also starts bounded
+Databricks CLI subprocesses. The CLI drives its asynchronous runtime on
 the main thread and ignores `TOKIO_WORKER_THREADS`. Scans use a separate output
 thread so a blocked stdout pipe does not stall network reads. The output thread
 finishes writing and flushing each batch before requesting another. The core
@@ -137,12 +148,21 @@ the process with status 1 and a synchronous diagnostic with code
 `runtime_initialization` and reason `process_panicked`. Panic payloads and
 backtraces are omitted. Runtime setup failures have their own reason and safe
 I/O category.
-Outside PID 1, Linux signals keep their normal termination behavior: a killed
-process is unsuccessful and need not emit an error event. This applies while loading,
+
+UC inspection handles SIGINT/SIGTERM while resolving and loading metadata,
+terminates any pending Databricks child, and exits 130/143. In text mode,
+cancellation emits an INFO `cli.cancelled` event with code `uc_cancelled`,
+visible with `RUST_LOG=info`. Machine mode emits a terminal diagnostic with
+that code, including with `RUST_LOG=off`. Cancellation remains responsive
+during stdout writes. On Windows, Ctrl+C exits 130.
+
+For direct-path commands outside PID 1, Linux signals keep their normal
+termination behavior: a killed process is unsuccessful and need not emit an
+error event. This applies while loading,
 waiting for a batch, or writing to a blocked pipe. A parent that cancels the
 child must also wait for it to exit and reap it.
 
 Machine mode attempts one terminal record for handled errors and panics on
-the main or worker threads. Signals, aborts, SIGKILL, allocation failure, and
+the main or worker threads. Unhandled signals, aborts, SIGKILL, allocation failure, and
 unwritable stderr cannot guarantee a terminal record. Missing completion is
 never evidence of success.

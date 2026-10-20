@@ -1,3 +1,6 @@
+//! Python package upload validation against a controlled index fixture.
+
+#![allow(clippy::unwrap_used)]
 #![cfg(unix)]
 
 use std::{

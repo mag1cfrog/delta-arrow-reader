@@ -1,3 +1,5 @@
+//! Dependency notice generation failures preserve existing output.
+
 #![cfg(unix)]
 
 use std::{fs, os::unix::fs::PermissionsExt, process::Command};
