@@ -10,7 +10,6 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-from urllib.request import build_opener, ProxyHandler
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
@@ -18,9 +17,6 @@ from run import digest, save
 import native
 
 BUCKET = "selective-read"
-GO_ENV = {"GOTOOLCHAIN": "go1.24.7", "CGO_ENABLED": "0", "GOOS": "linux", "GOARCH": "amd64",
-          "GOAMD64": "v1", "GOMAXPROCS": "8"}
-HTTP = build_opener(ProxyHandler({}))
 
 
 def prepare(output, source=None):
@@ -46,8 +42,6 @@ def state(path):
 
 def verify_server(directory):
     native.call("storage", {"action": "verify-server", "directory": str(directory)})
-    import network
-    network.verify(directory)
 
 
 @contextmanager
@@ -167,7 +161,4 @@ if __name__ == "__main__":
     elif args.command == "upload":
         upload(args.state, args.fixtures, args.output, args.table, checksum=args.verify_checksum)
     else:
-        with exclusive(args.state):
-            import network
-            network.stop(args.state)
-            subprocess.run(["systemctl", "--user", "stop", state(args.state)["unit"]], check=True)
+        subprocess.run([str(native.executable()), "selective-read", "stop-storage", "--state", str(args.state)], check=True)

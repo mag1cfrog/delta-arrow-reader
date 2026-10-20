@@ -102,7 +102,7 @@ To measure a remote-network profile, attach the optional proxy after starting
 MinIO and uploading the fixtures:
 
 ```sh
-python3 -B benches/selective_read/network.py start \
+cargo xtask selective-read start-network \
   --state ../selective-read-storage --output ../selective-read-network \
   --latency-ms 200 --jitter-ms 20 --mbps 150 --seed 0
 python3 -B benches/selective_read/check_network.py \
@@ -160,10 +160,10 @@ The campaign records and hashes the attached network configuration.
 To detach the proxy while keeping MinIO running:
 
 ```sh
-python3 -B benches/selective_read/network.py stop --state ../selective-read-storage
+cargo xtask selective-read stop-network --state ../selective-read-storage
 ```
 
-Stopping MinIO through `storage.py stop` also stops its attached proxy. The
+Stopping MinIO through `cargo xtask selective-read stop-storage` also stops its attached proxy. The
 proxy's build/profile record and shutdown receipt remain in its output directory.
 
 The focused HTTP check can run without MinIO:
@@ -330,5 +330,5 @@ outside the repository; publish only reviewed, sanitized records.
 Stop the owned service when finished:
 
 ```sh
-python3 -B benches/selective_read/storage.py stop --state ../selective-read-storage
+cargo xtask selective-read stop-storage --state ../selective-read-storage
 ```

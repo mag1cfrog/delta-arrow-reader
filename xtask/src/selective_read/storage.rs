@@ -1,9 +1,12 @@
 use std::{
     collections::BTreeMap,
     ffi::OsString,
-    fs::{self, File},
+    fs::{self, File, OpenOptions},
     io::Write,
-    os::unix::{fs::PermissionsExt, process::CommandExt},
+    os::{
+        fd::AsRawFd,
+        unix::{fs::PermissionsExt, process::CommandExt},
+    },
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     time::{SystemTime, UNIX_EPOCH},
@@ -113,6 +116,18 @@ pub(super) fn save(path: &Path, value: &Value) -> Result<()> {
     bytes.push(b'\n');
     write_new_file(path, &bytes)?;
     Ok(())
+}
+
+pub(super) fn exclusive(directory: &Path) -> Result<File> {
+    let lock = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(directory.join(".lock"))?;
+    // SAFETY: lock owns a valid file descriptor; closing it releases the lock.
+    if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    Ok(lock)
 }
 
 pub(super) fn timestamp_ns() -> Result<u64> {
@@ -251,6 +266,7 @@ pub(super) fn verify_server(directory: &Path) -> Result<()> {
         "server affinity changed",
     )?;
     verify_memory(text(&actual["ControlGroup"])?, 4 * 1024u64.pow(3))?;
+    super::network::verify(directory)?;
     Ok(())
 }
 

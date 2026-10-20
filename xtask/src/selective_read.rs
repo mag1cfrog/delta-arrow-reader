@@ -1,4 +1,5 @@
 mod campaign;
+mod network;
 mod observe;
 mod storage;
 mod supervise;
@@ -19,6 +20,20 @@ pub(crate) enum Task {
     Storage,
     /// Read or reconcile storage observations. Read the operation as JSON from stdin.
     Observe,
+    /// Control the optional benchmark proxy. Read the operation as JSON from stdin.
+    Network,
+    /// Build and attach the optional network proxy.
+    StartNetwork(network::Start),
+    /// Stop the attached proxy after proving that its process exited.
+    StopNetwork {
+        #[arg(long)]
+        state: PathBuf,
+    },
+    /// Stop the dedicated benchmark server and any attached proxy.
+    StopStorage {
+        #[arg(long)]
+        state: PathBuf,
+    },
     /// Capture and reconcile MinIO requests, using a deadline sent on stdin.
     Capture {
         #[arg(long)]
@@ -56,6 +71,26 @@ pub(crate) enum Task {
 impl Task {
     pub(crate) fn run(self) -> Result<()> {
         match self {
+            Self::StartNetwork(arguments) => return network::start(arguments),
+            Self::StopNetwork { state } => {
+                let _lock = storage::exclusive(&state)?;
+                return network::stop(&state);
+            }
+            Self::StopStorage { state } => {
+                let _lock = storage::exclusive(&state)?;
+                network::stop(&state)?;
+                let config = storage::state(&state)?;
+                require(
+                    text(&config["unit"])?.starts_with("selective-read-minio-"),
+                    "unexpected MinIO unit",
+                )?;
+                crate::command::run_command(std::process::Command::new("systemctl").args([
+                    "--user",
+                    "stop",
+                    text(&config["unit"])?,
+                ]))?;
+                return Ok(());
+            }
             Self::ExecReader { state, command } => return storage::exec_reader(&state, &command),
             Self::PrepareStorage { output, source } => {
                 return storage::service::prepare(&output, source.as_deref());
@@ -76,10 +111,14 @@ impl Task {
             Self::Campaign => campaign::run(serde_json::from_value(input)?)?,
             Self::Storage => storage::run(serde_json::from_value(input)?)?,
             Self::Observe => observe::run(serde_json::from_value(input)?)?,
+            Self::Network => network::run(serde_json::from_value(input)?)?,
             Self::ExecReader { .. }
             | Self::PrepareStorage { .. }
             | Self::StartStorage { .. }
-            | Self::Capture { .. } => {
+            | Self::Capture { .. }
+            | Self::StartNetwork(_)
+            | Self::StopNetwork { .. }
+            | Self::StopStorage { .. } => {
                 unreachable!()
             }
         };
