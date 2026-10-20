@@ -13,7 +13,7 @@ use delta_arrow_reader::{DeltaStorageOptions, DeltaTable, DeltaTableBuilder};
 use object_store::{ObjectStoreScheme, aws::AmazonS3ConfigKey, azure::AzureConfigKey};
 use serde::Deserialize;
 use serde_json::Value;
-use snafu::ResultExt;
+use snafu::{ResultExt, Snafu};
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
     process::Command,
@@ -25,21 +25,48 @@ use crate::input::JsonObject;
 const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Snafu)]
 pub(crate) enum Error {
+    #[snafu(display(
+        "Use uc://catalog.schema.table with an explicit Databricks profile; profile flags are invalid for other targets."
+    ))]
     Reference,
+    #[snafu(display("Unity Catalog targets currently support inspection only."))]
     Scan,
+    #[snafu(display(
+        "Unity Catalog storage options must contain only supported transport or region settings, without credential or namespace overrides."
+    ))]
     Options,
+    #[snafu(display(
+        "Supply an explicit S3 region in the storage options file for this Unity Catalog table."
+    ))]
     Region,
+    #[snafu(display("Install the Databricks CLI and make it available on PATH."))]
     MissingCli,
+    #[snafu(display("Could not run the Databricks CLI."))]
     Process,
+    #[snafu(display("The Databricks CLI request timed out."))]
     Timeout,
+    #[snafu(display("The Databricks CLI returned an invalid or oversized response."))]
     Response,
+    #[snafu(display(
+        "Could not fetch Unity Catalog metadata. Check the CLI version, profile login, and table permissions."
+    ))]
     Table,
+    #[snafu(display(
+        "Could not obtain read credentials. Check the profile login, external access setting, and EXTERNAL USE SCHEMA grant."
+    ))]
     Credentials,
+    #[snafu(display(
+        "This Unity Catalog table, storage location, or credential type is not supported for direct reads."
+    ))]
     Unsupported,
+    #[snafu(display(
+        "Unity Catalog credentials expired. Run inspection again to obtain fresh credentials."
+    ))]
     Expired,
-    Cancelled(u8),
+    #[snafu(display("Unity Catalog inspection was cancelled."))]
+    Cancelled { status: u8 },
 }
 
 impl Error {
@@ -57,14 +84,14 @@ impl Error {
             Self::Credentials => "uc_credential_request_failed",
             Self::Unsupported => "unsupported_uc_table",
             Self::Expired => "uc_credentials_expired",
-            Self::Cancelled(_) => "uc_cancelled",
+            Self::Cancelled { .. } => "uc_cancelled",
         }
     }
 
     pub(crate) fn exit_status(&self) -> u8 {
         match self {
             Self::Reference | Self::Scan | Self::Options | Self::Region | Self::MissingCli => 2,
-            Self::Cancelled(status) => *status,
+            Self::Cancelled { status } => *status,
             _ => 1,
         }
     }
@@ -78,32 +105,11 @@ impl Error {
     }
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Reference => "Use uc://catalog.schema.table with an explicit Databricks profile; profile flags are invalid for other targets.",
-            Self::Scan => "Unity Catalog targets currently support inspection only.",
-            Self::Options => "Unity Catalog storage options must contain only supported transport or region settings, without credential or namespace overrides.",
-            Self::Region => "Supply an explicit S3 region in the storage options file for this Unity Catalog table.",
-            Self::MissingCli => "Install the Databricks CLI and make it available on PATH.",
-            Self::Process => "Could not run the Databricks CLI.",
-            Self::Timeout => "The Databricks CLI request timed out.",
-            Self::Response => "The Databricks CLI returned an invalid or oversized response.",
-            Self::Table => "Could not fetch Unity Catalog metadata. Check the CLI version, profile login, and table permissions.",
-            Self::Credentials => "Could not obtain read credentials. Check the profile login, external access setting, and EXTERNAL USE SCHEMA grant.",
-            Self::Unsupported => "This Unity Catalog table, storage location, or credential type is not supported for direct reads.",
-            Self::Expired => "Unity Catalog credentials expired. Run inspection again to obtain fresh credentials.",
-            Self::Cancelled(_) => "Unity Catalog inspection was cancelled.",
-        })
-    }
-}
-
 impl fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)
     }
 }
-impl std::error::Error for Error {}
 
 #[derive(Clone, Copy)]
 pub(crate) struct Reference<'a> {
@@ -600,7 +606,7 @@ pub(crate) async fn cancellable<T>(
     let stop = async { tokio::signal::ctrl_c().await.map(|()| 130) };
     tokio::select! {
         biased;
-        status = stop => Err(crate::Error::UnityCatalog { source: Error::Cancelled(status.context(crate::RuntimeSnafu { reason: "signal_wait_failed" })?) }),
+        status = stop => Err(crate::Error::UnityCatalog { source: Error::Cancelled { status: status.context(crate::RuntimeSnafu { reason: "signal_wait_failed" })? } }),
         result = work => result,
     }
 }

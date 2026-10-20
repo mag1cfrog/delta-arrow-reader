@@ -134,7 +134,7 @@ impl fmt::Debug for Error {
 impl Error {
     fn log_failure(&self) {
         if let Self::UnityCatalog {
-            source: unity_catalog::Error::Cancelled(status),
+            source: unity_catalog::Error::Cancelled { status },
         } = self
         {
             tracing::info!(target: "delta_arrow_reader_cli",
@@ -513,7 +513,7 @@ mod tests {
     fn uc_cancellation_is_informational_and_keeps_signal_exit_status() {
         for status in [130, 143] {
             let error = Error::UnityCatalog {
-                source: unity_catalog::Error::Cancelled(status),
+                source: unity_catalog::Error::Cancelled { status },
             };
             assert_eq!(error.exit_code(), ExitCode::from(status));
             assert!(diagnostics::capture("warn", || error.log_failure()).is_empty());
