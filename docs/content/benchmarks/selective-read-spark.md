@@ -36,7 +36,8 @@ JDK and native JARs before table access. See the official
 Use the pinned oracle environment and a prepared smoke fixture:
 
 ```sh
-"$BENCH_PYTHON" -B benches/selective_read/runners/spark/check.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read check-capabilities \
+  --python "$BENCH_PYTHON" \
   --binary /path/to/build-spark/selective-read-spark \
   --fixtures /path/to/smoke-fixtures \
   --output /path/to/spark-capability-check

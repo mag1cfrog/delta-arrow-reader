@@ -131,6 +131,7 @@ impl Capabilities {
             &remote,
             &self.check.output.join("s3-configuration"),
             Some(&env),
+            None,
         )?;
         require(
             record["status"] == "validation_failed"

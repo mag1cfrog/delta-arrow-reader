@@ -72,6 +72,7 @@ impl Capabilities {
             &remote,
             &self.check.output.join("s3-secret-setup"),
             Some(&secrets),
+            None,
         )?;
         require(
             record["status"] == "validation_failed"
@@ -124,6 +125,7 @@ impl Capabilities {
             &changed.join(name),
             &payload,
             &self.check.output.join("extension-rejected"),
+            None,
             None,
         )?;
         require(

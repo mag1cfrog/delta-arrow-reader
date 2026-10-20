@@ -32,8 +32,6 @@ pub(crate) enum Task {
     CheckReaders(checks::Args),
     /// Check real remote readers, MinIO request accounting and observer overhead.
     CheckStorage(checks::remote::StorageArgs),
-    /// Check native Delta snapshot and deletion-vector capabilities. Read JSON from stdin.
-    DeltaCapabilities,
     /// Check a prepared reader's public contract and native capabilities.
     CheckCapabilities(checks::capabilities::Options),
     /// Upload a verified fixture snapshot and save its immutable receipt.
@@ -247,7 +245,6 @@ impl Task {
             Self::ProductionPairs => pairs::run(serde_json::from_value(input)?)?,
             Self::Experiment => experiment::run(serde_json::from_value(input)?)?,
             Self::IntraPage => experiment::intra_page::run(serde_json::from_value(input)?)?,
-            Self::DeltaCapabilities => checks::capabilities::delta(serde_json::from_value(input)?)?,
             Self::ExecReader { .. }
             | Self::RunCampaign(_)
             | Self::CheckReaders(_)

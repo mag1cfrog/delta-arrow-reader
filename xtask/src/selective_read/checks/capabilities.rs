@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     command::wait_with_timeout, selective_read::experiment::Process, selective_read_build::digest,
 };
-use serde::Deserialize;
+use rustix::process::{Resource, getrlimit};
 use std::{
     os::unix::process::CommandExt,
     process::{Command, Stdio},
@@ -11,9 +11,9 @@ use std::{
 
 mod duckdb;
 mod polars;
+mod spark;
 
-#[derive(clap::Args, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(clap::Args)]
 pub(crate) struct Options {
     #[arg(long)]
     binary: PathBuf,
@@ -30,6 +30,7 @@ pub(crate) struct Options {
 struct Capabilities {
     binary: PathBuf,
     corpus: PathBuf,
+    file_limit: Option<u64>,
     check: Checker,
 }
 
@@ -39,6 +40,14 @@ impl Capabilities {
         let output = fs::canonicalize(&args.output)?;
         Ok(Self {
             binary: fs::canonicalize(&args.binary)?,
+            file_limit: (read_json(&args.binary.with_file_name("build.json"))?["reader_id"]
+                == "spark")
+                .then(|| {
+                    getrlimit(Resource::Fsize)
+                        .current
+                        .unwrap_or(u64::MAX)
+                        .min(256 * 1024 * 1024)
+                }),
             corpus: fs::canonicalize(harness.join(
                 "../../crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus",
             ))?,
@@ -52,7 +61,13 @@ impl Capabilities {
     }
 
     fn probe(&self, payload: &Value, name: &str) -> Result<Value> {
-        probe(&self.binary, payload, &self.check.output.join(name), None)
+        probe(
+            &self.binary,
+            payload,
+            &self.check.output.join(name),
+            None,
+            self.file_limit,
+        )
     }
 
     fn exported(
@@ -173,6 +188,7 @@ fn probe(
     payload: &Value,
     output: &Path,
     env: Option<&BTreeMap<String, String>>,
+    file_limit: Option<u64>,
 ) -> Result<Value> {
     fs::create_dir(output)?;
     let output = fs::canonicalize(output)?;
@@ -188,6 +204,7 @@ fn probe(
     if let Some(env) = env {
         command.envs(env);
     }
+    invoke::apply_export_limit(&mut command, file_limit);
     let mut process = Process(command.spawn()?);
     let status = wait_with_timeout(&mut process.0, Duration::from_secs(600))?;
     let path = output.join("reader/record.json");
@@ -257,39 +274,44 @@ fn stage(original: &Path, output: &Path) -> Result<(PathBuf, PathBuf, PathBuf)> 
     Ok((no_dv, unknown, missing))
 }
 
-pub(in crate::selective_read) fn delta(args: Options) -> Result<Value> {
-    Ok(json!(Capabilities::start(&args)?.delta()?))
-}
-
 pub(in crate::selective_read) fn run(args: Options) -> Result<()> {
     let build = read_json(&args.binary.with_file_name("build.json"))?;
     let reader = text(&build["reader_id"])?;
     require(
-        matches!(reader, "duckdb" | "polars"),
-        "expected a DuckDB or Polars capability build",
+        matches!(reader, "duckdb" | "polars" | "spark"),
+        "expected a DuckDB, Polars or Spark capability build",
     )?;
     fs::create_dir(&args.output)?;
-    super::local(super::Args {
-        binaries: vec![args.binary.clone()],
-        fixtures: args.fixtures.clone(),
-        output: args.output.join("public-cases"),
-        python: args.python.clone(),
-        harness: args.harness.clone(),
-    })?;
+    if reader != "spark" {
+        super::local(super::Args {
+            binaries: vec![args.binary.clone()],
+            fixtures: args.fixtures.clone(),
+            output: args.output.join("public-cases"),
+            python: args.python.clone(),
+            harness: args.harness.clone(),
+        })?;
+    }
     let mut checks = Capabilities::start(&args)?;
     let mut observations = checks.delta()?;
-    if reader == "duckdb" {
-        checks.duckdb(&args.python, &mut observations)?;
-    } else {
-        checks.polars(&args.harness, &mut observations)?;
+    match reader {
+        "duckdb" => checks.duckdb(&args.python, &mut observations)?,
+        "polars" => checks.polars(&args.harness, &mut observations)?,
+        _ => checks.spark(&args.harness, &mut observations)?,
     }
-    let public = read_json(&args.output.join("public-cases/checks.json"))?["invocations"].clone();
-    let mut summary = json!({"status":"passed","public_contract_invocations":public});
-    if reader == "duckdb" {
-        summary["capability_invocations"] = json!(observations.len());
-        summary["total_invocations"] = json!(count(&public)? + observations.len() as u64);
+    let mut summary = json!({"status":"passed"});
+    if reader == "spark" {
+        summary["invocations"] = json!(observations.len());
+        summary["pilot_only"] = json!(true);
     } else {
-        summary["capability_checks"] = json!(observations.len());
+        let public =
+            read_json(&args.output.join("public-cases/checks.json"))?["invocations"].clone();
+        summary["public_contract_invocations"] = public.clone();
+        if reader == "duckdb" {
+            summary["capability_invocations"] = json!(observations.len());
+            summary["total_invocations"] = json!(count(&public)? + observations.len() as u64);
+        } else {
+            summary["capability_checks"] = json!(observations.len());
+        }
     }
     let mut result = summary.clone();
     result.as_object_mut().unwrap().extend(super::super::object(&json!({
@@ -297,6 +319,12 @@ pub(in crate::selective_read) fn run(args: Options) -> Result<()> {
         "corpus_manifest_sha256":digest(&checks.corpus.join("manifest.json"))?,
         "controller_sha256":digest(&std::env::current_exe()?)?,
         "scope":"bounded fixtures; rerun against exact campaign fixtures","observations":observations}))?.clone());
+    if reader == "spark" {
+        result["publication_ready"] = json!(false);
+        result["scope"] =
+            json!("bounded exact-value capability checks; not a performance campaign");
+        result["max_file_size_bytes"] = json!(checks.file_limit);
+    }
     save(&args.output.join("capabilities.json"), &result)?;
     println!("{summary}");
     Ok(())
