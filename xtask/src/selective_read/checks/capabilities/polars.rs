@@ -25,7 +25,7 @@ impl Capabilities {
             self.check.worker.call(&json!({"action":"capability-export","record":record,
                 "output":self.check.output.join(&name),"deleted":false,"ids":null,"semantics":semantics}))?;
             require(
-                !text(&record["identity"]["native_expression_sha256"])?.is_empty(),
+                record["identity"]["native_expression"].is_object(),
                 "missing Polars expression identity",
             )?;
             observations.push(
@@ -158,7 +158,7 @@ impl Capabilities {
             .output
             .join("public-cases/polars-li.clustered.eq2-in20-open-validation");
         let mut proof = read_json(&public.join("correctness.json"))?;
-        proof["checks"][0]["native_expression_sha256"] = json!("0".repeat(64));
+        proof["checks"][0]["native_expression"]["limit"] = json!(1);
         let wrong = self.check.output.join("stale-expression.json");
         save(&wrong, &proof)?;
         let mut payload = self.check.request(

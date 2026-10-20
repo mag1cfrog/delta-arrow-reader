@@ -191,8 +191,8 @@ impl Capabilities {
         let output = self.check.output.join("wrong-values");
         let identity = output.join("reader/query-0.identity.json");
         let mut changed = read_json(&identity)?;
-        changed["canonical_sql_sha256"] =
-            read_json(&reference.join("reference.json"))?["canonical_sql_sha256"].clone();
+        changed["canonical_sql"] =
+            read_json(&reference.join("reference.json"))?["canonical_sql"].clone();
         fs::write(&identity, serde_json::to_vec(&changed)?)?;
         let record = self
             .check

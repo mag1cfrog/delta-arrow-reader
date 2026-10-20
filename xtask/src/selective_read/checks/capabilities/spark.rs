@@ -97,6 +97,10 @@ impl Capabilities {
         base["table_uri"] = json!(uri(&self.corpus.join("deletion_vectors/table"))?);
         base["snapshot_version"] = json!(1);
         base["canonical_sql"] = json!("SELECT id, value, label FROM bench");
+        base["workload_contract"] = json!({"comparison_revision":6,"sampling_stage":"pilot",
+            "scope":"capability", "cases":[{"case_id":base["case_id"],
+                "canonical_sql":base["canonical_sql"],"snapshot_version":base["snapshot_version"],
+                "fixture_manifest_sha256":base["fixture_manifest_sha256"]}]});
         for mode in ["open", "reuse"] {
             let mut payload = base.clone();
             payload["execution_mode"] = json!(mode);
