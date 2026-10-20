@@ -15,6 +15,7 @@ mod large;
 pub(super) mod matrix;
 pub(super) mod planner;
 pub(super) mod production;
+mod wide;
 
 const ORIGINAL: [&str; 16] = [
     "l_orderkey",
@@ -80,6 +81,11 @@ pub(super) enum Request {
         table: Value,
         files: u64,
     },
+    WideGeometry {
+        manifest: Value,
+        large: bool,
+        smoke: bool,
+    },
     Query {
         case: String,
         manifest: Value,
@@ -124,6 +130,11 @@ pub(super) fn run(request: Request) -> Result<Value> {
             files::geometry(&table, files)?;
             Ok(Value::Null)
         }
+        Request::WideGeometry {
+            manifest,
+            large,
+            smoke,
+        } => wide::geometry(&manifest, large, smoke),
         Request::Query {
             case,
             manifest,

@@ -51,11 +51,7 @@ def binding(value, fixtures, case_id):
     if value["comparison_revision"] in (5, 6):
         import production_workloads
         return production_workloads.binding(value, fixtures, case_id)
-    row = native.call("workload", {"action": "large-binding", "value": value, "fixtures": str(fixtures), "case": case_id})
-    if value.get("family") == "files":
-        import wide_files
-        wide_files.geometry(json.loads((Path(fixtures) / "manifest.json").read_text()), large=True, smoke=value["scope"] == "smoke")
-    return row
+    return native.call("workload", {"action": "large-binding", "value": value, "fixtures": str(fixtures), "case": case_id})
 
 
 def report(campaign, output):

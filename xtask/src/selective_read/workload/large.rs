@@ -383,12 +383,16 @@ pub(super) fn binding(value: &Value, fixtures: &Path, case: &str) -> Result<Valu
         row["fixture_manifest_sha256"] == digest(&path)?,
         "workload fixture identity changed",
     )?;
+    let manifest = read_json(&path)?;
     require(
-        object(&query(case, &read_json(&path)?)?)?
+        object(&query(case, &manifest)?)?
             .iter()
             .all(|(k, v)| row.get(k) == Some(v)),
         "workload SQL, literals, scale or geometry changed",
     )?;
+    if value["family"] == "files" {
+        super::wide::geometry(&manifest, true, value["scope"] == "smoke")?;
+    }
     Ok(row.clone())
 }
 

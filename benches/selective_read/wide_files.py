@@ -3,9 +3,10 @@
 import argparse
 import json
 from pathlib import Path
-from statistics import median
+from decimal import Decimal
 
 import file_organizations as organizations
+import native
 import oracle
 from oracle import require
 
@@ -13,35 +14,23 @@ LEGACY_CASES = ("wide.files4096.eq2-in20", "wide.files4096.eq2-in20.dv")
 
 
 def geometry(manifest, *, large, smoke):
-    pair = manifest["wide_file_pair"]
-    require(pair["kind"] == ("large" if large else "legacy"), "wrong wide-file deletion contract")
-    expected = {"wide.clustered", "wide.files4096", "wide.files4096.dv"} | ({"wide.clustered.dv"} if large else set())
-    tables = {t["id"]: t for t in manifest["tables"]}
-    require(set(tables) == expected and len(tables) == len(manifest["tables"]), "wrong wide-file inventory")
-    require(len(manifest["sources"]) == 1, "one shared source required")
-    source = manifest["sources"][0]
-    scale = source["scale_factor"]
-    require(float(scale) == .01 if smoke else scale in (10, 30, 100, 300) if large else scale == 1,
-            "wrong wide-file source scale")
-    normal, repacked = (tables[t] for t in ("wide.clustered", "wide.files4096"))
-    names = [f["name"] for f in normal["schema"]["fields"]]
-    require(names == list(oracle.ORIGINAL + oracle.PAYLOADS), "wide pair must preserve all 80 columns")
-    for table in tables.values():
-        require(table["scale_factor"] == scale and table["rows"] == source["rows"] and table["schema"] == normal["schema"],
-                "wide organizations differ in scale, rows or schema")
-        dv = table["id"].endswith(".dv")
-        require(table["deletion_vectors"] is dv and type(table["snapshot_version"]) is int
-                and table["snapshot_version"] == int(dv), "wrong wide-file snapshot")
-    organizations.geometry(repacked, 4096)
-    sizes = sorted(f["bytes"] for f in repacked["files"])
-    predicates = oracle.conditions("eq2-in20", source["in_literals"])
-    candidates = [f["path"] for f in repacked["files"] if oracle.candidate(f["delta_stats"], predicates)]
-    require(0 < len(candidates) <= 40, "wide pair needs at least 99% independently excludable files")
-    require(not large or smoke or median(sizes) >= 64 * 1024**2, "large 4096-file median is below 64 MiB")
-    return {"source_scale": float(scale), "physical_rows": source["rows"], "files": 4096,
-            "file_bytes_sorted": sizes, "median_file_bytes": median(sizes),
-            "candidate_files": candidates, "excluded_files": sorted({f["path"] for f in repacked["files"]} - set(candidates)),
-            "scope": "smoke geometry; not large-data acceptance" if smoke else "large geometry" if large else "SF1 mechanism control"}
+    tables = []
+    columns = ("l_shipdate", "l_shipmode", "l_partkey")
+    for table in manifest["tables"]:
+        metadata = {k: table[k] for k in ("id", "rows", "scale_factor", "schema", "snapshot_version", "deletion_vectors")}
+        if table["id"] == "wide.files4096":
+            metadata.update(organizations.boundaries(table))
+            for item, original in zip(metadata["files"], table["files"], strict=True):
+                item.update({k: original[k] for k in ("path", "bytes")})
+                item["delta_stats"].update({key: {column: original["delta_stats"][key][column] for column in columns}
+                                          for key in ("minValues", "maxValues", "nullCount")})
+        tables.append(metadata)
+    sources = [{k: source[k] for k in ("rows", "scale_factor", "in_literals")} for source in manifest["sources"]]
+    for item in tables + sources:
+        if isinstance(item["scale_factor"], Decimal):
+            item["scale_factor"] = float(item["scale_factor"])
+    return native.call("workload", {"action": "wide-geometry", "large": large, "smoke": smoke,
+        "manifest": {"wide_file_pair": {"kind": manifest["wide_file_pair"]["kind"]}, "tables": tables, "sources": sources}})
 
 
 def extra_keys(fixtures, manifest):

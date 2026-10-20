@@ -18,13 +18,16 @@ def batches(root, table):
         yield from pq.ParquetFile(path).iter_batches(batch_size=BATCH_ROWS)
 
 
-def geometry(table, files):
-    boundaries = {"rows": table["rows"], "file_count": table["file_count"], "files": [
+def boundaries(table):
+    return {"rows": table["rows"], "file_count": table["file_count"], "files": [
         {**{k: item[k] for k in ("rows", "source_ordinal_range")},
          "delta_stats": {"numRecords": item["delta_stats"]["numRecords"]},
          "row_groups": [{"rows": group["rows"]} for group in item["row_groups"]]}
         for item in table["files"]]}
-    native.call("workload", {"action": "file-geometry", "table": boundaries, "files": files})
+
+
+def geometry(table, files):
+    native.call("workload", {"action": "file-geometry", "table": boundaries(table), "files": files})
 
 
 if __name__ == "__main__":
