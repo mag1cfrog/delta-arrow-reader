@@ -56,6 +56,8 @@ pub(crate) enum Task {
     ReportMatrix(workload::matrix::Report),
     /// Verify repacked rows and prepare independent file-organization references.
     PrepareFiles(workload::files::Prepare),
+    /// Prepare independent normal/repacked wide references with and without deletions.
+    PrepareWideFiles(workload::wide::Prepare),
     /// Export a verified file-organization campaign.
     ReportFiles(workload::files::Report),
     /// Freeze independently checked production fixtures and pinned Polars translations.
@@ -170,6 +172,14 @@ impl Task {
                 );
                 return Ok(());
             }
+            Self::PrepareWideFiles(args) => {
+                let value = workload::wide::prepare(args)?;
+                println!(
+                    "{}",
+                    serde_json::json!({"status":value["status"],"cases":array(&value["cases"])?.len()})
+                );
+                return Ok(());
+            }
             Self::ReportFiles(args) => {
                 println!("{}", workload::files::report(args)?);
                 return Ok(());
@@ -258,6 +268,7 @@ impl Task {
             | Self::PrepareMatrix(_)
             | Self::ReportMatrix(_)
             | Self::PrepareFiles(_)
+            | Self::PrepareWideFiles(_)
             | Self::ReportFiles(_)
             | Self::RunNumericPages(_)
             | Self::RunDeltaLength(_)

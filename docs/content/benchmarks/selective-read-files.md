@@ -181,7 +181,8 @@ target/selective-read/release/selective-read-fixtures \
   --profile development --wide-files-from ../selective-read-development \
   --output ../wide-files-legacy
 
-../selective-read-oracle-venv/bin/python -B benches/selective_read/wide_files.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read prepare-wide-files \
+  --python ../selective-read-oracle-venv/bin/python \
   --fixtures ../wide-files-legacy --output ../wide-files-legacy-references
 ```
 
@@ -229,7 +230,8 @@ validation and report export remain. With a matching frozen harness and
 definition, prepare the independent references:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/wide_files.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read prepare-wide-files \
+  --python ../selective-read-oracle-venv/bin/python \
   --workload ../wide-files-workload/workload.json \
   --fixtures ../wide-files-large --output ../wide-files-large-references
 ```

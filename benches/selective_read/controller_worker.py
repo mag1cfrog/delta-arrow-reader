@@ -88,7 +88,8 @@ def dispatch(value):
         if "sql" in value:
             oracle.require(oracle.case_input(fixtures, value["case_id"])[-1] == value["sql"], "oracle SQL differs from catalog")
         metadata = (json.loads((reference / "reference.json").read_text()) if value["reuse"] else
-                    oracle.prepare(fixtures, value["case_id"], reference))
+                    oracle.prepare(fixtures, value["case_id"], reference,
+                                   workload=Path(value["workload"]) if value.get("workload") else None))
         oracle.check_reference_build(metadata)
         return metadata
     if action == "load":

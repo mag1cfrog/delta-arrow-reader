@@ -15,7 +15,7 @@ mod large;
 pub(super) mod matrix;
 pub(super) mod planner;
 pub(super) mod production;
-mod wide;
+pub(super) mod wide;
 
 const ORIGINAL: [&str; 16] = [
     "l_orderkey",
@@ -149,6 +149,23 @@ pub(super) fn run(request: Request) -> Result<Value> {
             Ok(Value::Null)
         }
     }
+}
+
+pub(super) fn load(path: &Path, harness: &Path) -> Result<(Value, Value)> {
+    let bytes = std::fs::read(path)?;
+    let value: Value = serde_json::from_slice(&bytes)?;
+    let mut identity = value.clone();
+    identity["workload_manifest_sha256"] = json!(reader_sha256(bytes.as_slice())?);
+    let identity = super::campaign::evidence::comparison(
+        &identity,
+        &harness.join("../../docs/content/benchmarks"),
+    )?;
+    let value = if value["format"] == "selective-read-production-workload-v1" {
+        production::load(value, harness)?
+    } else {
+        large::load(value, harness)?
+    };
+    Ok((value, identity))
 }
 
 fn payloads() -> Vec<String> {

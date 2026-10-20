@@ -1,6 +1,24 @@
 use super::*;
 use crate::selective_read::experiment::median;
-use std::collections::BTreeMap;
+use crate::selective_read::{
+    storage::{read_json, save},
+    validation::Worker,
+};
+use std::{collections::BTreeMap, fs};
+
+#[derive(clap::Args)]
+pub(crate) struct Prepare {
+    #[arg(long)]
+    fixtures: PathBuf,
+    #[arg(long)]
+    output: PathBuf,
+    #[arg(long)]
+    workload: Option<PathBuf>,
+    #[arg(long)]
+    python: PathBuf,
+    #[arg(long, default_value = "benches/selective_read")]
+    harness: PathBuf,
+}
 
 fn date(value: &Value) -> Result<&str> {
     let value = text(value)?;
@@ -160,6 +178,112 @@ pub(super) fn geometry(manifest: &Value, large: bool, smoke: bool) -> Result<Val
         "file_bytes_sorted":sizes,"median_file_bytes":middle,"candidate_files":candidates,"excluded_files":excluded,
         "scope":if smoke {"smoke geometry; not large-data acceptance"} else if large {"large geometry"} else {"SF1 mechanism control"}}),
     )
+}
+
+fn paired_results(references: &[Value]) -> Result<()> {
+    for dv in [false, true] {
+        let hashes = references
+            .iter()
+            .filter(|r| {
+                r["case_id"]
+                    .as_str()
+                    .is_some_and(|id| id.ends_with(".dv") == dv)
+            })
+            .map(|r| text(&r["reference_sha256"]))
+            .collect::<Result<BTreeSet<_>>>()?;
+        require(
+            hashes.len() == 1,
+            "file organizations have different exact live results",
+        )?;
+    }
+    Ok(())
+}
+
+pub(crate) fn prepare(args: Prepare) -> Result<Value> {
+    let fixtures = fs::canonicalize(&args.fixtures)?;
+    let harness = fs::canonicalize(&args.harness)?;
+    let manifest_hash = digest(&fixtures.join("manifest.json"))?;
+    let manifest = read_json(&fixtures.join("manifest.json"))?;
+    let is_large = manifest["wide_file_pair"]["kind"] == "large";
+    require(
+        is_large == args.workload.is_some(),
+        "large organizations require an explicit files workload",
+    )?;
+    let (cases, comparison) = if let Some(workload) = &args.workload {
+        let (frozen, identity) = super::load(workload, &harness)?;
+        require(
+            frozen["family"] == "files",
+            "expected file-organization workload",
+        )?;
+        (
+            object(&large::definitions("files", None)?)?
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+            identity,
+        )
+    } else {
+        (
+            vec![
+                "wide.files4096.eq2-in20".to_owned(),
+                "wide.files4096.eq2-in20.dv".to_owned(),
+            ],
+            json!({"comparison_revision":2,"protocol_sha256":digest(&harness.join("../../docs/content/benchmarks/selective-read-protocol.md"))?}),
+        )
+    };
+    let shape = geometry(&manifest, is_large, manifest["profile"] == "smoke")?;
+    fs::create_dir(&args.output)?;
+    let output = fs::canonicalize(&args.output)?;
+    let mut worker = Worker::start(&args.python, &harness, &output)?;
+    let mut references = Vec::new();
+    for case in cases {
+        eprintln!("preparing {case}");
+        references.push(worker.call(
+            &json!({"action":"prepare-reference","fixtures":fixtures,"case_id":case,
+            "reference":output.join(case),"reuse":false,"workload":args.workload}),
+        )?);
+    }
+    paired_results(&references)?;
+    let cases = references
+        .iter()
+        .map(|reference| {
+            let mut row = [
+                "case_id",
+                "source_rows",
+                "output_rows",
+                "physical_qualifying_rows",
+                "deleted_qualifying_rows",
+                "candidate_files",
+                "matching_files",
+                "wide_file_geometry",
+                "reference_sha256",
+            ]
+            .into_iter()
+            .map(|key| Ok((key.to_owned(), field(reference, key)?.clone())))
+            .collect::<Result<Map<_, _>>>()?;
+            row.insert(
+                "reference_metadata_sha256".into(),
+                json!(digest(
+                    &output
+                        .join(text(&reference["case_id"])?)
+                        .join("reference.json")
+                )?),
+            );
+            Ok(json!(row))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    require(
+        digest(&fixtures.join("manifest.json"))? == manifest_hash,
+        "fixture manifest changed during preparation",
+    )?;
+    let mut result = comparison;
+    result.as_object_mut().unwrap().extend(
+        object(&json!({"status":"complete","geometry":shape,
+        "fixture_manifest_sha256":manifest_hash,"cases":cases}))?
+        .clone(),
+    );
+    save(&output.join("wide-files.json"), &result)?;
+    Ok(result)
 }
 
 #[cfg(test)]

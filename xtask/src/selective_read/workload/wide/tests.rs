@@ -103,3 +103,19 @@ fn wide_pruning_checks_inclusive_bounds_nulls_and_calendar_dates() -> Result<()>
     assert_eq!(date(&json!("2000-02-29"))?, "2000-02-29");
     Ok(())
 }
+
+#[test]
+fn preparation_requires_identical_live_rows_within_each_dv_state() -> Result<()> {
+    let mut references = vec![
+        json!({"case_id":"large.files.normal.eq2-in20","reference_sha256":"base"}),
+        json!({"case_id":"large.files4096.eq2-in20","reference_sha256":"base"}),
+        json!({"case_id":"large.files.normal.eq2-in20.dv","reference_sha256":"deleted"}),
+        json!({"case_id":"large.files4096.eq2-in20.dv","reference_sha256":"deleted"}),
+    ];
+    paired_results(&references)?;
+    paired_results(&references[1..3])?;
+    references[3]["reference_sha256"] = json!("different");
+    assert!(paired_results(&references).is_err());
+    assert!(paired_results(&references[..2]).is_err());
+    Ok(())
+}
