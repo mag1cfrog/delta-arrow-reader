@@ -16,6 +16,8 @@ use serde_json::{Value, json};
 use super::{array, network, require, storage, text};
 use crate::{Result, command::wait_with_timeout};
 
+pub(super) mod intra_page;
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Request {
@@ -89,13 +91,6 @@ fn execute(
     result
 }
 
-fn capture(directory: &Path, output: &Path) -> Result<Value> {
-    network::run(network::Request::Finish {
-        directory: directory.to_owned(),
-        output: output.to_owned(),
-    })
-}
-
 pub(super) fn run(input: Request) -> Result<Value> {
     fs::create_dir(&input.output)?;
     let output = fs::canonicalize(&input.output)?;
@@ -158,12 +153,12 @@ pub(super) fn run(input: Request) -> Result<Value> {
         || {
             let init = output.join("initialization");
             fs::create_dir(&init)?;
-            capture(&input.directory, &init)?;
+            network::capture(&input.directory, &init)?;
             network::control(&input.directory, true, traced, 10.0)?;
             Ok(())
         },
     )?;
-    let capture = capture(&input.directory, &output)?;
+    let capture = network::capture(&input.directory, &output)?;
     Ok(
         json!({"record":storage::read_json(&output.join("reader/record.json"))?,
         "network":capture,

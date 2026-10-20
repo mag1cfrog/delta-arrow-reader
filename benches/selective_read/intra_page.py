@@ -1,7 +1,6 @@
 """Compare partial-page policies or two reader builds using a retained query and oracle."""
 
 import argparse
-from collections import Counter
 import json
 import os
 from pathlib import Path
@@ -15,27 +14,7 @@ sys.path.insert(0, str(HERE / "runners"))
 import network
 import oracle
 import storage
-from run import comparison_identity, digest, invoke, save
-
-
-def network_metrics(capture, path):
-    if capture is None:
-        return None
-    records = [json.loads(line) for line in path.read_text().splitlines()]
-    events = sorted(event for r in records for event in
-                    ((r["started_ns"], 1), (r["ended_ns"], -1)))
-    active = peak = 0
-    for _, change in events:
-        active += change
-        peak = max(peak, active)
-    assert active == 0
-    identical = Counter((r["method"], r["object"], r["range"]) for r in records)
-    return {"response_bytes": capture["response_bytes"], "requests": capture["requests"],
-            "peak_active_requests": peak, "by_class": capture["by_class"],
-            "incomplete_bodies": sum(r["incomplete_body"] for r in records),
-            "http_statuses": dict(Counter(r["status"] for r in records)),
-            "repeated_identical_requests": sum(n - 1 for n in identical.values()),
-            "retries": None, "retry_note": "Repeated ranges may be separate reads; the proxy cannot identify SDK retries."}
+from run import PROTOCOL, comparison_identity, digest, save
 
 
 def run(args, request, mode, purpose, repetition):
@@ -46,27 +25,13 @@ def run(args, request, mode, purpose, repetition):
     payload = request | {"purpose": purpose, "run_id": name, "campaign_id": "intra-page-networks",
                          "repetition": repetition, "correctness_file": str(certificate),
                          "validation_diagnostics": purpose == "validation"}
-    env = storage.reader_environment(args.state)
-    env.pop("RUST_LOG", None)
-    binary = args.binary
-    if args.baseline_binary:
-        binary = args.baseline_binary if mode == "baseline" else args.binary
-        env.update(DAR_INTRA_PAGE_READS="default", DAR_NETWORK_WARMUP="default")
-    else:
-        env["DAR_INTRA_PAGE_READS"] = mode
-        env["DAR_NETWORK_WARMUP"] = ("none" if args.no_warmup else
-                                     "on" if args.network_warmup and mode == "auto" else "off")
-    if purpose == "validation":
-        env["RUST_LOG"] = ("delta_arrow_reader::diagnostics::intra_page=debug,"
-                           "delta_arrow_reader::diagnostics::parquet_range_planning=debug,"
-                           "delta_arrow_reader::diagnostics::network_warmup=debug")
-    remote = args.local_table is None
-    if remote:
-        network.control(args.state, reset=True, traced=purpose != "timing")
     print(f"START {name}", flush=True)
-    record = invoke(binary, payload, slot, reference=args.reference, env=env,
-                    command_prefix=storage.reader_prefix(args.state), supervised=True, defer_validation=True)
-    capture = network.finish(args.state, slot) if remote else None
+    result = storage.native.call("intra-page", {"directory": str(args.state), "output": str(slot),
+        "binary": str(args.binary), "baseline_binary": str(args.baseline_binary) if args.baseline_binary else None,
+        "reference": str(args.reference), "protocols": str(PROTOCOL.parent), "payload": payload,
+        "mode": mode, "remote": args.local_table is None,
+        "network_warmup": args.network_warmup, "no_warmup": args.no_warmup})
+    record = result["record"]
     assert record["status"] == "success", record.get("failure_reason")
     if args.baseline_binary:
         provider = record["settings"]["provider"]
@@ -98,7 +63,7 @@ def run(args, request, mode, purpose, repetition):
               "initialization_seconds": record["initialization_ns"] / 1e9 if record["initialization_ns"] is not None else None,
               "query_seconds": [q["completion_ns"] / 1e9 if q["completion_ns"] is not None else None
                                 for q in record["queries"]],
-              "network": network_metrics(capture, slot / "network-requests.jsonl") if purpose != "timing" else capture,
+              "network": result["network"],
               "process_cpu_ns": resources["process_cpu_ns"], "peak_rss_bytes": resources["peak_rss_bytes"],
               "record": str((output / "record.json").relative_to(args.output))}
     save(slot / "sample.json", sample)
@@ -162,7 +127,8 @@ def main():
         "builds": builds,
         "primary_metric": "first query after initialization" if args.baseline_binary else "session or open query",
         "reference": metadata, "network": profile,
-        "harness_sha256": digest(Path(__file__)), "samples_per_mode": args.samples,
+        "harness_sha256": digest(Path(__file__)), "controller_sha256": digest(storage.native.executable()),
+        "samples_per_mode": args.samples,
         "network_warmup": args.network_warmup,
         "no_warmup": args.no_warmup,
         "concurrent_queries": args.concurrent_queries,

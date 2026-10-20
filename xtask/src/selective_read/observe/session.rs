@@ -351,10 +351,7 @@ pub(in crate::selective_read) fn run(request: Request) -> Result<Value> {
             .or_insert_with(|| json!({}))["reason"] =
             json!("request/byte metrics require a separate I/O diagnostic");
     }
-    match network::run(network::Request::Finish {
-        directory,
-        output: trace_output,
-    }) {
+    match network::capture(&directory, &trace_output) {
         Ok(transport) if !transport.is_null() => {
             if traced {
                 let external = record

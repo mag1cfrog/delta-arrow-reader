@@ -43,38 +43,21 @@ pub(crate) struct Start {
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "kebab-case", deny_unknown_fields)]
 pub(super) enum Request {
-    Config {
-        directory: PathBuf,
-    },
-    Control {
-        directory: PathBuf,
-        reset: bool,
-        traced: bool,
-        timeout: f64,
-    },
-    Finish {
-        directory: PathBuf,
-        output: PathBuf,
-    },
+    Config { directory: PathBuf },
 }
 
 pub(super) fn run(request: Request) -> Result<Value> {
     match request {
         Request::Config { directory } => Ok(config(&directory)?.unwrap_or(Value::Null)),
-        Request::Control {
-            directory,
-            reset,
-            traced,
-            timeout,
-        } => control(&directory, reset, traced, timeout),
-        Request::Finish { directory, output } => {
-            let value = control(&directory, false, false, 10.0)?;
-            if value.is_null() {
-                Ok(value)
-            } else {
-                finish(&output, value)
-            }
-        }
+    }
+}
+
+pub(super) fn capture(directory: &Path, output: &Path) -> Result<Value> {
+    let value = control(directory, false, false, 10.0)?;
+    if value.is_null() {
+        Ok(value)
+    } else {
+        finish(output, value)
     }
 }
 

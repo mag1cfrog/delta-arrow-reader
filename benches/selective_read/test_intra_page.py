@@ -1,17 +1,16 @@
-"""Check request overlap and avoid mistaking repeated reads for SDK retries."""
+"""Check the Python experiment boundary and first-query reporting."""
 
-import json
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from intra_page import network_metrics, run
+from intra_page import run
 from run import query_count
 
 
-class NetworkMetricsTest(unittest.TestCase):
+class IntraPageTest(unittest.TestCase):
     def test_two_builds_use_defaults_and_report_first_query(self):
         record = {"status": "success", "settings": {"provider": {
             "warmup": "Automatic", "scan_options": "experimental_intra_page_reads: true"}},
@@ -21,22 +20,21 @@ class NetworkMetricsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             args = SimpleNamespace(output=Path(directory), binary=Path("candidate"),
                 baseline_binary=Path("baseline"), state=Path("state"), reference=Path("reference"),
-                local_table=None)
-            with patch("intra_page.storage.reader_environment", return_value={}), \
-                 patch("intra_page.storage.reader_prefix", return_value=[]), \
-                 patch("intra_page.network.control") as control, \
-                 patch("intra_page.network.finish", return_value={"requests": 10}), \
-                 patch("intra_page.invoke", return_value=record) as invoke, \
+                local_table=None, network_warmup=False, no_warmup=False)
+            with patch("intra_page.storage.native.call", return_value={"record": record, "network": {"requests": 10}}) as invoke, \
                  patch("intra_page.save"), patch("builtins.print"):
                 for mode in ("baseline", "candidate"):
                     sample = run(args, {"execution_mode": "reuse"}, mode, "timing", 0)
-                    self.assertEqual(invoke.call_args.args[0], Path(mode))
-                    self.assertEqual(invoke.call_args.kwargs["env"], {
-                        "DAR_INTRA_PAGE_READS": "default", "DAR_NETWORK_WARMUP": "default"})
+                    self.assertEqual(invoke.call_args.args[0], "intra-page")
+                    request = invoke.call_args.args[1]
+                    self.assertEqual(request["mode"], mode)
+                    self.assertEqual(request["binary"], "candidate")
+                    self.assertEqual(request["baseline_binary"], "baseline")
+                    self.assertFalse(request["network_warmup"] or request["no_warmup"])
                     self.assertEqual(sample["seconds"], 7)
                     self.assertEqual(sample["initialization_seconds"], 2)
                     self.assertEqual(sample["query_seconds"], [7, 4])
-                    control.assert_called_with(args.state, reset=True, traced=False)
+                    self.assertEqual(sample["network"], {"requests": 10})
 
     def test_concurrent_request_counts(self):
         payload = {"execution_mode": "reuse", "comparison_revision": 6,
@@ -48,20 +46,6 @@ class NetworkMetricsTest(unittest.TestCase):
             query_count(payload | {"execution_mode": "open"})
         with self.assertRaises(ValueError):
             query_count(payload | {"comparison_revision": 5})
-
-    def test_overlapping_and_repeated_ranges(self):
-        base = {"method": "GET", "object": "part.parquet", "range": "bytes=0-7",
-                "incomplete_body": False, "status": 206}
-        records = [base | {"started_ns": start, "ended_ns": end}
-                   for start, end in ((1, 4), (2, 3), (4, 5))]
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "requests.jsonl"
-            path.write_text("\n".join(json.dumps(r) for r in records))
-            metrics = network_metrics({"requests": 3, "response_bytes": 24, "by_class": {}}, path)
-        self.assertEqual(metrics["peak_active_requests"], 2)
-        self.assertEqual(metrics["repeated_identical_requests"], 2)
-        self.assertIsNone(metrics["retries"])
-        self.assertIsNone(network_metrics(None, None))
 
 
 if __name__ == "__main__":

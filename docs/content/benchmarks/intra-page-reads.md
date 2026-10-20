@@ -148,6 +148,8 @@ one DAR executable. Enabling the option uses the automatic cost decision; there
 is no separate forced mode. This manual experiment reuses a retained revision-6
 request and its independently generated reference output. It does not run in CI
 or update the published five-reader results.
+Rust configures and supervises each invocation and summarizes network traffic;
+Python compares the exported Arrow values with the independent reference.
 
 Build the [DAR runner](selective-read-runners.md), then prepare the original
 table and [MinIO network proxy](selective-read-storage.md). Use the Python

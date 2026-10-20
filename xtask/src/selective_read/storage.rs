@@ -44,13 +44,6 @@ pub(super) enum Request {
     Credentials {
         directory: PathBuf,
     },
-    ReaderEnvironment {
-        directory: PathBuf,
-    },
-    ReaderPrefix {
-        directory: PathBuf,
-        unit: Option<String>,
-    },
     PutVerified {
         directory: PathBuf,
         key: String,
@@ -68,8 +61,6 @@ pub(super) fn run(operation: Request) -> Result<Value> {
             Ok(Value::Null)
         }
         Request::Credentials { directory } => credentials(&directory),
-        Request::ReaderEnvironment { directory } => reader_environment(&directory),
-        Request::ReaderPrefix { directory, unit } => reader_prefix(&directory, unit.as_deref()),
         Request::PutVerified {
             directory,
             key,

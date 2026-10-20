@@ -35,6 +35,8 @@ pub(crate) enum Task {
     ProductionPairs,
     /// Run a numeric-page or Delta-length diagnostic process. Read JSON from stdin.
     Experiment,
+    /// Compare partial-page policies or reader builds. Read one invocation as JSON.
+    IntraPage,
     /// Measure raw Zstd block discovery against complete column reads.
     ZstdProbe(zstd_probe::Args),
     /// Calibrate the 200 +/- 20 ms, 150 Mbit/s proxy against signed MinIO reads.
@@ -140,6 +142,7 @@ impl Task {
             Self::ProductionReport => report::run(serde_json::from_value(input)?)?,
             Self::ProductionPairs => pairs::run(serde_json::from_value(input)?)?,
             Self::Experiment => experiment::run(serde_json::from_value(input)?)?,
+            Self::IntraPage => experiment::intra_page::run(serde_json::from_value(input)?)?,
             Self::ExecReader { .. }
             | Self::ZstdProbe(_)
             | Self::CheckNetwork { .. }

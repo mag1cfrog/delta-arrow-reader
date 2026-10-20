@@ -83,14 +83,6 @@ def put_verified(directory, key, source, expected, *, checksum=False):
         "source": str(source), "expected": expected, "checksum": checksum})
 
 
-def reader_environment(directory):
-    return native.call("storage", {"action": "reader-environment", "directory": str(directory)})
-
-
-def reader_prefix(directory, unit=None):
-    return native.call("storage", {"action": "reader-prefix", "directory": str(directory), "unit": unit})
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)

@@ -302,10 +302,7 @@ pub(super) fn run(args: Args) -> Result<()> {
             }
             let elapsed = started.elapsed().as_secs_f64();
             let cpu = cpu_seconds()? - cpu;
-            let capture = network::run(network::Request::Finish {
-                directory: args.state.clone(),
-                output: slot.clone(),
-            })?;
+            let capture = network::capture(&args.state, &slot)?;
             let sample = json!({"mode":mode,"repetition":repetition,"seconds":elapsed,"client_cpu_seconds":cpu,
                 "process_peak_rss_kib":usage(libc::RUSAGE_SELF)?.ru_maxrss,"network":capture});
             storage::save(&slot.join("sample.json"), &sample)?;
