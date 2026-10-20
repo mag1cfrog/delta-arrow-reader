@@ -435,9 +435,9 @@ fn core_filter_preserves_benchmark_targets_and_shared_inputs() -> Result<()> {
         "crates/delta-arrow-reader-core/benches/range_planning/controlled_http.rs",
         "crates/delta-arrow-reader-core/benches/range_planning/plan_diagnostics.rs",
         "benches/selective_read/src/control_rows.rs",
-        "benches/scan_scheduling.py",
-        "benches/test_scan_scheduling.py",
-        "benches/run_order.py",
+        "xtask/src/scan_scheduling.rs",
+        "xtask/src/scan_scheduling/tests.rs",
+        "xtask/tests/scan_scheduling.rs",
     ] {
         assert!(filter_matches(&filters, "code", path)?, "{path}");
     }
@@ -452,6 +452,7 @@ fn core_filter_preserves_benchmark_targets_and_shared_inputs() -> Result<()> {
         "benches/selective_read/src/tests.rs",
         "benches/selective_read/tests/large_cli.rs",
         "benches/selective_read/oracle.py",
+        "benches/run_order.py",
         "benches/selective_read/runners/dar/src/main.rs",
     ] {
         assert!(!filter_matches(&filters, "code", path)?, "{path}");

@@ -28,6 +28,9 @@ url = "2"
 [dev-dependencies]
 serde_yaml_ng = "0.10"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 http-body-util = { version = "0.1", features = ["channel"] }
 hyper = { version = "1", features = ["http1", "server"] }

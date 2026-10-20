@@ -29,6 +29,8 @@ mod release_request;
 mod release_selection;
 mod repository;
 mod scan;
+#[cfg(unix)]
+mod scan_scheduling;
 mod validation_record;
 
 use std::{
@@ -55,6 +57,9 @@ struct Arguments {
 
 #[derive(Subcommand)]
 enum Task {
+    /// Run process-isolated scan scheduling benchmarks.
+    #[cfg(unix)]
+    ScanScheduling(scan_scheduling::Arguments),
     /// Build and validate CLI distribution artifacts.
     Cli {
         #[command(subcommand)]
@@ -184,6 +189,8 @@ fn main() -> ExitCode {
 
 fn run_task(task: Task) -> Result<()> {
     match task {
+        #[cfg(unix)]
+        Task::ScanScheduling(args) => args.run(),
         Task::Cli { command } => command.run().map_err(Into::into),
         Task::CheckCacheWrites => check_cache_writes(),
         Task::ReportCacheReads => report_cache_reads(),
