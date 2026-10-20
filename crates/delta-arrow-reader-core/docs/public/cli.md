@@ -64,7 +64,7 @@ Discovery does not search numeric version gaps.
 
 Use an existing Databricks CLI workspace profile to resolve a table name and
 obtain temporary cloud credentials. DAR then reads the Delta log directly from
-S3 or Azure on your machine. It returns the snapshot's schema and version;
+S3, Azure, or R2 on your machine. It returns the snapshot's schema and version;
 Unity Catalog column metadata does not determine the output schema. This
 command does not submit SQL or start a cluster or SQL warehouse.
 
@@ -112,15 +112,20 @@ These rules apply to Unity Catalog targets:
   column masks, catalog commits (`catalogManaged`), and coordinated commits
   are unsupported. Authorization failures never fall back to cloud credentials
   from the environment.
-- Supported credentials are S3 temporary key/secret/session-token credentials
+- Supported credentials are S3/R2 temporary key/secret/session-token credentials
   and Azure user-delegation SAS or Azure AD bearer tokens. Azure locations must
   identify the account and container using `abfss://` or an Azure Blob/DFS HTTPS
-  URL. Other credential types, S3 access points, and other Azure endpoints are
+  URL. R2 locations use `r2://bucket@account.r2.cloudflarestorage.com/path`
+  or the equivalent `https://account.r2.cloudflarestorage.com/bucket/path`.
+  Other credential types, S3 access points, and other Azure/R2 endpoints are
   unsupported.
 - Storage options may supply supported region and transport settings, including
   endpoints, timeouts, and proxies. Credential, bucket, account, container,
   authentication-source, and unsigned-access overrides are rejected, including
-  their aliases. S3 needs one nonempty region setting. Unknown options fail.
+  their aliases. S3 needs one nonempty region setting. R2 uses `auto` and needs
+  no region option; an explicit region must be `auto`. To override the R2
+  transport endpoint, use `aws_endpoint_url_s3`; the generic endpoint option
+  is rejected because the R2 URL would override it. Unknown options fail.
 - Credentials remain in memory and are acquired once. If they expire while
   metadata is loading, the command fails; rerun it for fresh credentials.
   `scan` does not yet accept Unity Catalog targets.

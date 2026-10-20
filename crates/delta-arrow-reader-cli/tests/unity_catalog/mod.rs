@@ -25,18 +25,29 @@ const TABLE_ID: &str = "12345678-1234-1234-1234-123456789abc";
 const TABLE_NAME: &str = "main.sales.orders";
 const PROFILE: &str = "secret profile $(do-not-run)";
 
+/// Credential forms returned by the fake Databricks CLI.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StorageCredentialKind {
+    S3,
+    R2,
+    AzureSas,
+    AzureBearer,
+}
+
 /// A fake Databricks executable with controllable table metadata and credential responses.
 struct DatabricksCliFixture {
     directory: tempfile::TempDir,
 }
 
 impl DatabricksCliFixture {
-    fn new(azure: bool) -> Result<Self, Box<dyn std::error::Error>> {
+    fn new(credential_kind: StorageCredentialKind) -> Result<Self, Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
-        let location = if azure {
-            "abfss://container@account.dfs.core.windows.net/table/"
-        } else {
-            "s3://bucket/table/"
+        let location = match credential_kind {
+            StorageCredentialKind::S3 => "s3://bucket/table/",
+            StorageCredentialKind::R2 => "r2://bucket@account.r2.cloudflarestorage.com/table/",
+            StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer => {
+                "abfss://container@account.dfs.core.windows.net/table/"
+            }
         };
         fs::write(
             directory.path().join("metadata.json"),
@@ -47,11 +58,25 @@ impl DatabricksCliFixture {
             }))?,
         )?;
         let mut credentials = json!({"url":location, "expiration_time": (SystemTime::now().duration_since(UNIX_EPOCH)? + Duration::from_secs(300)).as_millis() as u64});
-        if azure {
-            credentials["azure_user_delegation_sas"] =
-                json!({"sas_token":"sv=test&sp=rl&sig=test%2Bsignature"});
-        } else {
-            credentials["aws_temp_credentials"] = json!({"access_key_id":"test-key", "secret_access_key":"secret-sentinel", "session_token":"test-session"});
+        match credential_kind {
+            StorageCredentialKind::S3 | StorageCredentialKind::R2 => {
+                let credential_field = if credential_kind == StorageCredentialKind::R2 {
+                    // Exercise equivalent catalog and native R2 URL forms across the two responses.
+                    credentials["url"] =
+                        json!("https://account.r2.cloudflarestorage.com/bucket/table/");
+                    "r2_temp_credentials"
+                } else {
+                    "aws_temp_credentials"
+                };
+                credentials[credential_field] = json!({"access_key_id":"test-key", "secret_access_key":"secret-sentinel", "session_token":"test-session"});
+            }
+            StorageCredentialKind::AzureSas => {
+                credentials["azure_user_delegation_sas"] =
+                    json!({"sas_token":"sv=test&sp=rl&sig=test%2Bsignature"});
+            }
+            StorageCredentialKind::AzureBearer => {
+                credentials["azure_aad"] = json!({"aad_token":"secret-bearer-token"});
+            }
         }
         fs::write(
             directory.path().join("credentials.json"),
@@ -85,9 +110,14 @@ esac
 "#,
         )?;
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o755))?;
+        let options = if credential_kind == StorageCredentialKind::S3 {
+            json!({"aws_region":"eu-west-1"})
+        } else {
+            json!({})
+        };
         fs::write(
             directory.path().join("options.json"),
-            br#"{"aws_region":"eu-west-1"}"#,
+            serde_json::to_vec(&options)?,
         )?;
         Ok(Self { directory })
     }
@@ -126,34 +156,35 @@ esac
 }
 
 #[test]
-fn inspection_uses_vended_s3_and_azure_credentials_and_actual_delta_schema() -> TestResult {
+fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestResult {
     let corpus = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
         "../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned",
     );
     let schema =
         FileReader::try_new(fs::File::open(corpus.join("expected.arrow"))?, None)?.schema();
     let log = fs::read(corpus.join("table/_delta_log/00000000000000000000.json"))?;
-    for (azure, bearer_token) in [
-        (false, None),
-        (true, None),
-        (true, Some("secret-bearer-token")),
+    for credential_kind in [
+        StorageCredentialKind::S3,
+        StorageCredentialKind::R2,
+        StorageCredentialKind::AzureSas,
+        StorageCredentialKind::AzureBearer,
     ] {
-        let fixture = DatabricksCliFixture::new(azure)?;
-        if let Some(token) = bearer_token {
-            let credentials_file = fixture.directory.path().join("credentials.json");
-            let mut credentials: Value = serde_json::from_slice(&fs::read(&credentials_file)?)?;
-            credentials
-                .as_object_mut()
-                .unwrap()
-                .remove("azure_user_delegation_sas");
-            credentials["azure_aad"] = json!({"aad_token":token});
-            fs::write(credentials_file, serde_json::to_vec(&credentials)?)?;
-        }
+        let fixture = DatabricksCliFixture::new(credential_kind)?;
+        let azure = matches!(
+            credential_kind,
+            StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer
+        );
         let server = MockCloudStorageServer::new(azure, log.clone())?;
-        let options = if azure {
-            json!({"azure_endpoint":server.endpoint, "azure_allow_http":"true"})
-        } else {
-            json!({"aws_endpoint":server.endpoint, "aws_allow_http":"true", "aws_region":"eu-west-1"})
+        let options = match credential_kind {
+            StorageCredentialKind::S3 => {
+                json!({"aws_endpoint":server.endpoint, "aws_allow_http":"true", "aws_region":"eu-west-1"})
+            }
+            StorageCredentialKind::R2 => {
+                json!({"aws_endpoint_url_s3":server.endpoint, "aws_allow_http":"true"})
+            }
+            StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer => {
+                json!({"azure_endpoint":server.endpoint, "azure_allow_http":"true"})
+            }
         };
         fs::write(
             fixture.directory.path().join("options.json"),
@@ -175,7 +206,7 @@ fn inspection_uses_vended_s3_and_azure_credentials_and_actual_delta_schema() -> 
             let output = run_with_timeout(&mut command)?;
             assert!(
                 output.status.success(),
-                "azure={azure}: {}, requests={:?}",
+                "{credential_kind:?}: {}, requests={:?}",
                 String::from_utf8_lossy(&output.stderr),
                 server
                     .requests
@@ -201,6 +232,7 @@ fn inspection_uses_vended_s3_and_azure_credentials_and_actual_delta_schema() -> 
                     "secret-bearer-token",
                     "bucket/table",
                     "account.dfs",
+                    "account.r2",
                 ] {
                     assert!(!diagnostic.contains(sentinel), "{diagnostic}");
                 }
@@ -239,27 +271,36 @@ fn inspection_uses_vended_s3_and_azure_credentials_and_actual_delta_schema() -> 
                 !first.contains(".parquet") && !first.contains(".bin"),
                 "{first}"
             );
-            if let Some(token) = bearer_token {
-                assert!(
-                    request
-                        .to_ascii_lowercase()
-                        .contains(&format!("authorization: bearer {token}\r\n")),
-                    "missing UC bearer token"
-                );
-                assert!(!first.contains("sig="), "unexpected SAS credential");
-            } else if azure {
-                assert!(first.contains("sig=test%2Bsignature"), "{first}");
-            } else {
-                assert!(
-                    request.contains("Credential=test-key/")
-                        && request.contains("/eu-west-1/s3/aws4_request"),
-                    "missing UC signing credential or region"
-                );
-                assert!(
-                    request
-                        .to_ascii_lowercase()
-                        .contains("x-amz-security-token: test-session")
-                );
+            match credential_kind {
+                StorageCredentialKind::AzureBearer => {
+                    assert!(
+                        request
+                            .to_ascii_lowercase()
+                            .contains("authorization: bearer secret-bearer-token\r\n"),
+                        "missing UC bearer token"
+                    );
+                    assert!(!first.contains("sig="), "unexpected SAS credential");
+                }
+                StorageCredentialKind::AzureSas => {
+                    assert!(first.contains("sig=test%2Bsignature"), "{first}");
+                }
+                StorageCredentialKind::S3 | StorageCredentialKind::R2 => {
+                    let region = if credential_kind == StorageCredentialKind::R2 {
+                        "auto"
+                    } else {
+                        "eu-west-1"
+                    };
+                    assert!(
+                        request.contains("Credential=test-key/")
+                            && request.contains(&format!("/{region}/s3/aws4_request")),
+                        "missing UC signing credential or region"
+                    );
+                    assert!(
+                        request
+                            .to_ascii_lowercase()
+                            .contains("x-amz-security-token: test-session")
+                    );
+                }
             }
         }
     }
@@ -268,7 +309,7 @@ fn inspection_uses_vended_s3_and_azure_credentials_and_actual_delta_schema() -> 
 
 #[test]
 fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResult {
-    let fixture = DatabricksCliFixture::new(false)?;
+    let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
     for args in [
         vec!["--help"],
         vec!["--version"],
@@ -334,7 +375,7 @@ fn invalid_responses_and_denied_credentials_are_redacted() -> TestResult {
             "invalid_databricks_response",
         ),
     ] {
-        let fixture = DatabricksCliFixture::new(false)?;
+        let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
         fs::write(fixture.directory.path().join("metadata.json"), response)?;
         let output = run_with_timeout(&mut fixture.inspect())?;
         assert_eq!(output.status.code(), Some(1));
@@ -349,7 +390,7 @@ fn invalid_responses_and_denied_credentials_are_redacted() -> TestResult {
                 .any(|a| a == "temporary-table-credentials")
         );
     }
-    let fixture = DatabricksCliFixture::new(false)?;
+    let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
     let output = run_with_timeout(
         fixture
             .inspect()
@@ -379,7 +420,7 @@ fn uc_admission_preserves_direct_path_inspection_of_unsupported_protocols() -> T
                 .join("_delta_log/00000000000000000000.json"),
             &log,
         )?;
-        let fixture = DatabricksCliFixture::new(false)?;
+        let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
         let server = MockCloudStorageServer::new(false, log.into_bytes())?;
         fs::write(
             fixture.directory.path().join("options.json"),
@@ -413,7 +454,7 @@ fn uc_admission_preserves_direct_path_inspection_of_unsupported_protocols() -> T
 #[test]
 fn uc_cancellation_remains_responsive_with_blocked_stdout() -> TestResult {
     use std::os::fd::AsRawFd;
-    let fixture = DatabricksCliFixture::new(false)?;
+    let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
     let schema = json!({"type":"struct","fields":[{"name":"id","type":"integer","nullable":true,"metadata":{"large": "x".repeat(256 * 1024)}}]});
     let log = format!(
         "{}\n{}\n",
@@ -470,7 +511,7 @@ fn uc_cancellation_remains_responsive_with_blocked_stdout() -> TestResult {
 #[test]
 fn cancellation_terminates_pending_databricks_process() -> TestResult {
     for signal in [libc::SIGINT, libc::SIGTERM] {
-        let fixture = DatabricksCliFixture::new(false)?;
+        let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
         let mut child = fixture
             .inspect()
             .env("RUST_LOG", "info")
@@ -532,7 +573,7 @@ fn check_cancellation(stderr: &[u8], status: i32) {
 #[ignore = "requires unshare and permission to create user/PID namespaces"]
 fn pid_one_cancellation_preserves_uc_diagnostic() -> TestResult {
     for (signal, status) in [("INT", 130), ("TERM", 143)] {
-        let fixture = DatabricksCliFixture::new(false)?;
+        let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
         let inspect = fixture.inspect();
         // Keep unshare on the host PATH; env then execs DAR as namespace PID 1.
         // --kill-child also cleans up the namespace if the test times out.

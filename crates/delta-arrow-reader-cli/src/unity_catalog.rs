@@ -317,6 +317,7 @@ impl TableMetadataResponse {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum StorageBackend {
     S3,
+    R2,
     Azure,
 }
 
@@ -327,7 +328,7 @@ struct TableStorageLocation {
 }
 
 impl TableStorageLocation {
-    /// Normalizes S3 aliases and Azure HTTPS URLs, and adds a trailing slash to the table root.
+    /// Normalizes S3, R2, and Azure URL forms, and adds a trailing slash to the table root.
     fn parse(raw: &str) -> Result<Self, Error> {
         let mut url = Url::parse(raw).map_err(|_| Error::InvalidDatabricksResponse)?;
         if url.query().is_some()
@@ -339,11 +340,36 @@ impl TableStorageLocation {
         {
             return Err(Error::InvalidDatabricksResponse);
         }
+        let is_r2_endpoint = url.host_str().is_some_and(|host| {
+            host.strip_suffix(".r2.cloudflarestorage.com")
+                .is_some_and(|account| !account.is_empty() && !account.contains('.'))
+        });
         let backend = match url.scheme() {
             "s3" | "s3a" if url.username().is_empty() && url.host_str().is_some() => {
                 url.set_scheme("s3")
                     .map_err(|_| Error::InvalidDatabricksResponse)?;
                 StorageBackend::S3
+            }
+            "r2" if is_r2_endpoint && !url.username().is_empty() => {
+                if url.username().contains('%') || matches!(url.username(), "." | "..") {
+                    return Err(Error::InvalidDatabricksResponse);
+                }
+                // The native S3 client accepts R2 HTTPS URLs; keep the account in the canonical root.
+                url = Url::parse(&format!(
+                    "https://{}/{}{}",
+                    url.host_str().ok_or(Error::InvalidDatabricksResponse)?,
+                    url.username(),
+                    url.path()
+                ))
+                .map_err(|_| Error::InvalidDatabricksResponse)?;
+                StorageBackend::R2
+            }
+            "https" if is_r2_endpoint && url.username().is_empty() => {
+                let bucket = url.path().split('/').nth(1).unwrap_or_default();
+                if bucket.is_empty() || bucket.contains('%') {
+                    return Err(Error::InvalidDatabricksResponse);
+                }
+                StorageBackend::R2
             }
             "abfss"
                 if !url.username().is_empty()
@@ -385,7 +411,7 @@ impl TableStorageLocation {
 
 /// Allows transport and region settings without letting callers replace UC credentials or identity.
 ///
-/// Before the metadata request, `None` accepts settings for either supported backend.
+/// Before the metadata request, `None` accepts settings for any supported backend.
 /// Once the table URL is known, settings must match that backend and S3 requires a region.
 fn validate_storage_options(
     options: &DeltaStorageOptions,
@@ -417,6 +443,10 @@ fn validate_storage_options(
             || !match backend {
                 None => aws_allowed || azure_allowed,
                 Some(StorageBackend::S3) => aws_allowed,
+                // R2 URLs supply the endpoint; only the service-specific override takes precedence.
+                Some(StorageBackend::R2) => {
+                    aws_allowed && !matches!(aws, Ok(AmazonS3ConfigKey::Endpoint))
+                }
                 Some(StorageBackend::Azure) => azure_allowed,
             }
         {
@@ -426,7 +456,10 @@ fn validate_storage_options(
             aws,
             Ok(AmazonS3ConfigKey::Region | AmazonS3ConfigKey::DefaultRegion)
         ) {
-            if has_region || value.trim().is_empty() {
+            if has_region
+                || value.trim().is_empty()
+                || (backend == Some(StorageBackend::R2) && value != "auto")
+            {
                 return Err(Error::InvalidStorageOptions);
             }
             has_region = true;
@@ -438,9 +471,9 @@ fn validate_storage_options(
     Ok(())
 }
 
-/// Temporary AWS session credentials returned for an S3 table.
+/// Temporary access keys and session token for an AWS S3 or Cloudflare R2 table.
 #[derive(Deserialize)]
-struct AwsTemporaryCredentials {
+struct S3SessionCredentials {
     access_key_id: String,
     secret_access_key: String,
     session_token: String,
@@ -468,11 +501,11 @@ struct TemporaryCredentialsResponse {
     url: String,
     /// Credential expiry as milliseconds since the Unix epoch.
     expiration_time: u64,
-    aws_temp_credentials: Option<JsonObject<AwsTemporaryCredentials>>,
+    aws_temp_credentials: Option<JsonObject<S3SessionCredentials>>,
+    r2_temp_credentials: Option<JsonObject<S3SessionCredentials>>,
     azure_user_delegation_sas: Option<JsonObject<AzureSasCredentials>>,
     azure_aad: Option<JsonObject<AzureBearerCredentials>>,
     gcp_oauth_token: Option<Value>,
-    r2_temp_credentials: Option<Value>,
 }
 
 /// Validated storage access for one UC inspection, including its credential deadline.
@@ -505,24 +538,26 @@ fn validate_read_credentials(
     if credentials_expire_at <= SystemTime::now() {
         return Err(Error::CredentialsExpired);
     }
-    if response.gcp_oauth_token.is_some() || response.r2_temp_credentials.is_some() {
+    if response.gcp_oauth_token.is_some() {
         return Err(Error::UnsupportedDirectRead);
     }
     // Accept exactly one credential type, matching the table URL's storage backend.
     match (
         storage_location.backend,
         response.aws_temp_credentials.map(|value| value.0),
+        response.r2_temp_credentials.map(|value| value.0),
         response.azure_user_delegation_sas.map(|value| value.0),
         response.azure_aad.map(|value| value.0),
     ) {
-        (StorageBackend::S3, Some(aws), None, None) => {
-            if aws.access_point.is_some() {
+        (StorageBackend::S3, Some(credentials), None, None, None)
+        | (StorageBackend::R2, None, Some(credentials), None, None) => {
+            if credentials.access_point.is_some() {
                 return Err(Error::UnsupportedDirectRead);
             }
             for (key, value) in [
-                ("aws_access_key_id", aws.access_key_id),
-                ("aws_secret_access_key", aws.secret_access_key),
-                ("aws_session_token", aws.session_token),
+                ("aws_access_key_id", credentials.access_key_id),
+                ("aws_secret_access_key", credentials.secret_access_key),
+                ("aws_session_token", credentials.session_token),
             ] {
                 if value.trim().is_empty() || value.chars().any(char::is_control) {
                     return Err(Error::InvalidDatabricksResponse);
@@ -530,7 +565,7 @@ fn validate_read_credentials(
                 storage_options.insert(key.into(), value);
             }
         }
-        (StorageBackend::Azure, None, Some(azure), None) => {
+        (StorageBackend::Azure, None, None, Some(azure), None) => {
             let sas = azure
                 .sas_token
                 .strip_prefix('?')
@@ -543,7 +578,7 @@ fn validate_read_credentials(
             }
             storage_options.insert("azure_storage_sas_key".into(), sas.into());
         }
-        (StorageBackend::Azure, None, None, Some(azure)) => {
+        (StorageBackend::Azure, None, None, None, Some(azure)) => {
             if azure.aad_token.is_empty()
                 || !azure.aad_token.bytes().all(|byte| byte.is_ascii_graphic())
             {
@@ -903,6 +938,164 @@ mod tests {
         ] {
             assert!(TableStorageLocation::parse(location).is_err(), "{location}");
         }
+    }
+
+    #[test]
+    fn r2_locations_preserve_account_bucket_and_encoded_path() {
+        for (location, expected) in [
+            (
+                "r2://bucket@account.r2.cloudflarestorage.com",
+                "https://account.r2.cloudflarestorage.com/bucket/",
+            ),
+            (
+                "r2://bucket@account.r2.cloudflarestorage.com/",
+                "https://account.r2.cloudflarestorage.com/bucket/",
+            ),
+            (
+                "https://account.r2.cloudflarestorage.com/bucket",
+                "https://account.r2.cloudflarestorage.com/bucket/",
+            ),
+            (
+                "r2://bucket@account.r2.cloudflarestorage.com/a%20b/%252F",
+                "https://account.r2.cloudflarestorage.com/bucket/a%20b/%252F/",
+            ),
+            (
+                "https://account.r2.cloudflarestorage.com/bucket/a%20b/%252F/",
+                "https://account.r2.cloudflarestorage.com/bucket/a%20b/%252F/",
+            ),
+        ] {
+            let parsed = TableStorageLocation::parse(location).unwrap();
+            assert_eq!(parsed.url.as_str(), expected);
+            assert!(parsed.backend == StorageBackend::R2);
+        }
+        for location in [
+            "r2://account.r2.cloudflarestorage.com/bucket/table",
+            "r2://bucket@unrecognized.example/table",
+            "r2://bucket@account.r2.cloudflarestorage.com.example/table",
+            "r2://bucket@sub.account.r2.cloudflarestorage.com/table",
+            "r2://bucket@account.r2.cloudflarestorage.com:1234/table",
+            "r2://bucket:secret@account.r2.cloudflarestorage.com/table",
+            "r2://buck%65t@account.r2.cloudflarestorage.com/table",
+            "r2://..@account.r2.cloudflarestorage.com/table",
+            "https://account.r2.cloudflarestorage.com/",
+            "https://account.r2.cloudflarestorage.com/buck%2Fet/table",
+            "https://account.r2.cloudflarestorage.com/bucket/table?secret",
+            "https://account.r2.cloudflarestorage.com/bucket/table#fragment",
+            "http://account.r2.cloudflarestorage.com/bucket/table",
+        ] {
+            assert!(TableStorageLocation::parse(location).is_err(), "{location}");
+        }
+    }
+
+    #[test]
+    fn r2_options_use_auto_region_and_the_service_endpoint_override() {
+        validate_storage_options(&DeltaStorageOptions::new(), Some(StorageBackend::R2)).unwrap();
+        let options = DeltaStorageOptions::from([
+            ("AWS_DEFAULT_REGION".into(), "auto".into()),
+            ("aws_endpoint_url_s3".into(), "http://127.0.0.1:1234".into()),
+            ("aws_allow_http".into(), "true".into()),
+        ]);
+        validate_storage_options(&options, Some(StorageBackend::R2)).unwrap();
+        for (key, value) in [
+            ("region", "eu-west-1"),
+            ("default_region", "us-east-1"),
+            ("aws_endpoint", "http://127.0.0.1:1234"),
+            ("endpoint_url", "http://127.0.0.1:1234"),
+            ("azure_endpoint", "http://127.0.0.1:1234"),
+            ("aws_bucket", "other"),
+            ("aws_session_token", "secret"),
+        ] {
+            let options = DeltaStorageOptions::from([(key.into(), value.into())]);
+            assert_eq!(
+                validate_storage_options(&options, Some(StorageBackend::R2)),
+                Err(Error::InvalidStorageOptions),
+                "{key}"
+            );
+        }
+    }
+
+    #[test]
+    fn r2_credentials_require_the_same_root_and_exactly_one_credential_kind() {
+        let mut response = aws_credentials_response();
+        let credentials = response
+            .as_object_mut()
+            .unwrap()
+            .remove("aws_temp_credentials")
+            .unwrap();
+        response["r2_temp_credentials"] = credentials;
+        response["url"] = json!("https://account.r2.cloudflarestorage.com/bucket/table/");
+        let resolve = |value: &Value| {
+            validate_read_credentials(
+                &serde_json::to_vec(value).unwrap(),
+                TableStorageLocation::parse("r2://bucket@account.r2.cloudflarestorage.com/table")
+                    .unwrap(),
+                DeltaStorageOptions::new(),
+            )
+        };
+        let access = resolve(&response).unwrap();
+        assert_eq!(
+            access.storage_url.as_str(),
+            response["url"].as_str().unwrap()
+        );
+        assert_eq!(access.storage_options["aws_access_key_id"], "test-key");
+        assert_eq!(
+            access.storage_options["aws_secret_access_key"],
+            "test-secret"
+        );
+        assert_eq!(access.storage_options["aws_session_token"], "test-token");
+        for (field, invalid) in [
+            (
+                "url",
+                json!("https://other.r2.cloudflarestorage.com/bucket/table/"),
+            ),
+            (
+                "url",
+                json!("https://account.r2.cloudflarestorage.com/other/table/"),
+            ),
+            (
+                "url",
+                json!("https://account.r2.cloudflarestorage.com/bucket/other/"),
+            ),
+            (
+                "aws_temp_credentials",
+                response["r2_temp_credentials"].clone(),
+            ),
+            (
+                "azure_user_delegation_sas",
+                json!({"sas_token":"sig=secret"}),
+            ),
+            ("azure_aad", json!({"aad_token":"secret"})),
+            ("gcp_oauth_token", json!({"oauth_token":"secret"})),
+            ("r2_temp_credentials", json!([])),
+            ("r2_temp_credentials", json!({"access_key_id":"key"})),
+            (
+                "r2_temp_credentials",
+                json!({"access_key_id":"key", "secret_access_key":"", "session_token":"token"}),
+            ),
+        ] {
+            let mut value = response.clone();
+            value[field] = invalid;
+            assert!(resolve(&value).is_err(), "{field}");
+        }
+        let mut wrong_kind = response.clone();
+        wrong_kind["aws_temp_credentials"] = wrong_kind
+            .as_object_mut()
+            .unwrap()
+            .remove("r2_temp_credentials")
+            .unwrap();
+        assert!(matches!(
+            resolve(&wrong_kind),
+            Err(Error::UnsupportedDirectRead)
+        ));
+        response["url"] = json!("s3://bucket/table/");
+        assert!(matches!(
+            validate_read_credentials(
+                &serde_json::to_vec(&response).unwrap(),
+                TableStorageLocation::parse("s3://bucket/table/").unwrap(),
+                DeltaStorageOptions::new(),
+            ),
+            Err(Error::UnsupportedDirectRead)
+        ));
     }
 
     #[test]
