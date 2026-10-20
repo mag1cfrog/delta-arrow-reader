@@ -1893,6 +1893,7 @@ pub(in crate::reader) mod tests {
         let engine_context = Arc::new(DeltaKernelEngineContext::try_new(
             table_url,
             &DeltaStorageOptions::default(),
+            None,
         )?);
         Ok(DirectParquetReader::new(
             engine_context,
@@ -2476,6 +2477,7 @@ pub(in crate::reader) mod tests {
         let engine_context = Arc::new(DeltaKernelEngineContext::try_new(
             table_url,
             &DeltaStorageOptions::default(),
+            None,
         )?);
         let store = engine_context.object_store();
         let metrics = metrics();

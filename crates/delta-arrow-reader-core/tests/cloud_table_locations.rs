@@ -9,11 +9,9 @@ use delta_arrow_reader::{
     ParquetReaderBackend,
 };
 use futures_util::TryStreamExt;
-use hyper::{Request, Response, body::Incoming, server::conn::http1, service::service_fn};
-use hyper_util::rt::TokioIo;
 use object_store::{
-    GetRange, ObjectStore, ObjectStoreExt, ObjectStoreScheme, client::HttpResponseBody,
-    local::LocalFileSystem, memory::InMemory, path::Path as StorePath,
+    ObjectStore, ObjectStoreExt, ObjectStoreScheme, local::LocalFileSystem, memory::InMemory,
+    path::Path as StorePath,
 };
 use serde_json::Value;
 use tokio::{net::TcpListener, task::JoinSet};
@@ -26,6 +24,10 @@ use support::RealParquetDeltaTable;
 
 #[path = "support/tracing.rs"]
 mod capture;
+
+#[path = "support/cloud_http.rs"]
+#[allow(dead_code)]
+mod cloud_http;
 
 type TestResult = Result<(), Box<dyn Error>>;
 
@@ -63,7 +65,7 @@ async fn optional_network_sampling_failure_warns_but_table_loading_succeeds() ->
         ("aws_skip_signature".into(), "true".into()),
     ]);
     let mut server = JoinSet::new();
-    server.spawn(serve_s3(listener, store));
+    server.spawn(cloud_http::serve(listener, store, None));
     let collector = capture::Collector::new(Level::WARN);
     let table = DeltaTableBuilder::new("s3://bucket/table/")
         .with_storage_options(options)
@@ -145,7 +147,7 @@ async fn cloud_table_locations_with_explicit_namespaces() -> TestResult {
     ]);
     // Dropping the set also stops the listener and its connection tasks on failure.
     let mut server = JoinSet::new();
-    server.spawn(serve_s3(listener, Arc::clone(&store)));
+    server.spawn(cloud_http::serve(listener, Arc::clone(&store), None));
     let log_key = StorePath::from("table/_delta_log/00000000000000000001.json");
     let original = fs::read_to_string(fixture.path().join("_delta_log/00000000000000000001.json"))?;
     for (table_url, ambiguous_namespace) in [
@@ -315,112 +317,6 @@ async fn cloud_table_locations_with_explicit_namespaces() -> TestResult {
     }
     assert!(server.try_join_next().is_none(), "S3 test server stopped");
     Ok(())
-}
-
-async fn serve_s3(
-    listener: TcpListener,
-    store: Arc<InMemory>,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let mut connections = JoinSet::new();
-    loop {
-        tokio::select! {
-            accepted = listener.accept() => {
-                let (socket, _) = accepted?;
-                let store = Arc::clone(&store);
-                connections.spawn(http1::Builder::new().serve_connection(
-                    TokioIo::new(socket),
-                    service_fn(move |request| s3_response(request, Arc::clone(&store))),
-                ));
-            }
-            Some(result) = connections.join_next() => { result??; }
-        }
-    }
-}
-
-// Only the read operations exercised by this fixture are needed, not an S3 emulator.
-async fn s3_response(
-    request: Request<Incoming>,
-    store: Arc<InMemory>,
-) -> Result<Response<HttpResponseBody>, Box<dyn Error + Send + Sync>> {
-    let url = Url::parse(&format!("http://localhost{}", request.uri()))?;
-    if url
-        .query_pairs()
-        .any(|(key, value)| key == "list-type" && value == "2")
-    {
-        assert_eq!(url.path().trim_end_matches('/'), "/bucket");
-        let query = url
-            .query_pairs()
-            .collect::<std::collections::HashMap<_, _>>();
-        let prefix = query.get("prefix").map_or("", |s| s.as_ref());
-        let offset = query.get("start-after").map_or("", |s| s.as_ref());
-        let objects = store.list(None).try_collect::<Vec<_>>().await?;
-        let mut xml = String::from("<ListBucketResult><IsTruncated>false</IsTruncated>");
-        for object in objects {
-            let key = object.location.as_ref();
-            if key.starts_with(prefix) && key > offset {
-                let key = key
-                    .replace('&', "&amp;")
-                    .replace('<', "&lt;")
-                    .replace('>', "&gt;");
-                xml.push_str(&format!(
-                    "<Contents><Key>{key}</Key><LastModified>{}</LastModified><Size>{}</Size></Contents>",
-                    object.last_modified.to_rfc3339(), object.size,
-                ));
-            }
-        }
-        xml.push_str("</ListBucketResult>");
-        return Ok(Response::builder()
-            .header("Content-Type", "application/xml")
-            .body(xml.into())?);
-    }
-    let key = StorePath::from_url_path(url.path().strip_prefix("/bucket/").ok_or("wrong bucket")?)?;
-    let object = match store.get(&key).await {
-        Ok(object) => object,
-        Err(object_store::Error::NotFound { .. }) => {
-            return Ok(Response::builder()
-                .status(404)
-                .body(bytes::Bytes::new().into())?);
-        }
-        Err(error) => return Err(error.into()),
-    };
-    let mut response = Response::builder()
-        .header("ETag", object.meta.e_tag.as_deref().unwrap_or_default())
-        .header(
-            "Last-Modified",
-            object
-                .meta
-                .last_modified
-                .format("%a, %d %b %Y %H:%M:%S GMT")
-                .to_string(),
-        );
-    let mut body = object.bytes().await?;
-    if let Some(range) = request.headers().get("Range") {
-        let (start, end) = range
-            .to_str()?
-            .strip_prefix("bytes=")
-            .and_then(|s| s.split_once('-'))
-            .ok_or("invalid range")?;
-        let range = match (start, end) {
-            ("", end) => GetRange::Suffix(end.parse()?),
-            (start, "") => GetRange::Offset(start.parse()?),
-            (start, end) => GetRange::Bounded(
-                start.parse()?..end.parse::<u64>()?.checked_add(1).ok_or("range overflow")?,
-            ),
-        }
-        .as_range(body.len() as u64)?;
-        response = response.status(206).header(
-            "Content-Range",
-            format!("bytes {}-{}/{}", range.start, range.end - 1, body.len()),
-        );
-        body = body.slice(range.start as usize..range.end as usize);
-    }
-    response = response.header("Content-Length", body.len());
-    if request.method() == "HEAD" {
-        body = bytes::Bytes::new();
-    } else {
-        assert_eq!(request.method(), "GET");
-    }
-    Ok(response.body(body.into())?)
 }
 
 async fn azure_tables_with_container_options() -> TestResult {

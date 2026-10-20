@@ -11,7 +11,7 @@ use super::{
     protocol::{DeltaProtocol, validate_protocol},
 };
 use crate::{
-    DeltaReaderError, DeltaSnapshotSelection, DeltaStorageOptions,
+    DeltaReaderError, DeltaSnapshotSelection, DeltaStorageCredentialProvider, DeltaStorageOptions,
     error::{
         ScanPlanningSnafu, SchemaConversionSnafu, SnapshotLoadSnafu, StorageInitializationSnafu,
     },
@@ -221,25 +221,30 @@ pub(crate) fn load_delta_table_snapshot_blocking(
     storage_options: &DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
 ) -> Result<ArrowTableSnapshot, DeltaReaderError> {
-    load_arrow_snapshot_blocking(table_location, storage_options, selection, None)
+    load_arrow_snapshot_blocking(table_location, storage_options, None, selection, None)
 }
 
 fn load_arrow_snapshot_blocking(
     table_location: &str,
     storage_options: &DeltaStorageOptions,
+    credential_provider: Option<&DeltaStorageCredentialProvider>,
     selection: DeltaSnapshotSelection,
     context: Option<&OperationContext>,
 ) -> Result<ArrowTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     trace_snapshot_load_started(selection_kind);
-    let result = build_kernel_table_snapshot(table_location, storage_options, selection).and_then(
-        |snapshot| {
-            if let Some(context) = context {
-                context.snapshot_loaded(snapshot.version());
-            }
-            snapshot.into_arrow_snapshot()
-        },
-    );
+    let result = build_kernel_table_snapshot(
+        table_location,
+        storage_options,
+        credential_provider,
+        selection,
+    )
+    .and_then(|snapshot| {
+        if let Some(context) = context {
+            context.snapshot_loaded(snapshot.version());
+        }
+        snapshot.into_arrow_snapshot()
+    });
 
     match &result {
         Ok(snapshot) => trace_snapshot_load_completed(selection_kind, snapshot),
@@ -251,11 +256,17 @@ fn load_arrow_snapshot_blocking(
 pub(crate) fn load_kernel_table_snapshot_blocking(
     table_location: &str,
     storage_options: &DeltaStorageOptions,
+    credential_provider: Option<&DeltaStorageCredentialProvider>,
     selection: DeltaSnapshotSelection,
 ) -> Result<KernelTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     trace_snapshot_load_started(selection_kind);
-    let result = build_kernel_table_snapshot(table_location, storage_options, selection);
+    let result = build_kernel_table_snapshot(
+        table_location,
+        storage_options,
+        credential_provider,
+        selection,
+    );
 
     match &result {
         Ok(snapshot) => trace_kernel_snapshot_load_completed(selection_kind, snapshot),
@@ -267,15 +278,24 @@ pub(crate) fn load_kernel_table_snapshot_blocking(
 fn build_kernel_table_snapshot(
     table_location: &str,
     storage_options: &DeltaStorageOptions,
+    credential_provider: Option<&DeltaStorageCredentialProvider>,
     selection: DeltaSnapshotSelection,
 ) -> Result<KernelTableSnapshot, DeltaReaderError> {
     let table_url = normalize_table_location(table_location)?;
-    let s3_auth_mode_hint = s3_auth_mode_hint_for_table(&table_url, storage_options);
-    let engine_context = DeltaKernelEngineContext::try_new(table_url, storage_options)
-        .boxed()
-        .context(StorageInitializationSnafu {
-            reason: "storage_initialization_failed",
-        })?;
+    if let Some(provider) = credential_provider {
+        provider.validate_storage_configuration(&table_url, storage_options)?;
+    }
+    let s3_auth_mode_hint = if credential_provider.is_some() {
+        None
+    } else {
+        s3_auth_mode_hint_for_table(&table_url, storage_options)
+    };
+    let engine_context =
+        DeltaKernelEngineContext::try_new(table_url, storage_options, credential_provider)
+            .boxed()
+            .context(StorageInitializationSnafu {
+                reason: "storage_initialization_failed",
+            })?;
     let engine_context = Arc::new(engine_context);
     let version = match selection {
         DeltaSnapshotSelection::Latest => None,
@@ -304,6 +324,7 @@ fn build_kernel_table_snapshot(
 pub(crate) async fn load_delta_table_snapshot(
     table_location: String,
     storage_options: DeltaStorageOptions,
+    credential_provider: Option<DeltaStorageCredentialProvider>,
     selection: DeltaSnapshotSelection,
     context: OperationContext,
 ) -> Result<ArrowTableSnapshot, DeltaReaderError> {
@@ -316,6 +337,7 @@ pub(crate) async fn load_delta_table_snapshot(
                 load_arrow_snapshot_blocking(
                     &table_location,
                     &storage_options,
+                    credential_provider.as_ref(),
                     selection,
                     Some(&context),
                 )
@@ -340,6 +362,7 @@ pub(crate) async fn load_delta_table_snapshot(
 pub(crate) async fn load_kernel_table_snapshot(
     table_location: String,
     storage_options: DeltaStorageOptions,
+    credential_provider: Option<DeltaStorageCredentialProvider>,
     selection: DeltaSnapshotSelection,
     context: OperationContext,
 ) -> Result<KernelTableSnapshot, DeltaReaderError> {
@@ -352,6 +375,7 @@ pub(crate) async fn load_kernel_table_snapshot(
                 let snapshot = load_kernel_table_snapshot_blocking(
                     &table_location,
                     &storage_options,
+                    credential_provider.as_ref(),
                     selection,
                 )?;
                 context.snapshot_loaded(snapshot.version());
@@ -958,6 +982,7 @@ mod tests {
         let kernel_snapshot = load_kernel_table_snapshot_blocking(
             &table.0.to_string_lossy(),
             &DeltaStorageOptions::new(),
+            None,
             DeltaSnapshotSelection::Latest,
         )?;
 
@@ -1532,8 +1557,11 @@ mod tests {
     fn s3_store_construction_accepts_implicit_and_documented_explicit_credentials()
     -> Result<(), Box<dyn std::error::Error>> {
         let table_url = url::Url::parse("s3://bucket/root")?;
-        let _implicit =
-            DeltaKernelEngineContext::try_new(table_url.clone(), &DeltaStorageOptions::new())?;
+        let _implicit = DeltaKernelEngineContext::try_new(
+            table_url.clone(),
+            &DeltaStorageOptions::new(),
+            None,
+        )?;
         for (access_key, secret_key, token_key, region_key) in [
             (
                 "AWS_ACCESS_KEY_ID",
@@ -1572,7 +1600,7 @@ mod tests {
                 (token_key, "token"),
                 (region_key, "us-east-1"),
             ]);
-            let context = DeltaKernelEngineContext::try_new(table_url.clone(), &options)?;
+            let context = DeltaKernelEngineContext::try_new(table_url.clone(), &options, None)?;
             assert_eq!(context.table_url(), &table_url);
         }
         Ok(())
@@ -1757,12 +1785,14 @@ mod tests {
             load_delta_table_snapshot(
                 table_uri.clone(),
                 DeltaStorageOptions::new(),
+                None,
                 DeltaSnapshotSelection::Latest,
                 crate::operation_tracing::OperationContext::default(),
             ),
             load_delta_table_snapshot(
                 table_uri,
                 DeltaStorageOptions::new(),
+                None,
                 DeltaSnapshotSelection::Version(0),
                 crate::operation_tracing::OperationContext::default(),
             ),
