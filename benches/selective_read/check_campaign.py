@@ -97,10 +97,6 @@ def check():
             if not count:
                 assert slots == []
                 continue
-            orders = campaign.balanced_orders(subset)
-            assert set(Counter((r, p) for order in orders for p, r in enumerate(order)).values()) == {2}
-            adjacent = Counter(pair for order in orders for pair in zip(order, order[1:]))
-            assert len(adjacent) == count * (count - 1) and all(n == 2 for n in adjacent.values())
             timing = [s for s in slots if s["stage"] == "timing"]
             assert set(Counter((s["job_id"], s["reader_id"]) for s in timing).values()) == {expected[count]}
             assert max(slots.index(s) for s in timing) < min(i for i, s in enumerate(slots) if s["stage"] == "plan")

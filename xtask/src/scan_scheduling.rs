@@ -211,7 +211,7 @@ fn cases() -> Vec<Case> {
     result
 }
 
-fn balanced_orders(count: usize) -> Vec<Vec<usize>> {
+pub(crate) fn balanced_orders(count: usize) -> Vec<Vec<usize>> {
     let first: Vec<_> = (0..count)
         .map(|position| match position {
             0 => 0,

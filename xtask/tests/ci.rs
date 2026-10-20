@@ -452,7 +452,6 @@ fn core_filter_preserves_benchmark_targets_and_shared_inputs() -> Result<()> {
         "benches/selective_read/src/tests.rs",
         "benches/selective_read/tests/large_cli.rs",
         "benches/selective_read/oracle.py",
-        "benches/run_order.py",
         "benches/selective_read/runners/dar/src/main.rs",
     ] {
         assert!(!filter_matches(&filters, "code", path)?, "{path}");

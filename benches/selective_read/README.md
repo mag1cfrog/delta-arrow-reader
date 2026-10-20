@@ -25,8 +25,9 @@ export SELECTIVE_READ_XTASK="$(pwd)/target/debug/xtask"
 ```
 
 With `CARGO_TARGET_DIR`, point `SELECTIVE_READ_XTASK` at that directory's
-`debug/xtask` instead. The controller handles watchdog deadlines and process
-accounting. It is never compiled during a reader invocation.
+`debug/xtask` instead. The controller handles schedules, timing summaries,
+watchdog deadlines, and process accounting. It is never compiled during a reader
+invocation.
 
 1. [Generate the public source](../../docs/content/benchmarks/selective-read-fixtures.md),
    then [write the wide tables and deletion-vector pairs](../../docs/content/benchmarks/selective-read-production-fixtures.md).

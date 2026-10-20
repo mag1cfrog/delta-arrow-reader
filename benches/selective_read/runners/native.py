@@ -18,5 +18,7 @@ def executable():
 
 def call(operation, payload):
     result = subprocess.run([str(executable()), "selective-read", operation],
-                            input=json.dumps(payload), text=True, stdout=subprocess.PIPE, check=True)
+                            input=json.dumps(payload), text=True, capture_output=True)
+    if result.returncode:
+        raise ValueError(result.stderr.strip() or f"native controller exited with {result.returncode}")
     return json.loads(result.stdout)

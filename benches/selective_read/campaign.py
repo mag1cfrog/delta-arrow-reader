@@ -1,7 +1,6 @@
 """Run the frozen selective-read schedule against one prepared MinIO server."""
 
 import argparse
-from collections import Counter
 import hashlib
 import json
 import math
@@ -18,12 +17,11 @@ import run
 import matrix
 import large_workloads
 import metadata_cache
+import native
 from run import digest, save
 from supervise import integer, require
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))
-from run_order import balanced_orders
 
 READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft")
 SESSIONS = {"reuse.li": "li.clustered.eq2-in20", "reuse.wide": "wide.clustered.eq2-in20",
@@ -95,67 +93,9 @@ def plan_evidence(record, artifacts):
 
 
 def schedule(inventory, campaign_id, comparison=None, *, combined=None, gate_warmup=None, gate_diagnostics=None):
-    slots = []
-    def mode(key, override, label):
-        values = [entry.get(key, False) for entries in inventory.values() for entry in entries.values()]
-        require(all(type(value) is bool for value in values) and len(set(values)) <= 1,
-                f"reader inventory has inconsistent {label} modes")
-        return (values[0] if values else False) if override is None else override
-    combined = mode("combined_diagnostics", combined, "diagnostic")
-    gate_warmup = mode("gate_warmup", gate_warmup, "warmup")
-    gate_diagnostics = mode("gate_diagnostics", gate_diagnostics, "gate-diagnostic")
-    require(type(gate_diagnostics) is bool and (not gate_diagnostics or
-            combined and gate_warmup and (comparison or {}).get("comparison_revision") == 6),
-            "gate diagnostics require revision 6, combined diagnostics and gate warmup")
-    require(type(gate_warmup) is bool and (not gate_warmup or (comparison or {}).get("comparison_revision") == 6),
-            "gate warmup requires comparison revision 6")
-    if gate_warmup:
-        cases = {job.removeprefix("reuse.") for job in inventory}
-        require(len(cases) == 1 and set(inventory) == {next(iter(cases)), "reuse." + next(iter(cases))},
-                "gate warmup requires one snapshot with both open and reuse profiles")
-    require(type(combined) is bool and (not combined or (comparison or {}).get("comparison_revision") == 6),
-            "combined diagnostics require comparison revision 6")
-    roster = run.reader_roster(comparison or {})
-    require(all(set(entries) == set(roster) for entries in inventory.values()), "reader inventory differs from the comparison roster")
-    reduced = (comparison or {}).get("comparison_revision", 2) >= 4
-    samples = 2 if (comparison or {}).get("sampling_stage") == "pilot" else 5
-    def add(job, stage, readers, repetition, *, traced=False):
-        for position, reader in enumerate(readers):
-            slots.append({"run_id": f"{campaign_id}-{len(slots):05d}", "job_id": job,
-                          "reader_id": reader, "stage": stage, "repetition": repetition,
-                          "order": position, "traced": traced, **(comparison or {})})
-
-    # Inventory is ordered: lexical isolated cases, then lexical reuse sessions.
-    for job, entries in inventory.items():
-        readers = tuple(r for r in roster if entries[r]["runnable"])
-        if not readers:
-            continue
-        if not gate_warmup:
-            for repetition, order in enumerate((readers,) if reduced else (readers, readers[::-1])):
-                add(job, "warmup", order, repetition)
-        orders = balanced_orders(readers)
-        orders *= math.ceil((samples if reduced else 10) / len(orders))
-        for repetition, order in enumerate(orders[:samples] if reduced else orders):
-            add(job, "timing", order, repetition)
-    # Separate diagnostic invocations follow every timing slot.
-    for job, entries in inventory.items():
-        readers = tuple(r for r in roster if entries[r]["runnable"])
-        # DuckDB EXPLAIN reads additional data; keep it outside the I/O invocation.
-        add(job, "plan", tuple(r for r in readers if r == "duckdb") if combined else readers, 0)
-        if gate_diagnostics:
-            continue
-        if reduced:
-            add(job, "diagnostic", readers, 0, traced=True)
-            continue
-        for repetition, order in enumerate((readers, readers[::-1])):
-            add(job, "diagnostic_warmup", order, repetition, traced=True)
-        for repetition, order in enumerate((readers, readers[::-1])):
-            for position, reader in enumerate(order):
-                # Same-query off/on then on/off pairs expose observer overhead.
-                for traced in ((False, True) if repetition == 0 else (True, False)):
-                    add(job, "diagnostic" if traced else "observer_baseline", (reader,), repetition, traced=traced)
-                    slots[-1]["order"] = position
-    return slots
+    return native.call("campaign", {"action": "schedule", "inventory": list(inventory.items()),
+        "campaign_id": campaign_id, "comparison": comparison or {}, "combined": combined,
+        "gate_warmup": gate_warmup, "gate_diagnostics": gate_diagnostics})
 
 
 def validate_diagnostics(config, inventory, slots, observations):
@@ -206,31 +146,11 @@ def validate_diagnostics(config, inventory, slots, observations):
 
 
 def warmed_gate(gate, observations):
-    row = observations.get(gate.get("run_id"), {})
-    record = row.get("observation", {})
-    return (row.get("stage") == "gate" and row.get("status") == "success"
-            and gate.get("status") == "success" and isinstance(gate.get("identity"), dict)
-            and record.get("status") == "success" and record.get("identity") == gate.get("identity")
-            and record.get("correctness", {}).get("status") == "passed"
-            and record.get("cleanup", {}).get("status") == "passed"
-            and (not gate.get("gate_diagnostics") or (
-                row.get("traced") is True and row.get("request", {}).get("validation_diagnostics") is True
-                and record.get("validation_diagnostics") is True
-                and record.get("storage_capture", {}).get("status") == "passed"
-                and record.get("storage_environment", {}).get("trace_enabled") is True
-                and isinstance(record.get("storage_io"), dict)
-                and (row.get("reader_id") == "duckdb" or bool(record.get("plan_artifacts"))))))
+    return native.call("campaign", {"action": "warmed-gate", "gate": gate, "observations": observations})
 
 
 def distribution(values):
-    values = sorted(values)
-    require(bool(values), "empty distribution")
-    def quantile(p):
-        index = (len(values) - 1) * p
-        low, high = math.floor(index), math.ceil(index)
-        return values[low] + (values[high] - values[low]) * (index - low)
-    q1, median, q3 = (quantile(p) for p in (.25, .5, .75))
-    return {"samples": len(values), "median": median, "q1": q1, "q3": q3, "iqr": q3 - q1}
+    return native.call("campaign", {"action": "distribution", "values": values})
 
 
 def timer_resolution():
@@ -310,83 +230,10 @@ def validate(record, payload, reader, gate=None):
         require(integer(record["external_metrics"][key]), "missing process resource: " + key)
 
 
-def measurements(record):
-    values = {key: record[key] for key in ("open_query_ns", "initialization_ns", "initialization_plus_query1_ns",
-              "initialization_plus_all_queries_ns", "session_elapsed_ns", "cleanup_ns") if record[key] is not None}
-    if record.get("startup_ns") is not None:
-        values["startup_ns"] = record["startup_ns"]
-    values.update({key: record["external_metrics"][key] for key in (
-        "process_user_cpu_ns", "process_system_cpu_ns", "process_cpu_ns", "peak_rss_bytes", "process_elapsed_ns")})
-    for query in record["queries"]:
-        for key in ("completion_ns", "first_batch_ns"):
-            if query[key] is not None:
-                values[f"query_{query['query_index']}.{key}"] = query[key]
-    return values
-
 
 def summarize(inventory, slots, rows, resolution, integrity=True):
-    by_id = {row["run_id"]: row for row in rows}
-    result = {}
-    for job, entries in inventory.items():
-        readers = {}
-        for reader, gate in entries.items():
-            selected = [s for s in slots if s["job_id"] == job and s["reader_id"] == reader]
-            timed = [s for s in selected if s["stage"] == "timing"]
-            required = [s for s in selected if s["stage"] in ("warmup", "timing")]
-            statuses = Counter(by_id.get(s["run_id"], {}).get("status", "not_run") for s in timed)
-            eligible = integrity and gate["runnable"] and bool(timed) and all(
-                by_id.get(s["run_id"], {}).get("status") == "success" for s in required)
-            if gate.get("gate_warmup"):
-                eligible = eligible and warmed_gate(gate, by_id)
-            values = [measurements(by_id[s["run_id"]]["observation"]) for s in timed] if eligible else []
-            metrics = {key: distribution([v[key] for v in values]) for key in values[0]
-                       if all(key in v for v in values)} if values else {}
-            durations = {key: [v[key] for v in values] for key in metrics if key.endswith("_ns")}
-            readers[reader] = {"gate_status": gate["status"], "eligible": eligible, "scheduled_samples": len(timed),
-                               "sample_statuses": dict(statuses), "metrics": metrics, "speedup_vs_dar": {},
-                               "first_batch_unavailable": [q["first_batch_unavailable_reason"] for s in timed
-                                   if by_id.get(s["run_id"], {}).get("status") == "success"
-                                   for q in by_id[s["run_id"]]["observation"]["queries"] if q["first_batch_ns"] is None],
-                               "_durations": durations}
-            if gate.get("gate_warmup"):
-                readers[reader]["warmup"] = {"source": "exact-validation-gate", "run_id": gate.get("run_id"),
-                                             "passed": warmed_gate(gate, by_id)}
-            diagnostics = {stage: [by_id.get(s["run_id"], {"run_id": s["run_id"], "status": "not_run"})
-                                  for s in selected if s["stage"] == stage]
-                           for stage in ("diagnostic", "observer_baseline")}
-            if gate.get("gate_diagnostics"):
-                diagnostics["diagnostic"] = [by_id.get(gate.get("run_id"),
-                    {"run_id": gate.get("run_id"), "status": "not_run"})]
-            readers[reader]["diagnostics"] = {stage: [{"run_id": row["run_id"], "status": row["status"],
-                "session_ns": row.get("observation", {}).get("diagnostic_session_ns"),
-                "io": row.get("observation", {}).get("storage_io")} for row in stage_rows]
-                for stage, stage_rows in diagnostics.items()}
-            if gate.get("gate_diagnostics"):
-                readers[reader]["diagnostics"]["diagnostic"][0]["source"] = "exact-validation-gate"
-            overhead = {stage: [r.get("observation", {}).get("diagnostic_session_ns") for r in observations]
-                        for stage, observations in diagnostics.items()}
-            if all(len(v) == 2 and all(integer(x) for x in v) for v in overhead.values()) and all(
-                    r["status"] == "success" for observations in diagnostics.values() for r in observations):
-                off, on = (distribution(overhead[stage])["median"] for stage in ("observer_baseline", "diagnostic"))
-                readers[reader]["observer_overhead"] = {"off_median_ns": off, "on_median_ns": on,
-                    "difference_ns": on - off, "ratio": on / off if min(overhead["observer_baseline"] + overhead["diagnostic"]) >= resolution else None,
-                    "note": "two descriptive pairs; separate observations from headline timing"}
-        dar = readers[READERS[0]]
-        for reader in (r for r in readers if r != READERS[0]):
-            comparator = readers[reader]
-            for key in ("open_query_ns", "initialization_plus_query1_ns", "initialization_plus_all_queries_ns"):
-                ratio, reason = None, "both readers must pass validation and every scheduled warmup/timing slot"
-                if dar["eligible"] and comparator["eligible"] and key in dar["metrics"] and key in comparator["metrics"]:
-                    if min(dar["_durations"][key] + comparator["_durations"][key]) >= resolution:
-                        ratio = comparator["metrics"][key]["median"] / dar["metrics"][key]["median"]
-                        reason = None
-                    else:
-                        reason = "duration below timer resolution"
-                comparator["speedup_vs_dar"][key] = {"value": ratio, "unavailable_reason": reason}
-        for reader in readers.values():
-            reader.pop("_durations")
-        result[job] = readers
-    return result
+    return native.call("campaign", {"action": "summarize", "inventory": inventory, "slots": slots,
+        "rows": rows, "resolution": resolution, "integrity": integrity})
 
 
 def read_results(directory, frozen_error="frozen campaign inputs changed"):
@@ -484,9 +331,8 @@ def execute_cached(args):
     previous_affinity = os.sched_getaffinity(0)
     os.sched_setaffinity(0, config["cpus"]["observer"])
     resolution = timer_resolution()
-    sources = [Path(__file__), HERE / "observe.py", HERE / "storage.py", HERE / "oracle.py", HERE.parent / "run_order.py",
+    sources = [Path(__file__), HERE / "observe.py", HERE / "storage.py", HERE / "oracle.py",
                HERE / "runners/run.py", HERE / "runners/supervise.py", HERE / "metadata_cache.py", run.PROTOCOL]
-    import native
     root = HERE.parents[1]
     sources += [Path(native.__file__), native.executable(), root / "Cargo.lock", root / "xtask/Cargo.toml",
                 *sorted((root / "xtask/src").rglob("*.rs"))]
