@@ -59,6 +59,13 @@ pub(super) enum Request {
         write_batch_rows: u64,
     },
     Cases,
+    LayoutQuery {
+        shape: Value,
+    },
+    LayoutGeometry {
+        shape: Value,
+        statistics: Value,
+    },
     LargeShapes,
     LargeDefinitions {
         family: String,
@@ -115,6 +122,10 @@ pub(super) fn run(request: Request) -> Result<Value> {
             write_batch_rows,
         } => shapes(file_target_mib, page_rows, page_bytes, write_batch_rows),
         Request::Cases => Ok(cases()),
+        Request::LayoutQuery { shape } => Ok(json!(planner::layout_query(&shape)?)),
+        Request::LayoutGeometry { shape, statistics } => {
+            planner::layout_geometry(&shape, &statistics)
+        }
         Request::LargeShapes => Ok(large::shapes()),
         Request::LargeDefinitions { family, pilot_case } => {
             large::definitions(&family, pilot_case.as_deref())

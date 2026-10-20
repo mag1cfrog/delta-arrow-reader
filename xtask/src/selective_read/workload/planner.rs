@@ -32,6 +32,88 @@ pub(crate) struct Args {
     harness: PathBuf,
 }
 
+fn file_counts(shape: &Value) -> Result<(u64, u64)> {
+    let (files, stripes) = (count(&shape["files"])?, count(&shape["stripes"])?);
+    require(
+        files >= stripes && stripes > 0,
+        "invalid file/stripe counts",
+    )?;
+    Ok((files, stripes))
+}
+
+pub(super) fn layout_query(shape: &Value) -> Result<String> {
+    let (files, stripes) = file_counts(shape)?;
+    Ok(format!(
+        "WITH striped AS (
+            SELECT *, l_orderkey % {stripes} AS stripe FROM source
+        ), ordered AS (
+            SELECT *, row_number() OVER (
+                PARTITION BY stripe ORDER BY l_shipdate, l_shipmode, l_linenumber, l_orderkey
+            ) - 1 AS ordinal, count(*) OVER (PARTITION BY stripe) AS stripe_rows
+            FROM striped
+        ), assigned AS (
+            SELECT *, (ordinal * ({per_stripe} + CAST(stripe < {remainder} AS BIGINT)))
+                // stripe_rows AS file_index FROM ordered
+        )
+        SELECT stripe, file_index, count(*) AS rows,
+            min(l_shipdate) AS date_min, max(l_shipdate) AS date_max,
+            min(l_shipmode) AS mode_min, max(l_shipmode) AS mode_max,
+            min(l_linenumber) AS line_min, max(l_linenumber) AS line_max,
+            count(*) FILTER (WHERE {PREDICATE}) AS matching_rows
+        FROM assigned GROUP BY stripe, file_index ORDER BY stripe, file_index",
+        per_stripe = files / stripes,
+        remainder = files % stripes,
+    ))
+}
+
+pub(super) fn layout_geometry(shape: &Value, statistics: &Value) -> Result<Value> {
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct File {
+        stripe: u64,
+        file_index: u64,
+        rows: u64,
+        date_min: String,
+        date_max: String,
+        mode_min: String,
+        mode_max: String,
+        line_min: i64,
+        line_max: i64,
+        matching_rows: u64,
+    }
+    let (files, stripes) = file_counts(shape)?;
+    let statistics: Vec<File> = serde_json::from_value(statistics.clone())?;
+    require(
+        statistics.len() as u64 == files,
+        "source cannot populate the declared file count",
+    )?;
+    let expected = (0..stripes).flat_map(|stripe| {
+        (0..files / stripes + u64::from(stripe < files % stripes)).map(move |index| (stripe, index))
+    });
+    let mut geometry = Vec::new();
+    for (file, (stripe, index)) in statistics.into_iter().zip(expected) {
+        require(
+            (file.stripe, file.file_index) == (stripe, index)
+                && file.rows > 0
+                && file.matching_rows <= file.rows,
+            "invalid file membership statistics",
+        )?;
+        let candidate = file.date_min.as_str() <= "1995-03-15"
+            && "1995-03-15" <= file.date_max.as_str()
+            && file.mode_min.as_str() <= "AIR"
+            && "AIR" <= file.mode_max.as_str()
+            && file.line_min <= 1
+            && 1 <= file.line_max;
+        require(
+            file.matching_rows == 0 || candidate,
+            "file bounds exclude qualifying rows",
+        )?;
+        geometry.push(json!({"stripe":stripe,"file_index":index,"rows":file.rows,
+            "candidate":candidate,"matching_rows":file.matching_rows}));
+    }
+    Ok(json!(geometry))
+}
+
 fn check_counts(counts: &Value, source: &Value) -> Result<()> {
     let counts: Vec<_> = array(counts)?.iter().map(count).collect::<Result<_>>()?;
     require(
@@ -90,7 +172,11 @@ pub(crate) fn run(args: Args) -> Result<()> {
     let (source, paths) = fixtures::source(&root, |path| fixtures::hash_before(path, deadline))?;
     fs::create_dir(&args.output)?;
     let output = fs::canonicalize(&args.output)?;
-    let result_path = output.join("analysis.json");
+    let queries: Map<_, _> = object(&definitions)?
+        .iter()
+        .map(|(name, shape)| Ok((name.clone(), json!(layout_query(shape)?))))
+        .collect::<Result<_>>()?;
+    let result_path = output.join("statistics.json");
     let mut child = fixtures::spawn(
         Command::new(&args.python)
             .args(["-I", "-B"])
@@ -106,7 +192,7 @@ pub(crate) fn run(args: Args) -> Result<()> {
     writeln!(
         child.0.stdin.take().ok_or("missing planner input")?,
         "{}",
-        json!({"paths":paths,"shapes":definitions})
+        json!({"paths":paths,"queries":queries})
     )?;
     require(
         wait_with_timeout(
@@ -120,17 +206,25 @@ pub(crate) fn run(args: Args) -> Result<()> {
     let counts = &analysis["counts"];
     check_counts(counts, &source)?;
     let mut sql = Map::new();
+    let mut geometries = Map::new();
     for (name, shape) in definitions.as_object_mut().unwrap() {
-        let geometry = &analysis["geometry"][name];
-        let (candidates, matching) = check_geometry(geometry, shape, counts)?;
+        let geometry = layout_geometry(shape, &analysis["statistics"][name])?;
+        let (candidates, matching) = check_geometry(&geometry, shape, counts)?;
         let path = output.join(format!("{name}-files.json"));
-        save(&path, geometry)?;
+        save(&path, &geometry)?;
+        geometries.insert(name.clone(), geometry);
         shape["candidate_files"] = json!(candidates);
         shape["matching_files"] = json!(matching);
         shape["output_rows"] = counts[3].clone();
         shape["file_geometry_sha256"] = json!(digest(&path)?);
         sql.insert(name.clone(), shape["canonical_sql"].clone());
     }
+    save(
+        &output.join("analysis.json"),
+        &json!({
+            "counts":counts, "geometry":geometries, "duckdb":analysis["duckdb"],
+        }),
+    )?;
     require(
         fixtures::hash_before(&root.join("manifest.json"), deadline)? == manifest_hash,
         "source manifest changed",
@@ -164,6 +258,51 @@ pub(crate) fn run(args: Args) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn layout_statistics_reject_missing_files_invalid_membership_and_false_bounds() -> Result<()> {
+        let shape = json!({"files":2,"stripes":1});
+        let statistics = json!([
+            {"stripe":0,"file_index":0,"rows":10,"date_min":"1995-03-14","date_max":"1995-03-15",
+             "mode_min":"AIR","mode_max":"RAIL","line_min":1,"line_max":2,"matching_rows":2},
+            {"stripe":0,"file_index":1,"rows":5,"date_min":"1995-03-16","date_max":"1995-03-17",
+             "mode_min":"AIR","mode_max":"AIR","line_min":1,"line_max":1,"matching_rows":0},
+        ]);
+        assert_eq!(
+            layout_geometry(&shape, &statistics)?,
+            json!([
+                {"stripe":0,"file_index":0,"rows":10,"candidate":true,"matching_rows":2},
+                {"stripe":0,"file_index":1,"rows":5,"candidate":false,"matching_rows":0},
+            ])
+        );
+        for invalid in [
+            json!({"files":0,"stripes":0}),
+            json!({"files":1,"stripes":2}),
+            json!({"files":true,"stripes":1}),
+        ] {
+            assert!(layout_query(&invalid).is_err());
+            assert!(layout_geometry(&invalid, &statistics).is_err());
+        }
+        assert!(layout_geometry(&shape, &json!([statistics[0]])).is_err());
+        for (field, value) in [
+            ("stripe", json!(1)),
+            ("file_index", json!(1)),
+            ("rows", json!(0)),
+            ("matching_rows", json!(11)),
+            ("matching_rows", json!(-1)),
+            ("date_min", json!("1995-03-16")),
+            ("date_max", json!("1995-03-14")),
+            ("mode_min", json!("RAIL")),
+            ("mode_max", json!("AAA")),
+            ("line_min", json!(2)),
+            ("line_max", json!(0)),
+        ] {
+            let mut invalid = statistics.clone();
+            invalid[0][field] = value;
+            assert!(layout_geometry(&shape, &invalid).is_err(), "{field}");
+        }
+        Ok(())
+    }
 
     #[test]
     fn planning_requires_independent_counts_and_bounded_candidate_geometry() -> Result<()> {

@@ -1,6 +1,7 @@
 """Check source predicates and fractional stripe boundaries without large data."""
 
 from datetime import date
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -10,6 +11,14 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 import production_shapes as shapes
+import native
+
+
+def file_geometry(connection, shape):
+    query = native.call("workload", {"action": "layout-query", "shape": shape})
+    statistics = connection.execute(query).to_arrow_table().to_pylist()
+    return native.call("workload", {"action": "layout-geometry", "shape": shape,
+                                   "statistics": json.loads(json.dumps(statistics, default=str))})
 
 
 class ProductionShapeCheck(unittest.TestCase):
@@ -29,7 +38,7 @@ class ProductionShapeCheck(unittest.TestCase):
             self.assertEqual(shapes.source_counts([path]), [20, 7, 5, 3])
             with duckdb.connect() as connection:
                 connection.register("source", table)
-                actual = shapes.file_geometry(connection, {"files": 5, "stripes": 2})
+                actual = file_geometry(connection, {"files": 5, "stripes": 2})
                 # Stripe 0's fractional cuts are 4/3/3; stripe 1's are 5/5.
                 # One nonmatching file survives min/max because its columns' bounds overlap.
                 self.assertEqual(actual, [
@@ -40,7 +49,7 @@ class ProductionShapeCheck(unittest.TestCase):
                     {"stripe": 1, "file_index": 1, "rows": 5, "candidate": False, "matching_rows": 0},
                 ])
                 with self.assertRaisesRegex(ValueError, "populate"):
-                    shapes.file_geometry(connection, {"files": 21, "stripes": 2})
+                    file_geometry(connection, {"files": 21, "stripes": 2})
 
 
 if __name__ == "__main__":
