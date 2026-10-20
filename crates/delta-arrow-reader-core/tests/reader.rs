@@ -1,6 +1,5 @@
 //! Public reader integration tests.
 
-#![deny(missing_docs, clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 #[path = "reader/compact_deletion_vectors.rs"]
 mod compact_deletion_vectors;
 #[path = "reader/data_file_location.rs"]

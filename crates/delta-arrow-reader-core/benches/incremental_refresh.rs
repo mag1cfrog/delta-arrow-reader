@@ -4,7 +4,6 @@
 //! Fixture creation stays outside the measured interval, and strategy order reverses between
 //! repetitions to reduce ordering bias.
 
-#![deny(missing_docs, clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 use std::{
     env,
     error::Error,

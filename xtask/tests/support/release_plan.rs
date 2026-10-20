@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use std::{
     env, fs,
     os::unix::fs::PermissionsExt,

@@ -1,3 +1,5 @@
+//! CLI artifact manifests, packaging, and invalid build identity checks.
+
 #![cfg(unix)]
 
 use std::{

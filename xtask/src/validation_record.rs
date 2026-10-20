@@ -8,7 +8,7 @@ use std::{
 use clap::Args;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use snafu::{ResultExt, ensure};
+use snafu::{OptionExt, ResultExt, ensure};
 
 use crate::{
     artifacts::write_new_file,
@@ -92,7 +92,13 @@ impl RecordValidationArgs {
         };
         let event = read_json(&self.event)?;
         let pr = &event["pull_request"];
-        let number = pr["number"].as_u64().filter(|number| *number > 0);
+        let number =
+            pr["number"]
+                .as_u64()
+                .filter(|number| *number > 0)
+                .context(InvalidInputSnafu {
+                    message: "validation requires the upstream release-plz PR event",
+                })?;
         let head = pr["head"]["sha"].as_str().unwrap_or_default();
         let base = pr["base"]["sha"].as_str().unwrap_or_default();
         ensure!(
@@ -104,8 +110,7 @@ impl RecordValidationArgs {
                 && pr["head"]["ref"]
                     .as_str()
                     .is_some_and(|name| name.starts_with("release-plz-"))
-                && number.is_some()
-                && event["number"].as_u64() == number
+                && event["number"].as_u64() == Some(number)
                 && is_full_commit_sha(head)
                 && is_full_commit_sha(base),
             InvalidInputSnafu {
@@ -180,7 +185,7 @@ impl RecordValidationArgs {
         Ok(ValidationRecord {
             schema_version: 1,
             repository: REPOSITORY.into(),
-            pull_request: number.unwrap(),
+            pull_request: number,
             pull_request_head_sha: head.into(),
             source_commit: identity.source_commit,
             source_tree,
@@ -196,14 +201,16 @@ impl RecordValidationArgs {
 fn artifact_reference(outputs: &Value, identity: &BuildIdentity) -> Result<ArtifactReference> {
     let id = outputs["artifact-id"]
         .as_str()
-        .and_then(|id| id.parse::<NonZeroU64>().ok());
+        .and_then(|id| id.parse::<NonZeroU64>().ok())
+        .context(InvalidInputSnafu {
+            message: "validated artifact ID, manifest SHA256, or build identity is missing or differs",
+        })?;
     let digest = outputs["manifest-sha256"].as_str().unwrap_or_default();
     ensure!(
         outputs["validated"] == "true"
             && outputs["source-commit"] == identity.source_commit
             && outputs["version"] == identity.version
             && outputs["rust-toolchain"] == identity.rust_toolchain
-            && id.is_some()
             && digest.len() == 64
             && digest
                 .bytes()
@@ -213,7 +220,7 @@ fn artifact_reference(outputs: &Value, identity: &BuildIdentity) -> Result<Artif
         }
     );
     Ok(ArtifactReference {
-        id: id.unwrap(),
+        id,
         manifest_sha256: digest.into(),
     })
 }

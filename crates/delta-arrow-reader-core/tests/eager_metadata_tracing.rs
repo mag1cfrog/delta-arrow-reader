@@ -1,6 +1,5 @@
 //! End-to-end tracing coverage for public eager metadata initialization.
 
-#![deny(missing_docs, clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 use std::{
     collections::BTreeMap,
     error::Error,

@@ -128,6 +128,7 @@ fn wheel_copy_replaces_output_only_after_success() {
     assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
 
     fs::write(&source, b"complete wheel").unwrap();
+    assert!(copy_wheel(&source, Path::new("")).is_err());
     let directory = temp.path().join("directory.whl");
     fs::create_dir(&directory).unwrap();
     fs::write(directory.join("keep"), b"untouched").unwrap();

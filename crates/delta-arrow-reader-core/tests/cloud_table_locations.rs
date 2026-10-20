@@ -1,7 +1,6 @@
 //! S3 uses a local endpoint; other cloud URLs replace Kernel's global handlers,
 //! so these regressions run in their own process.
 
-#![deny(missing_docs, clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 use std::{error::Error, fs, sync::Arc};
 
 use arrow::array::Int32Array;

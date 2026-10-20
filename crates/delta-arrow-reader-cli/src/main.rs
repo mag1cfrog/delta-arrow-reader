@@ -1,3 +1,7 @@
+//! Read Delta snapshots as JSON metadata or Arrow IPC streams.
+
+#![cfg_attr(test, allow(clippy::panic))]
+
 mod diagnostics;
 mod execution_options;
 mod input;

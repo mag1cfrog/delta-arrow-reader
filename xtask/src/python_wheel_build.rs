@@ -8,7 +8,7 @@ use std::{
 
 use clap::Args;
 use serde::Deserialize;
-use snafu::{ResultExt, ensure};
+use snafu::{OptionExt, ResultExt, ensure};
 
 use crate::{
     build::compiler_field,
@@ -122,8 +122,11 @@ impl BuildPythonWheelArgs {
         let cargo_arguments = self.cargo_arguments(&project);
 
         // Serialize staging and assembly when frontends build the same source concurrently.
-        let lock_path = repository.join("target/python-wheel.lock");
-        fs::create_dir_all(lock_path.parent().unwrap()).context(FileSnafu { path: &lock_path })?;
+        let lock_directory = repository.join("target");
+        fs::create_dir_all(&lock_directory).context(FileSnafu {
+            path: &lock_directory,
+        })?;
+        let lock_path = lock_directory.join("python-wheel.lock");
         let lock = File::options()
             .write(true)
             .create(true)
@@ -211,7 +214,9 @@ impl BuildPythonWheelArgs {
         profile: &str,
         cargo_arguments: &[OsString],
     ) -> Result<String> {
-        let output_directory = self.wheel_directory.as_ref().unwrap();
+        let output_directory = self.wheel_directory.as_ref().context(InvalidInputSnafu {
+            message: "wheel assembly requires an output directory",
+        })?;
         fs::create_dir_all(output_directory).context(FileSnafu {
             path: output_directory,
         })?;
@@ -260,7 +265,9 @@ impl BuildPythonWheelArgs {
                 message: "Maturin did not return a built wheel"
             }
         );
-        let filename = wheel.file_name().unwrap();
+        let filename = wheel.file_name().context(InvalidInputSnafu {
+            message: "Maturin did not return a built wheel",
+        })?;
         let destination = output_directory.join(filename);
         if wheel != destination {
             copy_wheel(wheel, &destination)?;
@@ -271,8 +278,11 @@ impl BuildPythonWheelArgs {
 
 fn copy_wheel(source: &Path, destination: &Path) -> Result<()> {
     // Copy before replacing the destination, which may alias the source.
-    let temporary = tempfile::NamedTempFile::new_in(destination.parent().unwrap())
-        .context(FileSnafu { path: destination })?;
+    let parent = destination.parent().context(InvalidInputSnafu {
+        message: "wheel destination must have a parent directory",
+    })?;
+    let temporary =
+        tempfile::NamedTempFile::new_in(parent).context(FileSnafu { path: destination })?;
     fs::copy(source, temporary.path()).context(FileSnafu { path: source })?;
     temporary
         .persist(destination)

@@ -5,7 +5,6 @@
 //! Parquet reader, where synchronous row-filter predicates are decoded and evaluated. Output rows
 //! are read only after both measurements have been captured.
 
-#![deny(missing_docs, clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 use std::env;
 use std::error::Error;
 use std::fs::{self, File};

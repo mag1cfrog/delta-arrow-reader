@@ -1,6 +1,5 @@
 //! Frozen reader benchmark parity harness from delta-funnel issue #459.
 
-#![deny(missing_docs, clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 use std::collections::BTreeMap;
 use std::env;
 use std::error::Error;

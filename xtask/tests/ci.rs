@@ -1,3 +1,6 @@
+//! CI source filters, cache handling, and job coordination checks.
+
+#![allow(clippy::unwrap_used)]
 #![cfg(unix)]
 
 use std::{

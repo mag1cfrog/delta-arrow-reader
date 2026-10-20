@@ -1,3 +1,6 @@
+//! Publication workflow triggers, permissions, and handoff validation.
+
+#![allow(clippy::unwrap_used)]
 #![cfg(unix)]
 
 use std::{error::Error, fs, os::unix::fs::PermissionsExt, process::Command};

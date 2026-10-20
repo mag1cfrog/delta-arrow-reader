@@ -70,7 +70,9 @@ unsafe extern "C" fn get_schema(
     // SAFETY: Arrow supplies a live stream and writable output; access is guarded below.
     unsafe {
         with_native_stream(exported_stream, |native| {
-            native.get_schema.unwrap()(native, out_schema)
+            native
+                .get_schema
+                .map_or(EINVAL, |callback| callback(native, out_schema))
         })
     }
     .unwrap_or(EINVAL)
@@ -92,7 +94,9 @@ unsafe extern "C" fn get_next(
     // SAFETY: Same stream/output contract as get_schema.
     unsafe {
         with_native_stream(exported_stream, |native| {
-            native.get_next.unwrap()(native, out_array)
+            native
+                .get_next
+                .map_or(EINVAL, |callback| callback(native, out_array))
         })
     }
     .unwrap_or(EINVAL)
@@ -111,7 +115,9 @@ unsafe extern "C" fn get_last_error(exported_stream: *mut FFI_ArrowArrayStream) 
     // SAFETY: Arrow supplies a live stream; its error pointer lasts until the next callback.
     unsafe {
         with_native_stream(exported_stream, |native| {
-            native.get_last_error.unwrap()(native)
+            native
+                .get_last_error
+                .map_or(UNAVAILABLE.as_ptr(), |callback| callback(native))
         })
     }
     .unwrap_or_else(|message| message.as_ptr())

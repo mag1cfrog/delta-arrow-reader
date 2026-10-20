@@ -6,7 +6,6 @@
 //! batches without collecting them and validates the full scan's row count and ID sum.
 //! HTTP measurements include the existing controlled server in the child process.
 
-#![deny(missing_docs, clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 use std::{
     env,
     error::Error,

@@ -1,3 +1,5 @@
+//! Release planning from validated binary and container artifacts.
+
 #![cfg(target_os = "linux")]
 
 use serde_json::{Value, json};
