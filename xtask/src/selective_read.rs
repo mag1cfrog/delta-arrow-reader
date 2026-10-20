@@ -34,6 +34,8 @@ pub(crate) enum Task {
     CheckStorage(checks::remote::StorageArgs),
     /// Check native Delta snapshot and deletion-vector capabilities. Read JSON from stdin.
     DeltaCapabilities,
+    /// Check a prepared reader's public contract and native capabilities.
+    CheckCapabilities(checks::capabilities::Options),
     /// Upload a verified fixture snapshot and save its immutable receipt.
     UploadStorage(storage::upload::Args),
     /// Operate the dedicated benchmark storage. Read the operation as JSON from stdin.
@@ -139,6 +141,7 @@ impl Task {
             Self::RunCampaign(args) => return campaign::controller::run(*args),
             Self::CheckReaders(args) => return checks::local(args),
             Self::CheckStorage(args) => return checks::remote::run(args),
+            Self::CheckCapabilities(args) => return checks::capabilities::run(args),
             Self::ProductionFixtures(args) => return workload::fixtures::run(*args),
             Self::PlanProduction(args) => return workload::planner::run(args),
             Self::PairProduction(args) => {
@@ -249,6 +252,7 @@ impl Task {
             | Self::RunCampaign(_)
             | Self::CheckReaders(_)
             | Self::CheckStorage(_)
+            | Self::CheckCapabilities(_)
             | Self::RunIntraPage(_)
             | Self::FreezeWorkload(_)
             | Self::ProductionFixtures(_)

@@ -381,8 +381,8 @@ No performance threshold is part of this check.
 DuckDB's check includes the shared check above and capability probes:
 
 ```sh
-PYTHONDONTWRITEBYTECODE=1 ../selective-read-oracle-venv/bin/python \
-  benches/selective_read/runners/duckdb/check.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read check-capabilities \
+  --python ../selective-read-oracle-venv/bin/python \
   --binary ../selective-read-duckdb-build/selective-read-duckdb \
   --fixtures ../selective-read-smoke --output ../duckdb-contract-check
 ```

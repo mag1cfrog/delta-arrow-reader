@@ -9,13 +9,20 @@ use std::{
     time::Duration,
 };
 
-#[derive(Deserialize)]
+mod duckdb;
+
+#[derive(clap::Args, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(in crate::selective_read) struct Delta {
+pub(crate) struct Options {
+    #[arg(long)]
     binary: PathBuf,
+    #[arg(long)]
     fixtures: PathBuf,
+    #[arg(long)]
     output: PathBuf,
+    #[arg(long)]
     python: PathBuf,
+    #[arg(long, default_value = "benches/selective_read")]
     harness: PathBuf,
 }
 
@@ -26,7 +33,7 @@ struct Capabilities {
 }
 
 impl Capabilities {
-    fn start(args: &Delta) -> Result<Self> {
+    fn start(args: &Options) -> Result<Self> {
         let harness = fs::canonicalize(&args.harness)?;
         let output = fs::canonicalize(&args.output)?;
         Ok(Self {
@@ -249,8 +256,37 @@ fn stage(original: &Path, output: &Path) -> Result<(PathBuf, PathBuf, PathBuf)> 
     Ok((no_dv, unknown, missing))
 }
 
-pub(in crate::selective_read) fn delta(args: Delta) -> Result<Value> {
+pub(in crate::selective_read) fn delta(args: Options) -> Result<Value> {
     Ok(json!(Capabilities::start(&args)?.delta()?))
+}
+
+pub(in crate::selective_read) fn run(args: Options) -> Result<()> {
+    let build = read_json(&args.binary.with_file_name("build.json"))?;
+    let reader = text(&build["reader_id"])?;
+    require(reader == "duckdb", "expected a DuckDB capability build")?;
+    fs::create_dir(&args.output)?;
+    super::local(super::Args {
+        binaries: vec![args.binary.clone()],
+        fixtures: args.fixtures.clone(),
+        output: args.output.join("public-cases"),
+        python: args.python.clone(),
+        harness: args.harness.clone(),
+    })?;
+    let mut checks = Capabilities::start(&args)?;
+    let mut observations = checks.delta()?;
+    checks.duckdb(&args.python, &mut observations)?;
+    let public = read_json(&args.output.join("public-cases/checks.json"))?["invocations"].clone();
+    let summary = json!({"status":"passed","public_contract_invocations":public,
+        "capability_invocations":observations.len(),"total_invocations":count(&public)? + observations.len() as u64});
+    let mut result = summary.clone();
+    result.as_object_mut().unwrap().extend(super::super::object(&json!({
+        "reader":reader,"build_sha256":digest(&args.binary.with_file_name("build.json"))?,
+        "corpus_manifest_sha256":digest(&checks.corpus.join("manifest.json"))?,
+        "controller_sha256":digest(&std::env::current_exe()?)?,
+        "scope":"bounded fixtures; rerun against exact campaign fixtures","observations":observations}))?.clone());
+    save(&args.output.join("capabilities.json"), &result)?;
+    println!("{summary}");
+    Ok(())
 }
 
 #[cfg(test)]

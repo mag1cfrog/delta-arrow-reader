@@ -28,9 +28,7 @@ def check_cli(check, description, native_probes=None):
 
 def capability_report(reader, binary, output, observations, scope="bounded fixtures; rerun against exact campaign fixtures"):
     public = json.loads((output / "public-cases/checks.json").read_text())["invocations"]
-    summary = {"status": "passed", "public_contract_invocations": public}
-    summary.update({"capability_invocations": len(observations), "total_invocations": public + len(observations)}
-                   if reader == "duckdb" else {"capability_checks": len(observations)})
+    summary = {"status": "passed", "public_contract_invocations": public, "capability_checks": len(observations)}
     run.save(output / "capabilities.json", {**summary, "reader": reader,
         "build_sha256": run.digest(binary.with_name("build.json")), "corpus_manifest_sha256": run.digest(CORPUS / "manifest.json"),
         "scope": scope, "observations": observations})
