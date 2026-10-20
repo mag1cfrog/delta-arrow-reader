@@ -113,9 +113,10 @@ These rules apply to Unity Catalog targets:
   are unsupported. Authorization failures never fall back to cloud credentials
   from the environment.
 - Supported credentials are S3 temporary key/secret/session-token credentials
-  and Azure user-delegation SAS. Azure locations must identify the account and
-  container using `abfss://` or an Azure Blob/DFS HTTPS URL. Other credential
-  types, S3 access points, and other Azure endpoints are unsupported.
+  and Azure user-delegation SAS or Azure AD bearer tokens. Azure locations must
+  identify the account and container using `abfss://` or an Azure Blob/DFS HTTPS
+  URL. Other credential types, S3 access points, and other Azure endpoints are
+  unsupported.
 - Storage options may supply supported region and transport settings, including
   endpoints, timeouts, and proxies. Credential, bucket, account, container,
   authentication-source, and unsigned-access overrides are rejected, including

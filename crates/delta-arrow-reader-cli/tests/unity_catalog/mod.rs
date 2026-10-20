@@ -133,8 +133,22 @@ fn inspection_uses_vended_s3_and_azure_credentials_and_actual_delta_schema() -> 
     let schema =
         FileReader::try_new(fs::File::open(corpus.join("expected.arrow"))?, None)?.schema();
     let log = fs::read(corpus.join("table/_delta_log/00000000000000000000.json"))?;
-    for azure in [false, true] {
+    for (azure, bearer_token) in [
+        (false, None),
+        (true, None),
+        (true, Some("secret-bearer-token")),
+    ] {
         let fixture = DatabricksCliFixture::new(azure)?;
+        if let Some(token) = bearer_token {
+            let credentials_file = fixture.directory.path().join("credentials.json");
+            let mut credentials: Value = serde_json::from_slice(&fs::read(&credentials_file)?)?;
+            credentials
+                .as_object_mut()
+                .unwrap()
+                .remove("azure_user_delegation_sas");
+            credentials["azure_aad"] = json!({"aad_token":token});
+            fs::write(credentials_file, serde_json::to_vec(&credentials)?)?;
+        }
         let server = MockCloudStorageServer::new(azure, log.clone())?;
         let options = if azure {
             json!({"azure_endpoint":server.endpoint, "azure_allow_http":"true"})
@@ -149,7 +163,9 @@ fn inspection_uses_vended_s3_and_azure_credentials_and_actual_delta_schema() -> 
             let mut command = fixture.inspect();
             command
                 .env("AWS_ACCESS_KEY_ID", "ambient-key")
-                .env("AZURE_STORAGE_ACCOUNT_KEY", "invalid-ambient-secret");
+                .env("AZURE_STORAGE_ACCOUNT_KEY", "invalid-ambient-secret")
+                .env("AZURE_STORAGE_TOKEN", "ambient-token")
+                .env("AZURE_STORAGE_SAS_KEY", "sig=ambient-signature");
             if !verbosity.is_empty() {
                 command.env("RUST_LOG", verbosity);
             }
@@ -182,6 +198,7 @@ fn inspection_uses_vended_s3_and_azure_credentials_and_actual_delta_schema() -> 
                     "test-key",
                     "test-session",
                     "test%2Bsignature",
+                    "secret-bearer-token",
                     "bucket/table",
                     "account.dfs",
                 ] {
@@ -222,7 +239,15 @@ fn inspection_uses_vended_s3_and_azure_credentials_and_actual_delta_schema() -> 
                 !first.contains(".parquet") && !first.contains(".bin"),
                 "{first}"
             );
-            if azure {
+            if let Some(token) = bearer_token {
+                assert!(
+                    request
+                        .to_ascii_lowercase()
+                        .contains(&format!("authorization: bearer {token}\r\n")),
+                    "missing UC bearer token"
+                );
+                assert!(!first.contains("sig="), "unexpected SAS credential");
+            } else if azure {
                 assert!(first.contains("sig=test%2Bsignature"), "{first}");
             } else {
                 assert!(

@@ -313,7 +313,7 @@ impl TableMetadataResponse {
     }
 }
 
-/// Storage backends that can use temporary credentials from Unity Catalog.
+/// Storage backends this adapter supports with temporary Unity Catalog credentials.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum StorageBackend {
     S3,
@@ -454,6 +454,12 @@ struct AzureSasCredentials {
     sas_token: String,
 }
 
+/// An Azure AD bearer token for the table's storage location.
+#[derive(Deserialize)]
+struct AzureBearerCredentials {
+    aad_token: String,
+}
+
 /// Raw response from the Databricks temporary-table-credentials command.
 ///
 /// Unsupported credential fields are retained so their presence causes a rejection.
@@ -464,8 +470,8 @@ struct TemporaryCredentialsResponse {
     expiration_time: u64,
     aws_temp_credentials: Option<JsonObject<AwsTemporaryCredentials>>,
     azure_user_delegation_sas: Option<JsonObject<AzureSasCredentials>>,
+    azure_aad: Option<JsonObject<AzureBearerCredentials>>,
     gcp_oauth_token: Option<Value>,
-    azure_aad: Option<Value>,
     r2_temp_credentials: Option<Value>,
 }
 
@@ -499,10 +505,7 @@ fn validate_read_credentials(
     if credentials_expire_at <= SystemTime::now() {
         return Err(Error::CredentialsExpired);
     }
-    if response.gcp_oauth_token.is_some()
-        || response.azure_aad.is_some()
-        || response.r2_temp_credentials.is_some()
-    {
+    if response.gcp_oauth_token.is_some() || response.r2_temp_credentials.is_some() {
         return Err(Error::UnsupportedDirectRead);
     }
     // Accept exactly one credential type, matching the table URL's storage backend.
@@ -510,8 +513,9 @@ fn validate_read_credentials(
         storage_location.backend,
         response.aws_temp_credentials.map(|value| value.0),
         response.azure_user_delegation_sas.map(|value| value.0),
+        response.azure_aad.map(|value| value.0),
     ) {
-        (StorageBackend::S3, Some(aws), None) => {
+        (StorageBackend::S3, Some(aws), None, None) => {
             if aws.access_point.is_some() {
                 return Err(Error::UnsupportedDirectRead);
             }
@@ -526,7 +530,7 @@ fn validate_read_credentials(
                 storage_options.insert(key.into(), value);
             }
         }
-        (StorageBackend::Azure, None, Some(azure)) => {
+        (StorageBackend::Azure, None, Some(azure), None) => {
             let sas = azure
                 .sas_token
                 .strip_prefix('?')
@@ -538,6 +542,14 @@ fn validate_read_credentials(
                 return Err(Error::InvalidDatabricksResponse);
             }
             storage_options.insert("azure_storage_sas_key".into(), sas.into());
+        }
+        (StorageBackend::Azure, None, None, Some(azure)) => {
+            if azure.aad_token.is_empty()
+                || !azure.aad_token.bytes().all(|byte| byte.is_ascii_graphic())
+            {
+                return Err(Error::InvalidDatabricksResponse);
+            }
+            storage_options.insert("azure_storage_token".into(), azure.aad_token);
         }
         _ => return Err(Error::UnsupportedDirectRead),
     }
@@ -922,6 +934,7 @@ mod tests {
                 "azure_user_delegation_sas",
                 json!({"sas_token":"sig=secret"}),
             ),
+            ("azure_aad", json!({"aad_token":"secret"})),
             ("gcp_oauth_token", json!({"oauth_token":"secret"})),
         ] {
             let mut invalid_value = value.clone();
@@ -959,6 +972,68 @@ mod tests {
             "s3://bucket/table#fragment",
         ] {
             assert!(TableStorageLocation::parse(location).is_err(), "{location}");
+        }
+    }
+
+    #[test]
+    fn azure_bearer_credentials_require_one_valid_token_for_azure_storage() {
+        let mut response = aws_credentials_response();
+        response
+            .as_object_mut()
+            .unwrap()
+            .remove("aws_temp_credentials");
+        response["url"] = json!("abfss://container@account.dfs.core.windows.net/table/");
+        response["azure_aad"] = json!({"aad_token":"secret-bearer-token"});
+        let resolve = |value: &Value| {
+            validate_read_credentials(
+                &serde_json::to_vec(value).unwrap(),
+                TableStorageLocation::parse(value["url"].as_str().unwrap()).unwrap(),
+                DeltaStorageOptions::new(),
+            )
+        };
+        assert_eq!(
+            resolve(&response).unwrap().storage_options,
+            DeltaStorageOptions::from([(
+                "azure_storage_token".into(),
+                "secret-bearer-token".into(),
+            )])
+        );
+        for invalid in [
+            json!("secret-bearer-token"),
+            json!([]),
+            json!({}),
+            json!({"aad_token":null}),
+            json!({"aad_token":""}),
+            json!({"aad_token":" "}),
+            json!({"aad_token":"secret\nbearer-token"}),
+            json!({"aad_token":"secret bearer-token"}),
+        ] {
+            let mut value = response.clone();
+            value["azure_aad"] = invalid;
+            assert!(matches!(
+                resolve(&value),
+                Err(Error::InvalidDatabricksResponse)
+            ));
+        }
+        for (field, conflicting) in [
+            (
+                "azure_user_delegation_sas",
+                json!({"sas_token":"sig=secret"}),
+            ),
+            (
+                "aws_temp_credentials",
+                aws_credentials_response()["aws_temp_credentials"].clone(),
+            ),
+            ("gcp_oauth_token", json!({"oauth_token":"secret"})),
+            (
+                "r2_temp_credentials",
+                json!({"access_key_id":"key", "secret_access_key":"secret", "session_token":"token"}),
+            ),
+            ("url", json!("s3://bucket/table/")),
+        ] {
+            let mut value = response.clone();
+            value[field] = conflicting;
+            assert!(matches!(resolve(&value), Err(Error::UnsupportedDirectRead)));
         }
     }
 
