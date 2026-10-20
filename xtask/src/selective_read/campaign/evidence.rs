@@ -20,7 +20,11 @@ pub(in crate::selective_read) enum Mode {
 }
 
 impl Mode {
-    pub(super) fn enabled(&self, config: &Value, protocols: &Path) -> Result<bool> {
+    pub(in crate::selective_read) fn enabled(
+        &self,
+        config: &Value,
+        protocols: &Path,
+    ) -> Result<bool> {
         let (key, amendment, file) = match self {
             Self::CombinedDiagnostics => (
                 "combined_diagnostics",
@@ -58,7 +62,7 @@ impl Mode {
     }
 }
 
-fn comparison(value: &Value, protocols: &Path) -> Result<Value> {
+pub(in crate::selective_read) fn comparison(value: &Value, protocols: &Path) -> Result<Value> {
     let revision = value["comparison_revision"]
         .as_u64()
         .ok_or("unknown comparison revision")?;
@@ -317,7 +321,8 @@ pub(super) fn validate(
         "incomplete capability or cleanup",
     )?;
     require(
-        record["external_resource_limits"]["process_memory_bytes"] == 8u64 * 1024u64.pow(3),
+        record["external_resource_limits"]["process_memory_bytes"]
+            == crate::selective_read::budget()["process_memory_bytes"],
         "missing enforced memory limit",
     )?;
     if payload["comparison_revision"].as_u64().unwrap() >= 3 && payload["purpose"] == "validation" {

@@ -7,7 +7,7 @@ use serde_json::{Map, Value, json};
 use super::{array, field, object, require, text};
 use crate::{Result, scan_scheduling::balanced_orders};
 
-mod evidence;
+pub(super) mod evidence;
 
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "kebab-case", deny_unknown_fields)]
@@ -143,7 +143,7 @@ fn mode(
     Ok(override_value.unwrap_or_else(|| values.first().copied().unwrap_or(false)))
 }
 
-fn roster(comparison: &Value) -> Result<[&'static str; 5]> {
+pub(super) fn roster(comparison: &Value) -> Result<[&'static str; 5]> {
     let revision = comparison
         .get("comparison_revision")
         .unwrap_or(&Value::from(2))

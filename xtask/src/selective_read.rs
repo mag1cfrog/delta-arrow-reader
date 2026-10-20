@@ -1,6 +1,7 @@
 mod campaign;
 mod network;
 mod observe;
+mod report;
 mod storage;
 mod supervise;
 
@@ -22,6 +23,8 @@ pub(crate) enum Task {
     Observe,
     /// Control the optional benchmark proxy. Read the operation as JSON from stdin.
     Network,
+    /// Combine audited formal batches. Read the report inputs as JSON from stdin.
+    ProductionReport,
     /// Build and attach the optional network proxy.
     StartNetwork(network::Start),
     /// Stop the attached proxy after proving that its process exited.
@@ -112,6 +115,7 @@ impl Task {
             Self::Storage => storage::run(serde_json::from_value(input)?)?,
             Self::Observe => observe::run(serde_json::from_value(input)?)?,
             Self::Network => network::run(serde_json::from_value(input)?)?,
+            Self::ProductionReport => report::run(serde_json::from_value(input)?)?,
             Self::ExecReader { .. }
             | Self::PrepareStorage { .. }
             | Self::StartStorage { .. }
@@ -157,4 +161,10 @@ fn text(value: &Value) -> Result<&str> {
     value
         .as_str()
         .ok_or_else(|| "expected a JSON string".into())
+}
+
+fn budget() -> Value {
+    serde_json::json!({"worker_threads":8, "max_blocking_threads":64, "target_partitions":8,
+        "batch_rows":8192, "datafusion_pool_bytes":4 * 1024u64.pow(3),
+        "process_memory_bytes":8 * 1024u64.pow(3), "logical_cpus":8})
 }

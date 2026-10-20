@@ -18,6 +18,7 @@ just to generate the overview.
 Supply the complete eight-case definition and each campaign once:
 
 ```sh
+cargo build --locked -p xtask
 BENCH_PYTHON=/path/to/oracle-venv/bin/python
 BENCH_RESULTS=/path/to/benchmark-results
 "$BENCH_PYTHON" -B benches/selective_read/production_report.py \
@@ -78,6 +79,8 @@ snapshots share their base snapshot's Parquet data.
 ## Input checks
 
 Each campaign passes the existing single-campaign audit before aggregation.
+Python loads the frozen definitions and oracle evidence; the compiled Rust
+controller checks cross-campaign consistency and writes the overview.
 Its case must match the complete definition, including SQL, fixture identity,
 native expressions, writer settings and geometry. Each successful observation
 must retain the formal resource and watchdog limits.
@@ -88,11 +91,10 @@ cannot be mixed in one report. Duplicate case/profile coverage is rejected;
 retries and partial schedules cannot fill another campaign's samples. Pilot and
 historical observations cannot enter the formal report.
 
-Run the bounded aggregation check manually:
+Run the aggregation checks:
 
 ```sh
-"$BENCH_PYTHON" -B benches/selective_read/check_production_report.py
+cargo test --locked -p xtask --bin xtask selective_read::report::
 ```
 
-The check uses simulated records and produces no performance evidence. This
-reporting command adds no reader build, dependency, CI job or timing threshold.
+These checks use simulated records and produce no performance evidence.
