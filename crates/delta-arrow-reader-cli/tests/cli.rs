@@ -2,6 +2,7 @@
 
 #![allow(clippy::panic, clippy::unwrap_used)]
 
+mod diagnostics;
 mod predicates;
 #[cfg(unix)]
 mod unity_catalog;
@@ -343,21 +344,25 @@ fn sort_by_id(batch: &RecordBatch) -> Result<RecordBatch, arrow::error::ArrowErr
 }
 
 fn run_with_timeout(command: &mut Command) -> io::Result<Output> {
+    run_with_stdout(command, Stdio::piped())
+}
+
+fn run_with_stdout(command: &mut Command, stdout: Stdio) -> io::Result<Output> {
     // Shell logging settings must not change a fixture's expected stderr.
     if !command.get_envs().any(|(key, _)| key == "RUST_LOG") {
         command.env_remove("RUST_LOG");
     }
-    let mut child = command
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
-    let mut stdout = child.stdout.take().unwrap();
+    let mut child = command.stdout(stdout).stderr(Stdio::piped()).spawn()?;
+    let stdout = child.stdout.take();
     let mut stderr = child.stderr.take().unwrap();
     // Drain both pipes while waiting so a full pipe cannot block the child.
     thread::scope(|scope| {
         let stdout = scope.spawn(move || {
             let mut bytes = Vec::new();
-            stdout.read_to_end(&mut bytes).map(|_| bytes)
+            if let Some(mut stdout) = stdout {
+                stdout.read_to_end(&mut bytes)?;
+            }
+            Ok::<_, io::Error>(bytes)
         });
         let stderr = scope.spawn(move || {
             let mut bytes = Vec::new();

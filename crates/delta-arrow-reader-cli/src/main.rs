@@ -25,13 +25,16 @@ use delta_arrow_reader::{
     DeltaReaderError, DeltaScan, DeltaSnapshotSelection, DeltaTableBuilder, WarmupMode,
     error_source_kind,
 };
-use serde_json::json;
+use diagnostics::DiagnosticFormat;
+use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu, ensure};
 
 /// Read Delta Lake snapshots as JSON metadata or Arrow IPC streams.
 #[derive(Parser)]
 #[command(name = command_name(), bin_name = command_name(), version)]
 struct Cli {
+    #[command(flatten)]
+    diagnostics: diagnostics::DiagnosticOptions,
     #[command(subcommand)]
     command: Command,
 }
@@ -135,22 +138,16 @@ impl fmt::Debug for Error {
 }
 
 impl Error {
-    fn log_failure(&self) {
-        if let Self::UnityCatalog {
-            source: unity_catalog::Error::Cancelled { status },
-        } = self
-        {
-            tracing::info!(target: "delta_arrow_reader_cli",
-                event = "cli.cancelled", operation = "cli_command", outcome = "cancelled",
-                error_phase = "execution", error_code = "uc_cancelled", exit_status = status,
-                "Unity Catalog inspection cancelled"
-            );
-            return;
-        }
-        let (phase, code, reason, source_kind) = match self {
-            // These API boundaries already emit their terminal core event.
-            Self::Reader { .. } => return,
-            Self::Configuration { source } => (
+    fn classification(
+        &self,
+    ) -> (
+        &'static str,
+        &'static str,
+        &'static str,
+        Option<&'static str>,
+    ) {
+        match self {
+            Self::Reader { source } | Self::Configuration { source } => (
                 source.phase().as_str(),
                 source.code(),
                 source.reason(),
@@ -202,7 +199,26 @@ impl Error {
                 Some(error_source_kind(source)),
             ),
             Self::UnityCatalog { source } => (source.phase(), source.code(), source.code(), None),
-        };
+        }
+    }
+
+    fn log_failure(&self) {
+        if let Self::UnityCatalog {
+            source: unity_catalog::Error::Cancelled { status },
+        } = self
+        {
+            tracing::info!(target: "delta_arrow_reader_cli",
+                event = "cli.cancelled", operation = "cli_command", outcome = "cancelled",
+                error_phase = "execution", error_code = "uc_cancelled", exit_status = status,
+                "Unity Catalog inspection cancelled"
+            );
+            return;
+        }
+        // Reader API boundaries already emit their terminal core event.
+        if matches!(self, Self::Reader { .. }) {
+            return;
+        }
+        let (phase, code, reason, source_kind) = self.classification();
         let argument_kind = match self {
             Self::Argument { kind } => Some(tracing::field::debug(kind)),
             _ => None,
@@ -232,6 +248,51 @@ impl Error {
             error_source_kind = source_kind, argument_kind, json_kind, json_line, json_column, io_kind, os_error,
             "{message}"
         );
+    }
+
+    fn to_json_diagnostic(&self) -> Value {
+        let (phase, code, reason, source_kind) = self.classification();
+        let (recovery, retryable) = match source_kind {
+            Some("unauthenticated") => ("authorize", Some(false)),
+            Some("permission_denied") => ("request_access", Some(false)),
+            Some("timeout" | "connection_reset" | "connection_aborted") => ("retry", Some(true)),
+            Some("unsupported") => ("change_request", Some(false)),
+            _ if phase == "configuration"
+                || matches!(code, "invalid_projection" | "unsupported_predicate") =>
+            {
+                ("fix_input", Some(false))
+            }
+            _ if code == "unsupported_protocol" => ("change_request", Some(false)),
+            _ => ("unknown", None),
+        };
+        let mut record = json!({
+            "format_version": 1,
+            "kind": "diagnostic",
+            "terminal": true,
+            "phase": phase,
+            "code": code,
+            "reason": reason,
+            "source_kind": source_kind,
+            "message": "CLI command failed.",
+            "retryable": retryable,
+            "recovery": recovery,
+        });
+        match self {
+            Self::Argument { kind } => {
+                record["argument_kind"] = format!("{kind:?}").into();
+            }
+            Self::InputJson { source } => {
+                record["json_kind"] = format!("{:?}", source.classify()).into();
+                record["line"] = source.line().into();
+                record["column"] = source.column().into();
+            }
+            Self::InputIo { source } | Self::Runtime { source, .. } | Self::Output { source } => {
+                record["io_kind"] = format!("{:?}", source.kind()).into();
+                record["os_error"] = json!(source.raw_os_error());
+            }
+            _ => {}
+        }
+        record
     }
 
     fn exit_code(&self) -> ExitCode {
@@ -288,7 +349,40 @@ fn encode_inspection_json(version: u64, schema: &Schema) -> Vec<u8> {
     output
 }
 
-fn run() -> Result<(), Error> {
+#[derive(Default)]
+struct StdoutStats {
+    rows_written: u64,
+    batches_written: u64,
+    bytes_written: u64,
+}
+
+fn build_completion_record(
+    command: &'static str,
+    table_version: Option<u64>,
+    stdout_stats: StdoutStats,
+    row_limit: Option<usize>,
+) -> Value {
+    let limit_reached = row_limit.is_some_and(|limit| stdout_stats.rows_written >= limit as u64);
+    let mut record = json!({
+        "format_version": 1,
+        "kind": "completion",
+        "terminal": true,
+        "command": command,
+        "completion": "complete",
+        "scope": if row_limit.is_some() { "limited_scan" } else { command },
+        "stop_reason": if limit_reached { "row_limit" } else { "end_of_input" },
+        "has_more": if limit_reached { None } else { Some(false) },
+        "bindings": table_version.map(|version| json!({"alias": "t", "table_version": version.to_string()})).into_iter().collect::<Vec<_>>(),
+        "output_bytes": stdout_stats.bytes_written.to_string(),
+    });
+    if command == "scan" {
+        record["rows"] = stdout_stats.rows_written.to_string().into();
+        record["batches"] = stdout_stats.batches_written.to_string().into();
+    }
+    record
+}
+
+fn run() -> Result<Value, Error> {
     #[cfg(target_os = "linux")]
     signals::install_container_signal_handlers().context(RuntimeSnafu {
         reason: "signal_handler_install_failed",
@@ -301,7 +395,21 @@ fn run() -> Result<(), Error> {
                 ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
             ) =>
         {
-            return write_stdout(error.to_string().as_bytes());
+            let output = error.to_string();
+            write_stdout(output.as_bytes())?;
+            return Ok(build_completion_record(
+                if error.kind() == ErrorKind::DisplayHelp {
+                    "help"
+                } else {
+                    "version"
+                },
+                None,
+                StdoutStats {
+                    bytes_written: output.len() as u64,
+                    ..Default::default()
+                },
+                None,
+            ));
         }
         // Clap's other diagnostics may contain argument values. Emit our redacted error.
         Err(error) => return ArgumentSnafu { kind: error.kind() }.fail(),
@@ -381,9 +489,14 @@ fn run() -> Result<(), Error> {
                     .context(ReaderSnafu)?
             }
         };
+        let version = table.version();
         match &command {
             Command::Inspect(_) => {
-                let output = encode_inspection_json(table.version(), table.schema().as_ref());
+                let output = encode_inspection_json(version, table.schema().as_ref());
+                let stdout_stats = StdoutStats {
+                    bytes_written: output.len() as u64,
+                    ..Default::default()
+                };
                 if uc_target.is_some() {
                     // Keep the UC cancellation handler responsive when stdout is blocked.
                     tokio::task::spawn_blocking(move || write_stdout(&output))
@@ -394,7 +507,13 @@ fn run() -> Result<(), Error> {
                         })?
                 } else {
                     write_stdout(&output)
-                }
+                }?;
+                Ok(build_completion_record(
+                    "inspect",
+                    Some(version),
+                    stdout_stats,
+                    None,
+                ))
             }
             Command::Scan {
                 columns,
@@ -421,7 +540,14 @@ fn run() -> Result<(), Error> {
                         .with_target_partitions(target_partitions.get())
                         .context(ConfigurationSnafu)?;
                 }
-                write_arrow_stream(builder.build().await.context(ReaderSnafu)?).await
+                let stdout_stats =
+                    write_arrow_stream(builder.build().await.context(ReaderSnafu)?).await?;
+                Ok(build_completion_record(
+                    "scan",
+                    Some(version),
+                    stdout_stats,
+                    *limit,
+                ))
             }
         }
     };
@@ -452,7 +578,24 @@ fn write_stdout(output: &[u8]) -> Result<(), Error> {
         .context(OutputSnafu)
 }
 
-async fn write_arrow_stream(scan: DeltaScan) -> Result<(), Error> {
+struct ByteCountingWriter<W> {
+    inner: W,
+    bytes_written: u64,
+}
+
+impl<W: Write> Write for ByteCountingWriter<W> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let count = self.inner.write(bytes)?;
+        self.bytes_written += count as u64;
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+async fn write_arrow_stream(scan: DeltaScan) -> Result<StdoutStats, Error> {
     let (result_sender, result_receiver) = tokio::sync::oneshot::channel();
     let runtime = tokio::runtime::Handle::current();
     // A blocked stdout must leave the runtime and its blocking pool free to read files.
@@ -460,18 +603,27 @@ async fn write_arrow_stream(scan: DeltaScan) -> Result<(), Error> {
         .name("dar-stdout".into())
         .spawn(move || {
             let result = runtime.block_on(async {
-                let mut writer =
-                    StreamWriter::try_new(io::stdout().lock(), scan.schema().as_ref())?;
+                let mut writer = StreamWriter::try_new(
+                    ByteCountingWriter {
+                        inner: io::stdout().lock(),
+                        bytes_written: 0,
+                    },
+                    scan.schema().as_ref(),
+                )?;
                 // Flush before polling so output failures stop further reads.
                 writer.flush()?;
                 let mut stream = scan.into_stream();
+                let mut stdout_stats = StdoutStats::default();
                 while let Some(batch) = stream.next_batch().await.context(ReaderSnafu)? {
                     writer.write(&batch)?;
                     writer.flush()?;
+                    stdout_stats.rows_written += batch.num_rows() as u64;
+                    stdout_stats.batches_written += 1;
                 }
                 // finish writes the end marker and flushes; never call it after an error.
                 writer.finish()?;
-                Ok(())
+                stdout_stats.bytes_written = writer.get_ref().bytes_written;
+                Ok(stdout_stats)
             });
             let _ = result_sender.send(result);
         })
@@ -486,22 +638,29 @@ async fn write_arrow_stream(scan: DeltaScan) -> Result<(), Error> {
         })?
 }
 
-fn main() -> ExitCode {
-    diagnostics::init();
+fn install_panic_hook(diagnostic_format: DiagnosticFormat) {
     // Kernel workers can panic without waking their caller. Report synchronously
     // and exit without unwinding into a blocking join; never format the payload.
-    std::panic::set_hook(Box::new(|_| {
-        tracing::error!(target: "delta_arrow_reader_cli",
-            event = "cli.failed", operation = "cli_command", outcome = "failed",
-            error_phase = "execution", error_code = "runtime_initialization",
-            error_reason = "process_panicked", "CLI process panicked"
-        );
+    std::panic::set_hook(Box::new(move |_| {
+        diagnostic_format.report_failure(&Error::Runtime {
+            source: io::Error::other("process panicked"),
+            reason: "process_panicked",
+        });
         std::process::exit(1);
     }));
+}
+
+fn main() -> ExitCode {
+    let diagnostic_format = DiagnosticFormat::from_cli_args();
+    diagnostics::init_tracing(diagnostic_format);
+    install_panic_hook(diagnostic_format);
     match run() {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(completion_record) => {
+            diagnostic_format.write_terminal_record(completion_record);
+            ExitCode::SUCCESS
+        }
         Err(error) => {
-            error.log_failure();
+            diagnostic_format.report_failure(&error);
             error.exit_code()
         }
     }
@@ -739,6 +898,9 @@ mod tests {
             ),
         ];
         for (error, source_kind, detail) in failures {
+            let record = error.to_json_diagnostic();
+            assert_eq!(record["source_kind"], source_kind);
+            assert!(!record.to_string().contains("secret"));
             for filter in ["warn", "trace"] {
                 let text = diagnostics::capture(filter, || error.log_failure());
                 assert_eq!(text.lines().count(), 1, "{text}");
@@ -751,6 +913,35 @@ mod tests {
                 assert!(!format!("{error:?}").contains("secret"));
             }
         }
+    }
+
+    #[test]
+    fn recovery_uses_typed_causes_without_interpreting_messages() {
+        for (kind, recovery, retryable) in [
+            (io::ErrorKind::TimedOut, "retry", Some(true)),
+            (io::ErrorKind::ConnectionReset, "retry", Some(true)),
+            (io::ErrorKind::ConnectionAborted, "retry", Some(true)),
+            (
+                io::ErrorKind::PermissionDenied,
+                "request_access",
+                Some(false),
+            ),
+            (io::ErrorKind::Other, "unknown", None),
+        ] {
+            let record = Error::Runtime {
+                source: io::Error::new(kind, "secret: unauthorized, timeout, permission denied"),
+                reason: "runtime_build_failed",
+            }
+            .to_json_diagnostic();
+            assert_eq!(record["recovery"], recovery);
+            assert_eq!(record["retryable"], json!(retryable));
+        }
+        let record = Error::ArrowIpc {
+            source: ArrowError::NotYetImplemented("secret unsupported schema".into()),
+        }
+        .to_json_diagnostic();
+        assert_eq!(record["recovery"], "change_request");
+        assert_eq!(record["retryable"], false);
     }
 
     #[test]

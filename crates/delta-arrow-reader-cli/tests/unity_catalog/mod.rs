@@ -214,7 +214,13 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
             fixture.directory.path().join("options.json"),
             serde_json::to_vec(&options)?,
         )?;
-        for (historical, verbosity) in [(false, ""), (true, ""), (false, "trace")] {
+        for (historical, verbosity, machine) in [
+            (false, "", false),
+            (true, "", false),
+            (false, "trace", false),
+            (false, "off", true),
+            (true, "trace", true),
+        ] {
             let mut command = fixture.inspect();
             command
                 .env("AWS_ACCESS_KEY_ID", "ambient-key")
@@ -226,6 +232,9 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
             }
             if historical {
                 command.args(["--table-version", "0"]);
+            }
+            if machine {
+                command.arg("--diagnostics=json");
             }
             let output = run_with_timeout(&mut command)?;
             assert!(
@@ -241,10 +250,18 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
                     .collect::<Vec<_>>()
             );
             let diagnostic = std::str::from_utf8(&output.stderr)?;
-            if verbosity.is_empty() {
+            if machine {
+                let record =
+                    super::diagnostics::assert_single_terminal_record(&output.stderr, "completion");
+                assert_eq!(record["command"], "inspect");
+                assert_eq!(record["bindings"][0]["table_version"], "0");
+                assert_eq!(record["output_bytes"], output.stdout.len().to_string());
+            } else if verbosity.is_empty() {
                 assert!(diagnostic.is_empty());
             } else {
                 assert!(diagnostic.contains("event=\"table_load.completed\""));
+            }
+            if machine || !verbosity.is_empty() {
                 for sentinel in [
                     PROFILE,
                     TABLE_NAME,
@@ -290,7 +307,7 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
             "--output",
             "json",
         ];
-        assert_eq!(fixture.calls(), expected.repeat(3));
+        assert_eq!(fixture.calls(), expected.repeat(5));
         let requests = server.requests.lock().unwrap();
         assert!(!requests.is_empty());
         for request in requests.iter() {
@@ -410,6 +427,17 @@ fn invalid_responses_and_denied_credentials_are_redacted() -> TestResult {
         assert!(output.stdout.is_empty());
         check_failure(&output.stderr, "execution", expected);
         assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+        let output = run_with_timeout(
+            fixture
+                .inspect()
+                .arg("--diagnostics=json")
+                .env("RUST_LOG", "off"),
+        )?;
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let record =
+            super::diagnostics::assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert_eq!(record["code"], expected);
         assert_eq!(fixture.calls().first().map(String::as_str), Some("tables"));
         assert!(
             !fixture
@@ -429,6 +457,18 @@ fn invalid_responses_and_denied_credentials_are_redacted() -> TestResult {
     assert!(output.stdout.is_empty());
     check_failure(&output.stderr, "execution", "uc_credential_request_failed");
     assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+    let output = run_with_timeout(
+        fixture
+            .inspect()
+            .arg("--diagnostics=json")
+            .env("RUST_LOG", "trace")
+            .env("DAR_TEST_DENIED", "1"),
+    )?;
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    let record = super::diagnostics::assert_single_terminal_record(&output.stderr, "diagnostic");
+    assert_eq!(record["code"], "uc_credential_request_failed");
+    assert_eq!(record["recovery"], "unknown");
     Ok(())
 }
 
@@ -538,7 +578,8 @@ fn uc_cancellation_remains_responsive_with_blocked_stdout() -> TestResult {
     )?;
     let mut child = fixture
         .inspect()
-        .env("RUST_LOG", "info")
+        .arg("--diagnostics=json")
+        .env("RUST_LOG", "off")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
@@ -571,18 +612,27 @@ fn uc_cancellation_remains_responsive_with_blocked_stdout() -> TestResult {
     let output = child.wait_with_output()?;
     assert_eq!(output.status.code(), Some(143));
     assert!(!output.stdout.is_empty());
-    check_cancellation(&output.stderr, 143);
+    let record = super::diagnostics::assert_single_terminal_record(&output.stderr, "diagnostic");
+    assert_eq!(record["code"], "uc_cancelled");
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 fn cancellation_terminates_pending_databricks_process() -> TestResult {
-    for signal in [libc::SIGINT, libc::SIGTERM] {
+    for (signal, machine) in [
+        (libc::SIGINT, false),
+        (libc::SIGTERM, false),
+        (libc::SIGINT, true),
+        (libc::SIGTERM, true),
+    ] {
         let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
-        let mut child = fixture
-            .inspect()
-            .env("RUST_LOG", "info")
+        let mut command = fixture.inspect();
+        if machine {
+            command.arg("--diagnostics=json");
+        }
+        let mut child = command
+            .env("RUST_LOG", if machine { "off" } else { "info" })
             .env("DAR_TEST_HANG", "1")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -605,7 +655,13 @@ fn cancellation_terminates_pending_databricks_process() -> TestResult {
         let output = child.wait_with_output()?;
         assert_eq!(output.status.code(), Some(128 + signal));
         assert!(output.stdout.is_empty());
-        check_cancellation(&output.stderr, 128 + signal);
+        if machine {
+            let record =
+                super::diagnostics::assert_single_terminal_record(&output.stderr, "diagnostic");
+            assert_eq!(record["code"], "uc_cancelled");
+        } else {
+            check_cancellation(&output.stderr, 128 + signal);
+        }
         let status_path = format!("/proc/{pid}/stat");
         let stopped = || {
             fs::read_to_string(&status_path)
