@@ -4,7 +4,10 @@ use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaScalar};
 use serde::{Deserialize, Deserializer, de};
 use snafu::ensure;
 
-use crate::{Error, InputValidationSnafu, input::JsonObject};
+use crate::{
+    Error, InputValidationSnafu,
+    input::{JsonInputSource, JsonObject},
+};
 
 const MAX_PREDICATE_NODES: usize = 1024;
 const MAX_PREDICATE_DEPTH: usize = 32;
@@ -163,13 +166,15 @@ impl PredicateNode {
         ensure!(
             depth <= MAX_PREDICATE_DEPTH,
             InputValidationSnafu {
-                reason: "predicate_depth_limit_exceeded"
+                reason: "predicate_depth_limit_exceeded",
+                input: JsonInputSource::Predicate,
             }
         );
         ensure!(
             *node_count < MAX_PREDICATE_NODES,
             InputValidationSnafu {
-                reason: "predicate_node_limit_exceeded"
+                reason: "predicate_node_limit_exceeded",
+                input: JsonInputSource::Predicate,
             }
         );
         *node_count += 1;
@@ -227,7 +232,8 @@ impl ScalarInput {
                 ensure!(
                     value.is_finite(),
                     InputValidationSnafu {
-                        reason: "predicate_non_finite_float"
+                        reason: "predicate_non_finite_float",
+                        input: JsonInputSource::Predicate,
                     }
                 );
                 DeltaScalar::Float32(value)
@@ -236,7 +242,8 @@ impl ScalarInput {
                 ensure!(
                     value.is_finite(),
                     InputValidationSnafu {
-                        reason: "predicate_non_finite_float"
+                        reason: "predicate_non_finite_float",
+                        input: JsonInputSource::Predicate,
                     }
                 );
                 DeltaScalar::Float64(value)
@@ -249,7 +256,8 @@ impl ScalarInput {
                 ensure!(
                     size > 0 && size as usize == value.len(),
                     InputValidationSnafu {
-                        reason: "predicate_binary_size_mismatch"
+                        reason: "predicate_binary_size_mismatch",
+                        input: JsonInputSource::Predicate,
                     }
                 );
                 DeltaScalar::FixedSizeBinary { size, value }

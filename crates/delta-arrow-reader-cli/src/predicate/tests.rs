@@ -5,7 +5,9 @@ use super::*;
 
 fn parse_text(text: &str) -> Result<DeltaPredicate, Error> {
     serde_json::from_str::<PredicateInput>(text)
-        .context(crate::InputJsonSnafu)?
+        .context(crate::InputJsonSnafu {
+            input: JsonInputSource::Predicate,
+        })?
         .into_predicate()
 }
 

@@ -139,11 +139,19 @@ fn json_input_failures_keep_distinct_safe_causes() -> Result<(), Box<dyn std::er
         "--predicate-file",
         "--execution-options-file",
     ] {
-        for (contents, detail) in [
-            (b"!secret-value".as_slice(), "kind=Syntax"),
-            (br#""secret-value""#.as_slice(), "kind=Data"),
-            (b"{".as_slice(), "kind=Eof"),
-            (oversized.as_slice(), "reason=input_file_too_large"),
+        for (contents, detail, hint) in [
+            (
+                b"!secret-value".as_slice(),
+                "kind=Syntax",
+                "Fix JSON syntax",
+            ),
+            (br#""secret-value""#.as_slice(), "kind=Data", "Use "),
+            (b"{".as_slice(), "kind=Eof", "Complete the JSON document"),
+            (
+                oversized.as_slice(),
+                "reason=input_file_too_large",
+                "Keep the JSON input at or below 1 MiB.",
+            ),
         ] {
             fs::write(&path, contents)?;
             let output = run_with_timeout(
@@ -165,7 +173,38 @@ fn json_input_failures_keep_distinct_safe_causes() -> Result<(), Box<dyn std::er
                 diagnostic.contains(&field),
                 "{option}, expected {field}: {diagnostic}"
             );
+            assert!(
+                diagnostic.contains(&format!("argument=\"{option}\"")),
+                "{diagnostic}"
+            );
+            assert!(diagnostic.contains(hint), "{diagnostic}");
             assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+
+            let output = run_with_timeout(
+                Command::new(env!("CARGO_BIN_EXE_dar"))
+                    .args(["scan", option])
+                    .arg(&path)
+                    .args(["secret-missing-table", "--diagnostics=json"])
+                    .env("RUST_LOG", "off"),
+            )?;
+            assert_eq!(output.status.code(), Some(2));
+            assert!(output.stdout.is_empty());
+            let record = diagnostics::assert_single_terminal_record(&output.stderr, "diagnostic");
+            assert_eq!(record["argument"], option);
+            assert_eq!(record["code"], "invalid_input_json");
+            assert_eq!(record["recovery"], "fix_input");
+            assert_eq!(record["retryable"], false);
+            assert!(record["expected"].is_string());
+            assert!(record["hint"].as_str().unwrap().contains(hint), "{record}");
+            assert!(record.get("field_path").is_none(), "{record}");
+            if let Some(kind) = detail.strip_prefix("kind=") {
+                assert_eq!(record["json_kind"], kind);
+                assert!(record["line"].as_u64().unwrap() > 0);
+                assert!(record["column"].as_u64().unwrap() > 0);
+            } else {
+                assert_eq!(record["reason"], "input_file_too_large");
+                assert!(record.get("line").is_none());
+            }
         }
     }
     Ok(())
@@ -191,6 +230,8 @@ fn predicate_validation_reasons_survive_json_decoding() -> Result<(), Box<dyn st
         assert!(output.stdout.is_empty());
         let diagnostic = check_failure(&output.stderr, "configuration", "invalid_input_json");
         assert!(diagnostic.contains(&format!("error_reason=\"{reason}\"")), "{diagnostic}");
+        assert!(diagnostic.contains("argument=\"--predicate-file\""), "{diagnostic}");
+        assert!(diagnostic.contains("hint="), "{diagnostic}");
         assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
     }
     Ok(())

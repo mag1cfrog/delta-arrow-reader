@@ -1,6 +1,8 @@
 use delta_arrow_reader::{DeltaReaderError, DeltaScanExecutionOptions, ParquetReaderBackend};
 use serde::{Deserialize, Deserializer, de};
 
+use crate::input::{InputFileCorrection, JsonInputSource};
+
 #[derive(Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct ExecutionOptionsInput {
@@ -48,6 +50,45 @@ impl ExecutionOptionsInput {
         }
         Ok(options)
     }
+}
+
+pub(crate) fn input_correction(reason: &str) -> Option<InputFileCorrection> {
+    let (field_path, maximum, nullable) = match reason {
+        "max_concurrent_file_reads_per_scan_must_be_positive"
+        | "max_concurrent_file_reads_per_scan_exceeds_tokio_max_permits" => (
+            "/max_concurrent_file_reads_per_scan",
+            tokio::sync::Semaphore::MAX_PERMITS,
+            true,
+        ),
+        "max_concurrent_file_reads_per_partition_must_be_positive"
+        | "max_concurrent_file_reads_per_partition_exceeds_tokio_max_permits" => (
+            "/max_concurrent_file_reads_per_partition",
+            tokio::sync::Semaphore::MAX_PERMITS,
+            false,
+        ),
+        "output_buffer_batches_per_partition_must_be_positive"
+        | "output_buffer_batches_per_partition_exceeds_tokio_max_permits" => (
+            "/output_buffer_batches_per_partition",
+            tokio::sync::Semaphore::MAX_PERMITS,
+            false,
+        ),
+        "parquet_metadata_size_hint_bytes_must_be_positive" => {
+            ("/parquet_metadata_size_hint_bytes", usize::MAX, true)
+        }
+        "parquet_full_file_read_threshold_bytes_must_be_positive" => {
+            ("/parquet_full_file_read_threshold_bytes", usize::MAX, true)
+        }
+        _ => return None,
+    };
+    Some(InputFileCorrection {
+        input: JsonInputSource::ExecutionOptions,
+        field_path: Some(field_path),
+        expected: format!(
+            "JSON integer from 1 to {maximum}{}",
+            if nullable { ", or null" } else { "" },
+        ),
+        hint: "Set this field within the accepted range, or omit it to use the default.",
+    })
 }
 
 // The outer Option records presence, keeping omission separate from explicit null.

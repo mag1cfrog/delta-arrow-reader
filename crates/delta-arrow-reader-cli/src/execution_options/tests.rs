@@ -8,7 +8,9 @@ use crate::{ConfigurationSnafu, Error, InputJsonSnafu, input::JsonObject};
 
 fn parse(text: &str) -> Result<DeltaScanExecutionOptions, Error> {
     serde_json::from_str::<JsonObject<ExecutionOptionsInput>>(text)
-        .context(InputJsonSnafu)?
+        .context(InputJsonSnafu {
+            input: JsonInputSource::ExecutionOptions,
+        })?
         .0
         .into_execution_options()
         .context(ConfigurationSnafu)
@@ -144,17 +146,30 @@ fn rejects_wrong_shapes_types_and_duplicate_fields() {
 
 #[test]
 fn native_setters_enforce_zero_and_capacity_limits() {
-    for field in [
-        "max_concurrent_file_reads_per_scan",
-        "max_concurrent_file_reads_per_partition",
-        "output_buffer_batches_per_partition",
-        "parquet_metadata_size_hint_bytes",
-        "parquet_full_file_read_threshold_bytes",
+    for (field, nullable, maximum) in [
+        (
+            "max_concurrent_file_reads_per_scan",
+            true,
+            tokio::sync::Semaphore::MAX_PERMITS,
+        ),
+        (
+            "max_concurrent_file_reads_per_partition",
+            false,
+            tokio::sync::Semaphore::MAX_PERMITS,
+        ),
+        (
+            "output_buffer_batches_per_partition",
+            false,
+            tokio::sync::Semaphore::MAX_PERMITS,
+        ),
+        ("parquet_metadata_size_hint_bytes", true, usize::MAX),
+        ("parquet_full_file_read_threshold_bytes", true, usize::MAX),
     ] {
         let text = format!(r#"{{"{field}":0}}"#);
         let error = parse(&text).unwrap_err();
         assert!(matches!(error, Error::Configuration { .. }), "{text}");
         assert_eq!(error.exit_code(), ExitCode::from(2));
+        assert_configuration_correction(&error, field, nullable, maximum);
     }
     let maximum = tokio::sync::Semaphore::MAX_PERMITS;
     let options = parse(
@@ -178,7 +193,36 @@ fn native_setters_enforce_zero_and_capacity_limits() {
         let error = parse(&text).unwrap_err();
         assert!(matches!(error, Error::Configuration { .. }), "{text}");
         assert_eq!(error.exit_code(), ExitCode::from(2));
+        assert_configuration_correction(
+            &error,
+            field,
+            field == "max_concurrent_file_reads_per_scan",
+            maximum,
+        );
     }
+    assert!(input_correction("secret-unknown-reason").is_none());
+}
+
+fn assert_configuration_correction(error: &Error, field: &str, nullable: bool, maximum: usize) {
+    let record = error.to_json_diagnostic();
+    assert_eq!(record["argument"], "--execution-options-file");
+    assert_eq!(record["field_path"], format!("/{field}"));
+    assert_eq!(
+        record["expected"],
+        format!(
+            "JSON integer from 1 to {maximum}{}",
+            if nullable { ", or null" } else { "" },
+        )
+    );
+    assert_eq!(record["recovery"], "fix_input");
+    assert_eq!(record["retryable"], false);
+    assert!(record["hint"].as_str().unwrap().contains("omit"));
+    let text = crate::diagnostics::capture("warn", || error.log_failure());
+    assert!(text.contains(&format!("field_path=\"/{field}\"")), "{text}");
+    assert!(
+        text.contains(record["expected"].as_str().unwrap()),
+        "{text}"
+    );
 }
 
 #[test]

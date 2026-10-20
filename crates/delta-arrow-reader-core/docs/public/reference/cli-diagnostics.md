@@ -56,6 +56,23 @@ Unknown command and option names are omitted; the hint directs callers to
 `expected` as guidance; use `code`, `argument_kind`, and `recovery` for decisions.
 The same correction fields appear in text-mode argument errors.
 
+JSON input and file-read failures identify the supplying option in `argument`,
+such as `--predicate-file`, without exposing the filename. `expected` describes
+that input's structure, and `hint` gives a next action for malformed or incomplete
+JSON, schema violations, unreadable files, oversized inputs, or predicate limits.
+Schema hints describe the input's rules; they do not identify unknown keys or
+quote invalid operators, types, or values.
+
+Execution settings rejected by a native range check also include `field_path`,
+a JSON Pointer made from known schema fields. For example, an execution file
+containing `{"max_concurrent_file_reads_per_partition":0}` produces
+`argument: "--execution-options-file"` and
+`field_path: "/max_concurrent_file_reads_per_partition"`. Here `expected` gives
+the field's allowed integer range and whether it accepts null. Set the field
+within that range, or remove it to use the default. These fields appear in both
+text and machine diagnostics. `field_path` is omitted when no specific field
+can be identified from a known error reason.
+
 `recovery` uses `fix_input` for invalid input, `authorize` for unauthenticated
 sources, `request_access` for permission failures, `retry` for known transient
 I/O failures, or `change_request` for unsupported operations. Unclassified

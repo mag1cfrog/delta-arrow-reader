@@ -26,6 +26,7 @@ use delta_arrow_reader::{
     error_source_kind,
 };
 use diagnostics::DiagnosticFormat;
+use input::JsonInputSource;
 use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu, ensure};
 
@@ -103,11 +104,20 @@ enum Error {
         "Invalid JSON input (kind={:?}, line={}, column={}).",
         source.classify(), source.line(), source.column()
     ))]
-    InputJson { source: serde_json::Error },
+    InputJson {
+        source: serde_json::Error,
+        input: JsonInputSource,
+    },
     #[snafu(display("Invalid JSON input (reason={reason})."))]
-    InputValidation { reason: &'static str },
+    InputValidation {
+        reason: &'static str,
+        input: JsonInputSource,
+    },
     #[snafu(display("Could not read the input file."))]
-    InputIo { source: io::Error },
+    InputIo {
+        source: io::Error,
+        input: JsonInputSource,
+    },
     #[snafu(display("The reader runtime failed."))]
     Runtime {
         source: io::Error,
@@ -174,10 +184,10 @@ impl Error {
                 "input_json_decode_failed",
                 None,
             ),
-            Self::InputValidation { reason } => {
+            Self::InputValidation { reason, .. } => {
                 ("configuration", "invalid_input_json", *reason, None)
             }
-            Self::InputIo { source } => (
+            Self::InputIo { source, .. } => (
                 "configuration",
                 "input_file_io",
                 "input_file_read_failed",
@@ -205,6 +215,54 @@ impl Error {
         }
     }
 
+    fn input_file_correction(&self) -> Option<input::InputFileCorrection> {
+        let (input, hint) = match self {
+            Self::InputJson { source, input } => (
+                *input,
+                match source.classify() {
+                    serde_json::error::Category::Syntax => {
+                        "Fix JSON syntax at the reported line and column."
+                    }
+                    serde_json::error::Category::Eof => {
+                        "Complete the JSON document at the reported line and column."
+                    }
+                    serde_json::error::Category::Data => input.schema_hint(),
+                    serde_json::error::Category::Io => "Check that the input file is readable.",
+                },
+            ),
+            Self::InputValidation { reason, input } => (
+                *input,
+                match *reason {
+                    "input_file_too_large" => "Keep the JSON input at or below 1 MiB.",
+                    "predicate_depth_limit_exceeded" => "Reduce predicate nesting.",
+                    "predicate_node_limit_exceeded" => "Reduce the number of predicate nodes.",
+                    "predicate_non_finite_float" => {
+                        "Use a finite number within the selected float type's range."
+                    }
+                    "predicate_binary_size_mismatch" => {
+                        "Use a positive fixed binary size matching the number of bytes."
+                    }
+                    _ => input.schema_hint(),
+                },
+            ),
+            Self::InputIo { source, input } => (
+                *input,
+                match source.kind() {
+                    io::ErrorKind::NotFound => {
+                        "Provide an existing input file; relative paths use the working directory."
+                    }
+                    io::ErrorKind::PermissionDenied => "Request read access to the input file.",
+                    _ => "Check that the input path names a readable file.",
+                },
+            ),
+            Self::Configuration { source } => {
+                return execution_options::input_correction(source.reason());
+            }
+            _ => return None,
+        };
+        Some(input.correction(hint))
+    }
+
     fn log_failure(&self) {
         if let Self::UnityCatalog {
             source: unity_catalog::Error::Cancelled { status },
@@ -222,6 +280,8 @@ impl Error {
             return;
         }
         let (phase, code, reason, source_kind) = self.classification();
+        let file_correction = self.input_file_correction();
+        let field_path = file_correction.as_ref().and_then(|value| value.field_path);
         let (argument_kind, argument, expected, hint) = match self {
             Self::Argument { kind, correction } => (
                 Some(tracing::field::debug(kind)),
@@ -229,10 +289,17 @@ impl Error {
                 correction.as_ref().map(|value| value.expected.as_str()),
                 Some(diagnostics::argument_error_hint(*kind)),
             ),
-            _ => (None, None, None, None),
+            _ => (
+                None,
+                file_correction.as_ref().map(|value| value.input.argument()),
+                file_correction
+                    .as_ref()
+                    .map(|value| value.expected.as_str()),
+                file_correction.as_ref().map(|value| value.hint),
+            ),
         };
         let (json_kind, json_line, json_column) = match self {
-            Self::InputJson { source } => (
+            Self::InputJson { source, .. } => (
                 Some(tracing::field::debug(source.classify())),
                 Some(source.line()),
                 Some(source.column()),
@@ -240,7 +307,9 @@ impl Error {
             _ => (None, None, None),
         };
         let (io_kind, os_error) = match self {
-            Self::InputIo { source } | Self::Runtime { source, .. } | Self::Output { source } => (
+            Self::InputIo { source, .. }
+            | Self::Runtime { source, .. }
+            | Self::Output { source } => (
                 Some(tracing::field::debug(source.kind())),
                 source.raw_os_error(),
             ),
@@ -253,7 +322,7 @@ impl Error {
         tracing::error!(target: "delta_arrow_reader_cli",
             event = "cli.failed", operation = "cli_command", outcome = "failed",
             error_phase = phase, error_code = code, error_reason = reason,
-            error_source_kind = source_kind, argument_kind, argument, expected, hint,
+            error_source_kind = source_kind, argument_kind, argument, expected, hint, field_path,
             json_kind, json_line, json_column, io_kind, os_error,
             "{message}"
         );
@@ -295,16 +364,26 @@ impl Error {
                     record["expected"] = correction.expected.as_str().into();
                 }
             }
-            Self::InputJson { source } => {
+            Self::InputJson { source, .. } => {
                 record["json_kind"] = format!("{:?}", source.classify()).into();
                 record["line"] = source.line().into();
                 record["column"] = source.column().into();
             }
-            Self::InputIo { source } | Self::Runtime { source, .. } | Self::Output { source } => {
+            Self::InputIo { source, .. }
+            | Self::Runtime { source, .. }
+            | Self::Output { source } => {
                 record["io_kind"] = format!("{:?}", source.kind()).into();
                 record["os_error"] = json!(source.raw_os_error());
             }
             _ => {}
+        }
+        if let Some(correction) = self.input_file_correction() {
+            record["argument"] = correction.input.argument().into();
+            record["expected"] = correction.expected.into();
+            record["hint"] = correction.hint.into();
+            if let Some(path) = correction.field_path {
+                record["field_path"] = path.into();
+            }
         }
         record
     }
@@ -451,14 +530,23 @@ fn run() -> Result<Value, Error> {
     )
     .context(UnityCatalogSnafu)?;
     let storage_options = match &table_args.storage_options_file {
-        Some(path) => input::read_json_file::<input::StorageOptionsInput>(path)?.0,
+        Some(path) => {
+            input::read_json_file::<input::StorageOptionsInput>(
+                path,
+                JsonInputSource::StorageOptions,
+            )?
+            .0
+        }
         None => Default::default(),
     };
     let predicate = match &command {
         Command::Scan {
             predicate_file: Some(path),
             ..
-        } => Some(input::read_json_file::<predicate::PredicateInput>(path)?.into_predicate()?),
+        } => Some(
+            input::read_json_file::<predicate::PredicateInput>(path, JsonInputSource::Predicate)?
+                .into_predicate()?,
+        ),
         _ => None,
     };
     let execution_options = match &command {
@@ -468,7 +556,7 @@ fn run() -> Result<Value, Error> {
         } => {
             let options = input::read_json_file::<
                 input::JsonObject<execution_options::ExecutionOptionsInput>,
-            >(path)?
+            >(path, JsonInputSource::ExecutionOptions)?
             .0;
             Some(
                 options
@@ -871,6 +959,7 @@ mod tests {
             (
                 Error::InputIo {
                     source: io::Error::new(io::ErrorKind::NotFound, "secret path"),
+                    input: JsonInputSource::StorageOptions,
                 },
                 "not_found",
                 "io_kind=NotFound",
@@ -878,6 +967,7 @@ mod tests {
             (
                 Error::InputIo {
                     source: io::Error::new(io::ErrorKind::PermissionDenied, "secret path"),
+                    input: JsonInputSource::Predicate,
                 },
                 "permission_denied",
                 "io_kind=PermissionDenied",
@@ -923,6 +1013,14 @@ mod tests {
             let record = error.to_json_diagnostic();
             assert_eq!(record["source_kind"], source_kind);
             assert!(!record.to_string().contains("secret"));
+            if let Error::InputIo { input, source } = &error {
+                assert_eq!(record["argument"], input.argument());
+                assert!(record.get("field_path").is_none());
+                if source.kind() == io::ErrorKind::PermissionDenied {
+                    assert_eq!(record["recovery"], "request_access");
+                    assert_eq!(record["hint"], "Request read access to the input file.");
+                }
+            }
             for filter in ["warn", "trace"] {
                 let text = diagnostics::capture(filter, || error.log_failure());
                 assert_eq!(text.lines().count(), 1, "{text}");
@@ -986,7 +1084,7 @@ mod tests {
         std::fs::write(&path, r#"{"secret-field":0}"#).unwrap();
         let error = input::read_json_file::<
             input::JsonObject<execution_options::ExecutionOptionsInput>,
-        >(path.to_str().unwrap())
+        >(path.to_str().unwrap(), JsonInputSource::ExecutionOptions)
         .err()
         .unwrap();
         let source = error
@@ -1001,9 +1099,12 @@ mod tests {
         assert!(!format!("{error:?}").contains("secret"));
 
         std::fs::write(&path, b" \n !secret").unwrap();
-        let error = input::read_json_file::<input::StorageOptionsInput>(path.to_str().unwrap())
-            .err()
-            .unwrap();
+        let error = input::read_json_file::<input::StorageOptionsInput>(
+            path.to_str().unwrap(),
+            JsonInputSource::StorageOptions,
+        )
+        .err()
+        .unwrap();
         assert_eq!(
             error.to_string(),
             "Invalid JSON input (kind=Syntax, line=2, column=2)."
@@ -1016,7 +1117,9 @@ mod tests {
         use std::error::Error as _;
 
         let error = Err::<(), _>(io::Error::other("secret input path"))
-            .context(InputIoSnafu)
+            .context(InputIoSnafu {
+                input: JsonInputSource::StorageOptions,
+            })
             .unwrap_err();
         assert!(error.source().unwrap().is::<io::Error>());
         let text = diagnostics::capture("warn", || error.log_failure());

@@ -167,6 +167,69 @@ fn unknown_arguments_offer_help_without_echoing_names() -> Result<(), Box<dyn st
 }
 
 #[test]
+fn input_schema_corrections_omit_unknown_keys_and_values() -> Result<(), Box<dyn std::error::Error>>
+{
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("secret-input.json");
+    for (argument, inputs, expected) in [
+        (
+            "--storage-options-file",
+            &[
+                r#"{"secret-key":null}"#,
+                r#"{"secret-key":"secret-value","secret-key":"secret-duplicate"}"#,
+            ][..],
+            "string values",
+        ),
+        (
+            "--predicate-file",
+            &[
+                r#"{"op":"secret-operator","secret-key":"secret-value"}"#,
+                r#"{"op":"eq","column":"secret-column","value":{"type":"secret-type","value":"secret-value"}}"#,
+                r#"{"op":"constant","value":true,"secret-key":"secret-value"}"#,
+                r#"{"op":"eq","column":"secret-column","value":{"type":"int32","value":"secret-value"}}"#,
+                r#"{"op":"constant","value":true,"value":false}"#,
+            ][..],
+            "'op'",
+        ),
+        (
+            "--execution-options-file",
+            &[
+                r#"{"secret-key":"secret-value"}"#,
+                r#"{"parquet_backend":"secret-value"}"#,
+                r#"{"parquet_backend":"direct","parquet_backend":"secret-value"}"#,
+            ][..],
+            "execution options",
+        ),
+    ] {
+        for input in inputs {
+            fs::write(&path, input)?;
+            let output = run_with_timeout(
+                Command::new(env!("CARGO_BIN_EXE_dar"))
+                    .args(["scan", "secret-table", argument])
+                    .arg(&path)
+                    .arg("--diagnostics=json")
+                    .env("RUST_LOG", "trace"),
+            )?;
+            assert_eq!(output.status.code(), Some(2));
+            assert!(output.stdout.is_empty());
+            let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+            assert_eq!(record["argument"], argument);
+            assert_eq!(record["json_kind"], "Data");
+            assert!(
+                record["expected"].as_str().unwrap().contains(expected),
+                "{record}"
+            );
+            assert!(
+                record["hint"].as_str().unwrap().starts_with("Use "),
+                "{record}"
+            );
+            assert!(record.get("field_path").is_none(), "{record}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn failures_stay_json_with_tracing_off_on_or_invalid() -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
     let malformed = directory.path().join("secret-malformed.json");
@@ -291,6 +354,34 @@ fn failures_stay_json_with_tracing_off_on_or_invalid() -> Result<(), Box<dyn std
                 if *code == "invalid_input_json" {
                     assert!(record["line"].is_number());
                     assert!(record["column"].is_number());
+                }
+                if let Some(argument) = args.iter().find(|argument| {
+                    matches!(
+                        **argument,
+                        "--storage-options-file" | "--execution-options-file"
+                    )
+                }) {
+                    assert_eq!(record["argument"], *argument);
+                    assert!(record["expected"].is_string());
+                    assert!(record["hint"].is_string());
+                    match *code {
+                        "input_file_io" => {
+                            assert!(
+                                record["hint"]
+                                    .as_str()
+                                    .unwrap()
+                                    .contains("existing input file")
+                            );
+                            assert!(record.get("field_path").is_none());
+                        }
+                        "invalid_configuration" => {
+                            assert_eq!(
+                                record["field_path"],
+                                "/max_concurrent_file_reads_per_partition"
+                            );
+                        }
+                        _ => {}
+                    }
                 }
             }
         }
