@@ -32,6 +32,7 @@ enum StorageCredentialKind {
     R2,
     AzureSas,
     AzureBearer,
+    Gcs,
 }
 
 /// A fake Databricks executable with controllable table metadata and credential responses.
@@ -48,6 +49,7 @@ impl DatabricksCliFixture {
             StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer => {
                 "abfss://container@account.dfs.core.windows.net/table/"
             }
+            StorageCredentialKind::Gcs => "gs://bucket/table/",
         };
         fs::write(
             directory.path().join("metadata.json"),
@@ -94,6 +96,9 @@ impl DatabricksCliFixture {
             }
             StorageCredentialKind::AzureBearer => {
                 credentials["azure_aad"] = json!({"aad_token":"secret-bearer-token"});
+            }
+            StorageCredentialKind::Gcs => {
+                credentials["gcp_oauth_token"] = json!({"oauth_token":"secret-gcp-token"});
             }
         }
         fs::write(
@@ -186,6 +191,7 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
         StorageCredentialKind::R2,
         StorageCredentialKind::AzureSas,
         StorageCredentialKind::AzureBearer,
+        StorageCredentialKind::Gcs,
     ] {
         let fixture = DatabricksCliFixture::new(credential_kind)?;
         let server = MockCloudStorageServer::new(credential_kind, log.clone())?;
@@ -209,6 +215,12 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
                     "azure_allow_http": "true"
                 })
             }
+            StorageCredentialKind::Gcs => {
+                json!({
+                    "google_base_url": server.endpoint,
+                    "google_allow_http": "true"
+                })
+            }
         };
         fs::write(
             fixture.directory.path().join("options.json"),
@@ -221,12 +233,26 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
             (false, "off", true),
             (true, "trace", true),
         ] {
+            if credential_kind == StorageCredentialKind::AzureSas && historical {
+                // Raw '+' and percent-encoded '+' must produce the same SAS signature.
+                let path = fixture.directory.path().join("credentials.json");
+                let mut credentials: Value = serde_json::from_slice(&fs::read(&path)?)?;
+                credentials["azure_user_delegation_sas"] =
+                    json!({"sas_token":"?sv=test&sp=rl&sig=test+signature"});
+                fs::write(path, serde_json::to_vec(&credentials)?)?;
+            }
             let mut command = fixture.inspect();
             command
                 .env("AWS_ACCESS_KEY_ID", "ambient-key")
                 .env("AZURE_STORAGE_ACCOUNT_KEY", "invalid-ambient-secret")
                 .env("AZURE_STORAGE_TOKEN", "ambient-token")
-                .env("AZURE_STORAGE_SAS_KEY", "sig=ambient-signature");
+                .env("AZURE_STORAGE_SAS_KEY", "sig=ambient-signature")
+                .env("GOOGLE_APPLICATION_CREDENTIALS", "secret-missing-adc.json")
+                .env(
+                    "GOOGLE_SERVICE_ACCOUNT",
+                    "secret-missing-service-account.json",
+                )
+                .env("GOOGLE_SKIP_SIGNATURE", "true");
             if !verbosity.is_empty() {
                 command.env("RUST_LOG", verbosity);
             }
@@ -312,11 +338,29 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
         assert!(!requests.is_empty());
         for request in requests.iter() {
             let first = request.lines().next().unwrap();
+            let request_url = Url::parse(&format!(
+                "http://localhost{}",
+                request
+                    .split_whitespace()
+                    .nth(1)
+                    .ok_or("missing request target")?
+            ))?;
+            let request_path = object_store::path::Path::from_url_path(request_url.path())?;
             assert!(
-                !first.contains(".parquet") && !first.contains(".bin"),
+                !request_path.as_ref().ends_with(".parquet")
+                    && !request_path.as_ref().ends_with(".bin"),
                 "{first}"
             );
             match credential_kind {
+                StorageCredentialKind::Gcs => {
+                    assert!(
+                        request
+                            .to_ascii_lowercase()
+                            .contains("authorization: bearer secret-gcp-token\r\n"),
+                        "missing UC GCS token"
+                    );
+                    assert!(!first.contains("sig="), "unexpected SAS credential");
+                }
                 StorageCredentialKind::AzureBearer => {
                     assert!(
                         request
@@ -775,6 +819,8 @@ impl MockCloudStorageServer {
                     continue;
                 };
                 let url = Url::parse(&format!("http://localhost{target}")).unwrap();
+                // GCS encodes slashes in object keys, unlike the S3 and Azure clients.
+                let request_path = object_store::path::Path::from_url_path(url.path()).unwrap();
                 let query = url.query_pairs().collect::<HashMap<_, _>>();
                 let listing = query.contains_key("list-type")
                     || query.get("comp").is_some_and(|v| v == "list");
@@ -805,8 +851,8 @@ impl MockCloudStorageServer {
                         )
                     };
                     (200, xml.into_bytes())
-                } else if url.path()
-                    == format!("/{}/{key}", if is_azure { "container" } else { "bucket" })
+                } else if request_path.as_ref()
+                    == format!("{}/{key}", if is_azure { "container" } else { "bucket" })
                 {
                     (200, log.clone())
                 } else {

@@ -112,8 +112,9 @@ These rules apply to Unity Catalog targets:
   column masks, catalog commits (`catalogManaged`), and coordinated commits
   are unsupported. Authorization failures never fall back to cloud credentials
   from the environment.
-- Supported credentials are S3/R2 temporary key/secret/session-token credentials
-  and Azure user-delegation SAS or Azure AD bearer tokens. Azure locations must
+- Supported credentials are S3/R2 temporary key/secret/session-token credentials,
+  Azure user-delegation SAS or Azure AD bearer tokens, and GCS OAuth bearer tokens.
+  GCS locations use `gs://bucket/path`. Azure locations must
   identify the account and container using `abfss://` or an Azure Blob/DFS HTTPS
   URL. R2 locations use `r2://bucket@account.r2.cloudflarestorage.com/path`
   or the equivalent `https://account.r2.cloudflarestorage.com/bucket/path`.
