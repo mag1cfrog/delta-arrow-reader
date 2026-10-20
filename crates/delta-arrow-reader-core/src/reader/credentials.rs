@@ -45,7 +45,7 @@ impl fmt::Debug for DeltaStorageCredentialProvider {
 }
 
 impl DeltaStorageCredentialProvider {
-    /// Rejects a mismatched store or competing authentication settings before reads.
+    /// Rejects a mismatched store or options incompatible with the provider before reads.
     pub(crate) fn validate_storage_configuration(
         &self,
         table_url: &Url,
@@ -66,11 +66,11 @@ impl DeltaStorageCredentialProvider {
             }
         );
 
-        // Presence alone conflicts, even when an authentication flag is set to false.
+        // Native with_credentials handles ordinary credential precedence.
         ensure!(
             !storage_options
                 .keys()
-                .any(|option_name| self.is_authentication_option(option_name)),
+                .any(|option_name| self.is_incompatible_option(option_name)),
             InvalidConfigurationSnafu {
                 reason: "credential_provider_conflicting_options",
             }
@@ -78,72 +78,27 @@ impl DeltaStorageCredentialProvider {
         Ok(())
     }
 
-    fn is_authentication_option(&self, option_name: &str) -> bool {
+    fn is_incompatible_option(&self, option_name: &str) -> bool {
         // Native parsers keep aliases and ignored unknown keys consistent with store construction.
         let normalized_name = option_name.to_ascii_lowercase();
         match self {
-            Self::Aws(_) => normalized_name
-                .parse::<AmazonS3ConfigKey>()
-                .is_ok_and(|option| AWS_AUTHENTICATION_OPTIONS.contains(&option)),
-            Self::Azure(_) => normalized_name
-                .parse::<AzureConfigKey>()
-                .is_ok_and(|option| AZURE_AUTHENTICATION_OPTIONS.contains(&option)),
-            Self::Gcp(_) => normalized_name
-                .parse::<GoogleConfigKey>()
-                .is_ok_and(|option| GCP_AUTHENTICATION_OPTIONS.contains(&option)),
+            // Unsigned requests bypass the provider.
+            Self::Aws(_) => matches!(
+                normalized_name.parse(),
+                Ok(AmazonS3ConfigKey::SkipSignature)
+            ),
+            // Emulator mode also bypasses the provider.
+            Self::Azure(_) => matches!(
+                normalized_name.parse(),
+                Ok(AzureConfigKey::SkipSignature | AzureConfigKey::UseEmulator)
+            ),
+            // GCS parses service-account data before selecting the provider and can use its endpoint.
+            Self::Gcp(_) => matches!(
+                normalized_name.parse(),
+                Ok(GoogleConfigKey::SkipSignature
+                    | GoogleConfigKey::ServiceAccount
+                    | GoogleConfigKey::ServiceAccountKey)
+            ),
         }
     }
 }
-
-const AWS_AUTHENTICATION_OPTIONS: &[AmazonS3ConfigKey] = &[
-    // These values would supply a second credential set.
-    AmazonS3ConfigKey::AccessKeyId,
-    AmazonS3ConfigKey::SecretAccessKey,
-    AmazonS3ConfigKey::Token,
-    // These settings configure the SDK's instance, container, or web-identity providers.
-    AmazonS3ConfigKey::ImdsV1Fallback,
-    AmazonS3ConfigKey::MetadataEndpoint,
-    AmazonS3ConfigKey::ContainerCredentialsRelativeUri,
-    AmazonS3ConfigKey::ContainerCredentialsFullUri,
-    AmazonS3ConfigKey::ContainerAuthorizationTokenFile,
-    AmazonS3ConfigKey::WebIdentityTokenFile,
-    AmazonS3ConfigKey::RoleArn,
-    AmazonS3ConfigKey::RoleSessionName,
-    AmazonS3ConfigKey::StsEndpoint,
-    // Unsigned requests bypass the supplied provider.
-    AmazonS3ConfigKey::SkipSignature,
-];
-
-const AZURE_AUTHENTICATION_OPTIONS: &[AzureConfigKey] = &[
-    // These values would supply a second credential set.
-    AzureConfigKey::AccessKey,
-    AzureConfigKey::SasKey,
-    AzureConfigKey::Token,
-    // These settings configure service-principal, managed-identity, or CLI authentication.
-    AzureConfigKey::ClientId,
-    AzureConfigKey::ClientSecret,
-    AzureConfigKey::AuthorityId,
-    AzureConfigKey::AuthorityHost,
-    AzureConfigKey::MsiEndpoint,
-    AzureConfigKey::ObjectId,
-    AzureConfigKey::MsiResourceId,
-    AzureConfigKey::FederatedTokenFile,
-    AzureConfigKey::UseAzureCli,
-    // Fabric's token service would select another credential provider.
-    AzureConfigKey::FabricTokenServiceUrl,
-    AzureConfigKey::FabricWorkloadHost,
-    AzureConfigKey::FabricSessionToken,
-    AzureConfigKey::FabricClusterIdentifier,
-    // Emulator mode and unsigned requests bypass the supplied provider.
-    AzureConfigKey::UseEmulator,
-    AzureConfigKey::SkipSignature,
-];
-
-const GCP_AUTHENTICATION_OPTIONS: &[GoogleConfigKey] = &[
-    // Credential files or inline service-account keys would supply another identity.
-    GoogleConfigKey::ServiceAccount,
-    GoogleConfigKey::ServiceAccountKey,
-    GoogleConfigKey::ApplicationCredentials,
-    // Unsigned requests bypass the supplied provider.
-    GoogleConfigKey::SkipSignature,
-];

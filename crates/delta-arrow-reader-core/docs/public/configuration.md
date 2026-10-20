@@ -294,9 +294,17 @@ including from Delta Kernel's runtime, and must return usable credentials or an
 error. The reader retains it for scans, table clones, and snapshot refreshes.
 Updating credentials does not change the table's snapshot version.
 
-Do not combine a provider with authentication settings in `DeltaStorageOptions`,
-including credential files, unsigned requests, or Azure emulator mode. These
-combinations and providers for the wrong cloud fail before storage reads.
+The provider takes precedence over ordinary authentication settings in
+`DeltaStorageOptions`, following the native client's `with_credentials` rules.
+For example, an AWS provider overrides static keys, and a GCP provider skips
+Application Default Credentials.
+
+Omit `skip_signature`, Azure's `use_emulator`, and GCP's `service_account` and
+`service_account_key` options, including their aliases, when supplying a provider.
+These options can bypass the provider or load service-account data separately.
+Their presence is rejected before storage reads, even when a boolean value is
+`false`. Providers for the wrong cloud also fail before reads.
+
 Transport and region options still follow the native storage client's rules:
 values derived from the URL override options. R2 selects the `auto` region and
 accepts `aws_endpoint_url_s3` for an endpoint override.

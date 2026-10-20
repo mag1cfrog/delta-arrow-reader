@@ -89,7 +89,7 @@ impl CredentialKind {
         }
     }
 
-    fn options(self, endpoint: &str) -> DeltaStorageOptions {
+    fn options_with_other_credentials(self, endpoint: &str) -> DeltaStorageOptions {
         let endpoint_key = match self {
             Self::S3 | Self::R2 => "aws_endpoint_url_s3",
             Self::AzureSas | Self::AzureBearer => "azure_endpoint",
@@ -103,6 +103,28 @@ impl CredentialKind {
             // R2 must replace this with the region derived from its URL.
             options.insert("aws_region".into(), "us-west-2".into());
         }
+        // Native with_credentials must override these settings, including on failure.
+        let other_credentials: &[(&str, &str)] = match self {
+            Self::S3 | Self::R2 => &[
+                ("AWS_ACCESS_KEY_ID", "secret-unused-key"),
+                ("secret_access_key", "secret-unused-signing-key"),
+                ("session_token", "secret-unused-session"),
+                ("web_identity_token_file", "secret-missing-token-file"),
+                ("aws_role_arn", "secret-unused-role"),
+            ],
+            Self::AzureSas | Self::AzureBearer => &[
+                ("azure_storage_master_key", "secret-invalid-base64-key"),
+                ("AZURE_STORAGE_SAS_TOKEN", "sig=secret-unused-sas"),
+                ("token", "secret-unused-bearer"),
+                ("use_azure_cli", "true"),
+            ],
+            Self::Gcs => &[("google_application_credentials", "secret-missing-adc.json")],
+        };
+        options.extend(
+            other_credentials
+                .iter()
+                .map(|(name, value)| ((*name).into(), (*value).into())),
+        );
         options
     }
 
@@ -220,7 +242,7 @@ async fn rotating_credentials_reach_logs_data_vectors_and_refreshed_tables() -> 
             ));
             let generation = Arc::new(AtomicUsize::new(0));
             let builder = DeltaTableBuilder::new(kind.table_url())
-                .with_storage_options(kind.options(&endpoint))
+                .with_storage_options(kind.options_with_other_credentials(&endpoint))
                 .with_credential_provider(kind.provider(Arc::clone(&generation)))
                 .with_execution_options(
                     DeltaScanExecutionOptions::new().with_parquet_backend(backend),
@@ -350,51 +372,40 @@ async fn assert_rows(scan: DeltaScan) -> TestResult {
 async fn conflicting_inputs_fail_before_any_storage_read() -> TestResult {
     let local_url = Url::from_directory_path(std::env::current_dir()?)
         .map_err(|()| "invalid local fixture URL")?;
-    for (kind, conflicts) in [
+    for (kind, conflicting_options) in [
         (
             CredentialKind::S3,
-            &[
-                "AWS_ACCESS_KEY_ID",
-                "secret_access_key",
-                "session_token",
-                "skip_signature",
-                "web_identity_token_file",
-                "aws_role_arn",
-                "aws_container_credentials_full_uri",
-                "metadata_endpoint",
-            ][..],
+            &[("AWS_SKIP_SIGNATURE", "true"), ("skip_signature", "false")][..],
         ),
         (
             CredentialKind::AzureSas,
             &[
-                "AZURE_STORAGE_SAS_TOKEN",
-                "token",
-                "azure_storage_master_key",
-                "use_azure_cli",
-                "use_emulator",
-                "federated_token_file",
-                "azure_client_id",
-                "azure_fabric_session_token",
+                ("AZURE_STORAGE_USE_EMULATOR", "true"),
+                ("use_emulator", "false"),
+                ("azure_skip_signature", "true"),
             ][..],
         ),
         (
             CredentialKind::Gcs,
             &[
-                "GOOGLE_SERVICE_ACCOUNT",
-                "service_account_key",
-                "google_application_credentials",
-                "skip_signature",
+                (
+                    "GOOGLE_SERVICE_ACCOUNT",
+                    "secret-missing-service-account.json",
+                ),
+                ("service_account_key", "secret-invalid-service-account-json"),
+                ("google_skip_signature", "true"),
+                ("skip_signature", "false"),
             ][..],
         ),
     ] {
         let provider = kind.provider(Arc::new(AtomicUsize::new(2)));
         assert!(!format!("{provider:?}").contains("secret-"));
-        for conflict in conflicts {
+        for (option_name, option_value) in conflicting_options {
             let error = DeltaTableBuilder::new(kind.table_url())
                 .with_credential_provider(provider.clone())
                 .with_storage_options(DeltaStorageOptions::from([(
-                    conflict.to_string(),
-                    "secret-value".into(),
+                    option_name.to_string(),
+                    option_value.to_string(),
                 )]))
                 .load_table()
                 .await
@@ -464,7 +475,7 @@ async fn explicit_provider_ignores_ambient_authentication_settings() -> TestResu
         let error = tokio::time::timeout(
             std::time::Duration::from_secs(5),
             DeltaTableBuilder::new(kind.table_url())
-                .with_storage_options(kind.options(&endpoint))
+                .with_storage_options(kind.options_with_other_credentials(&endpoint))
                 .with_credential_provider(kind.provider(Arc::new(AtomicUsize::new(2))))
                 .load_snapshot(),
         )

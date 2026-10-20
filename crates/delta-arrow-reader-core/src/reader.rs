@@ -192,11 +192,19 @@ impl DeltaTableBuilder {
 
     /// Uses a caller-owned provider for storage credentials.
     ///
-    /// The provider must match the URL's cloud. Authentication options (including
-    /// credential files, unsigned requests, and Azure's emulator mode) conflict
-    /// with an explicit provider and fail before storage reads. Other options keep
-    /// the native client's precedence: URL-derived bucket, account, container, and
-    /// region values override options; transport and endpoint options still apply.
+    /// The provider must match the URL's cloud. The native client's `with_credentials`
+    /// precedence applies: the provider overrides ordinary authentication settings
+    /// in [`DeltaStorageOptions`].
+    ///
+    /// A few options remain incompatible: `skip_signature`, Azure's `use_emulator`,
+    /// and GCP's `service_account` and `service_account_key`, including their aliases.
+    /// These options can bypass the provider or load service-account data separately.
+    /// Their presence is rejected before storage reads, even for boolean values of
+    /// `false`. Omit them when supplying a provider.
+    ///
+    /// Other options keep the native client's precedence: URL-derived bucket,
+    /// account, container, and region values override options; transport and
+    /// endpoint options still apply.
     /// Native R2 HTTPS URLs select the `auto` region and use `aws_endpoint_url_s3`
     /// for an endpoint override.
     ///
