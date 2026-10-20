@@ -11,8 +11,8 @@ use tracing::{Dispatch, Event, Level, Metadata, Subscriber, field::Visit, subscr
 use tracing_subscriber::{Layer, layer::Context, prelude::*};
 
 const LOGGER_NAME: &str = "delta_arrow_reader";
-pub(crate) const REENTRY_MESSAGE: &str =
-    "reader operations cannot be called from a logging callback";
+pub(crate) const REENTRY_MESSAGE: &std::ffi::CStr =
+    c"reader operations cannot be called from a logging callback";
 const MAX_EVENT_FIELDS: usize = 64;
 const MAX_FIELD_CHARS: usize = 1024;
 
@@ -40,7 +40,9 @@ impl Drop for LoggingCallback {
 
 pub(crate) fn check_reentry() -> PyResult<()> {
     if is_logging_callback() {
-        return Err(PyRuntimeError::new_err(REENTRY_MESSAGE));
+        return Err(PyRuntimeError::new_err(
+            REENTRY_MESSAGE.to_string_lossy().into_owned(),
+        ));
     }
     Ok(())
 }

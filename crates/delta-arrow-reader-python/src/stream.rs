@@ -8,7 +8,6 @@ use arrow::{
     datatypes::{DataType, Field, Fields, Schema, SchemaRef},
     error::ArrowError,
     ffi::FFI_ArrowSchema,
-    ffi_stream::FFI_ArrowArrayStream,
     record_batch::{RecordBatch, RecordBatchReader},
 };
 use datafusion::{common::DataFusionError, dataframe::DataFrame};
@@ -128,7 +127,7 @@ impl RecordBatchStream {
         drop(slot);
         PyCapsule::new_with_value(
             py,
-            FFI_ArrowArrayStream::new(Box::new(reader)),
+            crate::arrow_stream::export(Box::new(reader)),
             c"arrow_array_stream",
         )
     }
@@ -318,12 +317,6 @@ impl Iterator for BlockingBatchReader {
     type Item = Result<RecordBatch, ArrowError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // Arrow can reenter without the GIL: reject without Python calls or changing stream state.
-        if crate::logging::is_logging_callback() {
-            return Some(Err(ArrowError::ComputeError(
-                crate::logging::REENTRY_MESSAGE.to_owned(),
-            )));
-        }
         if let Some(error) = &self.terminal_error {
             return Some(Err(ArrowError::ExternalError(Box::new(Arc::clone(error)))));
         }

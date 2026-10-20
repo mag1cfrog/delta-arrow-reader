@@ -1,5 +1,6 @@
 //! Python package entrypoint.
 
+mod arrow_stream;
 mod filters;
 mod logging;
 mod options;

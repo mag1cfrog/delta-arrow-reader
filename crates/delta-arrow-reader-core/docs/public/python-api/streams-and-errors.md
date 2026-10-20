@@ -80,8 +80,14 @@ Handlers run synchronously on the calling thread or a reader worker. They must
 not start reader work or wait for another thread to finish reader work. Calls
 that start reader work or close/export a `RecordBatchStream` raise `RuntimeError`
 inside a callback. Reading an exported reader raises a PyArrow error instead;
-the rejected read leaves it usable. Ordinary handler
-exceptions are ignored; control-flow exceptions such as `KeyboardInterrupt` and
+the rejected read leaves it usable. An Arrow consumer's `close()` releases its
+stream, including when called from a handler. The C stream release callback
+cannot report an error. If a read is active, cleanup waits for its native
+callback to return; the current batch can still be returned. Further reads see
+a closed stream. This does not make Arrow consumers safe for concurrent reads
+and closes; follow the consumer's threading rules.
+
+Ordinary handler exceptions are ignored; control-flow exceptions such as `KeyboardInterrupt` and
 `SystemExit` propagate to the waiting caller. Logging callbacks use PyO3's best-effort
 interpreter shutdown check; delivery during finalization is not guaranteed.
 The bridge uses a scoped Rust subscriber and leaves other native extensions'
