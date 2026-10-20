@@ -236,6 +236,9 @@ cannot authorize the same query against S3.
 limits, server identity, capture status, and I/O totals. A sibling directory with
 the suffix `-io` holds the capture proof and sanitized `requests.jsonl`. Failed
 captures retain their artifacts and invalidate the storage observation.
+The Rust controller launches the reader, drains its cgroup and pending requests,
+and reconciles the capture before Python checks any validation exports.
+The storage observation records that controller's SHA-256.
 The capture process runs as `xtask selective-read capture`; its proof records
 the controller executable's SHA-256 and effective observer affinity.
 

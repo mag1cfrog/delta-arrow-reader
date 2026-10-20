@@ -90,7 +90,7 @@ pub(super) fn run(request: Request) -> Result<Value> {
     }
 }
 
-fn config(directory: &Path) -> Result<Option<Value>> {
+pub(super) fn config(directory: &Path) -> Result<Option<Value>> {
     let path = directory.join("network.json");
     if !path.exists() {
         return Ok(None);
@@ -104,7 +104,7 @@ fn config(directory: &Path) -> Result<Option<Value>> {
     Ok(Some(value))
 }
 
-fn control(directory: &Path, reset: bool, traced: bool, timeout: f64) -> Result<Value> {
+pub(super) fn control(directory: &Path, reset: bool, traced: bool, timeout: f64) -> Result<Value> {
     let Some(value) = config(directory)? else {
         return Ok(Value::Null);
     };

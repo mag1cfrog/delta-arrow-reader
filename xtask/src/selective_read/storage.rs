@@ -504,7 +504,7 @@ fn put_verified(
     Ok("full-get")
 }
 
-fn reader_environment(directory: &Path) -> Result<Value> {
+pub(super) fn reader_environment(directory: &Path) -> Result<Value> {
     let config = state(directory)?;
     let proxy = directory.join("network.json");
     let network = if proxy.exists() {
@@ -549,7 +549,7 @@ fn reader_environment(directory: &Path) -> Result<Value> {
     Ok(json!(env))
 }
 
-fn reader_prefix(directory: &Path, unit: Option<&str>) -> Result<Value> {
+pub(super) fn reader_prefix(directory: &Path, unit: Option<&str>) -> Result<Value> {
     let config = state(directory)?;
     let cpus = array(&config["cpus"]["reader"])?
         .iter()
