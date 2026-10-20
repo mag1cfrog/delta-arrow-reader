@@ -90,8 +90,9 @@ A query succeeds only after exhausting its requested result, with
 `--limit` has `scope: "limited_scan"`; it is not a complete table export.
 Reaching an exact ceiling alone does not establish exhaustion.
 
-Put `--diagnostics=json` before the command to select versioned JSON Lines on
-stderr, including parse errors. Plain stderr stays the default.
+Use the global `--diagnostics=json` option before or after the command, and
+before `--`, to select versioned JSON Lines on stderr, including parse errors.
+Plain stderr stays the default.
 Reuse typed phase/code/reason classifications.
 Do not echo SQL, paths, unknown keys, credential contents, or provider messages.
 Known argument/field names and line/column locations provide safe error context:

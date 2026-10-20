@@ -6,17 +6,22 @@ specific log targets. For ordinary troubleshooting, see
 
 ## Machine diagnostics
 
-Place `--diagnostics=json` immediately after the executable, before the command:
+Use the global option `--diagnostics=json` before or after the command:
 
 ```sh
 dar --diagnostics=json inspect /path/to/table > snapshot.json 2> diagnostics.jsonl
-dar --diagnostics=json scan /path/to/table --limit 10 > rows.arrow 2> diagnostics.jsonl
+dar scan /path/to/table --limit 10 --diagnostics=json > rows.arrow 2> diagnostics.jsonl
 ```
+
+The option requires `=json` and must precede `--`, which marks the end of
+options. Argument errors also use JSON when an invalid argument appears before
+`--diagnostics=json`. A value such as `--column=--diagnostics=json` does not
+enable this mode.
 
 This mode writes one UTF-8 JSON object followed by a newline to stderr. It
 emits no human logs or ANSI escapes, regardless of `RUST_LOG`. Stdout and exit
 statuses are unchanged. The wheel command, `delta-arrow-reader`, accepts the
-same prefix. A handled failure produces:
+same option. A handled failure produces:
 
 ```json
 {

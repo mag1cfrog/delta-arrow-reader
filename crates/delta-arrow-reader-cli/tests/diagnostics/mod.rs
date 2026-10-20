@@ -63,6 +63,24 @@ fn failures_stay_json_with_tracing_off_on_or_invalid() -> Result<(), Box<dyn std
             "invalid_cli_argument",
         ),
         (
+            vec!["secret-command"],
+            2,
+            "configuration",
+            "invalid_cli_argument",
+        ),
+        (
+            vec!["scan", "unused", "--limit", "secret-limit"],
+            2,
+            "configuration",
+            "invalid_cli_argument",
+        ),
+        (
+            vec!["scan", "unused", "--limit"],
+            2,
+            "configuration",
+            "invalid_cli_argument",
+        ),
+        (
             vec![
                 "inspect",
                 "unused",
@@ -124,21 +142,24 @@ fn failures_stay_json_with_tracing_off_on_or_invalid() -> Result<(), Box<dyn std
     ];
     for filter in ["off", "trace", "secret-invalid-filter=not-a-level"] {
         for (args, status, phase, code) in &cases {
-            let output = run_with_timeout(
-                Command::new(env!("CARGO_BIN_EXE_dar"))
-                    .arg("--diagnostics=json")
-                    .args(args)
-                    .env("RUST_LOG", filter),
-            )?;
-            assert_eq!(output.status.code(), Some(*status), "{output:?}");
-            assert!(output.stdout.is_empty());
-            let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-            assert_eq!(record["phase"], *phase);
-            assert_eq!(record["code"], *code);
-            assert!(record["reason"].is_string());
-            if *code == "invalid_input_json" {
-                assert!(record["line"].is_number());
-                assert!(record["column"].is_number());
+            for position in [0, args.len()] {
+                let mut args = args.clone();
+                args.insert(position, "--diagnostics=json");
+                let output = run_with_timeout(
+                    Command::new(env!("CARGO_BIN_EXE_dar"))
+                        .args(&args)
+                        .env("RUST_LOG", filter),
+                )?;
+                assert_eq!(output.status.code(), Some(*status), "{args:?}: {output:?}");
+                assert!(output.stdout.is_empty());
+                let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+                assert_eq!(record["phase"], *phase);
+                assert_eq!(record["code"], *code);
+                assert!(record["reason"].is_string());
+                if *code == "invalid_input_json" {
+                    assert!(record["line"].is_number());
+                    assert!(record["column"].is_number());
+                }
             }
         }
     }
@@ -156,6 +177,7 @@ fn success_preserves_output_and_reports_actual_counts() -> Result<(), Box<dyn st
     let inspected: Value = serde_json::from_slice(&inspected.stdout)?;
     for args in [
         vec!["--help"],
+        vec!["inspect", "--help"],
         vec!["--version"],
         vec!["inspect", table.to_str().unwrap()],
         vec!["scan", table.to_str().unwrap(), "--limit", "0"],
@@ -171,14 +193,15 @@ fn success_preserves_output_and_reports_actual_counts() -> Result<(), Box<dyn st
     ] {
         let baseline = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).args(&args))?;
         assert!(baseline.status.success(), "{baseline:?}");
-        for filter in ["off", "trace"] {
+        for (position, filter) in [(0, "off"), (1, "trace"), (args.len(), "off")] {
+            let mut diagnostic_args = args.clone();
+            diagnostic_args.insert(position, "--diagnostics=json");
             let output = run_with_timeout(
                 Command::new(env!("CARGO_BIN_EXE_dar"))
-                    .arg("--diagnostics=json")
-                    .args(&args)
+                    .args(&diagnostic_args)
                     .env("RUST_LOG", filter),
             )?;
-            assert!(output.status.success(), "{output:?}");
+            assert!(output.status.success(), "{diagnostic_args:?}: {output:?}");
             let record = assert_single_terminal_record(&output.stderr, "completion");
             assert_eq!(record["output_bytes"], output.stdout.len().to_string());
             assert_eq!(record["completion"], "complete");
@@ -207,7 +230,7 @@ fn success_preserves_output_and_reports_actual_counts() -> Result<(), Box<dyn st
             } else {
                 assert_eq!(output.stdout, baseline.stdout);
             }
-            if matches!(args[0], "inspect" | "scan") {
+            if !args.contains(&"--help") && matches!(args[0], "inspect" | "scan") {
                 assert_eq!(record["bindings"][0]["alias"], "t");
                 assert_eq!(
                     record["bindings"][0]["table_version"],
@@ -222,7 +245,7 @@ fn success_preserves_output_and_reports_actual_counts() -> Result<(), Box<dyn st
 }
 
 #[test]
-fn wheel_command_accepts_the_machine_prefix() -> Result<(), Box<dyn std::error::Error>> {
+fn wheel_command_accepts_global_diagnostics() -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
     let executable = directory.path().join(format!(
         "delta-arrow-reader{}",
@@ -233,13 +256,59 @@ fn wheel_command_accepts_the_machine_prefix() -> Result<(), Box<dyn std::error::
     #[cfg(not(unix))]
     fs::copy(env!("CARGO_BIN_EXE_dar"), &executable)?;
     let output =
-        run_with_timeout(Command::new(&executable).args(["--diagnostics=json", "--version"]))?;
+        run_with_timeout(Command::new(&executable).args(["--version", "--diagnostics=json"]))?;
     assert!(output.status.success());
     assert_eq!(
         output.stdout,
         format!("delta-arrow-reader {}\n", env!("CARGO_PKG_VERSION")).as_bytes()
     );
     assert_single_terminal_record(&output.stderr, "completion");
+    Ok(())
+}
+
+#[test]
+fn values_and_arguments_after_double_dash_do_not_enable_json()
+-> Result<(), Box<dyn std::error::Error>> {
+    for args in [
+        vec!["inspect", "--", "--diagnostics=json"],
+        vec!["inspect", "unused", "--", "--diagnostics=json"],
+        vec![
+            "inspect",
+            "unused",
+            "--storage-options-file=--diagnostics=json",
+        ],
+        vec![
+            "scan",
+            "unused",
+            "--column=--diagnostics=json",
+            "--limit",
+            "secret-limit",
+        ],
+        vec!["--diagnostics", "json", "inspect", "unused"],
+        vec!["--diagnostics=secret-format", "inspect", "unused"],
+        vec!["--diagnostics=text", "inspect", "unused"],
+    ] {
+        let output = run_with_timeout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .args(&args)
+                .env("RUST_LOG", "off"),
+        )?;
+        assert!(!output.status.success(), "{args:?}: {output:?}");
+        assert!(output.stdout.is_empty(), "{args:?}: {output:?}");
+        assert!(output.stderr.is_empty(), "{args:?}: {output:?}");
+    }
+    let output = run_with_timeout(
+        Command::new(env!("CARGO_BIN_EXE_dar"))
+            .args([
+                "inspect",
+                "--diagnostics=json",
+                "--",
+                "secret-missing-table",
+            ])
+            .env("RUST_LOG", "off"),
+    )?;
+    assert_eq!(output.status.code(), Some(1));
+    assert_single_terminal_record(&output.stderr, "diagnostic");
     Ok(())
 }
 
@@ -250,8 +319,9 @@ fn non_utf8_arguments_and_filters_do_not_escape_json() -> Result<(), Box<dyn std
 
     let output = run_with_timeout(
         Command::new(env!("CARGO_BIN_EXE_dar"))
-            .args(["--diagnostics=json", "inspect"])
+            .arg("inspect")
             .arg(OsString::from_vec(b"secret-table-\xff".to_vec()))
+            .arg("--diagnostics=json")
             .env(
                 "RUST_LOG",
                 OsString::from_vec(b"secret-filter-\xff".to_vec()),

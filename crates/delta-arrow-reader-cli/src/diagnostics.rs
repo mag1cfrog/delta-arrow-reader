@@ -3,6 +3,7 @@ use std::{
     sync::Mutex,
 };
 
+use clap::{Args, FromArgMatches, ValueEnum};
 use serde_json::Value;
 use tracing::Subscriber;
 use tracing_subscriber::{
@@ -11,8 +12,22 @@ use tracing_subscriber::{
     prelude::*,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Args)]
+pub(crate) struct DiagnosticOptions {
+    /// JSON Lines on stderr, including argument errors.
+    #[arg(
+        long = "diagnostics",
+        value_name = "FORMAT",
+        value_enum,
+        global = true,
+        require_equals = true
+    )]
+    diagnostic_format: Option<DiagnosticFormat>,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
 pub(crate) enum DiagnosticFormat {
+    #[value(skip)]
     Text,
     Json,
 }
@@ -21,15 +36,22 @@ pub(crate) enum DiagnosticFormat {
 static TERMINAL_RECORD_WRITTEN: Mutex<bool> = Mutex::new(false);
 
 impl DiagnosticFormat {
-    pub(crate) fn from_cli_prefix() -> Self {
-        if std::env::args_os()
-            .nth(1)
-            .is_some_and(|arg| arg == "--diagnostics=json")
-        {
-            Self::Json
-        } else {
-            Self::Text
+    pub(crate) fn from_cli_args() -> Self {
+        let mut parser = DiagnosticOptions::augment_args(
+            clap::Command::new("diagnostics")
+                .no_binary_name(true)
+                .disable_help_flag(true),
+        );
+        // Required '=' makes each selection self-contained, even after invalid arguments.
+        for arg in std::env::args_os().skip(1).take_while(|arg| arg != "--") {
+            if let Ok(matches) = parser.try_get_matches_from_mut([arg])
+                && let Ok(options) = DiagnosticOptions::from_arg_matches(&matches)
+                && let Some(diagnostic_format) = options.diagnostic_format
+            {
+                return diagnostic_format;
+            }
         }
+        Self::Text
     }
 
     pub(crate) fn report_failure(self, error: &crate::Error) {

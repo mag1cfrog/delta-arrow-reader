@@ -29,9 +29,8 @@ use snafu::{ResultExt, Snafu, ensure};
 #[derive(Parser)]
 #[command(name = command_name(), bin_name = command_name(), version)]
 struct Cli {
-    /// JSON Lines on stderr; place '--diagnostics=json' immediately after the executable.
-    #[arg(long = "diagnostics", value_name = "FORMAT", value_parser = ["json"], require_equals = true)]
-    _diagnostics: Option<String>,
+    #[command(flatten)]
+    diagnostics: diagnostics::DiagnosticOptions,
     #[command(subcommand)]
     command: Command,
 }
@@ -579,7 +578,7 @@ fn install_panic_hook(diagnostic_format: DiagnosticFormat) {
 }
 
 fn main() -> ExitCode {
-    let diagnostic_format = DiagnosticFormat::from_cli_prefix();
+    let diagnostic_format = DiagnosticFormat::from_cli_args();
     diagnostics::init_tracing(diagnostic_format);
     install_panic_hook(diagnostic_format);
     match run() {
