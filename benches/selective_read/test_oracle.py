@@ -16,6 +16,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 import oracle
+import native
 import file_organizations
 
 
@@ -561,7 +562,8 @@ class OracleTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     oracle.check(*self.export(case, identity_change={name: value}))
         args = self.export(case, identity_change={"snapshot_version": 1})
-        command = [sys.executable, str(Path(oracle.__file__)), "check"]
+        command = [str(native.executable()), "selective-read", "check-export", "--python", sys.executable,
+                   "--harness", str(Path(oracle.__file__).parent)]
         for name, value in zip(("reference", "fixtures", "result", "identity"), args):
             command += ["--" + name, str(value)]
         process = subprocess.run(command, capture_output=True, text=True)

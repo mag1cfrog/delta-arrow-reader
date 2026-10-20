@@ -227,8 +227,8 @@ cargo xtask selective-read freeze-workload \
   --binary ../build-polars/selective-read-polars \
   --output ../production-q4-workload
 
-../selective-read-oracle-venv/bin/python -B benches/selective_read/oracle.py \
-  prepare --fixtures ../production-q4-localized \
+cargo +1.98.1 run --locked -p xtask -- selective-read prepare-reference \
+  --python ../selective-read-oracle-venv/bin/python --fixtures ../production-q4-localized \
   --case production.q4.localized \
   --workload ../production-q4-workload/workload.json \
   --output ../production-q4-reference

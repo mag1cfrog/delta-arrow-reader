@@ -37,7 +37,8 @@ RUSTFLAGS='-C target-cpu=x86-64' CARGO_TARGET_DIR=target/selective-read \
   --controls --profile smoke --output ../selective-read-controls
 
 for case in row-groups.select pages.localized pages.scattered; do
-  ../selective-read-oracle-venv/bin/python -B benches/selective_read/oracle.py prepare \
+  cargo +1.98.1 run --locked -p xtask -- selective-read prepare-reference \
+    --python ../selective-read-oracle-venv/bin/python \
     --fixtures ../selective-read-controls --case "$case" \
     --output "../selective-read-control-references/$case"
 done

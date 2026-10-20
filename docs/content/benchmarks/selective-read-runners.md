@@ -126,8 +126,8 @@ different dependency sets.
 environment's Python:
 
 ```sh
-PYTHONDONTWRITEBYTECODE=1 ../selective-read-oracle-venv/bin/python \
-  benches/selective_read/oracle.py prepare \
+cargo +1.98.1 run --locked -p xtask -- selective-read prepare-reference \
+  --python ../selective-read-oracle-venv/bin/python \
   --fixtures ../selective-read-smoke --case li.clustered.eq2-in20 \
   --output ../reference-li-clustered
 ```

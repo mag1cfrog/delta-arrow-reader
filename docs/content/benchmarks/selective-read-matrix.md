@@ -260,7 +260,8 @@ SF0.01 inputs cannot measure a scale effect.
 Prepare one case at a time:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/oracle.py prepare \
+cargo +1.98.1 run --locked -p xtask -- selective-read prepare-reference \
+  --python ../selective-read-oracle-venv/bin/python \
   --workload ../large-workload/workload.json \
   --fixtures ../large-data-shuffled-dv --case large.wide.shuffled.date30-wide \
   --output ../large-date30-reference

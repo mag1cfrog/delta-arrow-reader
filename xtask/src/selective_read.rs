@@ -29,6 +29,10 @@ pub(crate) enum Task {
     ReaderRequest,
     /// Invoke one local or remote reader and validate its independent exports.
     RunReader(Box<invoke::controller::Args>),
+    /// Prepare one or more independent Arrow references with a persistent oracle.
+    PrepareReference(validation::cli::Prepare),
+    /// Check every typed value and the identity of an exported Arrow stream.
+    CheckExport(validation::cli::Check),
     /// Schedule and summarize a campaign. Read the operation as JSON from stdin.
     Campaign,
     /// Execute a frozen campaign, using Python only for independent data validation.
@@ -147,6 +151,8 @@ pub(crate) enum Task {
 impl Task {
     pub(crate) fn run(self) -> Result<()> {
         match self {
+            Self::PrepareReference(args) => return validation::cli::prepare(args),
+            Self::CheckExport(args) => return validation::cli::check(args),
             Self::RunReader(args) => return invoke::controller::run(*args),
             Self::RunCampaign(args) => return campaign::controller::run(*args),
             Self::CheckReaders(args) => return checks::local(args),
@@ -288,6 +294,8 @@ impl Task {
             Self::Experiment => experiment::run(serde_json::from_value(input)?)?,
             Self::IntraPage => experiment::intra_page::run(serde_json::from_value(input)?)?,
             Self::ExecReader { .. }
+            | Self::PrepareReference(_)
+            | Self::CheckExport(_)
             | Self::RunReader(_)
             | Self::RunCampaign(_)
             | Self::CheckReaders(_)

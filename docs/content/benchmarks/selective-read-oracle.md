@@ -39,8 +39,8 @@ uv pip sync --python ../selective-read-oracle-venv/bin/python --require-hashes \
 reference per case in a new directory:
 
 ```sh
-PYTHONDONTWRITEBYTECODE=1 ../selective-read-oracle-venv/bin/python \
-  benches/selective_read/oracle.py prepare \
+cargo +1.98.1 run --locked -p xtask -- selective-read prepare-reference \
+  --python ../selective-read-oracle-venv/bin/python \
   --fixtures ../selective-read-smoke \
   --case wide.clustered.eq2-in20 \
   --output ../selective-read-reference-wide
@@ -74,7 +74,8 @@ retrying. Existing directories are never overwritten.
 For a production no-DV/DV pair, prepare both references in one process:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/oracle.py prepare \
+cargo +1.98.1 run --locked -p xtask -- selective-read prepare-reference \
+  --python ../selective-read-oracle-venv/bin/python \
   --fixtures ../production-q2-scattered-pairs \
   --workload ../production-q2-workload/workload.json \
   --case production.q2.scattered --case production.q2.scattered.dv \
@@ -125,8 +126,8 @@ is responsible for recording its actual build and invocation rather than
 copying labels from a reference it did not execute.
 
 ```sh
-PYTHONDONTWRITEBYTECODE=1 ../selective-read-oracle-venv/bin/python \
-  benches/selective_read/oracle.py check \
+cargo +1.98.1 run --locked -p xtask -- selective-read check-export \
+  --python ../selective-read-oracle-venv/bin/python \
   --fixtures ../selective-read-smoke \
   --reference ../selective-read-reference-wide \
   --result ../reader-result.arrow \

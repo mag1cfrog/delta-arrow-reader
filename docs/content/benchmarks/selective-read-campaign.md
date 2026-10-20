@@ -58,7 +58,8 @@ repository root. Each output directory must be new:
 
 ```sh
 for case in li.clustered.eq2-in20 li.shuffled.eq2-in20 wide.clustered.eq2-in20; do
-  ../selective-read-oracle-venv/bin/python -B benches/selective_read/oracle.py prepare \
+  cargo +1.98.1 run --locked -p xtask -- selective-read prepare-reference \
+    --python ../selective-read-oracle-venv/bin/python \
     --fixtures ../selective-read-smoke --case "$case" \
     --output "../reference-$case"
 done

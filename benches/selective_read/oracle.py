@@ -4,7 +4,6 @@ Python evaluates predicates and payloads independently. PyArrow stores typed
 references in compressed Parquet; DuckDB only sorts actual Arrow results.
 """
 
-import argparse
 import base64
 from contextlib import contextmanager
 from datetime import date
@@ -860,41 +859,3 @@ def check_rows(reference, fixtures, result, identity, quota):
         "identity_sha256": digest_file(identity), "output_rows": count,
         "qualifying_rows": metadata["qualifying_rows"], "reported_nullability": reported_nullability,
     }
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    commands = parser.add_subparsers(dest="command", required=True)
-    prepare_parser = commands.add_parser("prepare", help="full-read a fixture and save an independent reference")
-    prepare_parser.add_argument("--fixtures", type=Path, required=True)
-    prepare_parser.add_argument("--case", action="append", required=True,
-                                help="repeat to prepare cases together and reuse unchanged inputs")
-    prepare_parser.add_argument("--output", type=Path, required=True)
-    prepare_parser.add_argument("--duplicate-in-literal", action="store_true")
-    prepare_parser.add_argument("--workload", type=Path)
-    check_parser = commands.add_parser("check", help="validate an untimed Arrow IPC stream and identity JSON")
-    for name in ("reference", "fixtures", "result", "identity"):
-        check_parser.add_argument(f"--{name}", type=Path, required=True)
-    args = parser.parse_args()
-    try:
-        if args.command == "prepare":
-            require(len(set(args.case)) == len(args.case), "duplicate preparation case")
-            if len(args.case) == 1:
-                output = prepare(args.fixtures, args.case[0], args.output, args.duplicate_in_literal, args.workload)
-            else:
-                require(all(re.fullmatch(r"[a-zA-Z0-9_.-]+", case) and case not in (".", "..") for case in args.case),
-                        "invalid batch preparation case")
-                args.output.mkdir()
-                output = [prepare(args.fixtures, case, args.output / case, args.duplicate_in_literal, args.workload)
-                          for case in args.case]
-        else:
-            output = check(args.reference, args.fixtures, args.result, args.identity)
-    except (ValueError, KeyError, TypeError, StopIteration, OSError, duckdb.Error, pa.ArrowException) as error:
-        print(json.dumps({"status": "validation_failed", "error": str(error), "operation": args.command}))
-        return 1
-    print(json.dumps(output))
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

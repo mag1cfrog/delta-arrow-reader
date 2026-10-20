@@ -18,6 +18,7 @@ import oracle
 import production_workloads as production
 import large_workloads
 import run
+import native
 
 
 class ValidationReuse(unittest.TestCase):
@@ -27,7 +28,8 @@ class ValidationReuse(unittest.TestCase):
             root = Path(temporary)
             fixtures = root / "fixtures"
             dataset(fixtures)
-            prefix = [sys.executable, "-B", oracle.__file__, "prepare", "--fixtures", str(fixtures)]
+            prefix = [str(native.executable()), "selective-read", "prepare-reference", "--python", sys.executable,
+                      "--harness", str(Path(oracle.__file__).parent), "--fixtures", str(fixtures)]
             cases = ["wide.clustered.eq2-in20", "li.clustered.date7-full"]
             batch = root / "batch"
             subprocess.run([*prefix, "--case", cases[0], "--case", cases[1], "--output", str(batch)],

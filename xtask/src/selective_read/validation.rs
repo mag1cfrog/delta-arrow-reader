@@ -20,6 +20,8 @@ use crate::{
     selective_read_build::digest,
 };
 
+pub(super) mod cli;
+
 pub(in crate::selective_read) struct Worker(Child);
 
 pub(in crate::selective_read) struct Affinity(CpuSet);
@@ -51,14 +53,22 @@ impl Worker {
         harness: &Path,
         output: &Path,
     ) -> Result<Self> {
+        Self::oracle(
+            python,
+            harness,
+            Stdio::from(std::fs::File::create_new(
+                output.join("validation.stderr.log"),
+            )?),
+        )
+    }
+
+    pub(super) fn oracle(python: &Path, harness: &Path, stderr: Stdio) -> Result<Self> {
         Self::spawn(
             Command::new(python)
                 .args(["-I", "-B", "-u"])
                 .arg(harness.join("controller_worker.py"))
                 .env("SELECTIVE_READ_XTASK", std::env::current_exe()?)
-                .stderr(std::fs::File::create_new(
-                    output.join("validation.stderr.log"),
-                )?),
+                .stderr(stderr),
         )
     }
 

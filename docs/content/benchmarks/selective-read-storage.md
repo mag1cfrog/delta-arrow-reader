@@ -186,7 +186,8 @@ relative to the repository root. The output directories must be new:
 
 ```sh
 cargo +1.98.1 build --locked -p xtask
-../selective-read-oracle-venv/bin/python -B benches/selective_read/oracle.py prepare \
+cargo +1.98.1 run --locked -p xtask -- selective-read prepare-reference \
+  --python ../selective-read-oracle-venv/bin/python \
   --fixtures ../selective-read-smoke --case li.clustered.eq2-in20 \
   --output ../remote-reference
 
