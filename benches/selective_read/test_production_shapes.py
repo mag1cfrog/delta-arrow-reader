@@ -1,101 +1,18 @@
 """Check source predicates and fractional stripe boundaries without large data."""
 
 from datetime import date
-from contextlib import nullcontext
-import io
-import json
 from pathlib import Path
 import tempfile
-from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
 
 import duckdb
 import pyarrow as pa
 import pyarrow.parquet as pq
 
 import production_shapes as shapes
-import production_fixtures as fixtures
 
 
 class ProductionShapeCheck(unittest.TestCase):
-    def test_writer_finish_uses_remaining_phase_budget_and_reaps_on_timeout(self):
-        files = [{"stripe": 0, "file_index": i, "rows": 100,
-                  "candidate": i == 0, "matching_rows": int(i == 0)} for i in range(2)]
-        shape = {**shapes.definitions()["q4"], "stripes": 1}
-        for elapsed, remaining in ((120, 3480), (3550, 50), (3601, 0)):
-            with self.subTest(elapsed=elapsed), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary)
-                args = SimpleNamespace(source=root, plan=root / "plan.json", output=root / "output",
-                                       writer=root / "writer", command="probe", shape="q4", probe=None,
-                                       layout=None, elapsed_limit_seconds=3600, disk_limit_mib=196608)
-                child = Mock(stdin=io.BytesIO())
-                child.wait.side_effect = [fixtures.subprocess.TimeoutExpired("writer", remaining), -9]
-                child.poll.return_value = None
-                batches = pa.RecordBatchReader.from_batches(pa.schema([]), [])
-                with patch.object(fixtures, "inputs", return_value=({}, {"bytes": 1000, "path": "source"}, [], shape, files)), \
-                     patch.object(fixtures.shutil, "disk_usage", return_value=SimpleNamespace(free=80 * fixtures.GIB)), \
-                     patch.object(fixtures.shutil, "copyfile"), \
-                     patch.object(fixtures, "bounded", return_value=nullcontext()), \
-                     patch.object(fixtures.duckdb, "connect") as connect, \
-                     patch.object(fixtures.subprocess, "Popen", return_value=child), \
-                     patch.object(fixtures.time, "monotonic", side_effect=[100, 100 + elapsed]):
-                    connect.return_value.__enter__.return_value.execute.return_value.to_arrow_reader.return_value = batches
-                    with self.assertRaises(fixtures.subprocess.TimeoutExpired):
-                        fixtures.generate(args)
-                self.assertEqual(child.wait.call_args_list[0].kwargs, {"timeout": remaining})
-                self.assertTrue(child.stdin.closed)
-                child.kill.assert_called_once_with()
-                self.assertEqual(child.wait.call_count, 2)
-                self.assertFalse((args.output / "manifest.json").exists())
-
-    def test_probe_reserves_its_estimate_not_the_entire_allocation(self):
-        files = [{"stripe": s, "file_index": i, "rows": 100,
-                  "candidate": i == 0, "matching_rows": int(i == 0)}
-                 for s in range(2) for i in range(2)]
-        shape = {**shapes.definitions()["q4"], "stripes": 2}
-        def check_limit(root, limits):
-            # The probe fits on a disk with 80 GiB free even when its allocation is 192 GiB.
-            self.assertLess(limits["disk_bytes"], 80 * fixtures.GIB)
-            self.assertGreater(limits["disk_bytes"], fixtures.SPILL)
-            request = json.loads((root / "writer-request.json").read_text())
-            for field in ("data_page_bytes", "write_batch_rows", "data_page_rows"):
-                self.assertEqual(request[field], shape[field])
-            raise RuntimeError("checked before native generation")
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            args = SimpleNamespace(source=root, plan=root / "plan.json", output=root / "output",
-                                   command="probe", shape="q4", probe=None, layout=None,
-                                   elapsed_limit_seconds=60, disk_limit_mib=196608)
-            with patch.object(fixtures, "inputs", return_value=({}, {"bytes": 1000}, [], shape, files)), \
-                 patch.object(fixtures.shutil, "disk_usage", return_value=SimpleNamespace(free=80 * fixtures.GIB)), \
-                 patch.object(fixtures, "bounded", side_effect=check_limit), \
-                 self.assertRaisesRegex(RuntimeError, "checked before native"):
-                fixtures.generate(args)
-
-    def test_capacity_keeps_false_positives_and_both_stripes(self):
-        files = [{"stripe": s, "file_index": i, "rows": 11 + i,
-                  "candidate": i == 0, "matching_rows": 0}
-                 for s in range(2) for i in range(3)]
-        self.assertEqual(fixtures.probe_selection(files, 2), [0, 2, 3, 5])
-        samples, evidence = [], []
-        for ordinal in fixtures.probe_selection(files, 2):
-            planned = files[ordinal]
-            samples.append({"rows": planned["rows"], "bytes": planned["rows"] * (100 + ordinal),
-                            "geometry": {"bytes": 500}, "delta_stats": {"numRecords": planned["rows"]}})
-            evidence.append({"source_file_ordinal": ordinal, "planned": planned,
-                             "full_value_roundtrip": "passed", "maximum_page_rows": 2048})
-        probe = {"writer": {"tables": [{"layout": "localized",
-                 "writer": {"data_page_rows": 2048, "write_batch_rows": 1024}, "files": samples, "file_evidence": evidence}]}}
-        result = fixtures.capacity(probe, files, "localized", 1000, 2000)
-        # Use each stripe's maximum, including an interior file, then round up.
-        self.assertEqual(result["estimated_parquet_bytes"], (36 * 102 * 5 + 3) // 4 + (36 * 105 * 5 + 3) // 4)
-        self.assertGreater(result["estimated_phase_peak_bytes"], result["native_output_limit_bytes"])
-        del samples[2:]
-        del evidence[2:]
-        with self.assertRaisesRegex(ValueError, "misses a stripe"):
-            fixtures.capacity(probe, files, "localized", 1000, 2000)
-
     def test_predicates_and_file_membership(self):
         rows = []
         for i in range(10):

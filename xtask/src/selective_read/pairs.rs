@@ -143,7 +143,7 @@ fn capacity(
     })
 }
 
-fn free_space(path: &Path) -> Result<u64> {
+pub(super) fn free_space(path: &Path) -> Result<u64> {
     let path = CString::new(path.as_os_str().as_bytes())?;
     let mut space = MaybeUninit::<libc::statvfs>::uninit();
     // SAFETY: path is NUL terminated and space is writable; success initializes it.

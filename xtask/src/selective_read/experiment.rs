@@ -59,7 +59,7 @@ enum Reader {
     },
 }
 
-struct Process(Child);
+pub(super) struct Process(pub(super) Child);
 
 impl Drop for Process {
     fn drop(&mut self) {

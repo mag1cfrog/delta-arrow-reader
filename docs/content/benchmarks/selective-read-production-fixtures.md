@@ -65,8 +65,8 @@ Start with Q4. The probe writes every candidate file, including false positives,
 and one ordinary interior file per stripe, in both localized and scattered form:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B \
-  benches/selective_read/production_fixtures.py probe \
+target/debug/xtask selective-read production-fixtures probe \
+  --python ../selective-read-oracle-venv/bin/python \
   --source ../selective-read-calibration-345/sf10 \
   --plan ../production-plan/plan.json --shape q4 \
   --writer target/selective-read/release/selective-read-fixtures \
@@ -90,8 +90,8 @@ directly with a complete table's timings.
 ## Generate one complete layout
 
 ```sh
-../selective-read-oracle-venv/bin/python -B \
-  benches/selective_read/production_fixtures.py generate \
+target/debug/xtask selective-read production-fixtures generate \
+  --python ../selective-read-oracle-venv/bin/python \
   --source ../selective-read-calibration-345/sf10 \
   --plan ../production-plan/plan.json --shape q4 \
   --writer target/selective-read/release/selective-read-fixtures \
@@ -107,7 +107,13 @@ the retained probe, geometry metadata, a bounded 16 GiB sort spill, and a later
 MinIO copy. Other retained layouts or DV copies need an additional budget;
 the estimate covers one layout. Builds have a separate allocation.
 
-The producer and writer each have an 8 GiB address-space limit and a hard elapsed
+The Rust controller owns the capacity checks, source copies and process cleanup.
+The pinned Python process sorts with DuckDB and sends an Arrow stream to the
+writer. New probes record the controller hash and require the same controller
+for full generation.
+
+The producer and writer each have an 8 GiB address-space limit. Copying,
+streaming, writer finalization and checksum verification share one elapsed
 deadline. DuckDB uses up to 2 GiB of managed memory. Native file writes share a
 byte ceiling; exceeding it aborts the run. The writer prepares independent files
 in parallel, capped by Rust's available CPU count and an estimate of per-file
