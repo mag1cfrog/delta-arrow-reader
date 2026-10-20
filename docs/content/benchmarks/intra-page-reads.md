@@ -250,6 +250,9 @@ control, a file URI for the local control, and the proxy's low-latency profile f
 the fast-network control. Validation compares independent Arrow references,
 including floating-point bits, in separate processes. Timings use defaults and
 report initialization and two fully consumed queries separately.
+The Rust controller runs the numeric and Delta-length diagnostic processes,
+enforces their deadlines and cleans up descendants. Python retains fixture
+generation and independent Arrow comparisons.
 
 ## Missing request-cost evidence
 

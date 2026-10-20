@@ -6,9 +6,7 @@ import json
 import os
 from pathlib import Path
 import random
-import signal
 import statistics
-import subprocess
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -90,21 +88,6 @@ def check(actual, expected):
         assert left.equals(right), "values differ (floats compared by bits)"
 
 
-def run_reader(command, *, env=None, stdout=None, stderr=None, timeout=180):
-    process = subprocess.Popen(command, env=env, stdout=stdout, stderr=stderr, start_new_session=True)
-    try:
-        code = process.wait(timeout=timeout)
-        if code:
-            raise subprocess.CalledProcessError(code, command)
-    finally:
-        # Killing only the launcher leaves its timed reader using shared resources.
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        process.wait(timeout=10)
-
-
 def measure(args):
     os.sched_setaffinity(0, storage.state(args.state)["cpus"]["observer"])
     manifest = json.loads((args.fixture / "manifest.json").read_text())
@@ -120,14 +103,11 @@ def measure(args):
     else:
         expected = pa.ipc.open_stream(args.fixture / ref["path"]).read_all()
     args.output.mkdir()
-    env = storage.reader_environment(args.state)
-    env.pop("RUST_LOG", None)
-    env.pop("NUMERIC_PAGE_VALIDATE", None)
     builds = {name: digest(binary) for name, binary in (("baseline", args.baseline), ("candidate", args.candidate))}
     save(args.output / "experiment.json", {"fixture_sha256": digest(args.fixture / "manifest.json"),
         "binaries": builds, "type": args.type, "selection": args.selection, "table_uri": args.table,
         "network": None if args.table.startswith("file:") else network.config(args.state),
-        "driver_sha256": digest(Path(__file__)),
+        "driver_sha256": digest(Path(__file__)), "controller_sha256": digest(storage.native.executable()),
         "primary_metric": "first fully consumed query after initialization", "pairs": 3})
     samples = []
     with storage.exclusive(args.state):
@@ -136,16 +116,10 @@ def measure(args):
             order = ("baseline", "candidate") if repetition % 2 == 0 else ("candidate", "baseline")
             for name in order:
                 slot = args.output / f"{name}-{phase}-{repetition}"
-                slot.mkdir()
-                current_env = env | ({"NUMERIC_PAGE_VALIDATE": "1",
-                    "RUST_LOG": "delta_arrow_reader::diagnostics::intra_page=debug"} if phase == "validation" else {})
-                network.control(args.state, reset=True, traced=phase == "validation")
-                command = storage.reader_prefix(args.state) + ["/usr/bin/time", "-f", "%U %S %M", "-o", str(slot / "resources.txt"),
-                    str(getattr(args, name)), args.table, args.type, args.selection, str(slot / "reader")]
-                with (slot / "stdout.json").open("x") as stdout, (slot / "stderr.log").open("x") as stderr:
-                    run_reader(command, env=current_env, stdout=stdout, stderr=stderr)
-                capture = network.finish(args.state, slot)
-                record = json.loads((slot / "reader/record.json").read_text())
+                result = storage.native.call("experiment", {"directory": str(args.state), "output": str(slot),
+                    "binary": str(getattr(args, name)), "table": args.table, "selection": args.selection,
+                    "reader": {"driver": "numeric-pages", "column_type": args.type, "validation": phase == "validation"}})
+                record, capture = result["record"], result["network"]
                 assert record["settings"]["warmup"] == "Automatic"
                 assert "experimental_intra_page_reads: true" in record["settings"]["scan_options"]
                 assert all(q["rows"] == expected.num_rows for q in record["queries"])

@@ -5,10 +5,8 @@ import json
 import os
 from pathlib import Path
 import random
-import signal
 import statistics
 import subprocess
-import time
 import uuid
 
 import pyarrow as pa
@@ -109,41 +107,11 @@ def generate(output, case, binary, compression="NONE"):
 
 def invoke(args, mode, phase, repetition, arrays):
     slot = args.output / f"{mode}-{phase}-{repetition}-{arrays}"
-    slot.mkdir()
-    command = storage.reader_prefix(args.state) + ["/usr/bin/time", "-f", "%U %S %M", "-o", str(slot / "resources.txt"),
-        str(args.binary), args.table, mode, args.selection, arrays, phase,
-        str(args.cost_profile) if args.cost_profile else "auto", str(slot / "reader")]
-    network.control(args.state, reset=True, traced=phase == "validate")
-    with (slot / "stdout.log").open("x") as stdout, (slot / "stderr.log").open("x") as stderr:
-        process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=stdout, stderr=stderr,
-            env=storage.reader_environment(args.state), start_new_session=True)
-        try:
-            deadline = time.monotonic() + 180
-            while not (slot / "reader/initialized.json").exists():
-                if process.poll() is not None:
-                    raise RuntimeError(f"initialization failed: {slot}")
-                if time.monotonic() >= deadline:
-                    raise TimeoutError("initialization deadline")
-                time.sleep(.01)
-            init = slot / "initialization"
-            init.mkdir()
-            network.finish(args.state, init)
-            network.control(args.state, reset=True, traced=phase == "validate")
-            process.stdin.write(b"\n")
-            process.stdin.close()
-            if process.wait(timeout=180):
-                raise RuntimeError(f"query failed: {slot}")
-        except BaseException as error:
-            save(slot / "failure.json", {"error": repr(error), "returncode": process.poll()})
-            raise
-        finally:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            process.wait(timeout=10)
-    capture = network.finish(args.state, slot)
-    record = json.loads((slot / "reader/record.json").read_text())
+    result = storage.native.call("experiment", {"directory": str(args.state), "output": str(slot),
+        "binary": str(args.binary), "table": args.table, "selection": args.selection,
+        "reader": {"driver": "delta-length", "mode": mode, "arrays": arrays, "phase": phase,
+                   "cost_profile": str(args.cost_profile) if args.cost_profile else None}})
+    record, capture = result["record"], result["network"]
     if args.cost_profile:
         assert record["cost_profile"] == args.profile_record, "fixed cost profile changed"
     if phase == "validate":
@@ -152,7 +120,7 @@ def invoke(args, mode, phase, repetition, arrays):
         assert actual.equals(args.expected), f"query result differs: {slot}"
     assert record["output_rows"] == args.expected.num_rows
     sample = {"mode": mode, "phase": phase, "repetition": repetition, "arrays": arrays,
-        "record": record, "query_network": capture, "process_resources": (slot / "resources.txt").read_text().strip()}
+        "record": record, "query_network": capture, "process_resources": result["process_resources"]}
     save(slot / "sample.json", sample)
     print(mode, phase, repetition, arrays, round(record["query_seconds"], 3), flush=True)
     return sample
@@ -177,7 +145,8 @@ def measure(args):
     args.expected = pa.ipc.open_stream(args.fixture / reference["path"]).read_all()
     os.sched_setaffinity(0, storage.state(args.state)["cpus"]["observer"])
     save(args.output / "experiment.json", {"fixture_sha256": digest(args.fixture / "manifest.json"),
-        "binary_sha256": digest(args.binary), "driver_sha256": digest(Path(__file__)), "network": network.config(args.state),
+        "binary_sha256": digest(args.binary), "driver_sha256": digest(Path(__file__)),
+        "controller_sha256": digest(storage.native.executable()), "network": network.config(args.state),
         "source_sha256": {name: digest(Path(__file__).parent / name) for name in (
             "src/bin/delta-length-query.rs", "src/delta_length_reader.rs", "src/delta_length_profile.rs", "src/delta_length_cost.rs", "src/delta_length_simulation.rs", "src/delta_length.rs", "Cargo.lock", "storage.py",
             "../../crates/delta-arrow-reader-core/src/reader/backend/direct_parquet/range_planning.rs",
