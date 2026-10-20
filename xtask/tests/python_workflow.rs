@@ -4,7 +4,6 @@ use std::{collections::BTreeSet, fs, path::Path, process::Command};
 
 use serde_json::{Value, json};
 
-#[path = "support/common.rs"]
 mod support;
 use support::{PLATFORMS, Result, WheelFixture, wheel_files, write_wheel};
 

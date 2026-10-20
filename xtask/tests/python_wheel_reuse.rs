@@ -9,7 +9,6 @@ use std::{
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-#[path = "support/common.rs"]
 mod support;
 use support::{PLATFORMS, Result, WheelFixture, wheel_files, write_wheel, write_zip};
 
