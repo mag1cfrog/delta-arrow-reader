@@ -9,6 +9,8 @@ use serde_json::{Map, Value, json};
 use super::{array, field, fixture_tables, object, require, text};
 use crate::{Result, artifacts::reader_sha256, selective_read_build::digest};
 
+pub(super) mod production;
+
 const ORIGINAL: [&str; 16] = [
     "l_orderkey",
     "l_partkey",
@@ -33,6 +35,17 @@ const PREDICATE: &str =
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "kebab-case", deny_unknown_fields)]
 pub(super) enum Request {
+    Define(Box<production::Define>),
+    Load {
+        value: Value,
+        harness: PathBuf,
+    },
+    Binding {
+        value: Value,
+        fixtures: PathBuf,
+        case: String,
+        harness: PathBuf,
+    },
     Shapes {
         file_target_mib: u64,
         page_rows: u64,
@@ -54,6 +67,14 @@ pub(super) enum Request {
 
 pub(super) fn run(request: Request) -> Result<Value> {
     match request {
+        Request::Define(args) => production::define(*args),
+        Request::Load { value, harness } => production::load(value, &harness),
+        Request::Binding {
+            value,
+            fixtures,
+            case,
+            harness,
+        } => production::binding(&value, &fixtures, &case, &harness),
         Request::Shapes {
             file_target_mib,
             page_rows,

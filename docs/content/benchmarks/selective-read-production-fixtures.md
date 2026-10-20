@@ -218,8 +218,7 @@ Reduced probes cannot stand in for full SF10 tables.
 Freeze a pilot for a completed full Q4 table:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B \
-  benches/selective_read/production_workloads.py \
+cargo xtask selective-read freeze-workload \
   --fixtures ../production-q4-localized \
   --binary ../build-polars/selective-read-polars \
   --output ../production-q4-workload
@@ -234,6 +233,9 @@ Freeze a pilot for a completed full Q4 table:
 New definitions use revision 6 and the Spark reader roster. Creating a revision 5
 definition requires Daft and the archived harness; the current generator accepts
 only revision 6.
+Rust freezes and validates the workload metadata. Polars expression translation
+still runs in the supplied adapter's pinned Python environment.
+The `production_workloads.py` command remains a forwarding entry point.
 
 The workload always lists all eight core cases and all five readers. Inputs not
 supplied to this freeze remain `not_prepared`. Use the paired probe directory

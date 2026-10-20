@@ -1,12 +1,10 @@
 """Bind Q2/Q4 fixtures to the existing oracle, native runners and campaign."""
 
-import argparse
 from datetime import date
 import json
 import os
 from pathlib import Path
 import platform
-import subprocess
 import sys
 
 import pyarrow as pa
@@ -19,13 +17,9 @@ import production_shapes as shapes
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
-from run import PROTOCOL, SAMPLING, SPARK_MATRIX, digest, fixture_tables, reader_roster, save
+from run import PROTOCOL, digest, fixture_tables, save
 from oracle import require
 
-SOURCES = (Path(__file__), HERE / "oracle.py", HERE / "oracle-requirements.txt",
-           HERE / "production_shapes.py", HERE / "large_workloads.py", HERE / "matrix.py",
-           HERE / "runners/run.py", HERE / "runners/native.py",
-           HERE.parents[1] / "Cargo.lock", *sorted((HERE.parents[1] / "xtask/src").rglob("*.rs")))
 PREDICATES = [("l_shipdate", "=", date(1995, 3, 15)), ("l_shipmode", "=", "AIR"),
               ("l_linenumber", "IN", frozenset([1]))]
 _SOURCE_SCANS = {}
@@ -43,103 +37,19 @@ def check_sampling(stage, cases, modes):
                             "cases": sorted(cases), "modes": sorted(modes)})
 
 
-def translate(cases, binaries, output):
-    require(len(binaries) == 1, "provide the pinned Polars translation binary")
-    binary = binaries[0].resolve()
-    build = json.loads(binary.with_name("build.json").read_text())
-    require(build["reader_id"] == "polars", "provide the pinned Polars translation binary")
-    save(output / "sql.json", {row["case_id"]: row["canonical_sql"] for row in cases})
-    path = output / "polars-translations.json"
-    subprocess.run([str(binary.with_name("venv") / "bin/python"), "-I", "-B", str(HERE / "matrix.py"),
-                    "translations", "--binary", str(binary), "--request", str((output / "sql.json").resolve()),
-                    "--output", str(path.resolve())], check=True)
-    translation = json.loads(path.read_text())
-    for row in cases:
-        row["native_expression_sha256"] = {"polars": translation["expressions"][row["case_id"]]["sha256"]}
-    return {"polars": translation}
-
-
 def define(fixtures, binaries, output, stage="pilot", comparison_revision=6):
-    require(comparison_revision == 6, "new workloads use revision 6; use the archived harness for Daft revisions")
-    readers = list(reader_roster({"comparison_revision": comparison_revision}))
-    import large_workloads
-    rows, seen = [], set()
-    for root in fixtures:
-        root = root.resolve()
-        manifest = json.loads((root / "manifest.json").read_text())
-        for table in fixture_tables(manifest):
-            case = table["id"]
-            require(case not in seen, "duplicate production case")
-            require(table["delta_log"] is not None, "raw probes need native Delta logs before reader validation")
-            seen.add(case)
-            row = query_fields(case, manifest)
-            rows.append(row | {"fixtures": str(root), "fixture_manifest_sha256": digest(root / "manifest.json")})
-    modes = {r["fixture_mode"] for r in rows}
-    require(rows and len(modes) == 1
-            and len({r["source_parent_manifest_sha256"] for r in rows}) == 1, "mixed probe/full or source identities")
-    check_sampling(stage, seen, modes)
-    output.mkdir()
-    translations = translate(rows, binaries, output)
-    result = {"format": "selective-read-production-workload-v1", "family": "production", "comparison_revision": comparison_revision,
-              "protocol_sha256": digest(SPARK_MATRIX), "base_protocol_sha256": digest(PROTOCOL),
-              "sampling_sha256": digest(SAMPLING), "sampling_stage": stage, "definition_sha256": digest(shapes.CONTRACT),
-              "scope": "probe" if rows[0]["fixture_mode"] == "probe" else stage, "publication_ready": False,
-              "source_sha256": {os.path.relpath(p, HERE): digest(p) for p in SOURCES},
-              "definition_controller_sha256": digest(native.executable()),
-              "readers": readers, "cases": rows, "sessions": {"reuse." + r["case_id"]: r["case_id"] for r in rows},
-              "inventory": {case: {**shape, "status": "prepared" if case in seen else "not_prepared", "readers": readers}
-                            for case, shape in shapes.cases().items()},
-              "oracle_limits": {"memory_bytes": 16 * 1024**3, "disk_bytes": 1024**3, "elapsed_seconds": 1800},
-              "translations": translations}
-    save(output / "workload.json", result)
-    large_workloads.load(output / "workload.json")
-    return result
+    return native.call("workload", {"action": "define", "fixtures": [str(p) for p in fixtures],
+        "binaries": [str(p) for p in binaries], "output": str(output), "stage": stage,
+        "comparison_revision": comparison_revision, "harness": str(HERE)})
 
 
 def load(path, value):
-    import matrix
-    readers = list(reader_roster(value))
-    require(value["comparison_revision"] in (5, 6) and value["family"] == "production"
-            and value["definition_sha256"] == digest(shapes.CONTRACT)
-            and value.get("definition_controller_sha256") == digest(native.executable())
-            and value["source_sha256"] == {os.path.relpath(p, HERE): digest(p) for p in SOURCES}, "production workload sources changed")
-    cases = {r["case_id"]: r for r in value["cases"]}
-    require(cases and len(cases) == len(value["cases"]) and set(cases) <= set(shapes.cases()), "unknown/duplicate production cases")
-    require(value["readers"] == readers and value["sessions"] == {"reuse." + c: c for c in cases}
-            and value["inventory"] == {c: {**v, "status": "prepared" if c in cases else "not_prepared", "readers": readers}
-                                       for c, v in shapes.cases().items()}, "incomplete production inventory")
-    modes = {r["fixture_mode"] for r in cases.values()}
-    require(modes in ({"probe"}, {"generate"}) and value["scope"] == ("probe" if modes == {"probe"} else value["sampling_stage"])
-            and value["publication_ready"] is False, "invalid production scope")
-    check_sampling(value["sampling_stage"], set(cases), modes)
-    require(value["oracle_limits"] == {"memory_bytes": 16 * 1024**3, "disk_bytes": 1024**3, "elapsed_seconds": 1800}, "production oracle limits changed")
-    require(set(value["translations"]) == ({"polars"} if value["comparison_revision"] == 6 else {"polars", "daft"}), "missing native translations")
-    require(all(set(row["native_expression_sha256"]) == set(value["translations"]) for row in cases.values()),
-            "case native expressions differ from the comparison roster")
-    for reader, translation in value["translations"].items():
-        require(translation["lock_sha256"] == digest(HERE / "runners" / reader / "lock.json")
-                and set(translation["expressions"]) == set(cases), "native translation lock/cases changed")
-        for case, expression in translation["expressions"].items():
-            require(matrix.sha(expression["native_expression"]) == expression["sha256"]
-                    == cases[case]["native_expression_sha256"][reader], "native expression changed")
-    deletion_unions = {}
-    for case, row in cases.items():
-        binding(value, Path(row["fixtures"]), case)
-        if row["deletion_vectors"]:
-            manifest = oracle.load_json(Path(row["fixtures"]) / "manifest.json")
-            keys = manifest["production_dv"]["extra_logical_keys"]
-            require(deletion_unions.setdefault(row["shape"], keys) == keys,
-                    "paired DV layouts delete different logical rows")
-    return value
+    return native.call("workload", {"action": "load", "value": value, "harness": str(HERE)})
 
 
 def binding(value, fixtures, case):
-    row = next(r for r in value["cases"] if r["case_id"] == case)
-    path = Path(fixtures) / "manifest.json"
-    require(digest(path) == row["fixture_manifest_sha256"], "production fixture identity changed")
-    expected = query_fields(case, json.loads(path.read_text()))
-    require(all(row[k] == v for k, v in expected.items()), "production SQL, literals, source or geometry changed")
-    return row
+    return native.call("workload", {"action": "binding", "value": value, "fixtures": str(fixtures),
+                                    "case": case, "harness": str(HERE)})
 
 
 def masks(batch):
@@ -385,12 +295,5 @@ def prepare_reference(fixtures, case, output, workload, quota):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--fixtures", type=Path, action="append", required=True)
-    parser.add_argument("--binary", type=Path, action="append", required=True, help="pinned Polars build")
-    parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--stage", choices=("pilot", "formal"), default="pilot")
-    parser.add_argument("--comparison-revision", type=int, choices=(6,), default=6)
-    args = parser.parse_args()
-    result = define(args.fixtures, args.binary, args.output, args.stage, args.comparison_revision)
-    print(json.dumps({"comparison_revision": result["comparison_revision"], "scope": result["scope"], "prepared_cases": len(result["cases"]), "core_cases": 8}))
+    executable = native.executable()
+    os.execv(executable, [str(executable), "selective-read", "freeze-workload", "--harness", str(HERE), *sys.argv[1:]])

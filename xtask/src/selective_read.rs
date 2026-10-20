@@ -41,6 +41,8 @@ pub(crate) enum Task {
     CampaignReport,
     /// Validate workload definitions and fixture metadata.
     Workload,
+    /// Freeze independently checked production fixtures and pinned Polars translations.
+    FreezeWorkload(Box<workload::production::Define>),
     /// Pair independently validated production fixtures. Read JSON from stdin.
     ProductionPairs,
     /// Run a numeric-page or Delta-length diagnostic process. Read JSON from stdin.
@@ -113,6 +115,15 @@ impl Task {
         match self {
             Self::RunCampaign(args) => return campaign::controller::run(*args),
             Self::RunIntraPage(args) => return experiment::intra_page::batch::run(*args),
+            Self::FreezeWorkload(args) => {
+                let value = workload::production::define(*args)?;
+                println!(
+                    "{}",
+                    serde_json::json!({"comparison_revision":value["comparison_revision"], "scope":value["scope"],
+                    "prepared_cases":array(&value["cases"])?.len(),"core_cases":8})
+                );
+                return Ok(());
+            }
             Self::RunNumericPages(args) => return experiment::batch::numeric(*args),
             Self::RunDeltaLength(args) => return experiment::batch::length(*args),
             Self::UploadStorage(args) => {
@@ -176,6 +187,7 @@ impl Task {
             Self::ExecReader { .. }
             | Self::RunCampaign(_)
             | Self::RunIntraPage(_)
+            | Self::FreezeWorkload(_)
             | Self::RunNumericPages(_)
             | Self::RunDeltaLength(_)
             | Self::UploadStorage(_)
