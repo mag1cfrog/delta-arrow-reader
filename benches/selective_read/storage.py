@@ -1,4 +1,4 @@
-"""Prepare and operate the dedicated, pinned loopback MinIO benchmark server."""
+"""Stage verified fixtures on the dedicated MinIO benchmark server."""
 
 import argparse
 from collections import Counter
@@ -6,7 +6,6 @@ from contextlib import contextmanager
 import fcntl
 import json
 from pathlib import Path
-import subprocess
 import sys
 import time
 
@@ -16,23 +15,6 @@ from run import digest, save
 import native
 
 BUCKET = "selective-read"
-
-
-def prepare(output, source=None):
-    subprocess.run([str(native.executable()), "selective-read", "prepare-storage", "--output", str(output.resolve()),
-                    *(["--source", str(source.resolve())] if source else [])], check=True, cwd=HERE.parents[1])
-
-
-def topology():
-    return native.call("storage", {"action": "topology"})
-
-
-def placement(rows):
-    return native.call("storage", {"action": "placement", "rows": rows})
-
-
-def properties(unit):
-    return native.call("storage", {"action": "properties", "unit": unit})
 
 
 def state(path):
@@ -52,11 +34,6 @@ def exclusive(directory):
 
 def credentials(directory):
     return native.call("storage", {"action": "credentials", "directory": str(directory)})
-
-
-def start(build, directory, port):
-    subprocess.run([str(native.executable()), "selective-read", "start-storage", "--build", str(build.resolve()),
-                    "--state", str(directory.resolve()), "--port", str(port)], check=True, cwd=HERE.parents[1])
 
 
 def inventory(fixtures, table_ids=None):
@@ -117,15 +94,6 @@ def reader_prefix(directory, unit=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    p = commands.add_parser("prepare")
-    p.add_argument("--output", type=Path, required=True)
-    p.add_argument("--source", type=Path)
-    p = commands.add_parser("start")
-    p.add_argument("--build", type=Path, required=True)
-    p.add_argument("--state", type=Path, required=True)
-    p.add_argument("--port", type=int, default=19000)
-    p = commands.add_parser("stop")
-    p.add_argument("--state", type=Path, required=True)
     p = commands.add_parser("upload")
     p.add_argument("--state", type=Path, required=True)
     p.add_argument("--fixtures", type=Path, required=True)
@@ -134,11 +102,4 @@ if __name__ == "__main__":
                    help="verify stored full-object SHA-256 and length; read back objects without that checksum")
     p.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    if args.command == "prepare":
-        prepare(args.output, args.source)
-    elif args.command == "start":
-        start(args.build, args.state, args.port)
-    elif args.command == "upload":
-        upload(args.state, args.fixtures, args.output, args.table, checksum=args.verify_checksum)
-    else:
-        subprocess.run([str(native.executable()), "selective-read", "stop-storage", "--state", str(args.state)], check=True)
+    upload(args.state, args.fixtures, args.output, args.table, checksum=args.verify_checksum)

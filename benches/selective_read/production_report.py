@@ -9,7 +9,7 @@ import large_workloads
 import metadata_cache
 import native
 from run import PROTOCOL
-from supervise import require
+from python_common import require
 
 
 def report(definition, campaigns, output):

@@ -12,7 +12,7 @@ import sys
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
 from run import PROTOCOL, digest, save
-from supervise import require
+from python_common import require
 
 CATALOG = HERE / "query-matrix.json"
 EXPRESSIONS = HERE / "native-expressions.jsonl"

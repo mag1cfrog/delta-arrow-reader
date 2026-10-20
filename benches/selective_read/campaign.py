@@ -17,7 +17,7 @@ import large_workloads
 import metadata_cache
 import native
 from run import digest, save
-from supervise import require
+from python_common import require
 
 HERE = Path(__file__).resolve().parent
 
@@ -178,7 +178,7 @@ def execute_cached(args):
     os.sched_setaffinity(0, config["cpus"]["observer"])
     resolution = timer_resolution()
     sources = [Path(__file__), HERE / "observe.py", HERE / "storage.py", HERE / "oracle.py",
-               HERE / "runners/run.py", HERE / "runners/supervise.py", HERE / "metadata_cache.py", run.PROTOCOL]
+               HERE / "runners/run.py", HERE / "runners/python_common.py", HERE / "metadata_cache.py", run.PROTOCOL]
     root = HERE.parents[1]
     sources += [Path(native.__file__), native.executable(), root / "Cargo.lock", root / "xtask/Cargo.toml",
                 *sorted((root / "xtask/src").rglob("*.rs"))]

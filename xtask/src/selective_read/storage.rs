@@ -35,13 +35,6 @@ pub(super) mod service;
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "kebab-case", deny_unknown_fields)]
 pub(super) enum Request {
-    Topology,
-    Placement {
-        rows: Vec<Value>,
-    },
-    Properties {
-        unit: String,
-    },
     State {
         directory: PathBuf,
     },
@@ -65,19 +58,10 @@ pub(super) enum Request {
         expected: String,
         checksum: bool,
     },
-    #[serde(rename = "request")]
-    Http {
-        directory: PathBuf,
-        path: String,
-        options: Vec<String>,
-    },
 }
 
 pub(super) fn run(operation: Request) -> Result<Value> {
     match operation {
-        Request::Topology => topology(),
-        Request::Placement { rows } => placement(&rows),
-        Request::Properties { unit } => properties(&unit),
         Request::State { directory } => state(&directory),
         Request::VerifyServer { directory } => {
             verify_server(&directory)?;
@@ -95,15 +79,6 @@ pub(super) fn run(operation: Request) -> Result<Value> {
         } => Ok(json!(put_verified(
             &directory, &key, &source, &expected, checksum
         )?)),
-        Request::Http {
-            directory,
-            path,
-            options,
-        } => Ok(json!(STANDARD.encode(request(
-            &directory,
-            &path,
-            &options.iter().map(String::as_str).collect::<Vec<_>>()
-        )?))),
     }
 }
 

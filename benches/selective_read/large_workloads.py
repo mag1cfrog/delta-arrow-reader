@@ -9,7 +9,7 @@ import sys
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
 from run import reader_roster, AMENDMENT, PROTOCOL, SAMPLING, comparison_identity, digest, save
-from supervise import require
+from python_common import require
 
 SCALES = (1, 10, 30, 100, 300)
 READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft")

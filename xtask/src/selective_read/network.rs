@@ -52,12 +52,6 @@ pub(super) enum Request {
         traced: bool,
         timeout: f64,
     },
-    Verify {
-        directory: PathBuf,
-    },
-    Stop {
-        directory: PathBuf,
-    },
     Finish {
         directory: PathBuf,
         output: PathBuf,
@@ -73,14 +67,6 @@ pub(super) fn run(request: Request) -> Result<Value> {
             traced,
             timeout,
         } => control(&directory, reset, traced, timeout),
-        Request::Verify { directory } => {
-            verify(&directory)?;
-            Ok(Value::Null)
-        }
-        Request::Stop { directory } => {
-            stop(&directory)?;
-            Ok(Value::Null)
-        }
         Request::Finish { directory, output } => {
             let value = control(&directory, false, false, 10.0)?;
             if value.is_null() {
