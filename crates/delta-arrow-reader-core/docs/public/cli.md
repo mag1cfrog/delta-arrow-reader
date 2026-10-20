@@ -413,9 +413,21 @@ A failed command can leave an incomplete result file. Check the command's exit
 status before using the result: zero means success, and a nonzero status means
 failure. Use `--help` if the command reports an invalid argument.
 
+For scripts and agents, put `--diagnostics=json` immediately after the executable:
+
+```sh
+dar --diagnostics=json inspect /path/to/table > snapshot.json 2> diagnostics.jsonl
+```
+
+Stderr contains one versioned JSON terminal record, including argument errors
+or successful completion. It remains enabled with `RUST_LOG=off`; stdout and
+exit statuses are unchanged. See the
+[machine diagnostics reference](reference/cli-diagnostics.md#machine-diagnostics)
+for fields and completion checks.
+
 ### Enable more detail
 
-Set `RUST_LOG=debug` before your command to show more detail:
+In the default human mode, set `RUST_LOG=debug` before your command to show more detail:
 
 ```sh
 RUST_LOG=debug dar inspect /path/to/table
@@ -435,7 +447,7 @@ preserving the exit status.
 
 Changing the log level does not change the result format. Only reader and CLI
 diagnostics are enabled, even at `trace`. Use shell redirection to save logs;
-the CLI has no separate file sink or format flag.
+the CLI has no separate file sink. Machine mode suppresses these logs.
 
 ### Exit statuses for scripts
 

@@ -4,7 +4,63 @@ Use this reference when integrating the CLI into a service or configuring
 specific log targets. For ordinary troubleshooting, see
 [Errors and process status](../cli.md#errors-and-process-status).
 
+## Machine diagnostics
+
+Place `--diagnostics=json` immediately after the executable, before the command:
+
+```sh
+dar --diagnostics=json inspect /path/to/table > snapshot.json 2> diagnostics.jsonl
+dar --diagnostics=json scan /path/to/table --limit 10 > rows.arrow 2> diagnostics.jsonl
+```
+
+This mode writes one UTF-8 JSON object followed by a newline to stderr. It
+emits no human logs or ANSI escapes, regardless of `RUST_LOG`. Stdout and exit
+statuses are unchanged. The wheel command, `delta-arrow-reader`, accepts the
+same prefix. A handled failure produces:
+
+```json
+{
+  "format_version": 1, "kind": "diagnostic", "terminal": true,
+  "phase": "configuration", "code": "invalid_cli_argument",
+  "reason": "argument_parse_failed", "source_kind": null,
+  "message": "CLI command failed.", "argument_kind": "UnknownArgument",
+  "retryable": false, "recovery": "fix_input"
+}
+```
+
+Core failures retain their typed phase, code, reason, and source category.
+`source_kind` is null when absent. Safe optional fields include `argument_kind`,
+`json_kind`, JSON `line` and `column`, `io_kind`, and `os_error`. No raw dependency
+errors, input values, paths, credentials, or captured child output are included.
+`message` is fixed text; use the classification fields for decisions.
+
+`recovery` uses `fix_input` for invalid input, `authorize` for unauthenticated
+sources, `request_access` for permission failures, `retry` for known transient
+I/O failures, or `change_request` for unsupported operations. Unclassified
+failures use `unknown` and `retryable: null`. A true `retryable` value means
+starting a new command, after discarding any output from the failed invocation.
+
+A successful command emits `kind: "completion"`, `terminal: true`, and
+`completion: "complete"` after stdout has been flushed. It includes `command`,
+`scope`, `stop_reason`, `has_more`, and `output_bytes`. Inspect and scan include
+the actual snapshot in `bindings`, for example
+`[{"alias":"t","table_version":"42"}]`; help and version use an empty array.
+Scan also reports `rows` and `batches`. Versions and counts are decimal strings.
+
+Scope is `inspect`, `scan`, `help`, or `version`, except that any scan with
+`--limit` uses `limited_scan`. Reaching the limit, including zero, reports
+`stop_reason: "row_limit"` and `has_more: null`: it does not prove that another
+row exists. Otherwise `stop_reason` is `end_of_input` and `has_more` is false.
+
+Consumers must check exit status 0, valid stdout, and the completion record.
+Records are at most 8 KiB. Ignore additional fields and JSON key order; reject
+unsupported `format_version` values. Incompatible field meanings or types
+require a new version. This opt-in format replaces the former unversioned
+JSON stderr object; plain text remains the default.
+
 ## Target filters
+
+These filters apply only to the default human diagnostics.
 
 Set `RUST_LOG` to comma-separated target directives, for example
 `delta_arrow_reader=debug,delta_arrow_reader_cli=warn`. A bare level sets the
@@ -30,12 +86,7 @@ ERROR delta_arrow_reader_cli: CLI command failed event="cli.failed" operation="c
 
 The [tracing reference](tracing.md) defines core event fields.
 Diagnostic text layout, field order, and human messages are not a machine
-interface; scripts should use the exit status and stdout format.
-
-## JSON stderr migration
-
-Text diagnostics replace the JSON stderr object containing `phase`, `code`,
-and `message`. Inspection JSON, Arrow IPC, and exit statuses are unchanged.
+interface; scripts should use machine diagnostics and the exit status.
 
 ## Diagnostic codes and output failures
 
@@ -52,7 +103,8 @@ and `message`. Inspection JSON, Arrow IPC, and exit statuses are unchanged.
 Diagnostics omit argument values, file paths, URLs, input contents, credential
 names and values, and dependency messages. Argument failures include the
 parser's `argument_kind`. JSON failures include `json_kind` (`Syntax`, `Data`, or
-`Eof`), `json_line`, and `json_column`. Oversized input and predicate validation
+`Eof`), `json_line`, and `json_column` in human mode (`line` and `column` in
+machine mode). Oversized input and predicate validation
 use fixed reasons, such as `input_file_too_large` or
 `predicate_depth_limit_exceeded`. Serde schema failures share `Data`; their
 messages are not parsed or printed. I/O failures retain `io_kind` and an OS error
@@ -76,7 +128,7 @@ uses background threads for blocking work. Runtime shutdown does not wait for
 unfinished blocking work, including core engine cleanup.
 
 An unrecoverable panic, including failure to start a reader worker, terminates
-the process with status 1 and a synchronous ERROR with code
+the process with status 1 and a synchronous diagnostic with code
 `runtime_initialization` and reason `process_panicked`. Panic payloads and
 backtraces are omitted. Runtime setup failures have their own reason and safe
 I/O category.
@@ -84,3 +136,8 @@ Outside PID 1, Linux signals keep their normal termination behavior: a killed
 process is unsuccessful and need not emit an error event. This applies while loading,
 waiting for a batch, or writing to a blocked pipe. A parent that cancels the
 child must also wait for it to exit and reap it.
+
+Machine mode attempts one terminal record for handled errors and panics on
+the main or worker threads. Signals, aborts, SIGKILL, allocation failure, and
+unwritable stderr cannot guarantee a terminal record. Missing completion is
+never evidence of success.
