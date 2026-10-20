@@ -8,6 +8,7 @@ mod report;
 mod storage;
 mod supervise;
 mod validation;
+mod workload;
 mod zstd_probe;
 
 use clap::Subcommand;
@@ -38,6 +39,8 @@ pub(crate) enum Task {
     ProductionReport,
     /// Export audited matrix, file-organization or workload results as JSON/CSV.
     CampaignReport,
+    /// Validate workload definitions and fixture metadata.
+    Workload,
     /// Pair independently validated production fixtures. Read JSON from stdin.
     ProductionPairs,
     /// Run a numeric-page or Delta-length diagnostic process. Read JSON from stdin.
@@ -166,6 +169,7 @@ impl Task {
             Self::Network => network::run(serde_json::from_value(input)?)?,
             Self::ProductionReport => report::run(serde_json::from_value(input)?)?,
             Self::CampaignReport => report::batch::run(serde_json::from_value(input)?)?,
+            Self::Workload => workload::run(serde_json::from_value(input)?)?,
             Self::ProductionPairs => pairs::run(serde_json::from_value(input)?)?,
             Self::Experiment => experiment::run(serde_json::from_value(input)?)?,
             Self::IntraPage => experiment::intra_page::run(serde_json::from_value(input)?)?,
@@ -227,4 +231,22 @@ fn budget() -> Value {
     serde_json::json!({"worker_threads":8, "max_blocking_threads":64, "target_partitions":8,
         "batch_rows":8192, "datafusion_pool_bytes":4 * 1024u64.pow(3),
         "process_memory_bytes":8 * 1024u64.pow(3), "logical_cpus":8})
+}
+
+fn fixture_tables(manifest: &Value) -> Result<&Vec<Value>> {
+    require(
+        manifest["status"] == "complete",
+        "incomplete fixture manifest",
+    )?;
+    match manifest["protocol"].as_str() {
+        Some("selective-read-v1") => array(&manifest["tables"]),
+        Some("selective-read-production-fixtures-v1" | "selective-read-production-pairs-v1") => {
+            require(
+                manifest["writer"]["status"] == "complete",
+                "incomplete production writer",
+            )?;
+            array(&manifest["writer"]["tables"])
+        }
+        _ => Err("unknown fixture manifest".into()),
+    }
 }

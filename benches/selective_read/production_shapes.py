@@ -16,7 +16,8 @@ import duckdb
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
-from oracle import ORIGINAL, PAYLOADS, WIDE69, digest_file, inside, require
+from oracle import WIDE69, digest_file, inside, require
+import native
 
 CONTRACT = Path(__file__).resolve().parents[2] / "docs/content/benchmarks/selective-read-production-shapes.md"
 PREDICATE = "l_shipdate = DATE '1995-03-15' AND l_shipmode = 'AIR' AND l_linenumber IN (1)"
@@ -29,23 +30,12 @@ INPUT_COLUMNS = ["l_orderkey", "l_linenumber", "l_shipdate", "l_shipmode"]
 
 
 def definitions(file_target_mib=512, page_rows=20000, page_bytes=1048576, write_batch_rows=1024):
-    require(file_target_mib in (256, 512) and page_rows in (2048, 20000)
-            and page_bytes in (8192, 65536, 1048576) and write_batch_rows in (128, 1024),
-            "unsupported production layout")
-    return {name: {**shape, "files": shape["files"] * (512 // file_target_mib),
-                   "file_target_mib": file_target_mib, "row_group_rows": 131072,
-                   "data_page_rows": page_rows, "data_page_bytes": page_bytes,
-                   "write_batch_rows": write_batch_rows, "dictionary": False,
-                   "projection": list(shape["projection"]),
-                   "stored_columns": len(ORIGINAL) + len(PAYLOADS) + shape["extra_numeric_columns"],
-                   "canonical_sql": "SELECT " + ", ".join(shape["projection"]) + " FROM bench WHERE " + PREDICATE}
-            for name, shape in SHAPES.items()}
+    return native.call("workload", {"action": "shapes", "file_target_mib": file_target_mib,
+        "page_rows": page_rows, "page_bytes": page_bytes, "write_batch_rows": write_batch_rows})
 
 
 def cases():
-    return {f"production.{shape}.{layout}" + (".dv" if dv else ""):
-            {"shape": shape, "layout": layout, "deletion_vectors": dv}
-            for shape in SHAPES for layout in ("localized", "scattered") for dv in (False, True)}
+    return native.call("workload", {"action": "cases"})
 
 
 def source_counts(paths):

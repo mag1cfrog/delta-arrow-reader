@@ -3,6 +3,7 @@
 import argparse
 from datetime import date
 import json
+import os
 from pathlib import Path
 import platform
 import subprocess
@@ -13,6 +14,7 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 import oracle
+import native
 import production_shapes as shapes
 
 HERE = Path(__file__).resolve().parent
@@ -22,7 +24,8 @@ from oracle import require
 
 SOURCES = (Path(__file__), HERE / "oracle.py", HERE / "oracle-requirements.txt",
            HERE / "production_shapes.py", HERE / "large_workloads.py", HERE / "matrix.py",
-           HERE / "runners/run.py")
+           HERE / "runners/run.py", HERE / "runners/native.py",
+           HERE.parents[1] / "Cargo.lock", *sorted((HERE.parents[1] / "xtask/src").rglob("*.rs")))
 PREDICATES = [("l_shipdate", "=", date(1995, 3, 15)), ("l_shipmode", "=", "AIR"),
               ("l_linenumber", "IN", frozenset([1]))]
 _SOURCE_SCANS = {}
@@ -31,70 +34,13 @@ _EXTRA_KEY_SCANS = {}
 
 
 def query_fields(case, manifest):
-    definition = shapes.cases()[case]
-    declared = (manifest["shape_definitions"][definition["shape"]] if "shape_definitions" in manifest
-                else manifest["shape_definition"])
-    table = next(t for t in fixture_tables(manifest) if t["id"] == case)
-    if "data_page_bytes" not in declared:
-        require(table["writer"].get("data_page_bytes") == 1048576,
-                "legacy shape requires its recorded 1 MiB page target")
-        declared = dict(declared, data_page_bytes=table["writer"]["data_page_bytes"])
-    shape = shapes.definitions(declared["file_target_mib"], declared["data_page_rows"],
-                               declared["data_page_bytes"], declared["write_batch_rows"])[definition["shape"]]
-    require(all(declared[k] == v for k, v in shape.items()), "production shape definition changed")
-    require(manifest["protocol"] in ("selective-read-production-fixtures-v1", "selective-read-production-pairs-v1")
-            and manifest["contract_sha256"] == digest(shapes.CONTRACT)
-            and manifest["mode"] in ("probe", "generate"), "unknown production fixture/definition")
-    source = next(s for s in manifest["sources"] if s["scale_factor"] == 10)
-    require(table["deletion_vectors"] is definition["deletion_vectors"]
-            and type(table["snapshot_version"]) is int
-            and table["snapshot_version"] == int(definition["deletion_vectors"])
-            and table["layout"] == definition["layout"] and table["scale_factor"] == 10, "wrong production snapshot")
-    columns = [f["name"] for f in table["schema"]["fields"]]
-    stored = [*oracle.ORIGINAL, *oracle.PAYLOADS, *[f"metric_{j:03}" for j in range(shape["extra_numeric_columns"])]]
-    require(columns == stored and len(columns) == shape["stored_columns"], "wrong stored production columns")
-    require(table["file_count"] == len(table["files"]) == len(table["file_evidence"])
-            and table["rows"] == sum(f["rows"] for f in table["files"])
-            and table["bytes"] == sum(f["bytes"] for f in table["files"]), "wrong physical inventory")
-    require(table["file_target_mib"] == shape["file_target_mib"]
-            and all(table["writer"][k] == shape[k] for k in
-                    ("row_group_rows", "data_page_rows", "data_page_bytes", "write_batch_rows", "dictionary")),
-            "production page/group settings changed")
-    if manifest["mode"] == "generate":
-        require(table["file_count"] == shape["files"] and table["rows"] == source["rows"], "incomplete full production fixture")
-    else:
-        require(0 < table["file_count"] < shape["files"] and 0 < table["rows"] < source["rows"], "probe must retain its reduced geometry")
-    if definition["deletion_vectors"]:
-        base = next(t for t in fixture_tables(manifest) if t["id"] == case.removesuffix(".dv"))
-        files = []
-        for f in table["files"]:
-            f = dict(f)
-            if f.pop("deletion_vector", None):
-                f["delta_stats"] = {k: v for k, v in f["delta_stats"].items() if k != "tightBounds"}
-            files.append(f)
-        require(files == base["files"] and table["schema"] == base["schema"]
-                and table["file_evidence"] == base["file_evidence"], "DV pair changed Parquet data or geometry")
-    sql = shape["canonical_sql"]
-    return {"case_id": case, "role": "production", "query_case_id": case, "fixture_id": case,
-            "fixture_path": table["path"], "snapshot_version": table["snapshot_version"],
-            **definition, "scale_factor": 10, "source_rows": source["rows"], "physical_rows": table["rows"],
-            "fixture_mode": manifest["mode"], "in_literals": [1], "projection": shape["projection"],
-            "projection_columns": len(shape["projection"]), "predicate": "production-eq2-in1",
-            "predicate_columns": [p[0] for p in PREDICATES], "predicate_only_columns": [], "limit": None,
-            "canonical_sql": sql, "canonical_sql_sha256": oracle.digest_bytes(sql.encode()),
-            "writer": table["writer"], "source_parent_manifest_sha256": manifest["source_parent_manifest_sha256"],
-            "geometry": {"files": table["file_count"], "stored_columns": len(columns), "physical_bytes": table["bytes"],
-                         "file_bytes": [f["bytes"] for f in table["files"]],
-                         "row_groups": [len(f["row_groups"]) for f in table["files"]]}}
+    return native.call("workload", {"action": "query", "case": case, "manifest": manifest,
+                                    "protocols": str(PROTOCOL.parent)})
 
 
 def check_sampling(stage, cases, modes):
-    require(stage in ("pilot", "formal"), "unknown production sampling stage")
-    if stage == "formal":
-        bases = {case.removesuffix(".dv") for case in cases}
-        require(modes == {"generate"} and cases and cases <= set(shapes.cases())
-                and cases == {case for base in bases for case in (base, base + ".dv")},
-                "formal sampling requires complete full no-DV/DV pairs")
+    native.call("workload", {"action": "sampling", "stage": stage,
+                            "cases": sorted(cases), "modes": sorted(modes)})
 
 
 def translate(cases, binaries, output):
@@ -138,7 +84,8 @@ def define(fixtures, binaries, output, stage="pilot", comparison_revision=6):
               "protocol_sha256": digest(SPARK_MATRIX), "base_protocol_sha256": digest(PROTOCOL),
               "sampling_sha256": digest(SAMPLING), "sampling_stage": stage, "definition_sha256": digest(shapes.CONTRACT),
               "scope": "probe" if rows[0]["fixture_mode"] == "probe" else stage, "publication_ready": False,
-              "source_sha256": {str(p.relative_to(HERE)): digest(p) for p in SOURCES},
+              "source_sha256": {os.path.relpath(p, HERE): digest(p) for p in SOURCES},
+              "definition_controller_sha256": digest(native.executable()),
               "readers": readers, "cases": rows, "sessions": {"reuse." + r["case_id"]: r["case_id"] for r in rows},
               "inventory": {case: {**shape, "status": "prepared" if case in seen else "not_prepared", "readers": readers}
                             for case, shape in shapes.cases().items()},
@@ -154,7 +101,8 @@ def load(path, value):
     readers = list(reader_roster(value))
     require(value["comparison_revision"] in (5, 6) and value["family"] == "production"
             and value["definition_sha256"] == digest(shapes.CONTRACT)
-            and value["source_sha256"] == {str(p.relative_to(HERE)): digest(p) for p in SOURCES}, "production workload sources changed")
+            and value.get("definition_controller_sha256") == digest(native.executable())
+            and value["source_sha256"] == {os.path.relpath(p, HERE): digest(p) for p in SOURCES}, "production workload sources changed")
     cases = {r["case_id"]: r for r in value["cases"]}
     require(cases and len(cases) == len(value["cases"]) and set(cases) <= set(shapes.cases()), "unknown/duplicate production cases")
     require(value["readers"] == readers and value["sessions"] == {"reuse." + c: c for c in cases}

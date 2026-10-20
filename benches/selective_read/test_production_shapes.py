@@ -124,36 +124,6 @@ class ProductionShapeCheck(unittest.TestCase):
                 ])
                 with self.assertRaisesRegex(ValueError, "populate"):
                     shapes.file_geometry(connection, {"files": 21, "stripes": 2})
-        definitions = shapes.definitions()
-        self.assertEqual([v["files"] for v in definitions.values()], [130, 60])
-        control = shapes.definitions(256, 20000)
-        self.assertEqual([v["files"] for v in control.values()], [260, 120])
-        for name, value in definitions.items():
-            self.assertEqual(value["canonical_sql"], control[name]["canonical_sql"])
-            self.assertEqual(value["row_group_rows"], 131072)
-            self.assertEqual(value["data_page_rows"], 20000)
-            self.assertEqual(value["data_page_bytes"], 1048576)
-            self.assertEqual(value["write_batch_rows"], 1024)
-            self.assertFalse(value["dictionary"])
-        with self.assertRaisesRegex(ValueError, "unsupported"):
-            shapes.definitions(128)
-        self.assertEqual([(v["stored_columns"], len(v["projection"])) for v in definitions.values()],
-                         [(416, 69), (90, 71)])
-        self.assertTrue(all(len(set(v["projection"])) == len(v["projection"])
-                            and "l_linenumber IN (1)" in v["canonical_sql"] for v in definitions.values()))
-        self.assertEqual(set(shapes.cases()), {"production." + name + suffix
-                         for name in ("q2.localized", "q2.scattered", "q4.localized", "q4.scattered")
-                         for suffix in ("", ".dv")})
-
-    def test_byte_controls_keep_query_and_file_geometry(self):
-        baseline = shapes.definitions(write_batch_rows=128)
-        for size in (8192, 65536):
-            control = shapes.definitions(page_bytes=size, write_batch_rows=128)
-            for name, shape in baseline.items():
-                self.assertEqual(control[name], dict(shape, data_page_bytes=size))
-        for options in ({"page_bytes": 0}, {"page_bytes": 16384}, {"write_batch_rows": 0}):
-            with self.assertRaisesRegex(ValueError, "unsupported"):
-                shapes.definitions(**options)
 
 
 if __name__ == "__main__":

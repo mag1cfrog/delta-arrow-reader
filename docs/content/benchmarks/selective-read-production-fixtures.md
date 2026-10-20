@@ -12,9 +12,10 @@ data and check its physical layout. They do not run a reader benchmark.
 
 ## Build and plan
 
-Build the existing fixture binary with its locked dependencies:
+Build the native controller and fixture binary with their locked dependencies:
 
 ```sh
+cargo build --locked -p xtask
 CARGO_TARGET_DIR=target/selective-read cargo +1.98.1 build --release --locked \
   --manifest-path benches/selective_read/Cargo.toml
 
@@ -24,6 +25,11 @@ CARGO_TARGET_DIR=target/selective-read cargo +1.98.1 build --release --locked \
   --file-target-mib 512 --page-rows 20000 \
   --output ../production-plan
 ```
+
+The controller validates query definitions, layout settings and DV pair metadata.
+New workload manifests record its executable hash, Rust sources and dependency
+lockfile along with the Python oracle sources. Rebuild it before freezing a new
+workload; use the recorded harness and controller when replaying an older one.
 
 The planner checks the original source and computes file boundaries before any
 reader timing. Keep its output directory: the writer checks its hashes against

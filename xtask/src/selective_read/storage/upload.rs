@@ -40,22 +40,7 @@ pub(in crate::selective_read) fn inventory(
 ) -> Result<Value> {
     let fixtures = fs::canonicalize(fixtures)?;
     let manifest = read_json(&fixtures.join("manifest.json"))?;
-    require(
-        manifest["status"] == "complete",
-        "incomplete fixture manifest",
-    )?;
-    let tables = match manifest["protocol"].as_str() {
-        Some("selective-read-v1") => &manifest["tables"],
-        Some("selective-read-production-fixtures-v1" | "selective-read-production-pairs-v1") => {
-            require(
-                manifest["writer"]["status"] == "complete",
-                "incomplete production writer",
-            )?;
-            &manifest["writer"]["tables"]
-        }
-        _ => return Err("unknown fixture manifest".into()),
-    };
-    let tables = array(tables)?;
+    let tables = crate::selective_read::fixture_tables(&manifest)?;
     if let Some(ids) = table_ids {
         require(
             !ids.is_empty()
