@@ -289,11 +289,7 @@ fn source_hashes(args: &Args, config: &Value, protocols: &Path) -> Result<(Value
     }
     if let Some(matrix) = &args.matrix {
         sources.push(args.harness.join("matrix.py"));
-        inputs.extend([
-            args.harness.join("query-matrix.json"),
-            args.harness.join("native-expressions.jsonl"),
-            matrix.clone(),
-        ]);
+        inputs.extend([args.harness.join("query-matrix.json"), matrix.clone()]);
     }
     if let Some(workload) = &args.workload {
         inputs.push(workload.clone());

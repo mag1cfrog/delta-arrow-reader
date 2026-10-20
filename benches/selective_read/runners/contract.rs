@@ -132,13 +132,6 @@ pub fn workload(value: &Value) -> Result<Value> {
     ] {
         contract.remove(key);
     }
-    if let Some(cases) = contract.get_mut("cases").and_then(Value::as_array_mut) {
-        for case in cases {
-            let case = case.as_object_mut().ok_or("invalid workload case")?;
-            case.remove("canonical_sql_sha256");
-            case.remove("native_expression_sha256");
-        }
-    }
     if let Some(translations) = contract
         .get_mut("translations")
         .and_then(Value::as_object_mut)
@@ -146,17 +139,6 @@ pub fn workload(value: &Value) -> Result<Value> {
         for translation in translations.values_mut() {
             let translation = translation.as_object_mut().ok_or("invalid translation")?;
             translation.remove("adapter_sha256");
-            if let Some(expressions) = translation
-                .get_mut("expressions")
-                .and_then(Value::as_object_mut)
-            {
-                for expression in expressions.values_mut() {
-                    expression
-                        .as_object_mut()
-                        .ok_or("invalid native expression")?
-                        .remove("sha256");
-                }
-            }
         }
     }
     Ok(Value::Object(contract))
@@ -431,9 +413,6 @@ pub fn identity_matches(expected: &Value, actual: &Value) -> bool {
                 | "sampling_sha256"
                 | "reader_build_sha256"
                 | "workload_manifest_sha256"
-                | "reader_config_sha256"
-                | "canonical_sql_sha256"
-                | "native_expression_sha256"
         ) || actual.get(key) == Some(value)
     })
 }
@@ -507,16 +486,12 @@ mod tests {
             "sampling_stage":"pilot", "cases":[{"canonical_sql":"SELECT id FROM bench", "projection":["id"],
             "writer":{"data_page_rows":2048}, "fixture_manifest_sha256":"fixture"}],
             "source_sha256":{"planner":"before"}, "definition_controller_sha256":"before",
-            "translations":{"polars":{"adapter_sha256":"before", "expressions":{"case":{"native_expression":"native expression", "sha256":"audit"}}}}});
+            "translations":{"polars":{"adapter_sha256":"before", "expressions":{"case":{"canonical_sql":"SELECT id FROM bench", "native_expression":{"projection":["id"]}}}}}});
         let expected = workload(&definition)?;
         let mut changed = definition.clone();
         changed["source_sha256"] = json!({"planner":"after"});
         changed["definition_controller_sha256"] = json!("after");
         changed["translations"]["polars"]["adapter_sha256"] = json!("after");
-        changed["cases"][0]["canonical_sql_sha256"] = json!("query audit");
-        changed["cases"][0]["native_expression_sha256"] = json!({"polars":"expression audit"});
-        changed["translations"]["polars"]["expressions"]["case"]["sha256"] =
-            json!("expression audit");
         assert_eq!(workload(&changed)?, expected);
         for (pointer, value) in [
             ("/cases/0/canonical_sql", json!("SELECT other FROM bench")),

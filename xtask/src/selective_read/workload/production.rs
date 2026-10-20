@@ -96,27 +96,7 @@ fn sessions(selected: &BTreeSet<String>) -> Value {
     )
 }
 
-pub(super) fn expression_hash(value: &Value) -> Result<String> {
-    let encoded = serde_json::to_string(value)?;
-    let mut ascii = String::new();
-    for character in encoded.chars() {
-        if character < '\u{7f}' {
-            ascii.push(character);
-        } else {
-            for unit in character.encode_utf16(&mut [0; 2]) {
-                ascii.push_str(&format!("\\u{unit:04x}"));
-            }
-        }
-    }
-    reader_sha256(ascii.as_bytes()).map_err(Into::into)
-}
-
-fn translate(
-    rows: &mut [Value],
-    binaries: &[PathBuf],
-    output: &Path,
-    harness: &Path,
-) -> Result<Value> {
+fn translate(rows: &[Value], binaries: &[PathBuf], output: &Path, harness: &Path) -> Result<Value> {
     require(
         binaries.len() == 1,
         "provide the pinned Polars translation binary",
@@ -151,10 +131,6 @@ fn translate(
             .arg(&path),
     )?;
     let translation = read_json(&path)?;
-    for row in rows {
-        row["native_expression_sha256"] =
-            json!({"polars":translation["expressions"][text(&row["case_id"])?]["sha256"]});
-    }
     Ok(json!({"polars":translation}))
 }
 
@@ -199,7 +175,7 @@ pub(in crate::selective_read) fn define(mut args: Define) -> Result<Value> {
     sampling(&args.stage, &seen, &modes)?;
     fs::create_dir(&args.output)?;
     args.output = fs::canonicalize(args.output)?;
-    let translations = translate(&mut rows, &args.binaries, &args.output, &args.harness)?;
+    let translations = translate(&rows, &args.binaries, &args.output, &args.harness)?;
     let result = json!({"format":"selective-read-production-workload-v1","family":"production","comparison_revision":args.comparison_revision,
         "protocol_sha256":digest(&protocols.join("selective-read-spark-matrix.md"))?,
         "base_protocol_sha256":digest(&protocols.join("selective-read-protocol.md"))?,
@@ -211,9 +187,7 @@ pub(in crate::selective_read) fn define(mut args: Define) -> Result<Value> {
         "oracle_limits":limits(),"translations":translations});
     let path = args.output.join("workload.json");
     save(&path, &result)?;
-    let mut identity = result.clone();
-    identity["workload_manifest_sha256"] = json!(digest(&path)?);
-    campaign::evidence::comparison(&identity, &protocols)?;
+    identity(&result, &digest(&path)?)?;
     load(result, &args.harness)
 }
 
@@ -305,16 +279,6 @@ pub(super) fn load(value: Value, harness: &Path) -> Result<Value> {
             == expected,
         "missing native translations",
     )?;
-    for row in rows {
-        require(
-            object(&row["native_expression_sha256"])?
-                .keys()
-                .map(String::as_str)
-                .collect::<BTreeSet<_>>()
-                == expected,
-            "case native expressions differ from the comparison roster",
-        )?;
-    }
     for (reader, translation) in translations {
         require(
             translation["lock_sha256"]
@@ -332,9 +296,11 @@ pub(super) fn load(value: Value, harness: &Path) -> Result<Value> {
                 .find(|r| r["case_id"] == *case)
                 .ok_or("missing case binding")?;
             require(
-                expression["sha256"] == expression_hash(&expression["native_expression"])?
-                    && row["native_expression_sha256"][reader] == expression["sha256"],
-                "native expression changed",
+                expression["native_expression"]
+                    .as_object()
+                    .is_some_and(|v| !v.is_empty())
+                    && expression["canonical_sql"] == row["canonical_sql"],
+                "native expression or SQL binding invalid",
             )?;
         }
     }

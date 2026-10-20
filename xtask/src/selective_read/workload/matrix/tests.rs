@@ -1,6 +1,30 @@
 use super::*;
 
 #[test]
+fn catalog_requires_sql_and_complete_native_descriptions() -> Result<()> {
+    let harness = crate::repository::repository_root().join("benches/selective_read");
+    let frozen = catalog(&harness)?;
+    for (field, value) in [
+        ("sql", json!(" ")),
+        (
+            "native_expressions",
+            json!({"polars":{"projection":["id"]}}),
+        ),
+        (
+            "native_expressions",
+            json!({"polars":null,"daft":{"projection":["id"]}}),
+        ),
+    ] {
+        let temporary = tempfile::tempdir()?;
+        let mut changed = frozen.clone();
+        changed["scales"]["0.01"]["queries"]["li"]["eq1"][field] = value;
+        save(&temporary.path().join("query-matrix.json"), &changed)?;
+        assert!(catalog(temporary.path()).is_err(), "{field}");
+    }
+    Ok(())
+}
+
+#[test]
 fn oracle_selectivities_survive_json_round_trips_exactly() -> Result<()> {
     for number in [0.00048192771084337347f64, 0.019792272538429582] {
         let value: Value = serde_json::from_str(&number.to_string())?;
@@ -96,9 +120,15 @@ fn loaded_matrix_rejects_missing_cases_changed_references_counts_and_shapes() ->
     let value = json!({"format":"selective-read-prepared-matrix-v1","status":"complete",
         "catalog_sha256":digest(&harness.join("query-matrix.json"))?,"protocol_sha256":frozen["protocol_sha256"],
         "fixture_manifest_sha256":"fixture","profile":"smoke","translation_locks":frozen["translation_locks"],"cases":rows});
-    check_loaded(&value, &frozen, &manifest, &harness, "fixture")?;
+    check_loaded(&value, &frozen, &manifest, "fixture")?;
+    let mut audit = value.clone();
+    audit["catalog_sha256"] = json!("reformatted catalog");
+    check_loaded(&audit, &frozen, &manifest, "fixture")?;
     for (pointer, replacement) in [
-        ("/catalog_sha256", json!("changed")),
+        (
+            "/cases/0/native_expressions/polars",
+            json!({"projection":["other"]}),
+        ),
         ("/cases/0/oracle/output_rows", json!(4)),
         ("/cases/0/canonical_sql", json!("SELECT 1")),
         ("/cases/0/reference_metadata_sha256", json!("changed")),
@@ -108,21 +138,21 @@ fn loaded_matrix_rejects_missing_cases_changed_references_counts_and_shapes() ->
         let mut changed = value.clone();
         *changed.pointer_mut(pointer).ok_or("missing test field")? = replacement;
         assert!(
-            check_loaded(&changed, &frozen, &manifest, &harness, "fixture").is_err(),
+            check_loaded(&changed, &frozen, &manifest, "fixture").is_err(),
             "{pointer}"
         );
     }
     let mut changed = value.clone();
     changed["cases"].as_array_mut().unwrap().pop();
-    assert!(check_loaded(&changed, &frozen, &manifest, &harness, "fixture").is_err());
+    assert!(check_loaded(&changed, &frozen, &manifest, "fixture").is_err());
     let mut changed = value.clone();
     changed["cases"][0].as_object_mut().unwrap().remove("limit");
-    assert!(check_loaded(&changed, &frozen, &manifest, &harness, "fixture").is_err());
+    assert!(check_loaded(&changed, &frozen, &manifest, "fixture").is_err());
     let mut failed = value.clone();
     failed["cases"][0]["status"] = json!("preparation_failed");
-    assert!(check_loaded(&failed, &frozen, &manifest, &harness, "fixture").is_err());
+    assert!(check_loaded(&failed, &frozen, &manifest, "fixture").is_err());
     failed["cases"][0]["failure_reason"] = json!("reader unavailable");
-    check_loaded(&failed, &frozen, &manifest, &harness, "fixture")?;
+    check_loaded(&failed, &frozen, &manifest, "fixture")?;
     fs::write(
         temporary
             .path()
@@ -130,6 +160,6 @@ fn loaded_matrix_rejects_missing_cases_changed_references_counts_and_shapes() ->
             .join("reference.json"),
         b"{}",
     )?;
-    assert!(check_loaded(&value, &frozen, &manifest, &harness, "fixture").is_err());
+    assert!(check_loaded(&value, &frozen, &manifest, "fixture").is_err());
     Ok(())
 }

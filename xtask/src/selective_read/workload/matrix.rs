@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fs};
+use std::fs;
 
 use super::*;
 use crate::selective_read::{
@@ -69,59 +69,27 @@ pub(crate) struct Report {
 }
 
 fn catalog(harness: &Path) -> Result<Value> {
-    let mut value = read_json(&harness.join("query-matrix.json"))?;
+    let value = read_json(&harness.join("query-matrix.json"))?;
     require(
         value["format"] == "selective-read-query-matrix-v1" && value["comparison_revision"] == 2,
         "unsupported query catalog",
     )?;
-    let path = harness.join("native-expressions.jsonl");
-    require(
-        value["native_expressions_sha256"] == digest(&path)?,
-        "native expression catalog changed",
-    )?;
-    let mut expressions = BTreeMap::new();
-    for line in fs::read_to_string(path)?.lines() {
-        let expression: Value = serde_json::from_str(line)?;
-        let hash = production::expression_hash(&expression["native_expression"])?;
-        require(
-            expression["sha256"] == hash,
-            "native expression hash differs",
-        )?;
-        expressions.insert(
-            (text(&expression["reader_id"])?.to_owned(), hash),
-            expression["native_expression"].clone(),
-        );
-    }
-    let mut expected = BTreeSet::new();
     for source in object(&value["scales"])?.values() {
         for queries in object(&source["queries"])?.values() {
             for query in object(queries)?.values() {
+                let expressions = object(&query["native_expressions"])?;
                 require(
-                    query["sql_sha256"] == reader_sha256(text(&query["sql"])?.as_bytes())?,
-                    "canonical SQL hash differs",
+                    !text(&query["sql"])?.trim().is_empty()
+                        && expressions
+                            .keys()
+                            .map(String::as_str)
+                            .collect::<BTreeSet<_>>()
+                            == BTreeSet::from(["daft", "polars"])
+                        && expressions
+                            .values()
+                            .all(|v| v.as_object().is_some_and(|o| !o.is_empty())),
+                    "query needs SQL and native expression descriptions",
                 )?;
-                for (reader, hash) in object(&query["native_expression_sha256"])? {
-                    expected.insert((reader.clone(), text(hash)?.to_owned()));
-                }
-            }
-        }
-    }
-    require(
-        expressions.keys().cloned().collect::<BTreeSet<_>>() == expected,
-        "native expression catalog incomplete",
-    )?;
-    for source in value["scales"].as_object_mut().unwrap().values_mut() {
-        for queries in source["queries"].as_object_mut().unwrap().values_mut() {
-            for query in queries.as_object_mut().unwrap().values_mut() {
-                query["native_expressions"] = json!(
-                    object(&query["native_expression_sha256"])?
-                        .iter()
-                        .map(|(reader, hash)| Ok((
-                            reader.clone(),
-                            expressions[&(reader.clone(), text(hash)?.to_owned())].clone()
-                        )))
-                        .collect::<Result<Map<_, _>>>()?
-                );
             }
         }
     }
@@ -216,8 +184,7 @@ fn query(case: &str, frozen: &Value, manifest: &Value) -> Result<Value> {
     };
     Ok(
         json!({"scale":scale,"fixture_id":table["id"],"fixture_path":table["path"],"snapshot_version":table["snapshot_version"],
-        "in_literals":literals,"canonical_sql":sql,"canonical_sql_sha256":query["sql_sha256"],
-        "native_expression_sha256":query["native_expression_sha256"], "native_expressions":query["native_expressions"]}),
+        "in_literals":literals,"canonical_sql":sql,"native_expressions":query["native_expressions"]}),
     )
 }
 
@@ -257,12 +224,10 @@ fn check_loaded(
     value: &Value,
     frozen: &Value,
     manifest: &Value,
-    harness: &Path,
     manifest_hash: &str,
 ) -> Result<()> {
     require(
         value["format"] == "selective-read-prepared-matrix-v1"
-            && value["catalog_sha256"] == digest(&harness.join("query-matrix.json"))?
             && value["fixture_manifest_sha256"] == manifest_hash
             && value["profile"] == manifest["profile"]
             && value["translation_locks"] == frozen["translation_locks"],
@@ -338,7 +303,6 @@ pub(in crate::selective_read) fn load(
         &value,
         &frozen,
         &read_json(&manifest_path)?,
-        harness,
         &digest(&manifest_path)?,
     )?;
     Ok(value)

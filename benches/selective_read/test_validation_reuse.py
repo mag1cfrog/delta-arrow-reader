@@ -155,9 +155,7 @@ class ValidationReuse(unittest.TestCase):
             manifest_path.write_text(json.dumps(manifest, default=str))
             workload = root / "workload.json"
             workload.write_text("{}")
-            row = {"shape": "q2", "projection": list(oracle.WIDE69), "canonical_sql": definition["canonical_sql"],
-                   "canonical_sql_sha256": oracle.digest_bytes(definition["canonical_sql"].encode()),
-                   "native_expression_sha256": {"polars": "1" * 64}}
+            row = {"shape": "q2", "projection": list(oracle.WIDE69), "canonical_sql": definition["canonical_sql"]}
 
             def objects(fixtures, table, source):
                 items = [{"path": str(Path(group["path"]) / item["path"]), "bytes": item["bytes"], "sha256": item["sha256"]}

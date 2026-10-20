@@ -562,10 +562,11 @@ missing/duplicated rows, and wrong snapshots. Full logical results must agree
 across layouts for unlimited queries.
 
 Validation and diagnostic plans are separate invocations. Save oracle status
-against the protocol, fixture, SQL, and executable hashes; a changed input or
-build invalidates the gate. Failed or unsupported cases remain visible and
+against the explicit execution contract, canonical SQL, native expressions,
+reader settings and artifact identities. Changed queries, settings or artifacts
+invalidate the gate. Failed or unsupported cases remain visible and
 cannot produce speedups. Record the canonical SQL and any native-expression
-translation hashes so an adapter change invalidates its previous validation.
+translation descriptions so a changed native expression invalidates its previous validation.
 
 ## Timing and observations
 
@@ -681,7 +682,7 @@ are null with a reason, never zero.
 Each raw JSONL observation must identify protocol revision/hash, campaign and
 run ID, timing/diagnostic mode, case/profile/session and query index, repetition
 and order, reader/source/build/config identity, fixture manifest/hash, snapshot,
-expanded SQL/hash, native-expression hash when applicable, capability/probe
+expanded SQL, native expressions when applicable, capability/probe
 identity, execution mode, correctness prerequisite, status/error, output rows, timers,
 resource metrics, and linked diagnostic artifacts. Store nanoseconds and bytes
 as integers. Preserve raw logs and complete resolved settings without secrets.

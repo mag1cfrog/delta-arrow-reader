@@ -210,7 +210,7 @@ pub(super) fn query(case: &str, manifest: &Value) -> Result<Value> {
         "snapshot_version":table["snapshot_version"],"deletion_vectors":dv,"scale_factor":source["scale_factor"],"source_rows":source["rows"],
         "layout":fixture.split('.').nth(1),"in_literals":literals,"projection":projection,"predicate":predicate,"predicate_columns":columns,
         "projection_columns":projection.len(),"predicate_only_columns":columns.iter().filter(|c| !projection.contains(&json!(c))).collect::<Vec<_>>(),
-        "limit":null,"canonical_sql":sql,"canonical_sql_sha256":reader_sha256(sql.as_bytes())?,
+        "limit":null,"canonical_sql":sql,
         "geometry":{"files":table["file_count"],"physical_bytes":table["bytes"],"file_bytes":files.iter().map(|f| &f["bytes"]).collect::<Vec<_>>(),
             "row_groups":files.iter().map(|f| Ok(array(&f["row_groups"])?.len())).collect::<Result<Vec<_>>>()?}}),
     )
@@ -338,18 +338,17 @@ pub(super) fn load(value: Value, harness: &Path) -> Result<Value> {
             "incomplete native translations",
         )?;
         for (case, expression) in expressions {
-            require(
-                expression["sha256"]
-                    == production::expression_hash(&expression["native_expression"])?,
-                "native expression changed",
-            )?;
             let row = rows
                 .iter()
                 .find(|row| row["case_id"] == *case)
                 .ok_or("missing translated case")?;
             require(
-                row["native_expression_sha256"][reader] == expression["sha256"],
-                "native expression binding changed",
+                expression["native_expression"]
+                    .as_object()
+                    .is_some_and(|v| !v.is_empty())
+                    && !text(&row["canonical_sql"])?.trim().is_empty()
+                    && expression["canonical_sql"] == row["canonical_sql"],
+                "native expression or SQL binding invalid",
             )?;
         }
     }

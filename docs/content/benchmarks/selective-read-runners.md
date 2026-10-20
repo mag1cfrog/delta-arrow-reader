@@ -334,7 +334,7 @@ independent validation result. Existing destinations are never overwritten.
 
 | Observation field | Meaning |
 | --- | --- |
-| `identity` | Reader/build/config, fixture, snapshot, case, SQL, protocol and optional native-expression hashes |
+| `identity` | Explicit reader configuration, SQL, native expression and workload contract, plus reader artifact, fixture, snapshot, case and audit provenance |
 | `settings` | Native configuration, provider options, requested resource budget, table URL and streaming execution mode |
 | `status`, `failure_reason`, `phase` | Success, unsupported feature, operational failure, or failed validation, with the failure location |
 | `capability` | Evidence for the requested query and snapshot; it does not claim untested feature support |
@@ -411,7 +411,7 @@ cargo +1.98.1 run --locked -p xtask -- selective-read check-capabilities \
   --fixtures ../selective-read-smoke --output ../polars-contract-check
 ```
 
-It also checks NULL/duplicate-IN semantics, projection order, expression hashes,
+It also checks NULL/duplicate-IN semantics, projection order, native expressions,
 and native snapshot reuse after temporarily hiding a copied table's log.
 A late invalid cast in a multi-file Delta fixture must fail after earlier
 batches have arrived. Deliberately altered output must fail the independent oracle.

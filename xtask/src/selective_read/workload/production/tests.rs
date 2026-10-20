@@ -1,16 +1,6 @@
 use super::*;
 
 #[test]
-fn expression_hashes_match_every_frozen_adapter_description() -> Result<()> {
-    let harness = crate::repository::repository_root().join("benches/selective_read");
-    for line in fs::read_to_string(harness.join("native-expressions.jsonl"))?.lines() {
-        let row: Value = serde_json::from_str(line)?;
-        assert_eq!(row["sha256"], expression_hash(&row["native_expression"])?);
-    }
-    Ok(())
-}
-
-#[test]
 fn frozen_workloads_check_queries_and_scope_independently_of_source_provenance() -> Result<()> {
     let harness =
         fs::canonicalize(crate::repository::repository_root().join("benches/selective_read"))?;
@@ -35,10 +25,8 @@ fn frozen_workloads_check_queries_and_scope_independently_of_source_provenance()
     save(&root.join("manifest.json"), &manifest)?;
     let mut row = query(case, &manifest, &protocols)?;
     let expression = json!({"projection":["l_orderkey"],"filter":null});
-    let hash = expression_hash(&expression)?;
     row["fixtures"] = json!(root);
     row["fixture_manifest_sha256"] = json!(digest(&root.join("manifest.json"))?);
-    row["native_expression_sha256"] = json!({"polars":hash});
     let selected = BTreeSet::from([case.to_owned()]);
     let readers = campaign::roster(&json!({"comparison_revision":6}))?;
     let value = json!({"format":"selective-read-production-workload-v1","comparison_revision":6,"family":"production","definition_sha256":digest(&protocols.join("selective-read-production-shapes.md"))?,
@@ -46,7 +34,7 @@ fn frozen_workloads_check_queries_and_scope_independently_of_source_provenance()
         "cases":[row],"readers":readers,"sessions":sessions(&selected),"inventory":inventory(&selected,&readers),
         "scope":"probe","sampling_stage":"pilot","publication_ready":false,"oracle_limits":limits(),
         "translations":{"polars":{"lock_sha256":digest(&harness.join("runners/polars/lock.json"))?,
-            "expressions":{case:{"native_expression":expression,"sha256":hash}}}}});
+            "expressions":{case:{"native_expression":expression,"canonical_sql":row["canonical_sql"]}}}}});
     assert_eq!(load(value.clone(), &harness)?, value);
     assert_eq!(binding(&value, root, case, &harness)?, row);
     for (pointer, replacement) in [
@@ -61,7 +49,6 @@ fn frozen_workloads_check_queries_and_scope_independently_of_source_provenance()
     for (pointer, replacement) in [
         ("/format", json!("unsupported")),
         ("/cases/0/canonical_sql", json!("SELECT 1")),
-        ("/cases/0/native_expression_sha256/polars", json!("changed")),
         ("/oracle_limits/disk_bytes", json!(1)),
         ("/publication_ready", json!(true)),
         ("/sampling_stage", json!("formal")),
@@ -80,13 +67,13 @@ fn frozen_workloads_check_queries_and_scope_independently_of_source_provenance()
             .contains("duplicate")
     );
     let mut changed = value.clone();
-    changed["translations"]["polars"]["expressions"][case]["native_expression"]["filter"] =
-        json!("changed");
+    changed["translations"]["polars"]["expressions"][case]["canonical_sql"] =
+        json!("SELECT other FROM bench");
     assert!(
         load(changed, &harness)
             .unwrap_err()
             .to_string()
-            .contains("expression changed")
+            .contains("SQL binding")
     );
     fs::write(root.join("manifest.json"), b"{}")?;
     assert!(

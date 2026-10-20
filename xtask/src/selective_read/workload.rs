@@ -396,7 +396,7 @@ pub(super) fn query(case: &str, manifest: &Value, _protocols: &Path) -> Result<V
         "physical_rows":table["rows"], "fixture_mode":manifest["mode"], "in_literals":[1], "projection":shape["projection"],
         "projection_columns":array(&shape["projection"])?.len(), "predicate":"production-eq2-in1",
         "predicate_columns":["l_shipdate","l_shipmode","l_linenumber"], "predicate_only_columns":[], "limit":null,
-        "canonical_sql":sql, "canonical_sql_sha256":reader_sha256(sql.as_bytes())?, "writer":table["writer"],
+        "canonical_sql":sql, "writer":table["writer"],
         "source_parent_manifest_sha256":field(manifest, "source_parent_manifest_sha256")?,
         "geometry":{"files":table["file_count"], "stored_columns":columns.len(), "physical_bytes":table["bytes"],
             "file_bytes":files.iter().map(|f| f["bytes"].clone()).collect::<Vec<_>>(),

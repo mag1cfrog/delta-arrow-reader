@@ -51,7 +51,7 @@ Use the protocol's `li.clustered`, `li.shuffled`, `wide.clustered`, or
 fixture manifest. Preparation independently verifies that those literals are
 the first qualifying distinct partkeys and that the saved SQL matches the case.
 For an untimed duplicate-IN check, add `--duplicate-in-literal`; this appends
-the first selected literal and produces a distinct SQL hash with the same
+the first selected literal and produces a distinct SQL statement with the same
 expected rows.
 
 Preparation checks the source/data/log object hashes, selected snapshot log,
@@ -111,14 +111,17 @@ The identity file has these fields:
 
 | Fields | Required values |
 | --- | --- |
-| `comparison_revision`, `protocol_sha256`, `fixture_manifest_sha256`, `case_id`, `snapshot_version`, `canonical_sql_sha256` | The exact inputs used for this invocation; must match the prepared reference |
-| `reader_id` | `delta-arrow-reader`, `delta-rs`, `duckdb`, `polars`, or `daft` |
-| `reader_build_sha256` | Hash of the adapter's recorded build identity, including executable/package, dependency lock, and adapter source identities |
-| `reader_config_sha256` | Hash of the invocation's resolved reader configuration |
-| `native_expression_sha256` | Hash of the executed expression translation for Polars/Daft; null for a reader executing canonical SQL directly |
+| `comparison_revision`, `fixture_manifest_sha256`, `case_id`, `snapshot_version`, `canonical_sql` | The exact inputs used for this invocation; must match the prepared reference |
+| `workload_contract` | For revision 3 and later, the explicit workload definition, including queries and translations |
+| `reader_id` | The reader selected by the comparison revision; revision 6 uses Spark in place of Daft |
+| `reader_artifact` | Executable, dependency lock, runtime and bundled runtime file identities |
+| `reader_config` | The invocation's resolved reader configuration |
+| `native_expression` | The executed native expression description for Polars; null for a reader executing canonical SQL directly |
+| `protocol_sha256`, `reader_build_sha256` | Audit provenance; documentation and build-record edits alone do not invalidate a proof |
 | `result_sha256` | SHA-256 of the completed IPC stream file |
 
-Hash strings use 64 lowercase hexadecimal characters. The
+SQL, configuration and native expressions are compared directly. File checksums
+use 64 lowercase hexadecimal characters. The
 [reader adapters](selective-read-runners.md) produce these artifacts and preserve
 the underlying build/config records for all five readers.
 The checker verifies their binding to the reference and result file; the runner

@@ -24,7 +24,7 @@ def translations(binary, request, output):
               "adapter_sha256": digest(binary), "expressions": {}}
     for key, sql in json.loads(request.read_text()).items():
         expression = adapter["expression_identity"](sql)
-        result["expressions"][key] = {"native_expression": expression, "sha256": adapter["json_hash"](expression)}
+        result["expressions"][key] = {"canonical_sql": sql, "native_expression": expression}
     save(output, result)
 
 

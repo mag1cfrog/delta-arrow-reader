@@ -257,7 +257,7 @@ def prepare_reference(fixtures, case, output, workload, quota):
                 "sort_memory_bytes": oracle.SORT_MEMORY_BYTES, "sort_threads": 1,
                 "fixture_manifest_sha256": digest(fixtures / "manifest.json"), "generator_protocol_sha256": manifest["contract_sha256"],
                 "case_id": case, "snapshot_version": table["snapshot_version"], "profile": "production-" + manifest["mode"],
-                "canonical_sql": row["canonical_sql"], "canonical_sql_sha256": row["canonical_sql_sha256"],
+                "canonical_sql": row["canonical_sql"],
                 "in_literals": [1], "projection": projection, "limit": None,
                 "source_rows": counts[0], "physical_rows": actual_rows, "qualifying_rows": len(expected),
                 "physical_qualifying_rows": counts[-1], "deleted_qualifying_rows": deleted_matches,
@@ -272,6 +272,6 @@ def prepare_reference(fixtures, case, output, workload, quota):
                 "physical_validation": scans,
                 "verified_objects": verified, "reference_sha256": digest(reference),
                 "workload_manifest": str(Path(workload).resolve()), "oracle_limits": frozen["oracle_limits"],
-                "native_expression_sha256": row["native_expression_sha256"], "projected_logical_bytes": projected_bytes[0]}
+                "projected_logical_bytes": projected_bytes[0]}
     save(output / "reference.json", metadata)
     return metadata

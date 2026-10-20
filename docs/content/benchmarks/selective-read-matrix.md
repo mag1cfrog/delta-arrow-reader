@@ -46,13 +46,13 @@ use 20. Smoke's one-file tables cannot demonstrate pruning across many files.
 
 [`query-matrix.json`](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/benches/selective_read/query-matrix.json)
 checks in every canonical SQL statement, the three scales' frozen membership
-values, generator provenance and Polars/Daft expression hashes.
-`benches/selective_read/native-expressions.jsonl` contains the full native
-expression identities, one JSON record per distinct reader/expression hash. The native
+values, generator provenance and native expression descriptions under each query.
+The native
 translations are constructed by the pinned adapters from these SQL statements
 as filter, projection, then optional limit. Each real validation run also
 preserves its native expressions. A campaign rejects a successful observation whose executed
-translation hash differs from the checked-in query.
+expression differs from the checked-in query. SQL and expressions are compared
+directly; catalog formatting and provenance changes do not invalidate prepared cases.
 
 ## Prepare and run all 150 entries
 
@@ -150,8 +150,8 @@ PYTHONPATH=benches/selective_read:benches/selective_read/runners \
 
 Real engine correctness still requires the campaign.
 
-The checked-in `query-matrix.json` and `native-expressions.jsonl` retain the
-revision 2 catalog and its original reader identities. Catalog generation
+The checked-in `query-matrix.json` retains the revision 2 catalog, including
+the retired Daft expressions as readable descriptions. Catalog generation
 depended on the retired Daft adapter. Historical regeneration requires the
 original harness checkout and retained engine builds. The current harness
 reads and validates the retained catalog.
@@ -240,11 +240,13 @@ The archived generator binds all 18 cases in the complete large-data family
 before preparing references or timing readers.
 
 `workload.json` freezes fixture hashes, scales, geometry, expanded SQL,
-projections, literals, native translations and oracle ceilings. It binds the
-amendment hash, sampling hash, base protocol hash and harness sources. Each reference, reader
-identity, correctness certificate, campaign, schedule slot and report carries
-that workload file's hash. Mismatches fail validation. Rebuild all five adapters
-after changing the harness or oracle.
+projections, literals, native translations and oracle ceilings. Each translation
+stores its case's canonical SQL and full native expression. Definitions using
+the old hash-only bindings need regeneration before current-harness validation.
+Document, source and workload checksums remain audit provenance. References,
+reader identities, correctness certificates, campaigns, schedule slots and
+reports carry the explicit workload contract. Changed queries, translations,
+fixture identities or execution settings fail validation.
 
 This definition records a **candidate**, with `publication_ready: false`. The full
 inventory including many-file cases, reader and environment bindings, and

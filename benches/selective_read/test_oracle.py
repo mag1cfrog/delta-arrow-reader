@@ -129,7 +129,6 @@ class OracleTests(unittest.TestCase):
                     self.assertEqual((shape["projection"], shape["predicate"], shape["limit"]),
                                      (list(projection), predicate, limit))
                     self.assertEqual(query["sql"], oracle.sql_for(projection, predicate, limit, literals))
-                    self.assertEqual(query["sql_sha256"], oracle.digest_bytes(query["sql"].encode()))
 
 
     def test_sort_spill_respects_disk_quota(self):
@@ -221,11 +220,11 @@ class OracleTests(unittest.TestCase):
                 variant["queries"] = {f"wide.{layout}.date30-wide.dv": oracle.sql_for(oracle.WIDE69, "date30", None, [1])}
                 manifest["tables"].append(variant)
             write_json(fixtures / "manifest.json", manifest)
-            expressions = {case: {"native_expression": "unit", "sha256": python_common.json_hash("unit")} for case in large.definitions()}
             cases = [large.query_fields(case, manifest) | {"fixtures": str(fixtures),
-                     "fixture_manifest_sha256": run.digest(fixtures / "manifest.json"),
-                     "native_expression_sha256": dict.fromkeys(("polars", "daft"), python_common.json_hash("unit"))}
+                     "fixture_manifest_sha256": run.digest(fixtures / "manifest.json")}
                      for case in large.definitions()]
+            expressions = {row["case_id"]: {"canonical_sql": row["canonical_sql"], "native_expression": {"projection": row["projection"]}}
+                           for row in cases}
             value = {"format": "selective-read-large-workload-v1", "comparison_revision": 4,
                      "protocol_sha256": "historical large-workload documentation", "base_protocol_sha256": "historical base documentation",
                      "sampling_sha256": "historical sampling documentation",

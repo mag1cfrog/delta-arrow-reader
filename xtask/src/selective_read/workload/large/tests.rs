@@ -61,19 +61,18 @@ fn legacy_load_checks_limits_sessions_and_translations_without_current_sources()
     }
     for family in ["data", "files", "pilot"] {
         let expected = definitions(family, None)?;
-        let expression_hash = production::expression_hash(&json!("unit"))?;
         let rows: Vec<_> = object(&expected)?.iter().map(|(case, definition)| {
             let shape = shapes()[definition[2].as_str().unwrap()].clone();
             json!({"case_id":case,"role":definition[0],"fixture_id":definition[1],"scale_factor":0.01,
                 "projection":shape[0],"predicate":shape[1],"limit":shape[2],
-                "native_expression_sha256":{"polars":expression_hash,"daft":expression_hash}})
+                "canonical_sql":format!("SELECT {case} FROM bench")})
         }).collect();
         let expressions = object(&expected)?
             .keys()
             .map(|case| {
                 (
                     case.clone(),
-                    json!({"native_expression":"unit","sha256":expression_hash}),
+                    json!({"native_expression":{"projection":["unit"]},"canonical_sql":format!("SELECT {case} FROM bench")}),
                 )
             })
             .collect::<Map<_, _>>();
@@ -92,7 +91,7 @@ fn legacy_load_checks_limits_sessions_and_translations_without_current_sources()
         for (pointer, replacement) in [
             ("/sessions", json!({})),
             ("/cases/0/predicate", json!("all wrong")),
-            ("/cases/0/native_expression_sha256/polars", json!("changed")),
+            ("/cases/0/canonical_sql", json!("SELECT other FROM bench")),
             ("/oracle_limits/disk_bytes", json!(1)),
             ("/oracle_limits/elapsed_seconds", json!(2147483648u64)),
             ("/translations/daft/lock_sha256", json!("changed")),
