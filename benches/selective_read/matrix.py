@@ -4,12 +4,11 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
-import runpy
 import sys
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
-from run import PROTOCOL, digest, save
+from run import PROTOCOL, digest, load_adapter, save
 from python_common import require
 import native
 
@@ -32,7 +31,7 @@ def scale_key(value):
 
 def translations(binary, request, output, comparison_revision=2):
     """Use the actual pinned adapter in its own interpreter, without table I/O."""
-    adapter = runpy.run_path(str(binary.resolve()), run_name="matrix_translation")
+    adapter = load_adapter(binary)
     build = json.loads(binary.with_name("build.json").read_text())
     require(digest(binary) == build["executable_sha256"], "stale adapter executable")
     require(adapter["runtime_metadata"](adapter["engine"]()) == build["runtime"], "stale native runtime")

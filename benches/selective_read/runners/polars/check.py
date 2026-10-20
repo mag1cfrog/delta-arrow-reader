@@ -3,7 +3,6 @@
 import json
 import os
 from pathlib import Path
-import runpy
 import shutil
 import sys
 from unittest import TestCase
@@ -20,7 +19,7 @@ from capabilities import (CORPUS, capability_report, check_cli, delta_capabiliti
 
 
 def native_probes(binary, output):
-    adapter = runpy.run_path(str(binary), run_name="capability_probe")
+    adapter = run.load_adapter(binary)
     table = output / "reuse-table"
     shutil.copytree(CORPUS / "deletion_vectors/table", table)
     source = adapter["scan"]({"table_uri": table.as_uri(), "snapshot_version": 1}, {})

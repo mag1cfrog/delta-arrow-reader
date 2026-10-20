@@ -16,6 +16,30 @@ import run
 
 
 class ReaderBookkeeping(unittest.TestCase):
+    def test_adapter_probes_use_bundled_helpers_and_restore_controller_imports(self):
+        previous_path = sys.path.copy()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "run.py").write_text("marker = 'bundled run'\n")
+            (root / "python_common.py").write_text("marker = 'bundled common'\n")
+            binary = root / "adapter"
+            source = ("import sys\nfrom pathlib import Path\n"
+                      "sys.path.insert(0, str(Path(__file__).parent))\n"
+                      "from run import marker as runner\n"
+                      "from python_common import marker as common\n")
+            binary.write_text(source)
+            adapter = run.load_adapter(binary)
+            self.assertEqual((adapter["runner"], adapter["common"]), ("bundled run", "bundled common"))
+            self.assertIs(sys.modules["run"], run)
+            self.assertIs(sys.modules["python_common"], common)
+            self.assertEqual(sys.path, previous_path)
+            binary.write_text(source + "raise ValueError('probe failed')\n")
+            with self.assertRaisesRegex(ValueError, "probe failed"):
+                run.load_adapter(binary)
+            self.assertIs(sys.modules["run"], run)
+            self.assertIs(sys.modules["python_common"], common)
+            self.assertEqual(sys.path, previous_path)
+
     def test_python_adapters_keep_the_comparison_identity_and_reader_roster(self):
         identity = {"comparison_revision": 6, "protocol_sha256": run.digest(run.SPARK_MATRIX),
             "base_protocol_sha256": run.digest(run.PROTOCOL), "sampling_sha256": run.digest(run.SAMPLING),
