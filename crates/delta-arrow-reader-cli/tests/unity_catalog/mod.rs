@@ -25,11 +25,12 @@ const TABLE_ID: &str = "12345678-1234-1234-1234-123456789abc";
 const TABLE_NAME: &str = "main.sales.orders";
 const PROFILE: &str = "secret profile $(do-not-run)";
 
-struct Fixture {
+/// A fake Databricks executable with controllable table metadata and credential responses.
+struct DatabricksCliFixture {
     directory: tempfile::TempDir,
 }
 
-impl Fixture {
+impl DatabricksCliFixture {
     fn new(azure: bool) -> Result<Self, Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
         let location = if azure {
@@ -133,8 +134,8 @@ fn inspection_uses_vended_s3_and_azure_credentials_and_actual_delta_schema() -> 
         FileReader::try_new(fs::File::open(corpus.join("expected.arrow"))?, None)?.schema();
     let log = fs::read(corpus.join("table/_delta_log/00000000000000000000.json"))?;
     for azure in [false, true] {
-        let fixture = Fixture::new(azure)?;
-        let server = CloudServer::new(azure, log.clone())?;
+        let fixture = DatabricksCliFixture::new(azure)?;
+        let server = MockCloudStorageServer::new(azure, log.clone())?;
         let options = if azure {
             json!({"azure_endpoint":server.endpoint, "azure_allow_http":"true"})
         } else {
@@ -242,7 +243,7 @@ fn inspection_uses_vended_s3_and_azure_credentials_and_actual_delta_schema() -> 
 
 #[test]
 fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResult {
-    let fixture = Fixture::new(false)?;
+    let fixture = DatabricksCliFixture::new(false)?;
     for args in [
         vec!["--help"],
         vec!["--version"],
@@ -308,7 +309,7 @@ fn invalid_responses_and_denied_credentials_are_redacted() -> TestResult {
             "invalid_databricks_response",
         ),
     ] {
-        let fixture = Fixture::new(false)?;
+        let fixture = DatabricksCliFixture::new(false)?;
         fs::write(fixture.directory.path().join("metadata.json"), response)?;
         let output = run_with_timeout(&mut fixture.inspect())?;
         assert_eq!(output.status.code(), Some(1));
@@ -323,7 +324,7 @@ fn invalid_responses_and_denied_credentials_are_redacted() -> TestResult {
                 .any(|a| a == "temporary-table-credentials")
         );
     }
-    let fixture = Fixture::new(false)?;
+    let fixture = DatabricksCliFixture::new(false)?;
     let output = run_with_timeout(
         fixture
             .inspect()
@@ -353,8 +354,8 @@ fn uc_admission_preserves_direct_path_inspection_of_unsupported_protocols() -> T
                 .join("_delta_log/00000000000000000000.json"),
             &log,
         )?;
-        let fixture = Fixture::new(false)?;
-        let server = CloudServer::new(false, log.into_bytes())?;
+        let fixture = DatabricksCliFixture::new(false)?;
+        let server = MockCloudStorageServer::new(false, log.into_bytes())?;
         fs::write(
             fixture.directory.path().join("options.json"),
             serde_json::to_vec(
@@ -387,14 +388,14 @@ fn uc_admission_preserves_direct_path_inspection_of_unsupported_protocols() -> T
 #[test]
 fn uc_cancellation_remains_responsive_with_blocked_stdout() -> TestResult {
     use std::os::fd::AsRawFd;
-    let fixture = Fixture::new(false)?;
+    let fixture = DatabricksCliFixture::new(false)?;
     let schema = json!({"type":"struct","fields":[{"name":"id","type":"integer","nullable":true,"metadata":{"large": "x".repeat(256 * 1024)}}]});
     let log = format!(
         "{}\n{}\n",
         json!({"protocol":{"minReaderVersion":1,"minWriterVersion":2}}),
         json!({"metaData":{"id":"test","format":{"provider":"parquet","options":{}},"schemaString":schema.to_string(),"partitionColumns":[],"configuration":{}}})
     );
-    let server = CloudServer::new(false, log.into_bytes())?;
+    let server = MockCloudStorageServer::new(false, log.into_bytes())?;
     fs::write(
         fixture.directory.path().join("options.json"),
         serde_json::to_vec(
@@ -444,7 +445,7 @@ fn uc_cancellation_remains_responsive_with_blocked_stdout() -> TestResult {
 #[test]
 fn cancellation_terminates_pending_databricks_process() -> TestResult {
     for signal in [libc::SIGINT, libc::SIGTERM] {
-        let fixture = Fixture::new(false)?;
+        let fixture = DatabricksCliFixture::new(false)?;
         let mut child = fixture
             .inspect()
             .env("RUST_LOG", "info")
@@ -506,7 +507,7 @@ fn check_cancellation(stderr: &[u8], status: i32) {
 #[ignore = "requires unshare and permission to create user/PID namespaces"]
 fn pid_one_cancellation_preserves_uc_diagnostic() -> TestResult {
     for (signal, status) in [("INT", 130), ("TERM", 143)] {
-        let fixture = Fixture::new(false)?;
+        let fixture = DatabricksCliFixture::new(false)?;
         let inspect = fixture.inspect();
         // Keep unshare on the host PATH; env then execs DAR as namespace PID 1.
         // --kill-child also cleans up the namespace if the test times out.
@@ -538,15 +539,17 @@ fn pid_one_cancellation_preserves_uc_diagnostic() -> TestResult {
     Ok(())
 }
 
-// Only GET/HEAD and log listing are needed, following the core cloud-location fixture.
-struct CloudServer {
+/// A local server that serves Delta logs as S3/Azure objects and records requests.
+///
+/// Only GET/HEAD and log listing are needed, following the core cloud-location fixture.
+struct MockCloudStorageServer {
     endpoint: String,
     requests: Arc<Mutex<Vec<String>>>,
     stop: Arc<AtomicBool>,
     thread: Option<thread::JoinHandle<()>>,
 }
 
-impl CloudServer {
+impl MockCloudStorageServer {
     fn new(azure: bool, log: Vec<u8>) -> std::io::Result<Self> {
         let listener = TcpListener::bind("127.0.0.1:0")?;
         listener.set_nonblocking(true)?;
@@ -641,7 +644,7 @@ impl CloudServer {
     }
 }
 
-impl Drop for CloudServer {
+impl Drop for MockCloudStorageServer {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
         self.thread.take().unwrap().join().unwrap();

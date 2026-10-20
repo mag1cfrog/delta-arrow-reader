@@ -311,7 +311,7 @@ fn run() -> Result<(), Error> {
     let table_args = match &command {
         Command::Inspect(table) | Command::Scan { table, .. } => table,
     };
-    let uc_reference = unity_catalog::Reference::parse(
+    let uc_target = unity_catalog::UnityCatalogTableTarget::parse(
         &table_args.table,
         table_args.databricks_profile.as_deref(),
         matches!(command, Command::Scan { .. }),
@@ -354,10 +354,10 @@ fn run() -> Result<(), Error> {
             reason: "runtime_build_failed",
         })?;
     let work = async {
-        let resolved = match uc_reference {
-            Some(reference) => Some(
-                reference
-                    .resolve(storage_options.clone())
+        let uc_access = match uc_target {
+            Some(target) => Some(
+                target
+                    .request_read_access(storage_options.clone())
                     .await
                     .context(UnityCatalogSnafu)?,
             ),
@@ -365,9 +365,11 @@ fn run() -> Result<(), Error> {
         };
         // Inspect needs only metadata. Scan planning happens explicitly below.
         let builder = DeltaTableBuilder::new(
-            resolved
+            uc_access
                 .as_ref()
-                .map_or(table_args.table.as_str(), |table| table.location.as_str()),
+                .map_or(table_args.table.as_str(), |access| {
+                    access.storage_url.as_str()
+                }),
         )
         .with_warmup(WarmupMode::None)
         .with_snapshot_selection(table_args.table_version.map_or(
@@ -375,18 +377,18 @@ fn run() -> Result<(), Error> {
             DeltaSnapshotSelection::Version,
         ))
         .with_storage_options(
-            resolved
+            uc_access
                 .as_ref()
-                .map_or(storage_options, |table| table.storage_options.clone()),
+                .map_or(storage_options, |access| access.storage_options.clone()),
         );
-        let table = match &resolved {
-            Some(resolved) => resolved.load(builder).await?,
+        let table = match &uc_access {
+            Some(access) => access.load_table(builder).await?,
             None => builder.load_table().await.context(ReaderSnafu)?,
         };
         match &command {
             Command::Inspect(_) => {
                 let output = encode_inspection_json(table.version(), table.schema().as_ref());
-                if resolved.is_some() {
+                if uc_access.is_some() {
                     // Keep the UC cancellation handler responsive when stdout is blocked.
                     tokio::task::spawn_blocking(move || write_stdout(&output))
                         .await
@@ -427,8 +429,8 @@ fn run() -> Result<(), Error> {
             }
         }
     };
-    let result = if uc_reference.is_some() {
-        runtime.block_on(unity_catalog::cancellable(work))
+    let result = if uc_target.is_some() {
+        runtime.block_on(unity_catalog::cancel_on_signal(work))
     } else {
         runtime.block_on(work)
     };
