@@ -93,30 +93,17 @@ pub(super) fn prepare(root: &Path, args: Arguments) -> Result<()> {
             }
         }
     }
-    let mut bundled: BTreeMap<String, PathBuf> = [
+    let bundled: BTreeMap<String, PathBuf> = [
         ("lock.json", adapter.join("lock.json")),
         ("run.py", root.join(RUNNERS).join("run.py")),
         (
             "python_common.py",
             root.join(RUNNERS).join("python_common.py"),
         ),
-        ("oracle.py", root.join("benches/selective_read/oracle.py")),
     ]
     .into_iter()
     .map(|(name, path)| (name.to_owned(), path))
     .collect();
-    for name in [
-        "protocol",
-        "large-workloads",
-        "sampling",
-        "production-workloads",
-        "spark-matrix",
-    ] {
-        bundled.insert(
-            format!("{name}.md"),
-            root.join(format!("docs/content/benchmarks/selective-read-{name}.md")),
-        );
-    }
     let builder_hash = digest(&env::current_exe()?)?;
     fs::create_dir(&args.output)?;
     let output = fs::canonicalize(&args.output)?;

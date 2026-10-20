@@ -9,17 +9,6 @@ import runpy
 import sys
 
 
-HERE = Path(__file__).resolve().parent
-PROTOCOL = HERE.parents[2] / "docs/content/benchmarks/selective-read-protocol.md"
-AMENDMENT = PROTOCOL.with_name("selective-read-large-workloads.md")
-SAMPLING = PROTOCOL.with_name("selective-read-sampling.md")
-PRODUCTION = PROTOCOL.with_name("selective-read-production-workloads.md")
-SPARK_MATRIX = PROTOCOL.with_name("selective-read-spark-matrix.md")
-if (HERE / "protocol.md").exists():
-    PROTOCOL, AMENDMENT = HERE / "protocol.md", HERE / "large-workloads.md"
-    SAMPLING = HERE / "sampling.md"
-    PRODUCTION = HERE / "production-workloads.md"
-    SPARK_MATRIX = HERE / "spark-matrix.md"
 COMPARISON_FIELDS = ("comparison_revision", "protocol_sha256")
 LARGE_IDENTITY_FIELDS = ("base_protocol_sha256", "workload_manifest_sha256")
 SAMPLING_IDENTITY_FIELDS = ("sampling_sha256",)

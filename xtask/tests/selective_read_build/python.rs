@@ -170,6 +170,17 @@ fn prepares_all_python_readers_offline_with_frozen_artifacts_and_build_provenanc
         for (name, checksum) in record["bundled_sha256"].as_object().unwrap() {
             assert_eq!(*checksum, hash(&output.join(name))?);
         }
+        for name in [
+            "oracle.py",
+            "protocol.md",
+            "large-workloads.md",
+            "sampling.md",
+            "production-workloads.md",
+            "spark-matrix.md",
+        ] {
+            assert!(!output.join(name).exists());
+            assert!(record["bundled_sha256"].get(name).is_none());
+        }
         for (name, checksum) in record["source_sha256"].as_object().unwrap() {
             assert_eq!(*checksum, hash(&root.join(name))?);
         }

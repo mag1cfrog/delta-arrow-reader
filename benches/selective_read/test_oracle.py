@@ -173,7 +173,7 @@ class OracleTests(unittest.TestCase):
             # Keep legacy oracle coverage independent of retired reader dependencies.
             harness = root / "harness/benches/selective_read"
             protocols = harness.parents[1] / "docs/content/benchmarks"
-            shutil.copytree(run.PROTOCOL.parent, protocols)
+            shutil.copytree(oracle.PROTOCOL.parent, protocols)
             sources = tuple(harness / p.relative_to(large.HERE) for p in large.SOURCES)
             for source, target in zip(large.SOURCES, sources):
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -227,8 +227,8 @@ class OracleTests(unittest.TestCase):
                      "native_expression_sha256": dict.fromkeys(("polars", "daft"), python_common.json_hash("unit"))}
                      for case in large.definitions()]
             value = {"format": "selective-read-large-workload-v1", "comparison_revision": 4,
-                     "protocol_sha256": run.digest(run.AMENDMENT), "base_protocol_sha256": run.digest(run.PROTOCOL),
-                     "sampling_sha256": run.digest(run.SAMPLING),
+                     "protocol_sha256": "historical large-workload documentation", "base_protocol_sha256": "historical base documentation",
+                     "sampling_sha256": "historical sampling documentation",
                      "scope": "smoke", "publication_ready": False, "scales": {"data": .01, "control": .01},
                      "readers": list(large.READERS), "sessions": large.SESSIONS, "cases": cases,
                      "source_sha256": {str(p.relative_to(large.HERE)): run.digest(p) for p in large.SOURCES},
