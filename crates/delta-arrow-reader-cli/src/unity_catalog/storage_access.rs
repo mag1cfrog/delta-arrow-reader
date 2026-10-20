@@ -1,4 +1,4 @@
-//! Table locations and temporary credentials bound to one local inspection.
+//! Validated table locations, credential responses, and local snapshot loading.
 
 use std::{
     sync::Arc,
@@ -6,22 +6,20 @@ use std::{
 };
 
 use delta_arrow_reader::{
-    DeltaSnapshotSelection, DeltaStorageCredentialProvider, DeltaStorageOptions, DeltaTable,
-    DeltaTableBuilder, WarmupMode,
+    DeltaSnapshotSelection, DeltaStorageOptions, DeltaTable, DeltaTableBuilder, WarmupMode,
 };
 use object_store::{
-    ObjectStoreScheme, StaticCredentialProvider,
+    ObjectStoreScheme,
     aws::{AmazonS3ConfigKey, AwsCredential},
     azure::{AzureConfigKey, AzureCredential},
     gcp::{GcpCredential, GoogleConfigKey},
 };
 use serde::Deserialize;
-use snafu::ResultExt;
 use url::Url;
 
 use crate::input::JsonObject;
 
-use super::Error;
+use super::{Error, credential_cache::TableCredentialCache};
 
 /// Storage backends this adapter supports with temporary Unity Catalog credentials.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -236,7 +234,34 @@ struct TemporaryCredentialsResponse {
     gcp_oauth_token: Option<JsonObject<GcsOAuthCredentials>>,
 }
 
-/// Validated storage access for one UC inspection, including its credential deadline.
+/// Native credentials from exactly one supported Unity Catalog credential family.
+#[derive(Clone)]
+pub(super) enum CloudCredentials {
+    Aws(Arc<AwsCredential>),
+    Azure(Arc<AzureCredential>),
+    Gcp(Arc<GcpCredential>),
+}
+
+impl CloudCredentials {
+    /// Azure SAS and bearer credentials must not switch families during renewal.
+    pub(super) fn same_kind(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Aws(_), Self::Aws(_)) | (Self::Gcp(_), Self::Gcp(_)) => true,
+            (Self::Azure(left), Self::Azure(right)) => {
+                std::mem::discriminant(left.as_ref()) == std::mem::discriminant(right.as_ref())
+            }
+            _ => false,
+        }
+    }
+}
+
+/// One validated credential response, before it enters the invocation's cache.
+pub(super) struct TemporaryTableCredentials {
+    pub(super) credentials: CloudCredentials,
+    pub(super) expires_at: SystemTime,
+}
+
+/// Validated storage access for one UC invocation, including its renewable credentials.
 ///
 /// The location and credentials must never be logged.
 pub(crate) struct AuthorizedTableAccess {
@@ -244,17 +269,15 @@ pub(crate) struct AuthorizedTableAccess {
     storage_url: Url,
     /// The caller's permitted transport and region settings.
     storage_options: DeltaStorageOptions,
-    /// Native cloud credentials supplied by the Unity Catalog grant.
-    credential_provider: DeltaStorageCredentialProvider,
-    credentials_expire_at: SystemTime,
+    /// Retains the redacted refresh failure even if a dependency flattens its error source.
+    credential_cache: Arc<TableCredentialCache>,
 }
 
-/// Decodes the grant and binds its validated location, lifetime, and credentials for inspection.
-pub(super) fn parse_authorized_access(
+/// Validates every grant against the original table root and supported credential families.
+pub(super) fn parse_temporary_credentials(
     credentials_json: &[u8],
-    storage_location: TableStorageLocation,
-    storage_options: DeltaStorageOptions,
-) -> Result<AuthorizedTableAccess, Error> {
+    storage_location: &TableStorageLocation,
+) -> Result<TemporaryTableCredentials, Error> {
     let response =
         serde_json::from_slice::<JsonObject<TemporaryCredentialsResponse>>(credentials_json)
             .map_err(|_| Error::InvalidDatabricksResponse)?
@@ -269,7 +292,7 @@ pub(super) fn parse_authorized_access(
         return Err(Error::CredentialsExpired);
     }
     // Accept exactly one credential type, matching the table URL's storage backend.
-    let credential_provider = match (storage_location.backend, response) {
+    let credentials = match (storage_location.backend, response) {
         (
             StorageBackend::S3,
             TemporaryCredentialsResponse {
@@ -304,13 +327,11 @@ pub(super) fn parse_authorized_access(
                     return Err(Error::InvalidDatabricksResponse);
                 }
             }
-            DeltaStorageCredentialProvider::Aws(Arc::new(StaticCredentialProvider::new(
-                AwsCredential {
-                    key_id: credentials.access_key_id,
-                    secret_key: credentials.secret_access_key,
-                    token: Some(credentials.session_token),
-                },
-            )))
+            CloudCredentials::Aws(Arc::new(AwsCredential {
+                key_id: credentials.access_key_id,
+                secret_key: credentials.secret_access_key,
+                token: Some(credentials.session_token),
+            }))
         }
         (
             StorageBackend::Azure,
@@ -347,9 +368,7 @@ pub(super) fn parse_authorized_access(
             {
                 return Err(Error::InvalidDatabricksResponse);
             }
-            DeltaStorageCredentialProvider::Azure(Arc::new(StaticCredentialProvider::new(
-                AzureCredential::SASToken(query_pairs),
-            )))
+            CloudCredentials::Azure(Arc::new(AzureCredential::SASToken(query_pairs)))
         }
         (
             StorageBackend::Azure,
@@ -363,8 +382,8 @@ pub(super) fn parse_authorized_access(
             },
         ) => {
             validate_bearer_token(&bearer_credentials.aad_token)?;
-            DeltaStorageCredentialProvider::Azure(Arc::new(StaticCredentialProvider::new(
-                AzureCredential::BearerToken(bearer_credentials.aad_token),
+            CloudCredentials::Azure(Arc::new(AzureCredential::BearerToken(
+                bearer_credentials.aad_token,
             )))
         }
         (
@@ -379,19 +398,15 @@ pub(super) fn parse_authorized_access(
             },
         ) => {
             validate_bearer_token(&credentials.oauth_token)?;
-            DeltaStorageCredentialProvider::Gcp(Arc::new(StaticCredentialProvider::new(
-                GcpCredential {
-                    bearer: credentials.oauth_token,
-                },
-            )))
+            CloudCredentials::Gcp(Arc::new(GcpCredential {
+                bearer: credentials.oauth_token,
+            }))
         }
         _ => return Err(Error::UnsupportedDirectRead),
     };
-    Ok(AuthorizedTableAccess {
-        storage_url: storage_location.url,
-        storage_options,
-        credential_provider,
-        credentials_expire_at,
+    Ok(TemporaryTableCredentials {
+        credentials,
+        expires_at: credentials_expire_at,
     })
 }
 
@@ -403,38 +418,48 @@ fn validate_bearer_token(token: &str) -> Result<(), Error> {
 }
 
 impl AuthorizedTableAccess {
-    /// Loads the requested snapshot using this grant's location, credentials, and expiry.
+    /// Binds renewal to the selected profile, immutable table ID, and canonical root.
+    pub(super) fn new(
+        storage_location: TableStorageLocation,
+        storage_options: DeltaStorageOptions,
+        profile: String,
+        table_id: String,
+        credentials: TemporaryTableCredentials,
+    ) -> Result<Self, Error> {
+        let storage_url = storage_location.url.clone();
+        let credential_cache =
+            TableCredentialCache::new(profile, table_id, storage_location, credentials)?;
+        Ok(Self {
+            storage_url,
+            storage_options,
+            credential_cache,
+        })
+    }
+
+    /// Loads the requested snapshot with credentials renewed on demand by the storage clients.
     ///
     /// UC inspection also requires a read protocol supported by the local reader.
     pub(crate) async fn load_table_for_inspection(
         self,
         snapshot_selection: DeltaSnapshotSelection,
     ) -> Result<DeltaTable, crate::Error> {
-        // shortcut: inspection uses one credential grant; replace with renewable providers when UC scanning is enabled.
-        let remaining = self
-            .credentials_expire_at
-            .duration_since(SystemTime::now())
-            .map_err(|_| Error::CredentialsExpired)
-            .context(crate::UnityCatalogSnafu)?;
-        let deadline = tokio::time::Instant::now()
-            .checked_add(remaining)
-            .ok_or(Error::InvalidDatabricksResponse)
-            .context(crate::UnityCatalogSnafu)?;
         let builder = DeltaTableBuilder::new(self.storage_url.as_str())
             .with_warmup(WarmupMode::None)
             .with_snapshot_selection(snapshot_selection)
-            .with_credential_provider(self.credential_provider)
+            .with_credential_provider(self.credential_cache.provider())
             .with_storage_options(self.storage_options);
-        let table = tokio::time::timeout_at(deadline, builder.load_table())
-            .await
-            .map_err(|_| Error::CredentialsExpired)
-            .context(crate::UnityCatalogSnafu)?
-            .context(crate::ReaderSnafu)?;
-        if self.credentials_expire_at <= SystemTime::now() {
-            return Err(crate::Error::UnityCatalog {
-                source: Error::CredentialsExpired,
-            });
-        }
+        let table = match builder.load_table().await {
+            Ok(table) => table,
+            Err(source) => {
+                return Err(self
+                    .credential_cache
+                    .refresh_failure()
+                    .await
+                    .map_or(crate::Error::Reader { source }, |source| {
+                        crate::Error::UnityCatalog { source }
+                    }));
+            }
+        };
         // The Delta log can declare unsupported features even when UC metadata passed validation.
         let protocol = table.protocol();
         if !matches!(protocol.min_reader_version(), 1..=3)
@@ -638,8 +663,8 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn r2_credentials_require_the_same_root_and_exactly_one_credential_kind() {
+    #[test]
+    fn r2_credentials_require_the_same_root_and_exactly_one_credential_kind() {
         let mut response = aws_credentials_response();
         let credentials = response
             .as_object_mut()
@@ -649,26 +674,19 @@ mod tests {
         response["r2_temp_credentials"] = credentials;
         response["url"] = json!("https://account.r2.cloudflarestorage.com/bucket/table/");
         let resolve = |value: &Value| {
-            parse_authorized_access(
+            parse_temporary_credentials(
                 &serde_json::to_vec(value).unwrap(),
-                TableStorageLocation::parse("r2://bucket@account.r2.cloudflarestorage.com/table")
+                &TableStorageLocation::parse("r2://bucket@account.r2.cloudflarestorage.com/table")
                     .unwrap(),
-                DeltaStorageOptions::new(),
             )
         };
         let access = resolve(&response).unwrap();
-        assert_eq!(
-            access.storage_url.as_str(),
-            response["url"].as_str().unwrap()
-        );
-        let DeltaStorageCredentialProvider::Aws(provider) = access.credential_provider else {
-            panic!("R2 must use an AWS provider");
+        let CloudCredentials::Aws(credentials) = access.credentials else {
+            panic!("R2 must use AWS credentials");
         };
-        let credentials = provider.get_credential().await.unwrap();
         assert_eq!(credentials.key_id, "test-key");
         assert_eq!(credentials.secret_key, "test-secret");
         assert_eq!(credentials.token.as_deref(), Some("test-token"));
-        assert!(access.storage_options.is_empty());
         for (field, invalid) in [
             (
                 "url",
@@ -719,34 +737,27 @@ mod tests {
         ));
         response["url"] = json!("s3://bucket/table/");
         assert!(matches!(
-            parse_authorized_access(
+            parse_temporary_credentials(
                 &serde_json::to_vec(&response).unwrap(),
-                TableStorageLocation::parse("s3://bucket/table/").unwrap(),
-                DeltaStorageOptions::new(),
+                &TableStorageLocation::parse("s3://bucket/table/").unwrap(),
             ),
             Err(Error::UnsupportedDirectRead)
         ));
     }
 
-    #[tokio::test]
-    async fn credentials_validate_expiry_location_and_cloud_before_mapping() {
+    #[test]
+    fn credentials_validate_expiry_location_and_cloud_before_mapping() {
         let value = aws_credentials_response();
         let resolve = |value: &Value| {
-            parse_authorized_access(
+            parse_temporary_credentials(
                 &serde_json::to_vec(value).unwrap(),
-                TableStorageLocation::parse("s3a://bucket/table").unwrap(),
-                DeltaStorageOptions::new(),
+                &TableStorageLocation::parse("s3a://bucket/table").unwrap(),
             )
         };
-        let DeltaStorageCredentialProvider::Aws(provider) =
-            resolve(&value).unwrap().credential_provider
-        else {
-            panic!("S3 must use an AWS provider");
+        let CloudCredentials::Aws(credentials) = resolve(&value).unwrap().credentials else {
+            panic!("S3 must use AWS credentials");
         };
-        assert_eq!(
-            provider.get_credential().await.unwrap().token.as_deref(),
-            Some("test-token")
-        );
+        assert_eq!(credentials.token.as_deref(), Some("test-token"));
         for (field, invalid) in [
             ("expiration_time", json!(0)),
             ("expiration_time", json!("tomorrow")),
@@ -782,19 +793,17 @@ mod tests {
         azure["url"] = json!("https://account.blob.core.windows.net/container/a%20b/%252F");
         azure["azure_user_delegation_sas"] =
             json!({"sas_token": "?sv=test&sig=test%2Bsignature&sp=rl"});
-        let result = parse_authorized_access(
+        let result = parse_temporary_credentials(
             &serde_json::to_vec(&azure).unwrap(),
-            TableStorageLocation::parse(
+            &TableStorageLocation::parse(
                 "abfss://container@account.dfs.core.windows.net/a%20b/%252F/",
             )
             .unwrap(),
-            DeltaStorageOptions::new(),
         )
         .unwrap();
-        let DeltaStorageCredentialProvider::Azure(provider) = result.credential_provider else {
-            panic!("Azure must use an Azure provider");
+        let CloudCredentials::Azure(credentials) = result.credentials else {
+            panic!("Azure must use Azure credentials");
         };
-        let credentials = provider.get_credential().await.unwrap();
         let AzureCredential::SASToken(query_pairs) = credentials.as_ref() else {
             panic!("expected SAS credentials");
         };
@@ -806,7 +815,6 @@ mod tests {
                 ("sp".into(), "rl".into()),
             ]
         );
-        assert!(result.storage_options.is_empty());
         for sas in [
             "",
             "sig=",
@@ -818,10 +826,9 @@ mod tests {
             let mut response = azure.clone();
             response["azure_user_delegation_sas"] = json!({"sas_token": sas});
             assert!(matches!(
-                parse_authorized_access(
+                parse_temporary_credentials(
                     &serde_json::to_vec(&response).unwrap(),
-                    TableStorageLocation::parse(response["url"].as_str().unwrap()).unwrap(),
-                    DeltaStorageOptions::new(),
+                    &TableStorageLocation::parse(response["url"].as_str().unwrap()).unwrap(),
                 ),
                 Err(Error::InvalidDatabricksResponse)
             ));
@@ -840,10 +847,9 @@ mod tests {
             let mut response = azure.clone();
             response[field] = conflicting;
             assert!(matches!(
-                parse_authorized_access(
+                parse_temporary_credentials(
                     &serde_json::to_vec(&response).unwrap(),
-                    TableStorageLocation::parse(response["url"].as_str().unwrap()).unwrap(),
-                    DeltaStorageOptions::new(),
+                    &TableStorageLocation::parse(response["url"].as_str().unwrap()).unwrap(),
                 ),
                 Err(Error::UnsupportedDirectRead)
             ));
@@ -861,8 +867,8 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn gcs_credentials_require_one_token_for_the_same_bucket_and_root() {
+    #[test]
+    fn gcs_credentials_require_one_token_for_the_same_bucket_and_root() {
         let mut response = aws_credentials_response();
         response
             .as_object_mut()
@@ -871,22 +877,16 @@ mod tests {
         response["url"] = json!("gs://bucket/table/");
         response["gcp_oauth_token"] = json!({"oauth_token": "secret-gcp-token"});
         let resolve = |value: &Value| {
-            parse_authorized_access(
+            parse_temporary_credentials(
                 &serde_json::to_vec(value).unwrap(),
-                TableStorageLocation::parse("gs://bucket/table").unwrap(),
-                DeltaStorageOptions::new(),
+                &TableStorageLocation::parse("gs://bucket/table").unwrap(),
             )
         };
         let access = resolve(&response).unwrap();
-        let DeltaStorageCredentialProvider::Gcp(provider) = access.credential_provider else {
-            panic!("GCS must use a GCP provider");
+        let CloudCredentials::Gcp(credentials) = access.credentials else {
+            panic!("GCS must use GCP credentials");
         };
-        assert_eq!(
-            provider.get_credential().await.unwrap().bearer,
-            "secret-gcp-token"
-        );
-        assert_eq!(access.storage_url.as_str(), "gs://bucket/table/");
-        assert!(access.storage_options.is_empty());
+        assert_eq!(credentials.bearer, "secret-gcp-token");
         for invalid in [
             json!("secret-gcp-token"),
             json!([]),
@@ -941,8 +941,8 @@ mod tests {
         assert!(matches!(resolve(&response), Err(Error::CredentialsExpired)));
     }
 
-    #[tokio::test]
-    async fn azure_bearer_credentials_require_one_valid_token_for_azure_storage() {
+    #[test]
+    fn azure_bearer_credentials_require_one_valid_token_for_azure_storage() {
         let mut response = aws_credentials_response();
         response
             .as_object_mut()
@@ -951,21 +951,19 @@ mod tests {
         response["url"] = json!("abfss://container@account.dfs.core.windows.net/table/");
         response["azure_aad"] = json!({"aad_token":"secret-bearer-token"});
         let resolve = |value: &Value| {
-            parse_authorized_access(
+            parse_temporary_credentials(
                 &serde_json::to_vec(value).unwrap(),
-                TableStorageLocation::parse(value["url"].as_str().unwrap()).unwrap(),
-                DeltaStorageOptions::new(),
+                &TableStorageLocation::parse(value["url"].as_str().unwrap()).unwrap(),
             )
         };
         let access = resolve(&response).unwrap();
-        let DeltaStorageCredentialProvider::Azure(provider) = access.credential_provider else {
-            panic!("Azure must use an Azure provider");
+        let CloudCredentials::Azure(credentials) = access.credentials else {
+            panic!("Azure must use Azure credentials");
         };
         assert!(matches!(
-            provider.get_credential().await.unwrap().as_ref(),
+            credentials.as_ref(),
             AzureCredential::BearerToken(token) if token == "secret-bearer-token"
         ));
-        assert!(access.storage_options.is_empty());
         for invalid in [
             json!("secret-bearer-token"),
             json!([]),

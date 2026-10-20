@@ -126,6 +126,17 @@ case "$1" in
   tables) /bin/cat "$DAR_TEST_DIR/metadata.json" ;;
   temporary-table-credentials)
     if [ "${DAR_TEST_DENIED:-}" = 1 ]; then printf 'secret-sentinel\n' >&2; exit 1; fi
+    if [ -n "${DAR_TEST_REFRESH:-}" ]; then
+      if [ -e "$DAR_TEST_DIR/initial_grant_issued" ]; then
+        case "$DAR_TEST_REFRESH" in
+          deny) printf 'secret-sentinel\n' >&2; exit 1 ;;
+          hang) printf '%s' "$$" > "$DAR_TEST_DIR/pid"; exec /bin/sleep 60 ;;
+        esac
+        /bin/cat "$DAR_TEST_DIR/credentials.next.json"
+        exit 0
+      fi
+      : > "$DAR_TEST_DIR/initial_grant_issued"
+    fi
     /bin/cat "$DAR_TEST_DIR/credentials.json"
     ;;
   *) exit 97 ;;
@@ -168,6 +179,68 @@ esac
         command
     }
 
+    fn use_storage_endpoint(&self, kind: StorageCredentialKind, endpoint: &str) -> TestResult {
+        let options = match kind {
+            StorageCredentialKind::S3 => json!({
+                "aws_endpoint": endpoint, "aws_allow_http": "true", "aws_region": "eu-west-1"
+            }),
+            StorageCredentialKind::R2 => json!({
+                "aws_endpoint_url_s3": endpoint, "aws_allow_http": "true"
+            }),
+            StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer => json!({
+                "azure_endpoint": endpoint, "azure_allow_http": "true"
+            }),
+            StorageCredentialKind::Gcs => json!({
+                "google_base_url": endpoint, "google_allow_http": "true"
+            }),
+        };
+        fs::write(
+            self.directory.path().join("options.json"),
+            serde_json::to_vec(&options)?,
+        )?;
+        Ok(())
+    }
+
+    /// Let the initial grant expire while the first storage response is pending.
+    fn storage_with_expiring_credentials(
+        &self,
+        kind: StorageCredentialKind,
+        update_replacement: impl FnOnce(&mut Value),
+    ) -> Result<MockCloudStorageServer, Box<dyn std::error::Error>> {
+        let credentials_path = self.directory.path().join("credentials.json");
+        let mut initial: Value = serde_json::from_slice(&fs::read(&credentials_path)?)?;
+        let mut replacement = initial.clone();
+        update_replacement(&mut replacement);
+        fs::write(
+            self.directory.path().join("credentials.next.json"),
+            serde_json::to_vec(&replacement)?,
+        )?;
+        let expires_at = SystemTime::now() + Duration::from_secs(3);
+        initial["expiration_time"] =
+            json!(expires_at.duration_since(UNIX_EPOCH)?.as_millis() as u64);
+        fs::write(credentials_path, serde_json::to_vec(&initial)?)?;
+        let log = fs::read(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned/table/_delta_log/00000000000000000000.json",
+        ))?;
+        let mut first_request = true;
+        let metadata_path = self.directory.path().join("metadata.json");
+        let server = MockCloudStorageServer::with_request_hook(kind, log, move |_| {
+            if first_request {
+                first_request = false;
+                // Re-resolving the table name after authorization must not be part of renewal.
+                fs::write(&metadata_path, "secret-table-was-replaced").unwrap();
+                thread::sleep(
+                    expires_at
+                        .duration_since(SystemTime::now())
+                        .unwrap_or_default()
+                        + Duration::from_millis(20),
+                );
+            }
+        })?;
+        self.use_storage_endpoint(kind, &server.endpoint)?;
+        Ok(server)
+    }
+
     fn calls(&self) -> Vec<String> {
         fs::read(self.directory.path().join("calls"))
             .unwrap_or_default()
@@ -195,37 +268,7 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
     ] {
         let fixture = DatabricksCliFixture::new(credential_kind)?;
         let server = MockCloudStorageServer::new(credential_kind, log.clone())?;
-        let options = match credential_kind {
-            StorageCredentialKind::S3 => {
-                json!({
-                    "aws_endpoint": server.endpoint,
-                    "aws_allow_http": "true",
-                    "aws_region": "eu-west-1"
-                })
-            }
-            StorageCredentialKind::R2 => {
-                json!({
-                    "aws_endpoint_url_s3": server.endpoint,
-                    "aws_allow_http": "true"
-                })
-            }
-            StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer => {
-                json!({
-                    "azure_endpoint": server.endpoint,
-                    "azure_allow_http": "true"
-                })
-            }
-            StorageCredentialKind::Gcs => {
-                json!({
-                    "google_base_url": server.endpoint,
-                    "google_allow_http": "true"
-                })
-            }
-        };
-        fs::write(
-            fixture.directory.path().join("options.json"),
-            serde_json::to_vec(&options)?,
-        )?;
+        fixture.use_storage_endpoint(credential_kind, &server.endpoint)?;
         for (historical, verbosity, machine) in [
             (false, "", false),
             (true, "", false),
@@ -455,6 +498,175 @@ fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResul
 }
 
 #[test]
+fn inspection_renews_expired_grants_without_resolving_the_table_name_again() -> TestResult {
+    for kind in [
+        StorageCredentialKind::S3,
+        StorageCredentialKind::R2,
+        StorageCredentialKind::AzureSas,
+        StorageCredentialKind::AzureBearer,
+        StorageCredentialKind::Gcs,
+    ] {
+        let fixture = DatabricksCliFixture::new(kind)?;
+        let server = fixture.storage_with_expiring_credentials(kind, |replacement| match kind {
+            StorageCredentialKind::S3 | StorageCredentialKind::R2 => {
+                let field = if kind == StorageCredentialKind::S3 {
+                    "aws_temp_credentials"
+                } else {
+                    "r2_temp_credentials"
+                };
+                replacement[field] = json!({
+                    "access_key_id": "renewed-key",
+                    "secret_access_key": "renewed-secret",
+                    "session_token": "renewed-session"
+                });
+            }
+            StorageCredentialKind::AzureSas => {
+                replacement["azure_user_delegation_sas"] =
+                    json!({"sas_token":"sig=renewed%2Bsignature"});
+            }
+            StorageCredentialKind::AzureBearer => {
+                replacement["azure_aad"] = json!({"aad_token":"renewed-azure-token"});
+            }
+            StorageCredentialKind::Gcs => {
+                replacement["gcp_oauth_token"] = json!({"oauth_token":"renewed-gcp-token"});
+            }
+        })?;
+        let output = run_with_timeout(
+            fixture
+                .inspect()
+                .env("DAR_TEST_REFRESH", "rotate")
+                .env("RUST_LOG", "trace"),
+        )?;
+        assert!(
+            output.status.success(),
+            "{kind:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            serde_json::from_slice::<Value>(&output.stdout)?["table_version"],
+            "0"
+        );
+        let calls = fixture.calls();
+        assert_eq!(calls.iter().filter(|arg| *arg == "tables").count(), 1);
+        assert_eq!(
+            calls
+                .iter()
+                .filter(|arg| *arg == "temporary-table-credentials")
+                .count(),
+            2
+        );
+        assert_eq!(calls.iter().filter(|arg| *arg == "READ").count(), 2);
+        for pair in calls.windows(2).filter(|pair| pair[0] == "--table-id") {
+            assert_eq!(pair[1], TABLE_ID);
+        }
+        assert_eq!(
+            calls
+                .iter()
+                .filter(|arg| **arg == format!("--profile={PROFILE}"))
+                .count(),
+            3
+        );
+        let requests = server.requests.lock().unwrap();
+        let renewed_auth = match kind {
+            StorageCredentialKind::S3 | StorageCredentialKind::R2 => "credential=renewed-key/",
+            StorageCredentialKind::AzureSas => "sig=renewed%2bsignature",
+            StorageCredentialKind::AzureBearer => "authorization: bearer renewed-azure-token",
+            StorageCredentialKind::Gcs => "authorization: bearer renewed-gcp-token",
+        };
+        assert!(
+            requests
+                .iter()
+                .any(|request| request.to_ascii_lowercase().contains(renewed_auth)),
+            "{kind:?}: no request used renewed credentials"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        for sensitive in ["secret", "renewed-", TABLE_NAME, TABLE_ID, PROFILE] {
+            assert!(!stderr.contains(sensitive), "{stderr}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn refresh_failures_preserve_redacted_uc_categories_and_stop_inspection() -> TestResult {
+    for (kind, failure, code) in [
+        (
+            StorageCredentialKind::S3,
+            "deny",
+            "uc_credential_request_failed",
+        ),
+        (
+            StorageCredentialKind::S3,
+            "expired",
+            "uc_credentials_expired",
+        ),
+        (
+            StorageCredentialKind::Gcs,
+            "root",
+            "invalid_databricks_response",
+        ),
+        (
+            StorageCredentialKind::Gcs,
+            "invalid",
+            "invalid_databricks_response",
+        ),
+        (
+            StorageCredentialKind::AzureSas,
+            "kind",
+            "unsupported_uc_table",
+        ),
+    ] {
+        let fixture = DatabricksCliFixture::new(kind)?;
+        let _server =
+            fixture.storage_with_expiring_credentials(kind, |replacement| match failure {
+                "expired" => replacement["expiration_time"] = json!(0),
+                "root" => replacement["url"] = json!("gs://other/secret-root"),
+                "invalid" => {
+                    replacement["gcp_oauth_token"] = json!({"oauth_token":"secret invalid token"})
+                }
+                "kind" => {
+                    replacement
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("azure_user_delegation_sas");
+                    replacement["azure_aad"] = json!({"aad_token":"secret-new-kind"});
+                }
+                _ => {}
+            })?;
+        let output = run_with_timeout(
+            fixture
+                .inspect()
+                .arg("--diagnostics=json")
+                .env("DAR_TEST_REFRESH", failure)
+                .env("RUST_LOG", "trace"),
+        )?;
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "{failure}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stdout.is_empty());
+        let record =
+            super::diagnostics::assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert_eq!(record["code"], code);
+        assert_eq!(
+            fixture
+                .calls()
+                .iter()
+                .filter(|arg| *arg == "temporary-table-credentials")
+                .count(),
+            2
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        for sensitive in ["secret", TABLE_NAME, TABLE_ID, PROFILE] {
+            assert!(!stderr.contains(sensitive), "{stderr}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn invalid_responses_and_denied_credentials_are_redacted() -> TestResult {
     for (response, expected) in [
         ("secret-sentinel".into(), "invalid_databricks_response"),
@@ -664,20 +876,28 @@ fn uc_cancellation_remains_responsive_with_blocked_stdout() -> TestResult {
 #[cfg(target_os = "linux")]
 #[test]
 fn cancellation_terminates_pending_databricks_process() -> TestResult {
-    for (signal, machine) in [
-        (libc::SIGINT, false),
-        (libc::SIGTERM, false),
-        (libc::SIGINT, true),
-        (libc::SIGTERM, true),
+    for (signal, machine, during_refresh) in [
+        (libc::SIGINT, false, false),
+        (libc::SIGTERM, false, false),
+        (libc::SIGINT, true, false),
+        (libc::SIGTERM, true, false),
+        (libc::SIGINT, false, true),
+        (libc::SIGTERM, true, true),
     ] {
         let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
+        let _server = if during_refresh {
+            Some(fixture.storage_with_expiring_credentials(StorageCredentialKind::S3, |_| {})?)
+        } else {
+            None
+        };
         let mut command = fixture.inspect();
         if machine {
             command.arg("--diagnostics=json");
         }
         let mut child = command
             .env("RUST_LOG", if machine { "off" } else { "info" })
-            .env("DAR_TEST_HANG", "1")
+            .env("DAR_TEST_HANG", if during_refresh { "0" } else { "1" })
+            .env("DAR_TEST_REFRESH", if during_refresh { "hang" } else { "" })
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?;
@@ -785,6 +1005,14 @@ struct MockCloudStorageServer {
 
 impl MockCloudStorageServer {
     fn new(credential_kind: StorageCredentialKind, log: Vec<u8>) -> std::io::Result<Self> {
+        Self::with_request_hook(credential_kind, log, |_| {})
+    }
+
+    fn with_request_hook(
+        credential_kind: StorageCredentialKind,
+        log: Vec<u8>,
+        mut on_request: impl FnMut(&str) + Send + 'static,
+    ) -> std::io::Result<Self> {
         let is_azure = matches!(
             credential_kind,
             StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer
@@ -815,6 +1043,7 @@ impl MockCloudStorageServer {
                 }
                 let request = String::from_utf8(request).unwrap();
                 recorded.lock().unwrap().push(request.clone());
+                on_request(&request);
                 let Some(target) = request.split_whitespace().nth(1) else {
                     continue;
                 };

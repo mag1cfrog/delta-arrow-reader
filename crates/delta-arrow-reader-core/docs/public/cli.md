@@ -127,9 +127,12 @@ These rules apply to Unity Catalog targets:
   no region option; an explicit region must be `auto`. To override the R2
   transport endpoint, use `aws_endpoint_url_s3`; the generic endpoint option
   is rejected because the R2 URL would override it. Unknown options fail.
-- Credentials remain in memory and are acquired once. If they expire while
-  metadata is loading, the command fails; rerun it for fresh credentials.
-  `scan` does not yet accept Unity Catalog targets.
+- Credentials stay in memory for one command. Storage requests reuse the grant
+  until it approaches expiry, then request new READ credentials for the original
+  table ID and profile. Concurrent requests share one refresh. Every replacement
+  must keep the same storage root and credential type and have a future expiry.
+  If renewal fails, the command fails without using the old grant or falling
+  back to another identity. `scan` does not yet accept Unity Catalog targets.
 
 Each Databricks subprocess has a 30-second timeout, no interactive stdin, and
 a 1 MiB limit on each output stream. DAR captures and discards child diagnostics

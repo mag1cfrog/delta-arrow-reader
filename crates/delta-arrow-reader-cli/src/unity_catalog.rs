@@ -4,6 +4,7 @@
 //! the Delta log directly. Table identifiers, credentials, and raw command output
 //! must stay out of diagnostics; the types carrying them deliberately omit `Debug`.
 
+mod credential_cache;
 mod databricks_cli;
 mod storage_access;
 mod table_metadata;
@@ -14,7 +15,8 @@ use delta_arrow_reader::DeltaStorageOptions;
 use snafu::Snafu;
 
 use storage_access::{
-    AuthorizedTableAccess, TableStorageLocation, parse_authorized_access, validate_storage_options,
+    AuthorizedTableAccess, TableStorageLocation, parse_temporary_credentials,
+    validate_storage_options,
 };
 use table_metadata::TableMetadataResponse;
 
@@ -56,7 +58,7 @@ pub(crate) enum Error {
     ))]
     UnsupportedDirectRead,
     #[snafu(display(
-        "Unity Catalog credentials expired. Run inspection again to obtain fresh credentials."
+        "Unity Catalog returned expired credentials. Check the profile login and system clock, then retry."
     ))]
     CredentialsExpired,
     #[snafu(display("Unity Catalog inspection was cancelled."))]
@@ -178,7 +180,14 @@ impl<'a> UnityCatalogTableTarget<'a> {
             &table_metadata.table_id,
         )
         .await?;
-        parse_authorized_access(&credentials_json, storage_location, storage_options)
+        let credentials = parse_temporary_credentials(&credentials_json, &storage_location)?;
+        AuthorizedTableAccess::new(
+            storage_location,
+            storage_options,
+            self.databricks_profile.to_owned(),
+            table_metadata.table_id,
+            credentials,
+        )
     }
 }
 
