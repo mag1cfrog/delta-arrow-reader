@@ -225,6 +225,10 @@ Freeze a pilot for a completed full Q4 table:
   --output ../production-q4-reference
 ```
 
+New definitions use revision 6 and the Spark reader roster. Creating a revision 5
+definition requires Daft and the archived harness; the current generator accepts
+only revision 6.
+
 The workload always lists all eight core cases and all five readers. Inputs not
 supplied to this freeze remain `not_prepared`. Use the paired probe directory
 instead to prepare references for all eight bounded cases. Native validation

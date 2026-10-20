@@ -5,6 +5,7 @@ from datetime import date
 import json
 from pathlib import Path
 import platform
+import subprocess
 import sys
 
 import pyarrow as pa
@@ -16,10 +17,9 @@ import production_shapes as shapes
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
-from run import PRODUCTION, PROTOCOL, SAMPLING, SPARK_MATRIX, digest, fixture_tables, reader_roster, save
+from run import PROTOCOL, SAMPLING, SPARK_MATRIX, digest, fixture_tables, reader_roster, save
 from oracle import require
 
-READERS = ["delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft"]
 SOURCES = (Path(__file__), HERE / "oracle.py", HERE / "oracle-requirements.txt",
            HERE / "production_shapes.py", HERE / "large_workloads.py", HERE / "matrix.py",
            HERE / "runners/run.py")
@@ -97,8 +97,24 @@ def check_sampling(stage, cases, modes):
                 "formal sampling requires complete full no-DV/DV pairs")
 
 
+def translate(cases, binaries, output):
+    require(len(binaries) == 1, "provide the pinned Polars translation binary")
+    binary = binaries[0].resolve()
+    build = json.loads(binary.with_name("build.json").read_text())
+    require(build["reader_id"] == "polars", "provide the pinned Polars translation binary")
+    save(output / "sql.json", {row["case_id"]: row["canonical_sql"] for row in cases})
+    path = output / "polars-translations.json"
+    subprocess.run([str(binary.with_name("venv") / "bin/python"), "-I", "-B", str(HERE / "matrix.py"),
+                    "translations", "--binary", str(binary), "--request", str((output / "sql.json").resolve()),
+                    "--output", str(path.resolve())], check=True)
+    translation = json.loads(path.read_text())
+    for row in cases:
+        row["native_expression_sha256"] = {"polars": translation["expressions"][row["case_id"]]["sha256"]}
+    return {"polars": translation}
+
+
 def define(fixtures, binaries, output, stage="pilot", comparison_revision=6):
-    require(comparison_revision in (5, 6), "unknown production comparison revision")
+    require(comparison_revision == 6, "new workloads use revision 6; use the archived harness for Daft revisions")
     readers = list(reader_roster({"comparison_revision": comparison_revision}))
     import large_workloads
     rows, seen = [], set()
@@ -117,9 +133,9 @@ def define(fixtures, binaries, output, stage="pilot", comparison_revision=6):
             and len({r["source_parent_manifest_sha256"] for r in rows}) == 1, "mixed probe/full or source identities")
     check_sampling(stage, seen, modes)
     output.mkdir()
-    translations = large_workloads.translate(rows, binaries, output, comparison_revision=comparison_revision)
+    translations = translate(rows, binaries, output)
     result = {"format": "selective-read-production-workload-v1", "family": "production", "comparison_revision": comparison_revision,
-              "protocol_sha256": digest(SPARK_MATRIX if comparison_revision == 6 else PRODUCTION), "base_protocol_sha256": digest(PROTOCOL),
+              "protocol_sha256": digest(SPARK_MATRIX), "base_protocol_sha256": digest(PROTOCOL),
               "sampling_sha256": digest(SAMPLING), "sampling_stage": stage, "definition_sha256": digest(shapes.CONTRACT),
               "scope": "probe" if rows[0]["fixture_mode"] == "probe" else stage, "publication_ready": False,
               "source_sha256": {str(p.relative_to(HERE)): digest(p) for p in SOURCES},
@@ -423,10 +439,10 @@ def prepare_reference(fixtures, case, output, workload, quota):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fixtures", type=Path, action="append", required=True)
-    parser.add_argument("--binary", type=Path, action="append", required=True, help="pinned Polars build; revision 5 also requires Daft")
+    parser.add_argument("--binary", type=Path, action="append", required=True, help="pinned Polars build")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--stage", choices=("pilot", "formal"), default="pilot")
-    parser.add_argument("--comparison-revision", type=int, choices=(5, 6), default=6)
+    parser.add_argument("--comparison-revision", type=int, choices=(6,), default=6)
     args = parser.parse_args()
     result = define(args.fixtures, args.binary, args.output, args.stage, args.comparison_revision)
     print(json.dumps({"comparison_revision": result["comparison_revision"], "scope": result["scope"], "prepared_cases": len(result["cases"]), "core_cases": 8}))

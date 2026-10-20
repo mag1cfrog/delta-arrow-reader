@@ -1,14 +1,13 @@
-"""Bind the large query families to immutable fixtures before any reader timing."""
+"""Validate frozen workload bindings and export audited campaign results."""
 
 import argparse
 import json
 from pathlib import Path
-import subprocess
 import sys
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
-from run import AMENDMENT, PROTOCOL, SAMPLING, comparison_identity, digest, save
+from run import PROTOCOL, comparison_identity, digest
 from python_common import require
 import native
 
@@ -90,101 +89,6 @@ def query_fields(case, manifest):
             "geometry": {"files": table["file_count"], "physical_bytes": table["bytes"],
                          "file_bytes": [f["bytes"] for f in table["files"]],
                          "row_groups": [len(f["row_groups"]) for f in table["files"]]}}
-
-
-def translate(cases, binaries, output, comparison_revision=2):
-    queries = {r["case_id"]: r["canonical_sql"] for r in cases}
-    save(output / "sql.json", queries)
-    translations = {}
-    for binary in binaries:
-        binary = binary.resolve()
-        build = json.loads(binary.with_name("build.json").read_text())
-        reader = build["reader_id"]
-        require(reader in (("polars",) if comparison_revision == 6 else ("polars", "daft")) and reader not in translations, "provide the comparison's required translation binaries")
-        path = output / (reader + "-translations.json")
-        subprocess.run([str(binary.with_name("venv") / "bin/python"), "-I", "-B", str(HERE / "matrix.py"),
-                        "translations", "--binary", str(binary), "--request", str((output / "sql.json").resolve()),
-                        "--comparison-revision", str(comparison_revision),
-                        "--output", str(path.resolve())], check=True)
-        translations[reader] = json.loads(path.read_text())
-    require(set(translations) == ({"polars"} if comparison_revision == 6 else {"polars", "daft"}), "required native translations missing")
-    for row in cases:
-        row["native_expression_sha256"] = {r: v["expressions"][row["case_id"]]["sha256"] for r, v in translations.items()}
-    return translations
-
-
-def define(fixtures, controls, binaries, output, disk_limit_mib, elapsed_limit_seconds, smoke=False, family="data", pilot_case=None):
-    """Freeze candidate inputs; publication/environment selection belongs to the pilot."""
-    require(type(disk_limit_mib) is int and disk_limit_mib > 0
-            and type(elapsed_limit_seconds) is int and 0 < elapsed_limit_seconds < 2**31, "finite oracle limits required")
-    inputs, scales = {}, {}
-    expected = definitions(family, pilot_case)
-    require(family == "data" or len(fixtures) == 1 and not controls,
-            "file organizations and pilots require one fixture and no scale control")
-    roles = [("files" if family == "files" else "data", fixtures)]
-    if family == "data":
-        roles.append(("control", controls))
-    for role, roots in roles:
-        for root in roots:
-            root = root.resolve()
-            manifest = json.loads((root / "manifest.json").read_text())
-            require(manifest["status"] == "complete" and manifest["protocol"] == "selective-read-v1", "incomplete fixtures")
-            if smoke:
-                require(manifest["profile"] == "smoke", "smoke workload requires smoke fixtures")
-            else:
-                require(manifest["profile"] == "large" and manifest["protocol_sha256"] == digest(AMENDMENT)
-                        and manifest["base_protocol_sha256"] == digest(PROTOCOL), "large fixture amendment differs")
-            if family == "files":
-                import wide_files
-                wide_files.geometry(manifest, large=True, smoke=smoke)
-            for table in manifest["tables"]:
-                if table["id"] not in {v[1] for v in expected.values()}:
-                    continue
-                key = role, table["id"]
-                require(key not in inputs, "duplicate workload fixture: " + str(key))
-                inputs[key] = root, manifest
-                scale = table["scale_factor"]
-                require(role not in scales or scales[role] == scale, "mixed source scales in one role")
-                scales[role] = scale
-    if family == "pilot":
-        require(scales == {"data": .01} if smoke else set(scales) == {"data"} and scales["data"] in SCALES,
-                "invalid pilot scale")
-    elif family == "files":
-        require(scales == {"files": .01} if smoke else set(scales) == {"files"} and scales["files"] in SCALES[1:], "invalid file-pair scale")
-    elif smoke:
-        require(scales == {"data": .01, "control": .01}, "smoke scale must be SF0.01")
-    else:
-        require(set(scales) == {"data", "control"}, "data and preceding-scale fixtures required")
-        require(scales["data"] in SCALES[1:] and scales["control"] == SCALES[SCALES.index(scales["data"]) - 1],
-                "control must use the immediately preceding ladder rung")
-    cases = []
-    for case, (role, fixture, _) in expected.items():
-        require((role, fixture) in inputs, "missing workload fixture: " + str((role, fixture)))
-        root, manifest = inputs[role, fixture]
-        row = query_fields(case, manifest)
-        row.update(fixtures=str(root), fixture_manifest_sha256=digest(root / "manifest.json"))
-        cases.append(row)
-    for role in scales:
-        rows = [r for r in cases if r["role"] == role]
-        require(all((r["source_rows"], r["in_literals"]) == (rows[0]["source_rows"], rows[0]["in_literals"]) for r in rows),
-                "layouts/DV pairs disagree on source rows or literals")
-    output.mkdir()
-    translations = translate(cases, binaries, output)
-    result = {"format": "selective-read-large-workload-v1", "comparison_revision": 4,
-              "protocol_sha256": digest(AMENDMENT), "base_protocol_sha256": digest(PROTOCOL),
-              "sampling_sha256": digest(SAMPLING),
-              "scope": "smoke" if smoke else "pilot" if family == "pilot" else "candidate", "publication_ready": False,
-              "source_sha256": {str(p.relative_to(HERE)): digest(p) for p in SOURCES},
-              "family": family, "scales": scales, "readers": list(READERS), "cases": cases,
-              "sessions": FILE_SESSIONS if family == "files" else {k: v for k, v in SESSIONS.items() if v in expected},
-              "oracle_limits": {"memory_bytes": 16 * 1024**3, "disk_bytes": disk_limit_mib * 1024**2,
-                                "elapsed_seconds": elapsed_limit_seconds},
-              "translations": translations}
-    if pilot_case is not None:
-        result["pilot_case"] = pilot_case
-    save(output / "workload.json", result)
-    load(output / "workload.json")
-    return result
 
 
 def load(path):
@@ -269,24 +173,10 @@ def report(campaign, output):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    if sys.argv[1:2] == ["report"]:
-        parser.add_argument("command")
-        parser.add_argument("--campaign", type=Path, required=True)
-        parser.add_argument("--output", type=Path, required=True)
-        args = parser.parse_args()
-        result = report(args.campaign, args.output)
-        print(json.dumps({"status": result["status"], "entries": len(result["rows"])}))
-        sys.exit(0 if result["status"] == "complete" else 1)
-    parser.add_argument("--fixtures", type=Path, action="append", required=True)
-    parser.add_argument("--control-fixtures", type=Path, action="append", default=[])
-    parser.add_argument("--family", choices=("data", "files", "pilot"), default="data",
-                        help="pilot binds one no-DV data case, including the SF1 baseline")
-    parser.add_argument("--case", dest="pilot_case", help="pilot case; defaults to large.wide.shuffled.date30-wide")
-    parser.add_argument("--binary", type=Path, action="append", required=True)
+    parser.add_argument("command", choices=("report",))
+    parser.add_argument("--campaign", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--disk-limit-mib", type=int, required=True)
-    parser.add_argument("--elapsed-limit-seconds", type=int, required=True)
-    parser.add_argument("--smoke", action="store_true", help="bounded SF0.01 contract check, never a scale-control result")
     args = parser.parse_args()
-    define(args.fixtures, args.control_fixtures, args.binary, args.output,
-           args.disk_limit_mib, args.elapsed_limit_seconds, args.smoke, args.family, args.pilot_case)
+    result = report(args.campaign, args.output)
+    print(json.dumps({"status": result["status"], "entries": len(result["rows"])}))
+    sys.exit(0 if result["status"] == "complete" else 1)

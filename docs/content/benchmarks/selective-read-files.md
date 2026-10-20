@@ -165,7 +165,7 @@ shapes. This experiment adds no CI workflow or benchmark timing job.
 ## Wide tables with paired deletion vectors
 
 The wide comparison keeps all 80 stored columns and projects the 69-column
-compound query. Its legacy pair uses SF1 and revision 2. The new revision 3
+compound query. Its legacy pair uses SF1 and revision 2. The historical revision 3
 family adds normal file boundaries at the same source scale as the 4,096-file
 repack, with both DV states on each organization.
 
@@ -222,16 +222,13 @@ bounded while retaining all physical details and all 80 columns' Delta
 statistics. Geometry sidecars are oracle inputs; they are not uploaded as
 Delta data objects or supplied to readers as a selected file list.
 
-Freeze the four cases with the existing workload command:
+Creating the revision 4 definition requires Daft and the
+[archived workload generator](https://github.com/mag1cfrog/delta-arrow-reader/blob/eb1f58b4be8dc0d8ec3bee1615f1777a4c41bd9f/docs/content/benchmarks/selective-read-files.md).
+Its creation CLI has been removed from the current `large_workloads.py`;
+validation and report export remain. With a matching frozen harness and
+definition, prepare the independent references:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/large_workloads.py \
-  --family files --fixtures ../wide-files-large \
-  --binary ../selective-read-polars-build/selective-read-polars \
-  --binary ../selective-read-daft-build/selective-read-daft \
-  --disk-limit-mib 196608 --elapsed-limit-seconds 1800 \
-  --output ../wide-files-workload
-
 ../selective-read-oracle-venv/bin/python -B benches/selective_read/wide_files.py \
   --workload ../wide-files-workload/workload.json \
   --fixtures ../wide-files-large --output ../wide-files-large-references
@@ -246,7 +243,7 @@ References include candidate/matching/excluded files and DV coverage for each
 category. The paired organizations must produce identical exact live results.
 
 For a bounded manual check, generate with `--profile smoke --wide-files-from
-../selective-read-smoke --large-file-pair` and freeze with `--family files
+../selective-read-smoke --large-file-pair` and use the archived generator with `--family files
 --smoke`. Use smaller explicit disk and time ceilings. It still uses 4,096 files,
 but its tiny files do not satisfy large-data geometry. SF1 cannot be relabeled
 as a large pair. The first qualifying SF10/SF30/SF100/SF300 rung, its resource

@@ -154,8 +154,14 @@ reads and validates the retained catalog.
 
 The large workload adds the cases from the
 [large-workload amendment](selective-read-large-workloads.md). Its workload
-manifest is separate from the checked-in revision 2 catalog. New manifests use
-revision 4 and the [reduced sampling contract](selective-read-sampling.md).
+manifest is separate from the checked-in revision 2 catalog. These historical
+manifests use revision 4 and the
+[reduced sampling contract](selective-read-sampling.md).
+Creating them requires Daft and the
+[archived harness](https://github.com/mag1cfrog/delta-arrow-reader/blob/eb1f58b4be8dc0d8ec3bee1615f1777a4c41bd9f/docs/content/benchmarks/selective-read-matrix.md).
+The current `large_workloads.py` retains validation and report export.
+Create new revision 6 workloads with the
+[production fixture workflow](selective-read-production-fixtures.md).
 
 The owner selected SF10 for the main large-data family after the SF1/SF10
 screen in [#345](https://github.com/mag1cfrog/delta-arrow-reader/issues/345).
@@ -199,26 +205,17 @@ DV directory contains the source, base snapshot, and paired DV snapshot; the
 input directory stays immutable. Do the same preparation at the preceding rung
 for the two controls, which do not need DVs.
 
-To calibrate scale first, bind only the shuffled `date30` anchor with
-`--family pilot`, one `--fixtures` directory and no `--control-fixtures`.
-This accepts the SF1 baseline and the declared larger rungs. For example:
-
-```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/large_workloads.py \
-  --family pilot --fixtures ../large-wide-shuffled-sf1 \
-  --binary ../selective-read-polars-build/selective-read-polars \
-  --binary ../selective-read-daft-build/selective-read-daft \
-  --disk-limit-mib 8192 --elapsed-limit-seconds 1800 \
-  --output ../pilot-workload-sf1
-```
-
-The resulting manifest has `scope: pilot` and `publication_ready: false`.
+The historical scale pilot binds only the shuffled `date30` anchor, with one
+fixture directory and no scale-control directory. It accepts the SF1 baseline
+and the declared larger rungs. Its manifest has `scope: pilot` and
+`publication_ready: false`.
 It preserves the same SQL, five readers, native expression identities and exact
 oracle checks. It needs no DV copy, other layout or 4,096-file pair to measure
 this one query. Choose oracle ceilings from the expected result and record them
-before each rung; the values above describe the SF1 preparation example.
+before each rung.
 
-For another declared no-DV data query, add `--case`, for example
+The archived generator also accepts another declared no-DV data query through
+`--case`, for example
 `--case large.wide.clustered.eq2-in20` or
 `--case large.wide.clustered.eq2-in20-keys`, with its matching fixture directory.
 Each pilot manifest binds one query and only its declared reuse profile, if any.
@@ -233,19 +230,8 @@ campaign below uses five independent samples per case or session, and two
 queries per reuse session, bound by `sampling_sha256`. Screening observations
 cannot fill formal measurement slots or freeze the full publication inventory.
 
-For the complete large-data family, bind all 18 cases before preparing its
-references or timing readers:
-
-```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/large_workloads.py \
-  --fixtures ../large-data-clustered-dv --fixtures ../large-data-shuffled-dv \
-  --control-fixtures ../large-control-clustered \
-  --control-fixtures ../large-control-shuffled \
-  --binary ../selective-read-polars-build/selective-read-polars \
-  --binary ../selective-read-daft-build/selective-read-daft \
-  --disk-limit-mib 196608 --elapsed-limit-seconds 1800 \
-  --output ../large-workload
-```
+The archived generator binds all 18 cases in the complete large-data family
+before preparing references or timing readers.
 
 `workload.json` freezes fixture hashes, scales, geometry, expanded SQL,
 projections, literals, native translations and oracle ceilings. It binds the
@@ -254,13 +240,13 @@ identity, correctness certificate, campaign, schedule slot and report carries
 that workload file's hash. Mismatches fail validation. Rebuild all five adapters
 after changing the harness or oracle.
 
-The command produces a **candidate**, with `publication_ready: false`. The full
+This definition records a **candidate**, with `publication_ready: false`. The full
 inventory including many-file cases, reader and environment bindings, and
 first-versus-reused execution measurements belong to the pilot in
-[#345](https://github.com/mag1cfrog/delta-arrow-reader/issues/345). This command
+[#345](https://github.com/mag1cfrog/delta-arrow-reader/issues/345). This definition
 cannot declare a formal publication workload.
 
-For a bounded implementation check, add `--smoke` and use SF0.01 fixtures for
+For a bounded check with the archived generator, add `--smoke` and use SF0.01 fixtures for
 both roles. Create the two small DV pairs with `--profile smoke --dv-from ...
 --dv-table wide.clustered` and its shuffled equivalent. Use smaller explicit
 oracle ceilings. The two smoke control IDs exercise binding only; identical

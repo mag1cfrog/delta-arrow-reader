@@ -1,4 +1,4 @@
-"""Freeze, prepare and report the 30 public predicate/projection cases."""
+"""Prepare and report the 30 retained public predicate/projection cases."""
 
 import argparse
 import hashlib
@@ -29,18 +29,17 @@ def scale_key(value):
     return format(value, "g")
 
 
-def translations(binary, request, output, comparison_revision=2):
+def translations(binary, request, output):
     """Use the actual pinned adapter in its own interpreter, without table I/O."""
     adapter = load_adapter(binary)
     build = json.loads(binary.with_name("build.json").read_text())
+    require(build["reader_id"] == "polars", "new workload translations require Polars")
     require(digest(binary) == build["executable_sha256"], "stale adapter executable")
     require(adapter["runtime_metadata"](adapter["engine"]()) == build["runtime"], "stale native runtime")
     result = {"reader": build["reader_id"], "lock_sha256": build["lockfile_sha256"],
               "adapter_sha256": digest(binary), "expressions": {}}
     for key, sql in json.loads(request.read_text()).items():
-        expression = (adapter["expression_identity"](sql, comparison_revision=5)
-                      if comparison_revision == 5 and build["reader_id"] == "daft"
-                      else adapter["expression_identity"](sql))
+        expression = adapter["expression_identity"](sql)
         result["expressions"][key] = {"native_expression": expression, "sha256": adapter["json_hash"](expression)}
     save(output, result)
 
@@ -176,7 +175,6 @@ if __name__ == "__main__":
     p = commands.add_parser("translations", help=argparse.SUPPRESS)
     for name in ("binary", "request", "output"):
         p.add_argument("--" + name, type=Path, required=True)
-    p.add_argument("--comparison-revision", type=int, choices=(2, 3, 4, 5, 6), default=2)
     p = commands.add_parser("prepare")
     for name in ("fixtures", "output"):
         p.add_argument("--" + name, type=Path, required=True)
@@ -186,7 +184,7 @@ if __name__ == "__main__":
     p.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "translations":
-        translations(args.binary, args.request, args.output, args.comparison_revision)
+        translations(args.binary, args.request, args.output)
     elif args.command == "prepare":
         sys.exit(0 if prepare(args.fixtures, args.output, args.references)["status"] == "complete" else 1)
     else:

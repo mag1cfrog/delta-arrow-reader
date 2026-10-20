@@ -54,6 +54,9 @@ The Daft adapter, dependency lock, and checks are available in the
 [historical reader checkout](https://github.com/mag1cfrog/delta-arrow-reader/tree/eb1f58b4be8dc0d8ec3bee1615f1777a4c41bd9f/benches/selective_read/runners/daft).
 Use the matching frozen harness for older comparisons. Their reader identities,
 expression snapshots, and published results remain available for validation.
+New workload definitions use revision 6. The old Daft-dependent creation
+commands live in the archived harness; `large_workloads.py report` still
+exports audited batch results.
 
 - [Table layouts and queries](../../docs/content/benchmarks/selective-read-production-shapes.md)
 - [Execution contract](../../docs/content/benchmarks/selective-read-production-workloads.md)
