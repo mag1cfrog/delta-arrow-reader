@@ -307,17 +307,16 @@ Use the smoke fixture to check the entire path without a report-scale campaign:
   --binary ../selective-read-delta-rs-build/selective-read-delta-rs \
   --binary ../selective-read-duckdb-build/selective-read-duckdb \
   --binary ../selective-read-polars-build/selective-read-polars \
-  --binary ../selective-read-daft-build/selective-read-daft \
   --output ../storage-check
 ```
 
 The check validates uploads, known request bytes, a canceled download, explicit
 retry metadata, trace completeness, and output from every remote reader against
 the independent oracle. Rust runs the storage boundary checks; Python prepares
-references and checks each reader's exported values. It covers compound predicates in both layouts, an empty
-result, LIMIT, wide projection, and ten-query reuse. The pinned Spark DV fixture
-checks real sidecar traffic for the four supporting readers and Daft's explicit
-unsupported result. It does not change the later report-scale DV scenarios.
+references and checks each reader's exported values. It covers compound
+predicates in both layouts, an empty result, LIMIT, wide projection, and
+ten-query reuse. The pinned Spark DV fixture checks real sidecar traffic for
+the four readers above. It does not change the later report-scale DV scenarios.
 
 For each reader, one warm-up per trace mode precedes four fresh-process diagnostic
 runs in off/on/on/off order. `checks.json` preserves the separate durations,

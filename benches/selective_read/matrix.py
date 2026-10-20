@@ -6,7 +6,6 @@ import hashlib
 import json
 from pathlib import Path
 import runpy
-import subprocess
 import sys
 
 HERE = Path(__file__).resolve().parent
@@ -45,65 +44,6 @@ def translations(binary, request, output, comparison_revision=2):
                       else adapter["expression_identity"](sql))
         result["expressions"][key] = {"native_expression": expression, "sha256": adapter["json_hash"](expression)}
     save(output, result)
-
-
-def freeze(fixtures, binaries, output):
-    import oracle
-    output.mkdir()
-    scales = {}
-    for fixture in fixtures:
-        manifest = json.loads((fixture / "manifest.json").read_text())
-        require(manifest["status"] == "complete" and manifest["protocol"] == "selective-read-v1", "incomplete fixtures")
-        for source in manifest["sources"]:
-            scale = scale_key(source["scale_factor"])
-            value = {"source_rows": source["rows"], "in_literals": source["in_literals"],
-                     "queries": {family: source["wide_queries" if family == "wide" else "queries"] for family in FAMILIES}}
-            if scale in scales:
-                require(all(scales[scale][key] == v for key, v in value.items()), "source scale differs between manifests")
-                continue
-            scales[scale] = value | {"literal_provenance": {"profile": manifest["profile"],
-                "manifest_sha256": digest(fixture / "manifest.json"), "generator": manifest["generator"],
-                "source_objects_sha256": sha([{k: f[k] for k in ("path", "bytes", "sha256")} for f in source["files"]])}}
-    require(set(scales) == {"0.01", "1", "10"}, "freeze smoke, SF1 and SF10 together")
-    shapes = {}
-    for family, cases in (("li", oracle.ORIGINAL_CASES), ("wide", oracle.WIDE_CASES)):
-        shapes[family] = {}
-        for name, (projection, predicate, limit) in cases.items():
-            columns = list(dict.fromkeys(p[0] for p in oracle.conditions(predicate, scales["1"]["in_literals"])))
-            shapes[family][name] = {"projection": list(projection), "predicate": predicate, "predicate_columns": columns, "limit": limit}
-            for source in scales.values():
-                require(source["queries"][family][name] == oracle.sql_for(projection, predicate, limit, source["in_literals"]), "generator/oracle SQL differs")
-    sql = {f"{scale}/{family}/{name}": query for scale, source in scales.items()
-           for family, queries in source["queries"].items() for name, query in queries.items()}
-    save(output / "sql.json", sql)
-    readers = {}
-    for binary in binaries:
-        build = json.loads(binary.with_name("build.json").read_text())
-        reader = build["reader_id"]
-        require(reader in ("polars", "daft") and reader not in readers, "provide one Polars and one Daft adapter")
-        artifact = output / (reader + ".json")
-        subprocess.run([str(binary.with_name("venv") / "bin/python"), "-I", "-B", str(Path(__file__).resolve()),
-                        "translations", "--binary", str(binary.resolve()), "--request", str((output / "sql.json").resolve()),
-                        "--output", str(artifact.resolve())], check=True)
-        readers[reader] = json.loads(artifact.read_text())
-    require(set(readers) == {"polars", "daft"}, "missing native expression snapshots")
-    with (output / EXPRESSIONS.name).open("x") as file:
-        for reader, values in sorted(readers.items()):
-            unique = {v["sha256"]: v["native_expression"] for v in values["expressions"].values()}
-            for key, expression in sorted(unique.items()):
-                file.write(json.dumps({"reader_id": reader, "sha256": key, "native_expression": expression}, sort_keys=True) + "\n")
-    for scale, source in scales.items():
-        for family, queries in source["queries"].items():
-            for name, query in queries.items():
-                key = f"{scale}/{family}/{name}"
-                queries[name] = {"sql": query, "sql_sha256": hashlib.sha256(query.encode()).hexdigest(),
-                    "native_expression_sha256": {r: v["expressions"][key]["sha256"] for r, v in readers.items()}}
-    result = {"format": "selective-read-query-matrix-v1", "comparison_revision": 2,
-              "protocol_sha256": digest(PROTOCOL), "shapes": shapes, "scales": scales,
-              "native_expressions_sha256": digest(output / EXPRESSIONS.name),
-              "translation_locks": {r: v["lock_sha256"] for r, v in readers.items()}}
-    save(output / "query-matrix.json", result)
-    return result
 
 
 def catalog():
@@ -276,10 +216,6 @@ def report(campaign, output):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    p = commands.add_parser("freeze")
-    p.add_argument("--fixtures", type=Path, action="append", required=True)
-    p.add_argument("--binary", type=Path, action="append", required=True)
-    p.add_argument("--output", type=Path, required=True)
     p = commands.add_parser("translations", help=argparse.SUPPRESS)
     for name in ("binary", "request", "output"):
         p.add_argument("--" + name, type=Path, required=True)
@@ -294,8 +230,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.command == "translations":
         translations(args.binary, args.request, args.output, args.comparison_revision)
-    elif args.command == "freeze":
-        freeze(args.fixtures, args.binary, args.output)
     elif args.command == "prepare":
         sys.exit(0 if prepare(args.fixtures, args.output, args.references)["status"] == "complete" else 1)
     else:

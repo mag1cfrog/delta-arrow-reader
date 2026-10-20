@@ -1,4 +1,4 @@
-"""Check the real MinIO boundary, five remote readers, and tracing overhead.
+"""Check the real MinIO boundary, prepared remote readers, and tracing overhead.
 
 Run explicitly on a dedicated server. This is not a performance campaign or CI job.
 """
@@ -87,11 +87,8 @@ def check(directory, binaries, fixtures, output):
                        fixture_manifest_sha256=digest(CORPUS / "manifest.json"))
         dv_result = observe.invoke(directory, binary, payload, output / (reader + "-dv"))
         assert dv_result["storage_capture"]["status"] == "passed", dv_result
-        if reader == "daft":
-            assert dv_result["status"] == "unsupported" and not dv_result["queries"], dv_result
-        else:
-            assert dv_result["status"] == "success" and dv_result["queries"][0]["output_rows"] == 9, dv_result
-            assert dv_result["storage_io"]["by_class"]["deletion_vector"]["response_bytes"] > 0, dv_result
+        assert dv_result["status"] == "success" and dv_result["queries"][0]["output_rows"] == 9, dv_result
+        assert dv_result["storage_io"]["by_class"]["deletion_vector"]["response_bytes"] > 0, dv_result
         records.append({"reader": reader, "case": "probe.spark-dv", "status": dv_result["status"], "io": dv_result["storage_io"]})
 
         # ABBA after one untimed warm-up in each mode. These fresh-client,

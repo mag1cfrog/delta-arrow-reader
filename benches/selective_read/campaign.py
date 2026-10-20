@@ -71,10 +71,6 @@ def validate_diagnostics(config, inventory, slots, observations):
         "protocols": str(run.PROTOCOL.parent)})
 
 
-def distribution(values):
-    return native.call("campaign", {"action": "distribution", "values": values})
-
-
 def timer_resolution():
     return native.call("campaign", {"action": "timer-resolution"})
 

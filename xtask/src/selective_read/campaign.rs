@@ -27,9 +27,6 @@ pub(super) enum Request {
         resolution: f64,
         integrity: bool,
     },
-    Distribution {
-        values: Vec<f64>,
-    },
     Mode {
         config: Value,
         mode: evidence::Mode,
@@ -84,7 +81,6 @@ pub(super) fn run(request: Request) -> Result<Value> {
             resolution,
             integrity,
         } => summarize(&inventory, &slots, &rows, resolution, integrity),
-        Request::Distribution { values } => distribution(values),
         Request::Mode {
             config,
             mode,

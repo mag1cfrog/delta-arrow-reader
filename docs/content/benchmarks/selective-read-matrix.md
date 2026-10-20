@@ -127,7 +127,7 @@ or counting a touched object as a full file read.
 This 30-case report is one part of the protocol's 46-case publication inventory.
 It does not reproduce private historical data or establish the old speedups.
 
-## Check or regenerate the catalog
+## Check the retained catalog
 
 Run the bounded matrix check against a prepared smoke matrix:
 
@@ -140,23 +140,11 @@ It checks all SQL/literal scales, paired projections, translation binding,
 changed metadata rejection and a synthetic 150-entry report containing failed
 and unsupported cases. Real engine correctness still requires the campaign.
 
-To regenerate the catalog deliberately, supply all three fixture profiles and
-the pinned Polars and Daft executables:
-
-```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/matrix.py freeze \
-  --fixtures ../selective-read-smoke --fixtures ../selective-read-development \
-  --fixtures ../selective-read-report \
-  --binary ../selective-read-polars-build/selective-read-polars \
-  --binary ../selective-read-daft-build/selective-read-daft \
-  --output ../matrix-catalog
-```
-
-Review the generated `query-matrix.json` and `native-expressions.jsonl` before
-replacing the checked-in copies.
-The command checks generator SQL against the independent oracle and constructs
-expressions in each adapter's own pinned environment. Keep generated data,
-references and campaign outputs outside Git.
+The checked-in `query-matrix.json` and `native-expressions.jsonl` retain the
+revision 2 catalog and its original reader identities. Catalog generation
+depended on the retired Daft adapter. Historical regeneration requires the
+original harness checkout and retained engine builds. The current harness
+reads and validates the retained catalog.
 
 ## Large-workload candidates
 
