@@ -3,7 +3,10 @@
 use std::sync::{Arc, Mutex};
 
 use datafusion::execution::context::{SQLOptions, SessionContext};
-use delta_arrow_reader::datafusion::{ScanOptions, register_table};
+use delta_arrow_reader::{
+    datafusion::{ScanOptions, register_table},
+    error_source_kind,
+};
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 
 use crate::{
@@ -104,15 +107,22 @@ impl Session {
                 .unwrap_or_default(),
             ..ScanOptions::default()
         };
-        let mut runtimes = self
-            .state
-            .table_runtimes
-            .lock()
-            .map_err(|_| sql_error(py, "sql_registration"))?;
-        register_table(&self.state.context, name, table.table.clone(), options)
-            .map_err(|_| sql_error(py, "sql_registration"))?;
-        runtimes.push(Arc::clone(&table.runtime));
-        Ok(())
+        let runtime = Arc::clone(&table.runtime);
+        let table = table.table.clone();
+        let result = self.state.runtime.wait_logged(py, async {
+            // Wait for the catalog lock without the GIL: logging handlers may release it.
+            let mut runtimes = self.state.table_runtimes.lock().map_err(|_| {
+                tracing::error!(target: "delta_arrow_reader_python",
+                    event = "sql_registration.failed", operation = "sql_registration", outcome = "failed",
+                    error_phase = "datafusion", error_code = "sql_registration",
+                    error_reason = "registration_state_poisoned");
+            })?;
+            // Core owns registration failures; keep the existing Python exception below.
+            register_table(&self.state.context, name, table, options).map_err(|_| ())?;
+            runtimes.push(runtime);
+            Ok(())
+        })?;
+        result.map_err(|()| sql_error(py, "sql_registration"))
     }
 
     /// Run a read-only SQL query over registered tables.
@@ -157,7 +167,16 @@ impl Session {
         let frame = self
             .state
             .runtime
-            .wait(py, self.state.context.sql_with_options(query, options))?
+            .wait_logged(py, async {
+                let result = self.state.context.sql_with_options(query, options).await;
+                result.inspect_err(|error| {
+                    // Logical SQL planning is owned by the binding; provider execution starts later.
+                    tracing::error!(target: "delta_arrow_reader_python",
+                        event = "sql_planning.failed", operation = "sql_planning", outcome = "failed",
+                        error_phase = "datafusion", error_code = "sql_planning",
+                        error_reason = "sql_planning_failed", error_source_kind = error_source_kind(error));
+                })
+            })?
             .map_err(|_| sql_error(py, "sql_planning"))?;
         export_schema(py, frame.schema().as_arrow())?;
         RecordBatchStream::from_sql(frame, Arc::clone(&self.state)).into_reader(py)

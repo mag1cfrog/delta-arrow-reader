@@ -127,6 +127,7 @@ impl<S: Subscriber> Layer<S> for PythonLogging {
 
     fn enabled(&self, metadata: &Metadata<'_>, _: Context<'_, S>) -> bool {
         if metadata.target() != LOGGER_NAME
+            && metadata.target() != "delta_arrow_reader_python"
             && !metadata.target().starts_with("delta_arrow_reader::")
         {
             return false;

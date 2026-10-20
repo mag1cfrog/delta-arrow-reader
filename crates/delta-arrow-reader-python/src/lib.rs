@@ -353,9 +353,12 @@ impl DeltaTable {
                     reader_error(py, error.to_string(), error.phase().as_str(), error.code())
                 })?;
         }
-        let scan = self.runtime.wait(py, builder.build())?.map_err(|error| {
-            reader_error(py, error.to_string(), error.phase().as_str(), error.code())
-        })?;
+        let scan = self
+            .runtime
+            .wait_logged(py, builder.build())?
+            .map_err(|error| {
+                reader_error(py, error.to_string(), error.phase().as_str(), error.code())
+            })?;
         // Validate before Arrow's C callback exports the schema.
         export_schema(py, scan.schema().as_ref())?;
         Ok(RecordBatchStream::new(

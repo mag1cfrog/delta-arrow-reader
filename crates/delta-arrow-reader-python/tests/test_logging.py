@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 
 import pyarrow as pa
@@ -110,6 +111,116 @@ class LoggingTests(unittest.TestCase):
             self.assertEqual(self.collect.records[-1].dar_fields["previous_snapshot_version"], 0)
             self.assertEqual(table.version, 0)
 
+    def test_planning_and_registration_forward_core_lifecycles(self):
+        table = DeltaTable(FIXTURE, warmup="none")
+        session = Session()
+        self.collect.records.clear()
+        table.scan(columns=["id"], limit=0).close()
+        session.register_table("private_events", table)
+        self.assertEqual(self.events(), [
+            "scan_planning.started", "scan_planning.completed",
+            "provider_registration.started", "provider_registration.completed",
+        ])
+        start, end, registration_start, registration_end = self.collect.records
+        for first, last in [(start, end), (registration_start, registration_end)]:
+            self.assertEqual(first.levelno, logging.INFO)
+            self.assertEqual(last.levelno, logging.INFO)
+            self.assertEqual(first.dar_fields["operation_id"], last.dar_fields["operation_id"])
+            self.assertEqual(last.dar_fields["snapshot_version"], table.version)
+        self.assertEqual(end.dar_fields["plan_id"], start.dar_fields["operation_id"])
+        self.assertNotEqual(end.dar_fields["operation_id"], registration_end.dar_fields["operation_id"])
+        self.assertNotIn("private_events", repr([r.__dict__ for r in self.collect.records]))
+
+    def test_planning_and_registration_failures_have_one_owner(self):
+        table = DeltaTable(FIXTURE, warmup="none")
+        session = Session()
+        session.register_table("private_events", table)
+        cases = [
+            (lambda: table.scan(columns=["private_column"]),
+             "scan_planning.failed", "column_not_found", "scan_planning"),
+            (lambda: session.register_table("private_events", table),
+             "provider_registration.failed", "table_registration_failed", "datafusion"),
+            (lambda: session.register_table("private-invalid", table),
+             "provider_registration.failed", "table_registration_name_invalid", "datafusion"),
+        ]
+        for level in [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, 5]:
+            self.logger.setLevel(level)
+            for operation, event, reason, phase in cases:
+                with self.subTest(level=level, event=event, reason=reason):
+                    self.collect.records.clear()
+                    with self.assertRaises(DeltaReaderError) as raised:
+                        operation()
+                    failures = [r for r in self.collect.records if r.levelno >= logging.ERROR]
+                    self.assertEqual(len(failures), 1)
+                    failure = failures[0]
+                    self.assertEqual(failure.dar_target, "delta_arrow_reader")
+                    self.assertEqual(failure.dar_fields["event"], event)
+                    self.assertEqual(failure.dar_fields["error_reason"], reason)
+                    self.assertEqual(failure.dar_fields["error_phase"], phase)
+                    self.assertEqual(raised.exception.phase, phase)
+                    self.assertEqual(failure.dar_fields["snapshot_version"], table.version)
+                    if event == "provider_registration.failed":
+                        self.assertEqual(raised.exception.code, "sql_registration")
+                        self.assertEqual(failure.dar_fields["error_code"], "datafusion_adapter")
+                    rendered = repr([r.__dict__ for r in self.collect.records])
+                    self.assertNotIn("private_", rendered)
+                    self.assertNotIn("private-invalid", rendered)
+                    self.assertNotIn(str(FIXTURE), rendered)
+        with session.sql("SELECT id FROM private_events LIMIT 1") as reader:
+            self.assertEqual(reader.read_all().num_rows, 1)
+
+    def test_sql_planning_failures_keep_safe_source_categories(self):
+        table = DeltaTable(FIXTURE, warmup="none")
+        session = Session()
+        session.register_table("events", table)
+        cases = [
+            ("SELECT 'private-literal' FROM", "sql_parse"),
+            ("SELECT * FROM private_table", "datafusion_plan"),
+            ("SELECT private_column FROM events", "schema"),
+            ("COPY events TO 's3://private-bucket/private-file' STORED AS CSV", "datafusion_plan"),
+        ]
+        for level in [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, 5]:
+            self.logger.setLevel(level)
+            for query, category in cases:
+                with self.subTest(level=level, category=category):
+                    self.collect.records.clear()
+                    with self.assertRaises(DeltaReaderError) as raised:
+                        session.sql(query)
+                    self.assertEqual(len(self.collect.records), 1)
+                    failure = self.collect.records[0]
+                    self.assertEqual(failure.levelno, logging.ERROR)
+                    self.assertEqual(failure.dar_target, "delta_arrow_reader_python")
+                    self.assertEqual(failure.dar_fields["event"], "sql_planning.failed")
+                    self.assertEqual(failure.dar_fields["error_source_kind"], category)
+                    self.assertEqual((raised.exception.phase, raised.exception.code),
+                                     ("datafusion", "sql_planning"))
+                    self.assertEqual(failure.dar_fields["error_phase"], raised.exception.phase)
+                    self.assertEqual(failure.dar_fields["error_code"], raised.exception.code)
+                    rendered = repr(failure.__dict__)
+                    self.assertNotIn("private", rendered)
+                    self.assertNotIn(str(FIXTURE), rendered)
+
+    def test_planning_observes_logging_changes_after_session_creation(self):
+        self.logger.setLevel(logging.CRITICAL)
+        table = DeltaTable(FIXTURE, warmup="none")
+        session = Session()
+        session.register_table("events", table)
+        with self.assertRaises(DeltaReaderError):
+            session.sql("SELECT * FROM private_missing")
+        self.assertEqual(self.collect.records, [])
+        self.logger.setLevel(logging.INFO)
+        table.scan(limit=0).close()
+        with self.assertRaises(DeltaReaderError):
+            session.sql("SELECT * FROM private_missing")
+        self.assertEqual(self.events(), [
+            "scan_planning.started", "scan_planning.completed", "sql_planning.failed",
+        ])
+        self.collect.records.clear()
+        self.collect.setLevel(logging.CRITICAL)
+        with self.assertRaises(DeltaReaderError):
+            session.sql("SELECT * FROM private_missing")
+        self.assertEqual(self.collect.records, [])
+
     def test_configuration_changes_apply_to_an_existing_table(self):
         self.logger.setLevel(logging.ERROR)
         table = DeltaTable(FIXTURE, warmup="none")
@@ -162,6 +273,13 @@ class LoggingTests(unittest.TestCase):
         self.assertEqual(table.refresh().version, table.version)
         with self.assertRaises(DeltaReaderError):
             DeltaTable(FIXTURE / "private-missing", warmup="none")
+        table.scan(limit=0).close()
+        session = Session()
+        session.register_table("events", table)
+        with self.assertRaises(DeltaReaderError):
+            session.sql("SELECT * FROM private_missing")
+        with session.sql("SELECT 42 AS answer") as reader:
+            self.assertEqual(reader.read_all().to_pylist(), [{"answer": 42}])
         self.logger.handlers = [self.collect]
         table.refresh()
         self.assertEqual(self.events(), ["table_refresh.started", "table_refresh.completed"])
@@ -169,9 +287,10 @@ class LoggingTests(unittest.TestCase):
     def test_import_and_caught_errors_are_quiet_without_configuration(self):
         result = subprocess.run([sys.executable, "-I", "-c", """
 import logging
+import sys
 root = logging.getLogger()
 previous = (root.handlers[:], root.level)
-from delta_arrow_reader import DeltaTable, DeltaReaderError
+from delta_arrow_reader import DeltaTable, DeltaReaderError, Session
 assert (root.handlers, root.level) == previous
 try:
     DeltaTable('unsupported-private-scheme://secret-token/private-table')
@@ -179,8 +298,19 @@ except DeltaReaderError:
     pass
 else:
     raise AssertionError('invalid location was accepted')
+table = DeltaTable(sys.argv[1], warmup='none')
+session = Session()
+for operation in [lambda: table.scan(columns=['private_missing']),
+                  lambda: session.register_table('private-invalid', table),
+                  lambda: session.sql('SELECT * FROM private_missing')]:
+    try:
+        operation()
+    except DeltaReaderError:
+        pass
+    else:
+        raise AssertionError('invalid operation was accepted')
 assert (root.handlers, root.level) == previous
-"""], capture_output=True, text=True, timeout=30)
+""", str(FIXTURE)], capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "")
         self.assertEqual(result.stderr, "")
@@ -191,9 +321,15 @@ assert (root.handlers, root.level) == previous
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
 
-    def test_signal_in_a_logging_callback_still_interrupts_loading(self):
+    def test_signal_in_a_logging_callback_still_interrupts_loading_and_planning(self):
         result = subprocess.run([sys.executable, "-I", __file__, "interrupt"],
                                 capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+
+    def test_concurrent_registration_can_log_without_holding_the_gil(self):
+        result = subprocess.run([sys.executable, "-I", __file__, "registration"],
+                                capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
 
@@ -267,6 +403,14 @@ def check_reentry():
     logger.setLevel(logging.DEBUG)
     logger.propagate = False
     assert table.refresh().version == table.version
+    table.scan(limit=0).close()
+    session.register_table("another", table)
+    try:
+        session.sql("SELECT * FROM private_missing")
+    except DeltaReaderError:
+        pass
+    else:
+        raise AssertionError("invalid SQL was accepted")
     logger.handlers = [logging.NullHandler()]
     assert not unexpected, unexpected
     assert rejected
@@ -278,7 +422,48 @@ def check_reentry():
     assert table.refresh().version == table.version
 
 
+def check_concurrent_registration():
+    table = DeltaTable(FIXTURE, warmup="none")
+    session = Session()
+    first_entered = threading.Event()
+    second_attempted = threading.Event()
+    overlapped = []
+
+    class Pause(logging.Handler):
+        def emit(self, record):
+            if record.msg == "provider_registration.started" and not first_entered.is_set():
+                first_entered.set()
+                overlapped.append(second_attempted.wait(5))
+                # Simulate a handler doing I/O while another caller takes the catalog lock.
+                time.sleep(0.1)
+
+    logger = logging.getLogger("delta_arrow_reader")
+    logger.handlers = [Pause()]
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    def register(second):
+        if second:
+            assert first_entered.wait(5)
+            second_attempted.set()
+        try:
+            session.register_table("events", table)
+            return "registered"
+        except DeltaReaderError as error:
+            return error.code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(register, [False, True]))
+    assert first_entered.is_set() and second_attempted.is_set()
+    assert overlapped == [True], overlapped
+    assert sorted(results) == ["registered", "sql_registration"], results
+    with session.sql("SELECT id FROM events LIMIT 1") as reader:
+        assert reader.read_all().num_rows == 1
+
+
 def check_interrupt():
+    table = DeltaTable(FIXTURE, warmup="none")
+    session = Session()
     calls = []
     interruption = KeyboardInterrupt("original signal exception")
 
@@ -288,24 +473,31 @@ def check_interrupt():
 
     class Interrupt(logging.Handler):
         def emit(self, record):
-            if record.msg == "table_load.started":
+            if record.msg == self.event:
                 signal.raise_signal(signal.SIGINT)
 
     logger = logging.getLogger("delta_arrow_reader")
-    logger.handlers = [Interrupt()]
+    handler = Interrupt()
+    logger.handlers = [handler]
     logger.setLevel(logging.INFO)
     logger.propagate = False
     previous = signal.signal(signal.SIGINT, on_signal)
     try:
-        try:
-            DeltaTable(FIXTURE, warmup="none")
-        except KeyboardInterrupt as error:
-            assert error is interruption
-        else:
-            raise AssertionError("logging swallowed Ctrl+C")
+        for event, operation in [
+            ("table_load.started", lambda: DeltaTable(FIXTURE, warmup="none")),
+            ("scan_planning.started", lambda: table.scan(limit=0)),
+            ("sql_planning.failed", lambda: session.sql("SELECT * FROM private_missing")),
+        ]:
+            handler.event = event
+            try:
+                operation()
+            except KeyboardInterrupt as error:
+                assert error is interruption
+            else:
+                raise AssertionError("logging swallowed Ctrl+C")
     finally:
         signal.signal(signal.SIGINT, previous)
-    assert calls == [signal.SIGINT], calls
+    assert calls == [signal.SIGINT] * 3, calls
     exit_request = SystemExit(17)
 
     class Exit(logging.Handler):
@@ -328,5 +520,7 @@ if __name__ == "__main__":
         check_reentry()
     elif sys.argv[1:] == ["interrupt"]:
         check_interrupt()
+    elif sys.argv[1:] == ["registration"]:
+        check_concurrent_registration()
     else:
         unittest.main()

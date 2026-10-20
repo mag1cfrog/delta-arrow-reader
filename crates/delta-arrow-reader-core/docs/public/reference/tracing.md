@@ -375,7 +375,7 @@ category, such as `invalid_projection`.
 | Tasks | `worker_panicked`, `worker_cancelled`, `worker_failed` |
 | Decoding and transforms | `malformed_json`, `deletion_vector`, `invalid_selection_vector`, `arrow`, `arrow_cast`, `arrow_memory`, `arrow_parse`, `arrow_compute`, `arrow_json`, `arrow_ipc`, `arrow_c_data`, `arrow_csv`, `arrow_avro`, `parquet`, `divide_by_zero`, `arithmetic_overflow`, `index_out_of_bounds`, `need_more_data` |
 | Other typed Kernel failures | `kernel_internal`, `invalid_transaction_state`, `checkpoint_write`, `invalid_timestamp_range`, `empty_timestamp_range`, `timestamp_out_of_range` |
-| DataFusion | `datafusion_plan`, `datafusion_execution`, `datafusion_internal`, `invalid_configuration`, `resources_exhausted`, `multiple_errors` |
+| DataFusion | `sql_parse`, `datafusion_plan`, `datafusion_execution`, `datafusion_internal`, `invalid_configuration`, `resources_exhausted`, `multiple_errors` |
 
 `unknown` means a source exists but exposes no recognized classification. For
 example, Kernel 0.25 reports an empty log as `Generic(String)`. Classification
