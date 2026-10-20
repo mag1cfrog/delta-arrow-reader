@@ -14,6 +14,9 @@ use sha2::{Digest, Sha256};
 type Result<T = ()> = std::result::Result<T, Box<dyn Error>>;
 const PIN: &str = "41f1ce23377f088298a3ed196ad6c8e40cb9bfed";
 
+#[path = "selective_read_build/python.rs"]
+mod python;
+
 fn write(root: &Path, path: &str, contents: &str) -> Result {
     let path = root.join(path);
     fs::create_dir_all(path.parent().unwrap())?;

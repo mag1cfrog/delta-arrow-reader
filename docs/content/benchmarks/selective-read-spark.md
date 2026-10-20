@@ -20,7 +20,7 @@ not copy the large AWS SDK JAR into a scratch file under the validation-export
 size limit.
 
 ```sh
-python3 -B benches/selective_read/runners/spark/prepare.py \
+cargo xtask build-selective-read --reader spark --python python3 \
   --java-home /path/to/temurin-21.0.8 \
   --output /path/to/build-spark
 ```

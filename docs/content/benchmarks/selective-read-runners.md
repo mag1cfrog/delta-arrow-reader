@@ -62,7 +62,7 @@ the lockfile, including any dirty flag recorded by its publisher.
 Use CPython 3.14.6, Linux x86-64, and `uv`. From the repository root:
 
 ```sh
-python3 benches/selective_read/runners/duckdb/prepare.py \
+cargo xtask build-selective-read --reader duckdb --python python3 \
   --output ../selective-read-duckdb-build
 ```
 
@@ -73,7 +73,8 @@ and httpfs source `827222fb45a043a7a852d1f7aae46901492a3cda`. It also records
 the DuckDB engine and Python binding source commits and the extension ABI.
 The four built-in extensions are part of the pinned DuckDB wheel.
 
-Preparation downloads and verifies the artifacts, creates a dedicated environment,
+The Rust builder checks the supplied Python interpreter, downloads and verifies
+the artifacts, creates a dedicated environment,
 and writes `selective-read-duckdb` beside `build.json`. The build record includes
 the adapter sources, interpreter build/ABI/hash, installed package file hashes,
 wheel metadata, and every loaded extension's version. Each invocation checks
@@ -85,7 +86,7 @@ Keep the entire output directory at its original path; its launcher refers to
 that environment. To prepare another build without downloading anything:
 
 ```sh
-python3 benches/selective_read/runners/duckdb/prepare.py \
+cargo xtask build-selective-read --reader duckdb --python python3 \
   --artifacts ../selective-read-duckdb-build/artifacts \
   --output ../selective-read-duckdb-build-copy
 ```
@@ -99,7 +100,7 @@ reproduction instead of updating the lock during a campaign.
 Use the same CPython 3.14.6, Linux x86-64, and `uv` prerequisites:
 
 ```sh
-python3 benches/selective_read/runners/polars/prepare.py \
+cargo xtask build-selective-read --reader polars --python python3 \
   --output ../selective-read-polars-build
 ```
 

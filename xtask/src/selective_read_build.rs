@@ -23,13 +23,24 @@ const RUSTFLAGS: &str = "-C target-cpu=x86-64";
 const DELTA_RS_COMMIT: &str = "41f1ce23377f088298a3ed196ad6c8e40cb9bfed";
 const RUNNERS: &str = "benches/selective_read/runners";
 
+mod python;
+
 #[derive(Args)]
 pub(crate) struct Arguments {
-    #[arg(long, value_parser = ["dar", "delta-rs"])]
+    #[arg(long, value_parser = ["dar", "delta-rs", "duckdb", "polars", "spark"])]
     reader: String,
     /// New directory for the executable, lockfile, and build provenance.
     #[arg(long)]
     output: PathBuf,
+    /// CPython 3.14.6 for a Python reader; defaults to python3 on PATH.
+    #[arg(long)]
+    python: Option<PathBuf>,
+    /// Reuse pinned Python reader artifacts without downloading them.
+    #[arg(long)]
+    artifacts: Option<PathBuf>,
+    /// Pinned Temurin JDK to copy into a Spark build.
+    #[arg(long, required_if_eq("reader", "spark"))]
+    java_home: Option<PathBuf>,
 }
 
 #[derive(Deserialize)]
@@ -137,6 +148,12 @@ fn cargo(root: &Path, target_dir: &Path) -> Command {
 impl Arguments {
     pub(crate) fn run(self) -> Result<()> {
         let root = cargo_workspace_root(&env::current_dir()?)?;
+        if matches!(self.reader.as_str(), "duckdb" | "polars" | "spark") {
+            return python::prepare(&root, self);
+        }
+        if self.python.is_some() || self.artifacts.is_some() || self.java_home.is_some() {
+            return Err("Python reader options require duckdb, polars, or spark".into());
+        }
         fs::create_dir(&self.output)?;
         let output = fs::canonicalize(&self.output)?;
         let manifest = root.join(RUNNERS).join(&self.reader).join("Cargo.toml");
