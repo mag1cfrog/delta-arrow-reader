@@ -72,7 +72,7 @@ Preparation independently scans the source and fixture for every case. It saves
 the exact reference result, predicate-step counts, conservative candidate files
 and actual matching files. To reuse references produced by the current oracle,
 pass `--references PATH`, containing `CASE_ID/reference.json` directories.
-Changed SQL, literals, source counts, reference hashes or protocol identities
+Changed SQL, literals, source counts, reference contents or execution contracts
 fail preparation. A failed case remains in `matrix.json` with its reason.
 
 Start MinIO and upload these same fixtures using the storage guide, then run:

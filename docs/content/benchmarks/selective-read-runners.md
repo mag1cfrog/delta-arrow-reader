@@ -275,8 +275,8 @@ The adapter accepts the public `SELECT columns FROM bench [WHERE ...] [LIMIT n]`
 shape. It uses `pl.col` for the ordered projection and Polars' `sql_expr` parser
 for the predicate, then applies `filter`, `select`, and `limit` in that order.
 Date literals and explicit Decimal precision/scale remain native expressions.
-The serialized expression tree, projection order, and limit have a separate
-hash bound to the correctness certificate. Each query reconstructs these
+The correctness certificate records the serialized expression tree, projection
+order and limit, and compares these values directly. Each query reconstructs these
 expressions inside its measured interval.
 
 [`scan_delta`](https://docs.pola.rs/api/python/stable/reference/api/polars.scan_delta.html)

@@ -30,8 +30,10 @@ follow the accepted physical calibration.
 
 Revision 5 uses this document as `protocol_sha256`, retains the base protocol
 and sampling amendment hashes, and adds `sampling_stage` to the identity.
-The workload hash binds all remaining input and harness identities. Revisions
-2, 3 and 4 retain their original meanings and replay rules.
+These hashes record provenance. The current harness compares the explicit
+workload definition, SQL, native expressions and reader settings; source and
+document edits alone do not invalidate validation. Historical runs retain their
+recorded comparison revisions and artifacts.
 
 Readers open a Delta table at a fixed snapshot through their native APIs. Each
 reader decides which files and row groups to read. The harness supplies no

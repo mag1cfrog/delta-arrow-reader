@@ -22,17 +22,17 @@ remain in the main comparison. No speedup is required for completion.
 
 ## Contract and historical records
 
-The [revision 2 protocol](selective-read-protocol.md) remains byte-for-byte
-unchanged. Its SHA-256 is
+The original [revision 2 protocol](selective-read-protocol.md) had SHA-256
 `affe5fde898c1e39c03792fadbfd79d17b6af8a16dbdaa48988869a4567d5efe`.
 Its pins, semantics, correctness rules, resources, scheduling, and storage
 observation rules apply except where this amendment explicitly changes them.
 
 Adoption requires explicit comparison revision 3 support in the harness. New
-records bind this amendment's hash as `protocol_sha256`, the revision 2 hash as
-`base_protocol_sha256`, and a frozen `workload_manifest_sha256`. References,
-correctness certificates, schedules, and reports must agree on all three.
-Generator hashes remain provenance. Never relabel an old run as revision 3 or
+records retain this amendment's hash as `protocol_sha256`, the revision 2 hash as
+`base_protocol_sha256`, and a frozen `workload_manifest_sha256` for provenance.
+The current harness compares the explicit workload contract in references,
+correctness certificates, schedules and reports. Generator and document hashes
+do not determine compatibility. Never relabel an old run as revision 3 or
 overwrite an old fixture identity, case definition, or artifact.
 
 Before formal measurement, the workload manifest must contain every concrete
