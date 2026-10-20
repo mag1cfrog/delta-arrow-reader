@@ -4,24 +4,22 @@ import argparse
 import base64
 from collections import Counter
 from contextlib import contextmanager
-from email.parser import BytesParser
 import fcntl
 import json
 import os
 from pathlib import Path
 import platform
-import resource
 import secrets
 import shutil
 import subprocess
 import sys
 import time
-from urllib.parse import quote, urlsplit
 from urllib.request import build_opener, ProxyHandler
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
 from run import digest, save
+import native
 
 COMMIT = "07c3a429bfed433e49018cb0f78a52145d4bedeb"
 RELEASE = "RELEASE.2025-09-07T16-13-09Z"
@@ -58,59 +56,27 @@ def prepare(output, source=None):
         "embedded_modules": subprocess.check_output(["go", "version", "-m", str(output / "minio")], env=environment, text=True),
         "version": subprocess.check_output([str(output / "minio"), "--version"], text=True),
         "harness_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=HERE, text=True).strip(),
-        "source_sha256": digest(Path(__file__))})
+        "source_sha256": digest(Path(__file__)), "controller_sha256": digest(native.executable())})
 
 
 def topology():
-    rows = []
-    for cpu in sorted(os.sched_getaffinity(0)):
-        root = Path(f"/sys/devices/system/cpu/cpu{cpu}")
-        rows.append({"cpu": cpu, "core": int((root / "topology/core_id").read_text()),
-                     "socket": int((root / "topology/physical_package_id").read_text()),
-                     "siblings": (root / "topology/thread_siblings_list").read_text().strip(),
-                     "governor": (root / "cpufreq/scaling_governor").read_text().strip()
-                                  if (root / "cpufreq/scaling_governor").exists() else None})
-    return rows
+    return native.call("storage", {"action": "topology"})
 
 
 def placement(rows):
-    groups = {}
-    for row in rows:
-        groups.setdefault((row["socket"], row["core"]), []).append(row["cpu"])
-    cores = list(groups.values())
-    readers = []
-    while cores and len(readers) < 8:
-        readers.extend(cores.pop(0)[:8 - len(readers)])
-    if len(readers) != 8 or len(cores) < 3:
-        raise ValueError("need eight reader CPUs plus two server cores and one observer core without shared SMT siblings")
-    return {"reader": sorted(readers), "server": [cores[0][0], cores[1][0]], "observer": [cores[2][0]]}
+    return native.call("storage", {"action": "placement", "rows": rows})
 
 
 def properties(unit):
-    names = ("MainPID", "ControlGroup", "MemoryMax", "MemorySwapMax", "ActiveState")
-    text = subprocess.check_output(["systemctl", "--user", "show", unit, *[f"--property={n}" for n in names]], text=True)
-    return dict(line.split("=", 1) for line in text.splitlines())
+    return native.call("storage", {"action": "properties", "unit": unit})
 
 
 def state(path):
-    value = json.loads((path / "server.json").read_text())
-    endpoint = urlsplit(value["endpoint"])
-    assert endpoint.scheme == "http" and endpoint.hostname == "127.0.0.1" and endpoint.port
-    assert not endpoint.username and not endpoint.password and not endpoint.path and not endpoint.query and not endpoint.fragment
-    assert value["bucket"] == BUCKET
-    return value
+    return native.call("storage", {"action": "state", "directory": str(path)})
 
 
 def verify_server(directory):
-    config = state(directory)
-    saved = json.loads((directory / "limits.json").read_text())
-    actual = properties(config["unit"])
-    assert actual == {k: saved[k] for k in actual} and actual["ActiveState"] == "active", "server changed or stopped"
-    assert digest(Path(config["build"]) / "build.json") == config["build_sha256"], "server build record changed"
-    group = Path("/sys/fs/cgroup" + actual["ControlGroup"])
-    assert sorted(os.sched_getaffinity(int(actual["MainPID"]))) == config["cpus"]["server"]
-    assert (group / "memory.max").read_text().strip() == str(4 * 1024**3)
-    assert (group / "memory.swap.max").read_text().strip() == "0"
+    native.call("storage", {"action": "verify-server", "directory": str(directory)})
     import network
     network.verify(directory)
 
@@ -123,9 +89,7 @@ def exclusive(directory):
 
 
 def credentials(directory):
-    path = directory / "credentials.json"
-    assert path.stat().st_mode & 0o077 == 0, "credentials must be private"
-    return json.loads(path.read_text())
+    return native.call("storage", {"action": "credentials", "directory": str(directory)})
 
 
 def curl(directory, path, *options, stdout=subprocess.PIPE, stderr=subprocess.PIPE):
@@ -143,11 +107,8 @@ def curl(directory, path, *options, stdout=subprocess.PIPE, stderr=subprocess.PI
 
 
 def request(directory, path, *options):
-    process = curl(directory, path, "--fail", "--max-time", "60", *options)
-    body, error = process.communicate()
-    if process.returncode:
-        raise RuntimeError(f"local S3 request failed ({process.returncode}): {error.decode()}")
-    return body
+    return base64.b64decode(native.call("storage", {"action": "request", "directory": str(directory),
+                                                  "path": path, "options": options}))
 
 
 def start(build, directory, port):
@@ -178,7 +139,7 @@ def start(build, directory, port):
                str(build / "minio"), "server", "--address", f"127.0.0.1:{port}", "--console-address", f"127.0.0.1:{port + 1}", str(directory / "data")]
     config = {"format": "selective-read-storage-v1", "endpoint": f"http://127.0.0.1:{port}", "bucket": BUCKET,
               "unit": unit, "build": str(build), "build_sha256": digest(build / "build.json"), "cpus": cpus,
-              "settings": settings, "source_sha256": digest(Path(__file__)),
+              "settings": settings, "source_sha256": digest(Path(__file__)), "controller_sha256": digest(native.executable()),
               "cache": "fresh clients; reused MinIO and OS caches; no cache flushing",
               "started_ns": time.time_ns(), "topology": rows, "kernel": platform.release(),
               "cpu_info": Path("/proc/cpuinfo").read_text(), "memory_info": Path("/proc/meminfo").read_text(),
@@ -250,74 +211,21 @@ def upload(directory, fixtures, output, table_ids=None, *, checksum=False):
                   "fixture_manifest_sha256": prefix, "prefix": prefix, "objects": objects,
                   "table_root": f"s3://{BUCKET}/{prefix}", "table_ids": table_ids, "verified_ns": time.time_ns(),
                   "verification": {"requested": "server-sha256" if checksum else "full-get", "methods": dict(methods)},
-                  "source_sha256": digest(Path(__file__)), "elapsed_seconds": time.monotonic() - started})
+                  "source_sha256": digest(Path(__file__)), "controller_sha256": digest(native.executable()),
+                  "elapsed_seconds": time.monotonic() - started})
 
 
 def put_verified(directory, key, source, expected, *, checksum=False):
-    import hashlib
-    path = f"/{BUCKET}/" + quote(key, safe="/")
-    # A content-addressed location is immutable, including repeat uploads.
-    proc = curl(directory, path, "--upload-file", str(source.resolve()),
-                "--header", "If-None-Match: *", "--header", "x-amz-checksum-sha256: " + base64.b64encode(bytes.fromhex(expected)).decode(),
-                "--output", "/dev/null", "--write-out", "%{http_code}")
-    status, error = proc.communicate()
-    assert proc.returncode == 0 and status.decode() in ("200", "412"), (status, error)
-    if checksum:
-        proc = curl(directory, path, "--head", "--fail", "--header", "x-amz-checksum-mode: ENABLED",
-                    "--write-out", "%{http_code}")
-        body, error = proc.communicate()
-        assert proc.returncode == 0 and body[-3:] == b"200", (key, error)
-        headers = BytesParser().parsebytes(body[:-3].partition(b"\r\n")[2])
-        assert headers.get_all("Content-Length") == [str(source.stat().st_size)], "stored object length changed: " + key
-        sha, kind = (headers.get_all(name) for name in ("x-amz-checksum-sha256", "x-amz-checksum-type"))
-        assert (sha is None or len(sha) == 1) and (kind is None or len(kind) == 1), "duplicate checksum headers: " + key
-        if sha is not None and kind == ["FULL_OBJECT"]:
-            assert sha == [base64.b64encode(bytes.fromhex(expected)).decode()], "stored object checksum changed: " + key
-            return "server-sha256"
-        # Legacy or multipart objects need a complete readback, not a partial checksum.
-    proc = curl(directory, path, "--fail")
-    actual = hashlib.file_digest(proc.stdout, "sha256").hexdigest()
-    error = proc.stderr.read()
-    assert proc.wait() == 0 and actual == expected, (key, error)
-    return "full-get"
+    return native.call("storage", {"action": "put-verified", "directory": str(directory), "key": key,
+        "source": str(source), "expected": expected, "checksum": checksum})
 
 
 def reader_environment(directory):
-    config = state(directory)
-    import network
-    endpoint = (network.config(directory) or config)["endpoint"]
-    secret = credentials(directory)
-    # A dedicated server must not inherit cloud profiles, metadata credentials,
-    # alternate S3 endpoints or proxies from the invoking shell.
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("AWS_", "MINIO_"))
-           and k.lower() not in ("http_proxy", "https_proxy", "all_proxy", "no_proxy")}
-    env.update(AWS_ACCESS_KEY_ID=secret["access_key"], AWS_SECRET_ACCESS_KEY=secret["secret_key"],
-               AWS_REGION="us-east-1", AWS_DEFAULT_REGION="us-east-1", AWS_ENDPOINT_URL=endpoint,
-               AWS_ENDPOINT=endpoint, AWS_ALLOW_HTTP="true", AWS_VIRTUAL_HOSTED_STYLE_REQUEST="false",
-               AWS_EC2_METADATA_DISABLED="true", NO_PROXY="*", no_proxy="*")
-    return env
+    return native.call("storage", {"action": "reader-environment", "directory": str(directory)})
 
 
 def reader_prefix(directory, unit=None):
-    cpus = state(directory)["cpus"]["reader"]
-    return ["systemd-run", "--user", "--scope", "--quiet", "--collect", *(["--unit", unit] if unit else []), "-p", "MemoryMax=8G", "-p", "MemorySwapMax=0",
-            "taskset", "--cpu-list", ",".join(map(str, cpus)), sys.executable, "-B", str(Path(__file__).resolve()),
-            "reader", "--state", str(directory.resolve()), "--"]
-
-
-def exec_reader(directory, arguments):
-    # Verify the effective limits inside the scope before any reader table I/O.
-    name = next(line.removeprefix("0::") for line in Path("/proc/self/cgroup").read_text().splitlines() if line.startswith("0::"))
-    group = Path("/sys/fs/cgroup" + name)
-    limits = {"cpu_affinity": sorted(os.sched_getaffinity(0)), "control_group": name,
-              "max_file_size_bytes": resource.getrlimit(resource.RLIMIT_FSIZE)[0],
-              "process_memory_bytes": int((group / "memory.max").read_text()),
-              "swap_bytes": int((group / "memory.swap.max").read_text()), "verified_ns": time.time_ns(),
-              "enforcement": "systemd user scope and taskset"}
-    assert limits["cpu_affinity"] == state(directory)["cpus"]["reader"]
-    assert limits["process_memory_bytes"] == 8 * 1024**3 and limits["swap_bytes"] == 0
-    save(Path(arguments[-1]).parent / "limits.json", limits)
-    os.execv(arguments[0], arguments)
+    return native.call("storage", {"action": "reader-prefix", "directory": str(directory), "unit": unit})
 
 
 if __name__ == "__main__":
@@ -339,9 +247,6 @@ if __name__ == "__main__":
     p.add_argument("--verify-checksum", action="store_true",
                    help="verify stored full-object SHA-256 and length; read back objects without that checksum")
     p.add_argument("--output", type=Path, required=True)
-    p = commands.add_parser("reader", help=argparse.SUPPRESS)
-    p.add_argument("--state", type=Path, required=True)
-    p.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     if args.command == "prepare":
         prepare(args.output, args.source)
@@ -349,8 +254,6 @@ if __name__ == "__main__":
         start(args.build, args.state, args.port)
     elif args.command == "upload":
         upload(args.state, args.fixtures, args.output, args.table, checksum=args.verify_checksum)
-    elif args.command == "reader":
-        exec_reader(args.state, args.arguments[1:])
     else:
         with exclusive(args.state):
             import network

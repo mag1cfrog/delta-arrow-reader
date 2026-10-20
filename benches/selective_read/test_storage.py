@@ -1,15 +1,12 @@
 """Check staged uploads without starting a server or reader."""
 
 from argparse import Namespace
-import base64
 from contextlib import nullcontext
 import hashlib
-import io
 import json
 import os
 from pathlib import Path
 import tempfile
-from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -19,37 +16,6 @@ import storage
 
 
 class StagedUpload(unittest.TestCase):
-    def test_remote_checksums_lengths_and_legacy_readback(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            source = Path(temporary) / "part.parquet"
-            source.write_bytes(b"data")
-            expected = hashlib.sha256(b"data").hexdigest()
-            sha = base64.b64encode(bytes.fromhex(expected)).decode()
-            def process(body=b"", data=b"data"):
-                return SimpleNamespace(returncode=0, communicate=lambda: (body, b""),
-                                       stdout=io.BytesIO(data), stderr=io.BytesIO(), wait=lambda: 0)
-            def head(fields):
-                return process(("HTTP/1.1 200 OK\r\n" + "\r\n".join(fields) + "\r\n\r\n200").encode())
-            correct = ["Content-Length: 4", "X-Amz-Checksum-Sha256: " + sha, "X-Amz-Checksum-Type: FULL_OBJECT"]
-            for status in (b"200", b"412"):
-                with patch.object(storage, "curl", side_effect=[process(status), head(correct)]) as curl:
-                    self.assertEqual(storage.put_verified(None, "key", source, expected, checksum=True), "server-sha256")
-                    self.assertTrue(all("--upload-file" in call.args or "--head" in call.args for call in curl.call_args_list))
-            for fields in (["Content-Length: 5"] + correct[1:], correct + ["Content-Length: 4"],
-                           correct + ["X-Amz-Checksum-Sha256: " + sha],
-                           [correct[0], "X-Amz-Checksum-Sha256: " + "A" * 44, correct[2]]):
-                with patch.object(storage, "curl", side_effect=[process(b"412"), head(fields)]), self.assertRaises(AssertionError):
-                    storage.put_verified(None, "key", source, expected, checksum=True)
-            for fields in (["Content-Length: 4"],
-                           [correct[0], "X-Amz-Checksum-Sha256: " + sha + "-2", "X-Amz-Checksum-Type: COMPOSITE"]):
-                with patch.object(storage, "curl", side_effect=[process(b"412"), head(fields), process()]):
-                    self.assertEqual(storage.put_verified(None, "key", source, expected, checksum=True), "full-get")
-            with patch.object(storage, "curl", side_effect=[process(b"412"), head([correct[0]]), process(data=b"bad!")]), \
-                    self.assertRaises(AssertionError):
-                storage.put_verified(None, "key", source, expected, checksum=True)
-            with patch.object(storage, "curl", side_effect=[process(b"200"), process()]):
-                self.assertEqual(storage.put_verified(None, "key", source, expected), "full-get")
-
     def test_inline_upload_reuses_checksums_and_rejects_changed_files(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

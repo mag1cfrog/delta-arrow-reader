@@ -79,16 +79,18 @@ upload selection does not block it. Pass this receipt and the matching `--case`
 to the campaign runner. Other tables need their own verified upload. Keep both
 snapshots and all eight main cases in the complete publication inventory.
 
-The launcher selects eight logical CPUs for the reader, two separate physical
+The Rust controller selects eight logical CPUs for the reader, two separate physical
 cores for MinIO, and a third separate core for the trace process. It never splits
 SMT siblings across these groups. Insufficient CPU topology fails setup. MinIO
 gets a 4 GiB memory cap; readers get 8 GiB. Both disable swap. Setup verifies
 MinIO's effective affinity and cgroup limits; every reader launch verifies and
-saves its own limits before table I/O. These caps include native allocations.
+saves its own limits before table I/O through `xtask selective-read exec-reader`.
+These caps include native allocations.
 
 `server.json` records the CPU topology, placement, kernel, memory, mount, curl
 version/hash, server build identity, startup command and cache policy.
-`limits.json` records the actual server cgroup. Keep MinIO running throughout a
+`limits.json` records the actual server cgroup. Build, server, and upload records
+also identify the compiled controller by SHA-256. Keep MinIO running throughout a
 campaign. Clients are fresh for every invocation; server and OS caches are reused
 without flushing. Start the server once before the campaign's uploads and
 warm-ups. Do not restart it between readers or modes. Use an otherwise idle host;
