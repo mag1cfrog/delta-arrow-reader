@@ -1,6 +1,7 @@
-use std::{future::Future, pin::pin, time::Duration};
+use std::{future::Future, pin::pin, sync::mpsc::Receiver, time::Duration};
 
 use pyo3::prelude::*;
+use tracing::instrument::WithSubscriber;
 
 /// Binding-owned runtime that can be released from any owning thread.
 pub(crate) struct Runtime {
@@ -28,20 +29,51 @@ impl Runtime {
         F: Future + Send,
         F::Output: Send,
     {
+        self.wait_with_interrupts(py, future, None)
+    }
+
+    pub(crate) fn wait_logged<F>(&self, py: Python<'_>, future: F) -> PyResult<F::Output>
+    where
+        F: Future + Send,
+        F::Output: Send,
+    {
+        crate::logging::check_reentry()?;
+        let (dispatch, interrupts) = crate::logging::dispatch()?;
+        self.wait_with_interrupts(py, future.with_subscriber(dispatch), Some(&interrupts))
+    }
+
+    fn wait_with_interrupts<F>(
+        &self,
+        py: Python<'_>,
+        future: F,
+        interrupts: Option<&Receiver<PyErr>>,
+    ) -> PyResult<F::Output>
+    where
+        F: Future + Send,
+        F::Output: Send,
+    {
+        crate::logging::check_reentry()?;
         let mut future = pin!(future);
-        py.check_signals()?;
+        check_interrupts(py, interrupts)?;
         loop {
             let result = py.detach(|| {
                 self.block_on(async {
                     tokio::time::timeout(Duration::from_millis(100), future.as_mut()).await
                 })
             });
-            py.check_signals()?;
+            check_interrupts(py, interrupts)?;
             if let Ok(result) = result {
                 return Ok(result);
             }
         }
     }
+}
+
+fn check_interrupts(py: Python<'_>, interrupts: Option<&Receiver<PyErr>>) -> PyResult<()> {
+    if let Some(error) = interrupts.and_then(|receiver| receiver.try_recv().ok()) {
+        return Err(error);
+    }
+    py.check_signals()
 }
 
 impl Drop for Runtime {

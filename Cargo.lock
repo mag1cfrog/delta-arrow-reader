@@ -1358,6 +1358,8 @@ dependencies = [
  "futures-util",
  "pyo3",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

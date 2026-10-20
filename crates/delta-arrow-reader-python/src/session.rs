@@ -47,6 +47,7 @@ pub(crate) struct SessionState {
 impl Session {
     #[new]
     fn new() -> PyResult<Self> {
+        crate::logging::check_reentry()?;
         let runtime = Arc::new(
             Runtime::new()
                 .map_err(|_| PyRuntimeError::new_err("failed to create the SQL runtime"))?,
@@ -96,6 +97,7 @@ impl Session {
         table: PyRef<'_, DeltaTable>,
         execution_options: Option<PyRef<'_, ScanExecutionOptions>>,
     ) -> PyResult<()> {
+        crate::logging::check_reentry()?;
         let options = ScanOptions {
             execution_options: execution_options
                 .map(|options| options.options)
@@ -147,6 +149,7 @@ impl Session {
     /// `code=sql_execution` in the message. A failed reader remains failed.
     /// SQL error messages omit query text, literal values and table paths.
     fn sql<'py>(&self, py: Python<'py>, query: &str) -> PyResult<Bound<'py, PyAny>> {
+        crate::logging::check_reentry()?;
         let options = SQLOptions::new()
             .with_allow_ddl(false)
             .with_allow_dml(false)

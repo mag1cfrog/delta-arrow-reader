@@ -113,6 +113,7 @@ impl RecordBatchStream {
         py: Python<'py>,
         requested_schema: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Bound<'py, PyCapsule>> {
+        crate::logging::check_reentry()?;
         let mut slot = self
             .reader
             .lock()
@@ -136,6 +137,7 @@ impl RecordBatchStream {
     ///
     /// After export, call `close()` on the consuming reader instead.
     fn close(&self) -> PyResult<()> {
+        crate::logging::check_reentry()?;
         let reader = self
             .reader
             .lock()
@@ -316,6 +318,12 @@ impl Iterator for BlockingBatchReader {
     type Item = Result<RecordBatch, ArrowError>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        // Arrow can reenter without the GIL: reject without Python calls or changing stream state.
+        if crate::logging::is_logging_callback() {
+            return Some(Err(ArrowError::ComputeError(
+                crate::logging::REENTRY_MESSAGE.to_owned(),
+            )));
+        }
         if let Some(error) = &self.terminal_error {
             return Some(Err(ArrowError::ExternalError(Box::new(Arc::clone(error)))));
         }

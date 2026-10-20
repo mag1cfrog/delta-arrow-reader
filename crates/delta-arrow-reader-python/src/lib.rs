@@ -1,6 +1,7 @@
 //! Python package entrypoint.
 
 mod filters;
+mod logging;
 mod options;
 mod runtime;
 mod session;
@@ -166,6 +167,7 @@ impl DeltaTable {
         warmup: &str,
         execution_options: Option<PyRef<'_, ScanExecutionOptions>>,
     ) -> PyResult<Self> {
+        logging::check_reentry()?;
         let location: String = py
             .import("os")?
             .call_method1("fspath", (location,))?
@@ -211,9 +213,11 @@ impl DeltaTable {
             Runtime::new()
                 .map_err(|_| PyRuntimeError::new_err("failed to create the reader runtime"))?,
         );
-        let table = runtime.wait(py, builder.load_table())?.map_err(|error| {
-            reader_error(py, error.to_string(), error.phase().as_str(), error.code())
-        })?;
+        let table = runtime
+            .wait_logged(py, builder.load_table())?
+            .map_err(|error| {
+                reader_error(py, error.to_string(), error.phase().as_str(), error.code())
+            })?;
         Ok(Self { table, runtime })
     }
 
@@ -234,9 +238,10 @@ impl DeltaTable {
     /// Raises:
     ///     DeltaReaderError: The latest snapshot cannot be loaded or prepared.
     fn refresh(&self, py: Python<'_>) -> PyResult<Self> {
+        logging::check_reentry()?;
         let table = self
             .runtime
-            .wait(py, self.table.refresh())?
+            .wait_logged(py, self.table.refresh())?
             .map_err(|error| {
                 reader_error(py, error.to_string(), error.phase().as_str(), error.code())
             })?;
@@ -300,6 +305,7 @@ impl DeltaTable {
         target_partitions: Option<&Bound<'_, PyInt>>,
         execution_options: Option<PyRef<'_, ScanExecutionOptions>>,
     ) -> PyResult<RecordBatchStream> {
+        logging::check_reentry()?;
         let mut builder = self.table.scan();
         if let Some(options) = execution_options {
             builder = builder.with_execution_options(options.options);
@@ -469,6 +475,7 @@ impl DeltaTable {
 
 #[pymodule]
 fn delta_arrow_reader(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    logging::initialize()?;
     // Wheel metadata already contains Maturin's normalized Python version.
     let version = module
         .py()
