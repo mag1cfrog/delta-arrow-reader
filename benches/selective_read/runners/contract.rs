@@ -132,15 +132,31 @@ pub fn workload(value: &Value) -> Result<Value> {
     ] {
         contract.remove(key);
     }
+    if let Some(cases) = contract.get_mut("cases").and_then(Value::as_array_mut) {
+        for case in cases {
+            let case = case.as_object_mut().ok_or("invalid workload case")?;
+            case.remove("canonical_sql_sha256");
+            case.remove("native_expression_sha256");
+        }
+    }
     if let Some(translations) = contract
         .get_mut("translations")
         .and_then(Value::as_object_mut)
     {
         for translation in translations.values_mut() {
-            translation
-                .as_object_mut()
-                .ok_or("invalid translation")?
-                .remove("adapter_sha256");
+            let translation = translation.as_object_mut().ok_or("invalid translation")?;
+            translation.remove("adapter_sha256");
+            if let Some(expressions) = translation
+                .get_mut("expressions")
+                .and_then(Value::as_object_mut)
+            {
+                for expression in expressions.values_mut() {
+                    expression
+                        .as_object_mut()
+                        .ok_or("invalid native expression")?
+                        .remove("sha256");
+                }
+            }
         }
     }
     Ok(Value::Object(contract))
@@ -195,15 +211,16 @@ pub fn comparison(value: &Value) -> Result<Value> {
             return Err("missing or stale large-workload identity".into());
         }
         keys.extend(["base_protocol_sha256", "workload_manifest_sha256"]);
-        if let Some(contract) = value.get("workload_contract") {
-            if !contract.is_object()
-                || contract["comparison_revision"] != revision
-                || contract["sampling_stage"] != value["sampling_stage"]
-            {
-                return Err("invalid workload contract".into());
-            }
-            keys.push("workload_contract");
+        let contract = &value["workload_contract"];
+        if !contract.is_object()
+            || contract["comparison_revision"] != revision
+            || contract["sampling_stage"] != value["sampling_stage"]
+        {
+            return Err(
+                "missing or invalid workload contract; regenerate requests and references".into(),
+            );
         }
+        keys.push("workload_contract");
     } else if !value["workload_manifest_sha256"].is_null()
         || value.get("workload_contract").is_some()
     {
@@ -230,12 +247,15 @@ pub fn comparison(value: &Value) -> Result<Value> {
 pub fn same_comparison(left: &Value, right: &Value) -> bool {
     left["comparison_revision"] == right["comparison_revision"]
         && left["sampling_stage"] == right["sampling_stage"]
-        && match (
-            left.get("workload_contract"),
-            right.get("workload_contract"),
-        ) {
-            (Some(left), Some(right)) => left == right,
-            _ => left["workload_manifest_sha256"] == right["workload_manifest_sha256"],
+        && match left["comparison_revision"].as_u64() {
+            Some(2) => {
+                left.get("workload_contract").is_none() && right.get("workload_contract").is_none()
+            }
+            Some(3..=6) => {
+                left["workload_contract"].is_object()
+                    && left["workload_contract"] == right["workload_contract"]
+            }
+            _ => false,
         }
 }
 
@@ -243,29 +263,36 @@ pub fn identity(
     request: &Value,
     reader: &str,
     build_record: &Value,
-    hashes: Value,
+    settings: Value,
+    native_expression: Value,
+    build_sha256: &str,
 ) -> Result<Value> {
     let mut identity = comparison(request)?;
-    let hashes = hashes.as_object().ok_or("invalid reader identity hashes")?;
-    if hashes.len() != 4
-        || [
-            "reader_build_sha256",
-            "reader_config_sha256",
-            "canonical_sql_sha256",
-        ]
-        .iter()
-        .any(|key| hashes.get(*key).is_none_or(|value| !is_hash(value)))
-        || hashes
-            .get("native_expression_sha256")
-            .is_none_or(|v| !v.is_null() && !is_hash(v))
+    if !settings.is_object()
+        || request["canonical_sql"]
+            .as_str()
+            .is_none_or(|sql| sql.trim().is_empty())
+        || !is_hash(&json!(build_sha256))
+        || if matches!(reader, "polars" | "daft") {
+            !native_expression.is_object()
+        } else {
+            !native_expression.is_null()
+        }
         || build_record["reader_id"] != reader
     {
         return Err("invalid reader artifact identity".into());
     }
-    identity.as_object_mut().unwrap().extend(hashes.clone());
+    identity["reader_build_sha256"] = json!(build_sha256);
+    identity["reader_config"] = settings;
+    identity["native_expression"] = native_expression;
     identity["reader_id"] = json!(reader);
     identity["reader_artifact"] = build(build_record)?;
-    for field in ["fixture_manifest_sha256", "case_id", "snapshot_version"] {
+    for field in [
+        "fixture_manifest_sha256",
+        "case_id",
+        "snapshot_version",
+        "canonical_sql",
+    ] {
         identity[field] = request
             .get(field)
             .ok_or("missing reader identity field")?
@@ -288,7 +315,10 @@ pub fn correctness(proof: &Value, identity: &Value, query_count: usize) -> Resul
                 return Err("failed oracle check".into());
             }
             if !identity_matches(identity, check) {
-                return Err("stale correctness identity".into());
+                return Err(
+                    "stale correctness identity or missing execution contract; rerun validation"
+                        .into(),
+                );
             }
             check["output_rows"]
                 .as_u64()
@@ -311,7 +341,9 @@ pub enum Operation {
         value: Value,
         reader: String,
         build: Value,
-        hashes: Value,
+        settings: Value,
+        native_expression: Value,
+        build_sha256: String,
     },
     Validate {
         value: Value,
@@ -331,8 +363,17 @@ pub fn run(operation: Operation) -> Result<Value> {
             value,
             reader,
             build,
-            hashes,
-        } => identity(&value, &reader, &build, hashes),
+            settings,
+            native_expression,
+            build_sha256,
+        } => identity(
+            &value,
+            &reader,
+            &build,
+            settings,
+            native_expression,
+            &build_sha256,
+        ),
         Operation::Validate { value } => {
             if ["campaign_id", "repetition", "order", "correctness_file"]
                 .iter()
@@ -356,31 +397,44 @@ pub fn run(operation: Operation) -> Result<Value> {
 }
 
 pub fn identity_matches(expected: &Value, actual: &Value) -> bool {
+    if !same_comparison(expected, actual)
+        || !expected["reader_artifact"].is_object()
+        || !expected["reader_config"].is_object()
+        || expected["canonical_sql"]
+            .as_str()
+            .is_none_or(|sql| sql.trim().is_empty())
+    {
+        return false;
+    }
+    for key in [
+        "reader_id",
+        "reader_artifact",
+        "reader_config",
+        "canonical_sql",
+        "native_expression",
+        "fixture_manifest_sha256",
+        "case_id",
+        "snapshot_version",
+    ] {
+        if expected.get(key).is_none() || expected.get(key) != actual.get(key) {
+            return false;
+        }
+    }
     let Some(expected) = expected.as_object() else {
         return false;
     };
     expected.iter().all(|(key, value)| {
-        let replacement = match key.as_str() {
-            "protocol_sha256" | "base_protocol_sha256" | "sampling_sha256" => return true,
-            "reader_build_sha256" => Some("reader_artifact"),
-            "workload_manifest_sha256" => Some("workload_contract"),
-            "reader_artifact" | "workload_contract" if actual.get(key).is_none() => {
-                let legacy = if key == "reader_artifact" {
-                    "reader_build_sha256"
-                } else {
-                    "workload_manifest_sha256"
-                };
-                return expected
-                    .get(legacy)
-                    .is_some_and(|v| actual.get(legacy) == Some(v));
-            }
-            _ => None,
-        };
-        // Legacy certificates can only be reused with their original immutable inputs.
-        if replacement.is_some_and(|k| expected.contains_key(k) && actual.get(k).is_some()) {
-            return true;
-        }
-        actual.get(key) == Some(value)
+        matches!(
+            key.as_str(),
+            "protocol_sha256"
+                | "base_protocol_sha256"
+                | "sampling_sha256"
+                | "reader_build_sha256"
+                | "workload_manifest_sha256"
+                | "reader_config_sha256"
+                | "canonical_sql_sha256"
+                | "native_expression_sha256"
+        ) || actual.get(key) == Some(value)
     })
 }
 
@@ -453,12 +507,16 @@ mod tests {
             "sampling_stage":"pilot", "cases":[{"canonical_sql":"SELECT id FROM bench", "projection":["id"],
             "writer":{"data_page_rows":2048}, "fixture_manifest_sha256":"fixture"}],
             "source_sha256":{"planner":"before"}, "definition_controller_sha256":"before",
-            "translations":{"polars":{"adapter_sha256":"before", "expressions":{"case":"native expression"}}}});
+            "translations":{"polars":{"adapter_sha256":"before", "expressions":{"case":{"native_expression":"native expression", "sha256":"audit"}}}}});
         let expected = workload(&definition)?;
         let mut changed = definition.clone();
         changed["source_sha256"] = json!({"planner":"after"});
         changed["definition_controller_sha256"] = json!("after");
         changed["translations"]["polars"]["adapter_sha256"] = json!("after");
+        changed["cases"][0]["canonical_sql_sha256"] = json!("query audit");
+        changed["cases"][0]["native_expression_sha256"] = json!({"polars":"expression audit"});
+        changed["translations"]["polars"]["expressions"]["case"]["sha256"] =
+            json!("expression audit");
         assert_eq!(workload(&changed)?, expected);
         for (pointer, value) in [
             ("/cases/0/canonical_sql", json!("SELECT other FROM bench")),
@@ -466,7 +524,7 @@ mod tests {
             ("/cases/0/writer/data_page_rows", json!(20000)),
             ("/cases/0/fixture_manifest_sha256", json!("other fixture")),
             (
-                "/translations/polars/expressions/case",
+                "/translations/polars/expressions/case/native_expression",
                 json!("other expression"),
             ),
         ] {
@@ -499,22 +557,29 @@ mod tests {
     }
 
     #[test]
-    fn legacy_proofs_need_exact_artifacts_and_new_proofs_compare_contracts() {
-        let legacy = json!({"reader_build_sha256":"old", "workload_manifest_sha256":"old", "canonical_sql_sha256":"query"});
-        let mut current = legacy.clone();
-        current["reader_artifact"] = json!({"executable_sha256":"binary"});
-        current["workload_contract"] = json!({"cases":["query"]});
-        assert!(identity_matches(&current, &legacy));
+    fn hash_only_proofs_are_rejected_even_when_the_hashes_match() -> Result<()> {
+        let cases: Value = serde_json::from_str(include_str!("contract-cases.json"))?;
+        let current = &cases["identity"];
+        let mut legacy = current.clone();
+        for key in [
+            "reader_artifact",
+            "workload_contract",
+            "reader_config",
+            "canonical_sql",
+            "native_expression",
+        ] {
+            legacy.as_object_mut().unwrap().remove(key);
+        }
+        assert!(!identity_matches(current, &legacy));
+        assert!(!identity_matches(&legacy, current));
+        assert!(!identity_matches(&legacy, &legacy));
+        assert!(!same_comparison(&legacy, &legacy));
         let mut updated = current.clone();
         updated["reader_build_sha256"] = json!("new audit");
         updated["workload_manifest_sha256"] = json!("new audit");
-        assert!(identity_matches(&updated, &current));
-        assert!(!identity_matches(&updated, &legacy));
-        assert!(!identity_matches(
-            &json!({"reader_artifact":{}}),
-            &json!({})
-        ));
+        assert!(identity_matches(&updated, current));
         updated["workload_contract"]["cases"] = json!(["different query"]);
-        assert!(!identity_matches(&updated, &current));
+        assert!(!identity_matches(&updated, current));
+        Ok(())
     }
 }

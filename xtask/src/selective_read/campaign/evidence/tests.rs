@@ -24,6 +24,10 @@ pub(super) fn identity(revision: u64) -> Result<Value> {
     if revision >= 5 {
         value["sampling_stage"] = json!("formal");
     }
+    if revision >= 3 {
+        value["workload_contract"] = json!({"comparison_revision":revision,
+            "sampling_stage":value["sampling_stage"], "cases":[]});
+    }
     Ok(value)
 }
 
@@ -76,8 +80,10 @@ fn incomplete_successes_and_unenforced_limits_are_rejected() -> Result<()> {
     let mut record = request.clone();
     record["identity"] = request.clone();
     record["identity"]["reader_id"] = json!("delta-arrow-reader");
-    record["identity"]["canonical_sql_sha256"] =
-        json!(format!("{:x}", Sha256::digest(b"SELECT id FROM t")));
+    record["identity"]["reader_artifact"] = json!({"executable_sha256":"binary"});
+    record["identity"]["reader_config"] = json!({"threads":8});
+    record["identity"]["native_expression"] = Value::Null;
+    record["settings"] = record["identity"]["reader_config"].clone();
     record.as_object_mut().unwrap().extend(object(&json!({
         "status": "success", "capability": {"status": "supported"}, "cleanup": {"status": "passed"},
         "correctness": {"status": "passed"}, "external_resource_limits": {"process_memory_bytes": 8589934592u64},
@@ -113,6 +119,9 @@ fn incomplete_successes_and_unenforced_limits_are_rejected() -> Result<()> {
     );
     for (pointer, changed) in [
         ("/identity/case_id", json!("another")),
+        ("/identity/canonical_sql", json!("SELECT other FROM t")),
+        ("/settings/threads", json!(4)),
+        ("/identity/reader_config", Value::Null),
         ("/canonical_sql", json!("SELECT * FROM t")),
         ("/cleanup/status", json!("failed")),
         ("/correctness/status", json!("failed")),

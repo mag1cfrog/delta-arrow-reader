@@ -29,12 +29,13 @@ A timing certificate applies to the reader build, configuration, query, and
 inputs that passed validation. A different reader build must pass validation
 before its timings can be accepted.
 
-New requests and certificates carry a structured workload contract and reader
-artifact identity. They compare queries, layout settings, inputs, runtime and
-executable artifacts directly. Updating Git metadata or source provenance alone
-does not require new references or correctness checks. Historical records that
-only contain checksums still require their original immutable inputs. Run
-validation with rebuilt readers to produce certificates with structured identities.
+Requests and certificates carry the workload contract, SQL, reader settings,
+native expressions, and reader artifact identity. Compatibility checks compare
+these values directly. Updating Git metadata or source provenance alone does not
+require new references or correctness checks. Certificates containing only hashes
+are rejected, even if those hashes match. Rebuild readers and rerun validation
+to replace them. Regenerate older requests, references, and prepared matrices
+with the current tools so they carry the same explicit execution fields.
 
 The native readers and Python adapters share the Rust request, identity and
 certificate checks. Python reader packages include the compiled controller and

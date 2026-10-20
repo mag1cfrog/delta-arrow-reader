@@ -111,6 +111,15 @@ fn select(
             } {
                 let mut row = row.clone();
                 row["status"] = json!("prepared");
+                row["native_expressions"] = json!(
+                    object(&workload["translations"])?
+                        .iter()
+                        .map(|(reader, translation)| (
+                            reader.clone(),
+                            translation["expressions"][case]["native_expression"].clone()
+                        ))
+                        .collect::<Map<_, _>>()
+                );
                 cases.insert(case.to_owned(), row);
             }
         }
@@ -460,8 +469,8 @@ impl Campaign {
                         && case["status"] == "prepared"
                     {
                         require(
-                            record["identity"]["native_expression_sha256"]
-                                == case["native_expression_sha256"][reader],
+                            record["identity"]["native_expression"]
+                                == case["native_expressions"][reader],
                             "native expression differs from checked-in matrix",
                         )?;
                     }

@@ -194,7 +194,7 @@ def run(request_path, output):
         if request["purpose"] == "timing":
             record["phase"] = "correctness_gate"
         expression = expression_identity(request["canonical_sql"])
-        identity = reader_identity(request, "polars", build_path, settings, json_hash(expression))
+        identity = reader_identity(request, "polars", build_path, settings, expression)
         record.update(identity=identity, settings=settings, build_record=str(build_path), phase="correctness_gate")
         record["correctness"] = correctness(request, identity)
         execute(request, options, output, record)

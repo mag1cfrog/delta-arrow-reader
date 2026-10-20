@@ -262,7 +262,7 @@ class OracleTests(unittest.TestCase):
                 identity = root / (case + ".json")
                 provenance = {k: metadata[k] for k in oracle.IDENTITY_FIELDS} | run.comparison_identity(metadata)
                 provenance.update(reader_id="delta-arrow-reader", reader_build_sha256="1" * 64,
-                                  reader_config_sha256="2" * 64, native_expression_sha256=None)
+                                  reader_config={"threads": 8}, reader_artifact={"executable_sha256": "3" * 64}, native_expression=None)
                 def export(current):
                     with result.open("wb") as sink, pa.ipc.new_stream(sink, current.schema) as writer:
                         writer.write_table(current, max_chunksize=7)
@@ -280,7 +280,7 @@ class OracleTests(unittest.TestCase):
                 self.assertEqual(oracle.check(reference, fixtures, result, identity)["status"], "passed")
                 altered.pop("workload_contract")
                 write_json(identity, altered)
-                with self.assertRaisesRegex(ValueError, "comparison mismatch"):
+                with self.assertRaisesRegex(ValueError, "workload contract"):
                     oracle.check(reference, fixtures, result, identity)
                 export(table)
                 corrupted = table.set_column(0, table.schema.field(0), pa.array([0] * table.num_rows, type=pa.int64()))
@@ -450,7 +450,7 @@ class OracleTests(unittest.TestCase):
             writer.write_table(table, max_chunksize=7)
         provenance = {name: metadata[name] for name in oracle.IDENTITY_FIELDS}
         provenance.update(reader_id="delta-arrow-reader", reader_build_sha256="1" * 64,
-                          reader_config_sha256="2" * 64, native_expression_sha256=None,
+                          reader_config={"threads": 8}, reader_artifact={"executable_sha256": "3" * 64}, native_expression=None,
                           result_sha256=oracle.digest_file(result))
         provenance.update(identity_change or {})
         write_json(identity, provenance)
@@ -485,7 +485,7 @@ class OracleTests(unittest.TestCase):
             _, original = self.references[case]
             repeated = oracle.prepare(self.fixtures, case, self.root / (query + "-duplicate"), True)
             self.assertEqual(repeated["reference_sha256"], original["reference_sha256"])
-            self.assertNotEqual(repeated["canonical_sql_sha256"], original["canonical_sql_sha256"])
+            self.assertNotEqual(repeated["canonical_sql"], original["canonical_sql"])
             self.assertEqual(repeated["output_rows"], original["output_rows"])
 
     def test_repacked_values_across_batch_boundaries(self):
@@ -565,8 +565,9 @@ class OracleTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "wrong row membership"):
             oracle.check(*self.export(case, pa.Table.from_pylist(rows, schema=good.schema)))
         for name, value in (("snapshot_version", 1), ("snapshot_version", False),
-                            ("reader_build_sha256", ""), ("canonical_sql_sha256", "0" * 64),
-                            ("native_expression_sha256", "bad"), ("result_sha256", "0" * 64)):
+                            ("reader_build_sha256", ""), ("canonical_sql", "SELECT wrong FROM bench"),
+                            ("reader_config", None), ("reader_artifact", None),
+                            ("native_expression", "bad"), ("result_sha256", "0" * 64)):
             with self.subTest(field=name):
                 with self.assertRaises(ValueError):
                     oracle.check(*self.export(case, identity_change={name: value}))

@@ -1,4 +1,4 @@
-use std::fs;
+use std::{collections::BTreeMap, fs};
 
 use super::*;
 use crate::selective_read::{
@@ -69,7 +69,7 @@ pub(crate) struct Report {
 }
 
 fn catalog(harness: &Path) -> Result<Value> {
-    let value = read_json(&harness.join("query-matrix.json"))?;
+    let mut value = read_json(&harness.join("query-matrix.json"))?;
     require(
         value["format"] == "selective-read-query-matrix-v1" && value["comparison_revision"] == 2,
         "unsupported query catalog",
@@ -79,7 +79,7 @@ fn catalog(harness: &Path) -> Result<Value> {
         value["native_expressions_sha256"] == digest(&path)?,
         "native expression catalog changed",
     )?;
-    let mut actual = BTreeSet::new();
+    let mut expressions = BTreeMap::new();
     for line in fs::read_to_string(path)?.lines() {
         let expression: Value = serde_json::from_str(line)?;
         let hash = production::expression_hash(&expression["native_expression"])?;
@@ -87,7 +87,10 @@ fn catalog(harness: &Path) -> Result<Value> {
             expression["sha256"] == hash,
             "native expression hash differs",
         )?;
-        actual.insert((text(&expression["reader_id"])?.to_owned(), hash));
+        expressions.insert(
+            (text(&expression["reader_id"])?.to_owned(), hash),
+            expression["native_expression"].clone(),
+        );
     }
     let mut expected = BTreeSet::new();
     for source in object(&value["scales"])?.values() {
@@ -103,7 +106,25 @@ fn catalog(harness: &Path) -> Result<Value> {
             }
         }
     }
-    require(actual == expected, "native expression catalog incomplete")?;
+    require(
+        expressions.keys().cloned().collect::<BTreeSet<_>>() == expected,
+        "native expression catalog incomplete",
+    )?;
+    for source in value["scales"].as_object_mut().unwrap().values_mut() {
+        for queries in source["queries"].as_object_mut().unwrap().values_mut() {
+            for query in queries.as_object_mut().unwrap().values_mut() {
+                query["native_expressions"] = json!(
+                    object(&query["native_expression_sha256"])?
+                        .iter()
+                        .map(|(reader, hash)| Ok((
+                            reader.clone(),
+                            expressions[&(reader.clone(), text(hash)?.to_owned())].clone()
+                        )))
+                        .collect::<Result<Map<_, _>>>()?
+                );
+            }
+        }
+    }
     Ok(value)
 }
 
@@ -196,7 +217,7 @@ fn query(case: &str, frozen: &Value, manifest: &Value) -> Result<Value> {
     Ok(
         json!({"scale":scale,"fixture_id":table["id"],"fixture_path":table["path"],"snapshot_version":table["snapshot_version"],
         "in_literals":literals,"canonical_sql":sql,"canonical_sql_sha256":query["sql_sha256"],
-        "native_expression_sha256":query["native_expression_sha256"]}),
+        "native_expression_sha256":query["native_expression_sha256"], "native_expressions":query["native_expressions"]}),
     )
 }
 
@@ -286,7 +307,6 @@ fn check_loaded(
                             "case_id",
                             "snapshot_version",
                             "canonical_sql",
-                            "canonical_sql_sha256",
                             "projection",
                             "limit",
                         ]

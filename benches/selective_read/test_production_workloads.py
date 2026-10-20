@@ -53,7 +53,8 @@ class ProductionContract(unittest.TestCase):
     def test_identity_and_sampling(self):
         identity = {"comparison_revision": 5, "protocol_sha256": "production documentation",
                     "base_protocol_sha256": "protocol documentation", "sampling_sha256": "sampling documentation",
-                    "workload_manifest_sha256": "1" * 64, "sampling_stage": "pilot"}
+                    "workload_manifest_sha256": "1" * 64, "sampling_stage": "pilot",
+                    "workload_contract": {"comparison_revision": 5, "sampling_stage": "pilot", "cases": []}}
         self.assertEqual(run.comparison_identity(identity), identity)
         for change in ({"comparison_revision": 4}, {"sampling_stage": None}):
             with self.assertRaises(ValueError):

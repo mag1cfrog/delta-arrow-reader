@@ -8,6 +8,7 @@ fn fixture(root: &Path, revision: u64) -> Result<Request> {
         "production-workloads"
     };
     let identity = json!({"comparison_revision":revision, "sampling_stage":"formal", "workload_manifest_sha256":"1".repeat(64),
+        "workload_contract":{"comparison_revision":revision,"sampling_stage":"formal","cases":[]},
         "protocol_sha256":digest(&protocols.join(format!("selective-read-{protocol}.md")))?,
         "base_protocol_sha256":digest(&protocols.join("selective-read-protocol.md"))?,
         "sampling_sha256":digest(&protocols.join("selective-read-sampling.md"))?});
@@ -48,7 +49,8 @@ fn fixture(root: &Path, revision: u64) -> Result<Request> {
                         };
                         rows.push(json!({"case":definition, "job":{"id":if mode=="open" {case.clone()} else {format!("reuse.{case}")},
                             "case_id":case,"execution_mode":mode}, "reader_id":reader,
-                            "gate":{"status":if unsupported {"unsupported"} else {"success"}, "identity":{"reader_build_sha256":reader}},
+                            "gate":{"status":if unsupported {"unsupported"} else {"success"}, "identity":{
+                                "reader_build_sha256":reader, "reader_artifact":config["reader_builds"][reader]}},
                             "measurements":{"eligible":!unsupported,"scheduled_samples":if unsupported {0} else {5},"metrics":metrics},
                             "oracle":{"output_rows":895},"native_phases":{"planning_ns":null}}));
                     }
@@ -143,7 +145,11 @@ fn altered_cases_samples_builds_and_formal_conditions_are_rejected() -> Result<(
         ("/case/projection_columns", json!(1)),
         ("/measurements/scheduled_samples", json!(4)),
         ("/measurements/metrics/open_query_ns/samples", json!(4)),
-        ("/gate/identity/reader_build_sha256", json!("changed")),
+        (
+            "/gate/identity/reader_artifact/executable_sha256",
+            json!("changed"),
+        ),
+        ("/gate/identity/reader_artifact", Value::Null),
     ] {
         let mut changed = request.clone();
         *changed.campaigns[0].1["rows"][0]

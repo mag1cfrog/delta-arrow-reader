@@ -130,6 +130,7 @@ fn validation_export_limits_apply_to_the_child_and_reject_stale_references() -> 
         r#"dd if=/dev/zero of="$2/too-large" bs=8192 count=4 status=none"#,
     )?;
     request.payload = json!({"execution_mode":"open","purpose":"validation","comparison_revision":6,"sampling_stage":"formal",
+        "workload_contract":{"comparison_revision":6,"sampling_stage":"formal","cases":[{"canonical_sql":"SELECT id FROM bench"}]},
         "protocol_sha256":digest(&request.protocols.join("selective-read-spark-matrix.md"))?,
         "base_protocol_sha256":digest(&request.protocols.join("selective-read-protocol.md"))?,
         "sampling_sha256":digest(&request.protocols.join("selective-read-sampling.md"))?,"workload_manifest_sha256":"1".repeat(64)});
@@ -155,6 +156,9 @@ fn validation_export_limits_apply_to_the_child_and_reject_stale_references() -> 
         assert_eq!(getrlimit(Resource::Fsize), parent_limit);
     }
     metadata["workload_manifest_sha256"] = json!("2".repeat(64));
+    fs::write(&reference, serde_json::to_vec(&metadata)?)?;
+    assert!(export_limit(&request).is_ok());
+    metadata["workload_contract"]["cases"][0]["canonical_sql"] = json!("SELECT other FROM bench");
     fs::write(&reference, serde_json::to_vec(&metadata)?)?;
     assert!(
         export_limit(&request)

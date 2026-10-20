@@ -68,11 +68,10 @@ def checked_build(executable, reader):
     return path, build
 
 
-def reader_identity(request, reader, build_path, settings, expression_sha256=None):
+def reader_identity(request, reader, build_path, settings, expression=None):
     return native.call("reader-contract", {"action": "identity", "value": request, "reader": reader,
-        "build": json.loads(build_path.read_text()), "hashes": {"reader_build_sha256": digest(build_path),
-        "reader_config_sha256": json_hash(settings), "canonical_sql_sha256": sha(request["canonical_sql"].encode()),
-        "native_expression_sha256": expression_sha256}})
+        "build": json.loads(build_path.read_text()), "build_sha256": digest(build_path),
+        "settings": settings, "native_expression": expression})
 
 
 def timing_totals(record):

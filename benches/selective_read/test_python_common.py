@@ -68,16 +68,14 @@ class ReaderBookkeeping(unittest.TestCase):
     def test_correctness_uses_result_identity_and_rows_not_oracle_source_hashes(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "correctness.json"
-            identity = {"reader_id": "test", "reader_build_sha256": "build",
-                        "reader_config_sha256": "config", "canonical_sql_sha256": "query",
-                        "protocol_sha256": "current documentation"}
+            identity = json.loads((Path(__file__).parent / "runners/contract-cases.json").read_text())["identity"]
             check = identity | {"status": "passed", "output_rows": 3, "oracle_sha256": "older source",
                                 "protocol_sha256": "older documentation"}
             request = {"purpose": "timing", "execution_mode": "open", "correctness_file": str(path)}
             path.write_text(json.dumps({"status": "passed", "checks": [check]}))
             self.assertEqual(common.correctness(request, identity)["expected_output_rows"], [3])
             for change in ({"status": "failed"}, {"output_rows": -1}, {"output_rows": True},
-                           {"canonical_sql_sha256": "different query"}, {"reader_build_sha256": "different reader"}):
+                           {"canonical_sql": "different query"}, {"reader_artifact": {"executable_sha256": "different reader"}}):
                 with self.subTest(change=change), self.assertRaises(ValueError):
                     path.write_text(json.dumps({"status": "passed", "checks": [check | change]}))
                     common.correctness(request, identity)
@@ -112,7 +110,8 @@ class ReaderBookkeeping(unittest.TestCase):
     def test_python_adapters_keep_the_comparison_identity_and_reader_roster(self):
         identity = {"comparison_revision": 6, "protocol_sha256": "spark_matrix documentation",
             "base_protocol_sha256": "protocol documentation", "sampling_sha256": "sampling documentation",
-            "sampling_stage": "formal", "workload_manifest_sha256": "1" * 64}
+            "sampling_stage": "formal", "workload_manifest_sha256": "1" * 64,
+            "workload_contract": {"comparison_revision": 6, "sampling_stage": "formal", "cases": []}}
         self.assertEqual(run.comparison_identity(identity), identity)
         for revision in range(2, 7):
             self.assertEqual(run.reader_roster({"comparison_revision": revision}),
@@ -121,7 +120,7 @@ class ReaderBookkeeping(unittest.TestCase):
                        {"base_protocol_sha256": "0" * 64}, {"sampling_sha256": "0" * 64}):
             self.assertTrue(run.same_comparison(run.comparison_identity(identity | change), identity))
         for change in ({"sampling_stage": None}, {"comparison_revision": 7},
-                       {"workload_manifest_sha256": None}):
+                       {"workload_manifest_sha256": None}, {"workload_contract": None}):
             with self.assertRaises(ValueError):
                 run.comparison_identity(identity | change)
         for revision in (1, 7, True, "6"):

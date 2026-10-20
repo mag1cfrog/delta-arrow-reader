@@ -59,6 +59,12 @@ fn diagnostic_modes_require_valid_dependencies_independently_of_documentation() 
 
 #[test]
 fn merged_diagnostics_preserve_timings_and_reject_missing_or_changed_evidence() -> Result<()> {
+    let execution_contract = |reader: &str| {
+        json!({"comparison_revision":2,
+        "reader_id":reader,"reader_artifact":{"executable_sha256":"binary"},"reader_config":{"threads":8},
+        "canonical_sql":"SELECT id FROM bench","native_expression":null,
+        "fixture_manifest_sha256":"fixture","case_id":"case","snapshot_version":0})
+    };
     for (combined, warmup, merged, count) in [
         (false, false, false, 80),
         (true, false, false, 72),
@@ -100,7 +106,7 @@ fn merged_diagnostics_preserve_timings_and_reject_missing_or_changed_evidence() 
         let inventory: Vec<(String,Value)> = ["production.q2.scattered","reuse.production.q2.scattered"].iter().map(|job| {
             (job.to_string(),Value::Object(readers.iter().map(|reader| (reader.to_string(),json!({
                 "status":"success","runnable":true,"combined_diagnostics":combined,"gate_warmup":warmup,"gate_diagnostics":merged,
-                "run_id":format!("{job}.gate.{reader}"),"identity":{"reader_id":reader}
+                "run_id":format!("{job}.gate.{reader}"),"identity":execution_contract(reader)
             }))).collect()))
         }).collect();
         let comparison = comparison(&config, &protocols())?;
@@ -150,7 +156,7 @@ fn merged_diagnostics_preserve_timings_and_reject_missing_or_changed_evidence() 
                 text(&row["job_id"])?.starts_with("reuse."),
             );
             record.as_object_mut().unwrap().extend(object(&json!({
-                "status":"success","identity":{"reader_id":row["reader_id"]},
+                "status":"success","identity":execution_contract(text(&row["reader_id"])?),
                 "correctness":{"status":"passed"},"cleanup":{"status":"passed"},
                 "validation_diagnostics":merged && stage=="gate",
                 "storage_capture":{"status":"passed"},"storage_io":{"requests":2,"response_bytes":100},

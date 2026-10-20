@@ -190,6 +190,8 @@ fn workload_reports_keep_unrunnable_readers_and_audit_queries_and_reference_iden
         if revision >= 5 {
             identity["sampling_stage"] = json!("formal");
         }
+        identity["workload_contract"] = json!({"comparison_revision":revision,
+            "sampling_stage":identity["sampling_stage"], "cases":[]});
         let mut metadata = identity.clone();
         metadata["output_rows"] = json!(3);
         write(&directory.join("reference.json"), &metadata)?;

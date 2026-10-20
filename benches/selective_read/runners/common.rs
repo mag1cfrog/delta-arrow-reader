@@ -50,6 +50,10 @@ mod contract_tests {
                 "purpose":"validation", "resource_budget":budget(), "run_id":"run"
             });
             let mut request: Request = serde_json::from_value(value)?;
+            if revision >= 3 {
+                request.workload_contract = Some(json!({"comparison_revision":revision,
+                    "sampling_stage":request.sampling_stage, "cases":[]}));
+            }
             request.validate()?;
             if revision >= 3 {
                 request.workload_manifest_sha256 = Some("invalid input identity".into());
@@ -493,9 +497,9 @@ fn run(request_path: &Path, output: &Path) -> Result<bool> {
         &serde_json::to_value(&request)?,
         crate::READER,
         &build,
-        json!({"reader_build_sha256":file_digest(&build_path)?,
-               "reader_config_sha256":digest(&serde_json::to_vec(&settings)?),
-               "canonical_sql_sha256":digest(request.canonical_sql.as_bytes()), "native_expression_sha256":null}),
+        settings.clone(),
+        Value::Null,
+        &file_digest(&build_path)?,
     )?;
     let mut record = json!({"format": "selective-read-observation-v1", "identity": input_identity,
         "campaign_id": request.campaign_id, "run_id": request.run_id, "repetition": request.repetition, "order": request.order,

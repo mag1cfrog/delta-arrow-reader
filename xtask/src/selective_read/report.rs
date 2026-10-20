@@ -172,9 +172,11 @@ pub(super) fn run(request: Request) -> Result<Value> {
             )?;
             let gate = &row["gate"];
             if gate["identity"].is_object() && !object(&gate["identity"])?.is_empty() {
-                let build = gate["identity"]
-                    .get("reader_artifact")
-                    .unwrap_or(field(&gate["identity"], "reader_build_sha256")?);
+                let build = field(&gate["identity"], "reader_artifact")?;
+                require(
+                    build.is_object(),
+                    "missing reader artifact contract; rerun validation",
+                )?;
                 require(
                     builds.get(reader).is_none_or(|previous| previous == build),
                     "native reader build changed",

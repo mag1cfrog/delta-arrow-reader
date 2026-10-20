@@ -756,7 +756,7 @@ def prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota):
         "generator_protocol_sha256": manifest["protocol_sha256"],
         "case_id": case_id, "snapshot_version": table["snapshot_version"],
         "profile": manifest["profile"], "query_variant": "duplicate-in" if duplicate_literal else "canonical",
-        "canonical_sql": sql, "canonical_sql_sha256": digest_bytes(sql.encode()),
+        "canonical_sql": sql,
         "in_literals": literals, "projection": list(projection), "limit": limit,
         "source_rows": counts[0], "qualifying_rows": live_qualifying,
         "physical_qualifying_rows": counts[-1], "deleted_qualifying_rows": deleted_qualifying,
@@ -779,9 +779,9 @@ def prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota):
     if workload is not None:
         import large_workloads
         frozen = large_workloads.load(workload)
-        row = large_workloads.binding(frozen, fixtures, case_id)
+        large_workloads.binding(frozen, fixtures, case_id)
         metadata.update(large_workloads.identity(workload), workload_manifest=str(Path(workload).resolve()),
-                        oracle_limits=frozen["oracle_limits"], native_expression_sha256=row["native_expression_sha256"],
+                        oracle_limits=frozen["oracle_limits"],
                         projected_logical_bytes=projected_bytes[0],
                         projected_logical_bytes_definition="non-null fixed-width values and actual UTF-8 string bytes; excludes null bitmaps, offsets and IPC framing")
     # Completion marker last. Partial preparations cannot be accepted by check().
@@ -790,7 +790,7 @@ def prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota):
 
 
 IDENTITY_FIELDS = ("comparison_revision", "protocol_sha256", "fixture_manifest_sha256",
-                   "case_id", "snapshot_version", "canonical_sql_sha256")
+                   "case_id", "snapshot_version", "canonical_sql")
 
 
 def check(reference, fixtures, result, identity):
@@ -815,7 +815,8 @@ def check_rows(reference, fixtures, result, identity, quota):
         import large_workloads
         path = Path(metadata["workload_manifest"])
         require(same_comparison(comparison, large_workloads.identity(path)), "stale workload manifest")
-        row = large_workloads.binding(large_workloads.load(path), fixtures, metadata["case_id"])
+        workload = large_workloads.load(path)
+        row = large_workloads.binding(workload, fixtures, metadata["case_id"])
         require(metadata["canonical_sql"] == row["canonical_sql"] and metadata["projection"] == row["projection"], "reference workload query changed")
     require(metadata["fixture_manifest_sha256"] == digest_file(fixtures / "manifest.json"), "stale fixture manifest")
     require(metadata["reference_sha256"] == digest_file(reference / "reference.parquet"), "reference Parquet changed")
@@ -827,13 +828,17 @@ def check_rows(reference, fixtures, result, identity, quota):
     identity_fields = tuple(name for name in IDENTITY_FIELDS if name != "protocol_sha256")
     for name in identity_fields:
         require(type(provenance[name]) is type(metadata[name]) and provenance[name] == metadata[name], f"result identity mismatch: {name}")
-    for name in ("reader_build_sha256", "reader_config_sha256", "result_sha256"):
+    for name in ("reader_build_sha256", "result_sha256"):
         require(re.fullmatch(r"[0-9a-f]{64}", provenance[name]) is not None, f"invalid {name}")
-    expression = provenance["native_expression_sha256"]
-    require(expression is None or re.fullmatch(r"[0-9a-f]{64}", expression) is not None, "invalid native expression hash")
-    require(provenance["reader_id"] not in ("polars", "daft") or expression is not None, "missing native expression identity")
+    require(isinstance(provenance.get("reader_config"), dict)
+            and isinstance(provenance.get("reader_artifact"), dict), "missing reader execution contract; rerun validation")
+    expression = provenance["native_expression"]
+    require(isinstance(expression, dict) if provenance["reader_id"] in ("polars", "daft") else expression is None,
+            "invalid native expression")
     if metadata["comparison_revision"] in (3, 4, 5, 6):
-        require(expression == row["native_expression_sha256"].get(provenance["reader_id"]), "native translation differs from workload")
+        translation = workload["translations"].get(provenance["reader_id"])
+        expected = translation["expressions"][metadata["case_id"]]["native_expression"] if translation else None
+        require(expression == expected, "native translation differs from workload")
     require(digest_file(result) == provenance["result_sha256"], "result checksum mismatch")
     projection = metadata["projection"]
     if quota is not None:
@@ -850,8 +855,7 @@ def check_rows(reference, fixtures, result, identity, quota):
         require(not source.read(1), "trailing bytes after Arrow stream")
     return {
         "status": "passed", **{name: metadata[name] for name in identity_fields}, **comparison_identity(provenance),
-        **({"reader_artifact": provenance["reader_artifact"]} if "reader_artifact" in provenance else {}),
-        **{name: provenance[name] for name in ("reader_id", "reader_build_sha256", "reader_config_sha256", "native_expression_sha256", "result_sha256")},
+        **{name: provenance[name] for name in ("reader_id", "reader_build_sha256", "reader_artifact", "reader_config", "native_expression", "result_sha256")},
         "oracle_sha256": digest_file(__file__), "reference_sha256": metadata["reference_sha256"],
         "identity_sha256": digest_file(identity), "output_rows": count,
         "qualifying_rows": metadata["qualifying_rows"], "reported_nullability": reported_nullability,

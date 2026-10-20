@@ -2,7 +2,6 @@ use std::{collections::BTreeMap, fs, path::Path};
 
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
-use sha2::{Digest, Sha256};
 
 use super::{array, field, object, require, schedule, summarize, text, warmed_gate};
 use crate::{
@@ -213,19 +212,20 @@ pub(in crate::selective_read) fn validate(
         same_comparison(identity, &comparison),
         "observation comparison differs",
     )?;
-    for key in ["fixture_manifest_sha256", "case_id", "snapshot_version"] {
+    for key in [
+        "fixture_manifest_sha256",
+        "case_id",
+        "snapshot_version",
+        "canonical_sql",
+    ] {
         require(
             field(identity, key)? == field(payload, key)?,
             &format!("observation identity differs: {key}"),
         )?;
     }
     require(
-        identity["canonical_sql_sha256"]
-            == format!(
-                "{:x}",
-                Sha256::digest(text(&payload["canonical_sql"])?.as_bytes())
-            ),
-        "SQL hash differs",
+        identity["reader_config"].is_object() && identity["reader_config"] == record["settings"],
+        "reader configuration differs",
     )?;
     for key in [
         "campaign_id",
