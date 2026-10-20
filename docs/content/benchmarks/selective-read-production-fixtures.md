@@ -19,8 +19,8 @@ cargo build --locked -p xtask
 CARGO_TARGET_DIR=target/selective-read cargo +1.98.1 build --release --locked \
   --manifest-path benches/selective_read/Cargo.toml
 
-../selective-read-oracle-venv/bin/python -B \
-  benches/selective_read/production_shapes.py \
+target/debug/xtask selective-read plan-production \
+  --python ../selective-read-oracle-venv/bin/python \
   --source ../selective-read-calibration-345/sf10 \
   --file-target-mib 512 --page-rows 20000 \
   --output ../production-plan
@@ -33,7 +33,7 @@ workload; use the recorded harness and controller when replaying an older one.
 
 The planner checks the original source and computes file boundaries before any
 reader timing. Keep its output directory: the writer checks its hashes against
-the current workload definition, source and planner. The default 512 MiB target
+the current workload definition, source, planner and native controller. The default 512 MiB target
 uses 60 Q4 files or 130 Q2 files. `--file-target-mib 256` doubles those counts.
 These are approximate compressed-size targets; the probe records actual sizes.
 The main setting is now `--page-rows 20000`; keep `--page-rows 2048` in a

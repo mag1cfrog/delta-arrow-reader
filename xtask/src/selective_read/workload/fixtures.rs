@@ -64,19 +64,24 @@ fn inside(root: &Path, path: &Path) -> Result<PathBuf> {
     Ok(path)
 }
 
-fn verified(root: &Path, directory: &Value, item: &Value) -> Result<PathBuf> {
+fn verified(
+    root: &Path,
+    directory: &Value,
+    item: &Value,
+    hash: impl Fn(&Path) -> Result<String>,
+) -> Result<PathBuf> {
     let path = inside(
         root,
         &Path::new(text(directory)?).join(text(&item["path"])?),
     )?;
     require(
-        item["bytes"] == fs::metadata(&path)?.len() && item["sha256"] == digest(&path)?,
+        item["bytes"] == fs::metadata(&path)?.len() && item["sha256"] == hash(&path)?,
         "fixture object changed",
     )?;
     Ok(path)
 }
 
-fn sum(files: &[Value], field: &str) -> Result<u64> {
+pub(super) fn sum(files: &[Value], field: &str) -> Result<u64> {
     files.iter().try_fold(0u64, |total, file| {
         total
             .checked_add(count(&file[field])?)
@@ -84,7 +89,10 @@ fn sum(files: &[Value], field: &str) -> Result<u64> {
     })
 }
 
-pub(super) fn source(root: &Path) -> Result<(Value, Vec<PathBuf>)> {
+pub(super) fn source(
+    root: &Path,
+    hash: impl Fn(&Path) -> Result<String>,
+) -> Result<(Value, Vec<PathBuf>)> {
     let manifest = read_json(&root.join("manifest.json"))?;
     require(
         manifest["status"] == "complete"
@@ -92,7 +100,7 @@ pub(super) fn source(root: &Path) -> Result<(Value, Vec<PathBuf>)> {
             && manifest["generator"]["tpchgen"] == "3.0.0"
             && manifest["generator"]["tpchgen_git"] == "4f6bf4c5ab40511c8fdef5888fc8d022e5e546d7"
             && manifest["generator"]["lockfile_sha256"]
-                == digest(&root.join("generator-Cargo.lock"))?,
+                == hash(&root.join("generator-Cargo.lock"))?,
         "source does not identify the pinned completed generator",
     )?;
     let sources: Vec<_> = array(&manifest["sources"])?
@@ -104,7 +112,7 @@ pub(super) fn source(root: &Path) -> Result<(Value, Vec<PathBuf>)> {
     let files = array(&source["files"])?;
     let paths: Vec<_> = files
         .iter()
-        .map(|file| verified(root, &source["path"], file))
+        .map(|file| verified(root, &source["path"], file, &hash))
         .collect::<Result<_>>()?;
     let directory = inside(root, Path::new(text(&source["path"])?))?;
     let listed: BTreeSet<_> = fs::read_dir(directory)?
@@ -148,14 +156,15 @@ fn inputs(args: &Args, root: &Path, harness: &Path) -> Result<Inputs> {
     )?;
     require(
         plan["contract_sha256"] == digest(&contract(harness))?
-            && plan["planner_sha256"] == digest(&harness.join("production_shapes.py"))?,
+            && plan["planner_sha256"] == digest(&harness.join("production_shapes.py"))?
+            && plan["planner_controller_sha256"] == digest(&std::env::current_exe()?)?,
         "layout definition changed",
     )?;
     require(
         plan["source_manifest_sha256"] == digest(&root.join("manifest.json"))?,
         "source manifest changed",
     )?;
-    let (source, paths) = source(root)?;
+    let (source, paths) = source(root, digest)?;
     let shape = field(&plan["shapes"], &args.shape)?.clone();
     let definitions = shapes(
         count(&plan["file_target_mib"])?,
@@ -208,7 +217,7 @@ fn inputs(args: &Args, root: &Path, harness: &Path) -> Result<Inputs> {
     })
 }
 
-fn contract(harness: &Path) -> PathBuf {
+pub(super) fn contract(harness: &Path) -> PathBuf {
     harness.join("../../docs/content/benchmarks/selective-read-production-shapes.md")
 }
 
@@ -379,7 +388,7 @@ impl<R: Read> Read for TimedRead<R> {
     }
 }
 
-fn hash_before(path: &Path, deadline: Instant) -> Result<String> {
+pub(super) fn hash_before(path: &Path, deadline: Instant) -> Result<String> {
     Ok(reader_sha256(TimedRead(fs::File::open(path)?, deadline))?)
 }
 
@@ -396,13 +405,13 @@ fn copy_before(from: &Path, to: &Path, deadline: Instant) -> Result<()> {
     }
 }
 
-fn spawn(command: &mut Command) -> Result<Process> {
+pub(super) fn spawn(command: &mut Command, memory: u64) -> Result<Process> {
     // SAFETY: the child only changes its own address-space limit before exec.
     unsafe {
-        command.pre_exec(|| {
+        command.pre_exec(move || {
             let limit = libc::rlimit {
-                rlim_cur: 8 * GIB,
-                rlim_max: 8 * GIB,
+                rlim_cur: memory,
+                rlim_max: memory,
             };
             if libc::setrlimit(libc::RLIMIT_AS, &limit) != 0 {
                 return Err(std::io::Error::last_os_error());
@@ -503,8 +512,8 @@ pub(crate) fn run(args: Args) -> Result<()> {
         )?;
         for table in array(&probe["writer"]["tables"])? {
             for file in array(&table["files"])? {
-                verified(&probe_root, &table["path"], file)?;
-                verified(&probe_root, &table["path"], &file["geometry"])?;
+                verified(&probe_root, &table["path"], file, digest)?;
+                verified(&probe_root, &table["path"], &file["geometry"], digest)?;
             }
         }
         capacity(
@@ -578,6 +587,7 @@ pub(crate) fn run(args: Args) -> Result<()> {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(fs::File::create_new(output.join("producer.stderr.log"))?),
+        8 * GIB,
     )?;
     let mut writer = spawn(
         Command::new(&writer_binary)
@@ -588,6 +598,7 @@ pub(crate) fn run(args: Args) -> Result<()> {
             .stdin(producer.0.stdout.take().ok_or("missing producer output")?)
             .stdout(log.try_clone()?)
             .stderr(log),
+        8 * GIB,
     )?;
     wait(&mut producer, &mut writer, deadline)?;
     require(

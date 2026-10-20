@@ -72,8 +72,8 @@ fn preparation_deadline_covers_copy_streaming_and_writer_finalization() -> Resul
         let before = Instant::now();
         let (a, b);
         {
-            let mut producer = spawn(Command::new("sh").args(["-c", producer]))?;
-            let mut writer = spawn(Command::new("sh").args(["-c", writer]))?;
+            let mut producer = spawn(Command::new("sh").args(["-c", producer]), 8 * GIB)?;
+            let mut writer = spawn(Command::new("sh").args(["-c", writer]), 8 * GIB)?;
             (a, b) = (producer.0.id(), writer.0.id());
             assert!(
                 wait(
@@ -104,19 +104,29 @@ fn source_inventory_rejects_stale_generator_objects_and_extra_parquet() -> Resul
         "sources":[{"scale_factor":10,"path":"source","file_count":1,"bytes":4,"files":[{"path":"part.parquet","bytes":4,
         "sha256":digest(&root.join("source/part.parquet"))?}]}]});
     save(&root.join("manifest.json"), &manifest)?;
-    assert_eq!(source(root)?.1.len(), 1);
+    assert_eq!(source(root, digest)?.1.len(), 1);
     fs::write(root.join("source/extra.parquet"), "extra")?;
-    assert!(source(root).unwrap_err().to_string().contains("inventory"));
+    assert!(
+        source(root, digest)
+            .unwrap_err()
+            .to_string()
+            .contains("inventory")
+    );
     fs::remove_file(root.join("source/extra.parquet"))?;
     fs::write(root.join("source/part.parquet"), "edit")?;
     assert!(
-        source(root)
+        source(root, digest)
             .unwrap_err()
             .to_string()
             .contains("object changed")
     );
     fs::write(root.join("generator-Cargo.lock"), "new lock")?;
-    assert!(source(root).unwrap_err().to_string().contains("generator"));
+    assert!(
+        source(root, digest)
+            .unwrap_err()
+            .to_string()
+            .contains("generator")
+    );
     assert!(inside(root, Path::new("../outside")).is_err());
     Ok(())
 }

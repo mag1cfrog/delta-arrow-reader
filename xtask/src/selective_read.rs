@@ -45,6 +45,8 @@ pub(crate) enum Task {
     FreezeWorkload(Box<workload::production::Define>),
     /// Probe or generate production layouts using the pinned Arrow streaming producer.
     ProductionFixtures(Box<workload::fixtures::Args>),
+    /// Plan production layouts from independent Arrow predicates and DuckDB geometry.
+    PlanProduction(workload::planner::Args),
     /// Pair independently validated production fixtures. Read JSON from stdin.
     ProductionPairs,
     /// Run a numeric-page or Delta-length diagnostic process. Read JSON from stdin.
@@ -117,6 +119,7 @@ impl Task {
         match self {
             Self::RunCampaign(args) => return campaign::controller::run(*args),
             Self::ProductionFixtures(args) => return workload::fixtures::run(*args),
+            Self::PlanProduction(args) => return workload::planner::run(args),
             Self::RunIntraPage(args) => return experiment::intra_page::batch::run(*args),
             Self::FreezeWorkload(args) => {
                 let value = workload::production::define(*args)?;
@@ -192,6 +195,7 @@ impl Task {
             | Self::RunIntraPage(_)
             | Self::FreezeWorkload(_)
             | Self::ProductionFixtures(_)
+            | Self::PlanProduction(_)
             | Self::RunNumericPages(_)
             | Self::RunDeltaLength(_)
             | Self::UploadStorage(_)

@@ -4,19 +4,20 @@ This is untimed input preparation. It writes no Delta fixture and cannot produce
 a campaign manifest or certify Parquet page geometry or reader performance.
 """
 
-import argparse
 from datetime import date
 import json
+import os
+import sys
 from pathlib import Path
-import resource
-import signal
 import tempfile
 
 import duckdb
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
-from oracle import WIDE69, digest_file, inside, require
+HERE = Path(__file__).resolve().parent
+sys.path[:0] = [str(HERE), str(HERE / "runners")]
+from oracle import WIDE69, require
 import native
 
 CONTRACT = Path(__file__).resolve().parents[2] / "docs/content/benchmarks/selective-read-production-shapes.md"
@@ -86,74 +87,21 @@ def file_geometry(connection, shape):
     return result
 
 
-def plan(fixtures, output, file_target_mib=512, page_rows=20000, page_bytes=1048576, write_batch_rows=1024):
-    shapes = definitions(file_target_mib, page_rows, page_bytes, write_batch_rows)
-    manifest_path = fixtures / "manifest.json"
-    manifest_hash = digest_file(manifest_path)
-    manifest = json.loads(manifest_path.read_text())
-    require(manifest["status"] == "complete", "incomplete source fixture")
-    sources = [s for s in manifest["sources"] if s["scale_factor"] == 10]
-    require(len(sources) == 1, "one verified SF10 source is required")
-    source = sources[0]
-    paths = []
-    for item in source["files"]:
-        path = inside(fixtures, str(Path(source["path"]) / item["path"]))
-        require(path.stat().st_size == item["bytes"] and digest_file(path) == item["sha256"], "source object changed")
-        paths.append(str(path))
-    require(len(set(paths)) == len(paths) == source["file_count"], "source inventory differs")
-    counts = source_counts(paths)
-    require(counts[0] == source["rows"], "source row count differs")
-    require(all(a > b > 0 for a, b in zip(counts, counts[1:])), "each predicate must reduce the source")
-    require(300 <= counts[-1] <= 2000, "query does not have the declared hundreds-of-rows shape")
-    output.mkdir()
+def analyze(output):
+    request = json.load(sys.stdin)
+    counts = source_counts(request["paths"])
     with tempfile.TemporaryDirectory(prefix="shape-sort-", dir=output) as temporary:
         with duckdb.connect(config={"memory_limit": "2GiB", "threads": "4",
                                     "temp_directory": temporary, "max_temp_directory_size": "16GiB"}) as connection:
-            connection.read_parquet(paths).project(", ".join(INPUT_COLUMNS)).create_view("source")
-            for name, shape in shapes.items():
-                print("checking logical file geometry for " + name, flush=True)
-                geometry = file_geometry(connection, shape)
-                candidates = [f for f in geometry if f["candidate"]]
-                matching = [f for f in geometry if f["matching_rows"]]
-                (output / (name + "-files.json")).write_text(json.dumps(geometry, indent=2) + "\n")
-                require(sum(f["rows"] for f in geometry) == counts[0]
-                        and sum(f["matching_rows"] for f in geometry) == counts[-1], "layout lost source or matching rows")
-                require(shape["stripes"] <= len(candidates) <= 3 * shape["stripes"]
-                        and len(matching) >= shape["stripes"], "query does not select a few files across every stripe")
-                shape.update(candidate_files=len(candidates), matching_files=len(matching), output_rows=counts[-1],
-                             file_geometry_sha256=digest_file(output / (name + "-files.json")))
-    require(digest_file(manifest_path) == manifest_hash, "source manifest changed")
-    sql = {name: shape["canonical_sql"] for name, shape in shapes.items()}
-    (output / "sql.json").write_text(json.dumps(sql, indent=2) + "\n")
-    result = {"format": "selective-read-production-shape-plan-v1", "status": "logical_geometry_checked",
-              "publication_ready": False, "native_campaign_ready": False,
-              "contract_sha256": digest_file(CONTRACT), "planner_sha256": digest_file(Path(__file__)),
-              "source_manifest_sha256": manifest_hash, "source_scale": 10, "predicate_stage_rows": counts,
-              "file_target_mib": file_target_mib, "data_page_rows": page_rows,
-              "data_page_bytes": page_bytes, "write_batch_rows": write_batch_rows,
-              "duckdb": duckdb.__version__, "shapes": shapes, "cases": cases(),
-              "scope": "Source predicates and proposed file membership only. No Delta generation, physical page or performance acceptance.",
-              "pending": ["bounded compression/capacity probe", "Delta fixtures and actual group/page geometry",
-                          "independent exact oracle and real DV pairs", "five-reader pilot and recorded storage transport"]}
-    (output / "plan.json").write_text(json.dumps(result, indent=2) + "\n")
-    return result
+            connection.read_parquet(request["paths"]).project(", ".join(INPUT_COLUMNS)).create_view("source")
+            geometry = {name: file_geometry(connection, shape) for name, shape in request["shapes"].items()}
+    print(json.dumps({"counts": counts, "geometry": geometry, "duckdb": duckdb.__version__}))
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--file-target-mib", type=int, choices=(256, 512), default=512)
-    parser.add_argument("--page-rows", type=int, choices=(2048, 20000), default=20000)
-    parser.add_argument("--page-bytes", type=int, choices=(8192, 65536, 1048576), default=1048576)
-    parser.add_argument("--write-batch-rows", type=int, choices=(128, 1024), default=1024)
-    args = parser.parse_args()
-    # Only preparation is bounded here; these settings never govern native timings.
-    resource.setrlimit(resource.RLIMIT_AS, (16 * 1024**3, 16 * 1024**3))
-    signal.signal(signal.SIGALRM, signal.SIG_DFL)
-    signal.alarm(600)
-    result = plan(args.source.resolve(), args.output.resolve(), args.file_target_mib, args.page_rows,
-                  args.page_bytes, args.write_batch_rows)
-    print(json.dumps({"status": result["status"], "predicate_stage_rows": result["predicate_stage_rows"],
-                      "shapes": {name: {k: shape[k] for k in ("files", "candidate_files", "matching_files", "output_rows")}
-                                 for name, shape in result["shapes"].items()}}))
+    if sys.argv[1:2] == ["--analyze"]:
+        analyze(Path(sys.argv[2]))
+    else:
+        binary = str(native.executable())
+        os.execv(binary, [binary, "selective-read", "plan-production", *sys.argv[1:],
+                         "--python", sys.executable, "--harness", str(HERE)])

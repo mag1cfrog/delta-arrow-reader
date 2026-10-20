@@ -10,6 +10,7 @@ use super::{array, field, fixture_tables, object, require, text};
 use crate::{Result, artifacts::reader_sha256, selective_read_build::digest};
 
 pub(super) mod fixtures;
+pub(super) mod planner;
 pub(super) mod production;
 
 const ORIGINAL: [&str; 16] = [
