@@ -33,7 +33,7 @@ impl ScanFixture<'_> {
                 }
             }
         }
-        files.sort_by(|a, b| b.0.cmp(&a.0));
+        files.sort_by_key(|entry| std::cmp::Reverse(entry.0));
         ensure!(
             files.len() == 3,
             InvalidInputSnafu {
