@@ -283,7 +283,7 @@ fn build_kernel_table_snapshot(
 ) -> Result<KernelTableSnapshot, DeltaReaderError> {
     let table_url = normalize_table_location(table_location)?;
     if let Some(provider) = credential_provider {
-        provider.validate(&table_url, storage_options)?;
+        provider.validate_storage_configuration(&table_url, storage_options)?;
     }
     let s3_auth_mode_hint = if credential_provider.is_some() {
         None

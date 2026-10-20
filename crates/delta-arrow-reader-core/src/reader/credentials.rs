@@ -45,25 +45,32 @@ impl fmt::Debug for DeltaStorageCredentialProvider {
 }
 
 impl DeltaStorageCredentialProvider {
-    pub(crate) fn validate(
+    /// Rejects a mismatched store or competing authentication settings before reads.
+    pub(crate) fn validate_storage_configuration(
         &self,
         table_url: &Url,
-        options: &DeltaStorageOptions,
+        storage_options: &DeltaStorageOptions,
     ) -> Result<(), DeltaReaderError> {
-        let scheme = ObjectStoreScheme::parse(table_url).map(|(scheme, _)| scheme);
+        let expected_store = match self {
+            Self::Aws(_) => ObjectStoreScheme::AmazonS3,
+            Self::Azure(_) => ObjectStoreScheme::MicrosoftAzure,
+            Self::Gcp(_) => ObjectStoreScheme::GoogleCloudStorage,
+        };
+        // Native parsing also recognizes HTTPS storage URLs, including R2 and Azure.
+        let store_matches_provider = ObjectStoreScheme::parse(table_url)
+            .is_ok_and(|(table_store, _)| table_store == expected_store);
         ensure!(
-            matches!(
-                (self, scheme),
-                (Self::Aws(_), Ok(ObjectStoreScheme::AmazonS3))
-                    | (Self::Azure(_), Ok(ObjectStoreScheme::MicrosoftAzure))
-                    | (Self::Gcp(_), Ok(ObjectStoreScheme::GoogleCloudStorage))
-            ),
+            store_matches_provider,
             InvalidConfigurationSnafu {
                 reason: "credential_provider_store_mismatch",
             }
         );
+
+        // Presence alone conflicts, even when an authentication flag is set to false.
         ensure!(
-            !options.keys().any(|key| self.conflicts_with_option(key)),
+            !storage_options
+                .keys()
+                .any(|option_name| self.is_authentication_option(option_name)),
             InvalidConfigurationSnafu {
                 reason: "credential_provider_conflicting_options",
             }
@@ -71,53 +78,72 @@ impl DeltaStorageCredentialProvider {
         Ok(())
     }
 
-    fn conflicts_with_option(&self, key: &str) -> bool {
-        let key = key.to_ascii_lowercase();
+    fn is_authentication_option(&self, option_name: &str) -> bool {
+        // Native parsers keep aliases and ignored unknown keys consistent with store construction.
+        let normalized_name = option_name.to_ascii_lowercase();
         match self {
-            Self::Aws(_) => matches!(
-                key.parse::<AmazonS3ConfigKey>(),
-                Ok(AmazonS3ConfigKey::AccessKeyId
-                    | AmazonS3ConfigKey::SecretAccessKey
-                    | AmazonS3ConfigKey::Token
-                    | AmazonS3ConfigKey::ImdsV1Fallback
-                    | AmazonS3ConfigKey::MetadataEndpoint
-                    | AmazonS3ConfigKey::ContainerCredentialsRelativeUri
-                    | AmazonS3ConfigKey::ContainerCredentialsFullUri
-                    | AmazonS3ConfigKey::ContainerAuthorizationTokenFile
-                    | AmazonS3ConfigKey::WebIdentityTokenFile
-                    | AmazonS3ConfigKey::RoleArn
-                    | AmazonS3ConfigKey::RoleSessionName
-                    | AmazonS3ConfigKey::StsEndpoint
-                    | AmazonS3ConfigKey::SkipSignature)
-            ),
-            Self::Azure(_) => matches!(
-                key.parse::<AzureConfigKey>(),
-                Ok(AzureConfigKey::AccessKey
-                    | AzureConfigKey::ClientId
-                    | AzureConfigKey::ClientSecret
-                    | AzureConfigKey::AuthorityId
-                    | AzureConfigKey::AuthorityHost
-                    | AzureConfigKey::SasKey
-                    | AzureConfigKey::Token
-                    | AzureConfigKey::UseEmulator
-                    | AzureConfigKey::MsiEndpoint
-                    | AzureConfigKey::ObjectId
-                    | AzureConfigKey::MsiResourceId
-                    | AzureConfigKey::FederatedTokenFile
-                    | AzureConfigKey::UseAzureCli
-                    | AzureConfigKey::SkipSignature
-                    | AzureConfigKey::FabricTokenServiceUrl
-                    | AzureConfigKey::FabricWorkloadHost
-                    | AzureConfigKey::FabricSessionToken
-                    | AzureConfigKey::FabricClusterIdentifier)
-            ),
-            Self::Gcp(_) => matches!(
-                key.parse::<GoogleConfigKey>(),
-                Ok(GoogleConfigKey::ServiceAccount
-                    | GoogleConfigKey::ServiceAccountKey
-                    | GoogleConfigKey::ApplicationCredentials
-                    | GoogleConfigKey::SkipSignature)
-            ),
+            Self::Aws(_) => normalized_name
+                .parse::<AmazonS3ConfigKey>()
+                .is_ok_and(|option| AWS_AUTHENTICATION_OPTIONS.contains(&option)),
+            Self::Azure(_) => normalized_name
+                .parse::<AzureConfigKey>()
+                .is_ok_and(|option| AZURE_AUTHENTICATION_OPTIONS.contains(&option)),
+            Self::Gcp(_) => normalized_name
+                .parse::<GoogleConfigKey>()
+                .is_ok_and(|option| GCP_AUTHENTICATION_OPTIONS.contains(&option)),
         }
     }
 }
+
+const AWS_AUTHENTICATION_OPTIONS: &[AmazonS3ConfigKey] = &[
+    // These values would supply a second credential set.
+    AmazonS3ConfigKey::AccessKeyId,
+    AmazonS3ConfigKey::SecretAccessKey,
+    AmazonS3ConfigKey::Token,
+    // These settings configure the SDK's instance, container, or web-identity providers.
+    AmazonS3ConfigKey::ImdsV1Fallback,
+    AmazonS3ConfigKey::MetadataEndpoint,
+    AmazonS3ConfigKey::ContainerCredentialsRelativeUri,
+    AmazonS3ConfigKey::ContainerCredentialsFullUri,
+    AmazonS3ConfigKey::ContainerAuthorizationTokenFile,
+    AmazonS3ConfigKey::WebIdentityTokenFile,
+    AmazonS3ConfigKey::RoleArn,
+    AmazonS3ConfigKey::RoleSessionName,
+    AmazonS3ConfigKey::StsEndpoint,
+    // Unsigned requests bypass the supplied provider.
+    AmazonS3ConfigKey::SkipSignature,
+];
+
+const AZURE_AUTHENTICATION_OPTIONS: &[AzureConfigKey] = &[
+    // These values would supply a second credential set.
+    AzureConfigKey::AccessKey,
+    AzureConfigKey::SasKey,
+    AzureConfigKey::Token,
+    // These settings configure service-principal, managed-identity, or CLI authentication.
+    AzureConfigKey::ClientId,
+    AzureConfigKey::ClientSecret,
+    AzureConfigKey::AuthorityId,
+    AzureConfigKey::AuthorityHost,
+    AzureConfigKey::MsiEndpoint,
+    AzureConfigKey::ObjectId,
+    AzureConfigKey::MsiResourceId,
+    AzureConfigKey::FederatedTokenFile,
+    AzureConfigKey::UseAzureCli,
+    // Fabric's token service would select another credential provider.
+    AzureConfigKey::FabricTokenServiceUrl,
+    AzureConfigKey::FabricWorkloadHost,
+    AzureConfigKey::FabricSessionToken,
+    AzureConfigKey::FabricClusterIdentifier,
+    // Emulator mode and unsigned requests bypass the supplied provider.
+    AzureConfigKey::UseEmulator,
+    AzureConfigKey::SkipSignature,
+];
+
+const GCP_AUTHENTICATION_OPTIONS: &[GoogleConfigKey] = &[
+    // Credential files or inline service-account keys would supply another identity.
+    GoogleConfigKey::ServiceAccount,
+    GoogleConfigKey::ServiceAccountKey,
+    GoogleConfigKey::ApplicationCredentials,
+    // Unsigned requests bypass the supplied provider.
+    GoogleConfigKey::SkipSignature,
+];
