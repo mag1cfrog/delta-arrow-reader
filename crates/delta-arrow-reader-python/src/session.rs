@@ -107,7 +107,7 @@ impl Session {
         };
         let runtime = Arc::clone(&table.runtime);
         let table = table.table.clone();
-        let result = self.state.runtime.wait_logged(py, async {
+        let lock_result = self.state.runtime.wait_logged(py, async {
             // Wait for the catalog lock without the GIL: logging handlers may release it.
             let mut runtimes = self.state.table_runtimes.lock().map_err(|_| {
                 tracing::error!(target: "delta_arrow_reader_python",
@@ -118,9 +118,9 @@ impl Session {
             // Convert Core failures after releasing the lock, on the Python calling thread.
             Ok(register_table(&self.state.context, name, table, options)
                 .map(|_| runtimes.push(runtime)))
-        })?
-        .map_err(|()| sql_error(py, "sql_registration"))?;
-        result.map_err(|error| core_error::<DeltaReaderError>(py, &error))
+        })?;
+        let registration_result = lock_result.map_err(|()| sql_error(py, "sql_registration"))?;
+        registration_result.map_err(|error| core_error::<DeltaReaderError>(py, &error))
     }
 
     /// Run a read-only SQL query over registered tables.
