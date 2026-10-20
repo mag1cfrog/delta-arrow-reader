@@ -13,6 +13,8 @@ use super::{
 use crate::{Result, process::copy_directory};
 use serde_json::{Value, json};
 
+pub(super) mod remote;
+
 #[derive(clap::Args)]
 pub(crate) struct Args {
     #[arg(long = "binary", required = true)]
@@ -80,7 +82,7 @@ impl Checker {
         reference: Option<&Path>,
     ) -> Result<Value> {
         let output = self.output.join(name);
-        let mut record = invoke::run(&invoke::Request {
+        let record = invoke::run(&invoke::Request {
             binary: binary.into(),
             payload: payload.clone(),
             output: output.clone(),
@@ -90,11 +92,22 @@ impl Checker {
             supervised: false,
             protocols: self.protocols.clone(),
         })?;
+        let record = self.validate(record, payload, &output, reference)?;
+        save(&output.join("observation.json"), &record)?;
+        Ok(record)
+    }
+
+    fn validate(
+        &mut self,
+        mut record: Value,
+        payload: &Value,
+        output: &Path,
+        reference: Option<&Path>,
+    ) -> Result<Value> {
         if record["status"] == "success" && payload["purpose"] == "validation" {
             record = self.worker.call(&json!({"action":"check","record":record,"output":output,
                 "fixtures":self.fixtures,"reference":reference.ok_or("missing independent reference")?,"payload":payload}))?;
         }
-        save(&output.join("observation.json"), &record)?;
         Ok(record)
     }
 }

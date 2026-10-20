@@ -303,7 +303,8 @@ the monotonic `diagnostic_session_ns` is used only for observer overhead.
 Use the smoke fixture to check the entire path without a report-scale campaign:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/check_storage.py \
+target/debug/xtask selective-read check-storage \
+  --python ../selective-read-oracle-venv/bin/python \
   --state ../selective-read-storage --fixtures ../selective-read-smoke \
   --binary ../selective-read-dar-build/selective-read-dar \
   --binary ../selective-read-delta-rs-build/selective-read-delta-rs \
@@ -314,8 +315,9 @@ Use the smoke fixture to check the entire path without a report-scale campaign:
 
 The check validates uploads, known request bytes, a canceled download, explicit
 retry metadata, trace completeness, and output from every remote reader against
-the independent oracle. Rust runs the storage boundary checks; Python prepares
-references and checks each reader's exported values. It covers compound
+the independent oracle. Rust controls the complete check, including reader
+invocations and the ABBA observer calibration. Python prepares references and
+checks each reader's exported values. It covers compound
 predicates in both layouts, an empty result, LIMIT, wide projection, and
 ten-query reuse. The pinned Spark DV fixture checks real sidecar traffic for
 the four readers above. It does not change the later report-scale DV scenarios.

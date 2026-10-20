@@ -30,6 +30,8 @@ pub(crate) enum Task {
     RunCampaign(Box<campaign::controller::Args>),
     /// Check real local readers, correctness gates, clocks and failure propagation.
     CheckReaders(checks::Args),
+    /// Check real remote readers, MinIO request accounting and observer overhead.
+    CheckStorage(checks::remote::StorageArgs),
     /// Upload a verified fixture snapshot and save its immutable receipt.
     UploadStorage(storage::upload::Args),
     /// Operate the dedicated benchmark storage. Read the operation as JSON from stdin.
@@ -132,6 +134,7 @@ impl Task {
         match self {
             Self::RunCampaign(args) => return campaign::controller::run(*args),
             Self::CheckReaders(args) => return checks::local(args),
+            Self::CheckStorage(args) => return checks::remote::run(args),
             Self::ProductionFixtures(args) => return workload::fixtures::run(*args),
             Self::PlanProduction(args) => return workload::planner::run(args),
             Self::PrepareMatrix(args) => {
@@ -232,6 +235,7 @@ impl Task {
             Self::ExecReader { .. }
             | Self::RunCampaign(_)
             | Self::CheckReaders(_)
+            | Self::CheckStorage(_)
             | Self::RunIntraPage(_)
             | Self::FreezeWorkload(_)
             | Self::ProductionFixtures(_)

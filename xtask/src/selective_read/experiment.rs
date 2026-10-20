@@ -19,7 +19,7 @@ use crate::{Result, command::wait_with_timeout};
 pub(super) mod batch;
 pub(super) mod intra_page;
 
-fn median(mut numbers: Vec<f64>) -> Result<f64> {
+pub(super) fn median(mut numbers: Vec<f64>) -> Result<f64> {
     require(
         !numbers.is_empty() && numbers.iter().all(|n| n.is_finite()),
         "invalid timing samples",
