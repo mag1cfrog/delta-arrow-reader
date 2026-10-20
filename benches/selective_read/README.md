@@ -82,6 +82,22 @@ deletion-vector state as names in current explanations.
 - [Large-workload planning](../../docs/content/benchmarks/selective-read-large-workloads.md)
 - [Recorded capacity check](../../docs/content/benchmarks/selective-read-pilot-capacity.md)
 
+For the isolated raw Zstd block discovery diagnostic, prepare and upload a `long`
+Zstd fixture, attach the network proxy, then run:
+
+```sh
+cargo xtask selective-read zstd-probe \
+  --fixture /path/to/long-zstd-fixture \
+  --state /path/to/minio-state \
+  --output /path/to/new-probe-results
+```
+
+The Rust probe compares complete column reads with sequential block-header
+discovery in three alternating pairs. Both modes use curl and at most 32 worker
+threads. Each request range, checksum, discovered block and proxy count is checked.
+The output records the controller hash because timings include client overhead.
+This diagnostic measures discovery alone; it does not execute queries.
+
 ## Maintain the report charts
 
 The README charts use the four deletion-vector cases from

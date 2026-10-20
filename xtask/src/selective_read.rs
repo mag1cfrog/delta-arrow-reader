@@ -5,6 +5,7 @@ mod observe;
 mod report;
 mod storage;
 mod supervise;
+mod zstd_probe;
 
 use clap::Subcommand;
 use serde_json::Value;
@@ -28,6 +29,8 @@ pub(crate) enum Task {
     Network,
     /// Combine audited formal batches. Read the report inputs as JSON from stdin.
     ProductionReport,
+    /// Measure raw Zstd block discovery against complete column reads.
+    ZstdProbe(zstd_probe::Args),
     /// Build and attach the optional network proxy.
     StartNetwork(network::Start),
     /// Stop the attached proxy after proving that its process exited.
@@ -77,6 +80,7 @@ pub(crate) enum Task {
 impl Task {
     pub(crate) fn run(self) -> Result<()> {
         match self {
+            Self::ZstdProbe(args) => return zstd_probe::run(args),
             Self::StartNetwork(arguments) => return network::start(arguments),
             Self::StopNetwork { state } => {
                 let _lock = storage::exclusive(&state)?;
@@ -121,6 +125,7 @@ impl Task {
             Self::Network => network::run(serde_json::from_value(input)?)?,
             Self::ProductionReport => report::run(serde_json::from_value(input)?)?,
             Self::ExecReader { .. }
+            | Self::ZstdProbe(_)
             | Self::PrepareStorage { .. }
             | Self::StartStorage { .. }
             | Self::Capture { .. }
