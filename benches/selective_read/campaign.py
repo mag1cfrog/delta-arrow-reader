@@ -486,6 +486,10 @@ def execute_cached(args):
     resolution = timer_resolution()
     sources = [Path(__file__), HERE / "observe.py", HERE / "storage.py", HERE / "oracle.py", HERE.parent / "run_order.py",
                HERE / "runners/run.py", HERE / "runners/supervise.py", HERE / "metadata_cache.py", run.PROTOCOL]
+    import native
+    root = HERE.parents[1]
+    sources += [Path(native.__file__), native.executable(), root / "Cargo.lock", root / "xtask/Cargo.toml",
+                *sorted((root / "xtask/src").rglob("*.rs"))]
     if "network" in config:
         sources += [HERE / "network.py", state / "network.json"]
     if combined:

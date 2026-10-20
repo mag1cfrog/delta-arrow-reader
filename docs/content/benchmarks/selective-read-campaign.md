@@ -39,6 +39,10 @@ the [storage guide](selective-read-storage.md). Start MinIO once before uploadin
 the fixtures. Keep it running throughout the campaign. Compilation, fixture
 generation and reference preparation must finish before timing starts.
 
+Build the [native controller](../../../benches/selective_read/README.md#reproduce-a-run)
+before starting the campaign. Its executable and Rust sources are recorded with
+the campaign inputs; each watchdog result also identifies the controller binary.
+
 For the default compound-query smoke cases, prepare these references from the
 repository root. Each output directory must be new:
 

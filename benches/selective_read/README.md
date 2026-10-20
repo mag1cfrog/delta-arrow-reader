@@ -17,6 +17,17 @@ Run commands from the repository root and keep generated tables outside Git.
 The recorded runs use pinned inputs, reader builds, and execution contracts.
 Follow the version and hash requirements in each guide.
 
+Build the native controller before running the Python orchestration or its tests:
+
+```sh
+cargo build --locked -p xtask
+export SELECTIVE_READ_XTASK="$(pwd)/target/debug/xtask"
+```
+
+With `CARGO_TARGET_DIR`, point `SELECTIVE_READ_XTASK` at that directory's
+`debug/xtask` instead. The controller handles watchdog deadlines and process
+accounting. It is never compiled during a reader invocation.
+
 1. [Generate the public source](../../docs/content/benchmarks/selective-read-fixtures.md),
    then [write the wide tables and deletion-vector pairs](../../docs/content/benchmarks/selective-read-production-fixtures.md).
 2. [Build the readers](../../docs/content/benchmarks/selective-read-runners.md),

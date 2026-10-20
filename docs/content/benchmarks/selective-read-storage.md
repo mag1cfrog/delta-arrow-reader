@@ -17,7 +17,9 @@ Use Linux x86-64 with cgroup v2, a working systemd user manager, `taskset`, `cur
 with `--aws-sigv4`, Go toolchain downloads, and an authenticated `gh` CLI.
 Prepare the [five reader builds](selective-read-runners.md), the
 [oracle environment](selective-read-oracle.md), and
-[public fixtures](selective-read-fixtures.md) first. Run from the repository root:
+[public fixtures](selective-read-fixtures.md) first. Also build the
+[native controller](../../../benches/selective_read/README.md#reproduce-a-run)
+for supervised reader invocations. Run from the repository root:
 
 ```sh
 python3 -B benches/selective_read/storage.py prepare \

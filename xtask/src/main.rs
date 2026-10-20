@@ -31,6 +31,8 @@ mod repository;
 mod scan;
 #[cfg(unix)]
 mod scan_scheduling;
+#[cfg(target_os = "linux")]
+mod selective_read;
 #[cfg(unix)]
 mod selective_read_build;
 mod selective_read_chart;
@@ -60,6 +62,12 @@ struct Arguments {
 
 #[derive(Subcommand)]
 enum Task {
+    /// Native selective-read benchmark control tools.
+    #[cfg(target_os = "linux")]
+    SelectiveRead {
+        #[command(subcommand)]
+        command: selective_read::Task,
+    },
     /// Build a pinned Linux x86-64 benchmark reader and record its provenance.
     #[cfg(unix)]
     BuildSelectiveRead(selective_read_build::Arguments),
@@ -201,6 +209,8 @@ fn main() -> ExitCode {
 
 fn run_task(task: Task) -> Result<()> {
     match task {
+        #[cfg(target_os = "linux")]
+        Task::SelectiveRead { command } => command.run(),
         #[cfg(unix)]
         Task::BuildSelectiveRead(args) => args.run(),
         Task::RenderSelectiveReadChart { check } => selective_read_chart::run(check),

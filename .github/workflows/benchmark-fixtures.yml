@@ -19,6 +19,7 @@ jobs:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target/selective-read
       RUSTFLAGS: -C target-cpu=x86-64
       PYTHONDONTWRITEBYTECODE: '1'
+      SELECTIVE_READ_XTASK: ${{ github.workspace }}/target/selective-read/debug/xtask
     defaults:
       run:
         working-directory: benches/selective_read
@@ -64,6 +65,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.14.6'
+      - name: Build native benchmark controller
+        run: cargo build --locked --package xtask --manifest-path ../../Cargo.toml -j8
       - name: Validate independent oracle and public query results
         env:
           SELECTIVE_READ_FIXTURES: ${{ runner.temp }}/selective-read-smoke

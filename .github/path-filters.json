@@ -136,6 +136,9 @@
     "crates/delta-arrow-reader-core/tests/reader/fixtures/**"
   ],
   "selective_read": [
+    "xtask/src/selective_read.rs",
+    "xtask/src/selective_read/**",
+    "xtask/tests/selective_read.rs",
     ".cargo/**",
     ".github/path-filters.json",
     ".github/workflows/benchmark-fixtures.yml",
