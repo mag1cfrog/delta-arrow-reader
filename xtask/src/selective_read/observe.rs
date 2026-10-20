@@ -152,7 +152,7 @@ fn parse_metrics(source: &str) -> Result<Value> {
     Ok(result)
 }
 
-fn metrics(directory: &Path, timeout: f64) -> Result<Value> {
+pub(super) fn metrics(directory: &Path, timeout: f64) -> Result<Value> {
     let config = storage::state(directory)?;
     let source = storage::http(
         &format!(

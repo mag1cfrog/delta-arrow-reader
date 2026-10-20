@@ -438,7 +438,7 @@ fn checksum_verified(headers: &[u8], size: u64, expected: &str) -> Result<bool> 
     Ok(false)
 }
 
-fn put_verified(
+pub(super) fn put_verified(
     directory: &Path,
     key: &str,
     source: &Path,

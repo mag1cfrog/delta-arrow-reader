@@ -105,7 +105,7 @@ MinIO and uploading the fixtures:
 cargo xtask selective-read start-network \
   --state ../selective-read-storage --output ../selective-read-network \
   --latency-ms 200 --jitter-ms 20 --mbps 150 --seed 0
-python3 -B benches/selective_read/check_network.py \
+cargo xtask selective-read check-network \
   --state ../selective-read-storage --output ../selective-read-network-check
 ```
 

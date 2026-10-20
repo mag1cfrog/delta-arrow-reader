@@ -31,6 +31,13 @@ pub(crate) enum Task {
     ProductionReport,
     /// Measure raw Zstd block discovery against complete column reads.
     ZstdProbe(zstd_probe::Args),
+    /// Calibrate the 200 +/- 20 ms, 150 Mbit/s proxy against signed MinIO reads.
+    CheckNetwork {
+        #[arg(long)]
+        state: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Build and attach the optional network proxy.
     StartNetwork(network::Start),
     /// Stop the attached proxy after proving that its process exited.
@@ -81,6 +88,7 @@ impl Task {
     pub(crate) fn run(self) -> Result<()> {
         match self {
             Self::ZstdProbe(args) => return zstd_probe::run(args),
+            Self::CheckNetwork { state, output } => return network::calibrate(&state, &output),
             Self::StartNetwork(arguments) => return network::start(arguments),
             Self::StopNetwork { state } => {
                 let _lock = storage::exclusive(&state)?;
@@ -126,6 +134,7 @@ impl Task {
             Self::ProductionReport => report::run(serde_json::from_value(input)?)?,
             Self::ExecReader { .. }
             | Self::ZstdProbe(_)
+            | Self::CheckNetwork { .. }
             | Self::PrepareStorage { .. }
             | Self::StartStorage { .. }
             | Self::Capture { .. }

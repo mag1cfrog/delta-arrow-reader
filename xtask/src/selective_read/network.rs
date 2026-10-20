@@ -19,6 +19,8 @@ use std::{
 use storage::{affinity, endpoint, http, properties, read_json, save, service, timestamp_ns};
 
 pub(super) const BOUNDARY: &str = "proxy client-facing HTTP ResponseWriter accepted body bytes";
+mod check;
+pub(super) use check::calibrate;
 
 #[derive(Args)]
 pub(crate) struct Start {
