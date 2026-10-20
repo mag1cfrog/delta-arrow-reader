@@ -16,6 +16,22 @@ pub(crate) enum Task {
     Campaign,
     /// Operate the dedicated benchmark storage. Read the operation as JSON from stdin.
     Storage,
+    /// Build the pinned MinIO server in a new directory.
+    PrepareStorage {
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        source: Option<PathBuf>,
+    },
+    /// Start the pinned server with dedicated CPUs and enforced memory limits.
+    StartStorage {
+        #[arg(long)]
+        build: PathBuf,
+        #[arg(long)]
+        state: PathBuf,
+        #[arg(long, default_value_t = 19000)]
+        port: u16,
+    },
     /// Verify the effective reader limits, then replace this process with the reader.
     ExecReader {
         #[arg(long)]
@@ -27,15 +43,24 @@ pub(crate) enum Task {
 
 impl Task {
     pub(crate) fn run(self) -> Result<()> {
-        if let Self::ExecReader { state, command } = self {
-            return storage::exec_reader(&state, &command);
+        match self {
+            Self::ExecReader { state, command } => return storage::exec_reader(&state, &command),
+            Self::PrepareStorage { output, source } => {
+                return storage::service::prepare(&output, source.as_deref());
+            }
+            Self::StartStorage { build, state, port } => {
+                return storage::service::start(&build, &state, port);
+            }
+            _ => {}
         }
         let input: Value = serde_json::from_reader(std::io::stdin().lock())?;
         let result = match self {
             Self::Supervise => supervise::launch(serde_json::from_value(input)?)?,
             Self::Campaign => campaign::run(serde_json::from_value(input)?)?,
             Self::Storage => storage::run(serde_json::from_value(input)?)?,
-            Self::ExecReader { .. } => unreachable!(),
+            Self::ExecReader { .. } | Self::PrepareStorage { .. } | Self::StartStorage { .. } => {
+                unreachable!()
+            }
         };
         println!("{}", serde_json::to_string(&result)?);
         Ok(())

@@ -27,6 +27,8 @@ use crate::{
 
 pub(super) const BUCKET: &str = "selective-read";
 
+pub(super) mod service;
+
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "kebab-case", deny_unknown_fields)]
 pub(super) enum Request {

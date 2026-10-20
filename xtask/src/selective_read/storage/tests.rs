@@ -211,3 +211,21 @@ fn immutable_upload_uses_native_curl_and_reads_back_legacy_objects() -> Result<(
     }
     Ok(())
 }
+
+#[test]
+fn server_start_rejects_wrong_builds_and_ports_before_creating_state() -> Result<()> {
+    let root = tempfile::tempdir()?;
+    let state = root.path().join("state");
+    for port in [0, 1023, u16::MAX] {
+        assert!(service::start(root.path(), &state, port).is_err());
+        assert!(!state.exists());
+    }
+    fs::write(root.path().join("minio"), "not the pinned server")?;
+    save(
+        &root.path().join("build.json"),
+        &json!({"source_commit": "wrong", "binary_sha256":digest(&root.path().join("minio"))?}),
+    )?;
+    assert!(service::start(root.path(), &state, 19000).is_err());
+    assert!(!state.exists());
+    Ok(())
+}

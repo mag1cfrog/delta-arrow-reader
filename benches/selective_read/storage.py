@@ -6,11 +6,7 @@ from collections import Counter
 from contextlib import contextmanager
 import fcntl
 import json
-import os
 from pathlib import Path
-import platform
-import secrets
-import shutil
 import subprocess
 import sys
 import time
@@ -21,8 +17,6 @@ sys.path.insert(0, str(HERE / "runners"))
 from run import digest, save
 import native
 
-COMMIT = "07c3a429bfed433e49018cb0f78a52145d4bedeb"
-RELEASE = "RELEASE.2025-09-07T16-13-09Z"
 BUCKET = "selective-read"
 GO_ENV = {"GOTOOLCHAIN": "go1.24.7", "CGO_ENABLED": "0", "GOOS": "linux", "GOARCH": "amd64",
           "GOAMD64": "v1", "GOMAXPROCS": "8"}
@@ -30,33 +24,8 @@ HTTP = build_opener(ProxyHandler({}))
 
 
 def prepare(output, source=None):
-    output = output.resolve()
-    output.mkdir()
-    if source is None:
-        source = output / "source"
-        subprocess.run(["gh", "repo", "clone", "minio/minio", str(source), "--", "--filter=blob:none", "--no-checkout"], check=True)
-        subprocess.run(["git", "checkout", "--detach", COMMIT], cwd=source, check=True)
-    source = source.resolve()
-    assert subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip() == COMMIT
-    assert not subprocess.check_output(["git", "status", "--porcelain"], cwd=source)
-    environment = dict(os.environ, **GO_ENV, GOFLAGS="", GOEXPERIMENT="")
-    version = subprocess.check_output(["go", "version"], env=environment, text=True).strip()
-    assert version == "go version go1.24.7 linux/amd64", version
-    ldflags = "-s -w " + " ".join(f"-X github.com/minio/minio/cmd.{k}={v}" for k, v in {
-        "Version": "2025-09-07T16:13:09Z", "ReleaseTag": RELEASE, "CommitID": COMMIT,
-        "ShortCommitID": COMMIT[:12], "CopyrightYear": "2025"}.items())
-    command = ["go", "build", "-mod=readonly", "-p=8", "-trimpath", "-ldflags", ldflags, "-o", str(output / "minio"), "."]
-    subprocess.run(command, cwd=source, env=environment, check=True)
-    assert not subprocess.check_output(["git", "status", "--porcelain"], cwd=source)
-    for name in ("go.mod", "go.sum", "LICENSE"):
-        shutil.copyfile(source / name, output / name)
-    save(output / "build.json", {"source_commit": COMMIT, "release": RELEASE, "command": command, "environment": GO_ENV,
-        "go_version": version, "binary_sha256": digest(output / "minio"),
-        "module_files": {name: digest(output / name) for name in ("go.mod", "go.sum")},
-        "embedded_modules": subprocess.check_output(["go", "version", "-m", str(output / "minio")], env=environment, text=True),
-        "version": subprocess.check_output([str(output / "minio"), "--version"], text=True),
-        "harness_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=HERE, text=True).strip(),
-        "source_sha256": digest(Path(__file__)), "controller_sha256": digest(native.executable())})
+    subprocess.run([str(native.executable()), "selective-read", "prepare-storage", "--output", str(output.resolve()),
+                    *(["--source", str(source.resolve())] if source else [])], check=True, cwd=HERE.parents[1])
 
 
 def topology():
@@ -112,65 +81,8 @@ def request(directory, path, *options):
 
 
 def start(build, directory, port):
-    assert 1024 <= port < 65535, "use two unprivileged TCP ports"
-    build = build.resolve()
-    directory = directory.resolve()
-    identity = json.loads((build / "build.json").read_text())
-    assert identity["source_commit"] == COMMIT and identity["binary_sha256"] == digest(build / "minio")
-    rows = topology()
-    cpus = placement(rows)
-    directory.mkdir()
-    directory.chmod(0o700)
-    (directory / "data").mkdir()
-    secret = {"access_key": "benchmark", "secret_key": secrets.token_hex(32)}
-    save(directory / "credentials.json", secret)
-    (directory / "credentials.json").chmod(0o600)
-    unit = "selective-read-minio-" + secrets.token_hex(6)
-    settings = {"MINIO_BROWSER": "off", "MINIO_PROMETHEUS_AUTH_TYPE": "public", "MINIO_UPDATE": "off"}
-    environment = dict(os.environ, **settings, MINIO_ROOT_USER=secret["access_key"], MINIO_ROOT_PASSWORD=secret["secret_key"])
-    service_env = subprocess.check_output(["systemctl", "--user", "show-environment"], text=True)
-    cleared = sorted(name for line in service_env.splitlines() if (name := line.split("=", 1)[0]).startswith("MINIO_")
-                     and name not in (*settings, "MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD"))
-    cleared += ["GOGC", "GOMEMLIMIT", "GODEBUG", "GOMAXPROCS"]
-    command = ["systemd-run", "--user", "--quiet", f"--unit={unit}", "--service-type=exec",
-               "-p", "MemoryMax=4G", "-p", "MemorySwapMax=0", "-p", "CPUAffinity=" + " ".join(map(str, cpus["server"])),
-               "-p", "UnsetEnvironment=" + " ".join(cleared),
-               *[f"--setenv={name}" for name in (*settings, "MINIO_ROOT_USER", "MINIO_ROOT_PASSWORD")],
-               str(build / "minio"), "server", "--address", f"127.0.0.1:{port}", "--console-address", f"127.0.0.1:{port + 1}", str(directory / "data")]
-    config = {"format": "selective-read-storage-v1", "endpoint": f"http://127.0.0.1:{port}", "bucket": BUCKET,
-              "unit": unit, "build": str(build), "build_sha256": digest(build / "build.json"), "cpus": cpus,
-              "settings": settings, "source_sha256": digest(Path(__file__)), "controller_sha256": digest(native.executable()),
-              "cache": "fresh clients; reused MinIO and OS caches; no cache flushing",
-              "started_ns": time.time_ns(), "topology": rows, "kernel": platform.release(),
-              "cpu_info": Path("/proc/cpuinfo").read_text(), "memory_info": Path("/proc/meminfo").read_text(),
-              "load_average": list(os.getloadavg()), "storage": subprocess.check_output(["findmnt", "--json", "--target", str(directory)], text=True),
-              "curl_version": subprocess.check_output(["curl", "--version"], text=True),
-              "curl_sha256": digest(Path(shutil.which("curl"))), "python": sys.version, "command": command}
-    save(directory / "server.json", config)
-    subprocess.run(command, env=environment, check=True)
-    try:
-        deadline = time.monotonic() + 60
-        while True:
-            try:
-                with HTTP.open(config["endpoint"] + "/minio/health/ready", timeout=1) as response:
-                    assert response.status == 200
-                break
-            except OSError:
-                if time.monotonic() >= deadline:
-                    raise TimeoutError("MinIO did not become ready")
-                time.sleep(.1)
-        actual = properties(unit)
-        pid = int(actual["MainPID"])
-        group = Path("/sys/fs/cgroup" + actual["ControlGroup"])
-        assert sorted(os.sched_getaffinity(pid)) == cpus["server"]
-        assert (group / "memory.max").read_text().strip() == str(4 * 1024**3)
-        assert (group / "memory.swap.max").read_text().strip() == "0"
-        assert digest(Path(f"/proc/{pid}/exe")) == identity["binary_sha256"]
-        save(directory / "limits.json", actual | {"affinity": sorted(os.sched_getaffinity(pid)), "verified_ns": time.time_ns()})
-        request(directory, "/" + BUCKET, "-X", "PUT")
-    except BaseException:
-        subprocess.run(["systemctl", "--user", "stop", unit], check=False)
-        raise
+    subprocess.run([str(native.executable()), "selective-read", "start-storage", "--build", str(build.resolve()),
+                    "--state", str(directory.resolve()), "--port", str(port)], check=True, cwd=HERE.parents[1])
 
 
 def inventory(fixtures, table_ids=None):

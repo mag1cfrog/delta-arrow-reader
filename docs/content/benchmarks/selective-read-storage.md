@@ -22,9 +22,9 @@ Prepare the [five reader builds](selective-read-runners.md), the
 for supervised reader invocations. Run from the repository root:
 
 ```sh
-python3 -B benches/selective_read/storage.py prepare \
+cargo xtask selective-read prepare-storage \
   --output ../selective-read-minio-build
-python3 -B benches/selective_read/storage.py start \
+cargo xtask selective-read start-storage \
   --build ../selective-read-minio-build --state ../selective-read-storage \
   --port 19000
 python3 -B benches/selective_read/storage.py upload \
@@ -36,7 +36,7 @@ Build and state directories must be new. Preparation checks out source commit
 `07c3a429bfed433e49018cb0f78a52145d4bedeb` and builds release
 `RELEASE.2025-09-07T16-13-09Z` with Go 1.24.7, `CGO_ENABLED=0`, Linux/amd64 and
 `GOAMD64=v1`. To reuse an existing clean checkout at that exact commit, pass
-`--source PATH` to `prepare`. Keep the binary, build record, Go module files and
+`--source PATH` to `prepare-storage`. Keep the binary, build record, Go module files and
 license together.
 
 The service binds only to `127.0.0.1`. Generated credentials live in the private
