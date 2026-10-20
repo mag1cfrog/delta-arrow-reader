@@ -31,10 +31,16 @@ use crate::{
 pub(super) const BUCKET: &str = "selective-read";
 
 pub(super) mod service;
+pub(super) mod upload;
 
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "kebab-case", deny_unknown_fields)]
 pub(super) enum Request {
+    Inventory {
+        fixtures: PathBuf,
+        table_ids: Option<Vec<String>>,
+    },
+    Upload(upload::Args),
     State {
         directory: PathBuf,
     },
@@ -55,6 +61,11 @@ pub(super) enum Request {
 
 pub(super) fn run(operation: Request) -> Result<Value> {
     match operation {
+        Request::Inventory {
+            fixtures,
+            table_ids,
+        } => upload::inventory(&fixtures, table_ids.as_deref(), upload::hashes),
+        Request::Upload(args) => upload::run(&args, upload::hashes),
         Request::State { directory } => state(&directory),
         Request::VerifyServer { directory } => {
             verify_server(&directory)?;

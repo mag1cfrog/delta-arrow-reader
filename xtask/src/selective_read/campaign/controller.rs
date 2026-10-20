@@ -725,9 +725,18 @@ pub(in crate::selective_read) fn run(mut args: Args) -> Result<()> {
         .ok_or("invalid harness directory")?
         .join("docs/content/benchmarks");
     let mut worker = Worker::start(&args.python, &args.harness, &args.output)?;
-    let preparation = worker.call(
-        &json!({"action":"prepare", "fixtures":args.fixtures, "state":args.state,
-        "upload":args.upload, "upload_tables":args.upload_table}),
+    let preparation = storage::upload::prepare(
+        &args.state,
+        &args.fixtures,
+        &args.upload,
+        &args.upload_table,
+        |paths| {
+            let values = worker.call(&json!({"action":"hashes", "paths":paths}))?;
+            array(&values)?
+                .iter()
+                .map(|value| Ok(text(value)?.to_owned()))
+                .collect()
+        },
     )?;
     verified_receipt(&args, &preparation)?;
     args.upload = fs::canonicalize(&args.upload)?;

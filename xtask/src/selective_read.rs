@@ -25,6 +25,8 @@ pub(crate) enum Task {
     Campaign,
     /// Execute a frozen campaign, using Python only for independent data validation.
     RunCampaign(Box<campaign::controller::Args>),
+    /// Upload a verified fixture snapshot and save its immutable receipt.
+    UploadStorage(storage::upload::Args),
     /// Operate the dedicated benchmark storage. Read the operation as JSON from stdin.
     Storage,
     /// Read or reconcile storage observations. Read the operation as JSON from stdin.
@@ -100,6 +102,14 @@ impl Task {
     pub(crate) fn run(self) -> Result<()> {
         match self {
             Self::RunCampaign(args) => return campaign::controller::run(*args),
+            Self::UploadStorage(args) => {
+                let receipt = storage::upload::run(&args, storage::upload::hashes)?;
+                println!(
+                    "{}",
+                    serde_json::json!({"status":receipt["status"], "objects":array(&receipt["objects"])?.len()})
+                );
+                return Ok(());
+            }
             Self::ZstdProbe(args) => return zstd_probe::run(args),
             Self::CheckNetwork { state, output } => return network::calibrate(&state, &output),
             Self::StartNetwork(arguments) => return network::start(arguments),
@@ -151,6 +161,7 @@ impl Task {
             Self::IntraPage => experiment::intra_page::run(serde_json::from_value(input)?)?,
             Self::ExecReader { .. }
             | Self::RunCampaign(_)
+            | Self::UploadStorage(_)
             | Self::ZstdProbe(_)
             | Self::CheckNetwork { .. }
             | Self::PrepareStorage { .. }

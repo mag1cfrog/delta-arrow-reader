@@ -27,7 +27,7 @@ cargo xtask selective-read prepare-storage \
 cargo xtask selective-read start-storage \
   --build ../selective-read-minio-build --state ../selective-read-storage \
   --port 19000
-python3 -B benches/selective_read/storage.py upload \
+cargo xtask selective-read upload-storage \
   --state ../selective-read-storage --fixtures ../selective-read-smoke \
   --output ../selective-read-upload.json
 ```
@@ -55,6 +55,8 @@ Objects without a full SHA-256, including legacy and multipart objects, receive
 the complete GET verification. ETags are not used as content checksums.
 The receipt records the requested method, actual verification counts and
 uploader source hash. The default standalone upload uses complete GETs.
+Inventory selection, upload and receipt creation run in Rust.
+The existing `storage.py upload` command forwards to `upload-storage`.
 
 To avoid hashing local files again in a separate campaign process, use the
 campaign's `--upload-table` option described in the
@@ -66,7 +68,7 @@ mtime or ctime forces a fresh hash. Upload preparation stays outside query clock
 For a large staged pair, upload one native table at a time:
 
 ```sh
-python3 -B benches/selective_read/storage.py upload \
+cargo xtask selective-read upload-storage \
   --state ../selective-read-storage --fixtures ../production-q2-pairs \
   --table production.q2.scattered --output ../q2-scattered-upload.json
 ```

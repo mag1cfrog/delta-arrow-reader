@@ -11,20 +11,13 @@ import large_workloads
 import matrix
 import metadata_cache
 import run
-import storage
 
 
 def dispatch(value):
     action = value["action"]
     fixtures = Path(value["fixtures"]) if "fixtures" in value else None
-    if action == "prepare":
-        state, upload = Path(value["state"]), Path(value["upload"])
-        if value["upload_tables"]:
-            if upload.exists():
-                raise ValueError("inline upload requires a new receipt path")
-            storage.upload(state, fixtures, upload, value["upload_tables"], checksum=True)
-        receipt = json.loads(upload.read_text())
-        return {"receipt": receipt, "objects": storage.inventory(fixtures, receipt.get("table_ids"))}
+    if action == "hashes":
+        return [run.digest(Path(path)) for path in value["paths"]]
     if action == "load":
         workload = Path(value["workload"]) if value["workload"] else None
         return {"matrix": matrix.load(Path(value["matrix"]), fixtures) if value["matrix"] else None,
