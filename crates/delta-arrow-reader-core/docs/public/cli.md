@@ -390,18 +390,55 @@ the table author put there.
 
 ## Errors and process status
 
-An ordinary failure writes one JSON object plus newline to stderr. Its only
-fields are the strings `phase`, `code`, and `message`:
+The CLI subscribes to the core's tracing events and writes plain text to stderr.
+By default it shows WARN and ERROR, so successful commands are quiet unless a
+warning occurs. Core failures retain their operation identity, phase, code,
+reason, and available source category. The CLI reports its own failures with
+the same `error_phase`, `error_code`, and `error_reason` fields. For example:
 
-```json
-{"phase":"configuration","code":"invalid_cli_argument","message":"Invalid command-line arguments."}
+```text
+ERROR delta_arrow_reader_cli: CLI command failed event="cli.failed" operation="cli_command" outcome="failed" error_phase="configuration" error_code="invalid_cli_argument" error_reason="argument_parse_failed" argument_kind=UnknownArgument
 ```
 
-Diagnostics omit argument values, file paths, URLs, configuration contents,
-credential names and values, and underlying dependency messages. Reader
-failures retain the core reader's phase, code, and redacted Display message.
-The CLI does not start a tracing logger or mix progress or usage text into
-errors. Use `--help` for usage.
+This replaces the former JSON stderr object with `phase`, `code`, and `message`.
+Stderr is diagnostic text; its layout, field order, and human messages are not a
+machine-readable interface. Scripts should use the exit status and stdout
+format. Inspection JSON, Arrow IPC, and the exit statuses below are unchanged.
+Core event fields are described in the [tracing reference](reference/tracing.md).
+
+Diagnostics omit argument values, file paths, URLs, input contents, credential
+names and values, and dependency messages. Argument failures include the
+parser's `argument_kind`. JSON failures include `json_kind` (`Syntax`, `Data`, or
+`Eof`), `json_line`, and `json_column`. Oversized input and predicate validation
+use fixed reasons, such as `input_file_too_large` or
+`predicate_depth_limit_exceeded`. Serde schema failures share `Data`; their
+messages are not parsed or printed. I/O failures retain `io_kind` and an OS error
+number when available. Arrow failures use the core's safe source classifier.
+
+Set `RUST_LOG` to `error`, `warn`, `info`, `debug`, or `trace` for more or less
+detail. `off` suppresses diagnostics without changing the command's exit status.
+Comma-separated target prefixes also work, for example
+`delta_arrow_reader=debug,delta_arrow_reader_cli=warn`. A bare level sets the
+default; otherwise unmatched targets use WARN. The `delta_arrow_reader` prefix
+also matches the CLI target; a more specific CLI directive overrides it.
+Target directives follow
+`tracing-subscriber`'s `Targets` filter, without dynamic span-value or regex
+matching. An unset or empty value uses WARN. An invalid value produces a safe
+warning and falls back to WARN without printing the value.
+
+Only `delta_arrow_reader`, `delta_arrow_reader_cli`, and their `::` subtargets
+are allowed. Dependency targets remain disabled even if explicitly requested,
+including with `RUST_LOG=trace`. More detail can add lines and spans on stderr;
+it does not change stdout. There is no file sink or format flag. Redirect stderr
+with your shell:
+
+```sh
+RUST_LOG=debug dar inspect /data/table > snapshot.json 2> dar.log
+RUST_LOG=trace dar scan /data/table > rows.arrow 2> dar.log
+```
+
+Use `--help` for usage. A failed command can have emitted partial stdout; check
+its exit status before accepting the result.
 
 | Status | Meaning |
 | --- | --- |
@@ -443,11 +480,13 @@ finishes writing and flushing each batch before requesting another. The core
 uses background threads for blocking work. Runtime shutdown does not wait for
 unfinished blocking work, including core engine cleanup.
 
-An unrecoverable panic during reader execution, including failure to start a
-runtime thread, terminates the process with status 1 and a redacted
-`runtime_initialization` diagnostic. Panic payloads and backtraces are omitted.
+An unrecoverable panic, including failure to start a reader worker, terminates
+the process with status 1 and a synchronous ERROR with code
+`runtime_initialization` and reason `process_panicked`. Panic payloads and
+backtraces are omitted. Runtime setup failures have their own reason and safe
+I/O category.
 Outside PID 1, Linux signals keep their normal termination behavior: a killed
-process is unsuccessful and need not emit an error object. This applies while loading,
+process is unsuccessful and need not emit an error event. This applies while loading,
 waiting for a batch, or writing to a blocked pipe. A parent that cancels the
 child must also wait for it to exit and reap it.
 

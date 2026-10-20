@@ -538,13 +538,7 @@ fn padded_json(content: &[u8], size: usize) -> Vec<u8> {
 }
 
 fn check_json_error(output: &Output) -> Result<()> {
-    let diagnostic = check_error(output, 2, "configuration", "invalid_input_json")?;
-    ensure!(
-        diagnostic["message"] == "Invalid JSON input.",
-        InvalidInputSnafu {
-            message: format!("unexpected JSON input message: {diagnostic}")
-        }
-    );
+    check_error(output, 2, "configuration", "invalid_input_json")?;
     Ok(())
 }
 

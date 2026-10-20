@@ -4,14 +4,16 @@ use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaScalar};
 use serde::{Deserialize, Deserializer, de};
 use snafu::ensure;
 
-use crate::{Error, InputJsonSnafu, input::JsonObject};
+use crate::{Error, InputValidationSnafu, input::JsonObject};
 
 const MAX_PREDICATE_NODES: usize = 1024;
 const MAX_PREDICATE_DEPTH: usize = 32;
 
 #[derive(Deserialize)]
-#[serde(try_from = "JsonObject<PredicateNode>")]
-pub(crate) struct PredicateInput(pub(crate) DeltaPredicate);
+#[serde(transparent)]
+pub(crate) struct PredicateInput {
+    root: JsonObject<PredicateNode>,
+}
 
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
@@ -149,20 +151,26 @@ fn deserialize_timezone<'de, D: Deserializer<'de>>(
     Ok(timezone)
 }
 
-impl TryFrom<JsonObject<PredicateNode>> for PredicateInput {
-    type Error = Error;
-
-    fn try_from(node: JsonObject<PredicateNode>) -> Result<Self, Error> {
+impl PredicateInput {
+    pub(crate) fn into_predicate(self) -> Result<DeltaPredicate, Error> {
         let mut node_count = 0;
-        node.0.into_predicate(1, &mut node_count).map(Self)
+        self.root.0.into_predicate(1, &mut node_count)
     }
 }
 
 impl PredicateNode {
     fn into_predicate(self, depth: usize, node_count: &mut usize) -> Result<DeltaPredicate, Error> {
         ensure!(
-            depth <= MAX_PREDICATE_DEPTH && *node_count < MAX_PREDICATE_NODES,
-            InputJsonSnafu
+            depth <= MAX_PREDICATE_DEPTH,
+            InputValidationSnafu {
+                reason: "predicate_depth_limit_exceeded"
+            }
+        );
+        ensure!(
+            *node_count < MAX_PREDICATE_NODES,
+            InputValidationSnafu {
+                reason: "predicate_node_limit_exceeded"
+            }
         );
         *node_count += 1;
         Ok(match self {
@@ -216,11 +224,21 @@ impl ScalarInput {
             Self::Int64 { value } => DeltaScalar::Int64(value),
             Self::Float32 { value } => {
                 let value = value as f32;
-                ensure!(value.is_finite(), InputJsonSnafu);
+                ensure!(
+                    value.is_finite(),
+                    InputValidationSnafu {
+                        reason: "predicate_non_finite_float"
+                    }
+                );
                 DeltaScalar::Float32(value)
             }
             Self::Float64 { value } => {
-                ensure!(value.is_finite(), InputJsonSnafu);
+                ensure!(
+                    value.is_finite(),
+                    InputValidationSnafu {
+                        reason: "predicate_non_finite_float"
+                    }
+                );
                 DeltaScalar::Float64(value)
             }
             Self::Utf8 { value } => DeltaScalar::Utf8(value),
@@ -228,7 +246,12 @@ impl ScalarInput {
             Self::Binary { value } => DeltaScalar::Binary(value),
             Self::LargeBinary { value } => DeltaScalar::LargeBinary(value),
             Self::FixedSizeBinary { size, value } => {
-                ensure!(size > 0 && size as usize == value.len(), InputJsonSnafu);
+                ensure!(
+                    size > 0 && size as usize == value.len(),
+                    InputValidationSnafu {
+                        reason: "predicate_binary_size_mismatch"
+                    }
+                );
                 DeltaScalar::FixedSizeBinary { size, value }
             }
             Self::Date32 { value } => DeltaScalar::Date32(value),

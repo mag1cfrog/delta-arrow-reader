@@ -48,7 +48,7 @@ impl ScanFixture<'_> {
                     .current_dir(directory)
                     .env("NO_PROXY", "*")
                     .env("no_proxy", "*")
-                    .env("RUST_LOG", "trace")
+                    .env_remove("RUST_LOG")
                     .env("SSL_CERT_FILE", directory.join("trusted-ca.pem"))
                     .env("SSL_CERT_DIR", &empty_certs)
                     .stdin(Stdio::null());

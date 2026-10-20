@@ -7,7 +7,7 @@ use serde::{
 };
 use snafu::{ResultExt, ensure};
 
-use crate::{Error, InputIoSnafu, InputJsonSnafu};
+use crate::{Error, InputIoSnafu, InputJsonSnafu, InputValidationSnafu};
 
 const MAX_JSON_BYTES: u64 = 1024 * 1024;
 
@@ -17,8 +17,13 @@ pub(crate) fn read_json_file<T: DeserializeOwned>(path: &str) -> Result<T, Error
     file.take(MAX_JSON_BYTES + 1)
         .read_to_end(&mut bytes)
         .context(InputIoSnafu)?;
-    ensure!(bytes.len() as u64 <= MAX_JSON_BYTES, InputJsonSnafu);
-    serde_json::from_slice(&bytes).map_err(|_| InputJsonSnafu.build())
+    ensure!(
+        bytes.len() as u64 <= MAX_JSON_BYTES,
+        InputValidationSnafu {
+            reason: "input_file_too_large"
+        }
+    );
+    serde_json::from_slice(&bytes).context(InputJsonSnafu)
 }
 
 // Serde also accepts arrays for structs and tagged enums; require objects.

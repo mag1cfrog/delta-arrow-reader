@@ -25,9 +25,7 @@ fn failed_output(rows: usize) -> TestResult<Output> {
     Ok(Output {
         status: ExitStatus::from_raw(1 << 8),
         stdout,
-        stderr:
-            b"{\"phase\":\"data_file_read\",\"code\":\"data_file_read\",\"message\":\"Failed\"}\n"
-                .to_vec(),
+        stderr: b"ERROR delta_arrow_reader: event=\"scan_execution.failed\" outcome=\"failed\" operation_id=3 error_phase=\"data_file_read\" error_code=\"data_file_read\" error_reason=\"read_failed\"\n".to_vec(),
     })
 }
 

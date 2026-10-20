@@ -8,7 +8,7 @@ use crate::{ConfigurationSnafu, Error, InputJsonSnafu, input::JsonObject};
 
 fn parse(text: &str) -> Result<DeltaScanExecutionOptions, Error> {
     serde_json::from_str::<JsonObject<ExecutionOptionsInput>>(text)
-        .map_err(|_| InputJsonSnafu.build())?
+        .context(InputJsonSnafu)?
         .0
         .into_execution_options()
         .context(ConfigurationSnafu)
@@ -90,7 +90,10 @@ fn rejects_wrong_shapes_types_and_duplicate_fields() {
         r#"{"parquet_backend":{"direct":null}}"#,
         r#"{"parquet_backend":"direct","parquet_backend":"delta_kernel"}"#,
     ] {
-        assert!(matches!(parse(text), Err(Error::InputJson)), "{text}");
+        assert!(
+            matches!(parse(text), Err(Error::InputJson { .. })),
+            "{text}"
+        );
     }
     for (field, nullable) in [
         ("max_concurrent_file_reads_per_scan", true),
@@ -104,14 +107,23 @@ fn rejects_wrong_shapes_types_and_duplicate_fields() {
             "-1", "-0", "1.0", "1e0", "true", "false", r#""1""#, "[]", "{}",
         ] {
             let text = format!(r#"{{"{field}":{value}}}"#);
-            assert!(matches!(parse(&text), Err(Error::InputJson)), "{text}");
+            assert!(
+                matches!(parse(&text), Err(Error::InputJson { .. })),
+                "{text}"
+            );
         }
         let overflow = usize::MAX as u128 + 1;
         let text = format!(r#"{{"{field}":{overflow}}}"#);
-        assert!(matches!(parse(&text), Err(Error::InputJson)), "{text}");
+        assert!(
+            matches!(parse(&text), Err(Error::InputJson { .. })),
+            "{text}"
+        );
         if !nullable {
             let text = format!(r#"{{"{field}":null}}"#);
-            assert!(matches!(parse(&text), Err(Error::InputJson)), "{text}");
+            assert!(
+                matches!(parse(&text), Err(Error::InputJson { .. })),
+                "{text}"
+            );
         }
         for value in if nullable {
             &["1", "null"][..]
@@ -121,7 +133,10 @@ fn rejects_wrong_shapes_types_and_duplicate_fields() {
             let escaped_key = format!(r#"\u{:04x}{}"#, field.as_bytes()[0], &field[1..]);
             for duplicate in [field, &escaped_key] {
                 let text = format!(r#"{{"{field}":{value},"{duplicate}":{value}}}"#);
-                assert!(matches!(parse(&text), Err(Error::InputJson)), "{text}");
+                assert!(
+                    matches!(parse(&text), Err(Error::InputJson { .. })),
+                    "{text}"
+                );
             }
         }
     }
@@ -194,9 +209,13 @@ fn native_configuration_errors_keep_their_diagnostics_and_source() {
         .unwrap_err();
     let error = parse(r#"{"output_buffer_batches_per_partition":0}"#).unwrap_err();
     assert_eq!(error.exit_code(), ExitCode::from(2));
-    assert_eq!(
-        error.diagnostic(),
-        json!({"phase":native.phase().as_str(), "code":native.code(), "message":native.to_string()})
-    );
+    let text = crate::diagnostics::capture("warn", || error.log_failure());
+    for (field, value) in [
+        ("error_phase", native.phase().as_str()),
+        ("error_code", native.code()),
+        ("error_reason", native.reason()),
+    ] {
+        assert!(text.contains(&format!("{field}=\"{value}\"")), "{text}");
+    }
     assert!(error.source().unwrap().is::<DeltaReaderError>());
 }

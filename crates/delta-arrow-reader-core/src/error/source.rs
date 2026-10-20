@@ -10,7 +10,13 @@ use object_store::{
 };
 use parquet::errors::ParquetError;
 
-pub(crate) fn source_kind(mut error: &(dyn Error + 'static)) -> &'static str {
+/// Classifies an error source without formatting dependency messages.
+///
+/// This is the classifier used by [`crate::DeltaReaderError::source_kind`]. Hosts
+/// can also use it for their own I/O or Arrow errors. Unrecognized sources return
+/// `"unknown"`; traversal stops after 16 links with `"source_chain_limit"`.
+/// Categories may be extended. The original error is not changed.
+pub fn source_kind(mut error: &(dyn Error + 'static)) -> &'static str {
     let mut fallback = "unknown";
     // External source implementations can contain cycles or arbitrarily deep chains.
     for _ in 0..16 {

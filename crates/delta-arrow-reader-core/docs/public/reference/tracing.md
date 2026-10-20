@@ -4,6 +4,10 @@ The core emits `tracing` events. The application installs the subscriber and
 chooses filtering, formatting, and destinations. Returned `DeltaReaderError`
 values remain available without a subscriber.
 
+Hosts can use `error_source_kind(&error)` to apply the same safe source
+classification to their own I/O or Arrow failures. It does not emit an event
+or transfer diagnostic ownership to the core.
+
 ## Public operation events
 
 The following boundaries own their diagnostic outcome on the
