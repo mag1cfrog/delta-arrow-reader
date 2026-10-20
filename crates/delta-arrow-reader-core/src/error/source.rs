@@ -194,11 +194,18 @@ pub fn source_kind(mut error: &(dyn Error + 'static)) -> &'static str {
         #[cfg(feature = "datafusion")]
         {
             use datafusion::common::DataFusionError;
-            let datafusion = error.downcast_ref::<DataFusionError>().or_else(|| {
-                error
-                    .downcast_ref::<Box<DataFusionError>>()
-                    .map(AsRef::as_ref)
-            });
+            let datafusion = error
+                .downcast_ref::<DataFusionError>()
+                .or_else(|| {
+                    error
+                        .downcast_ref::<Box<DataFusionError>>()
+                        .map(AsRef::as_ref)
+                })
+                .or_else(|| {
+                    error
+                        .downcast_ref::<std::sync::Arc<DataFusionError>>()
+                        .map(AsRef::as_ref)
+                });
             match datafusion {
                 Some(DataFusionError::SQL(..)) => return "sql_parse",
                 Some(DataFusionError::Plan(_)) => return "datafusion_plan",
@@ -500,5 +507,12 @@ mod tests {
             ])),
             "multiple_errors"
         );
+        let collection = DataFusionError::External(Box::new(std::sync::Arc::new(
+            DataFusionError::Collection(vec![
+                DataFusionError::IoError(io::ErrorKind::NotFound.into()),
+                DataFusionError::IoError(io::ErrorKind::PermissionDenied.into()),
+            ]),
+        )));
+        assert_eq!(source_kind(&collection), "multiple_errors");
     }
 }

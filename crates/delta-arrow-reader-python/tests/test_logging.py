@@ -365,6 +365,177 @@ class LoggingTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
 
+    def test_sql_consumption_forwards_partition_lifecycles_from_workers(self):
+        table = DeltaTable(FIXTURE, warmup="none")
+        for backend in ["direct", "delta_kernel"]:
+            with self.subTest(backend=backend):
+                session = Session()
+                session.register_table("private_events", table,
+                                       execution_options=ScanExecutionOptions(parquet_backend=backend))
+                self.collect.records.clear()
+                unused = session.sql("SELECT * FROM private_events")
+                unused.close()
+                readers = [session.sql("SELECT * FROM private_events") for _ in range(2)]
+                self.assertEqual(self.collect.records, [])
+
+                def consume(reader):
+                    with reader:
+                        return threading.get_ident(), reader.read_all().num_rows
+
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    results = list(pool.map(consume, readers))
+                self.assertEqual([rows for _, rows in results], [360, 360])
+                callers = {thread for thread, _ in results}
+                partitions = [r for r in self.collect.records
+                              if r.msg.startswith("datafusion_partition_execution.")]
+                self.assertTrue(partitions)
+                self.assertTrue(all(r.thread not in callers for r in partitions))
+                plans = {r.dar_fields["plan_id"] for r in partitions}
+                self.assertEqual(len(plans), 2)
+                by_operation = {}
+                for record in partitions:
+                    self.assertEqual(record.levelno, logging.INFO)
+                    self.assertEqual(record.dar_fields["snapshot_version"], table.version)
+                    by_operation.setdefault(record.dar_fields["operation_id"], []).append(record)
+                for records in by_operation.values():
+                    self.assertEqual([r.msg for r in records],
+                                     ["datafusion_partition_execution.started",
+                                      "datafusion_partition_execution.completed"])
+                    self.assertEqual(records[0].dar_fields["plan_id"], records[1].dar_fields["plan_id"])
+                rendered = repr([r.__dict__ for r in self.collect.records])
+                self.assertNotIn("private_events", rendered)
+                self.assertNotIn(str(FIXTURE), rendered)
+
+    def test_sql_operator_failures_keep_distinct_safe_categories_and_replay_once(self):
+        session = Session()
+        table = DeltaTable(FIXTURE, warmup="none")
+        session.register_table("private_events", table)
+        cases = [
+            ("SELECT CAST('private-literal' AS INT)", "arrow_cast"),
+            ("SELECT CAST(label AS INT) FROM private_events WHERE label IS NOT NULL", "arrow_cast"),
+            ("SELECT id / (id - id) FROM private_events", "divide_by_zero"),
+        ]
+        for level in [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, 5]:
+            self.logger.setLevel(level)
+            for query, category in cases:
+                with self.subTest(level=level, category=category, query=query):
+                    # Enable diagnostics after constructing the deferred reader.
+                    self.collect.setLevel(logging.CRITICAL)
+                    reader = session.sql(query)
+                    self.collect.records.clear()
+                    self.collect.setLevel(level)
+                    messages = []
+                    with reader:
+                        for _ in range(3):
+                            with self.assertRaises(pa.ArrowInvalid) as caught:
+                                reader.read_next_batch()
+                            messages.append(str(caught.exception))
+                    self.assertEqual(len(set(messages)), 1)
+                    self.assertIn("phase=datafusion code=sql_execution", messages[0])
+                    failures = [r for r in self.collect.records if r.levelno >= logging.ERROR]
+                    self.assertEqual(len(failures), 1)
+                    failure = failures[0]
+                    self.assertEqual(failure.dar_target, "delta_arrow_reader_python")
+                    self.assertEqual(failure.msg, "sql_execution.failed")
+                    self.assertEqual(failure.dar_fields["error_source_kind"], category)
+                    self.assertEqual(failure.dar_fields["error_code"], "sql_execution")
+                    rendered = repr([r.__dict__ for r in self.collect.records]) + repr(messages)
+                    for secret in ["private_events", "private-literal", "value-", str(FIXTURE)]:
+                        self.assertNotIn(secret, rendered)
+        with session.sql("SELECT 42 AS answer") as reader:
+            self.assertEqual(reader.read_all().to_pylist(), [{"answer": 42}])
+
+    def test_sql_core_failures_have_one_owner_at_all_levels(self):
+        with tempfile.TemporaryDirectory(prefix="private-sql-") as temporary:
+            location = Path(temporary) / "private-table"
+            shutil.copytree(FIXTURE, location)
+            table = DeltaTable(location, warmup="none")
+            for path in (location / "region=east").glob("*.parquet"):
+                path.unlink()
+            for backend in ["direct", "delta_kernel"]:
+                session = Session()
+                session.register_table("private_events", table,
+                                       execution_options=ScanExecutionOptions(parquet_backend=backend))
+                for level in [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, 5]:
+                    with self.subTest(backend=backend, level=level):
+                        self.logger.setLevel(level)
+                        reader = session.sql("SELECT * FROM private_events")
+                        self.collect.records.clear()
+                        with reader:
+                            for _ in range(3):
+                                with self.assertRaises(pa.ArrowInvalid) as caught:
+                                    reader.read_all()
+                                self.assertIn("phase=datafusion code=sql_execution", str(caught.exception))
+                        failures = [r for r in self.collect.records if r.levelno >= logging.ERROR]
+                        self.assertEqual(len(failures), 1)
+                        failure = failures[0]
+                        self.assertEqual(failure.msg, "datafusion_partition_execution.failed")
+                        self.assertEqual(failure.dar_target, "delta_arrow_reader")
+                        self.assertEqual(failure.dar_fields["error_source_kind"], "not_found")
+                        self.assertEqual(failure.dar_fields["error_code"], "data_file_read")
+                        self.assertIn("operation_id", failure.dar_fields)
+                        self.assertIn("plan_id", failure.dar_fields)
+                        self.assertNotEqual(failure.thread, threading.get_ident())
+                        rendered = repr([r.__dict__ for r in self.collect.records])
+                        for secret in ["private_events", temporary, "region=east", ".parquet"]:
+                            self.assertNotIn(secret, rendered)
+
+    def test_sql_worker_callbacks_interrupt_and_close_without_deadlock(self):
+        for action in ["sql-interrupt", "sql-close"]:
+            with self.subTest(action=action):
+                result = subprocess.run([sys.executable, "-I", __file__, action],
+                                        capture_output=True, text=True, timeout=30)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stderr, "")
+
+    def test_sql_deferred_provider_planning_failure_is_not_reported_twice(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            location = Path(temporary) / "private-table"
+            shutil.copytree(FIXTURE, location)
+            table = DeltaTable(location, warmup="none")
+            session = Session()
+            session.register_table("events", table)
+            reader = session.sql("SELECT * FROM events")
+            (location / "_delta_log/00000000000000000000.json").write_text("private-invalid-json\n")
+            self.collect.records.clear()
+            self.logger.setLevel(logging.ERROR)
+            with reader:
+                for _ in range(3):
+                    with self.assertRaises(pa.ArrowInvalid):
+                        reader.read_all()
+            self.assertEqual(self.events(), ["provider_scan.failed"])
+            self.assertEqual(self.collect.records[0].dar_fields["error_source_kind"], "arrow_json")
+            rendered = repr(self.collect.records[0].__dict__)
+            self.assertNotIn("private", rendered)
+            self.assertNotIn(temporary, rendered)
+
+    def test_interpreter_shutdown_with_live_logged_readers_is_quiet(self):
+        result = subprocess.run([sys.executable, "-I", "-c", """
+import logging
+import sys
+from delta_arrow_reader import DeltaTable, Session
+records = []
+class Collect(logging.Handler):
+    def emit(self, record):
+        records.append(record.msg)
+logger = logging.getLogger('delta_arrow_reader')
+logger.handlers = [Collect()]
+logger.setLevel(logging.INFO)
+logger.propagate = False
+table = DeltaTable(sys.argv[1], warmup='none')
+session = Session()
+session.register_table('events', table)
+ordinary = table.to_reader(target_partitions=1)
+sql = session.sql('SELECT * FROM events')
+assert ordinary.read_next_batch().num_rows > 0
+assert sql.read_next_batch().num_rows > 0
+assert 'datafusion_partition_execution.started' in records
+# Keep both readers and their subscribers alive until interpreter finalization.
+""", str(FIXTURE)], capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(result.stderr, "")
+
     def test_worker_events_and_concurrent_refreshes_keep_distinct_ids(self):
         self.logger.setLevel(logging.DEBUG)
         table = DeltaTable(FIXTURE, warmup="query_planning")
@@ -400,6 +571,8 @@ class LoggingTests(unittest.TestCase):
             session.sql("SELECT * FROM private_missing")
         with session.sql("SELECT 42 AS answer") as reader:
             self.assertEqual(reader.read_all().to_pylist(), [{"answer": 42}])
+        with session.sql("SELECT * FROM events") as reader:
+            self.assertEqual(reader.read_all().num_rows, 360)
         self.logger.handlers = [self.collect]
         table.refresh()
         self.assertEqual(self.events(), ["table_refresh.started", "table_refresh.completed"])
@@ -432,6 +605,16 @@ for operation in [lambda: table.scan(columns=['private_missing']),
 assert (root.handlers, root.level) == previous
 with table.to_reader() as reader:
     assert reader.read_all().num_rows == 360
+session.register_table('events', table)
+with session.sql('SELECT * FROM events') as reader:
+    assert reader.read_all().num_rows == 360
+with session.sql("SELECT CAST('private-literal' AS INT)") as reader:
+    try:
+        reader.read_all()
+    except Exception:
+        pass
+    else:
+        raise AssertionError('invalid SQL cast succeeded')
 """, str(FIXTURE)], capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "")
@@ -685,13 +868,16 @@ def check_stream_interrupt():
         assert reader.read_all().num_rows == 360
 
 
-def check_stream_close():
+def check_stream_close(*, sql=False):
     table = DeltaTable(FIXTURE, warmup="none")
+    session = Session()
+    session.register_table("events", table)
     logger = logging.getLogger("delta_arrow_reader")
     logger.setLevel(logging.INFO)
     logger.propagate = False
     for worker in [False, True]:
-        reader = table.to_reader(target_partitions=1)
+        reader = (session.sql("SELECT * FROM events")
+                  if sql else table.to_reader(target_partitions=1))
         idle = table.to_reader()
         rejected = []
         unexpected = []
@@ -699,7 +885,8 @@ def check_stream_close():
 
         class Close(logging.Handler):
             def emit(self, record):
-                if record.msg != "scan_execution.started":
+                expected = "datafusion_partition_execution.started" if sql else "scan_execution.started"
+                if record.msg != expected or calls:
                     return
                 calls.append(record.thread)
                 for target in [reader, idle]:
@@ -726,7 +913,7 @@ def check_stream_close():
             assert len(rejected) == 2 and not unexpected, (rejected, unexpected)
             assert all("reader operations cannot be called from a logging callback" in x for x in rejected)
             assert len(calls) == 1
-            assert (calls[0] != threading.get_ident()) == worker
+            assert (calls[0] != threading.get_ident()) == (worker or sql)
             for target in [reader, idle]:
                 try:
                     target.read_next_batch()
@@ -742,6 +929,41 @@ def check_stream_close():
         assert reader.read_all().num_rows == 360
 
 
+def check_sql_interrupt():
+    table = DeltaTable(FIXTURE, warmup="none")
+    session = Session()
+    session.register_table("events", table)
+    logger = logging.getLogger("delta_arrow_reader")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    for exception in [KeyboardInterrupt, SystemExit]:
+        reader = session.sql("SELECT * FROM events")
+        called = []
+
+        class Interrupt(logging.Handler):
+            def emit(self, record):
+                if record.msg == "datafusion_partition_execution.started" and not called:
+                    called.append(threading.get_ident())
+                    raise exception("private handler interruption")
+
+        logger.handlers = [Interrupt()]
+        try:
+            for _ in range(3):
+                try:
+                    reader.read_all()
+                except pa.ArrowInvalid as error:
+                    assert "phase=execution code=python_signal reason=reader_wait_interrupted" in str(error)
+                    assert "private" not in str(error)
+                else:
+                    raise AssertionError("SQL swallowed a worker handler interruption")
+            assert len(called) == 1 and called[0] != threading.get_ident(), called
+        finally:
+            logger.handlers = [logging.NullHandler()]
+            reader.close()
+    with session.sql("SELECT 42 AS answer") as reader:
+        assert reader.read_all().to_pylist() == [{"answer": 42}]
+
+
 if __name__ == "__main__":
     if sys.argv[1:] == ["reentry"]:
         check_reentry()
@@ -753,5 +975,9 @@ if __name__ == "__main__":
         check_stream_interrupt()
     elif sys.argv[1:] == ["stream-close"]:
         check_stream_close()
+    elif sys.argv[1:] == ["sql-close"]:
+        check_stream_close(sql=True)
+    elif sys.argv[1:] == ["sql-interrupt"]:
+        check_sql_interrupt()
     else:
         unittest.main()

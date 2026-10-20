@@ -304,14 +304,37 @@ span or default-dispatch guard crosses an await.
 | Lazy partition startup and Direct reads | Partition tasks inherit the polling caller's subscriber. Their profiling spans retain the existing causal link to the caller. |
 | DeltaKernel file producer | The blocking producer inherits the invoking partition task's context. |
 | DataFusion provider scan | Native adapters carry the planning caller through warmup and blocking setup. The returned plan retains no planning subscriber. |
-| DataFusion execution | Lifecycle records use the caller at `execute`; detailed polling work uses the consumer's active context. Reusing a plan does not reuse its planning caller. |
+| DataFusion execution | By default, lifecycle records use the caller at `execute` and detailed work uses the polling caller. An optional `Dispatch` in the query's `TaskContext` overrides both. Reusing a plan does not reuse its planning caller. |
 | Pooled S3 connection driver, pool cleanup, and shared Kernel-engine shutdown | Shared background work uses the worker's ambient/global subscriber, if any. It does not capture the first request's context. |
 
 When using a scoped subscriber, keep it active while consuming the stream and
-performing cleanup. `into_stream` and DataFusion `execute` do not bind later
-polling to their creation scope. Native span nesting and filtering rules apply;
+performing cleanup. `into_stream` and DataFusion `execute` without a task-context
+extension do not bind later polling to their creation scope. Native span nesting and filtering rules apply;
 the reader does not reset the caller's span stack. Lifecycle records carry
 `operation_id` and stream `plan_id` independently of span filtering.
+
+DataFusion can start tasks outside a scoped subscriber. To carry a query's
+subscriber into DAR partition setup, polling, and reader workers, put a native
+`tracing::Dispatch` in that query's `TaskContext` configuration:
+
+```rust
+use std::sync::Arc;
+
+let task = frame.task_ctx();
+let config = task.session_config().clone().with_extension(Arc::new(
+    tracing::dispatcher::get_default(Clone::clone),
+));
+let task = Arc::new(task.with_session_config(config));
+let plan = frame.create_physical_plan().await?;
+let stream = datafusion::physical_plan::execute_stream(plan, task)?;
+```
+
+Capture this dispatch while the query's subscriber is active. Keep the extension
+on the query task context, rather than the shared session configuration, so later
+queries can use their own subscriber. DAR restores the worker's previous default
+after each setup call and poll. This extension carries the subscriber, not a span
+stack, and does not configure tracing for other DataFusion operators or install
+a global task hook. The Python binding supplies the extension for SQL readers.
 
 Dropping a started operation or stream still records abandonment or early drop
 through its lifecycle guard. This does not promise that every destructor in the

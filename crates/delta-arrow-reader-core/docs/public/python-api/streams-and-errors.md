@@ -14,10 +14,10 @@ around iteration or `read_all()` as well.
 
 ## Configure diagnostic logging
 
-Table loading, refresh, ordinary scan planning and consumption, and SQL table
-registration forward core tracing events to the `delta_arrow_reader` Python
-logger. SQL logical planning failures use the same logger. Configure logging in
-your application:
+Table loading, refresh, scan planning and consumption, and SQL table registration
+forward core tracing events to the `delta_arrow_reader` Python logger. SQL
+planning and operator failures use the same logger. Configure logging in your
+application:
 
 ```python
 import logging
@@ -39,7 +39,7 @@ stays quiet, including when it catches a reader exception. It does not configure
 the root logger or install console or file handlers. Existing application
 handlers receive records through normal propagation. Logger and handler level
 changes take effect on later events, including calls on an existing table,
-session, or partially consumed ordinary scan.
+session, or partially consumed reader.
 
 | Core level | Python level |
 | --- | --- |
@@ -83,8 +83,23 @@ its plan and execution identities and whether output has already started.
 Closing an unused stream produces no execution record. There is no lifecycle
 record per batch.
 
-Python argument validation, schema export, and deferred SQL execution are not
-yet forwarded by the Python bridge.
+SQL consumption forwards provider planning and partition execution records,
+including records from DataFusion workers. Each partition has its own execution
+identity linked to its plan. A partition completing does not mean the whole
+query succeeded; a later SQL operator can still fail. Independent partitions
+can each report a failure.
+
+The binding forwards typed DAR failures without adding another ERROR. Other SQL
+execution failures emit one `sql_execution.failed` ERROR on the
+`delta_arrow_reader_python` target. The `error_source_kind` field distinguishes
+causes such as `arrow_cast` and `divide_by_zero`, while the Arrow exception
+keeps `phase=datafusion code=sql_execution`. This includes physical planning
+performed on the first batch request. Collections of failures use
+`multiple_errors`; unknown sources use `unknown`, and classification beyond 16
+links uses `source_chain_limit`. Raw errors and query data remain omitted.
+
+Python argument validation and schema export are not yet forwarded by the
+Python bridge.
 
 Handlers run synchronously on the calling thread or a reader worker. They must
 not start reader work or wait for another thread to finish reader work. Calls
