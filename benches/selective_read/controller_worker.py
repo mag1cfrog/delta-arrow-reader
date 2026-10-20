@@ -13,11 +13,34 @@ import metadata_cache
 import run
 
 
+def check_intra(value):
+    import oracle
+    import pyarrow as pa
+    reference = Path(value["reference"])
+    record = value["record"]
+    metadata = json.loads((reference / "reference.json").read_text())
+    for field in oracle.IDENTITY_FIELDS:
+        oracle.require(record["identity"][field] == metadata[field], "reference identity mismatch: " + field)
+    checks = []
+    for query in record["queries"]:
+        path = Path(value["output"]) / "reader" / query["result"]
+        with path.open("rb") as source, pa.ipc.open_stream(source) as batches:
+            oracle.check_schema(batches.schema, metadata["projection"])
+            rows = oracle.compare(batches, reference / "reference.parquet", metadata["projection"], metadata["output_rows"])
+            oracle.require(not source.read(1), "trailing Arrow bytes")
+        checks.append(record["identity"] | {"status": "passed", "output_rows": rows,
+            "oracle_sha256": run.digest(HERE / "oracle.py"), "reference_sha256": metadata["reference_sha256"],
+            "result_sha256": run.digest(path)})
+    return {"status": "passed", "checks": checks}
+
+
 def dispatch(value):
     action = value["action"]
     fixtures = Path(value["fixtures"]) if "fixtures" in value else None
     if action == "hashes":
         return [run.digest(Path(path)) for path in value["paths"]]
+    if action == "check-intra":
+        return check_intra(value)
     if action == "load":
         workload = Path(value["workload"]) if value["workload"] else None
         return {"matrix": matrix.load(Path(value["matrix"]), fixtures) if value["matrix"] else None,

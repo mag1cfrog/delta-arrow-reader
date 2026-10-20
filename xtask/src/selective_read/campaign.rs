@@ -9,7 +9,6 @@ use crate::{Result, scan_scheduling::balanced_orders};
 
 pub(super) mod controller;
 pub(super) mod evidence;
-mod worker;
 
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "kebab-case", deny_unknown_fields)]

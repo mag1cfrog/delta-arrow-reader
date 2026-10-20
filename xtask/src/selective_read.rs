@@ -7,6 +7,7 @@ mod pairs;
 mod report;
 mod storage;
 mod supervise;
+mod validation;
 mod zstd_probe;
 
 use clap::Subcommand;
@@ -43,6 +44,8 @@ pub(crate) enum Task {
     Experiment,
     /// Compare partial-page policies or reader builds. Read one invocation as JSON.
     IntraPage,
+    /// Run a complete partial-page or two-build experiment with independent validation.
+    RunIntraPage(Box<experiment::intra_page::batch::Args>),
     /// Measure raw Zstd block discovery against complete column reads.
     ZstdProbe(zstd_probe::Args),
     /// Calibrate the 200 +/- 20 ms, 150 Mbit/s proxy against signed MinIO reads.
@@ -102,6 +105,7 @@ impl Task {
     pub(crate) fn run(self) -> Result<()> {
         match self {
             Self::RunCampaign(args) => return campaign::controller::run(*args),
+            Self::RunIntraPage(args) => return experiment::intra_page::batch::run(*args),
             Self::UploadStorage(args) => {
                 let receipt = storage::upload::run(&args, storage::upload::hashes)?;
                 println!(
@@ -161,6 +165,7 @@ impl Task {
             Self::IntraPage => experiment::intra_page::run(serde_json::from_value(input)?)?,
             Self::ExecReader { .. }
             | Self::RunCampaign(_)
+            | Self::RunIntraPage(_)
             | Self::UploadStorage(_)
             | Self::ZstdProbe(_)
             | Self::CheckNetwork { .. }

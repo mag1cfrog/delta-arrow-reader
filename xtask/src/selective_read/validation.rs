@@ -10,16 +10,46 @@ use std::{
 use rustix::{
     io::ioctl_fionbio,
     process::{Pid, Signal, kill_process_group},
-    thread::{CpuSet, sched_setaffinity},
+    thread::{CpuSet, sched_getaffinity, sched_setaffinity},
 };
 use serde_json::Value;
 
-use crate::{Result, selective_read::require};
+use crate::{
+    Result,
+    selective_read::{array, require},
+};
 
-pub(super) struct Worker(Child);
+pub(in crate::selective_read) struct Worker(Child);
+
+pub(in crate::selective_read) struct Affinity(CpuSet);
+
+impl Affinity {
+    pub(in crate::selective_read) fn pin(config: &Value, worker: &Worker) -> Result<Self> {
+        let guard = Self(sched_getaffinity(None)?);
+        let mut cpus = CpuSet::new();
+        for cpu in array(&config["cpus"]["observer"])? {
+            let cpu: usize = cpu.as_u64().ok_or("invalid observer CPU")?.try_into()?;
+            require(cpu < CpuSet::MAX_CPU, "observer CPU exceeds affinity mask")?;
+            cpus.set(cpu);
+        }
+        sched_setaffinity(None, &cpus)?;
+        worker.pin(&cpus)?;
+        Ok(guard)
+    }
+}
+
+impl Drop for Affinity {
+    fn drop(&mut self) {
+        let _ = sched_setaffinity(None, &self.0);
+    }
+}
 
 impl Worker {
-    pub(super) fn start(python: &Path, harness: &Path, output: &Path) -> Result<Self> {
+    pub(in crate::selective_read) fn start(
+        python: &Path,
+        harness: &Path,
+        output: &Path,
+    ) -> Result<Self> {
         Self::spawn(
             Command::new(python)
                 .args(["-I", "-B", "-u"])
@@ -47,12 +77,12 @@ impl Worker {
         Ok(worker)
     }
 
-    pub(super) fn pin(&self, cpus: &CpuSet) -> Result<()> {
+    pub(in crate::selective_read) fn pin(&self, cpus: &CpuSet) -> Result<()> {
         sched_setaffinity(Some(Pid::from_child(&self.0)), cpus)?;
         Ok(())
     }
 
-    pub(super) fn call(&mut self, request: &Value) -> Result<Value> {
+    pub(in crate::selective_read) fn call(&mut self, request: &Value) -> Result<Value> {
         // Each export also retains the oracle's own memory, disk and elapsed-time limits.
         self.exchange(request, Duration::from_secs(24 * 3600))
     }

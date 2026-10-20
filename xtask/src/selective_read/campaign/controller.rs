@@ -5,14 +5,16 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use rustix::thread::{CpuSet, sched_getaffinity, sched_setaffinity};
 use serde_json::{Map, Value, json};
 
-use super::{array, evidence, object, require, roster, schedule, summarize, text, worker::Worker};
+use super::{array, evidence, object, require, roster, schedule, summarize, text};
 use crate::{
     Result,
     repository::files,
-    selective_read::{network, observe, storage},
+    selective_read::{
+        network, observe, storage,
+        validation::{Affinity, Worker},
+    },
     selective_read_build::digest,
 };
 use storage::{read_json, save, timestamp_ns};
@@ -193,29 +195,6 @@ fn select(
         references,
         jobs,
     })
-}
-
-struct Affinity(CpuSet);
-
-impl Affinity {
-    fn pin(config: &Value, worker: &Worker) -> Result<Self> {
-        let guard = Self(sched_getaffinity(None)?);
-        let mut cpus = CpuSet::new();
-        for cpu in array(&config["cpus"]["observer"])? {
-            let cpu: usize = cpu.as_u64().ok_or("invalid observer CPU")?.try_into()?;
-            require(cpu < CpuSet::MAX_CPU, "observer CPU exceeds affinity mask")?;
-            cpus.set(cpu);
-        }
-        sched_setaffinity(None, &cpus)?;
-        worker.pin(&cpus)?;
-        Ok(guard)
-    }
-}
-
-impl Drop for Affinity {
-    fn drop(&mut self) {
-        let _ = sched_setaffinity(None, &self.0);
-    }
 }
 
 fn modes(args: &Args, comparison: &Value, protocols: &Path) -> Result<Value> {

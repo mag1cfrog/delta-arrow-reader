@@ -1,6 +1,8 @@
 use super::*;
 use crate::selective_read::{field, invoke};
 
+pub(in crate::selective_read) mod batch;
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(in crate::selective_read) struct Request {

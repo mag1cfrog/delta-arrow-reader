@@ -129,5 +129,17 @@ class ReaderBookkeeping(unittest.TestCase):
             self.assertEqual(common.redact_credentials("fake-key/fake-secret/fake-key"), "[redacted]/[redacted]/[redacted]")
 
 
+    def test_concurrent_request_counts(self):
+        payload = {"execution_mode": "reuse", "comparison_revision": 6,
+                   "purpose": "timing", "concurrent_queries": 4}
+        for count in (0, 1, 3, True, "4"):
+            with self.subTest(count=count), self.assertRaises(ValueError):
+                run.query_count(payload | {"concurrent_queries": count})
+        with self.assertRaises(ValueError):
+            run.query_count(payload | {"execution_mode": "open"})
+        with self.assertRaises(ValueError):
+            run.query_count(payload | {"comparison_revision": 5})
+
+
 if __name__ == "__main__":
     unittest.main()

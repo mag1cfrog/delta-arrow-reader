@@ -143,20 +143,22 @@ settings are not fixed per-fetch defaults in this implementation.
 
 ## Validate the original workloads
 
-`benches/selective_read/intra_page.py` compares the public option off and on in
+`xtask selective-read run-intra-page` compares the public option off and on in
 one DAR executable. Enabling the option uses the automatic cost decision; there
 is no separate forced mode. This manual experiment reuses a retained revision-6
 request and its independently generated reference output. It does not run in CI
 or update the published five-reader results.
-Rust configures and supervises each invocation and summarizes network traffic;
-Python compares the exported Arrow values with the independent reference.
+Rust runs the validation gates, alternating samples and statistics, and supervises
+each invocation. A persistent Python process compares the exported Arrow values
+with the independent reference. The `intra_page.py` entry point forwards to the
+native command with its current Python interpreter.
 
 Build the [DAR runner](selective-read-runners.md), then prepare the original
 table and [MinIO network proxy](selective-read-storage.md). Use the Python
 environment with the oracle's pinned PyArrow dependency:
 
 ```console
-python benches/selective_read/intra_page.py \
+cargo xtask selective-read run-intra-page --python /path/to/oracle-venv/bin/python \
   --binary /path/to/build/selective-read-dar \
   --request /path/to/retained/request.json \
   --reference /path/to/retained/reference-directory \
