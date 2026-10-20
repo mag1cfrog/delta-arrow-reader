@@ -242,8 +242,6 @@ fn source_hashes(args: &Args, config: &Value, protocols: &Path) -> Result<Value>
     let mut sources: Vec<_> = [
         "campaign.py",
         "controller_worker.py",
-        "observe.py",
-        "storage.py",
         "oracle.py",
         "runners/run.py",
         "runners/python_common.py",
@@ -265,10 +263,7 @@ fn source_hashes(args: &Args, config: &Value, protocols: &Path) -> Result<Value>
             .filter(|p| p.extension().is_some_and(|e| e == "rs")),
     );
     if !config["server"]["network"].is_null() {
-        sources.extend([
-            args.harness.join("network.py"),
-            args.state.join("network.json"),
-        ]);
+        sources.push(args.state.join("network.json"));
     }
     for (enabled, name) in [
         (

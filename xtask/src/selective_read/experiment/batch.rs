@@ -308,7 +308,7 @@ pub(in crate::selective_read) fn length(mut args: Length) -> Result<()> {
         None,
     )?;
     let sources = ["src/bin/delta-length-query.rs", "src/delta_length_reader.rs", "src/delta_length_profile.rs",
-        "src/delta_length_cost.rs", "src/delta_length_simulation.rs", "src/delta_length.rs", "Cargo.lock", "storage.py",
+        "src/delta_length_cost.rs", "src/delta_length_simulation.rs", "src/delta_length.rs", "Cargo.lock",
         "../../crates/delta-arrow-reader-core/src/reader/backend/direct_parquet/range_planning.rs",
         "../../crates/delta-arrow-reader-core/src/reader/backend/direct_parquet/cost_model/range_cost.rs"]
         .into_iter().map(|name| Ok((name.to_owned(), json!(digest(&common.harness.join(name))?)))).collect::<Result<serde_json::Map<_,_>>>()?;

@@ -14,10 +14,6 @@ import native
 BUCKET = "selective-read"
 
 
-def state(path):
-    return native.call("storage", {"action": "state", "directory": str(path)})
-
-
 def verify_server(directory):
     native.call("storage", {"action": "verify-server", "directory": str(directory)})
 
@@ -29,17 +25,8 @@ def exclusive(directory):
         yield
 
 
-def credentials(directory):
-    return native.call("storage", {"action": "credentials", "directory": str(directory)})
-
-
 def inventory(fixtures, table_ids=None):
     return native.call("storage", {"action": "inventory", "fixtures": str(fixtures), "table_ids": table_ids})
-
-
-def upload(directory, fixtures, output, table_ids=None, *, checksum=False):
-    native.call("storage", {"action": "upload", "directory": str(directory), "fixtures": str(fixtures),
-        "output": str(output), "table_ids": table_ids, "checksum": checksum})
 
 
 def put_verified(directory, key, source, expected, *, checksum=False):
