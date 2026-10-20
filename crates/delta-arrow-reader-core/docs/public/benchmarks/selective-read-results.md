@@ -10,36 +10,20 @@ single-machine Spark on queries that return about 900 rows from Delta tables
 containing about 60 million rows. The 416-column tables return 69 selected
 columns; the 90-column tables return 71.
 
-Matching rows are either grouped together or spread out within the files.
-Parquet stores files in larger blocks of rows called row groups; the two
-layouts change where matches sit within those groups.
-Each layout has a snapshot with and without deletion vectors (DVs), which mark
-deleted rows without rewriting data files. These combinations give eight cases.
-The inputs use public TPC-H lineitem data at scale factor 10, extended with
-synthetic numeric columns. These are custom scans, not standard TPC-H queries
-or a TPC-H score.
-
 DAR had the lowest median query time in all eight cases below. The differences
 apply to these selective queries and test conditions; other layouts, queries,
-and connections can change the result.
+and connections can change the result. These are custom scans of TPC-H-derived
+data, not standard TPC-H queries or a TPC-H score.
 
 ## Query an initialized table
 
-The README chart shows the **first complete query after table initialization**.
-All five readers use this boundary: query planning, reading, and consuming every
-result are timed. Process startup, Python imports, Spark session/JVM startup,
-and table initialization are excluded. No query result cache is used.
+Medians of five independent processes, in seconds; lower is faster.
+Each timing includes planning, reading, and consuming the first query.
+**Startup and table initialization are excluded.** No query result cache is used.
+For a one-off read, also consider [initialization plus the first query](#initialization-and-repeated-queries).
 
-Every value is the median of five independent processes, in seconds; lower is
-faster. Each process initializes its table once and runs two queries. Only its
-first query contributes to this table. Every case passed exact value checks
-before timing began.
-
-All readers had four physical CPU cores and an 8 GiB memory limit. Storage used
-200 ms request latency (+/-20 ms jitter) and a shared 150 Mbps bandwidth limit.
-These conditions emulate a network connection, not a particular cloud service.
-DAR's updated measurements are compared with the other readers' earlier samples,
-after verifying the same inputs, hardware, and test settings.
+All readers used four physical CPU cores, an 8 GiB memory limit, and an emulated
+storage connection with 200 ms latency and 150 Mbps shared bandwidth.
 
 | Columns / matches | DAR | delta-rs | DuckDB | Polars | Spark |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -52,8 +36,24 @@ after verifying the same inputs, hardware, and test settings.
 | 90, grouped + DV | 1.979 | 177.713 | 23.719 | 166.096 | 14.071 |
 | 90, scattered + DV | 10.274 | 178.820 | 24.169 | 166.000 | 26.840 |
 
+Grouped and scattered describe whether matching rows sit together or are spread
+out within the files. DV means deletion vectors, which mark rows as deleted
+without rewriting data files. See [Tables and queries](#tables-and-queries)
+for the exact layouts.
+
 <details markdown="1">
-<summary>Reader revisions and comparison provenance</summary>
+<summary>Timing, test conditions, and reader versions</summary>
+
+The README chart uses this same first-query timing boundary. Process startup,
+Python imports, Spark session/JVM startup, and table initialization are excluded.
+Each process initializes its table once and runs two queries. Only its first
+query contributes to the table above. Every case passed exact value checks
+before timing began.
+
+Storage used 200 ms request latency (+/-20 ms jitter) and a shared 150 Mbps
+bandwidth limit. These conditions emulate a network connection, not a particular
+cloud service. DAR's updated measurements are compared with the other readers'
+earlier samples, after verifying the same inputs, hardware, and test settings.
 
 DAR was rerun from merged commit
 [`cd3064e`](https://github.com/mag1cfrog/delta-arrow-reader/commit/cd3064e7551bf04b4c763b540d855b285d65a738)
@@ -181,6 +181,11 @@ pattern can vary between invocations. These records do not provide comparable
 decoded-page counters for all five readers.
 
 ## Tables and queries
+
+The inputs use public TPC-H lineitem data at scale factor 10 (SF10), extended
+with synthetic numeric columns. There are two table widths and two layouts of
+matching rows. Each layout has a snapshot with and without deletion vectors,
+giving eight cases.
 
 Each base table contains all 59,986,052 SF10 source rows. Parquet divides a
 file into row groups, then divides each group's column data into pages. In the

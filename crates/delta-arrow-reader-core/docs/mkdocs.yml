@@ -54,11 +54,24 @@ nav:
   - Start here:
       - Overview: index.md
       - Installation: installation.md
-      - Python quickstart: python.md
       - Command-line quickstart: cli-quickstart.md
       - Rust quickstart: streaming-reader.md
       - DataFusion in Rust: datafusion.md
-      - Configuration: configuration.md
+      - Rust diagnostics: diagnostics.md
+      - Storage and configuration: configuration.md
+  - Python:
+      - Overview: python-api/index.md
+      - Quickstart: python.md
+      - Common tasks:
+          - Handle errors: python-api/errors.md
+          - Enable logging: python-api/logging.md
+      - API reference:
+          - DeltaTable: python-api/table.md
+          - Session: python-api/session.md
+          - ScanExecutionOptions: python-api/options.md
+      - Advanced integration:
+          - Arrow stream interface: python-api/streams-and-errors.md
+          - Log records and handlers: reference/python-logging.md
   - How it works:
       - How a read works: architecture.md
       - Reusing a loaded table: delta-metadata-lifecycle.md
@@ -73,14 +86,11 @@ nav:
       - Skipping pages: benchmarks/page-index.md
       - Combining read requests: benchmarks/range-planning.md
   - Reference:
-      - Command-line reference: cli.md
-      - Execution options: reference/execution-options.md
-      - Scan metrics: reference/metrics.md
-      - Tracing: reference/tracing.md
-      - Rust API: https://docs.rs/delta-arrow-reader
-  - Python API:
-      - Overview: python-api/index.md
-      - DeltaTable: python-api/table.md
-      - Session: python-api/session.md
-      - ScanExecutionOptions: python-api/options.md
-      - Streams and errors: python-api/streams-and-errors.md
+      - Command line:
+          - Command-line reference: cli.md
+          - CLI diagnostics reference: reference/cli-diagnostics.md
+      - Rust:
+          - Execution options: reference/execution-options.md
+          - Scan metrics: reference/metrics.md
+          - Tracing event reference: reference/tracing.md
+          - Rust API: https://docs.rs/delta-arrow-reader

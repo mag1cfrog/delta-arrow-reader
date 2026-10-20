@@ -113,6 +113,7 @@ for how refresh updates cached file information.
 
 ## Where to go next
 
+- [Rust diagnostics](https://mag1cfrog.github.io/delta-arrow-reader/diagnostics/): enable logs or investigate a failed read.
 - [Configuration](https://mag1cfrog.github.io/delta-arrow-reader/configuration/): choose how much preparation happens when opening a table, including the default S3 connection check.
 - [DataFusion quickstart](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/): query the table with SQL.
 - [Scan metrics](https://mag1cfrog.github.io/delta-arrow-reader/reference/metrics/): inspect the work a query performed.

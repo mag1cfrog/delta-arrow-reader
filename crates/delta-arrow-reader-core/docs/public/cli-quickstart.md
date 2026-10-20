@@ -70,6 +70,7 @@ rows.
 
 ## Where to go next
 
+- [Diagnose a failed command](cli.md#errors-and-process-status) or save a log for investigation.
 - [Filter rows](cli.md#filter-rows) when you only need rows matching a condition.
 - [Read a table from storage such as S3](cli.md#inspect-a-snapshot), with
   [storage options](cli.md#storage-options-file) when your environment needs them.

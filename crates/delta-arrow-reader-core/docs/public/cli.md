@@ -10,7 +10,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | Select rows by a condition | [Filter rows](#filter-rows) |
 | Connect to remote storage | [Storage options file](#storage-options-file) |
 | Change parallel reads or buffering | [Execution options](#execution-options) |
-| Handle a command's result in a script | [Inspection JSON](#inspection-json) and [exit statuses](#errors-and-process-status) |
+| Handle a command's result in a script | [Inspection JSON](#inspection-json) and [exit statuses](#exit-statuses-for-scripts) |
 
 The standalone command is `dar`. A Python wheel installs `delta-arrow-reader`
 instead; substitute that name in the examples. Both accept the same arguments.
@@ -233,16 +233,30 @@ and leave stdout empty.
 ## Storage options file
 
 `--storage-options-file` accepts a local UTF-8 JSON file containing an object
-of string keys and string values. For example, to access an HTTP endpoint:
+of string keys and string values. For example, save this as `storage.json`
+to select an S3 region when your environment already provides credentials:
 
 ```json
-{"allow_http":"true"}
+{"aws_region":"us-west-2"}
 ```
+
+Then pass the file when opening the table:
+
+```sh
+dar inspect --storage-options-file storage.json s3://example-bucket/orders
+```
+
+Use the same option with `dar scan`. The
+[storage guide](configuration.md#read-from-s3) explains table URLs and credentials,
+including [Azure](configuration.md#read-from-azure). Use its storage keys as JSON
+keys here. Keep files containing credentials out of source control.
 
 The CLI forwards keys and values unchanged, including case, spaces, and
 commas. The core reader interprets provider options. Omitting the file supplies
 an empty explicit map and keeps the core's environment and provider credential
 behavior. An empty object is also valid.
+
+For a local HTTP test endpoint, `{"allow_http":"true"}` enables plain HTTP.
 
 <details markdown="1">
 <summary>Storage file parsing and size limits</summary>
@@ -348,7 +362,8 @@ loading. Their failures also exit 2, preserving the core's redacted
 ## Inspection JSON
 
 A successful inspection writes one UTF-8 JSON object followed by a newline to
-stdout and leaves stderr empty. This example represents an empty schema:
+stdout. Diagnostic logging uses stderr and does not change this JSON.
+This example represents an empty schema:
 
 ```json
 {"format_version":1,"table_version":"0","schema":{"fields":[],"metadata":{}}}
@@ -390,55 +405,41 @@ the table author put there.
 
 ## Errors and process status
 
-The CLI subscribes to the core's tracing events and writes plain text to stderr.
-By default it shows WARN and ERROR, so successful commands are quiet unless a
-warning occurs. Core failures retain their operation identity, phase, code,
-reason, and available source category. The CLI reports its own failures with
-the same `error_phase`, `error_code`, and `error_reason` fields. For example:
+The CLI normally shows warnings and errors in the terminal. Data goes to
+standard output (`stdout`), while log messages go to standard error (`stderr`),
+so you can save them separately.
 
-```text
-ERROR delta_arrow_reader_cli: CLI command failed event="cli.failed" operation="cli_command" outcome="failed" error_phase="configuration" error_code="invalid_cli_argument" error_reason="argument_parse_failed" argument_kind=UnknownArgument
-```
+A failed command can leave an incomplete result file. Check the command's exit
+status before using the result: zero means success, and a nonzero status means
+failure. Use `--help` if the command reports an invalid argument.
 
-This replaces the former JSON stderr object with `phase`, `code`, and `message`.
-Stderr is diagnostic text; its layout, field order, and human messages are not a
-machine-readable interface. Scripts should use the exit status and stdout
-format. Inspection JSON, Arrow IPC, and the exit statuses below are unchanged.
-Core event fields are described in the [tracing reference](reference/tracing.md).
+### Enable more detail
 
-Diagnostics omit argument values, file paths, URLs, input contents, credential
-names and values, and dependency messages. Argument failures include the
-parser's `argument_kind`. JSON failures include `json_kind` (`Syntax`, `Data`, or
-`Eof`), `json_line`, and `json_column`. Oversized input and predicate validation
-use fixed reasons, such as `input_file_too_large` or
-`predicate_depth_limit_exceeded`. Serde schema failures share `Data`; their
-messages are not parsed or printed. I/O failures retain `io_kind` and an OS error
-number when available. Arrow failures use the core's safe source classifier.
-
-Set `RUST_LOG` to `error`, `warn`, `info`, `debug`, or `trace` for more or less
-detail. `off` suppresses diagnostics without changing the command's exit status.
-Comma-separated target prefixes also work, for example
-`delta_arrow_reader=debug,delta_arrow_reader_cli=warn`. A bare level sets the
-default; otherwise unmatched targets use WARN. The `delta_arrow_reader` prefix
-also matches the CLI target; a more specific CLI directive overrides it.
-Target directives follow
-`tracing-subscriber`'s `Targets` filter, without dynamic span-value or regex
-matching. An unset or empty value uses WARN. An invalid value produces a safe
-warning and falls back to WARN without printing the value.
-
-Only `delta_arrow_reader`, `delta_arrow_reader_cli`, and their `::` subtargets
-are allowed. Dependency targets remain disabled even if explicitly requested,
-including with `RUST_LOG=trace`. More detail can add lines and spans on stderr;
-it does not change stdout. There is no file sink or format flag. Redirect stderr
-with your shell:
+Set `RUST_LOG=debug` before your command to show more detail:
 
 ```sh
-RUST_LOG=debug dar inspect /data/table > snapshot.json 2> dar.log
-RUST_LOG=trace dar scan /data/table > rows.arrow 2> dar.log
+RUST_LOG=debug dar inspect /path/to/table
 ```
 
-Use `--help` for usage. A failed command can have emitted partial stdout; check
-its exit status before accepting the result.
+To save that detail in `dar.log`, use `2>`:
+
+```sh
+RUST_LOG=debug dar inspect /path/to/table > snapshot.json 2> dar.log
+RUST_LOG=debug dar scan --limit 10 /path/to/table > rows.arrow 2> dar.log
+```
+
+`snapshot.json` or `rows.arrow` contains the result; `dar.log` contains the log.
+Use `info` for progress messages, `warn` for the default verbosity, `error` for
+failures only, or `trace` for the most detail. `off` suppresses logs while
+preserving the exit status.
+
+Changing the log level does not change the result format. Only reader and CLI
+diagnostics are enabled, even at `trace`. Use shell redirection to save logs;
+the CLI has no separate file sink or format flag.
+
+### Exit statuses for scripts
+
+Use the exact status when a script needs to distinguish failures:
 
 | Status | Meaning |
 | --- | --- |
@@ -447,50 +448,8 @@ its exit status before accepting the result.
 | 1 | Runtime, reader, or Arrow IPC encoding failure |
 | 3 | stdout write or flush failure, including a broken pipe |
 
-<details markdown="1">
-<summary>Diagnostic codes and output after a failure</summary>
-
-| CLI phase | Code | Meaning |
-| --- | --- | --- |
-| `configuration` | `invalid_cli_argument` | Invalid command, argument, or option value |
-| `configuration` | `invalid_input_json` | Invalid JSON structure, encoding, duplicate key, or size |
-| `configuration` | `input_file_io` | Input file could not be opened or read |
-| `configuration` | `invalid_configuration` | A native execution setting is outside its allowed range |
-| `execution` | `runtime_initialization` | Runtime creation failed or reader execution panicked |
-| `execution` | `output_write` | stdout could not be written or flushed |
-| `execution` | `arrow_ipc` | Arrow IPC encoding failed |
-
-Provider configuration rejected during table loading is a reader failure
-(status 1), even if the option came from a valid local JSON file.
-
-The complete inspection JSON is built before writing. Failures before output
-leave stdout empty. Consumers must check the process status and discard output
-from any unsuccessful invocation, including partial output after a write
-failure. Status 3 is preserved even when stderr cannot be written.
-
-</details>
-
-<details markdown="1">
-<summary>Threads, blocked output, cancellation, and signals</summary>
-
-Each command runs in one process. The CLI drives its asynchronous runtime on
-the main thread and ignores `TOKIO_WORKER_THREADS`. Scans use a separate output
-thread so a blocked stdout pipe does not stall network reads. The output thread
-finishes writing and flushing each batch before requesting another. The core
-uses background threads for blocking work. Runtime shutdown does not wait for
-unfinished blocking work, including core engine cleanup.
-
-An unrecoverable panic, including failure to start a reader worker, terminates
-the process with status 1 and a synchronous ERROR with code
-`runtime_initialization` and reason `process_panicked`. Panic payloads and
-backtraces are omitted. Runtime setup failures have their own reason and safe
-I/O category.
-Outside PID 1, Linux signals keep their normal termination behavior: a killed
-process is unsuccessful and need not emit an error event. This applies while loading,
-waiting for a batch, or writing to a blocked pipe. A parent that cancels the
-child must also wait for it to exit and reap it.
-
-</details>
+For target-specific filters, diagnostic fields, or process lifecycle rules,
+see the [CLI diagnostics reference](reference/cli-diagnostics.md).
 
 ## Installation alternatives
 
