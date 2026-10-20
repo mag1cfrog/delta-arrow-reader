@@ -52,12 +52,26 @@ impl DatabricksCliFixture {
         fs::write(
             directory.path().join("metadata.json"),
             serde_json::to_vec(&json!({
-                "table_id": TABLE_ID, "full_name": TABLE_NAME, "table_type": "EXTERNAL", "data_source_format": "DELTA", "storage_location": location,
-                "securable_kind_manifest": {"securable_type":"TABLE", "securable_kind":"TABLE_DELTA_EXTERNAL", "capabilities":[]},
-                "columns": [{"name":"not_the_delta_schema", "type_name":"STRING"}]
+                "table_id": TABLE_ID,
+                "full_name": TABLE_NAME,
+                "table_type": "EXTERNAL",
+                "data_source_format": "DELTA",
+                "storage_location": location,
+                "securable_kind_manifest": {
+                    "securable_type": "TABLE",
+                    "securable_kind": "TABLE_DELTA_EXTERNAL",
+                    "capabilities": []
+                },
+                "columns": [{"name": "not_the_delta_schema", "type_name": "STRING"}]
             }))?,
         )?;
-        let mut credentials = json!({"url":location, "expiration_time": (SystemTime::now().duration_since(UNIX_EPOCH)? + Duration::from_secs(300)).as_millis() as u64});
+        let expiration_time = (SystemTime::now().duration_since(UNIX_EPOCH)?
+            + Duration::from_secs(300))
+        .as_millis() as u64;
+        let mut credentials = json!({
+            "url": location,
+            "expiration_time": expiration_time
+        });
         match credential_kind {
             StorageCredentialKind::S3 | StorageCredentialKind::R2 => {
                 let credential_field = if credential_kind == StorageCredentialKind::R2 {
@@ -68,7 +82,11 @@ impl DatabricksCliFixture {
                 } else {
                     "aws_temp_credentials"
                 };
-                credentials[credential_field] = json!({"access_key_id":"test-key", "secret_access_key":"secret-sentinel", "session_token":"test-session"});
+                credentials[credential_field] = json!({
+                    "access_key_id": "test-key",
+                    "secret_access_key": "secret-sentinel",
+                    "session_token": "test-session"
+                });
             }
             StorageCredentialKind::AzureSas => {
                 credentials["azure_user_delegation_sas"] =
@@ -170,20 +188,26 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
         StorageCredentialKind::AzureBearer,
     ] {
         let fixture = DatabricksCliFixture::new(credential_kind)?;
-        let azure = matches!(
-            credential_kind,
-            StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer
-        );
-        let server = MockCloudStorageServer::new(azure, log.clone())?;
+        let server = MockCloudStorageServer::new(credential_kind, log.clone())?;
         let options = match credential_kind {
             StorageCredentialKind::S3 => {
-                json!({"aws_endpoint":server.endpoint, "aws_allow_http":"true", "aws_region":"eu-west-1"})
+                json!({
+                    "aws_endpoint": server.endpoint,
+                    "aws_allow_http": "true",
+                    "aws_region": "eu-west-1"
+                })
             }
             StorageCredentialKind::R2 => {
-                json!({"aws_endpoint_url_s3":server.endpoint, "aws_allow_http":"true"})
+                json!({
+                    "aws_endpoint_url_s3": server.endpoint,
+                    "aws_allow_http": "true"
+                })
             }
             StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer => {
-                json!({"azure_endpoint":server.endpoint, "azure_allow_http":"true"})
+                json!({
+                    "azure_endpoint": server.endpoint,
+                    "azure_allow_http": "true"
+                })
             }
         };
         fs::write(
@@ -239,7 +263,11 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
             }
             assert_eq!(
                 serde_json::from_slice::<Value>(&output.stdout)?,
-                json!({"format_version":1, "table_version":"0", "schema":schema})
+                json!({
+                    "format_version": 1,
+                    "table_version": "0",
+                    "schema": schema
+                })
             );
         }
         let profile = format!("--profile={PROFILE}");
@@ -411,8 +439,23 @@ fn uc_admission_preserves_direct_path_inspection_of_unsupported_protocols() -> T
         fs::create_dir(directory.path().join("_delta_log"))?;
         let log = format!(
             "{}\n{}\n",
-            json!({"protocol":{"minReaderVersion":3,"minWriterVersion":7,"readerFeatures":[feature],"writerFeatures":[feature]}}),
-            json!({"metaData":{"id":"test","format":{"provider":"parquet","options":{}},"schemaString":r#"{"type":"struct","fields":[{"name":"id","type":"integer","nullable":true,"metadata":{}}]}"#,"partitionColumns":[],"configuration":{}}})
+            json!({
+                "protocol": {
+                    "minReaderVersion": 3,
+                    "minWriterVersion": 7,
+                    "readerFeatures": [feature],
+                    "writerFeatures": [feature]
+                }
+            }),
+            json!({
+                "metaData": {
+                    "id": "test",
+                    "format": {"provider": "parquet", "options": {}},
+                    "schemaString": r#"{"type":"struct","fields":[{"name":"id","type":"integer","nullable":true,"metadata":{}}]}"#,
+                    "partitionColumns": [],
+                    "configuration": {}
+                }
+            })
         );
         fs::write(
             directory
@@ -421,12 +464,14 @@ fn uc_admission_preserves_direct_path_inspection_of_unsupported_protocols() -> T
             &log,
         )?;
         let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
-        let server = MockCloudStorageServer::new(false, log.into_bytes())?;
+        let server = MockCloudStorageServer::new(StorageCredentialKind::S3, log.into_bytes())?;
         fs::write(
             fixture.directory.path().join("options.json"),
-            serde_json::to_vec(
-                &json!({"aws_region":"eu-west-1", "aws_endpoint":server.endpoint, "aws_allow_http":"true"}),
-            )?,
+            serde_json::to_vec(&json!({
+                "aws_region": "eu-west-1",
+                "aws_endpoint": server.endpoint,
+                "aws_allow_http": "true"
+            }))?,
         )?;
         let output = run_with_timeout(&mut fixture.inspect())?;
         assert_eq!(output.status.code(), Some(1));
@@ -455,18 +500,41 @@ fn uc_admission_preserves_direct_path_inspection_of_unsupported_protocols() -> T
 fn uc_cancellation_remains_responsive_with_blocked_stdout() -> TestResult {
     use std::os::fd::AsRawFd;
     let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
-    let schema = json!({"type":"struct","fields":[{"name":"id","type":"integer","nullable":true,"metadata":{"large": "x".repeat(256 * 1024)}}]});
+    let schema = json!({
+        "type": "struct",
+        "fields": [{
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {"large": "x".repeat(256 * 1024)}
+        }]
+    });
     let log = format!(
         "{}\n{}\n",
-        json!({"protocol":{"minReaderVersion":1,"minWriterVersion":2}}),
-        json!({"metaData":{"id":"test","format":{"provider":"parquet","options":{}},"schemaString":schema.to_string(),"partitionColumns":[],"configuration":{}}})
+        json!({
+            "protocol": {
+                "minReaderVersion": 1,
+                "minWriterVersion": 2
+            }
+        }),
+        json!({
+            "metaData": {
+                "id": "test",
+                "format": {"provider": "parquet", "options": {}},
+                "schemaString": schema.to_string(),
+                "partitionColumns": [],
+                "configuration": {}
+            }
+        })
     );
-    let server = MockCloudStorageServer::new(false, log.into_bytes())?;
+    let server = MockCloudStorageServer::new(StorageCredentialKind::S3, log.into_bytes())?;
     fs::write(
         fixture.directory.path().join("options.json"),
-        serde_json::to_vec(
-            &json!({"aws_region":"eu-west-1", "aws_endpoint":server.endpoint, "aws_allow_http":"true"}),
-        )?,
+        serde_json::to_vec(&json!({
+            "aws_region": "eu-west-1",
+            "aws_endpoint": server.endpoint,
+            "aws_allow_http": "true"
+        }))?,
     )?;
     let mut child = fixture
         .inspect()
@@ -616,7 +684,11 @@ struct MockCloudStorageServer {
 }
 
 impl MockCloudStorageServer {
-    fn new(azure: bool, log: Vec<u8>) -> std::io::Result<Self> {
+    fn new(credential_kind: StorageCredentialKind, log: Vec<u8>) -> std::io::Result<Self> {
+        let is_azure = matches!(
+            credential_kind,
+            StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer
+        );
         let listener = TcpListener::bind("127.0.0.1:0")?;
         listener.set_nonblocking(true)?;
         let endpoint = format!("http://{}", listener.local_addr()?);
@@ -656,7 +728,7 @@ impl MockCloudStorageServer {
                         && key > query.get("start-after").map_or("", |v| v.as_ref());
                     let entry = if !include {
                         String::new()
-                    } else if azure {
+                    } else if is_azure {
                         format!(
                             "<Blob><Name>{key}</Name><Properties><Last-Modified>Wed, 01 Jan 2020 00:00:00 GMT</Last-Modified><Etag>test</Etag><Content-Length>{}</Content-Length><Content-Type>application/octet-stream</Content-Type><BlobType>BlockBlob</BlobType></Properties></Blob>",
                             log.len()
@@ -667,7 +739,7 @@ impl MockCloudStorageServer {
                             log.len()
                         )
                     };
-                    let xml = if azure {
+                    let xml = if is_azure {
                         format!(
                             "<EnumerationResults><Blobs>{entry}</Blobs><NextMarker /></EnumerationResults>"
                         )
@@ -678,7 +750,7 @@ impl MockCloudStorageServer {
                     };
                     (200, xml.into_bytes())
                 } else if url.path()
-                    == format!("/{}/{key}", if azure { "container" } else { "bucket" })
+                    == format!("/{}/{key}", if is_azure { "container" } else { "bucket" })
                 {
                     (200, log.clone())
                 } else {

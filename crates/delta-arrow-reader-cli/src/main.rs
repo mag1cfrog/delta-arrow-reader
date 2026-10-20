@@ -2,7 +2,6 @@ mod diagnostics;
 mod execution_options;
 mod input;
 mod predicate;
-#[cfg(target_os = "linux")]
 mod signals;
 mod unity_catalog;
 
@@ -354,41 +353,34 @@ fn run() -> Result<(), Error> {
             reason: "runtime_build_failed",
         })?;
     let work = async {
-        let uc_access = match uc_target {
-            Some(target) => Some(
-                target
-                    .request_read_access(storage_options.clone())
-                    .await
-                    .context(UnityCatalogSnafu)?,
-            ),
-            None => None,
-        };
-        // Inspect needs only metadata. Scan planning happens explicitly below.
-        let builder = DeltaTableBuilder::new(
-            uc_access
-                .as_ref()
-                .map_or(table_args.table.as_str(), |access| {
-                    access.storage_url.as_str()
-                }),
-        )
-        .with_warmup(WarmupMode::None)
-        .with_snapshot_selection(table_args.table_version.map_or(
+        let snapshot_selection = table_args.table_version.map_or(
             DeltaSnapshotSelection::Latest,
             DeltaSnapshotSelection::Version,
-        ))
-        .with_storage_options(
-            uc_access
-                .as_ref()
-                .map_or(storage_options, |access| access.storage_options.clone()),
         );
-        let table = match &uc_access {
-            Some(access) => access.load_table(builder).await?,
-            None => builder.load_table().await.context(ReaderSnafu)?,
+        let table = match uc_target {
+            Some(target) => {
+                target
+                    .request_read_access(storage_options)
+                    .await
+                    .context(UnityCatalogSnafu)?
+                    .load_table_for_inspection(snapshot_selection)
+                    .await?
+            }
+            None => {
+                // Inspect needs only metadata. Scan planning happens explicitly below.
+                DeltaTableBuilder::new(&table_args.table)
+                    .with_warmup(WarmupMode::None)
+                    .with_snapshot_selection(snapshot_selection)
+                    .with_storage_options(storage_options)
+                    .load_table()
+                    .await
+                    .context(ReaderSnafu)?
+            }
         };
         match &command {
             Command::Inspect(_) => {
                 let output = encode_inspection_json(table.version(), table.schema().as_ref());
-                if uc_access.is_some() {
+                if uc_target.is_some() {
                     // Keep the UC cancellation handler responsive when stdout is blocked.
                     tokio::task::spawn_blocking(move || write_stdout(&output))
                         .await
@@ -430,7 +422,16 @@ fn run() -> Result<(), Error> {
         }
     };
     let result = if uc_target.is_some() {
-        runtime.block_on(unity_catalog::cancel_on_signal(work))
+        runtime.block_on(async {
+            tokio::select! {
+                // Install listeners before polling work; cancellation drops any pending child.
+                biased;
+                exit_status = signals::wait_for_cancellation() => Err(Error::UnityCatalog {
+                    source: unity_catalog::Error::Cancelled { status: exit_status? },
+                }),
+                result = work => result,
+            }
+        })
     } else {
         runtime.block_on(work)
     };

@@ -132,9 +132,11 @@ These rules apply to Unity Catalog targets:
 
 Each Databricks subprocess has a 30-second timeout, no interactive stdin, and
 a 1 MiB limit on each output stream. DAR captures and discards child diagnostics
-instead of forwarding them. Errors use fixed JSON messages without profile
-names, table names, storage URLs, or credentials. Check the selected profile's
-login and permissions separately when a metadata or credential request fails.
+instead of forwarding them. Errors use tracing diagnostics on stderr with fixed
+messages that omit profile names, table names, storage URLs, and credentials.
+See [Errors and process status](#errors-and-process-status) for output and
+filtering rules. Check the selected profile's login and permissions separately
+when a metadata or credential request fails.
 
 ## Scan rows
 
