@@ -5,13 +5,27 @@ use std::io::Write;
 fn fixture(reader: &str) -> Result<tempfile::TempDir> {
     let temporary = super::fixture()?;
     let root = temporary.path();
-    for path in ["run.py", "python_common.py", "check.py", "capabilities.py"] {
+    for path in [
+        "run.py",
+        "python_common.py",
+        "native.py",
+        "check.py",
+        "capabilities.py",
+    ] {
         write(
             root,
             &format!("benches/selective_read/runners/{path}"),
             "# fixture\n",
         )?;
     }
+    write(
+        root,
+        "benches/selective_read/runners/native.py",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../benches/selective_read/runners/native.py"
+        )),
+    )?;
     write(
         root,
         &format!("benches/selective_read/runners/{reader}/runner.py"),
@@ -154,6 +168,10 @@ fn prepares_all_python_readers_offline_with_frozen_artifacts_and_build_provenanc
         let executable = output.join(format!("selective-read-{reader}"));
         let record: Value = serde_json::from_slice(&fs::read(output.join("build.json"))?)?;
         assert_eq!(record["reader_id"], reader);
+        assert_eq!(
+            record["bundled_sha256"]["selective-read-controller"],
+            hash(Path::new(env!("CARGO_BIN_EXE_xtask")))?
+        );
         assert_eq!(record["runtime"]["packages"]["package"]["version"], "1");
         assert_eq!(record["executable_sha256"], hash(&executable)?);
         assert_eq!(
@@ -181,6 +199,18 @@ fn prepares_all_python_readers_offline_with_frozen_artifacts_and_build_provenanc
             assert!(!output.join(name).exists());
             assert!(record["bundled_sha256"].get(name).is_none());
         }
+        let probe = Command::new("python3").args(["-I", "-c",
+            "import json,sys; sys.path.insert(0,sys.argv[1]); import native; print(json.dumps(native.call('reader-contract', {'action':'comparison','value':{'comparison_revision':2,'protocol_sha256':'old docs'}})))"])
+            .arg(&output).current_dir(root).env("SELECTIVE_READ_XTASK", "/missing/controller").output()?;
+        assert!(
+            probe.status.success(),
+            "{}",
+            String::from_utf8_lossy(&probe.stderr)
+        );
+        assert_eq!(
+            serde_json::from_slice::<Value>(&probe.stdout)?,
+            json!({"comparison_revision":2,"protocol_sha256":"old docs"})
+        );
         for (name, checksum) in record["source_sha256"].as_object().unwrap() {
             assert_eq!(*checksum, hash(&root.join(name))?);
         }

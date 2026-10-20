@@ -4,18 +4,12 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import runpy
 import sys
 
+import native
 
-COMPARISON_FIELDS = ("comparison_revision", "protocol_sha256")
-LARGE_IDENTITY_FIELDS = ("base_protocol_sha256", "workload_manifest_sha256")
-SAMPLING_IDENTITY_FIELDS = ("sampling_sha256",)
-PRODUCTION_IDENTITY_FIELDS = ("sampling_stage",)
-BUDGET = {"worker_threads": 8, "max_blocking_threads": 64, "target_partitions": 8,
-          "batch_rows": 8192, "datafusion_pool_bytes": 4 * 1024**3,
-          "process_memory_bytes": 8 * 1024**3, "logical_cpus": 8}
+
 _DIGESTS = {}
 
 
@@ -44,7 +38,7 @@ def save(path, value):
 
 def load_adapter(binary):
     """Import the built adapter with its bundled helpers in a probe interpreter."""
-    previous = {name: sys.modules.pop(name, None) for name in ("run", "python_common")}
+    previous = {name: sys.modules.pop(name, None) for name in ("run", "python_common", "native")}
     search_path = sys.path.copy()
     try:
         return runpy.run_path(str(binary.resolve()), run_name="native_probe")
@@ -57,49 +51,11 @@ def load_adapter(binary):
 
 
 def comparison_identity(value):
-    revision = value["comparison_revision"]
-    if type(revision) is not int or revision not in (2, 3, 4, 5, 6):
-        raise ValueError("unknown comparison revision")
-    fields = COMPARISON_FIELDS + (LARGE_IDENTITY_FIELDS if revision >= 3 else ())
-    if revision >= 3:
-        if not isinstance(value.get("workload_manifest_sha256"), str) or not re.fullmatch(
-                "[0-9a-f]{64}", value["workload_manifest_sha256"]):
-            raise ValueError("missing or stale large-workload identity")
-        if "workload_contract" in value:
-            contract = value["workload_contract"]
-            if not isinstance(contract, dict) or contract.get("comparison_revision") != revision or contract.get("sampling_stage") != value.get("sampling_stage"):
-                raise ValueError("invalid workload contract")
-            fields += ("workload_contract",)
-    elif value.get("workload_manifest_sha256") is not None or "workload_contract" in value:
-        raise ValueError("revision 2 cannot carry large-workload identities")
-    if revision >= 4:
-        fields += SAMPLING_IDENTITY_FIELDS
-    if revision >= 5:
-        if value.get("sampling_stage") not in ("pilot", "formal"):
-            raise ValueError("missing or invalid production sampling stage")
-        fields += PRODUCTION_IDENTITY_FIELDS
-    elif value.get("sampling_stage") is not None:
-        raise ValueError("historical revisions cannot carry a production sampling stage")
-    return {key: value.get(key) for key in fields}
-
-
-def comparison_contract(value):
-    return (value.get("comparison_revision"), value.get("workload_contract", value.get("workload_manifest_sha256")), value.get("sampling_stage"))
+    return native.call("reader-contract", {"action": "comparison", "value": value})
 
 
 def same_comparison(left, right):
-    return (left.get("comparison_revision") == right.get("comparison_revision")
-            and left.get("sampling_stage") == right.get("sampling_stage")
-            and (left["workload_contract"] == right["workload_contract"] if "workload_contract" in left and "workload_contract" in right
-                 else left.get("workload_manifest_sha256") == right.get("workload_manifest_sha256")))
-
-
-def identity_matches(expected, actual):
-    replacements = {"reader_build_sha256": "reader_artifact", "workload_manifest_sha256": "workload_contract"}
-    return all(type(actual.get(key)) is type(value) and actual.get(key) == value for key, value in expected.items()
-               if key not in ("protocol_sha256", "base_protocol_sha256", "sampling_sha256")
-               and not (key in replacements and replacements[key] in expected and replacements[key] in actual)
-               and not (key in replacements.values() and key not in actual))
+    return native.call("reader-contract", {"action": "same-comparison", "left": left, "right": right})
 
 
 HISTORICAL_READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft")

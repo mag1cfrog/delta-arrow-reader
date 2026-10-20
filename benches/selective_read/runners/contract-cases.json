@@ -1,0 +1,122 @@
+{
+  "request": {
+    "table_uri": "file:///fixture",
+    "snapshot_version": 0,
+    "case_id": "case",
+    "canonical_sql": "SELECT id FROM bench",
+    "comparison_revision": 6,
+    "protocol_sha256": "documentation",
+    "base_protocol_sha256": "base documentation",
+    "sampling_sha256": "sampling documentation",
+    "workload_manifest_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "workload_contract": {
+      "comparison_revision": 6,
+      "sampling_stage": "pilot",
+      "cases": [
+        {
+          "canonical_sql": "SELECT id FROM bench",
+          "projection": [
+            "id"
+          ],
+          "data_page_rows": 2048
+        }
+      ]
+    },
+    "sampling_stage": "pilot",
+    "fixture_manifest_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "profile": "smoke",
+    "execution_mode": "reuse",
+    "purpose": "validation",
+    "resource_budget": {
+      "worker_threads": 8,
+      "max_blocking_threads": 64,
+      "target_partitions": 8,
+      "batch_rows": 8192,
+      "datafusion_pool_bytes": 4294967296,
+      "process_memory_bytes": 8589934592,
+      "logical_cpus": 8
+    },
+    "correctness_file": null,
+    "campaign_id": null,
+    "run_id": "run",
+    "repetition": null,
+    "order": null
+  },
+  "requests": [
+    {"name": "missing Python request context", "change": {}, "remove": ["campaign_id"], "valid": true, "python_valid": false},
+    {"name": "unchanged","change": {},"valid": true,"python_valid": true},
+    {"name": "documentation edited","change": {"protocol_sha256": "other docs"},"valid": true,"python_valid": true},
+    {"name": "unknown revision","change": {"comparison_revision": 7},"valid": false,"python_valid": false},
+    {"name": "boolean revision","change": {"comparison_revision": true},"valid": false,"python_valid": false},
+    {"name": "boolean snapshot","change": {"snapshot_version": true},"valid": false,"python_valid": false},
+    {"name": "negative snapshot","change": {"snapshot_version": -1},"valid": false,"python_valid": false},
+    {"name": "fractional snapshot","change": {"snapshot_version": 0.5},"valid": false,"python_valid": false},
+    {"name": "unknown sampling stage","change": {"sampling_stage": "other"},"valid": false,"python_valid": false},
+    {"name": "mismatched workload revision","change": {"workload_contract": {"comparison_revision": 5,"sampling_stage": "pilot","cases": [{"canonical_sql": "SELECT id FROM bench","projection": ["id"],"data_page_rows": 2048}]}},"valid": false,"python_valid": false},
+    {"name": "relative file URL","change": {"table_uri": "file:relative"},"valid": false,"python_valid": false},
+    {"name": "remote file host","change": {"table_uri": "file://host/table"},"valid": false,"python_valid": false},
+    {"name": "S3 credential URL","change": {"table_uri": "s3://user:secret@bucket/table"},"valid": false,"python_valid": false},
+    {"name": "empty S3 bucket","change": {"table_uri": "s3:///table"},"valid": false,"python_valid": false},
+    {"name": "URL query","change": {"table_uri": "file:///fixture?version=1"},"valid": false,"python_valid": false},
+    {"name": "blank SQL","change": {"canonical_sql": " "},"valid": false,"python_valid": false},
+    {"name": "blank profile","change": {"profile": " "},"valid": false,"python_valid": false},
+    {"name": "changed memory budget","change": {"resource_budget": {"worker_threads": 8,"max_blocking_threads": 64,"target_partitions": 8,"batch_rows": 8192,"datafusion_pool_bytes": 4294967296,"process_memory_bytes": 1,"logical_cpus": 8}},"valid": false,"python_valid": false},
+    {"name": "boolean thread budget","change": {"resource_budget": {"worker_threads": true,"max_blocking_threads": 64,"target_partitions": 8,"batch_rows": 8192,"datafusion_pool_bytes": 4294967296,"process_memory_bytes": 8589934592,"logical_cpus": 8}},"valid": false,"python_valid": false},
+    {"name": "validation diagnostics","change": {"validation_diagnostics": true},"valid": true,"python_valid": true},
+    {"name": "diagnostics during timing","change": {"validation_diagnostics": true,"purpose": "timing"},"valid": false,"python_valid": false},
+    {"name": "unknown field","change": {"extra": false},"valid": false,"python_valid": false},
+    {"name": "malformed input checksum","change": {"fixture_manifest_sha256": "changed"},"valid": false,"python_valid": false},
+    {"name": "native concurrent queries","change": {"concurrent_queries": 2},"valid": true,"python_valid": false}
+  ],
+  "identity": {
+    "reader_id": "test",
+    "reader_build_sha256": "build audit",
+    "reader_artifact": {
+      "reader_id": "test",
+      "executable_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "lockfile_sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "reader_config_sha256": "settings",
+    "workload_manifest_sha256": "workload audit",
+    "workload_contract": {
+      "comparison_revision": 6,
+      "sampling_stage": "pilot",
+      "cases": [
+        {
+          "canonical_sql": "SELECT id FROM bench",
+          "projection": [
+            "id"
+          ],
+          "data_page_rows": 2048
+        }
+      ]
+    },
+    "canonical_sql_sha256": "query",
+    "snapshot_version": 0,
+    "fixture_manifest_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "protocol_sha256": "docs"
+  },
+  "proofs": [
+    {"name": "unchanged","change": {},"valid": true},
+    {"name": "build audit edited","change": {"reader_build_sha256": "other audit"},"valid": true},
+    {"name": "workload audit edited","change": {"workload_manifest_sha256": "other audit"},"valid": true},
+    {"name": "documentation edited","change": {"protocol_sha256": "other docs"},"valid": true},
+    {"name": "changed executable","change": {"reader_artifact": {"reader_id": "test","executable_sha256": "2222222222222222222222222222222222222222222222222222222222222222","lockfile_sha256": "2222222222222222222222222222222222222222222222222222222222222222"}},"valid": false},
+    {"name": "changed runtime settings","change": {"reader_config_sha256": "different settings"},"valid": false},
+    {"name": "changed query","change": {"canonical_sql_sha256": "different query"},"valid": false},
+    {"name": "changed workload projection","change": {"workload_contract": {"comparison_revision": 6,"sampling_stage": "pilot","cases": [{"projection": ["other"]}]}},"valid": false},
+    {"name": "changed fixture","change": {"fixture_manifest_sha256": "2222222222222222222222222222222222222222222222222222222222222222"},"valid": false},
+    {"name": "boolean snapshot","change": {"snapshot_version": false},"valid": false},
+    {"name": "negative row count","change": {"output_rows": -1},"valid": false},
+    {"name": "boolean row count","change": {"output_rows": true},"valid": false},
+    {"name": "failed result check","change": {"status": "failed"},"valid": false},
+    {"name": "missing documentation","change": {},"remove": ["protocol_sha256"],"valid": true},
+    {"name": "legacy unchanged build","change": {},"remove": ["reader_artifact"],"valid": true},
+    {"name": "legacy changed build","change": {"reader_build_sha256": "changed"},"remove": ["reader_artifact"],"valid": false},
+    {"name": "legacy unchanged workload","change": {},"remove": ["workload_contract"],"valid": true},
+    {"name": "legacy changed workload","change": {"workload_manifest_sha256": "changed"},"remove": ["workload_contract"],"valid": false},
+    {"name": "incomplete session","change": {},"checks": 1,"valid": false},
+    {"name": "failed certificate","change": {},"status": "failed","valid": false},
+    {"name": "missing row count","change": {},"remove": ["output_rows"],"valid": false}
+  ]
+}

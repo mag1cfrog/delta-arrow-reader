@@ -10,14 +10,11 @@ import re
 import sys
 import sysconfig
 from time import time_ns
-from urllib.parse import urlsplit
 
-from run import BUDGET, LARGE_IDENTITY_FIELDS, SAMPLING_IDENTITY_FIELDS, PRODUCTION_IDENTITY_FIELDS, comparison_identity, digest, identity_matches, query_count, save
+import native
+from run import digest, query_count, save
 
 HERE = Path(__file__).resolve().parent
-REQUEST_FIELDS = set("table_uri snapshot_version case_id canonical_sql comparison_revision protocol_sha256 "
-                     "fixture_manifest_sha256 profile execution_mode purpose resource_budget correctness_file "
-                     "campaign_id run_id repetition order".split())
 
 
 def sha(value):
@@ -72,19 +69,10 @@ def checked_build(executable, reader):
 
 
 def reader_identity(request, reader, build_path, settings, expression_sha256=None):
-    build = json.loads(build_path.read_text())
-    artifact = {key: build[key] for key in ("reader_id", "executable_sha256", "lockfile_sha256")}
-    if "runtime" in build:
-        artifact["runtime"] = build["runtime"]
-    if "bundled_sha256" in build:
-        artifact["bundled_sha256"] = {k: v for k, v in build["bundled_sha256"].items()
-                                    if k not in ("protocol.md", "large-workloads.md", "sampling.md",
-                                                 "production-workloads.md", "spark-matrix.md", "oracle.py")}
-    return {"reader_id": reader, "reader_build_sha256": digest(build_path), "reader_artifact": artifact,
-            "reader_config_sha256": json_hash(settings),
-            **comparison_identity(request),
-            **{name: request[name] for name in ("fixture_manifest_sha256", "case_id", "snapshot_version")},
-            "canonical_sql_sha256": sha(request["canonical_sql"].encode()), "native_expression_sha256": expression_sha256}
+    return native.call("reader-contract", {"action": "identity", "value": request, "reader": reader,
+        "build": json.loads(build_path.read_text()), "hashes": {"reader_build_sha256": digest(build_path),
+        "reader_config_sha256": json_hash(settings), "canonical_sql_sha256": sha(request["canonical_sql"].encode()),
+        "native_expression_sha256": expression_sha256}})
 
 
 def timing_totals(record):
@@ -125,36 +113,7 @@ def runner_cli(run, describe_build):
 
 
 def validate(request):
-    require(isinstance(request, dict), "expected request object")
-    extra = set(LARGE_IDENTITY_FIELDS) if request.get("comparison_revision") in (3, 4, 5, 6) else set()
-    if request.get("comparison_revision") in (4, 5, 6):
-        extra.update(SAMPLING_IDENTITY_FIELDS)
-    if request.get("comparison_revision") in (5, 6):
-        extra.update(PRODUCTION_IDENTITY_FIELDS)
-    if "workload_contract" in request:
-        extra.add("workload_contract")
-    if "validation_diagnostics" in request:
-        extra.add("validation_diagnostics")
-        require(type(request["validation_diagnostics"]) is bool and (not request["validation_diagnostics"] or
-                request.get("comparison_revision") == 6 and request.get("purpose") == "validation"),
-                "diagnostic validation requires revision 6 and validation purpose")
-    require(set(request) == REQUEST_FIELDS | extra, "unknown or missing request fields")
-    comparison_identity(request)
-    uri = urlsplit(request["table_uri"])
-    require(uri.scheme in ("file", "s3") and not (uri.username or uri.password or uri.query or uri.fragment)
-            and (uri.scheme != "file" or (uri.netloc in ("", "localhost") and uri.path.startswith("/")))
-            and (uri.scheme != "s3" or bool(uri.netloc)), "expected a file/s3 URL without credentials, query or fragment")
-    require(type(request["snapshot_version"]) is int and 0 <= request["snapshot_version"] < 2**64,
-            "invalid snapshot version")
-    require(request["execution_mode"] in ("open", "reuse") and request["purpose"] in ("validation", "timing", "diagnostic", "io")
-            and re.fullmatch("[0-9a-f]{64}", request["fixture_manifest_sha256"])
-            and request["resource_budget"] == BUDGET, "request differs from the frozen protocol")
-    for field in ("case_id", "run_id", "canonical_sql", "profile"):
-        require(isinstance(request[field], str) and request[field].strip(), f"invalid {field}")
-    for field in ("campaign_id", "correctness_file"):
-        require(request[field] is None or isinstance(request[field], str), f"invalid {field}")
-    for field in ("repetition", "order"):
-        require(request[field] is None or (type(request[field]) is int and request[field] >= 0), f"invalid {field}")
+    native.call("reader-contract", {"action": "validate", "value": request})
 
 
 def correctness(request, identity):
@@ -162,15 +121,8 @@ def correctness(request, identity):
         return {"status": "not_checked", "reason": "untimed invocation"}
     require(request["correctness_file"], "timing requires a correctness certificate")
     path = Path(request["correctness_file"])
-    proof = json.loads(path.read_text())
-    count = query_count(request)
-    require(proof["status"] == "passed" and len(proof["checks"]) == count, "failed or incomplete correctness certificate")
-    rows = []
-    for check in proof["checks"]:
-        require(check["status"] == "passed", "failed oracle check")
-        require(identity_matches(identity, check), "stale correctness identity")
-        require(type(check["output_rows"]) is int and check["output_rows"] >= 0, "missing validated row count")
-        rows.append(check["output_rows"])
+    rows = native.call("reader-contract", {"action": "correctness", "proof": json.loads(path.read_text()),
+        "identity": identity, "query_count": query_count(request)})
     return {"status": "passed", "path": str(path), "artifact_sha256": digest(path), "expected_output_rows": rows}
 
 

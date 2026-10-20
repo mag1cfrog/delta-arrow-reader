@@ -30,6 +30,8 @@ pub(crate) enum Task {
     Invoke,
     /// Bind a reader request to verified fixture and workload metadata.
     ReaderRequest,
+    /// Check Python adapter requests, identities and proofs outside query timers.
+    ReaderContract,
     /// Invoke one local or remote reader and validate its independent exports.
     RunReader(Box<invoke::controller::Args>),
     /// Prepare one or more independent Arrow references with a persistent oracle.
@@ -296,6 +298,7 @@ impl Task {
             Self::Supervise => supervise::launch(serde_json::from_value(input)?)?,
             Self::Invoke => invoke::run(&serde_json::from_value(input)?)?,
             Self::ReaderRequest => request::run(serde_json::from_value(input)?)?,
+            Self::ReaderContract => contract::run(serde_json::from_value(input)?)?,
             Self::Campaign => campaign::run(serde_json::from_value(input)?)?,
             Self::Storage => storage::run(serde_json::from_value(input)?)?,
             Self::Observe => observe::run(serde_json::from_value(input)?)?,

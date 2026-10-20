@@ -16,6 +16,34 @@ import run
 
 
 class ReaderBookkeeping(unittest.TestCase):
+    def test_shared_native_contract_cases(self):
+        cases = json.loads((Path(__file__).parent / "runners/contract-cases.json").read_text())
+        for case in cases["requests"]:
+            with self.subTest(request=case["name"]):
+                request = cases["request"] | case["change"]
+                for key in case.get("remove", []):
+                    request.pop(key)
+                if case["python_valid"]:
+                    common.validate(request)
+                else:
+                    with self.assertRaises(ValueError):
+                        common.validate(request)
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "proof.json"
+            request = cases["request"] | {"purpose": "timing", "correctness_file": str(path)}
+            for case in cases["proofs"]:
+                with self.subTest(proof=case["name"]):
+                    check = cases["identity"] | {"status": "passed", "output_rows": 3} | case["change"]
+                    for key in case.get("remove", []):
+                        check.pop(key)
+                    path.write_text(json.dumps({"status": case.get("status", "passed"),
+                                               "checks": [check] * case.get("checks", 2)}))
+                    if case["valid"]:
+                        self.assertEqual(common.correctness(request, cases["identity"])["expected_output_rows"], [3, 3])
+                    else:
+                        with self.assertRaises(ValueError):
+                            common.correctness(request, cases["identity"])
+
     def test_build_audit_changes_preserve_certificates_but_artifact_changes_do_not(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -60,14 +88,17 @@ class ReaderBookkeeping(unittest.TestCase):
             root = Path(temporary)
             (root / "run.py").write_text("marker = 'bundled run'\n")
             (root / "python_common.py").write_text("marker = 'bundled common'\n")
+            (root / "native.py").write_text("marker = 'bundled controller'\n")
             binary = root / "adapter"
             source = ("import sys\nfrom pathlib import Path\n"
                       "sys.path.insert(0, str(Path(__file__).parent))\n"
                       "from run import marker as runner\n"
-                      "from python_common import marker as common\n")
+                      "from python_common import marker as common\nfrom native import marker as controller\n")
             binary.write_text(source)
             adapter = run.load_adapter(binary)
             self.assertEqual((adapter["runner"], adapter["common"]), ("bundled run", "bundled common"))
+            self.assertEqual(adapter["controller"], "bundled controller")
+            self.assertIs(sys.modules["native"], run.native)
             self.assertIs(sys.modules["run"], run)
             self.assertIs(sys.modules["python_common"], common)
             self.assertEqual(sys.path, previous_path)
@@ -88,8 +119,7 @@ class ReaderBookkeeping(unittest.TestCase):
                 ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "spark" if revision == 6 else "daft"))
         for change in ({"protocol_sha256": "production documentation"},
                        {"base_protocol_sha256": "0" * 64}, {"sampling_sha256": "0" * 64}):
-            self.assertEqual(run.comparison_contract(run.comparison_identity(identity | change)),
-                             run.comparison_contract(identity))
+            self.assertTrue(run.same_comparison(run.comparison_identity(identity | change), identity))
         for change in ({"sampling_stage": None}, {"comparison_revision": 7},
                        {"workload_manifest_sha256": None}):
             with self.assertRaises(ValueError):

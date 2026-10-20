@@ -1,8 +1,113 @@
 //! Execution contracts shared by the controller and native readers.
 
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::path::PathBuf;
 
 use super::Result;
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Request {
+    pub table_uri: String,
+    pub snapshot_version: u64,
+    pub case_id: String,
+    pub(super) canonical_sql: String,
+    pub(super) comparison_revision: u64,
+    pub(super) protocol_sha256: String,
+    pub(super) base_protocol_sha256: Option<String>,
+    pub(super) workload_manifest_sha256: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) workload_contract: Option<Value>,
+    pub(super) sampling_sha256: Option<String>,
+    pub(super) sampling_stage: Option<String>,
+    pub(super) fixture_manifest_sha256: String,
+    pub(super) profile: String,
+    pub(super) execution_mode: String,
+    pub(super) concurrent_queries: Option<usize>,
+    pub(super) purpose: String,
+    #[serde(default)]
+    pub(super) validation_diagnostics: bool,
+    pub(super) resource_budget: Value,
+    pub(super) correctness_file: Option<PathBuf>,
+    pub(super) campaign_id: Option<String>,
+    pub(super) run_id: String,
+    pub(super) repetition: Option<u64>,
+    pub(super) order: Option<u64>,
+}
+
+impl Request {
+    pub fn reuse(&self) -> bool {
+        self.execution_mode == "reuse"
+    }
+    pub fn query_count(&self) -> usize {
+        if let Some(count) = self.concurrent_queries {
+            count
+        } else if !self.reuse() {
+            1
+        } else if self.comparison_revision >= 4 {
+            2
+        } else {
+            10
+        }
+    }
+    pub fn timed(&self) -> bool {
+        self.purpose == "timing"
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        let uri = url::Url::parse(&self.table_uri)?;
+        if !matches!(uri.scheme(), "file" | "s3")
+            || !uri.username().is_empty()
+            || uri.password().is_some()
+            || uri.query().is_some()
+            || uri.fragment().is_some()
+            || (uri.scheme() == "file"
+                && (!matches!(uri.host_str(), None | Some("localhost"))
+                    || !self
+                        .table_uri
+                        .strip_prefix("file:")
+                        .is_some_and(|p| p.starts_with('/'))))
+            || (uri.scheme() == "s3" && uri.host_str().is_none_or(str::is_empty))
+        {
+            return Err(
+                "expected a file/s3 table URL without embedded credentials, query or fragment"
+                    .into(),
+            );
+        }
+        if !matches!(self.execution_mode.as_str(), "open" | "reuse")
+            || !matches!(
+                self.purpose.as_str(),
+                "timing" | "validation" | "diagnostic" | "io"
+            )
+            || self.concurrent_queries.is_some_and(|count| {
+                !matches!(count, 2 | 4) || !self.reuse() || self.comparison_revision != 6
+            })
+            || !self.valid_comparison()
+            || !is_hash(&json!(self.fixture_manifest_sha256))
+            || self.case_id.trim().is_empty()
+            || self.run_id.trim().is_empty()
+            || self.profile.trim().is_empty()
+            || self.canonical_sql.trim().is_empty()
+            || self.resource_budget != budget()
+            || self.validation_diagnostics
+                && (self.comparison_revision != 6 || self.purpose != "validation")
+        {
+            return Err("invalid request or settings differ from the frozen protocol".into());
+        }
+        Ok(())
+    }
+
+    fn valid_comparison(&self) -> bool {
+        serde_json::to_value(self).is_ok_and(|value| comparison(&value).is_ok())
+    }
+}
+
+pub fn budget() -> Value {
+    json!({"worker_threads": 8, "max_blocking_threads": 64, "target_partitions": 8,
+        "batch_rows": 8192, "datafusion_pool_bytes": 4_u64 * 1024 * 1024 * 1024,
+        "process_memory_bytes": 8_u64 * 1024 * 1024 * 1024, "logical_cpus": 8})
+}
 
 pub fn is_hash(value: &Value) -> bool {
     value.as_str().is_some_and(|s| {
@@ -68,6 +173,8 @@ pub fn build(value: &Value) -> Result<Value> {
                             | "production-workloads.md"
                             | "spark-matrix.md"
                             | "oracle.py"
+                            | "native.py"
+                            | "selective-read-controller"
                     )
                 })
                 .map(|(k, v)| (k.clone(), v.clone()))
@@ -132,6 +239,122 @@ pub fn same_comparison(left: &Value, right: &Value) -> bool {
         }
 }
 
+pub fn identity(
+    request: &Value,
+    reader: &str,
+    build_record: &Value,
+    hashes: Value,
+) -> Result<Value> {
+    let mut identity = comparison(request)?;
+    let hashes = hashes.as_object().ok_or("invalid reader identity hashes")?;
+    if hashes.len() != 4
+        || [
+            "reader_build_sha256",
+            "reader_config_sha256",
+            "canonical_sql_sha256",
+        ]
+        .iter()
+        .any(|key| hashes.get(*key).is_none_or(|value| !is_hash(value)))
+        || hashes
+            .get("native_expression_sha256")
+            .is_none_or(|v| !v.is_null() && !is_hash(v))
+        || build_record["reader_id"] != reader
+    {
+        return Err("invalid reader artifact identity".into());
+    }
+    identity.as_object_mut().unwrap().extend(hashes.clone());
+    identity["reader_id"] = json!(reader);
+    identity["reader_artifact"] = build(build_record)?;
+    for field in ["fixture_manifest_sha256", "case_id", "snapshot_version"] {
+        identity[field] = request
+            .get(field)
+            .ok_or("missing reader identity field")?
+            .clone();
+    }
+    Ok(identity)
+}
+
+pub fn correctness(proof: &Value, identity: &Value, query_count: usize) -> Result<Vec<u64>> {
+    let checks = proof["checks"]
+        .as_array()
+        .ok_or("missing correctness checks")?;
+    if proof["status"] != "passed" || checks.len() != query_count || query_count == 0 {
+        return Err("failed or incomplete correctness certificate".into());
+    }
+    checks
+        .iter()
+        .map(|check| {
+            if check["status"] != "passed" {
+                return Err("failed oracle check".into());
+            }
+            if !identity_matches(identity, check) {
+                return Err("stale correctness identity".into());
+            }
+            check["output_rows"]
+                .as_u64()
+                .ok_or_else(|| "missing validated row count".into())
+        })
+        .collect()
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "action", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum Operation {
+    Comparison {
+        value: Value,
+    },
+    SameComparison {
+        left: Value,
+        right: Value,
+    },
+    Identity {
+        value: Value,
+        reader: String,
+        build: Value,
+        hashes: Value,
+    },
+    Validate {
+        value: Value,
+    },
+    Correctness {
+        proof: Value,
+        identity: Value,
+        query_count: usize,
+    },
+}
+
+pub fn run(operation: Operation) -> Result<Value> {
+    match operation {
+        Operation::Comparison { value } => comparison(&value),
+        Operation::SameComparison { left, right } => Ok(json!(same_comparison(&left, &right))),
+        Operation::Identity {
+            value,
+            reader,
+            build,
+            hashes,
+        } => identity(&value, &reader, &build, hashes),
+        Operation::Validate { value } => {
+            if ["campaign_id", "repetition", "order", "correctness_file"]
+                .iter()
+                .any(|key| value.get(*key).is_none())
+            {
+                return Err("missing Python adapter request context".into());
+            }
+            let request: Request = serde_json::from_value(value)?;
+            request.validate()?;
+            if request.concurrent_queries.is_some() {
+                return Err("Python adapters do not support concurrent queries".into());
+            }
+            Ok(Value::Null)
+        }
+        Operation::Correctness {
+            proof,
+            identity,
+            query_count,
+        } => Ok(json!(correctness(&proof, &identity, query_count)?)),
+    }
+}
+
 pub fn identity_matches(expected: &Value, actual: &Value) -> bool {
     let Some(expected) = expected.as_object() else {
         return false;
@@ -166,6 +389,65 @@ mod tests {
     use super::*;
 
     #[test]
+    fn shared_request_and_proof_cases() -> Result<()> {
+        let cases: Value = serde_json::from_str(include_str!("contract-cases.json"))?;
+        for case in cases["requests"].as_array().unwrap() {
+            let mut value = cases["request"].clone();
+            value
+                .as_object_mut()
+                .unwrap()
+                .extend(case["change"].as_object().unwrap().clone());
+            if let Some(remove) = case["remove"].as_array() {
+                for key in remove {
+                    value.as_object_mut().unwrap().remove(key.as_str().unwrap());
+                }
+            }
+            let result = serde_json::from_value::<Request>(value.clone())
+                .map_err(Into::into)
+                .and_then(|request| request.validate());
+            assert_eq!(
+                result.is_ok(),
+                case["valid"],
+                "{}: {result:?}",
+                case["name"]
+            );
+            assert_eq!(
+                run(Operation::Validate { value }).is_ok(),
+                case["python_valid"],
+                "{}",
+                case["name"]
+            );
+        }
+        for case in cases["proofs"].as_array().unwrap() {
+            let mut check = cases["identity"].clone();
+            check["status"] = json!("passed");
+            check["output_rows"] = json!(3);
+            check
+                .as_object_mut()
+                .unwrap()
+                .extend(case["change"].as_object().unwrap().clone());
+            if let Some(remove) = case["remove"].as_array() {
+                for key in remove {
+                    check.as_object_mut().unwrap().remove(key.as_str().unwrap());
+                }
+            }
+            let proof = json!({"status":case.get("status").unwrap_or(&json!("passed")),
+                "checks":vec![check; case["checks"].as_u64().unwrap_or(2) as usize]});
+            let result = correctness(&proof, &cases["identity"], 2);
+            assert_eq!(
+                result.is_ok(),
+                case["valid"],
+                "{}: {result:?}",
+                case["name"]
+            );
+            if let Ok(rows) = result {
+                assert_eq!(rows, vec![3, 3]);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn audit_edits_preserve_contracts_but_execution_changes_do_not() -> Result<()> {
         let definition = json!({"format":"selective-read-production-workload-v1", "comparison_revision":6,
             "sampling_stage":"pilot", "cases":[{"canonical_sql":"SELECT id FROM bench", "projection":["id"],
@@ -194,11 +476,14 @@ mod tests {
         }
         let artifact = json!({"reader_id":"test", "executable_sha256":"1".repeat(64), "lockfile_sha256":"2".repeat(64),
             "harness_git_commit":"before", "runtime":{"engine":"1"},
-            "bundled_sha256":{"run.py":"runtime", "protocol.md":"docs", "oracle.py":"checker"}});
+            "bundled_sha256":{"run.py":"runtime", "protocol.md":"docs", "oracle.py":"checker",
+                "native.py":"bridge", "selective-read-controller":"validator"}});
         let mut changed = artifact.clone();
         changed["harness_git_commit"] = json!("after");
         changed["bundled_sha256"]["protocol.md"] = json!("new docs");
         changed["bundled_sha256"]["oracle.py"] = json!("new checker");
+        changed["bundled_sha256"]["selective-read-controller"] = json!("rebuilt validator");
+        changed["bundled_sha256"]["native.py"] = json!("updated bridge");
         assert_eq!(build(&artifact)?, build(&changed)?);
         for (pointer, value) in [
             ("/executable_sha256", json!("3".repeat(64))),

@@ -33,8 +33,14 @@ New requests and certificates carry a structured workload contract and reader
 artifact identity. They compare queries, layout settings, inputs, runtime and
 executable artifacts directly. Updating Git metadata or source provenance alone
 does not require new references or correctness checks. Historical records that
-only contain checksums still require their original immutable inputs. Revalidate
-exports with the current tools to produce certificates with structured identities.
+only contain checksums still require their original immutable inputs. Run
+validation with rebuilt readers to produce certificates with structured identities.
+
+The native readers and Python adapters share the Rust request, identity and
+certificate checks. Python reader packages include the compiled controller and
+call it during setup, before query timers start. Rebuild reader packages to pick
+up changes to these checks. The independent oracle runs from the harness and is
+not copied into reader packages.
 
 Build the native controller before preparing references, running readers or
 checking the independent Python oracle:

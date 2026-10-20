@@ -96,6 +96,8 @@ pub(super) fn prepare(root: &Path, args: Arguments) -> Result<()> {
     let bundled: BTreeMap<String, PathBuf> = [
         ("lock.json", adapter.join("lock.json")),
         ("run.py", root.join(RUNNERS).join("run.py")),
+        ("native.py", root.join(RUNNERS).join("native.py")),
+        ("selective-read-controller", env::current_exe()?),
         (
             "python_common.py",
             root.join(RUNNERS).join("python_common.py"),

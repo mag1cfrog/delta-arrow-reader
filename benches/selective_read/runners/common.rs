@@ -5,7 +5,7 @@ use std::{
     error::Error,
     fs::{self, File},
     io::{BufReader, BufWriter, Read, Write},
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
@@ -18,7 +18,6 @@ use datafusion::{
     prelude::{SessionConfig, SessionContext},
 };
 use futures_util::StreamExt;
-use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -30,97 +29,11 @@ pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 pub const TABLE: &str = "bench";
 const LOCK: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.lock"));
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Request {
-    pub table_uri: String,
-    pub snapshot_version: u64,
-    pub case_id: String,
-    canonical_sql: String,
-    comparison_revision: u64,
-    protocol_sha256: String,
-    base_protocol_sha256: Option<String>,
-    workload_manifest_sha256: Option<String>,
-    workload_contract: Option<Value>,
-    sampling_sha256: Option<String>,
-    sampling_stage: Option<String>,
-    fixture_manifest_sha256: String,
-    profile: String,
-    execution_mode: String,
-    concurrent_queries: Option<usize>,
-    purpose: String,
-    #[serde(default)]
-    validation_diagnostics: bool,
-    resource_budget: Value,
-    correctness_file: Option<PathBuf>,
-    campaign_id: Option<String>,
-    run_id: String,
-    repetition: Option<u64>,
-    order: Option<u64>,
-}
-
-impl Request {
-    pub fn reuse(&self) -> bool {
-        self.execution_mode == "reuse"
-    }
-    fn query_count(&self) -> usize {
-        if let Some(count) = self.concurrent_queries {
-            count
-        } else if !self.reuse() {
-            1
-        } else if self.comparison_revision >= 4 {
-            2
-        } else {
-            10
-        }
-    }
-    fn timed(&self) -> bool {
-        self.purpose == "timing"
-    }
-
-    fn validate(&self) -> Result<()> {
-        let uri = url::Url::parse(&self.table_uri)?;
-        if !matches!(uri.scheme(), "file" | "s3")
-            || !uri.username().is_empty()
-            || uri.password().is_some()
-            || uri.query().is_some()
-            || uri.fragment().is_some()
-        {
-            return Err(
-                "expected a file/s3 table URL without embedded credentials, query or fragment"
-                    .into(),
-            );
-        }
-        if !matches!(self.execution_mode.as_str(), "open" | "reuse")
-            || !matches!(
-                self.purpose.as_str(),
-                "timing" | "validation" | "diagnostic" | "io"
-            )
-            || self.concurrent_queries.is_some_and(|count| {
-                !matches!(count, 2 | 4) || !self.reuse() || self.comparison_revision != 6
-            })
-            || !self.valid_comparison()
-            || !is_hash(&self.fixture_manifest_sha256)
-            || self.case_id.is_empty()
-            || self.run_id.is_empty()
-            || self.canonical_sql.trim().is_empty()
-            || self.resource_budget != budget()
-            || self.validation_diagnostics
-                && (self.comparison_revision != 6 || self.purpose != "validation")
-        {
-            return Err("invalid request or settings differ from the frozen protocol".into());
-        }
-        Ok(())
-    }
-
-    fn valid_comparison(&self) -> bool {
-        (self.comparison_revision != 2 || self.workload_contract.is_none())
-            && contract::comparison(&identity(self, "", "")).is_ok()
-    }
-}
+pub use contract::Request;
 
 #[cfg(test)]
 mod contract_tests {
+    use super::contract::budget;
     use super::*;
 
     #[test]
@@ -152,12 +65,6 @@ mod contract_tests {
     }
 }
 
-fn budget() -> Value {
-    json!({"worker_threads": 8, "max_blocking_threads": 64, "target_partitions": 8,
-        "batch_rows": 8192, "datafusion_pool_bytes": 4_u64 * 1024 * 1024 * 1024,
-        "process_memory_bytes": 8_u64 * 1024 * 1024 * 1024, "logical_cpus": 8})
-}
-
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
@@ -177,13 +84,6 @@ fn file_digest(path: &Path) -> Result<String> {
         hash.update(&buffer[..n]);
     }
     Ok(hex(&hash.finalize()))
-}
-
-fn is_hash(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 fn read_json(path: &Path) -> Result<Value> {
@@ -224,30 +124,6 @@ fn context() -> Result<SessionContext> {
     Ok(SessionContext::new_with_config_rt(config, runtime))
 }
 
-fn identity(request: &Request, build_hash: &str, config_hash: &str) -> Value {
-    let mut value = json!({"reader_id": crate::READER, "reader_build_sha256": build_hash,
-        "reader_config_sha256": config_hash, "comparison_revision": request.comparison_revision,
-        "protocol_sha256": request.protocol_sha256,
-        "fixture_manifest_sha256": request.fixture_manifest_sha256,
-        "case_id": request.case_id, "snapshot_version": request.snapshot_version,
-        "canonical_sql_sha256": digest(request.canonical_sql.as_bytes()),
-        "native_expression_sha256": null});
-    if request.comparison_revision >= 3 {
-        value["base_protocol_sha256"] = json!(request.base_protocol_sha256);
-        value["workload_manifest_sha256"] = json!(request.workload_manifest_sha256);
-        if let Some(contract) = &request.workload_contract {
-            value["workload_contract"] = contract.clone();
-        }
-    }
-    if request.comparison_revision >= 4 {
-        value["sampling_sha256"] = json!(request.sampling_sha256);
-    }
-    if request.comparison_revision >= 5 {
-        value["sampling_stage"] = json!(request.sampling_stage);
-    }
-    value
-}
-
 fn correctness(request: &Request, identity: &Value) -> Result<Value> {
     if !request.timed() {
         return Ok(json!({"status": "not_checked", "reason": "untimed invocation"}));
@@ -257,26 +133,7 @@ fn correctness(request: &Request, identity: &Value) -> Result<Value> {
         .as_ref()
         .ok_or("timing requires a correctness certificate")?;
     let proof = read_json(path)?;
-    let checks = proof["checks"]
-        .as_array()
-        .ok_or("missing correctness checks")?;
-    if proof["status"] != "passed" || checks.len() != request.query_count() {
-        return Err("failed or incomplete correctness certificate".into());
-    }
-    let mut expected_rows = Vec::new();
-    for check in checks {
-        if check["status"] != "passed" {
-            return Err("failed oracle check".into());
-        }
-        if !contract::identity_matches(identity, check) {
-            return Err("stale correctness identity".into());
-        }
-        expected_rows.push(
-            check["output_rows"]
-                .as_u64()
-                .ok_or("missing validated row count")?,
-        );
-    }
+    let expected_rows = contract::correctness(&proof, identity, request.query_count())?;
     Ok(
         json!({"status": "passed", "artifact_sha256": file_digest(path)?, "path": path,
         "expected_output_rows": expected_rows}),
@@ -632,12 +489,14 @@ fn run(request_path: &Path, output: &Path) -> Result<bool> {
     if let Some(count) = request.concurrent_queries {
         settings["concurrent_queries"] = json!(count);
     }
-    let mut input_identity = identity(
-        &request,
-        &file_digest(&build_path)?,
-        &digest(&serde_json::to_vec(&settings)?),
-    );
-    input_identity["reader_artifact"] = contract::build(&build)?;
+    let input_identity = contract::identity(
+        &serde_json::to_value(&request)?,
+        crate::READER,
+        &build,
+        json!({"reader_build_sha256":file_digest(&build_path)?,
+               "reader_config_sha256":digest(&serde_json::to_vec(&settings)?),
+               "canonical_sql_sha256":digest(request.canonical_sql.as_bytes()), "native_expression_sha256":null}),
+    )?;
     let mut record = json!({"format": "selective-read-observation-v1", "identity": input_identity,
         "campaign_id": request.campaign_id, "run_id": request.run_id, "repetition": request.repetition, "order": request.order,
         "profile": request.profile, "purpose": request.purpose, "execution_mode": request.execution_mode,

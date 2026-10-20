@@ -7,6 +7,9 @@ import subprocess
 
 
 def executable():
+    bundled = Path(__file__).with_name("selective-read-controller")
+    if bundled.is_file():
+        return bundled
     root = Path(__file__).resolve().parents[3]
     path = Path(os.environ.get("SELECTIVE_READ_XTASK",
                 Path(os.environ.get("CARGO_TARGET_DIR", root / "target")) / "debug/xtask")).resolve()
