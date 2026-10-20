@@ -17,7 +17,7 @@ flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 rawzip = "0.5.2"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["float_roundtrip"] }
 sha2 = "0.10"
 snafu = "0.9"
 tar = { version = "0.4", default-features = false }

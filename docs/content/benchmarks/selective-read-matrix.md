@@ -58,11 +58,13 @@ translation hash differs from the checked-in query.
 
 Follow the [fixture](selective-read-fixtures.md),
 [reader](selective-read-runners.md) and [storage](selective-read-storage.md)
-guides first. Use the oracle environment and new output directories. Prepare
-all references before starting a timed campaign:
+guides first. Build the controller with `cargo build --locked -p xtask`.
+Use the oracle environment and new output directories. Prepare all references
+before starting a timed campaign:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/matrix.py prepare \
+target/debug/xtask selective-read prepare-matrix \
+  --python ../selective-read-oracle-venv/bin/python \
   --fixtures ../selective-read-smoke --output ../matrix-smoke
 ```
 
@@ -85,7 +87,7 @@ Start MinIO and upload these same fixtures using the storage guide, then run:
   --binary ../selective-read-polars-build/selective-read-polars \
   --binary ../selective-read-daft-build/selective-read-daft \
   --output ../campaign-matrix-smoke
-../selective-read-oracle-venv/bin/python -B benches/selective_read/matrix.py report \
+target/debug/xtask selective-read report-matrix \
   --campaign ../campaign-matrix-smoke --output ../matrix-smoke-report
 ```
 
@@ -133,16 +135,19 @@ It does not reproduce private historical data or establish the old speedups.
 
 ## Check the retained catalog
 
-Run the bounded matrix check against a prepared smoke matrix:
+Rust tests cover prepared metadata, paired projections and reports that retain
+failed and unsupported entries. Python tests compare every frozen SQL statement
+and literal set with the independent oracle definitions:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/check_matrix.py \
-  --fixtures ../selective-read-smoke --matrix ../matrix-smoke/matrix.json
+cargo test --locked -p xtask selective_read::workload::matrix
+cargo test --locked -p xtask selective_read::report::batch
+PYTHONPATH=benches/selective_read:benches/selective_read/runners \
+  ../selective-read-oracle-venv/bin/python -B -m unittest \
+  test_oracle.OracleTests.test_retained_matrix_matches_independent_oracle_definitions
 ```
 
-It checks all SQL/literal scales, paired projections, translation binding,
-changed metadata rejection and a synthetic 150-entry report containing failed
-and unsupported cases. Real engine correctness still requires the campaign.
+Real engine correctness still requires the campaign.
 
 The checked-in `query-matrix.json` and `native-expressions.jsonl` retain the
 revision 2 catalog and its original reader identities. Catalog generation

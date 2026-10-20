@@ -114,6 +114,23 @@ def expected_keys(query):
 
 
 class OracleTests(unittest.TestCase):
+    def test_retained_matrix_matches_independent_oracle_definitions(self):
+        import matrix
+        frozen = matrix.catalog()
+        for scale, source in frozen["scales"].items():
+            literals = source["in_literals"]
+            self.assertEqual(literals, sorted(set(literals)))
+            self.assertEqual(len(literals), 5 if scale == "0.01" else 20)
+            for family, cases in (("li", oracle.ORIGINAL_CASES), ("wide", oracle.WIDE_CASES)):
+                self.assertEqual(set(frozen["shapes"][family]), set(cases))
+                for name, (projection, predicate, limit) in cases.items():
+                    shape, query = frozen["shapes"][family][name], source["queries"][family][name]
+                    self.assertEqual((shape["projection"], shape["predicate"], shape["limit"]),
+                                     (list(projection), predicate, limit))
+                    self.assertEqual(query["sql"], oracle.sql_for(projection, predicate, limit, literals))
+                    self.assertEqual(query["sql_sha256"], oracle.digest_bytes(query["sql"].encode()))
+
+
     def test_sort_spill_respects_disk_quota(self):
         count = 600000
         schema = oracle.result_schema(oracle.KEYS)

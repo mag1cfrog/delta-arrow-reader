@@ -41,6 +41,12 @@ pub(crate) enum Task {
     CampaignReport,
     /// Validate workload definitions and fixture metadata.
     Workload,
+    /// Validate public query matrix metadata. Read the operation as JSON from stdin.
+    Matrix,
+    /// Prepare all 30 public cases with independent Python references.
+    PrepareMatrix(workload::matrix::Prepare),
+    /// Export a validated public query matrix campaign.
+    ReportMatrix(workload::matrix::Report),
     /// Freeze independently checked production fixtures and pinned Polars translations.
     FreezeWorkload(Box<workload::production::Define>),
     /// Probe or generate production layouts using the pinned Arrow streaming producer.
@@ -120,6 +126,18 @@ impl Task {
             Self::RunCampaign(args) => return campaign::controller::run(*args),
             Self::ProductionFixtures(args) => return workload::fixtures::run(*args),
             Self::PlanProduction(args) => return workload::planner::run(args),
+            Self::PrepareMatrix(args) => {
+                let result = workload::matrix::prepare(args)?;
+                require(
+                    result["status"] == "complete",
+                    "matrix preparation incomplete",
+                )?;
+                return Ok(());
+            }
+            Self::ReportMatrix(args) => {
+                println!("{}", workload::matrix::report(args)?);
+                return Ok(());
+            }
             Self::RunIntraPage(args) => return experiment::intra_page::batch::run(*args),
             Self::FreezeWorkload(args) => {
                 let value = workload::production::define(*args)?;
@@ -187,6 +205,7 @@ impl Task {
             Self::ProductionReport => report::run(serde_json::from_value(input)?)?,
             Self::CampaignReport => report::batch::run(serde_json::from_value(input)?)?,
             Self::Workload => workload::run(serde_json::from_value(input)?)?,
+            Self::Matrix => workload::matrix::run(serde_json::from_value(input)?)?,
             Self::ProductionPairs => pairs::run(serde_json::from_value(input)?)?,
             Self::Experiment => experiment::run(serde_json::from_value(input)?)?,
             Self::IntraPage => experiment::intra_page::run(serde_json::from_value(input)?)?,
@@ -196,6 +215,8 @@ impl Task {
             | Self::FreezeWorkload(_)
             | Self::ProductionFixtures(_)
             | Self::PlanProduction(_)
+            | Self::PrepareMatrix(_)
+            | Self::ReportMatrix(_)
             | Self::RunNumericPages(_)
             | Self::RunDeltaLength(_)
             | Self::UploadStorage(_)
