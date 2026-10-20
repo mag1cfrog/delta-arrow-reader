@@ -27,6 +27,17 @@ from delta_arrow_reader import (
 )
 
 
+class MisleadingInteger(int):
+    def __lt__(self, other):
+        return False
+
+    def __le__(self, other):
+        return False
+
+    def __index__(self):
+        return 123
+
+
 class TableTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="secret-table-")
@@ -1066,18 +1077,11 @@ class TableTests(unittest.TestCase):
                         self.assertEqual(list(reader), [])
 
     def test_limit_validation_is_shared_by_both_entrypoints(self):
-        class Limit(int):
-            def __lt__(self, other):
-                return False
-
-            def __index__(self):
-                return 123
-
         self.write_log(1, self.write_parquet("rows.parquet", [1, 2]))
         table = DeltaTable(self.location)
         for method in ("scan", "to_reader"):
             with self.subTest(method=method):
-                result = getattr(table, method)(limit=Limit(1))
+                result = getattr(table, method)(limit=MisleadingInteger(1))
                 reader = (pa.RecordBatchReader.from_stream(result)
                           if method == "scan" else result)
                 with reader:
@@ -1085,7 +1089,7 @@ class TableTests(unittest.TestCase):
                 for limit, error_type in (
                     (True, TypeError), (False, TypeError), (1.0, TypeError),
                     ("1", TypeError), (b"1", TypeError), (object(), TypeError),
-                    (-1, ValueError), (-2**100, ValueError), (Limit(-1), ValueError),
+                    (-1, ValueError), (-2**100, ValueError), (MisleadingInteger(-1), ValueError),
                     (2 * sys.maxsize + 2, OverflowError), (2**100, OverflowError),
                 ):
                     with self.subTest(limit=limit), self.assertRaises(error_type):
@@ -1122,22 +1126,15 @@ class TableTests(unittest.TestCase):
                                 self.assertTrue(set(values) <= {1, 2, 3, 4, 5, 6})
 
     def test_target_partitions_validation_is_shared_by_both_entrypoints(self):
-        class Partitions(int):
-            def __le__(self, other):
-                return False
-
-            def __index__(self):
-                return 123
-
         table = DeltaTable(self.location)
         for method in (table.scan, table.to_reader):
             with self.subTest(method=method.__name__):
-                method(target_partitions=Partitions(1)).close()
+                method(target_partitions=MisleadingInteger(1)).close()
                 for target, error_type in (
                     (True, TypeError), (False, TypeError), (1.0, TypeError),
                     ("1", TypeError), (b"1", TypeError), (object(), TypeError),
-                    (0, ValueError), (Partitions(0), ValueError), (-1, ValueError),
-                    (-2**100, ValueError), (Partitions(-1), ValueError),
+                    (0, ValueError), (MisleadingInteger(0), ValueError), (-1, ValueError),
+                    (-2**100, ValueError), (MisleadingInteger(-1), ValueError),
                     (2 * sys.maxsize + 2, OverflowError), (2**100, OverflowError),
                 ):
                     with self.subTest(target=target), self.assertRaises(error_type):
@@ -1188,16 +1185,6 @@ class TableTests(unittest.TestCase):
                     method(execution_options=value)
 
     def test_execution_capacity_defaults_and_validation(self):
-        class Count(int):
-            def __lt__(self, other):
-                return False
-
-            def __le__(self, other):
-                return False
-
-            def __index__(self):
-                return 1
-
         maximum = sys.maxsize >> 2
         for name, default in (
             ("max_concurrent_file_reads_per_partition", 3),
@@ -1209,7 +1196,7 @@ class TableTests(unittest.TestCase):
                 with self.subTest(name=name), self.assertRaises(TypeError) as caught:
                     ScanExecutionOptions(**{name: None})
                 self.assertIn(name, str(caught.exception))
-            for count in (1, 2, Count(2), maximum, default):
+            for count in (1, 2, MisleadingInteger(2), maximum, default):
                 with self.subTest(name=name, count=count):
                     options = ScanExecutionOptions(**{name: count})
                     self.assertEqual(getattr(options, name), count)
@@ -1219,8 +1206,8 @@ class TableTests(unittest.TestCase):
                 (True, TypeError), (False, TypeError),
                 (1.0, TypeError), ("1", TypeError), (b"1", TypeError),
                 ([], TypeError), ({}, TypeError), (object(), TypeError),
-                (0, ValueError), (Count(0), ValueError), (-1, ValueError),
-                (-2**100, ValueError), (Count(-1), ValueError),
+                (0, ValueError), (MisleadingInteger(0), ValueError), (-1, ValueError),
+                (-2**100, ValueError), (MisleadingInteger(-1), ValueError),
                 (maximum + 1, ValueError), (2 * sys.maxsize + 1, ValueError),
                 (2 * sys.maxsize + 2, OverflowError), (2**100, OverflowError),
             ):
@@ -1229,15 +1216,8 @@ class TableTests(unittest.TestCase):
                 self.assertIn(name, str(caught.exception))
 
     def test_prefetch_depth_defaults_and_validation(self):
-        class Count(int):
-            def __lt__(self, other):
-                return False
-
-            def __index__(self):
-                return 1
-
         self.assertEqual(ScanExecutionOptions().prefetch_files_per_partition, 2)
-        for count in (0, 1, 2, Count(0), Count(2), 2 * sys.maxsize + 1):
+        for count in (0, 1, 2, MisleadingInteger(0), MisleadingInteger(2), 2 * sys.maxsize + 1):
             with self.subTest(count=count):
                 options = ScanExecutionOptions(prefetch_files_per_partition=count)
                 self.assertEqual(options.prefetch_files_per_partition, count)
@@ -1247,7 +1227,7 @@ class TableTests(unittest.TestCase):
             (None, TypeError), (True, TypeError), (False, TypeError),
             (1.0, TypeError), ("1", TypeError), (b"1", TypeError),
             ([], TypeError), ({}, TypeError), (object(), TypeError),
-            (-1, ValueError), (-2**100, ValueError), (Count(-1), ValueError),
+            (-1, ValueError), (-2**100, ValueError), (MisleadingInteger(-1), ValueError),
             (2 * sys.maxsize + 2, OverflowError), (2**100, OverflowError),
         ):
             with self.subTest(count=count), self.assertRaises(error_type) as caught:
@@ -1255,19 +1235,12 @@ class TableTests(unittest.TestCase):
             self.assertIn("prefetch_files_per_partition", str(caught.exception))
 
     def test_parquet_byte_options_defaults_and_validation(self):
-        class Size(int):
-            def __lt__(self, other):
-                return False
-
-            def __index__(self):
-                return 1
-
         for name, default in (
             ("parquet_metadata_size_hint_bytes", 65536),
             ("parquet_full_file_read_threshold_bytes", None),
         ):
             self.assertEqual(getattr(ScanExecutionOptions(), name), default)
-            for size in (None, 1, 65536, Size(2), 2 * sys.maxsize + 1):
+            for size in (None, 1, 65536, MisleadingInteger(2), 2 * sys.maxsize + 1):
                 with self.subTest(name=name, size=size):
                     options = ScanExecutionOptions(**{name: size})
                     self.assertEqual(getattr(options, name), size)
@@ -1277,8 +1250,8 @@ class TableTests(unittest.TestCase):
                 (True, TypeError), (False, TypeError), (1.0, TypeError),
                 ("1", TypeError), (b"1", TypeError), ([], TypeError),
                 ({}, TypeError), (object(), TypeError), (0, ValueError),
-                (Size(0), ValueError), (-1, ValueError), (-2**100, ValueError),
-                (Size(-1), ValueError), (2 * sys.maxsize + 2, OverflowError),
+                (MisleadingInteger(0), ValueError), (-1, ValueError), (-2**100, ValueError),
+                (MisleadingInteger(-1), ValueError), (2 * sys.maxsize + 2, OverflowError),
                 (2**100, OverflowError),
             ):
                 with self.subTest(name=name, size=size), self.assertRaises(error_type) as caught:
@@ -1923,14 +1896,7 @@ class TableTests(unittest.TestCase):
                 self.assertNotIn("secret", str(caught.exception))
 
     def test_version_validation(self):
-        class Version(int):
-            def __lt__(self, other):
-                return False
-
-            def __index__(self):
-                return 123
-
-        self.assertEqual(DeltaTable(self.location, version=Version(0)).version, 0)
+        self.assertEqual(DeltaTable(self.location, version=MisleadingInteger(0)).version, 0)
         with self.assertRaises(TypeError):
             DeltaTable(self.location, 0)
         cases = (
@@ -1942,7 +1908,7 @@ class TableTests(unittest.TestCase):
             (object(), TypeError),
             (-1, ValueError),
             (-(2**100), ValueError),
-            (Version(-1), ValueError),
+            (MisleadingInteger(-1), ValueError),
             (2**64, OverflowError),
             (2**100, OverflowError),
         )
