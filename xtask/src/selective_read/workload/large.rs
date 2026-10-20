@@ -2,15 +2,6 @@ use super::*;
 use crate::selective_read::{campaign, storage::read_json};
 
 const SCALES: [f64; 5] = [1.0, 10.0, 30.0, 100.0, 300.0];
-const SOURCES: [&str; 7] = [
-    "oracle.py",
-    "oracle-requirements.txt",
-    "large_workloads.py",
-    "matrix.py",
-    "runners/run.py",
-    "wide_files.py",
-    "file_organizations.py",
-];
 
 pub(super) fn shapes() -> Value {
     let wide: Vec<_> = [
@@ -262,14 +253,6 @@ pub(super) fn load(value: Value, harness: &Path) -> Result<Value> {
         value["format"] == "selective-read-large-workload-v1"
             && [json!(3), json!(4)].contains(&value["comparison_revision"]),
         "unknown large workload",
-    )?;
-    let sources = SOURCES
-        .iter()
-        .map(|name| Ok((name.to_string(), json!(digest(&harness.join(name))?))))
-        .collect::<Result<Map<_, _>>>()?;
-    require(
-        value["source_sha256"] == json!(sources),
-        "workload harness sources changed",
     )?;
     let family = value.get("family").map(text).transpose()?.unwrap_or("data");
     require(

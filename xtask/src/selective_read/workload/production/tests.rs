@@ -11,7 +11,7 @@ fn expression_hashes_match_every_frozen_adapter_description() -> Result<()> {
 }
 
 #[test]
-fn frozen_workloads_reject_changed_sources_translations_scope_and_fixture_bindings() -> Result<()> {
+fn frozen_workloads_check_queries_and_scope_independently_of_source_provenance() -> Result<()> {
     let harness =
         fs::canonicalize(crate::repository::repository_root().join("benches/selective_read"))?;
     let protocols = protocols(&harness)?;
@@ -41,7 +41,7 @@ fn frozen_workloads_reject_changed_sources_translations_scope_and_fixture_bindin
     row["native_expression_sha256"] = json!({"polars":hash});
     let selected = BTreeSet::from([case.to_owned()]);
     let readers = campaign::roster(&json!({"comparison_revision":6}))?;
-    let value = json!({"comparison_revision":6,"family":"production","definition_sha256":digest(&protocols.join("selective-read-production-shapes.md"))?,
+    let value = json!({"format":"selective-read-production-workload-v1","comparison_revision":6,"family":"production","definition_sha256":digest(&protocols.join("selective-read-production-shapes.md"))?,
         "definition_controller_sha256":digest(&std::env::current_exe()?)?,"source_sha256":sources(&harness)?,
         "cases":[row],"readers":readers,"sessions":sessions(&selected),"inventory":inventory(&selected,&readers),
         "scope":"probe","sampling_stage":"pilot","publication_ready":false,"oracle_limits":limits(),
@@ -50,8 +50,16 @@ fn frozen_workloads_reject_changed_sources_translations_scope_and_fixture_bindin
     assert_eq!(load(value.clone(), &harness)?, value);
     assert_eq!(binding(&value, root, case, &harness)?, row);
     for (pointer, replacement) in [
+        ("/definition_sha256", json!("different documentation")),
         ("/definition_controller_sha256", json!("changed")),
         ("/source_sha256/oracle.py", json!("changed")),
+    ] {
+        let mut changed = value.clone();
+        *changed.pointer_mut(pointer).ok_or("missing test field")? = replacement;
+        assert_eq!(load(changed.clone(), &harness)?, changed);
+    }
+    for (pointer, replacement) in [
+        ("/format", json!("unsupported")),
         ("/cases/0/canonical_sql", json!("SELECT 1")),
         ("/cases/0/native_expression_sha256/polars", json!("changed")),
         ("/oracle_limits/disk_bytes", json!(1)),

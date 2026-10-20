@@ -246,13 +246,10 @@ pub(super) fn load(value: Value, harness: &Path) -> Result<Value> {
     let protocols = protocols(&harness)?;
     let readers = campaign::roster(&value)?;
     require(
-        matches!(value["comparison_revision"].as_u64(), Some(5 | 6))
-            && value["family"] == "production"
-            && value["definition_sha256"]
-                == digest(&protocols.join("selective-read-production-shapes.md"))?
-            && value["definition_controller_sha256"] == digest(&std::env::current_exe()?)?
-            && value["source_sha256"] == sources(&harness)?,
-        "production workload sources changed",
+        value["format"] == "selective-read-production-workload-v1"
+            && matches!(value["comparison_revision"].as_u64(), Some(5 | 6))
+            && value["family"] == "production",
+        "unknown production workload",
     )?;
     let rows = array(&value["cases"])?;
     let selected = rows

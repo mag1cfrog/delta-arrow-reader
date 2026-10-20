@@ -51,14 +51,9 @@ fn declared_families_keep_pilots_and_adjacent_scale_controls() -> Result<()> {
 }
 
 #[test]
-fn legacy_load_rejects_stale_sources_limits_sessions_and_translations() -> Result<()> {
+fn legacy_load_checks_limits_sessions_and_translations_without_current_sources() -> Result<()> {
     let temporary = tempfile::tempdir()?;
     let harness = temporary.path();
-    for name in SOURCES {
-        let path = harness.join(name);
-        fs::create_dir_all(path.parent().unwrap())?;
-        fs::write(path, "frozen source")?;
-    }
     for reader in ["polars", "daft"] {
         let path = harness.join("runners").join(reader);
         fs::create_dir_all(&path)?;
@@ -82,10 +77,6 @@ fn legacy_load_rejects_stale_sources_limits_sessions_and_translations() -> Resul
                 )
             })
             .collect::<Map<_, _>>();
-        let sources = SOURCES
-            .iter()
-            .map(|name| Ok((name.to_string(), json!(digest(&harness.join(name))?))))
-            .collect::<Result<Map<_, _>>>()?;
         let translations = ["polars","daft"].into_iter().map(|reader| Ok((reader.to_owned(),json!({
             "expressions":expressions,"lock_sha256":digest(&harness.join("runners").join(reader).join("lock.json"))?})))).collect::<Result<Map<_,_>>>()?;
         let scales = match family {
@@ -94,12 +85,11 @@ fn legacy_load_rejects_stale_sources_limits_sessions_and_translations() -> Resul
             _ => json!({"data":0.01,"control":0.01}),
         };
         let value = json!({"format":"selective-read-large-workload-v1","comparison_revision":4,"scope":"smoke","family":family,
-            "publication_ready":false,"source_sha256":sources,"readers":campaign::roster(&json!({}))?,
+            "publication_ready":false,"source_sha256":{"oracle.py":"old source"},"readers":campaign::roster(&json!({}))?,
             "sessions":sessions(family,&expected),"scales":scales,"cases":rows,"translations":translations,
             "oracle_limits":{"memory_bytes":16 * 1024u64.pow(3),"disk_bytes":1024 * 1024 * 1024,"elapsed_seconds":1800}});
         assert_eq!(load(value.clone(), harness)?, value);
         for (pointer, replacement) in [
-            ("/source_sha256/oracle.py", json!("changed")),
             ("/sessions", json!({})),
             ("/cases/0/predicate", json!("all wrong")),
             ("/cases/0/native_expression_sha256/polars", json!("changed")),

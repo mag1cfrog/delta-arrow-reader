@@ -443,13 +443,8 @@ def compare(batches, reference, projection, expected_count, max_bytes=None, subs
 
 def check_reference_build(metadata):
     require(metadata["format"] == "selective-read-reference-v2" and metadata["status"] == "complete", "incomplete reference")
-    if metadata["comparison_revision"] in (5, 6):
-        import production_workloads
-        require(metadata["production_oracle_sha256"] == digest_file(production_workloads.__file__), "stale production oracle")
-    require(metadata["oracle_sha256"] == digest_file(__file__)
-            and metadata["oracle_dependencies_sha256"] == digest_file(REQUIREMENTS)
-            and metadata["pyarrow"] == pa.__version__ == "25.0.1"
-            and metadata["duckdb_sort"] == duckdb.__version__ == "1.5.5", "stale oracle build")
+    require(metadata["pyarrow"] == pa.__version__ == "25.0.1"
+            and metadata["duckdb_sort"] == duckdb.__version__ == "1.5.5", "unsupported oracle runtime")
 
 
 def objects(fixtures, table, source):

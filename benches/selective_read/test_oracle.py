@@ -583,8 +583,7 @@ class OracleTests(unittest.TestCase):
             stream.write(b"extra")
         with self.assertRaisesRegex(ValueError, "checksum"):
             oracle.check(*args)
-        for field, value in (("protocol_sha256", "bad"), ("oracle_sha256", "bad"),
-                             ("oracle_dependencies_sha256", "bad"), ("duckdb_sort", "bad"),
+        for field, value in (("protocol_sha256", "bad"), ("duckdb_sort", "bad"),
                              ("fixture_manifest_sha256", "bad"), ("reference_sha256", "bad")):
             path = args[0] / "reference.json"
             original = path.read_bytes()
@@ -596,6 +595,25 @@ class OracleTests(unittest.TestCase):
                     oracle.check(*args)
             finally:
                 path.write_bytes(original)
+
+    def test_reference_checks_values_after_oracle_sources_change(self):
+        args = self.export("li.clustered.all-full")
+        path = args[0] / "reference.json"
+        original = path.read_bytes()
+        try:
+            metadata = json.loads(original)
+            metadata.update(oracle_sha256="old source", production_oracle_sha256="old producer",
+                            oracle_dependencies_sha256="old requirements text")
+            write_json(path, metadata)
+            self.assertEqual(oracle.check(*args)["status"], "passed")
+            corrupted = self.result_table("li.clustered.all-full").to_pylist()
+            corrupted[0]["l_comment"] = "wrong value with the same row count"
+            args = self.export("li.clustered.all-full", pa.Table.from_pylist(
+                corrupted, schema=oracle.result_schema(oracle.ORIGINAL)))
+            with self.assertRaisesRegex(ValueError, "wrong row membership or value"):
+                oracle.check(*args)
+        finally:
+            path.write_bytes(original)
 
     def test_source_corruption_and_false_file_bounds(self):
         manifest_path = self.fixtures / "manifest.json"

@@ -16,6 +16,21 @@ import run
 
 
 class ReaderBookkeeping(unittest.TestCase):
+    def test_correctness_uses_result_identity_and_rows_not_oracle_source_hashes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "correctness.json"
+            identity = {"reader_id": "test", "reader_build_sha256": "build",
+                        "reader_config_sha256": "config", "canonical_sql_sha256": "query"}
+            check = identity | {"status": "passed", "output_rows": 3, "oracle_sha256": "older source"}
+            request = {"purpose": "timing", "execution_mode": "open", "correctness_file": str(path)}
+            path.write_text(json.dumps({"status": "passed", "checks": [check]}))
+            self.assertEqual(common.correctness(request, identity)["expected_output_rows"], [3])
+            for change in ({"status": "failed"}, {"output_rows": -1}, {"output_rows": True},
+                           {"canonical_sql_sha256": "different query"}, {"reader_build_sha256": "different reader"}):
+                with self.subTest(change=change), self.assertRaises(ValueError):
+                    path.write_text(json.dumps({"status": "passed", "checks": [check | change]}))
+                    common.correctness(request, identity)
+
     def test_adapter_probes_use_bundled_helpers_and_restore_controller_imports(self):
         previous_path = sys.path.copy()
         with tempfile.TemporaryDirectory() as temporary:

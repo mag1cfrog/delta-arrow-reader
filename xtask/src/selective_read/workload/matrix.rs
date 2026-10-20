@@ -227,17 +227,14 @@ fn selected(value: &Value, fields: &[&str]) -> Result<Value> {
     ))
 }
 
-fn reference_build(metadata: &Value, harness: &Path) -> Result<()> {
+fn reference_build(metadata: &Value) -> Result<()> {
     require(
         metadata["format"] == "selective-read-reference-v2"
             && metadata["status"] == "complete"
             && metadata["comparison_revision"] == 2
-            && metadata["oracle_sha256"] == digest(&harness.join("oracle.py"))?
-            && metadata["oracle_dependencies_sha256"]
-                == digest(&harness.join("oracle-requirements.txt"))?
             && metadata["pyarrow"] == "25.0.1"
             && metadata["duckdb_sort"] == "1.5.5",
-        "stale oracle build",
+        "unsupported reference format or runtime",
     )
 }
 
@@ -289,7 +286,7 @@ fn check_loaded(
                     "reference metadata changed",
                 )?;
                 let metadata = read_json(&path)?;
-                reference_build(&metadata, harness)?;
+                reference_build(&metadata)?;
                 require(
                     metadata["fixture_manifest_sha256"] == value["fixture_manifest_sha256"]
                         && metadata["protocol_sha256"] == value["protocol_sha256"]
@@ -360,7 +357,7 @@ pub(crate) fn prepare(args: Prepare) -> Result<Value> {
             let reference = references.join(&case);
             let metadata = worker.call(&json!({"action":"prepare-reference","fixtures":fixtures,"case_id":case,
                 "reference":reference,"reuse":args.references.is_some(),"sql":row["canonical_sql"]}))?;
-            reference_build(&metadata, &harness)?;
+            reference_build(&metadata)?;
             require(
                 metadata["case_id"] == case
                     && metadata["canonical_sql"] == row["canonical_sql"]
