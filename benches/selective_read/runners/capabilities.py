@@ -3,7 +3,6 @@
 import argparse
 import json
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 
@@ -97,86 +96,21 @@ def exported(record, output, expected):
         assert query["output_rows"] == expected.num_rows and query["completion_ns"] is None
 
 
-def delta_capabilities(binary, fixtures, output, *, dv_status="success"):
-    corpus = CORPUS
-    manifest = json.loads((corpus / "manifest.json").read_text())
-    fixture = next(f for f in manifest["fixtures"] if f["name"] == "deletion_vectors")
-    original = corpus / "deletion_vectors"
-    for name, expected in fixture["files"].items():
-        path = original / name
-        assert path.stat().st_size == expected["bytes"] and run.digest(path) == expected["sha256"]
+def export_corpus(record, output, deleted, ids):
+    original = CORPUS / "deletion_vectors"
     source = pq.ParquetFile(next((original / "table").glob("*.parquet"))).read()
     with pa.ipc.open_file(original / "expected.arrow") as saved:
-        deleted = saved.read_all()
-    assert source.num_rows == 12 and deleted.num_rows == 9
-    assert set(source["id"].to_pylist()) - set(deleted["id"].to_pylist()) == {2, 5, 12}
+        live = saved.read_all()
+    assert source.num_rows == 12 and live.num_rows == 9
+    assert set(source["id"].to_pylist()) - set(live["id"].to_pylist()) == {2, 5, 12}
+    expected = live if deleted else source
+    if ids is not None:
+        expected = pa.Table.from_pylist([row for row in expected.to_pylist() if row["id"] in ids], schema=expected.schema)
+    exported(record, output, expected)
+    return expected.num_rows
 
-    no_dv = output / "no-dv"
-    shutil.copytree(original / "table", no_dv)
-    (no_dv / "_delta_log/00000000000000000001.json").unlink()
-    log = no_dv / "_delta_log/00000000000000000000.json"
-    actions = [json.loads(line) for line in log.read_text().splitlines()]
-    for action in actions:
-        if "protocol" in action:
-            action["protocol"] = {"minReaderVersion": 1, "minWriterVersion": 2}
-        if "metaData" in action:
-            action["metaData"]["configuration"].pop("delta.enableDeletionVectors", None)
-    log.write_text("".join(json.dumps(a) + "\n" for a in actions))
 
-    observations = []
-    base = run.request(fixtures, "li.clustered.eq2-in20", "open", "validation", "probe")
-    # The corpus hash identifies these bounded probes. They cannot authorize public timing.
-    base.update(fixture_manifest_sha256=run.digest(corpus / "manifest.json"), case_id="probe.spark-dv")
-    for mode in ("open", "reuse"):
-        for name, table, version, expected in (("no-dv", no_dv, 0, source),
-                ("feature-only", original / "table", 0, source), ("real-dv", original / "table", 1, deleted)):
-            for predicate in ("", " WHERE id IN (2, 5, 12)", " WHERE id IN (1, 2, 5, 6, 12)"):
-                if name == "no-dv" and predicate:
-                    continue
-                selected = expected
-                if predicate:
-                    ids = {2, 5, 12} if predicate == " WHERE id IN (2, 5, 12)" else {1, 2, 5, 6, 12}
-                    selected = pa.Table.from_pylist([r for r in expected.to_pylist() if r["id"] in ids], schema=expected.schema)
-                destination = output / f"{mode}-{name}-{len(observations)}"
-                payload = dict(base, table_uri=table.resolve().as_uri(), snapshot_version=version,
-                               canonical_sql="SELECT id, value, label FROM bench" + predicate,
-                               execution_mode=mode, run_id=destination.name)
-                record = probe(binary, payload, destination)
-                expected_status = "success" if name == "no-dv" else dv_status
-                assert record["status"] == expected_status, record
-                if expected_status == "success":
-                    exported(record, destination, selected)
-                    assert len(record["queries"]) == (10 if mode == "reuse" else 1)
-                else:
-                    assert record["failure_reason"] and not record["queries"], record
-                observations.append({"path": destination.name, "status": "passed" if expected_status == "success" else expected_status,
-                                     "mode": mode, "feature": name, "version": version, "predicate": predicate,
-                                     "output_rows": selected.num_rows if expected_status == "success" else None,
-                                     "reason": record["failure_reason"]})
-
-    unknown = output / "unsupported-feature"
-    shutil.copytree(original / "table", unknown)
-    unknown_log = unknown / "_delta_log/00000000000000000000.json"
-    actions = [json.loads(line) for line in unknown_log.read_text().splitlines()]
-    for action in actions:
-        if "protocol" in action:
-            for key in ("readerFeatures", "writerFeatures"):
-                action["protocol"][key].append("unknownBenchmarkProbe")
-    unknown_log.write_text("".join(json.dumps(a) + "\n" for a in actions))
-    missing = output / "missing-dv"
-    shutil.copytree(original / "table", missing)
-    next(missing.glob("deletion_vector_*.bin")).unlink()
-    for mode in ("open", "reuse"):
-        for name, table, version, status in (("wrong-version", original / "table", 999, "operational_failure"),
-                ("unsupported", unknown, 0, "unsupported"),
-                ("missing-dv", missing, 1, "unsupported" if dv_status == "unsupported" else "operational_failure")):
-            destination = output / f"{mode}-{name}"
-            payload = dict(base, table_uri=table.resolve().as_uri(), snapshot_version=version,
-                           canonical_sql="SELECT * FROM bench", execution_mode=mode, run_id=destination.name)
-            record = probe(binary, payload, destination)
-            assert record["status"] == status and record["failure_reason"], record
-            if mode == "reuse" and name == "wrong-version":
-                assert record["phase"] == "snapshot_open" and not record["queries"]
-            observations.append({"path": destination.name, "status": status, "reason": record["failure_reason"]})
-
-    return observations
+def delta_capabilities(binary, fixtures, output):
+    import native
+    return native.call("delta-capabilities", {"binary": str(binary), "fixtures": str(fixtures),
+        "output": str(output), "python": sys.executable, "harness": str(Path(__file__).resolve().parents[1])})

@@ -41,6 +41,9 @@ def dispatch(value):
     fixtures = Path(value["fixtures"]) if "fixtures" in value else None
     if action == "hashes":
         return [run.digest(Path(path)) for path in value["paths"]]
+    if action == "capability-export":
+        from capabilities import export_corpus
+        return export_corpus(value["record"], Path(value["output"]), value["deleted"], value["ids"])
     if action == "check-intra":
         return check_intra(value)
     if action == "experiment-reference":

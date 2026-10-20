@@ -13,6 +13,7 @@ use super::{
 use crate::{Result, process::copy_directory};
 use serde_json::{Value, json};
 
+pub(super) mod capabilities;
 pub(super) mod remote;
 
 #[derive(clap::Args)]
