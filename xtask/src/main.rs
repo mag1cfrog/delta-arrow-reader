@@ -31,6 +31,7 @@ mod repository;
 mod scan;
 #[cfg(unix)]
 mod scan_scheduling;
+mod selective_read_chart;
 mod validation_record;
 
 use std::{
@@ -57,6 +58,12 @@ struct Arguments {
 
 #[derive(Subcommand)]
 enum Task {
+    /// Render the SF10 README charts from the published timing CSV.
+    RenderSelectiveReadChart {
+        /// Check the CSV and require byte-identical checked-in SVGs.
+        #[arg(long)]
+        check: bool,
+    },
     /// Run process-isolated scan scheduling benchmarks.
     #[cfg(unix)]
     ScanScheduling(scan_scheduling::Arguments),
@@ -189,6 +196,7 @@ fn main() -> ExitCode {
 
 fn run_task(task: Task) -> Result<()> {
     match task {
+        Task::RenderSelectiveReadChart { check } => selective_read_chart::run(check),
         #[cfg(unix)]
         Task::ScanScheduling(args) => args.run(),
         Task::Cli { command } => command.run().map_err(Into::into),

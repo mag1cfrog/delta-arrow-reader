@@ -460,7 +460,8 @@ fn core_filter_preserves_benchmark_targets_and_shared_inputs() -> Result<()> {
     }
     for path in [
         "benches/query_shapes.sql",
-        "benches/render_selective_read_chart.py",
+        "xtask/src/selective_read_chart.rs",
+        "xtask/src/selective_read_chart/tests.rs",
     ] {
         assert!(!filter_matches(&filters, "code", path)?, "{path}");
     }

@@ -274,6 +274,7 @@ jobs:
           cargo test --locked --package xtask --bin xtask python_sdist::
           cargo test --locked --package xtask --bin xtask python_wheel_build::
           cargo test --locked --package xtask --bin xtask scan_scheduling::
+          cargo test --locked --package xtask --bin xtask selective_read_chart::
           cargo test --locked --package xtask --test cli_release_plan --test cli_release_assets --test cli_release_images \
             --test cli_release_request --test cli_release_notes --test cli_release_workflow
           cargo test --locked --package xtask \

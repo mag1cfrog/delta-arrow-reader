@@ -52,6 +52,8 @@
     "crates/delta-arrow-reader-core/docs/public/reference/metrics.md"
   ],
   "tooling": [
+    "crates/delta-arrow-reader-core/docs/public/benchmarks/selective-read-current-timings.csv",
+    "crates/delta-arrow-reader-core/docs/public/assets/selective-read-readme-*.svg",
     ".cargo/**",
     ".github/path-filters.json",
     ".github/workflows/ci.yml",
