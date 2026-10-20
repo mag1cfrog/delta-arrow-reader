@@ -43,7 +43,16 @@ def dispatch(value):
         return [run.digest(Path(path)) for path in value["paths"]]
     if action == "capability-export":
         from capabilities import export_corpus
-        return export_corpus(value["record"], Path(value["output"]), value["deleted"], value["ids"])
+        return export_corpus(value["record"], Path(value["output"]), value["deleted"], value["ids"], value.get("semantics"))
+    if action == "capability-stream":
+        from capabilities import stream_fixture
+        return stream_fixture(Path(value["output"]))
+    if action == "capability-corrupt":
+        from capabilities import corrupt_export
+        return corrupt_export(Path(value["input"]), Path(value["output"]))
+    if action == "check-export":
+        import oracle
+        return oracle.check(Path(value["reference"]), fixtures, Path(value["result"]), Path(value["identity"]))
     if action == "check-intra":
         return check_intra(value)
     if action == "experiment-reference":

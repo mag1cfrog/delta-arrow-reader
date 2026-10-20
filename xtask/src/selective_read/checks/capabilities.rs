@@ -10,6 +10,7 @@ use std::{
 };
 
 mod duckdb;
+mod polars;
 
 #[derive(clap::Args, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -263,7 +264,10 @@ pub(in crate::selective_read) fn delta(args: Options) -> Result<Value> {
 pub(in crate::selective_read) fn run(args: Options) -> Result<()> {
     let build = read_json(&args.binary.with_file_name("build.json"))?;
     let reader = text(&build["reader_id"])?;
-    require(reader == "duckdb", "expected a DuckDB capability build")?;
+    require(
+        matches!(reader, "duckdb" | "polars"),
+        "expected a DuckDB or Polars capability build",
+    )?;
     fs::create_dir(&args.output)?;
     super::local(super::Args {
         binaries: vec![args.binary.clone()],
@@ -274,10 +278,19 @@ pub(in crate::selective_read) fn run(args: Options) -> Result<()> {
     })?;
     let mut checks = Capabilities::start(&args)?;
     let mut observations = checks.delta()?;
-    checks.duckdb(&args.python, &mut observations)?;
+    if reader == "duckdb" {
+        checks.duckdb(&args.python, &mut observations)?;
+    } else {
+        checks.polars(&args.harness, &mut observations)?;
+    }
     let public = read_json(&args.output.join("public-cases/checks.json"))?["invocations"].clone();
-    let summary = json!({"status":"passed","public_contract_invocations":public,
-        "capability_invocations":observations.len(),"total_invocations":count(&public)? + observations.len() as u64});
+    let mut summary = json!({"status":"passed","public_contract_invocations":public});
+    if reader == "duckdb" {
+        summary["capability_invocations"] = json!(observations.len());
+        summary["total_invocations"] = json!(count(&public)? + observations.len() as u64);
+    } else {
+        summary["capability_checks"] = json!(observations.len());
+    }
     let mut result = summary.clone();
     result.as_object_mut().unwrap().extend(super::super::object(&json!({
         "reader":reader,"build_sha256":digest(&args.binary.with_file_name("build.json"))?,

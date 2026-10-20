@@ -406,8 +406,8 @@ the exact later DV/file-layout cases before scheduling their measurements.
 Polars uses the same public-case and Delta capability checks:
 
 ```sh
-PYTHONDONTWRITEBYTECODE=1 ../selective-read-oracle-venv/bin/python \
-  benches/selective_read/runners/polars/check.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read check-capabilities \
+  --python ../selective-read-oracle-venv/bin/python \
   --binary ../selective-read-polars-build/selective-read-polars \
   --fixtures ../selective-read-smoke --output ../polars-contract-check
 ```
