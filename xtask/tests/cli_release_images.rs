@@ -10,6 +10,7 @@ use std::{
 use serde_json::json;
 
 #[allow(dead_code)]
+#[path = "support/common.rs"]
 mod support;
 use support::Result;
 #[allow(dead_code)]

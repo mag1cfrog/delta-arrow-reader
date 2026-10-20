@@ -3,6 +3,7 @@
 //! Run with `cargo bench --bench page_index`. The benchmark compares equivalent indexed and
 //! unindexed Delta fixtures for localized matches and matches scattered across every data page.
 
+#![deny(missing_docs, clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 use std::env;
 use std::error::Error;
 use std::fs::{self, File};

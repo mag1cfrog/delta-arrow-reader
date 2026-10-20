@@ -1,5 +1,6 @@
 //! Compile-time and behavioral coverage for the public reader API.
 
+#![deny(missing_docs, clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 use std::{error::Error as _, future::Future};
 
 use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};

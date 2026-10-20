@@ -1,4 +1,5 @@
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", env!("CARGO_PKG_README")))]
+#![deny(missing_docs, clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 #![cfg_attr(test, allow(clippy::panic))]
 
 mod delta;

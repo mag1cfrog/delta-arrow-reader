@@ -9,6 +9,7 @@ use std::{
 use serde_json::{Value, json};
 
 #[allow(dead_code)]
+#[path = "support/common.rs"]
 mod support;
 use support::Result;
 #[allow(dead_code)]

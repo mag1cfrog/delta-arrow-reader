@@ -6,6 +6,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 
 #[allow(dead_code)]
+#[path = "support/common.rs"]
 mod support;
 use support::{Result, write_zip};
 

@@ -38,6 +38,65 @@ fn workflow_script(source: &str, step: &str) -> String {
     script
 }
 
+#[test]
+fn module_filename_check_rejects_mod_rs_in_sources_and_tests() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    assert!(
+        Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(directory.path())
+            .status()?
+            .success()
+    );
+    let script = workflow_script(
+        include_str!("../../.github/workflows/ci.yml"),
+        "Check Rust module filenames",
+    );
+    for (filenames, valid) in [
+        (
+            &[
+                "crates/example/tests/cli/main.rs",
+                "crates/example/tests/cli/helpers.rs",
+                "xtask/tests/support/common.rs",
+            ],
+            true,
+        ),
+        (
+            &[
+                "crates/example/src/component/mod.rs",
+                "crates/example/tests/shared/mod.rs",
+                "xtask/tests/support/mod.rs",
+            ],
+            false,
+        ),
+    ] {
+        for filename in filenames {
+            let file = directory.path().join(filename);
+            fs::create_dir_all(file.parent().unwrap())?;
+            fs::write(file, "")?;
+        }
+        assert!(
+            Command::new("git")
+                .args(["add", "."])
+                .current_dir(directory.path())
+                .status()?
+                .success()
+        );
+        let output = Command::new("bash")
+            .args(["-c", &script])
+            .current_dir(directory.path())
+            .output()?;
+        let stderr = String::from_utf8(output.stderr)?;
+        assert_eq!(output.status.success(), valid, "{stderr}");
+        if !valid {
+            for filename in filenames {
+                assert!(stderr.contains(filename), "{stderr}");
+            }
+        }
+    }
+    Ok(())
+}
+
 fn filter_matches(filters: &Value, name: &str, path: &str) -> Result<bool> {
     let patterns: Vec<_> = filters[name]
         .as_array()
@@ -173,8 +232,8 @@ fn cli_sources_run_separate_required_checks() -> Result<()> {
     for path in [
         "crates/delta-arrow-reader-cli/src/main.rs",
         "crates/delta-arrow-reader-cli/src/predicate/tests.rs",
-        "crates/delta-arrow-reader-cli/tests/cli.rs",
-        "crates/delta-arrow-reader-cli/tests/predicates/mod.rs",
+        "crates/delta-arrow-reader-cli/tests/cli/main.rs",
+        "crates/delta-arrow-reader-cli/tests/cli/predicates.rs",
     ] {
         assert!(filter_matches(&filters, "cli", path)?, "{path}");
         assert_eq!(

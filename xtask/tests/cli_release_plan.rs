@@ -4,6 +4,7 @@ use serde_json::{Value, json};
 use std::fs;
 
 #[allow(dead_code)]
+#[path = "support/common.rs"]
 mod support;
 use support::Result;
 #[allow(dead_code)]

@@ -1,5 +1,6 @@
 use std::{fs, path::Path, process::Command};
 
+#[path = "support/common.rs"]
 mod support;
 use support::{
     PLATFORMS, Result, WheelFixture, record_contents, wheel_filename, wheel_files, write_wheel,
