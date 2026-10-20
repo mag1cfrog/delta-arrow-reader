@@ -36,6 +36,8 @@ mod selective_read;
 #[cfg(unix)]
 mod selective_read_build;
 mod selective_read_chart;
+#[cfg(target_os = "linux")]
+mod test_https;
 mod validation_record;
 
 use std::{
@@ -62,6 +64,9 @@ struct Arguments {
 
 #[derive(Subcommand)]
 enum Task {
+    /// Test core HTTPS certificate verification and proxy routing on Linux.
+    #[cfg(target_os = "linux")]
+    TestHttps(test_https::Arguments),
     /// Native selective-read benchmark control tools.
     #[cfg(target_os = "linux")]
     SelectiveRead {
@@ -209,6 +214,8 @@ fn main() -> ExitCode {
 
 fn run_task(task: Task) -> Result<()> {
     match task {
+        #[cfg(target_os = "linux")]
+        Task::TestHttps(args) => args.run(),
         #[cfg(target_os = "linux")]
         Task::SelectiveRead { command } => command.run(),
         #[cfg(unix)]

@@ -33,6 +33,17 @@ RUSTDOCFLAGS="-D warnings" cargo doc --locked --all-features --no-deps
 cargo package --locked
 ```
 
+On Linux, run the core HTTPS tests with `openssl` available:
+
+```console
+cargo xtask test-https
+cargo xtask test-https --features datafusion
+```
+
+The harness creates temporary certificates and local servers. It checks trusted
+and rejected certificates, empty trust stores, presigned reads, range reads, and
+proxy routing. Trust and proxy settings affect only the test subprocesses.
+
 ## Run scan scheduling benchmarks
 
 Build the harness, then pass the executable path printed by Cargo to the runner:

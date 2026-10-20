@@ -95,7 +95,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
       - run: cargo test --locked ${{ matrix.features }}
       - name: Verify HTTPS certificates and proxies
-        run: python3 crates/delta-arrow-reader-core/tests/reader/https.py ${{ matrix.features }}
+        run: cargo xtask test-https ${{ matrix.features }}
 
   platform-tests:
     name: Platform Tests / ${{ matrix.name }}

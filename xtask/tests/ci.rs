@@ -68,7 +68,7 @@ fn python_filter_excludes_unrelated_sources_and_tools() -> Result<()> {
         ("crates/delta-arrow-reader-cli/build.rs", true),
         ("crates/delta-arrow-reader-python/src/lib.rs", true),
         ("crates/delta-arrow-reader-python/tests/test_table.py", true),
-        ("crates/delta-arrow-reader-core/tests/reader/https.py", true),
+        ("xtask/src/test_https.rs", false),
         (
             "crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/table/data.parquet",
             true,
@@ -438,6 +438,11 @@ fn core_filter_preserves_benchmark_targets_and_shared_inputs() -> Result<()> {
         "xtask/src/scan_scheduling.rs",
         "xtask/src/scan_scheduling/tests.rs",
         "xtask/tests/scan_scheduling.rs",
+        "xtask/src/test_https.rs",
+        "xtask/src/test_https/proxy.rs",
+        "xtask/src/http_fixture.rs",
+        "xtask/src/http_fixture/table.rs",
+        "xtask/src/command.rs",
     ] {
         assert!(filter_matches(&filters, "code", path)?, "{path}");
     }
@@ -464,6 +469,17 @@ fn core_filter_preserves_benchmark_targets_and_shared_inputs() -> Result<()> {
     ] {
         assert!(!filter_matches(&filters, "code", path)?, "{path}");
     }
+    Ok(())
+}
+
+#[test]
+fn feature_tests_use_the_native_https_harness() -> Result<()> {
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    let steps = ci["jobs"]["feature-tests"]["steps"].as_array().unwrap();
+    assert!(steps.iter().any(|step| {
+        step["name"] == "Verify HTTPS certificates and proxies"
+            && step["run"] == "cargo xtask test-https ${{ matrix.features }}"
+    }));
     Ok(())
 }
 

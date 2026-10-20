@@ -8,6 +8,7 @@ use http_body_util::Full;
 use hyper::{
     Method, Request, Response, Uri,
     body::{Body, Bytes, Incoming},
+    header::{HeaderValue, RANGE},
     server::conn::http1,
     service::service_fn,
 };
@@ -31,8 +32,10 @@ pub(crate) mod tls;
 #[derive(Debug)]
 pub(crate) struct RecordedRequest {
     pub connection_id: u64,
+    pub peer_port: u16,
     pub method: Method,
     pub uri: Uri,
+    pub range: Option<HeaderValue>,
 }
 
 enum Event {
@@ -117,8 +120,8 @@ impl HttpTestServer {
             loop {
                 tokio::select! {
                     accepted = listener.accept() => {
-                        let socket = match accepted {
-                            Ok((socket, _)) => socket,
+                        let (socket, peer) = match accepted {
+                            Ok(connection) => connection,
                             Err(error) => {
                                 let _ = send.send(Event::Failed(format!("accept failed: {error}")));
                                 return;
@@ -133,12 +136,12 @@ impl HttpTestServer {
                             let response_completed = if let Some(tls) = tls {
                                 // Rejected certificates must never reach the HTTP handler.
                                 if let Ok(socket) = tls.accept(socket).await {
-                                    serve_connection(socket, connection_id, send.clone(), respond).await
+                                    serve_connection(socket, connection_id, peer.port(), send.clone(), respond).await
                                 } else {
                                     false
                                 }
                             } else {
-                                serve_connection(socket, connection_id, send.clone(), respond).await
+                                serve_connection(socket, connection_id, peer.port(), send.clone(), respond).await
                             };
                             let _ = send.send(Event::Disconnected { connection_id, response_completed });
                         });
@@ -233,8 +236,9 @@ impl HttpTestServer {
 }
 
 async fn serve_connection<F, B>(
-    socket: impl AsyncRead + AsyncWrite + Unpin,
+    socket: impl AsyncRead + AsyncWrite + Unpin + Send + 'static,
     connection_id: u64,
+    peer_port: u16,
     send: mpsc::Sender<Event>,
     respond: Arc<impl Fn(Request<Incoming>) -> F>,
 ) -> bool
@@ -246,8 +250,10 @@ where
     let service = service_fn(move |request: Request<Incoming>| {
         let _ = send.send(Event::Request(RecordedRequest {
             connection_id,
+            peer_port,
             method: request.method().clone(),
             uri: request.uri().clone(),
+            range: request.headers().get(RANGE).cloned(),
         }));
         let result = respond(request);
         let send = send.clone();
@@ -266,6 +272,7 @@ where
     http1::Builder::new()
         .keep_alive(false)
         .serve_connection(TokioIo::new(socket), service)
+        .with_upgrades()
         .await
         .is_ok()
 }
