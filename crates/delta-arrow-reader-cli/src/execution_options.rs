@@ -1,7 +1,7 @@
 use delta_arrow_reader::{DeltaReaderError, DeltaScanExecutionOptions, ParquetReaderBackend};
 use serde::{Deserialize, Deserializer, de};
 
-use crate::input::{InputFileCorrection, JsonInputSource};
+use crate::{diagnostics::InputCorrection, input::JsonInputSource};
 
 #[derive(Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -52,7 +52,7 @@ impl ExecutionOptionsInput {
     }
 }
 
-pub(crate) fn input_correction(reason: &str) -> Option<InputFileCorrection> {
+pub(crate) fn input_correction(reason: &str) -> Option<InputCorrection> {
     let (field_path, maximum, nullable) = match reason {
         "max_concurrent_file_reads_per_scan_must_be_positive"
         | "max_concurrent_file_reads_per_scan_exceeds_tokio_max_permits" => (
@@ -80,9 +80,9 @@ pub(crate) fn input_correction(reason: &str) -> Option<InputFileCorrection> {
         }
         _ => return None,
     };
-    Some(InputFileCorrection {
-        input: JsonInputSource::ExecutionOptions,
-        field_path: Some(field_path),
+    Some(InputCorrection {
+        argument: JsonInputSource::ExecutionOptions.argument().to_owned(),
+        field_path: Some(field_path.to_owned()),
         expected: format!(
             "JSON integer from 1 to {maximum}{}",
             if nullable { ", or null" } else { "" },

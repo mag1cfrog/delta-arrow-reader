@@ -25,7 +25,7 @@ use delta_arrow_reader::{
     DeltaReaderError, DeltaScan, DeltaSnapshotSelection, DeltaTableBuilder, WarmupMode,
     error_source_kind,
 };
-use diagnostics::DiagnosticFormat;
+use diagnostics::{DiagnosticFormat, InputCorrection};
 use input::JsonInputSource;
 use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu, ensure};
@@ -96,7 +96,7 @@ enum Error {
     #[snafu(display("Invalid command-line arguments (kind={kind:?})."))]
     Argument {
         kind: ErrorKind,
-        correction: Option<diagnostics::ArgumentCorrection>,
+        correction: Option<InputCorrection>,
     },
     #[snafu(display("Arrow IPC output requires redirected stdout."))]
     TerminalOutput,
@@ -111,7 +111,7 @@ enum Error {
     #[snafu(display("Invalid JSON input (reason={reason})."))]
     InputValidation {
         reason: &'static str,
-        input: JsonInputSource,
+        correction: InputCorrection,
     },
     #[snafu(display("Could not read the input file."))]
     InputIo {
@@ -215,8 +215,10 @@ impl Error {
         }
     }
 
-    fn input_file_correction(&self) -> Option<input::InputFileCorrection> {
+    fn input_correction(&self) -> Option<InputCorrection> {
         let (input, hint) = match self {
+            Self::Argument { correction, .. } => return correction.clone(),
+            Self::InputValidation { correction, .. } => return Some(correction.clone()),
             Self::InputJson { source, input } => (
                 *input,
                 match source.classify() {
@@ -228,21 +230,6 @@ impl Error {
                     }
                     serde_json::error::Category::Data => input.schema_hint(),
                     serde_json::error::Category::Io => "Check that the input file is readable.",
-                },
-            ),
-            Self::InputValidation { reason, input } => (
-                *input,
-                match *reason {
-                    "input_file_too_large" => "Keep the JSON input at or below 1 MiB.",
-                    "predicate_depth_limit_exceeded" => "Reduce predicate nesting.",
-                    "predicate_node_limit_exceeded" => "Reduce the number of predicate nodes.",
-                    "predicate_non_finite_float" => {
-                        "Use a finite number within the selected float type's range."
-                    }
-                    "predicate_binary_size_mismatch" => {
-                        "Use a positive fixed binary size matching the number of bytes."
-                    }
-                    _ => input.schema_hint(),
                 },
             ),
             Self::InputIo { source, input } => (
@@ -258,6 +245,7 @@ impl Error {
             Self::Configuration { source } => {
                 return execution_options::input_correction(source.reason());
             }
+            Self::Reader { source } => return InputCorrection::from_reader(source),
             _ => return None,
         };
         Some(input.correction(hint))
@@ -275,28 +263,31 @@ impl Error {
             );
             return;
         }
-        // Reader API boundaries already emit their terminal core event.
+        let correction = self.input_correction();
+        let argument = correction.as_ref().map(|value| value.argument.as_str());
+        let expected = correction.as_ref().map(|value| value.expected.as_str());
+        let field_path = correction
+            .as_ref()
+            .and_then(|value| value.field_path.as_deref());
+        let hint = match self {
+            Self::Argument { kind, .. } => Some(diagnostics::argument_error_hint(*kind)),
+            _ => correction.as_ref().map(|value| value.hint),
+        };
+        let (phase, code, reason, source_kind) = self.classification();
+        // Core owns the terminal failure; CLI guidance supplements that event.
         if matches!(self, Self::Reader { .. }) {
+            if correction.is_some() {
+                tracing::error!(target: "delta_arrow_reader_cli",
+                    event = "cli.input_correction", error_phase = phase, error_code = code,
+                    error_reason = reason, argument, expected, hint, field_path,
+                    "Correct the command input"
+                );
+            }
             return;
         }
-        let (phase, code, reason, source_kind) = self.classification();
-        let file_correction = self.input_file_correction();
-        let field_path = file_correction.as_ref().and_then(|value| value.field_path);
-        let (argument_kind, argument, expected, hint) = match self {
-            Self::Argument { kind, correction } => (
-                Some(tracing::field::debug(kind)),
-                correction.as_ref().map(|value| value.argument.as_str()),
-                correction.as_ref().map(|value| value.expected.as_str()),
-                Some(diagnostics::argument_error_hint(*kind)),
-            ),
-            _ => (
-                None,
-                file_correction.as_ref().map(|value| value.input.argument()),
-                file_correction
-                    .as_ref()
-                    .map(|value| value.expected.as_str()),
-                file_correction.as_ref().map(|value| value.hint),
-            ),
+        let argument_kind = match self {
+            Self::Argument { kind, .. } => Some(tracing::field::debug(kind)),
+            _ => None,
         };
         let (json_kind, json_line, json_column) = match self {
             Self::InputJson { source, .. } => (
@@ -356,13 +347,9 @@ impl Error {
             "recovery": recovery,
         });
         match self {
-            Self::Argument { kind, correction } => {
+            Self::Argument { kind, .. } => {
                 record["argument_kind"] = format!("{kind:?}").into();
                 record["hint"] = diagnostics::argument_error_hint(*kind).into();
-                if let Some(correction) = correction {
-                    record["argument"] = correction.argument.as_str().into();
-                    record["expected"] = correction.expected.as_str().into();
-                }
             }
             Self::InputJson { source, .. } => {
                 record["json_kind"] = format!("{:?}", source.classify()).into();
@@ -377,8 +364,8 @@ impl Error {
             }
             _ => {}
         }
-        if let Some(correction) = self.input_file_correction() {
-            record["argument"] = correction.input.argument().into();
+        if let Some(correction) = self.input_correction() {
+            record["argument"] = correction.argument.into();
             record["expected"] = correction.expected.into();
             record["hint"] = correction.hint.into();
             if let Some(path) = correction.field_path {
@@ -510,7 +497,7 @@ fn run() -> Result<Value, Error> {
         Err(error) => {
             return ArgumentSnafu {
                 kind: error.kind(),
-                correction: diagnostics::ArgumentCorrection::from_clap(&error),
+                correction: InputCorrection::from_clap(&error),
             }
             .fail();
         }

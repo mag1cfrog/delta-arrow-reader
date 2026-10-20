@@ -7,7 +7,9 @@ use serde::{
 };
 use snafu::{ResultExt, ensure};
 
-use crate::{Error, InputIoSnafu, InputJsonSnafu, InputValidationSnafu};
+use crate::{
+    Error, InputIoSnafu, InputJsonSnafu, InputValidationSnafu, diagnostics::InputCorrection,
+};
 
 const MAX_JSON_BYTES: u64 = 1024 * 1024;
 
@@ -16,13 +18,6 @@ pub(crate) enum JsonInputSource {
     StorageOptions,
     Predicate,
     ExecutionOptions,
-}
-
-pub(crate) struct InputFileCorrection {
-    pub(crate) input: JsonInputSource,
-    pub(crate) field_path: Option<&'static str>,
-    pub(crate) expected: String,
-    pub(crate) hint: &'static str,
 }
 
 impl JsonInputSource {
@@ -34,14 +29,14 @@ impl JsonInputSource {
         }
     }
 
-    pub(crate) fn correction(self, hint: &'static str) -> InputFileCorrection {
+    pub(crate) fn correction(self, hint: &'static str) -> InputCorrection {
         let expected = match self {
             Self::StorageOptions => "a JSON object with unique keys and string values",
             Self::Predicate => "a predicate object with an 'op' tag and typed comparison values",
             Self::ExecutionOptions => "a JSON object containing supported execution options",
         };
-        InputFileCorrection {
-            input: self,
+        InputCorrection {
+            argument: self.argument().to_owned(),
             field_path: None,
             expected: expected.to_owned(),
             hint,
@@ -76,7 +71,7 @@ pub(crate) fn read_json_file<T: DeserializeOwned>(
         bytes.len() as u64 <= MAX_JSON_BYTES,
         InputValidationSnafu {
             reason: "input_file_too_large",
-            input,
+            correction: input.correction("Keep the JSON input at or below 1 MiB."),
         }
     );
     serde_json::from_slice(&bytes).context(InputJsonSnafu { input })

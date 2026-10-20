@@ -230,6 +230,133 @@ fn input_schema_corrections_omit_unknown_keys_and_values() -> Result<(), Box<dyn
 }
 
 #[test]
+fn reader_input_errors_include_safe_corrections() -> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("secret-predicate.json");
+    let table = partitioned_table_path();
+    for (args, predicate, code, reason, argument, expected, hint) in [
+        (
+            vec!["--column", "secret-column"],
+            None,
+            "invalid_projection",
+            "column_not_found",
+            "--column",
+            "logical column",
+            "schema.fields",
+        ),
+        (
+            vec!["--column", "id", "--column", "id"],
+            None,
+            "invalid_projection",
+            "duplicate_column",
+            "--column",
+            "at most once",
+            "Remove repeated",
+        ),
+        (
+            vec!["--predicate-file", path.to_str().unwrap()],
+            Some(r#"{"op":"and","args":[{"op":"is_null","column":"secret-column"}]}"#),
+            "unsupported_predicate",
+            "column_not_found",
+            "--predicate-file",
+            "unambiguous",
+            "schema.fields",
+        ),
+        (
+            vec!["--predicate-file", path.to_str().unwrap()],
+            Some(r#"{"op":"is_null","column":"secret.column"}"#),
+            "unsupported_predicate",
+            "invalid_column_reference",
+            "--predicate-file",
+            "without dots",
+            "top-level column",
+        ),
+        (
+            vec!["--predicate-file", path.to_str().unwrap()],
+            Some(r#"{"op":"eq","column":"id","value":{"type":"utf8","value":"secret-literal"}}"#),
+            "unsupported_predicate",
+            "scalar_type_mismatch",
+            "--predicate-file",
+            "Arrow type",
+            "same table and snapshot",
+        ),
+        (
+            vec!["--predicate-file", path.to_str().unwrap()],
+            Some(
+                r#"{"op":"eq","column":"id","value":{"type":"decimal128","value":"123456789123456789","precision":2,"scale":0}}"#,
+            ),
+            "unsupported_predicate",
+            "invalid_decimal",
+            "--predicate-file",
+            "declared precision",
+            "unscaled value",
+        ),
+    ] {
+        if let Some(predicate) = predicate {
+            fs::write(&path, predicate)?;
+        }
+        for filter in ["off", "trace"] {
+            let output = run_with_timeout(
+                Command::new(env!("CARGO_BIN_EXE_dar"))
+                    .arg("scan")
+                    .arg(&table)
+                    .args(&args)
+                    .arg("--diagnostics=json")
+                    .env("RUST_LOG", filter),
+            )?;
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+            assert_eq!(record["phase"], "scan_planning");
+            assert_eq!(record["code"], code);
+            assert_eq!(record["reason"], reason);
+            assert_eq!(record["argument"], argument);
+            assert_eq!(record["recovery"], "fix_input");
+            assert_eq!(record["retryable"], false);
+            assert!(
+                record["expected"].as_str().unwrap().contains(expected),
+                "{record}"
+            );
+            assert!(record["hint"].as_str().unwrap().contains(hint), "{record}");
+            assert!(record.get("field_path").is_none(), "{record}");
+            assert!(!record.to_string().contains("123456789123456789"));
+        }
+        let output = run_with_timeout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .arg("scan")
+                .arg(&table)
+                .args(&args)
+                .env("RUST_LOG", "error"),
+        )?;
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let text = std::str::from_utf8(&output.stderr)?;
+        assert_eq!(
+            text.lines()
+                .filter(|line| line.contains("event=\"scan_planning.failed\""))
+                .count(),
+            1,
+            "{text}"
+        );
+        let corrections: Vec<_> = text
+            .lines()
+            .filter(|line| line.contains("event=\"cli.input_correction\""))
+            .collect();
+        assert_eq!(corrections.len(), 1, "{text}");
+        assert!(
+            corrections[0].contains(&format!("argument=\"{argument}\"")),
+            "{text}"
+        );
+        assert!(corrections[0].contains(expected), "{text}");
+        assert!(corrections[0].contains(hint), "{text}");
+        assert!(!text.contains("secret"), "{text}");
+        assert!(!text.contains("123456789123456789"), "{text}");
+        assert!(!text.contains("cli.failed"), "{text}");
+    }
+    Ok(())
+}
+
+#[test]
 fn failures_stay_json_with_tracing_off_on_or_invalid() -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
     let malformed = directory.path().join("secret-malformed.json");
@@ -354,6 +481,11 @@ fn failures_stay_json_with_tracing_off_on_or_invalid() -> Result<(), Box<dyn std
                 if *code == "invalid_input_json" {
                     assert!(record["line"].is_number());
                     assert!(record["column"].is_number());
+                }
+                if *code == "storage_initialization" {
+                    for field in ["argument", "expected", "hint", "field_path"] {
+                        assert!(record.get(field).is_none(), "{record}");
+                    }
                 }
                 if let Some(argument) = args.iter().find(|argument| {
                     matches!(

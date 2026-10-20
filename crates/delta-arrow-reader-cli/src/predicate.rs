@@ -6,6 +6,7 @@ use snafu::ensure;
 
 use crate::{
     Error, InputValidationSnafu,
+    diagnostics::InputCorrection,
     input::{JsonInputSource, JsonObject},
 };
 
@@ -161,20 +162,52 @@ impl PredicateInput {
     }
 }
 
+fn validation_correction(
+    field_path: &str,
+    expected: String,
+    hint: &'static str,
+) -> InputCorrection {
+    InputCorrection {
+        argument: JsonInputSource::Predicate.argument().to_owned(),
+        field_path: Some(field_path.to_owned()),
+        expected,
+        hint,
+    }
+}
+
+fn prepend_field_path(mut error: Error, prefix: &str) -> Error {
+    if let Error::InputValidation { correction, .. } = &mut error
+        && let Some(path) = &mut correction.field_path
+    {
+        path.insert_str(0, prefix);
+    }
+    error
+}
+
 impl PredicateNode {
     fn into_predicate(self, depth: usize, node_count: &mut usize) -> Result<DeltaPredicate, Error> {
         ensure!(
             depth <= MAX_PREDICATE_DEPTH,
             InputValidationSnafu {
                 reason: "predicate_depth_limit_exceeded",
-                input: JsonInputSource::Predicate,
+                correction: validation_correction(
+                    "",
+                    format!(
+                        "predicate nesting of at most {MAX_PREDICATE_DEPTH} levels, including the root"
+                    ),
+                    "Reduce nesting at this predicate node.",
+                ),
             }
         );
         ensure!(
             *node_count < MAX_PREDICATE_NODES,
             InputValidationSnafu {
                 reason: "predicate_node_limit_exceeded",
-                input: JsonInputSource::Predicate,
+                correction: validation_correction(
+                    "",
+                    format!("at most {MAX_PREDICATE_NODES} predicate nodes in the whole tree"),
+                    "Remove or combine predicate nodes; this node exceeds the tree's total limit.",
+                ),
             }
         );
         *node_count += 1;
@@ -192,17 +225,29 @@ impl PredicateNode {
             Self::IsNotNull { column } => DeltaPredicate::IsNotNull { column },
             Self::And { args } => DeltaPredicate::And(
                 args.into_iter()
-                    .map(|arg| arg.0.into_predicate(depth + 1, node_count))
+                    .enumerate()
+                    .map(|(index, arg)| {
+                        arg.0
+                            .into_predicate(depth + 1, node_count)
+                            .map_err(|error| prepend_field_path(error, &format!("/args/{index}")))
+                    })
                     .collect::<Result<_, _>>()?,
             ),
             Self::Or { args } => DeltaPredicate::Or(
                 args.into_iter()
-                    .map(|arg| arg.0.into_predicate(depth + 1, node_count))
+                    .enumerate()
+                    .map(|(index, arg)| {
+                        arg.0
+                            .into_predicate(depth + 1, node_count)
+                            .map_err(|error| prepend_field_path(error, &format!("/args/{index}")))
+                    })
                     .collect::<Result<_, _>>()?,
             ),
-            Self::Not { arg } => {
-                DeltaPredicate::Not(Box::new(arg.0.into_predicate(depth + 1, node_count)?))
-            }
+            Self::Not { arg } => DeltaPredicate::Not(Box::new(
+                arg.0
+                    .into_predicate(depth + 1, node_count)
+                    .map_err(|error| prepend_field_path(error, "/arg"))?,
+            )),
         })
     }
 }
@@ -215,7 +260,10 @@ fn convert_comparison(
     Ok(DeltaPredicate::Compare {
         column,
         op,
-        value: value.0.into_scalar()?,
+        value: value
+            .0
+            .into_scalar()
+            .map_err(|error| prepend_field_path(error, "/value"))?,
     })
 }
 
@@ -233,7 +281,12 @@ impl ScalarInput {
                     value.is_finite(),
                     InputValidationSnafu {
                         reason: "predicate_non_finite_float",
-                        input: JsonInputSource::Predicate,
+                        correction: validation_correction(
+                            "/value",
+                            "JSON number that remains finite after conversion to float32"
+                                .to_owned(),
+                            "Use a finite number within the float32 range.",
+                        ),
                     }
                 );
                 DeltaScalar::Float32(value)
@@ -243,7 +296,11 @@ impl ScalarInput {
                     value.is_finite(),
                     InputValidationSnafu {
                         reason: "predicate_non_finite_float",
-                        input: JsonInputSource::Predicate,
+                        correction: validation_correction(
+                            "/value",
+                            "finite float64 JSON number".to_owned(),
+                            "Use a finite number within the float64 range.",
+                        ),
                     }
                 );
                 DeltaScalar::Float64(value)
@@ -257,7 +314,11 @@ impl ScalarInput {
                     size > 0 && size as usize == value.len(),
                     InputValidationSnafu {
                         reason: "predicate_binary_size_mismatch",
-                        input: JsonInputSource::Predicate,
+                        correction: validation_correction(
+                            "/size",
+                            "positive i32 JSON integer equal to the byte array length".to_owned(),
+                            "Use a positive fixed binary size matching the number of bytes.",
+                        ),
                     }
                 );
                 DeltaScalar::FixedSizeBinary { size, value }

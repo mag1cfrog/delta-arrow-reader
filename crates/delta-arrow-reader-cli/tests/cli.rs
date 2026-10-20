@@ -215,24 +215,105 @@ fn predicate_validation_reasons_survive_json_decoding() -> Result<(), Box<dyn st
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("secret-predicate.json");
     let leaf = r#"{"op":"is_null","column":"secret-column"}"#;
-    for (predicate, reason) in [
-        (format!("{}{leaf}{}", r#"{"op":"not","arg":"#.repeat(32), "}".repeat(32)), "predicate_depth_limit_exceeded"),
-        (format!(r#"{{"op":"and","args":[{}]}}"#, [leaf; 1024].join(",")), "predicate_node_limit_exceeded"),
-        (r#"{"op":"eq","column":"secret-column","value":{"type":"float32","value":1e100}}"#.into(), "predicate_non_finite_float"),
-        (r#"{"op":"eq","column":"secret-column","value":{"type":"fixed_size_binary","size":2,"value":[1]}}"#.into(), "predicate_binary_size_mismatch"),
+    let oversized_float =
+        r#"{"op":"eq","column":"secret-column","value":{"type":"float32","value":1e100}}"#;
+    let wrong_binary_size = r#"{"op":"eq","column":"secret-column","value":{"type":"fixed_size_binary","size":2,"value":[1]}}"#;
+    let nested = |predicate: &str| {
+        format!(
+            r#"{{"op":"and","args":[{leaf},{{"op":"not","arg":{{"op":"or","args":[{leaf},{predicate}]}}}}]}}"#
+        )
+    };
+    for (predicate, reason, field_path, expected) in [
+        (
+            format!(
+                "{}{leaf}{}",
+                r#"{"op":"not","arg":"#.repeat(32),
+                "}".repeat(32)
+            ),
+            "predicate_depth_limit_exceeded",
+            "/arg".repeat(32),
+            "32 levels",
+        ),
+        (
+            format!(r#"{{"op":"and","args":[{}]}}"#, [leaf; 1024].join(",")),
+            "predicate_node_limit_exceeded",
+            "/args/1023".into(),
+            "1024 predicate nodes",
+        ),
+        (
+            oversized_float.into(),
+            "predicate_non_finite_float",
+            "/value/value".into(),
+            "finite after conversion to float32",
+        ),
+        (
+            wrong_binary_size.into(),
+            "predicate_binary_size_mismatch",
+            "/value/size".into(),
+            "byte array length",
+        ),
+        (
+            nested(oversized_float),
+            "predicate_non_finite_float",
+            "/args/1/arg/args/1/value/value".into(),
+            "finite after conversion to float32",
+        ),
+        (
+            nested(wrong_binary_size),
+            "predicate_binary_size_mismatch",
+            "/args/1/arg/args/1/value/size".into(),
+            "byte array length",
+        ),
     ] {
+        let input: Value = serde_json::from_str(&predicate)?;
+        assert!(input.pointer(&field_path).is_some(), "{field_path}");
         fs::write(&path, predicate)?;
         let output = run_with_timeout(
             Command::new(env!("CARGO_BIN_EXE_dar"))
-                .args(["scan", "--predicate-file"]).arg(&path).arg("secret-missing-table"),
+                .args(["scan", "--predicate-file"])
+                .arg(&path)
+                .arg("secret-missing-table"),
         )?;
         assert_eq!(output.status.code(), Some(2));
         assert!(output.stdout.is_empty());
         let diagnostic = check_failure(&output.stderr, "configuration", "invalid_input_json");
-        assert!(diagnostic.contains(&format!("error_reason=\"{reason}\"")), "{diagnostic}");
-        assert!(diagnostic.contains("argument=\"--predicate-file\""), "{diagnostic}");
+        assert!(
+            diagnostic.contains(&format!("error_reason=\"{reason}\"")),
+            "{diagnostic}"
+        );
+        assert!(
+            diagnostic.contains("argument=\"--predicate-file\""),
+            "{diagnostic}"
+        );
+        assert!(
+            diagnostic.contains(&format!("field_path=\"{field_path}\"")),
+            "{diagnostic}"
+        );
+        assert!(diagnostic.contains(expected), "{diagnostic}");
         assert!(diagnostic.contains("hint="), "{diagnostic}");
         assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+
+        let output = run_with_timeout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .args(["scan", "--predicate-file"])
+                .arg(&path)
+                .args(["secret-missing-table", "--diagnostics=json"])
+                .env("RUST_LOG", "off"),
+        )?;
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let record = diagnostics::assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert_eq!(record["code"], "invalid_input_json");
+        assert_eq!(record["reason"], reason);
+        assert_eq!(record["argument"], "--predicate-file");
+        assert_eq!(record["field_path"], field_path);
+        assert!(
+            record["expected"].as_str().unwrap().contains(expected),
+            "{record}"
+        );
+        assert_eq!(record["recovery"], "fix_input");
+        assert_eq!(record["retryable"], false);
+        assert!(record.get("line").is_none());
     }
     Ok(())
 }
@@ -565,7 +646,7 @@ fn verbosity_preserves_stdout_and_core_failure_identity() -> Result<(), Box<dyn 
             assert!(!text.contains("secret"), "{text}");
             let failures: Vec<_> = text
                 .lines()
-                .filter(|line| line.starts_with("ERROR "))
+                .filter(|line| line.starts_with("ERROR ") && line.contains("outcome=\"failed\""))
                 .collect();
             assert_eq!(failures.len(), 1, "{text}");
             let failure = failures[0];
@@ -578,6 +659,15 @@ fn verbosity_preserves_stdout_and_core_failure_identity() -> Result<(), Box<dyn 
                 assert!(failure.contains(&field), "{field}: {text}");
             }
             assert!(!failure.contains("cli.failed"), "{text}");
+            let corrections = text
+                .lines()
+                .filter(|line| line.contains("event=\"cli.input_correction\""))
+                .count();
+            assert_eq!(
+                corrections,
+                usize::from(code == "invalid_projection"),
+                "{text}"
+            );
         }
     }
     Ok(())

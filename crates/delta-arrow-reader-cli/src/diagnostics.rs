@@ -79,12 +79,15 @@ impl DiagnosticFormat {
     }
 }
 
-pub(crate) struct ArgumentCorrection {
+#[derive(Clone)]
+pub(crate) struct InputCorrection {
     pub(crate) argument: String,
+    pub(crate) field_path: Option<String>,
     pub(crate) expected: String,
+    pub(crate) hint: &'static str,
 }
 
-impl ArgumentCorrection {
+impl InputCorrection {
     pub(crate) fn from_clap(error: &clap::Error) -> Option<Self> {
         if matches!(
             error.kind(),
@@ -95,15 +98,17 @@ impl ArgumentCorrection {
         let mut command = crate::Cli::command();
         command.build();
         match error.get(ContextKind::InvalidArg)? {
-            ContextValue::String(argument) => Self::from_declaration(&command, argument),
+            ContextValue::String(argument) => {
+                Self::from_declaration(&command, argument, error.kind())
+            }
             ContextValue::Strings(arguments) => arguments
                 .iter()
-                .find_map(|argument| Self::from_declaration(&command, argument)),
+                .find_map(|argument| Self::from_declaration(&command, argument, error.kind())),
             _ => None,
         }
     }
 
-    fn from_declaration(command: &clap::Command, reported: &str) -> Option<Self> {
+    fn from_declaration(command: &clap::Command, reported: &str, kind: ErrorKind) -> Option<Self> {
         // Only return declaration text, never values copied from the failing invocation.
         for argument in command.get_arguments() {
             if argument.to_string() == reported {
@@ -120,13 +125,57 @@ impl ArgumentCorrection {
                     argument: argument
                         .get_long()
                         .map_or_else(|| argument.get_id().to_string(), |name| format!("--{name}")),
+                    field_path: None,
                     expected,
+                    hint: argument_error_hint(kind),
                 });
             }
         }
         command
             .get_subcommands()
-            .find_map(|command| Self::from_declaration(command, reported))
+            .find_map(|command| Self::from_declaration(command, reported, kind))
+    }
+
+    pub(crate) fn from_reader(error: &delta_arrow_reader::DeltaReaderError) -> Option<Self> {
+        let (argument, expected, hint) = match (error.code(), error.reason()) {
+            ("invalid_projection", "column_not_found") => (
+                "--column",
+                "a logical column name in the selected snapshot",
+                "Run inspect for the same table and snapshot, then select a name from schema.fields.",
+            ),
+            ("invalid_projection", "duplicate_column") => (
+                "--column",
+                "each logical column selected at most once",
+                "Remove repeated --column values.",
+            ),
+            ("unsupported_predicate", "column_not_found" | "ambiguous_column") => (
+                "--predicate-file",
+                "an unambiguous top-level logical column in the selected snapshot",
+                "Run inspect for the same table and snapshot, then use an unambiguous name from schema.fields in the predicate's column field.",
+            ),
+            ("unsupported_predicate", "invalid_column_reference") => (
+                "--predicate-file",
+                "a nonempty top-level logical column name without dots",
+                "Use a top-level column from inspect; qualified names and nested field paths are not supported in predicates.",
+            ),
+            ("unsupported_predicate", "scalar_type_mismatch") => (
+                "--predicate-file",
+                "a scalar type matching the column's Arrow type",
+                "Run inspect for the same table and snapshot, then match the scalar type, including decimal precision/scale or timestamp timezone, to the column.",
+            ),
+            ("unsupported_predicate", "invalid_decimal") => (
+                "--predicate-file",
+                "a decimal128 value within its declared precision and valid scale",
+                "Check decimal precision and scale against the inspected schema and ensure the unscaled value fits the precision.",
+            ),
+            _ => return None,
+        };
+        Some(Self {
+            argument: argument.to_owned(),
+            field_path: None,
+            expected: expected.to_owned(),
+            hint,
+        })
     }
 }
 

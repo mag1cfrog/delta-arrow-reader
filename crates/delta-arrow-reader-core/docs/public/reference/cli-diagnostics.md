@@ -71,7 +71,22 @@ containing `{"max_concurrent_file_reads_per_partition":0}` produces
 the field's allowed integer range and whether it accepts null. Set the field
 within that range, or remove it to use the default. These fields appear in both
 text and machine diagnostics. `field_path` is omitted when no specific field
-can be identified from a known error reason.
+can be identified.
+
+Predicate depth and node-count failures identify the node exceeding the limit.
+Float32 overflow identifies the scalar's `value`; fixed-size binary validation
+identifies its `size`. Paths include nesting and zero-based array indexes, such
+as `/args/1/arg/value/value`. `expected` and `hint` describe the requirement at
+that location. Paths contain only known schema field names and indexes.
+
+Unknown or repeated projection columns and supported predicate planning errors
+also include correction fields. For unknown columns or scalar type mismatches,
+run `inspect` with the same table and snapshot selection, then use its
+`schema.fields` to correct `--column` or the predicate file. These planning
+errors retain the core's `code` and `reason`, with exit status 1 and
+`recovery: "fix_input"`. They omit `field_path` because the core does not identify
+the failing predicate node. Text mode adds an ERROR `cli.input_correction`
+event after the core failure event; machine mode keeps one terminal record.
 
 `recovery` uses `fix_input` for invalid input, `authorize` for unauthenticated
 sources, `request_access` for permission failures, `retry` for known transient
