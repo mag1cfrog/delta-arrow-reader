@@ -2,6 +2,7 @@ mod campaign;
 mod invoke;
 mod network;
 mod observe;
+mod pairs;
 mod report;
 mod storage;
 mod supervise;
@@ -29,6 +30,8 @@ pub(crate) enum Task {
     Network,
     /// Combine audited formal batches. Read the report inputs as JSON from stdin.
     ProductionReport,
+    /// Pair independently validated production fixtures. Read JSON from stdin.
+    ProductionPairs,
     /// Measure raw Zstd block discovery against complete column reads.
     ZstdProbe(zstd_probe::Args),
     /// Calibrate the 200 +/- 20 ms, 150 Mbit/s proxy against signed MinIO reads.
@@ -132,6 +135,7 @@ impl Task {
             Self::Observe => observe::run(serde_json::from_value(input)?)?,
             Self::Network => network::run(serde_json::from_value(input)?)?,
             Self::ProductionReport => report::run(serde_json::from_value(input)?)?,
+            Self::ProductionPairs => pairs::run(serde_json::from_value(input)?)?,
             Self::ExecReader { .. }
             | Self::ZstdProbe(_)
             | Self::CheckNetwork { .. }

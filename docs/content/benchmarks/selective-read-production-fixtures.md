@@ -148,7 +148,9 @@ Pair the localized and scattered layouts of one shape at a time. For Q4:
 ```
 
 Each supplied shape must include both layouts, from the same source and plan
-settings. The helper preserves Parquet bytes and computes one shared logical
+settings. Python validates the fixture definitions; the Rust controller budgets
+disk space, stages immutable files and invokes the DV writer. The helper
+preserves Parquet bytes and computes one shared logical
 deletion union across the supplied base inventory, recorded in the manifest.
 Both layouts therefore delete the same logical rows. Q2 can be paired later;
 the complete publication inventory requires all eight cases. Formal batches can
