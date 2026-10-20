@@ -23,8 +23,9 @@ results, Parquet footers, data pages, or decoded batches.
 
 ## No warmup
 
-With `WarmupMode::None`, opening a table reads its version and column schema.
-Each query then builds the file information it needs:
+With `warmup="none"` in Python (`WarmupMode::None` in Rust), opening a table
+reads its version and column schema. Each query then builds the file information
+it needs:
 
 ```text
 Open table:  load version and schema
@@ -38,8 +39,9 @@ behavior by default.
 
 ## Query-planning warmup
 
-With `WarmupMode::QueryPlanning`, opening also builds and keeps the file
-information. Queries reuse it while applying their own filters:
+With `warmup="query_planning"` in Python (`WarmupMode::QueryPlanning` in Rust),
+opening also builds and keeps the file information. Queries reuse it while
+applying their own filters:
 
 ```text
 Open table:  load version and schema -> prepare file list
@@ -72,11 +74,11 @@ Parquet I/O, or deletion-vector handling.
 
 The modes apply whether you read batches directly or use DataFusion SQL:
 
-| Mode | Work when opening | Work on later queries |
-| --- | --- | --- |
-| `Automatic` (default) | Prepare file information and measure the connection on supported S3 stores; other stores remain lazy. | Reuse that preparation when available. |
-| `QueryPlanning` | Prepare file information, without test reads of data files. | Reuse the file information; partial-page reads stay off. |
-| `None` | Load the version and schema without retaining the file list. | Build file information for each query; partial-page reads stay off. |
+| Python `warmup` | Rust `WarmupMode` | Work when opening | Work on later queries |
+| --- | --- | --- | --- |
+| `"automatic"` (default) | `Automatic` | Prepare file information and measure the connection on supported S3 stores; other stores remain lazy. | Reuse that preparation when available. |
+| `"query_planning"` | `QueryPlanning` | Prepare file information, without test reads of data files. | Reuse the file information; partial-page reads stay off. |
+| `"none"` | `None` | Load the version and schema without retaining the file list. | Build file information for each query; partial-page reads stay off. |
 
 Automatic S3 preparation also measures whether smaller data requests will help.
 The [connection check](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/#measure-the-connection)
@@ -85,8 +87,8 @@ has its own time and I/O costs.
 Compare opening time plus all the queries your application will run. There is
 no fixed query count at which preparation pays off: the table's history, file
 count, statistics, storage latency, query selectivity, and available memory all
-matter. Use `None` when the opening cost or retained metadata outweighs reuse;
-use `QueryPlanning` when you want metadata reuse without network sampling.
+matter. Skip warmup when the opening cost or retained metadata outweighs reuse;
+choose query-planning warmup when you want metadata reuse without network sampling.
 
 ## Version and refresh behavior
 
@@ -96,9 +98,13 @@ table, leaving the original usable even if refresh fails. If the version has
 not changed, the returned table reuses the snapshot, schema, and prepared cache.
 
 Your application decides when to refresh. The reader does not poll in the
-background. For SQL, refreshing a provider also rebuilds its schema when needed,
-but does not replace the old registration in a DataFusion session. See the
-[registration refresh example](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/#refresh-a-registered-provider).
+background. In Python, register the refreshed table under a new name or in a
+new `Session`; see the
+[Python refresh example](https://mag1cfrog.github.io/delta-arrow-reader/python/#read-again-or-use-newer-data).
+
+In Rust, refreshing a DataFusion provider also rebuilds its schema when needed,
+but does not replace the old session registration. See the
+[Rust registration refresh example](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/#refresh-a-registered-provider).
 
 <details markdown="1">
 <summary>Incremental refresh, checkpoints, and failures</summary>

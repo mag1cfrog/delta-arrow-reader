@@ -1,7 +1,7 @@
 # ScanExecutionOptions
 
 Leave these settings at their defaults for your first query. When you need a
-file-read limit or different buffering, [Configuration](../configuration.md)
+file-read limit or different buffering, [Configuration](../configuration.md#limit-parallel-reads)
 explains which setting to try and its tradeoff.
 
 Pass an options object to `DeltaTable` for direct-scan defaults, to `to_reader()`

@@ -10,6 +10,9 @@ with the question you are investigating:
 | Did work finish, or did reading stop early? | [Scan progress](#scan-progress) |
 | How did it choose smaller or combined requests? | [Range-planning counters](#range-planning-counters) |
 
+The Python API does not expose these metric handles. For diagnostics in Python,
+use [logging](https://mag1cfrog.github.io/delta-arrow-reader/python-api/logging/).
+
 These are reader counters, not network billing figures. Some count planned work
 and others count completed work. Keep those boundaries in mind when comparing
 queries. An unavailable value (`None`) is different from a measured zero.

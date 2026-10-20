@@ -1,12 +1,74 @@
-# Tracing
+# Tracing event reference
 
-The core emits `tracing` events. The application installs the subscriber and
-chooses filtering, formatting, and destinations. Returned `DeltaReaderError`
-values remain available without a subscriber.
+<span id="subscribe-from-rust"></span>
 
-Hosts can use `error_source_kind(&error)` to apply the same safe source
-classification to their own I/O or Arrow failures. It does not emit an event
-or transfer diagnostic ownership to the core.
+Use this reference when consuming structured events or integrating tracing with
+an application framework. For ordinary logging and error handling, start with
+[Rust diagnostics](https://mag1cfrog.github.io/delta-arrow-reader/diagnostics/),
+[Python logging](https://mag1cfrog.github.io/delta-arrow-reader/python-api/logging/),
+or [CLI diagnostics](https://mag1cfrog.github.io/delta-arrow-reader/cli/#errors-and-process-status).
+
+| Look up | Section |
+| --- | --- |
+| Level meanings and safe failure fields | [Levels](#levels) and [error fields](#error-fields) |
+| Event names, identities, and outcomes | [Public operations](#public-operation-events) and [stream execution](#ordinary-stream-execution) |
+| DataFusion event ownership | [Provider operations](#datafusion-provider-operations) and [partition execution](#datafusion-partition-execution) |
+| Subscriber propagation and cleanup | [Task propagation](#task-propagation-and-streaming) |
+| Typed causes and classification limits | [Source classification](#source-classification) |
+| Regression coverage | [Diagnostic coverage](#diagnostic-coverage) |
+
+<span id="choose-a-level"></span>
+
+## Levels
+
+| Level | Meaning |
+| --- | --- |
+| ERROR | An owned operation failed |
+| WARN | Recoverable degradation that warrants attention |
+| INFO | Operation starts and terminal outcomes |
+| DEBUG | Internal phases, planning decisions, and expected fallbacks |
+| TRACE | Detailed cost and calibration records |
+
+A WARN or ERROR filter retains the failure's context without requiring INFO or
+DEBUG spans. The stable lifecycle contract below permits additive fields;
+consumers ignore fields they do not recognize. Detailed profiling records and
+human message wording are outside that contract.
+
+## Error fields
+
+Terminal failures and existing internal failure events contain:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `event` | String | The operation or internal phase reporting the failure. |
+| `error_phase` | String | Reader phase, such as `snapshot` or `data_file_read`. |
+| `error_code` | String | Reader error category, such as `snapshot_load`. |
+| `error_reason` | String | Fixed reader reason, such as `snapshot_load_failed`. |
+| `error_source_kind` | Optional string | Safe category obtained from the dependency's error type. Absent when there is no source. |
+
+The source kind helps distinguish failures that share a reader code and reason.
+For example, a snapshot failure can identify `missing_metadata`, `not_found`, or
+`permission_denied`. These categories describe observed failures; they do not
+establish a retry policy or explain causes that the dependency did not expose.
+
+Consumers should ignore additional fields and handle unfamiliar source kinds.
+The application controls the rendered text. Raw dependency messages, source
+chains, paths, URLs, credential values, and panic payloads are not diagnostic
+fields. Programmatic access to the original source is preserved.
+The host's panic hook and events emitted by dependencies have their own output
+policies.
+
+See [Source classification](#source-classification) for category values and
+limits.
+
+<span id="inspect-a-returned-error"></span>
+
+Returned errors expose these fields without logging; see
+[Inspect a returned error](https://mag1cfrog.github.io/delta-arrow-reader/diagnostics/#inspect-a-returned-error).
+
+Hosts can also use `error_source_kind(&error)` to classify their own I/O or
+Arrow failures. It does not emit an event or transfer diagnostic ownership
+to the core.
 
 ## Public operation events
 
@@ -45,7 +107,8 @@ Internal schema conversion and metadata preparation during loading belong to the
 load operation. Their DEBUG phase events do not emit another terminal ERROR.
 Pure helpers such as `validate_protocol`, `predicate_column_type`, and fallible
 option setters return errors without an automatic ERROR event. An application
-that treats a helper failure as a failed command can use the error fields below.
+that treats a helper failure as a failed command can use the
+[error fields](#error-fields).
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -66,11 +129,82 @@ for version 99 can carry `requested_snapshot_version = 99` with no resolved
 `snapshot_version`. A refresh failure after resolving version 4 can carry both
 `previous_snapshot_version = 3` and `snapshot_version = 4`.
 
-Required failure context is on the ERROR event itself. A subscriber that enables
-WARN/ERROR, or ERROR alone, does not need a DEBUG/INFO parent span to interpret
-it. Event names and the field meanings in these tables form the lifecycle
-contract. Consumers ignore additional fields; detailed profiling records and
-human message wording are not a second stable interface.
+Event names and the field meanings in these tables form the lifecycle contract.
+Required failure context is on the ERROR event itself.
+
+## Ordinary stream execution
+
+`DeltaBatchStream` owns one `scan_execution` operation across all calls to
+`next_batch` or `Stream::poll_next`. Its first poll emits INFO
+`scan_execution.started`. It then emits one terminal event:
+
+| Event | Level | `outcome` | Meaning |
+| --- | --- | --- | --- |
+| `scan_execution.completed` | INFO | `completed` | The caller observed EOF, or received the batch satisfying its row limit |
+| `scan_execution.failed` | ERROR | `failed` | Reading, decoding, applying a deletion vector/transform, finalizing a batch, or running a worker failed |
+| `scan_execution.cancelled` | INFO | `cancelled` | The scheduler observed explicit scan cancellation |
+| `scan_execution.dropped` | INFO | `dropped` | The caller dropped a started stream before a terminal result |
+
+These events use the same target and identity/time types as public operation
+events. Each stream gets a fresh `operation_id`; `plan_id` identifies the plan
+that created it. Every event carries `snapshot_version`, `backend`, and
+`partition_count`. ERROR events also carry the [error fields](#error-fields),
+so filtering out INFO still leaves a self-contained failure.
+
+| Stream field | Type | Meaning |
+| --- | --- | --- |
+| `output_started` | Boolean | At least one batch has been returned, including an empty batch; prefetched batches do not count |
+| `completion_reason` | Optional string | `eof` or `row_limit`, present only on completion |
+| `partition` | Optional unsigned integer | Zero-based planned partition being consumed when failure occurred; absent if unavailable |
+
+Elapsed time starts at the first poll and includes consumer waiting between
+polls. It is wall time, not CPU time. Reaching a zero-row limit completes without
+reading data. Reaching a positive limit completes with the final returned batch;
+otherwise, returning the last batch alone does not prove EOF. The caller must
+poll again to observe completion.
+
+Dropping an unpolled stream emits nothing. Dropping only a pending `next_batch`
+future leaves its borrowed stream alive and resumable. Dropping a started stream
+requests cleanup, but does not prove blocking producers have stopped. Their late
+completion cannot emit success for the dropped stream. Once terminal, further
+polling and cleanup emit no additional terminal event.
+
+Only the explicit `scan_execution_cancelled` error reason or the scheduler's
+cancellation state produces a normal cancellation outcome. Unexpected worker
+abort/panic and internal capacity failures remain ERROR failures, even when
+their compatibility error code is `cancelled`. Returned errors and cleanup
+behavior are unchanged.
+
+## Recoverable network warmup
+
+Optional network sampling can fail while the load or plan succeeds. A timed-out
+or failed sample emits WARN `network_warmup.degraded`, with the owning
+`operation`, `operation_id`, available version/backend, and operation elapsed
+time. `phase` is `initialization` or `recovery`; `status` is `timeout` or
+`read_failed`. Failure to construct the optional partial-read transport uses
+`transport_unavailable`. Read and transport failures include `error_source_kind`
+when a typed source is available. The previous estimator remains usable.
+
+There is at most one warning per attempt: initialization and, if sampling started,
+the table's one deferred recovery attempt. Concurrent eligible scans share that
+recovery result.
+Insufficient samples, unsupported sampling, and disabled warmup are expected
+fallbacks, not warnings. Required metadata preparation is different: its failure
+fails the owning operation and emits ERROR.
+
+<details markdown="1">
+<summary>Sampling details and concurrent recovery</summary>
+
+The detailed `delta_arrow_reader::diagnostics::network_warmup` event remains
+DEBUG. Its elapsed time covers sampling alone, and its counts describe that
+attempt, including partial work. Sampling and subscriber callbacks run outside
+the shared recovery-state lock; cancellation wakes waiting scans and consumes
+the recovery attempt. Subscribers run synchronously and must avoid waiting for
+the operation that invoked them.
+Measurements are captured before the estimator is published, so later queries
+cannot change the diagnostics for that sampling attempt.
+
+</details>
 
 ## DataFusion provider operations
 
@@ -79,6 +213,9 @@ Provider events require the `datafusion` feature. They use the same
 as ordinary reader events. `provider_scan.completed` means a physical plan was
 returned. It does not report execution or whole-query success. Repeated and
 concurrent calls to `scan` receive distinct operation and plan IDs.
+
+<details markdown="1">
+<summary>Provider failure ownership and delegated calls</summary>
 
 Each boundary records only the failures it owns:
 
@@ -111,6 +248,8 @@ Catalog errors from DataFusion sometimes expose only an error variant and a
 message. Those retain `table_registration_failed` and the variant's safe source
 kind; the core does not parse the message to infer a more specific cause.
 
+</details>
+
 ## DataFusion physical-plan preparation
 
 `with_new_children` and `repartitioned` use the public operation lifecycle above.
@@ -120,6 +259,9 @@ count and records the returned plan's count after successful repartitioning.
 `completed` means the callback returned successfully, including an unchanged
 plan or `Ok(None)` when repartitioning is unsupported or unnecessary. It does
 not mean that reading started or a query completed.
+
+<details markdown="1">
+<summary>Validation failures, capability probes, and native defaults</summary>
 
 Child validation records `scan_children_not_supported` with the
 `datafusion_internal` source kind. The caller still receives the original native
@@ -152,48 +294,7 @@ result cannot infer all diagnostic ownership from the error type. It can report
 its own query outcome with its own identity; it must not deduplicate errors by
 parsing message text or suppress independent partition failures.
 
-## Ordinary stream execution
-
-`DeltaBatchStream` owns one `scan_execution` operation across all calls to
-`next_batch` or `Stream::poll_next`. Its first poll emits INFO
-`scan_execution.started`. It then emits one terminal event:
-
-| Event | Level | `outcome` | Meaning |
-| --- | --- | --- | --- |
-| `scan_execution.completed` | INFO | `completed` | The caller observed EOF, or received the batch satisfying its row limit |
-| `scan_execution.failed` | ERROR | `failed` | Reading, decoding, applying a deletion vector/transform, finalizing a batch, or running a worker failed |
-| `scan_execution.cancelled` | INFO | `cancelled` | The scheduler observed explicit scan cancellation |
-| `scan_execution.dropped` | INFO | `dropped` | The caller dropped a started stream before a terminal result |
-
-These events use the same target and identity/time types as public operation
-events. Each stream gets a fresh `operation_id`; `plan_id` identifies the plan
-that created it. Every event carries `snapshot_version`, `backend`, and
-`partition_count`. ERROR events also carry the error fields below, so filtering
-out INFO still leaves a self-contained failure.
-
-| Stream field | Type | Meaning |
-| --- | --- | --- |
-| `output_started` | Boolean | At least one batch has been returned, including an empty batch; prefetched batches do not count |
-| `completion_reason` | Optional string | `eof` or `row_limit`, present only on completion |
-| `partition` | Optional unsigned integer | Zero-based planned partition being consumed when failure occurred; absent if unavailable |
-
-Elapsed time starts at the first poll and includes consumer waiting between
-polls. It is wall time, not CPU time. Reaching a zero-row limit completes without
-reading data. Reaching a positive limit completes with the final returned batch;
-otherwise, returning the last batch alone does not prove EOF. The caller must
-poll again to observe completion.
-
-Dropping an unpolled stream emits nothing. Dropping only a pending `next_batch`
-future leaves its borrowed stream alive and resumable. Dropping a started stream
-requests cleanup, but does not prove blocking producers have stopped. Their late
-completion cannot emit success for the dropped stream. Once terminal, further
-polling and cleanup emit no additional terminal event.
-
-Only the explicit `scan_execution_cancelled` error reason or the scheduler's
-cancellation state produces a normal cancellation outcome. Unexpected worker
-abort/panic and internal capacity failures remain ERROR failures, even when
-their compatibility error code is `cancelled`. Returned errors and cleanup
-behavior are unchanged.
+</details>
 
 ## DataFusion partition execution
 
@@ -234,36 +335,20 @@ out-of-scope drop. Detailed work still uses the active polling context described
 below. A partition outcome does not report whole-query success or failures in
 other DataFusion operators. The host owns those query-level outcomes.
 
-## Recoverable network warmup
+## Task propagation and streaming
 
-Optional network sampling can fail while the load or plan succeeds. A timed-out
-or failed sample emits WARN `network_warmup.degraded`, with the owning
-`operation`, `operation_id`, available version/backend, and operation elapsed
-time. `phase` is `initialization` or `recovery`; `status` is `timeout` or
-`read_failed`. Failure to construct the optional partial-read transport uses
-`transport_unavailable`. Read and transport failures include `error_source_kind`
-when a typed source is available. The previous estimator remains usable.
+When using a scoped subscriber, keep it active while consuming the stream and
+performing cleanup. `into_stream` and DataFusion `execute` without a task-context
+extension do not bind later polling to their creation scope. Native span nesting
+and filtering rules apply; the reader does not reset the caller's span stack.
+Lifecycle records carry `operation_id` and stream `plan_id` independently of span
+filtering.
 
-There is at most one warning per attempt: initialization and, if sampling started,
-the table's one deferred recovery attempt. Concurrent eligible scans share that
-recovery result.
-Insufficient samples, unsupported sampling, and disabled warmup are expected
-fallbacks, not warnings. Required metadata preparation is different: its failure
-fails the owning operation and emits ERROR.
+<details markdown="1">
+<summary>Install an application-owned subscriber</summary>
 
-The detailed `delta_arrow_reader::diagnostics::network_warmup` event remains
-DEBUG. Its elapsed time covers sampling alone, and its counts describe that
-attempt, including partial work. Sampling and subscriber callbacks run outside
-the shared recovery-state lock; cancellation wakes waiting scans and consumes
-the recovery attempt. Subscribers run synchronously and must avoid waiting for
-the operation that invoked them.
-Measurements are captured before the estimator is published, so later queries
-cannot change the diagnostics for that sampling attempt.
-
-## Subscribe from Rust
-
-The application chooses filtering, formatting, and output destinations. An
-application that owns the process can install one subscriber at startup:
+If your application owns the process, install one subscriber before starting
+reader work:
 
 ```no_run
 use delta_arrow_reader::{DeltaReaderError, DeltaTable, DeltaTableBuilder};
@@ -281,37 +366,15 @@ async fn load_table() -> Result<DeltaTable, DeltaReaderError> {
 }
 ```
 
-Configure the subscriber once, before starting reader work. The core does not
-install a global subscriber, write a file, or change the returned error.
+The core does not install a global subscriber, write a file, or change the
+returned error.
 Concurrent operations use spans and `operation_id` to distinguish their records.
 Tests and embedded applications can use tracing's scoped subscribers instead.
 
-## Task propagation and streaming
+</details>
 
-The core uses tracing's native `Instrument` and `WithSubscriber` adapters for
-async work. Blocking handoffs capture the active dispatch and span, then use
-`dispatcher::with_default` and `Span::in_scope` inside the worker. A missing or
-filtered span does not disable dispatch propagation. These scopes restore the
-worker's previous subscriber after the synchronous call or poll; no entered
-span or default-dispatch guard crosses an await.
-
-| Boundary | Tracing behavior |
-| --- | --- |
-| Async load, snapshot load, refresh, and ordinary planning | Native adapters capture the caller on first poll. An unpolled future starts no diagnostic operation. |
-| Synchronous snapshot conversion and provider registration | Use the caller at entry. |
-| Ordinary stream | Creation starts no diagnostic operation. First poll starts `scan_execution`; each poll runs in the consumer's active context. |
-| Snapshot loading, refresh, eager metadata, scan planning, deletion-vector reads, and numeric cost estimation | Blocking workers inherit the context active at the handoff. |
-| Lazy partition startup and Direct reads | Partition tasks inherit the polling caller's subscriber. Their profiling spans retain the existing causal link to the caller. |
-| DeltaKernel file producer | The blocking producer inherits the invoking partition task's context. |
-| DataFusion provider scan | Native adapters carry the planning caller through warmup and blocking setup. The returned plan retains no planning subscriber. |
-| DataFusion execution | By default, lifecycle records use the caller at `execute` and detailed work uses the polling caller. An optional `Dispatch` in the query's `TaskContext` overrides both. Reusing a plan does not reuse its planning caller. |
-| Pooled S3 connection driver, pool cleanup, and shared Kernel-engine shutdown | Shared background work uses the worker's ambient/global subscriber, if any. It does not capture the first request's context. |
-
-When using a scoped subscriber, keep it active while consuming the stream and
-performing cleanup. `into_stream` and DataFusion `execute` without a task-context
-extension do not bind later polling to their creation scope. Native span nesting and filtering rules apply;
-the reader does not reset the caller's span stack. Lifecycle records carry
-`operation_id` and stream `plan_id` independently of span filtering.
+<details markdown="1">
+<summary>Scoped subscribers with DataFusion workers</summary>
 
 DataFusion can start tasks outside a scoped subscriber. To carry a query's
 subscriber into DAR partition setup, polling, and reader workers, put a native
@@ -341,6 +404,30 @@ after each setup call and poll. This extension carries the subscriber, not a spa
 stack, and does not configure tracing for other DataFusion operators or install
 a global task hook. The Python binding supplies the extension for SQL readers.
 
+</details>
+
+<details markdown="1">
+<summary>Task capture points and cleanup behavior</summary>
+
+The core uses tracing's native `Instrument` and `WithSubscriber` adapters for
+async work. Blocking handoffs capture the active dispatch and span, then use
+`dispatcher::with_default` and `Span::in_scope` inside the worker. A missing or
+filtered span does not disable dispatch propagation. These scopes restore the
+worker's previous subscriber after the synchronous call or poll; no entered
+span or default-dispatch guard crosses an await.
+
+| Boundary | Tracing behavior |
+| --- | --- |
+| Async load, snapshot load, refresh, and ordinary planning | Native adapters capture the caller on first poll. An unpolled future starts no diagnostic operation. |
+| Synchronous snapshot conversion and provider registration | Use the caller at entry. |
+| Ordinary stream | Creation starts no diagnostic operation. First poll starts `scan_execution`; each poll runs in the consumer's active context. |
+| Snapshot loading, refresh, eager metadata, scan planning, deletion-vector reads, and numeric cost estimation | Blocking workers inherit the context active at the handoff. |
+| Lazy partition startup and Direct reads | Partition tasks inherit the polling caller's subscriber. Their profiling spans retain the existing causal link to the caller. |
+| DeltaKernel file producer | The blocking producer inherits the invoking partition task's context. |
+| DataFusion provider scan | Native adapters carry the planning caller through warmup and blocking setup. The returned plan retains no planning subscriber. |
+| DataFusion execution | By default, lifecycle records use the caller at `execute` and detailed work uses the polling caller. An optional `Dispatch` in the query's `TaskContext` overrides both. Reusing a plan does not reuse its planning caller. |
+| Pooled S3 connection driver, pool cleanup, and shared Kernel-engine shutdown | Shared background work uses the worker's ambient/global subscriber, if any. It does not capture the first request's context. |
+
 Dropping a started operation or stream still records abandonment or early drop
 through its lifecycle guard. This does not promise that every destructor in the
 reader or its dependencies runs under the same subscriber. `WithSubscriber`
@@ -356,29 +443,7 @@ that invoked them. The application owns subscriber shutdown and flushing, and
 must account for blocking work that continues after cancellation. Third-party
 threads and their diagnostics are outside the reader's task propagation.
 
-## Error fields
-
-Terminal failures and existing internal failure events contain:
-
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `event` | String | The operation or internal phase reporting the failure. |
-| `error_phase` | String | Reader phase, such as `snapshot` or `data_file_read`. |
-| `error_code` | String | Reader error category, such as `snapshot_load`. |
-| `error_reason` | String | Fixed reader reason, such as `snapshot_load_failed`. |
-| `error_source_kind` | Optional string | Safe category obtained from the dependency's error type. Absent when there is no source. |
-
-The source kind helps distinguish failures that share a reader code and reason.
-For example, a snapshot failure can identify `missing_metadata`, `not_found`, or
-`permission_denied`. These categories describe observed failures; they do not
-establish a retry policy or explain causes that the dependency did not expose.
-
-Consumers should ignore additional fields and handle unfamiliar source kinds.
-The application controls the rendered text. Raw dependency messages, source
-chains, paths, URLs, credential values, and panic payloads are not diagnostic
-fields. Programmatic access to the original source is preserved.
-The host's panic hook and events emitted by dependencies have their own output
-policies.
+</details>
 
 ## Source classification
 
@@ -394,6 +459,9 @@ When a dependency wraps another `DeltaReaderError`, classification follows that
 reader error's source. If it has no source, its stable reader code supplies the
 category, such as `invalid_projection`.
 
+<details markdown="1">
+<summary>Source categories</summary>
+
 | Source family | Categories |
 | --- | --- |
 | Delta snapshot and log | `missing_version`, `missing_metadata`, `missing_protocol`, `missing_metadata_and_protocol`, `invalid_protocol`, `invalid_checkpoint`, `invalid_log_path`, `missing_log_history` |
@@ -404,6 +472,8 @@ category, such as `invalid_projection`.
 | Decoding and transforms | `malformed_json`, `deletion_vector`, `invalid_selection_vector`, `arrow`, `arrow_cast`, `arrow_memory`, `arrow_parse`, `arrow_compute`, `arrow_json`, `arrow_ipc`, `arrow_c_data`, `arrow_csv`, `arrow_avro`, `parquet`, `divide_by_zero`, `arithmetic_overflow`, `index_out_of_bounds`, `need_more_data` |
 | Other typed Kernel failures | `kernel_internal`, `invalid_transaction_state`, `checkpoint_write`, `invalid_timestamp_range`, `empty_timestamp_range`, `timestamp_out_of_range` |
 | DataFusion | `sql_parse`, `datafusion_plan`, `datafusion_execution`, `datafusion_internal`, `invalid_configuration`, `resources_exhausted`, `multiple_errors` |
+
+</details>
 
 `unknown` means a source exists but exposes no recognized classification. For
 example, Kernel 0.25 reports an empty log as `Generic(String)`. Classification
@@ -416,15 +486,6 @@ dependency that retained a broad category but converted its detailed cause into
 a string. `multiple_errors` identifies a DataFusion collection without presenting
 its first member as the entire cause.
 
-Kernel 0.29 adds `EmptyLog` and a version-carrying `MissingVersion(version)` through
-[upstream #3195](https://github.com/delta-io/delta-kernel-rs/pull/3195).
-The dependency remains pinned because newer releases treat empty String/Binary
-partition values as non-null, tracked by
-[upstream #3260](https://github.com/delta-io/delta-kernel-rs/pull/3260).
-Once a release passes the partition regression tests, update the source mappings,
-the adapter's `MissingVersion` construction, and the snapshot diagnostic tests
-together.
-
 `source_chain_limit` means the traversal reached its depth bound, including a
 cyclic source implementation. It is distinct from an error with no source.
 
@@ -435,49 +496,75 @@ distinguish `worker_panicked` from `worker_cancelled`; the `cancelled` code alon
 does not identify a normal caller cancellation. A failure encountered during
 cleanup does not replace an earlier data error.
 
-## Inspect a returned error
+<details markdown="1">
+<summary>Delta Kernel compatibility and upgrade work</summary>
 
-The same fields are available without enabling tracing:
+Kernel 0.29 adds `EmptyLog` and a version-carrying `MissingVersion(version)` through
+[upstream #3195](https://github.com/delta-io/delta-kernel-rs/pull/3195).
+The dependency remains pinned because newer releases treat empty String/Binary
+partition values as non-null, tracked by
+[upstream #3260](https://github.com/delta-io/delta-kernel-rs/pull/3260).
+Once a release passes the partition regression tests, update the source mappings,
+the adapter's `MissingVersion` construction, and the snapshot diagnostic tests
+together.
 
-```no_run
-use delta_arrow_reader::DeltaTableBuilder;
-
-# async fn inspect_error() {
-if let Err(error) = DeltaTableBuilder::new("/tmp/table").load_table().await {
-    let phase = error.phase().as_str();
-    let code = error.code();
-    let reason = error.reason();
-    let source_kind = error.source_kind();
-    // Pass these safe values to the application's diagnostic handler.
-    # let _ = (phase, code, reason, source_kind);
-}
-# }
-```
+</details>
 
 ## Diagnostic coverage
 
+This map connects diagnostic owners with their regression coverage. Use it
+when changing an operation or adding an adapter.
+
+<details markdown="1">
+<summary>Audited boundaries and regression evidence</summary>
+
 | Boundary or event family | Owner and safe context | Regression coverage |
 | --- | --- | --- |
-| Early load/configuration, location/storage setup, missing/corrupt snapshots | Public load; requested version, available resolved version, typed cause | WARN/ERROR-only public tests distinguish missing version, corrupt metadata, access denial, missing object, and worker panic |
-| Schema conversion, protocol checks for warmup, required query metadata | Enclosing load, or standalone conversion; resolved version and failure phase | Public conversion/metadata failures produce one ERROR, including both Parquet backend configurations |
-| Refresh snapshot/schema/cache and task-join errors | Public refresh; previous and resolved versions remain distinct | Failed schema/cache refresh preserves the original table and its scans; successful retry remains possible |
-| Protocol/predicate/projection and physical planning | Public planning; plan identity, version, backend, metadata source | Early validation and projection failures; concurrent planning IDs linked to their streams |
-| Pure validation/configuration helpers | Return-only; fixed error reason | Invalid column/partition options and protocol checks stay quiet |
-| Optional network sampling | Enclosing load, ordinary plan, or provider plan; bounded warning and typed read/transport cause | Initial S3 sample failure and retained transport-initialization errors; failed/timed-out recovery warns once without changing rows or published estimator; concurrent recovery and cancellation tests; provider recovery preserves query results and does not retry sampling |
-| `snapshot_load.*`, `snapshot_refresh.*`, `scan_metadata_cache_build.*` | Internal DEBUG phases; enclosing public operation owns ERROR | Existing phase-field tests, eager metadata tracing, source preservation |
-| Planning/transport profiling spans, automatic range planning, network sample details | DEBUG details; fixed names, numeric measurements, bounded status; TRACE cost/calibration details | Existing planning/range tests and recovery callback lock-reentry test |
-| Ordinary storage reads, Parquet decoding, deletion vectors, physical-to-logical transforms, and final row filtering/projection | Public stream; execution/plan identities, version/backend, partition, partial-output flag, typed cause | Both backends report failure after partial output at WARN/ERROR; focused DV/transform and finalization fixtures retain the error and stop the stream |
-| Scheduler admission, capacity, and worker-join failures | Public stream owns ERROR; explicit cancellation owns INFO | Worker panic versus unexpected abort retain distinct causes; internal capacity errors remain failures; permits are released |
-| `scan_execution.*` success, cancellation, and drop | Public stream owns bounded INFO milestones; no event per batch | EOF and zero/positive limits, concurrent IDs, unpolled drop, resumable pending waits, drop under another subscriber, blocking producer finishing after drop, subscriber panic |
-| Disabled/filtered execution diagnostics | Same reader operations and lazy error classification; no diagnostic I/O | No-subscriber and WARN runs preserve rows and scan metrics, including Direct request counts; controlled scheduling tests retain read bounds and cleanup |
-| `provider_creation.*`, `provider_registration.*` | Public provider creation or registration owns INFO/ERROR; version/backend and safe error fields | Both backends at WARN/ERROR: invalid options/protocol/name and duplicate registration; one failure record, original registration preserved |
-| `provider_refresh.*` | Core owns snapshot refresh; provider owns subsequent protocol validation/schema update, with previous and resolved versions | Both backends distinguish delegated corruption from a newly unsupported protocol; original provider remains usable and refresh can be retried |
-| `provider_scan.*` | Public provider planning owns INFO/ERROR and optional warmup WARN; fresh IDs, version/backend, metadata source, known partition count | Both backends at WARN/ERROR distinguish invalid projections, unsupported requested filters, missing/corrupt metadata; worker panics before and after recovery retain sources; abandonment cannot become late success; INFO IDs and DEBUG redaction |
-| DataFusion filter/projection profiling and capability probes | Internal DEBUG details with counts only; unsupported pushdown is not a failed operation | Unsupported probe produces no WARN/ERROR; sensitive columns, predicates, registration names, and raw sources stay out of DEBUG |
-| `datafusion_replace_children.*`, `datafusion_repartition.*` | Each callback owns INFO/ERROR; retained plan ID, fresh invocation ID, version/backend, known partition count | WARN/ERROR distinguish invalid children, target, and ranges; native/reader error wrappers are preserved; failed callbacks leave the original plan usable; clone/reset/repartition milestones and identities |
-| Dynamic partition-pruning fallback | Internal DEBUG phase and typed source kind; conservative keep decision and existing counters | Real plans under both backends distinguish expression-index errors from division by zero; rejected filters and fallbacks remain quiet at WARN; rows, completion metrics, and DEBUG redaction are checked |
-| Inherited DataFusion defaults | DataFusion owns the default implementation and its native errors; the host owns its query outcome | Unknown statistics succeed; invalid statistics partition indices retain the native error and emit no DAR event |
-| `datafusion_partition_execution.*` | One execution owns setup and stream INFO/ERROR; retained plan ID, fresh execution ID, requested partition, version/backend, partial-output flag, typed cause | Both backends: empty/EOF/drop/LIMIT, WARN/ERROR after partial output from missing/corrupt data or missing DV, typed transform/projection failures and DEBUG redaction, resource release without another poll, independent concurrent/repeated failures; task panic; clone/repartition identities; disabled/WARN rows and metrics |
+| Load, location/storage setup, and missing/corrupt snapshots | Public load; requested/resolved version and typed cause | [Public failures at WARN/ERROR][operation-tests] |
+| Schema conversion, warmup protocol checks, and required query metadata | Enclosing load or standalone conversion; resolved version and phase | [Conversion and metadata failures][operation-tests] |
+| Refresh snapshot/schema/cache and task joins | Public refresh; previous and resolved versions | [Original table preservation and retry][operation-tests] |
+| Protocol/predicate/projection and physical planning | Public planning; plan identity, version, backend, metadata source | [Validation failures and concurrent plan IDs][operation-tests] |
+| Pure validation/configuration helpers | Return-only; fixed error reason | [Quiet validation][operation-tests] |
+| Optional network sampling | Enclosing load or plan; bounded WARN and typed read/transport cause | [Initial sampling][cloud-tests], [shared recovery][direct-tests], and [provider recovery][execution-tests] |
+| Internal snapshot and metadata phases | DEBUG; enclosing public operation owns ERROR | [Phase fields and eager metadata][metadata-tests] |
+| Planning/transport profiling and range decisions | DEBUG details; TRACE cost/calibration; numeric measurements and bounded status | [Planning][planning-tests], [range decisions][direct-tests], and [recovery callbacks][warmup-tests] |
+| Ordinary reads, decoding, deletion vectors, transforms, and final projection | Public stream; plan/execution IDs, version/backend, partition, partial output, typed cause | [Partial-output failures][operation-tests] and [finalization][stream-tests] |
+| Scheduler admission, capacity, and task joins | Stream ERROR for worker failure; INFO for explicit cancellation | [Scheduler failures and resource release][scheduling-tests] |
+| Ordinary stream EOF, limits, cancellation, and drop | Bounded INFO milestones; no event per batch | [Lifecycle outcomes][operation-tests] and [pending waits and cleanup][stream-tests] |
+| Disabled/filtered diagnostics | Lazy classification; no diagnostic I/O | [Rows and read metrics][operation-tests] and [disabled source inspection][lifecycle-tests] |
+| Task handoffs and reusable plans | Calling or polling context; operation correlation survives span filtering | [Scoped subscribers, abandonment, and worker reuse][task-tests] |
+| Provider creation and registration | Provider owns INFO/ERROR; version/backend and safe error fields | [Options, protocol, names, and duplicate registration][provider-tests] |
+| Provider refresh | Core owns snapshot refresh; provider owns later validation/schema update | [Distinct failures and preserved provider][provider-tests] |
+| Provider planning | INFO/ERROR and optional warmup WARN; fresh IDs, metadata source, known partitions | [Validation, worker failure, abandonment, and redaction][provider-tests] |
+| DataFusion profiling and capability probes | DEBUG counts; unsupported pushdown is a normal answer | [Quiet probes and redaction][provider-tests] |
+| Physical-plan callbacks | Per-call INFO/ERROR; retained plan ID and fresh operation ID | [Child validation][callback-tests] and [repartitioning][execution-tests] |
+| Dynamic partition-pruning fallback | DEBUG typed cause; conservative keep decision and existing counters | [Fallback results and redaction][execution-tests] |
+| Inherited DataFusion defaults | Host owns query outcome; native errors preserved | [Statistics defaults][callback-tests] |
+| DataFusion partition execution | Per-execution setup/stream outcome; partition, partial output, typed cause | [Both backends, plan reuse, and cleanup][partition-tests]; [transform/projection failures][execution-tests] |
+| Source classification and dependency limits | Bounded typed traversal; explicit unknown/depth-limit categories | [Typed causes and traversal limits][source-tests] |
+| CLI argument, runtime, and output boundaries | CLI owns its failures; core owns reader failures; stdout/status remain separate | [CLI contracts][cli-tests] and [process checks][process-tests] |
+| Python conversion, runtime, SQL, and Arrow boundaries | Binding owns its failures and forwards core events; exceptions remain independent | [Logging, exceptions, handlers, and shutdown][python-tests] |
 
 The shared S3 HTTP connection driver records `error_source_kind` on its own
 target without formatting the dependency error.
+
+</details>
+
+[operation-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/tests/operation_tracing.rs
+[warmup-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/src/reader/backend/direct_parquet/network_profile/warmup.rs
+[cloud-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/tests/cloud_table_locations.rs
+[direct-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/src/reader/backend/direct_parquet.rs
+[planning-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/tests/reader/planning_runtime.rs
+[metadata-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/tests/eager_metadata_tracing.rs
+[stream-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/src/reader/tests/stream_tracing.rs
+[scheduling-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/src/reader/scheduling.rs
+[lifecycle-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/src/operation_tracing.rs
+[task-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/tests/operation_tracing/tasks.rs
+[provider-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/tests/operation_tracing/datafusion.rs
+[callback-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/tests/operation_tracing/datafusion_callbacks.rs
+[execution-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/src/reader/datafusion/execution.rs
+[partition-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/tests/operation_tracing/datafusion_execution.rs
+[source-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-core/src/error/source.rs
+[cli-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-cli/tests/cli.rs
+[process-tests]: https://github.com/mag1cfrog/delta-arrow-reader/tree/main/xtask/src/scan/linux
+[python-tests]: https://github.com/mag1cfrog/delta-arrow-reader/blob/main/crates/delta-arrow-reader-python/tests/test_logging.py
