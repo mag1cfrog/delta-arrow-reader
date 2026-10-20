@@ -1,5 +1,5 @@
 use delta_arrow_reader::{DeltaReaderError, DeltaScanExecutionOptions, ParquetReaderBackend};
-use serde::{Deserialize, Deserializer, de};
+use serde::{Deserialize, Deserializer, de::value::StringDeserializer};
 
 use crate::{diagnostics::InputCorrection, input::JsonInputSource};
 
@@ -110,10 +110,17 @@ where
 fn deserialize_backend<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<ParquetReaderBackend>, D::Error> {
-    let backend = match String::deserialize(deserializer)?.as_str() {
-        "direct" => ParquetReaderBackend::Direct,
-        "delta_kernel" => ParquetReaderBackend::DeltaKernel,
-        _ => return Err(de::Error::custom("invalid parquet backend")),
+    #[derive(Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    enum BackendInput {
+        Direct,
+        DeltaKernel,
+    }
+
+    let name = String::deserialize(deserializer)?;
+    let backend = match BackendInput::deserialize(StringDeserializer::<D::Error>::new(name))? {
+        BackendInput::Direct => ParquetReaderBackend::Direct,
+        BackendInput::DeltaKernel => ParquetReaderBackend::DeltaKernel,
     };
     Ok(Some(backend))
 }

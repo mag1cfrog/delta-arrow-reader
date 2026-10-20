@@ -135,7 +135,7 @@ impl<'de> Deserialize<'de> for StorageOptionsInput {
                 let mut options = DeltaStorageOptions::new();
                 while let Some((key, value)) = map.next_entry::<String, String>()? {
                     if options.insert(key, value).is_some() {
-                        return Err(serde::de::Error::custom("duplicate object key"));
+                        return Err(serde::de::Error::duplicate_field("storage option key"));
                     }
                 }
                 Ok(StorageOptionsInput(options))

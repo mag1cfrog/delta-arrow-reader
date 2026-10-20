@@ -193,6 +193,12 @@ fn input_schema_corrections_omit_unknown_keys_and_values() -> Result<(), Box<dyn
                     "unique object keys",
                     "duplicate",
                 ),
+                (
+                    r#"{"secret-key":"secret-value","op":{"secret-nested-key":false}}"#,
+                    "",
+                    "string storage option",
+                    "expected format",
+                ),
             ][..],
         ),
         (
@@ -329,6 +335,18 @@ fn input_schema_corrections_omit_unknown_keys_and_values() -> Result<(), Box<dyn
                     "JSON integer from 1",
                     "expected format",
                 ),
+                (
+                    r#"{"prefetch_files_per_partition":1,"secret/key~\n":{"secret-nested-key":false}}"#,
+                    "",
+                    "object fields: parquet_backend",
+                    "unsupported fields",
+                ),
+                (
+                    r#"{"prefetch_files_per_partition":1,"\u0070refetch_files_per_partition":"secret-value"}"#,
+                    "/prefetch_files_per_partition",
+                    "one occurrence",
+                    "duplicate field",
+                ),
             ][..],
         ),
     ] {
@@ -380,29 +398,51 @@ fn input_schema_corrections_omit_unknown_keys_and_values() -> Result<(), Box<dyn
 fn schema_corrections_stay_bounded_for_large_or_incomplete_input()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
-    let path = directory.path().join("secret-predicate.json");
+    let path = directory.path().join("secret-input.json");
     let long_key = format!("secret\n{}", "secret".repeat(10_000));
     let long_value = "secret".repeat(10_000);
     let nested = format!("{}0{}", "[".repeat(10_000), "]".repeat(10_000));
-    for (input, field_path) in [
+    for (argument, input, field_path) in [
         (
+            "--predicate-file",
             serde_json::json!({"op":"constant", "value":true, long_key:"secret-value"}).to_string(),
             Some(""),
         ),
         (
+            "--predicate-file",
             serde_json::json!({"op":long_value}).to_string(),
             Some("/op"),
         ),
         (
+            "--predicate-file",
             format!(r#"{{"op":"secret-operator","secret-key":{nested}}}"#),
             Some("/op"),
         ),
-        (r#"{"op":"secret-operator","secret-key":}"#.into(), None),
+        (
+            "--predicate-file",
+            r#"{"op":"secret-operator","secret-key":}"#.into(),
+            None,
+        ),
+        (
+            "--execution-options-file",
+            format!(r#"{{"prefetch_files_per_partition":{nested}}}"#),
+            None,
+        ),
+        (
+            "--execution-options-file",
+            format!(r#"{{"secret-key":{nested}}}"#),
+            None,
+        ),
+        (
+            "--storage-options-file",
+            format!(r#"{{"secret-key":{nested}}}"#),
+            None,
+        ),
     ] {
         fs::write(&path, input)?;
         let output = run_with_timeout(
             Command::new(env!("CARGO_BIN_EXE_dar"))
-                .args(["scan", "secret-table", "--predicate-file"])
+                .args(["scan", "secret-table", argument])
                 .arg(&path)
                 .arg("--diagnostics=json")
                 .env("RUST_LOG", "trace"),
@@ -410,7 +450,7 @@ fn schema_corrections_stay_bounded_for_large_or_incomplete_input()
         assert_eq!(output.status.code(), Some(2));
         assert!(output.stdout.is_empty());
         let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["argument"], "--predicate-file");
+        assert_eq!(record["argument"], argument);
         assert_eq!(record["code"], "invalid_input_json");
         assert_eq!(record["field_path"].as_str(), field_path);
     }

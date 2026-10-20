@@ -1,23 +1,15 @@
-use std::{collections::HashSet, fmt, str::FromStr};
+use std::{collections::HashSet, fmt, marker::PhantomData, str::FromStr};
 
 use serde::{
     Deserialize, Deserializer,
-    de::{MapAccess, Visitor},
+    de::{DeserializeOwned, MapAccess, Visitor, value::MapDeserializer},
 };
 use serde_json::value::RawValue;
+use serde_value::DeserializerError;
 
-use super::JsonInputSource;
+use super::{JsonInputSource, StorageOptionsInput};
 use crate::{diagnostics::InputCorrection, execution_options, predicate};
 
-const EXECUTION_FIELDS: &[&str] = &[
-    "parquet_backend",
-    "max_concurrent_file_reads_per_scan",
-    "max_concurrent_file_reads_per_partition",
-    "output_buffer_batches_per_partition",
-    "prefetch_files_per_partition",
-    "parquet_metadata_size_hint_bytes",
-    "parquet_full_file_read_threshold_bytes",
-];
 const PREDICATE_OPERATORS: &[&str] = &[
     "constant",
     "eq",
@@ -58,8 +50,12 @@ pub(crate) fn correction(bytes: &[u8], input: JsonInputSource) -> Option<InputCo
         path: String::new(),
     };
     match input {
-        JsonInputSource::StorageOptions => storage_options(raw, &location),
-        JsonInputSource::ExecutionOptions => execution_options(raw, &location),
+        JsonInputSource::StorageOptions => {
+            deserialize_flat_input::<StorageOptionsInput>(raw, &location)
+        }
+        JsonInputSource::ExecutionOptions => {
+            deserialize_flat_input::<execution_options::ExecutionOptionsInput>(raw, &location)
+        }
         JsonInputSource::Predicate => predicate_node(raw, &location, 1),
     }
     .err()
@@ -108,13 +104,13 @@ impl FieldLocation {
     }
 }
 
-struct ObjectFields<'de>(Vec<(String, &'de RawValue)>);
+struct ObjectFields<T>(Vec<(String, T)>);
 
-impl<'de> Deserialize<'de> for ObjectFields<'de> {
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for ObjectFields<T> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct ObjectVisitor;
-        impl<'de> Visitor<'de> for ObjectVisitor {
-            type Value = ObjectFields<'de>;
+        struct ObjectVisitor<T>(PhantomData<T>);
+        impl<'de, T: Deserialize<'de>> Visitor<'de> for ObjectVisitor<T> {
+            type Value = ObjectFields<T>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                 formatter.write_str("a JSON object")
@@ -128,36 +124,29 @@ impl<'de> Deserialize<'de> for ObjectFields<'de> {
                 Ok(ObjectFields(fields))
             }
         }
-        deserializer.deserialize_map(ObjectVisitor)
+        deserializer.deserialize_map(ObjectVisitor(PhantomData))
     }
 }
 
-impl<'de> ObjectFields<'de> {
+impl<'de> ObjectFields<&'de RawValue> {
     fn check_fields(
         &self,
-        allowed: Option<&[&'static str]>,
+        allowed: &[&'static str],
         location: &FieldLocation,
     ) -> Result<(), InputCorrection> {
         let mut seen = HashSet::new();
         for (name, _) in &self.0 {
-            let known =
-                allowed.and_then(|fields| fields.iter().copied().find(|field| field == name));
-            if let Some(fields) = allowed
-                && known.is_none()
-            {
+            let Some(known) = allowed.iter().copied().find(|field| field == name) else {
                 return Err(location.invalid(
-                    format!("object fields: {}", fields.join(", ")),
+                    format!("object fields: {}", allowed.join(", ")),
                     "Remove unsupported fields; use only the listed fields.",
                 ));
-            }
-            if !seen.insert(name) {
-                return Err(match known {
-                    Some(field) => location.field(field).invalid(
-                        "one occurrence of this field",
-                        "Remove the duplicate field.",
-                    ),
-                    None => location.invalid("unique object keys", "Remove duplicate object keys."),
-                });
+            };
+            if !seen.insert(known) {
+                return Err(location.field(known).invalid(
+                    "one occurrence of this field",
+                    "Remove the duplicate field.",
+                ));
             }
         }
         Ok(())
@@ -203,43 +192,70 @@ impl<'de> ObjectFields<'de> {
     }
 }
 
-fn storage_options(raw: &RawValue, location: &FieldLocation) -> Result<(), InputCorrection> {
-    let fields: ObjectFields<'_> = location.parse(raw, "a JSON object with string values")?;
-    fields.check_fields(None, location)?;
-    for (_, value) in &fields.0 {
-        location.parse::<String>(value, "string storage option values")?;
-    }
-    Ok(())
-}
-
-fn execution_options(raw: &RawValue, location: &FieldLocation) -> Result<(), InputCorrection> {
-    let fields: ObjectFields<'_> =
-        location.parse(raw, "a JSON object with execution option fields")?;
-    fields.check_fields(Some(EXECUTION_FIELDS), location)?;
-    for &name in EXECUTION_FIELDS {
-        let Some((_, value)) = fields.0.iter().find(|(field, _)| field == name) else {
-            continue;
-        };
-        let field = location.field(name);
-        if name == "parquet_backend" {
-            fields.tag(name, &["direct", "delta_kernel"], location)?;
-            continue;
+fn deserialize_flat_input<T: DeserializeOwned>(
+    raw: &RawValue,
+    location: &FieldLocation,
+) -> Result<(), InputCorrection> {
+    // Preserve duplicate keys and integer/float token types while reusing the input's Deserialize.
+    let fields = match serde_json::from_str::<ObjectFields<serde_value::Value>>(raw.get()) {
+        Ok(fields) => fields,
+        Err(error) if error.is_data() => {
+            return Err(location.invalid(
+                "a JSON object",
+                "Supply a value matching this field's expected format.",
+            ));
         }
-        let Some(expected) = execution_options::expected_integer(name) else {
-            continue;
-        };
-        match name {
-            "max_concurrent_file_reads_per_scan"
-            | "parquet_metadata_size_hint_bytes"
-            | "parquet_full_file_read_threshold_bytes" => {
-                field.parse::<Option<usize>>(value, &expected)?;
-            }
-            _ => {
-                field.parse::<usize>(value, &expected)?;
-            }
+        // shortcut: deeply nested invalid values keep the generic hint; revisit for nested options.
+        Err(_) => return Ok(()),
+    };
+    let mut field = String::new();
+    let entries = fields
+        .0
+        .into_iter()
+        .inspect(|(name, _)| field.clone_from(name));
+    let error = match T::deserialize(MapDeserializer::<_, DeserializerError>::new(entries)) {
+        Ok(_) => return Ok(()),
+        Err(error) => error,
+    };
+    let storage = matches!(location.input, JsonInputSource::StorageOptions);
+    let (expected, hint) = match error {
+        DeserializerError::UnknownField(_, fields) => {
+            return Err(location.invalid(
+                format!("object fields: {}", fields.join(", ")),
+                "Remove unsupported fields; use only the listed fields.",
+            ));
         }
+        DeserializerError::DuplicateField(name) => {
+            return Err(if storage {
+                location.invalid("unique object keys", "Remove duplicate object keys.")
+            } else {
+                location.field(name).invalid(
+                    "one occurrence of this field",
+                    "Remove the duplicate field.",
+                )
+            });
+        }
+        DeserializerError::UnknownVariant(_, choices) => (
+            format!("one of: {}", choices.join(", ")),
+            "Use one of the listed values.",
+        ),
+        DeserializerError::InvalidType(_, expected)
+        | DeserializerError::InvalidValue(_, expected) => (
+            if storage {
+                "string storage option values".to_owned()
+            } else {
+                execution_options::expected_integer(&field).unwrap_or(expected)
+            },
+            "Supply a value matching this field's expected format.",
+        ),
+        _ => return Err(location.input.correction(location.input.schema_hint())),
+    };
+    let mut correction = location.invalid(expected, hint);
+    if !storage {
+        // Execution options reject unknown keys before deserializing their values.
+        correction.field_path = Some(format!("/{field}"));
     }
-    Ok(())
+    Err(correction)
 }
 
 fn predicate_node(
@@ -256,7 +272,7 @@ fn predicate_node(
             "Reduce predicate nesting.",
         ));
     }
-    let fields: ObjectFields<'_> = location.parse(raw, "a JSON predicate object")?;
+    let fields: ObjectFields<&RawValue> = location.parse(raw, "a JSON predicate object")?;
     let op = fields.tag("op", PREDICATE_OPERATORS, location)?;
     let allowed: &[&str] = match op {
         "constant" => &["op", "value"],
@@ -265,7 +281,7 @@ fn predicate_node(
         "not" => &["op", "arg"],
         _ => &["op", "column", "value"],
     };
-    fields.check_fields(Some(allowed), location)?;
+    fields.check_fields(allowed, location)?;
     match op {
         "constant" => {
             location
@@ -318,7 +334,7 @@ fn integer_string<T: FromStr + fmt::Display>(
 }
 
 fn scalar(raw: &RawValue, location: &FieldLocation) -> Result<(), InputCorrection> {
-    let fields: ObjectFields<'_> = location.parse(raw, "a typed JSON scalar object")?;
+    let fields: ObjectFields<&RawValue> = location.parse(raw, "a typed JSON scalar object")?;
     let kind = fields.tag("type", SCALAR_TYPES, location)?;
     let allowed: &[&str] = match kind {
         "fixed_size_binary" => &["type", "value", "size"],
@@ -326,7 +342,7 @@ fn scalar(raw: &RawValue, location: &FieldLocation) -> Result<(), InputCorrectio
         "decimal128" => &["type", "value", "precision", "scale"],
         _ => &["type", "value"],
     };
-    fields.check_fields(Some(allowed), location)?;
+    fields.check_fields(allowed, location)?;
     let raw_value = fields.required("value", location)?;
     let value = location.field("value");
     match kind {
