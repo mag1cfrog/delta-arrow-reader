@@ -1,6 +1,9 @@
 //! Python package entrypoint.
 
+mod arrow_stream;
+mod diagnostics;
 mod filters;
+mod logging;
 mod options;
 mod runtime;
 mod session;
@@ -14,10 +17,12 @@ use ::delta_arrow_reader::{
 };
 use arrow::{
     datatypes::{DataType, Field, Schema},
+    error::ArrowError,
     ffi::FFI_ArrowSchema,
 };
 use pyo3::{
-    exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError},
+    PyTypeInfo,
+    exceptions::{PyException, PyTypeError, PyValueError},
     prelude::*,
     types::{PyBool, PyCapsule, PyDict, PyInt, PyList, PyMapping, PyTuple},
 };
@@ -39,6 +44,8 @@ Messages omit sensitive details such as table paths and storage credentials.
 Attributes:
     phase: The stage that failed, such as `schema` or `datafusion`.
     code: The error category, such as `schema_conversion` or `sql_planning`.
+    reason: The Core failure reason, or `None` for a binding-owned failure.
+    source_kind: The safe Core source category, or `None` when unavailable.
 
 Invalid Python arguments can raise built-in exceptions such as `TypeError`
 or `ValueError` instead. Failures while consuming a PyArrow reader use PyArrow
@@ -46,12 +53,31 @@ exceptions; catch those around iteration or `read_all()` as well.
 "#
 );
 
-fn reader_error(py: Python<'_>, message: String, phase: &str, code: &str) -> PyErr {
+fn core_error<T: PyTypeInfo>(
+    py: Python<'_>,
+    error: &::delta_arrow_reader::DeltaReaderError,
+) -> PyErr {
+    let exception = PyErr::new::<T, _>(error.to_string());
+    let value = exception.value(py);
+    if let Err(error) = value
+        .setattr("phase", error.phase().as_str())
+        .and_then(|()| value.setattr("code", error.code()))
+        .and_then(|()| value.setattr("reason", error.reason()))
+        .and_then(|()| value.setattr("source_kind", error.source_kind()))
+    {
+        return error;
+    }
+    exception
+}
+
+fn binding_error(py: Python<'_>, message: String, phase: &str, code: &str) -> PyErr {
     let exception = DeltaReaderError::new_err(message);
     let value = exception.value(py);
     if let Err(error) = value
         .setattr("phase", phase)
         .and_then(|()| value.setattr("code", code))
+        .and_then(|()| value.setattr("reason", py.None()))
+        .and_then(|()| value.setattr("source_kind", py.None()))
     {
         return error;
     }
@@ -59,13 +85,21 @@ fn reader_error(py: Python<'_>, message: String, phase: &str, code: &str) -> PyE
 }
 
 fn export_schema(py: Python<'_>, schema: &Schema) -> PyResult<FFI_ArrowSchema> {
-    let export_error = || {
-        reader_error(
-            py,
-            "delta reader error: phase=schema code=schema_conversion reason=arrow_schema_export_failed"
-                .to_owned(),
-            "schema",
-            "schema_conversion",
+    let export_error = |reason: &'static str, source: Option<&ArrowError>| {
+        diagnostics::log_failure(
+            binding_error(
+                py,
+                "delta reader error: phase=schema code=schema_conversion reason=arrow_schema_export_failed"
+                    .to_owned(),
+                "schema",
+                "schema_conversion",
+            ),
+            || {
+                tracing::error!(target: "delta_arrow_reader_python",
+                    event = "schema_export.failed", operation = "schema_export", outcome = "failed",
+                    error_phase = "schema", error_code = "schema_conversion", error_reason = reason,
+                    error_source_kind = source.map(|error| ::delta_arrow_reader::error_source_kind(error)));
+            },
         )
     };
     // Arrow 58's FFI exporter panics on NUL bytes in names or timestamp timezones.
@@ -74,9 +108,10 @@ fn export_schema(py: Python<'_>, schema: &Schema) -> PyResult<FFI_ArrowSchema> {
         .iter()
         .any(|field| field_contains_nul(field))
     {
-        return Err(export_error());
+        return Err(export_error("arrow_schema_contains_nul", None));
     }
-    FFI_ArrowSchema::try_from(schema).map_err(|_| export_error())
+    FFI_ArrowSchema::try_from(schema)
+        .map_err(|error| export_error("arrow_schema_export_failed", Some(&error)))
 }
 
 fn field_contains_nul(field: &Field) -> bool {
@@ -166,6 +201,7 @@ impl DeltaTable {
         warmup: &str,
         execution_options: Option<PyRef<'_, ScanExecutionOptions>>,
     ) -> PyResult<Self> {
+        logging::check_reentry()?;
         let location: String = py
             .import("os")?
             .call_method1("fspath", (location,))?
@@ -207,13 +243,10 @@ impl DeltaTable {
         if let Some(options) = execution_options {
             builder = builder.with_execution_options(options.options);
         }
-        let runtime = Arc::new(
-            Runtime::new()
-                .map_err(|_| PyRuntimeError::new_err("failed to create the reader runtime"))?,
-        );
-        let table = runtime.wait(py, builder.load_table())?.map_err(|error| {
-            reader_error(py, error.to_string(), error.phase().as_str(), error.code())
-        })?;
+        let runtime = Arc::new(Runtime::for_python("reader")?);
+        let table = runtime
+            .wait_logged(py, builder.load_table())?
+            .map_err(|error| core_error::<DeltaReaderError>(py, &error))?;
         Ok(Self { table, runtime })
     }
 
@@ -234,12 +267,11 @@ impl DeltaTable {
     /// Raises:
     ///     DeltaReaderError: The latest snapshot cannot be loaded or prepared.
     fn refresh(&self, py: Python<'_>) -> PyResult<Self> {
+        logging::check_reentry()?;
         let table = self
             .runtime
-            .wait(py, self.table.refresh())?
-            .map_err(|error| {
-                reader_error(py, error.to_string(), error.phase().as_str(), error.code())
-            })?;
+            .wait_logged(py, self.table.refresh())?
+            .map_err(|error| core_error::<DeltaReaderError>(py, &error))?;
         Ok(Self {
             table,
             runtime: Arc::clone(&self.runtime),
@@ -300,6 +332,7 @@ impl DeltaTable {
         target_partitions: Option<&Bound<'_, PyInt>>,
         execution_options: Option<PyRef<'_, ScanExecutionOptions>>,
     ) -> PyResult<RecordBatchStream> {
+        logging::check_reentry()?;
         let mut builder = self.table.scan();
         if let Some(options) = execution_options {
             builder = builder.with_execution_options(options.options);
@@ -344,12 +377,17 @@ impl DeltaTable {
             builder = builder
                 .with_target_partitions(target_partitions.extract::<usize>()?)
                 .map_err(|error| {
-                    reader_error(py, error.to_string(), error.phase().as_str(), error.code())
+                    diagnostics::validation_error(
+                        &error,
+                        "target_partitions",
+                        core_error::<DeltaReaderError>(py, &error),
+                    )
                 })?;
         }
-        let scan = self.runtime.wait(py, builder.build())?.map_err(|error| {
-            reader_error(py, error.to_string(), error.phase().as_str(), error.code())
-        })?;
+        let scan = self
+            .runtime
+            .wait_logged(py, builder.build())?
+            .map_err(|error| core_error::<DeltaReaderError>(py, &error))?;
         // Validate before Arrow's C callback exports the schema.
         export_schema(py, scan.schema().as_ref())?;
         Ok(RecordBatchStream::new(
@@ -469,6 +507,7 @@ impl DeltaTable {
 
 #[pymodule]
 fn delta_arrow_reader(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    logging::initialize()?;
     // Wheel metadata already contains Maturin's normalized Python version.
     let version = module
         .py()
@@ -494,4 +533,81 @@ fn delta_arrow_reader(module: &Bound<'_, PyModule>) -> PyResult<()> {
             "Session",
         ],
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arrow::datatypes::TimeUnit;
+
+    #[test]
+    fn schema_export_keeps_distinct_safe_failure_causes() {
+        // Isolate Python's package logger from other Rust tests in this process.
+        const CHILD: &str = "DELTA_ARROW_READER_SCHEMA_LOG_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "tests::schema_export_keeps_distinct_safe_failure_causes",
+                ])
+                .env(CHILD, "1")
+                .status()
+                .unwrap();
+            assert!(status.success());
+            return;
+        }
+        Python::initialize();
+        Python::attach(|py| {
+            let locals = PyDict::new(py);
+            py.run(
+                c"
+import logging
+records = []
+class Collect(logging.Handler):
+    def emit(self, record):
+        records.append(record)
+logger = logging.getLogger('delta_arrow_reader')
+logger.handlers = [Collect()]
+logger.setLevel(logging.ERROR)
+logger.propagate = False
+",
+                Some(&locals),
+                None,
+            )
+            .unwrap();
+            for (data_type, reason, source) in [
+                (
+                    DataType::Timestamp(TimeUnit::Microsecond, Some("private\0zone".into())),
+                    "arrow_schema_contains_nul",
+                    None,
+                ),
+                (
+                    DataType::Time32(TimeUnit::Nanosecond),
+                    "arrow_schema_export_failed",
+                    Some("arrow_c_data"),
+                ),
+            ] {
+                py.run(c"records.clear()", Some(&locals), None).unwrap();
+                let schema = Schema::new(vec![Field::new("private_field", data_type, true)]);
+                let error = export_schema(py, &schema).unwrap_err();
+                assert!(error.is_instance_of::<DeltaReaderError>(py));
+                locals.set_item("reason", reason).unwrap();
+                locals.set_item("source", source).unwrap();
+                py.run(
+                    c"
+record, = records
+assert record.levelno == logging.ERROR
+assert record.dar_fields['event'] == 'schema_export.failed'
+assert record.dar_fields['error_reason'] == reason
+assert record.dar_fields.get('error_source_kind') == source
+assert 'private' not in repr(record.__dict__)
+",
+                    Some(&locals),
+                    None,
+                )
+                .unwrap();
+            }
+            export_schema(py, &Schema::empty()).unwrap();
+        });
+    }
 }

@@ -1,6 +1,15 @@
 use super::*;
 use tracing::{Instrument, instrument::WithSubscriber};
 
+fn assert_subscriber_released(lifetime: &std::sync::Weak<()>, message: &str) {
+    // Concurrent callsite registration can briefly retain another test's subscriber.
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while lifetime.strong_count() > 0 {
+        assert!(std::time::Instant::now() < deadline, "{message}");
+        std::thread::sleep(Duration::from_millis(1));
+    }
+}
+
 fn caller(collector: &Collector) -> tracing::Span {
     with_default(
         collector.clone(),
@@ -15,7 +24,10 @@ fn unpolled_future_does_not_capture_its_creation_subscriber() -> TestResult {
     let future = with_default(creation.clone(), || DeltaTableBuilder::new("").load_table());
     assert!(creation.records().is_empty());
     drop(creation);
-    assert!(lifetime.upgrade().is_none());
+    assert_subscriber_released(
+        &lifetime,
+        "unpolled future retained its creation subscriber",
+    );
     let polling = Collector::new(Level::ERROR);
     let error = runtime()?
         .block_on(future.with_subscriber(polling.clone()))
@@ -95,10 +107,7 @@ fn public_operations_propagate_dispatch_and_parent_to_workers() -> TestResult {
         });
         let lifetime = collector.lifetime();
         drop(collector);
-        assert!(
-            lifetime.upgrade().is_none(),
-            "the returned table retained its caller"
-        );
+        assert_subscriber_released(&lifetime, "the returned table retained its caller");
         drop(table);
     }
     Ok(())
@@ -295,10 +304,7 @@ fn filtered_spans_keep_failures_visible_and_terminal_streams_release_resources()
             assert!(runtime.block_on(stream.next_batch())?.is_none());
             // Failure requests cleanup; wait for outstanding workers while retaining the stream.
             drop(runtime);
-            assert!(
-                lifetime.upgrade().is_none(),
-                "terminal stream retained its context"
-            );
+            assert_subscriber_released(&lifetime, "terminal stream retained its context");
         }
     }
     Ok(())
@@ -393,10 +399,7 @@ fn pending_load_and_refresh_report_abandonment_before_workers_finish() -> TestRe
             release.send(())?;
         }
         drop(runtime);
-        assert!(
-            lifetime.upgrade().is_none(),
-            "finished worker retained its context"
-        );
+        assert_subscriber_released(&lifetime, "finished worker retained its context");
     }
     Ok(())
 }
@@ -447,9 +450,9 @@ fn datafusion_terminal_error_releases_resources_without_an_extra_poll() -> TestR
             owner.assert_balanced();
             let lifetime = owner.lifetime();
             drop(owner);
-            assert!(
-                lifetime.upgrade().is_none(),
-                "terminal DataFusion stream retained its subscriber"
+            assert_subscriber_released(
+                &lifetime,
+                "terminal DataFusion stream retained its subscriber",
             );
             assert!(matches!(stream.next().now_or_never(), Some(None)));
         }
@@ -500,10 +503,7 @@ fn reusable_datafusion_plan_uses_each_polling_caller() -> TestResult {
         planning.assert_balanced();
         let lifetime = planning.lifetime();
         drop(planning);
-        assert!(
-            lifetime.upgrade().is_none(),
-            "plan retained the planning subscriber"
-        );
+        assert_subscriber_released(&lifetime, "plan retained the planning subscriber");
         for _ in 0..2 {
             let owner = Collector::new(Level::TRACE);
             let parent = caller(&owner);
@@ -533,10 +533,7 @@ fn reusable_datafusion_plan_uses_each_polling_caller() -> TestResult {
             owner.assert_balanced();
             let lifetime = owner.lifetime();
             drop(owner);
-            assert!(
-                lifetime.upgrade().is_none(),
-                "finished execution retained its subscriber"
-            );
+            assert_subscriber_released(&lifetime, "finished execution retained its subscriber");
         }
     }
     Ok(())

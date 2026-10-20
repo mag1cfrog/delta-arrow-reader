@@ -16,6 +16,89 @@ use tracing::instrument::WithSubscriber;
 
 const EXECUTION: &str = "datafusion_partition_execution";
 
+#[test]
+fn task_context_subscribers_follow_concurrent_queries_through_datafusion_tasks() -> TestResult {
+    let runtime = runtime()?;
+    for backend in [
+        ParquetReaderBackend::Direct,
+        ParquetReaderBackend::DeltaKernel,
+    ] {
+        let fixture = LogTable::new()?;
+        fixture.write(
+            1,
+            &[
+                fixture.parquet("secret-a.parquet", &[1, 2])?,
+                fixture.parquet("secret-b.parquet", &[3, 4])?,
+            ],
+        )?;
+        let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 2))?;
+        let first = Collector::new(Level::DEBUG);
+        let second = Collector::new(Level::DEBUG);
+        let unrelated = Collector::new(Level::DEBUG);
+        let task = |collector: &Collector| {
+            let config = context
+                .task_ctx()
+                .session_config()
+                .clone()
+                .with_extension(Arc::new(tracing::Dispatch::new(collector.clone())));
+            Arc::new(
+                ::datafusion::execution::TaskContext::from(&context.state())
+                    .with_session_config(config),
+            )
+        };
+        let (a, b) = runtime.block_on(
+            futures_util::future::join(
+                collect(Arc::clone(&plan), task(&first)),
+                collect(Arc::clone(&plan), task(&second)),
+            )
+            .with_subscriber(unrelated.clone()),
+        );
+        assert_eq!(a?.iter().map(|batch| batch.num_rows()).sum::<usize>(), 4);
+        assert_eq!(b?.iter().map(|batch| batch.num_rows()).sum::<usize>(), 4);
+        assert!(unrelated.records().is_empty());
+        let mut all_ids = std::collections::HashSet::new();
+        for collector in [&first, &second] {
+            let events = collector.events();
+            let started: Vec<_> = events
+                .iter()
+                .filter(|event| {
+                    event.fields.get("event") == Some(&json!(format!("{EXECUTION}.started")))
+                })
+                .collect();
+            let completed: Vec<_> = events
+                .iter()
+                .filter(|event| {
+                    event.fields.get("event") == Some(&json!(format!("{EXECUTION}.completed")))
+                })
+                .collect();
+            assert_eq!(started.len(), 2, "{events:?}");
+            assert_eq!(completed.len(), 2, "{events:?}");
+            for start in started {
+                let id = start.fields["operation_id"].as_u64().unwrap();
+                assert!(all_ids.insert(id));
+                assert_eq!(start.fields["plan_id"], plan_id);
+                assert!(completed.iter().any(|end| end.fields["operation_id"] == id));
+                assert_ne!(start.thread, std::thread::current().id());
+            }
+            assert!(
+                collector
+                    .records()
+                    .iter()
+                    .any(|record| record.is_span && record.thread != std::thread::current().id())
+            );
+            collector.assert_balanced();
+        }
+        assert!(
+            context
+                .task_ctx()
+                .session_config()
+                .get_extension::<tracing::Dispatch>()
+                .is_none()
+        );
+    }
+    Ok(())
+}
+
 pub(super) async fn plan(
     fixture: &LogTable,
     backend: ParquetReaderBackend,

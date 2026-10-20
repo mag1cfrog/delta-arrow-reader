@@ -1,6 +1,7 @@
 use std::{future::Future, pin::pin, time::Duration};
 
-use pyo3::prelude::*;
+use pyo3::{exceptions::PyRuntimeError, prelude::*};
+use tracing::instrument::WithSubscriber;
 
 /// Binding-owned runtime that can be released from any owning thread.
 pub(crate) struct Runtime {
@@ -14,6 +15,22 @@ impl Runtime {
         })
     }
 
+    pub(crate) fn for_python(kind: &'static str) -> PyResult<Self> {
+        Self::new().map_err(|error| {
+            crate::diagnostics::log_failure(
+                PyRuntimeError::new_err(format!("failed to create the {kind} runtime")),
+                || {
+                    tracing::error!(target: "delta_arrow_reader_python",
+                        event = "runtime_creation.failed", operation = "runtime_creation", outcome = "failed",
+                        runtime = kind, error_phase = "execution", error_code = "runtime_creation",
+                        error_reason = "runtime_creation_failed",
+                        error_os_code = error.raw_os_error(),
+                        error_source_kind = delta_arrow_reader::error_source_kind(&error));
+                },
+            )
+        })
+    }
+
     pub(crate) fn block_on<F: Future>(&self, future: F) -> F::Output {
         self.inner
             .as_ref()
@@ -21,22 +38,44 @@ impl Runtime {
             .block_on(future)
     }
 
-    /// Check signals on the calling Python thread between waits without the GIL.
-    /// Returning a signal error drops the owned future, cancelling further polling.
-    pub(crate) fn wait<F>(&self, py: Python<'_>, future: F) -> PyResult<F::Output>
+    pub(crate) fn wait_logged<F>(&self, py: Python<'_>, future: F) -> PyResult<F::Output>
     where
         F: Future + Send,
         F::Output: Send,
     {
+        crate::logging::check_reentry()?;
+        let (dispatch, interrupts) = crate::logging::dispatch()?;
+        self.wait(py, future.with_subscriber(dispatch), || {
+            interrupts.try_recv().ok()
+        })
+    }
+
+    /// Check signals and handler interruptions between waits without the GIL.
+    /// Returning an error drops the owned future, cancelling further polling.
+    pub(crate) fn wait<F>(
+        &self,
+        py: Python<'_>,
+        future: F,
+        handler_interrupt: impl Fn() -> Option<PyErr>,
+    ) -> PyResult<F::Output>
+    where
+        F: Future + Send,
+        F::Output: Send,
+    {
+        crate::logging::check_reentry()?;
+        let check_interrupts = || match handler_interrupt() {
+            Some(error) => Err(error),
+            None => py.check_signals(),
+        };
         let mut future = pin!(future);
-        py.check_signals()?;
+        check_interrupts()?;
         loop {
             let result = py.detach(|| {
                 self.block_on(async {
                     tokio::time::timeout(Duration::from_millis(100), future.as_mut()).await
                 })
             });
-            py.check_signals()?;
+            check_interrupts()?;
             if let Ok(result) = result {
                 return Ok(result);
             }
@@ -99,19 +138,23 @@ mod tests {
             let (release, pending) = tokio::sync::oneshot::channel::<()>();
             let (admit, work) = mpsc::channel();
             let error = runtime
-                .wait(py, async move {
-                    // SAFETY: PyErr_SetInterrupt may be called without the GIL.
-                    unsafe { pyo3::ffi::PyErr_SetInterrupt() };
-                    // Bound the test if signal handling regresses.
-                    let _ = tokio::time::timeout(TIMEOUT, pending).await;
-                    admit.send(()).unwrap();
-                })
+                .wait(
+                    py,
+                    async move {
+                        // SAFETY: PyErr_SetInterrupt may be called without the GIL.
+                        unsafe { pyo3::ffi::PyErr_SetInterrupt() };
+                        // Bound the test if signal handling regresses.
+                        let _ = tokio::time::timeout(TIMEOUT, pending).await;
+                        admit.send(()).unwrap();
+                    },
+                    || None,
+                )
                 .unwrap_err();
             assert!(error.is_instance_of::<PyKeyboardInterrupt>(py));
             // Both channel endpoints owned by the future must be gone already.
             assert!(release.send(()).is_err());
             assert_eq!(work.try_recv(), Err(mpsc::TryRecvError::Disconnected));
-            assert_eq!(runtime.wait(py, async { 42 }).unwrap(), 42);
+            assert_eq!(runtime.wait(py, async { 42 }, || None).unwrap(), 42);
 
             signal.call_method1("signal", (sigint, previous)).unwrap();
         });

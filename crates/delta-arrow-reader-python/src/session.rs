@@ -3,12 +3,15 @@
 use std::sync::{Arc, Mutex};
 
 use datafusion::execution::context::{SQLOptions, SessionContext};
-use delta_arrow_reader::datafusion::{ScanOptions, register_table};
-use pyo3::{exceptions::PyRuntimeError, prelude::*};
+use delta_arrow_reader::{
+    datafusion::{ScanOptions, register_table},
+    error_source_kind,
+};
+use pyo3::prelude::*;
 
 use crate::{
-    DeltaTable, export_schema, options::ScanExecutionOptions, reader_error, runtime::Runtime,
-    stream::RecordBatchStream,
+    DeltaReaderError, DeltaTable, binding_error, core_error, export_schema,
+    options::ScanExecutionOptions, runtime::Runtime, stream::RecordBatchStream,
 };
 
 /// Query Delta tables with SQL and read the results as PyArrow batches.
@@ -47,10 +50,8 @@ pub(crate) struct SessionState {
 impl Session {
     #[new]
     fn new() -> PyResult<Self> {
-        let runtime = Arc::new(
-            Runtime::new()
-                .map_err(|_| PyRuntimeError::new_err("failed to create the SQL runtime"))?,
-        );
+        crate::logging::check_reentry()?;
+        let runtime = Arc::new(Runtime::for_python("SQL")?);
         let context = runtime.block_on(async { SessionContext::new() });
         Ok(Self {
             state: Arc::new(SessionState {
@@ -86,7 +87,8 @@ impl Session {
     /// Raises:
     ///     TypeError: An argument has the wrong type.
     ///     DeltaReaderError: Registration fails, including an invalid or duplicate
-    ///         name. The error has phase `datafusion` and code `sql_registration`.
+    ///         name. Core failures retain their phase, code, reason, and source
+    ///         category. Invalid or duplicate names have code `datafusion_adapter`.
     ///         A duplicate does not replace the existing table.
     #[pyo3(signature = (name, table, *, execution_options=None))]
     fn register_table(
@@ -96,21 +98,29 @@ impl Session {
         table: PyRef<'_, DeltaTable>,
         execution_options: Option<PyRef<'_, ScanExecutionOptions>>,
     ) -> PyResult<()> {
+        crate::logging::check_reentry()?;
         let options = ScanOptions {
             execution_options: execution_options
                 .map(|options| options.options)
                 .unwrap_or_default(),
             ..ScanOptions::default()
         };
-        let mut runtimes = self
-            .state
-            .table_runtimes
-            .lock()
-            .map_err(|_| sql_error(py, "sql_registration"))?;
-        register_table(&self.state.context, name, table.table.clone(), options)
-            .map_err(|_| sql_error(py, "sql_registration"))?;
-        runtimes.push(Arc::clone(&table.runtime));
-        Ok(())
+        let runtime = Arc::clone(&table.runtime);
+        let table = table.table.clone();
+        let lock_result = self.state.runtime.wait_logged(py, async {
+            // Wait for the catalog lock without the GIL: logging handlers may release it.
+            let mut runtimes = self.state.table_runtimes.lock().map_err(|_| {
+                tracing::error!(target: "delta_arrow_reader_python",
+                    event = "sql_registration.failed", operation = "sql_registration", outcome = "failed",
+                    error_phase = "datafusion", error_code = "sql_registration",
+                    error_reason = "registration_state_poisoned");
+            })?;
+            // Convert Core failures after releasing the lock, on the Python calling thread.
+            Ok(register_table(&self.state.context, name, table, options)
+                .map(|_| runtimes.push(runtime)))
+        })?;
+        let registration_result = lock_result.map_err(|()| sql_error(py, "sql_registration"))?;
+        registration_result.map_err(|error| core_error::<DeltaReaderError>(py, &error))
     }
 
     /// Run a read-only SQL query over registered tables.
@@ -147,6 +157,7 @@ impl Session {
     /// `code=sql_execution` in the message. A failed reader remains failed.
     /// SQL error messages omit query text, literal values and table paths.
     fn sql<'py>(&self, py: Python<'py>, query: &str) -> PyResult<Bound<'py, PyAny>> {
+        crate::logging::check_reentry()?;
         let options = SQLOptions::new()
             .with_allow_ddl(false)
             .with_allow_dml(false)
@@ -154,7 +165,16 @@ impl Session {
         let frame = self
             .state
             .runtime
-            .wait(py, self.state.context.sql_with_options(query, options))?
+            .wait_logged(py, async {
+                let result = self.state.context.sql_with_options(query, options).await;
+                result.inspect_err(|error| {
+                    // Logical SQL planning is owned by the binding; provider execution starts later.
+                    tracing::error!(target: "delta_arrow_reader_python",
+                        event = "sql_planning.failed", operation = "sql_planning", outcome = "failed",
+                        error_phase = "datafusion", error_code = "sql_planning",
+                        error_reason = "sql_planning_failed", error_source_kind = error_source_kind(error));
+                })
+            })?
             .map_err(|_| sql_error(py, "sql_planning"))?;
         export_schema(py, frame.schema().as_arrow())?;
         RecordBatchStream::from_sql(frame, Arc::clone(&self.state)).into_reader(py)
@@ -162,7 +182,7 @@ impl Session {
 }
 
 fn sql_error(py: Python<'_>, code: &'static str) -> PyErr {
-    reader_error(
+    binding_error(
         py,
         format!("delta reader error: phase=datafusion code={code}"),
         "datafusion",

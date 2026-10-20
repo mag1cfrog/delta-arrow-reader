@@ -1,20 +1,29 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    error::Error,
+    fmt,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 
 use arrow::{
     datatypes::{DataType, Field, Fields, Schema, SchemaRef},
     error::ArrowError,
     ffi::FFI_ArrowSchema,
-    ffi_stream::FFI_ArrowArrayStream,
     record_batch::{RecordBatch, RecordBatchReader},
 };
 use datafusion::{common::DataFusionError, dataframe::DataFrame};
-use delta_arrow_reader::DeltaBatchStream;
+use delta_arrow_reader::{DeltaBatchStream, DeltaReaderError, error_source_kind};
 use futures_util::{StreamExt, TryStreamExt, stream::BoxStream};
 use pyo3::{
-    exceptions::{PyNotImplementedError, PyRuntimeError, PyTypeError, PyValueError},
+    exceptions::{
+        PyKeyboardInterrupt, PyNotImplementedError, PyRuntimeError, PyTypeError, PyValueError,
+    },
     prelude::*,
     types::PyCapsule,
 };
+use tracing::{Dispatch, instrument::WithSubscriber};
 
 use crate::runtime::Runtime;
 use crate::session::SessionState;
@@ -53,9 +62,20 @@ impl RecordBatchStream {
     pub(crate) fn from_sql(frame: DataFrame, session: Arc<SessionState>) -> Self {
         let schema = Arc::new(frame.schema().as_arrow().clone());
         // Starting the physical plan can spawn work, so wait for the first pull.
-        let stream = futures_util::stream::once(async move { frame.execute_stream().await })
-            .try_flatten()
-            .boxed();
+        let stream = futures_util::stream::once(async move {
+            let task = frame.task_ctx();
+            let config = task
+                .session_config()
+                .clone()
+                .with_extension(Arc::new(tracing::dispatcher::get_default(Clone::clone)));
+            let plan = frame.create_physical_plan().await?;
+            datafusion::physical_plan::execute_stream(
+                plan,
+                Arc::new(task.with_session_config(config)),
+            )
+        })
+        .try_flatten()
+        .boxed();
         let runtime = Arc::clone(&session.runtime);
         Self::from_source(
             schema,
@@ -74,6 +94,8 @@ impl RecordBatchStream {
                 stream: Some(stream),
                 runtime,
                 terminal_error: None,
+                dispatch: None,
+                interrupted: Arc::new(AtomicBool::new(false)),
             })),
         }
     }
@@ -109,6 +131,7 @@ impl RecordBatchStream {
         py: Python<'py>,
         requested_schema: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Bound<'py, PyCapsule>> {
+        crate::logging::check_reentry()?;
         let mut slot = self
             .reader
             .lock()
@@ -123,7 +146,7 @@ impl RecordBatchStream {
         drop(slot);
         PyCapsule::new_with_value(
             py,
-            FFI_ArrowArrayStream::new(Box::new(reader)),
+            crate::arrow_stream::export(Box::new(reader)),
             c"arrow_array_stream",
         )
     }
@@ -132,6 +155,7 @@ impl RecordBatchStream {
     ///
     /// After export, call `close()` on the consuming reader instead.
     fn close(&self) -> PyResult<()> {
+        crate::logging::check_reentry()?;
         let reader = self
             .reader
             .lock()
@@ -254,13 +278,96 @@ enum BatchStream {
 }
 
 impl BatchStream {
-    async fn next_batch(&mut self) -> Result<Option<RecordBatch>, String> {
+    async fn next_batch(&mut self) -> Result<Option<RecordBatch>, BatchReadError> {
         match self {
-            Self::Delta(stream) => stream.next_batch().await.map_err(|error| error.to_string()),
+            Self::Delta(stream) => stream.next_batch().await.map_err(BatchReadError::Delta),
             Self::Sql { stream, .. } => stream
                 .try_next()
                 .await
-                .map_err(|_| "delta reader error: phase=datafusion code=sql_execution".to_owned()),
+                .inspect_err(|error| {
+                    if !core_owns_sql_error(error) {
+                        tracing::error!(target: "delta_arrow_reader_python",
+                            event = "sql_execution.failed", operation = "sql_execution", outcome = "failed",
+                            error_phase = "datafusion", error_code = "sql_execution",
+                            error_reason = "sql_execution_failed", error_source_kind = error_source_kind(error));
+                    }
+                })
+                .map_err(BatchReadError::Sql),
+        }
+    }
+}
+
+// SQL plans in this binding only obtain reader errors from DAR-owned provider boundaries.
+fn core_owns_sql_error(error: &DataFusionError) -> bool {
+    let mut error: &(dyn Error + 'static) = error;
+    for _ in 0..16 {
+        let datafusion = error
+            .downcast_ref::<DataFusionError>()
+            .or_else(|| {
+                error
+                    .downcast_ref::<Box<DataFusionError>>()
+                    .map(AsRef::as_ref)
+            })
+            .or_else(|| {
+                error
+                    .downcast_ref::<Arc<DataFusionError>>()
+                    .map(AsRef::as_ref)
+            });
+        error = if let Some(datafusion) = datafusion {
+            match datafusion {
+                DataFusionError::External(source) => source.as_ref(),
+                DataFusionError::Context(_, source) | DataFusionError::Diagnostic(_, source) => {
+                    source.as_ref()
+                }
+                DataFusionError::Shared(source) => source.as_ref(),
+                DataFusionError::ArrowError(source, _) => source.as_ref(),
+                // Collections may also contain failures from unrelated SQL operators.
+                _ => return false,
+            }
+        } else if let Some(ArrowError::ExternalError(source)) = error.downcast_ref::<ArrowError>() {
+            source.as_ref()
+        } else {
+            return error.is::<DeltaReaderError>()
+                || error.is::<Box<DeltaReaderError>>()
+                || error.is::<Arc<DeltaReaderError>>();
+        };
+    }
+    false
+}
+
+// Retain typed causes for diagnostics while keeping Arrow's messages redacted.
+enum BatchReadError {
+    Delta(DeltaReaderError),
+    Sql(DataFusionError),
+    Interrupted,
+}
+
+impl fmt::Display for BatchReadError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Delta(error) => fmt::Display::fmt(error, formatter),
+            Self::Sql(_) => {
+                formatter.write_str("delta reader error: phase=datafusion code=sql_execution")
+            }
+            Self::Interrupted => formatter.write_str(
+                "delta reader error: phase=execution code=python_signal reason=reader_wait_interrupted",
+            ),
+        }
+    }
+}
+
+impl fmt::Debug for BatchReadError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, formatter)
+    }
+}
+
+impl Error for BatchReadError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Delta(error) => Some(error),
+            Self::Sql(error) => Some(error),
+            Self::Interrupted => None,
         }
     }
 }
@@ -271,34 +378,58 @@ struct BlockingBatchReader {
     stream: Option<BatchStream>,
     runtime: Arc<Runtime>,
     // Repeat failures so a failed scan never appears successfully exhausted.
-    terminal_error: Option<String>,
+    terminal_error: Option<Arc<BatchReadError>>,
+    // Reuse the first pull's subscriber, including for later worker events.
+    dispatch: Option<Dispatch>,
+    interrupted: Arc<AtomicBool>,
 }
 
 impl Iterator for BlockingBatchReader {
     type Item = Result<RecordBatch, ArrowError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(message) = &self.terminal_error {
-            return Some(Err(ArrowError::ExternalError(message.clone().into())));
+        if let Some(error) = &self.terminal_error {
+            return Some(Err(ArrowError::ExternalError(Box::new(Arc::clone(error)))));
         }
         let stream = self.stream.as_mut()?;
         let result = Python::attach(|py| {
-            self.runtime.wait(py, stream.next_batch()).map_err(|_| {
-                "delta reader error: phase=execution code=python_signal reason=reader_wait_interrupted"
-                    .to_owned()
-            })
+            let mut read = || {
+                if self.dispatch.is_none() {
+                    self.dispatch = Some(crate::logging::stream_dispatch(Arc::clone(
+                        &self.interrupted,
+                    ))?);
+                }
+                let dispatch = self
+                    .dispatch
+                    .as_ref()
+                    .expect("stream subscriber initialized");
+                self.runtime.wait(
+                    py,
+                    stream.next_batch().with_subscriber(dispatch.clone()),
+                    || {
+                        self.interrupted
+                            .load(Ordering::Relaxed)
+                            .then(|| PyKeyboardInterrupt::new_err(()))
+                    },
+                )
+            };
+            // Arrow reports control flow as a safe error, without retaining a traceback.
+            read().map_err(|_| BatchReadError::Interrupted)
         })
         .flatten();
         match result {
             Ok(Some(batch)) => Some(Ok(batch)),
             Ok(None) => {
                 self.stream = None;
+                self.dispatch = None;
                 None
             }
-            Err(message) => {
+            Err(error) => {
                 self.stream = None;
-                self.terminal_error = Some(message.clone());
-                Some(Err(ArrowError::ExternalError(message.into())))
+                self.dispatch = None;
+                let error = Arc::new(error);
+                self.terminal_error = Some(Arc::clone(&error));
+                Some(Err(ArrowError::ExternalError(Box::new(error))))
             }
         }
     }
@@ -308,4 +439,178 @@ impl RecordBatchReader for BlockingBatchReader {
     fn schema(&self) -> SchemaRef {
         Arc::clone(&self.schema)
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+
+    use super::*;
+    use delta_arrow_reader::{DeltaScanExecutionOptions, error_source_kind};
+
+    fn failed_reader(error: BatchReadError, runtime: &Arc<Runtime>) -> BlockingBatchReader {
+        BlockingBatchReader {
+            schema: Arc::new(Schema::empty()),
+            stream: None,
+            runtime: Arc::clone(runtime),
+            terminal_error: Some(Arc::new(error)),
+            dispatch: None,
+            interrupted: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    #[test]
+    fn sql_error_replays_keep_distinct_typed_causes_and_safe_messages() {
+        let runtime = Arc::new(Runtime::new().unwrap());
+        for (source, kind) in [
+            (
+                DataFusionError::IoError(io::Error::new(io::ErrorKind::NotFound, "secret path")),
+                "not_found",
+            ),
+            (
+                DataFusionError::IoError(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "secret credentials",
+                )),
+                "permission_denied",
+            ),
+            (
+                DataFusionError::Shared(Arc::new(DataFusionError::Context(
+                    "secret SQL".into(),
+                    Box::new(DataFusionError::ArrowError(
+                        Box::new(ArrowError::DivideByZero),
+                        Some("secret backtrace".into()),
+                    )),
+                ))),
+                "divide_by_zero",
+            ),
+            (
+                DataFusionError::External(Box::new(Unformattable)),
+                "unknown",
+            ),
+        ] {
+            let mut reader = failed_reader(BatchReadError::Sql(source), &runtime);
+            for _ in 0..3 {
+                let error = reader.next().unwrap().unwrap_err();
+                assert_eq!(
+                    error.to_string(),
+                    "External error: delta reader error: phase=datafusion code=sql_execution"
+                );
+                assert!(!format!("{error:?}").contains("secret"));
+                assert_eq!(error_source_kind(&error), kind);
+                assert!(
+                    error
+                        .source()
+                        .unwrap()
+                        .source()
+                        .unwrap()
+                        .is::<DataFusionError>()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn direct_and_sql_errors_retain_the_original_reader_error() {
+        let runtime = Arc::new(Runtime::new().unwrap());
+        for sql in [false, true] {
+            let source = DeltaScanExecutionOptions::new()
+                .with_output_buffer_batches_per_partition(0)
+                .unwrap_err();
+            let failure = if sql {
+                BatchReadError::Sql(DataFusionError::Context(
+                    "secret operator".into(),
+                    Box::new(DataFusionError::External(Box::new(source))),
+                ))
+            } else {
+                BatchReadError::Delta(source)
+            };
+            let mut reader = failed_reader(failure, &runtime);
+            for _ in 0..3 {
+                let error = reader.next().unwrap().unwrap_err();
+                let reader_error =
+                    std::iter::successors(Some(&error as &(dyn Error + 'static)), |&error| {
+                        error.source()
+                    })
+                    .find_map(|error| error.downcast_ref::<DeltaReaderError>())
+                    .unwrap();
+                assert_eq!(reader_error.code(), "invalid_configuration");
+                assert_eq!(
+                    reader_error.reason(),
+                    "output_buffer_batches_per_partition_must_be_positive"
+                );
+                assert!(!format!("{error} {error:?}").contains("secret"));
+            }
+        }
+    }
+
+    #[test]
+    fn interruption_replays_preserve_the_arrow_message() {
+        let runtime = Arc::new(Runtime::new().unwrap());
+        let mut reader = failed_reader(BatchReadError::Interrupted, &runtime);
+        for _ in 0..3 {
+            let error = reader.next().unwrap().unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                "External error: delta reader error: phase=execution code=python_signal reason=reader_wait_interrupted"
+            );
+            assert!(!format!("{error:?}").contains("secret"));
+            assert!(error.source().unwrap().source().is_none());
+        }
+    }
+
+    #[test]
+    fn sql_ownership_recognizes_typed_wrappers_without_hiding_other_failures() {
+        let reader_error = || {
+            DeltaScanExecutionOptions::new()
+                .with_output_buffer_batches_per_partition(0)
+                .unwrap_err()
+        };
+        let wrapped = DataFusionError::Shared(Arc::new(DataFusionError::Context(
+            "secret context".into(),
+            Box::new(DataFusionError::ArrowError(
+                Box::new(ArrowError::ExternalError(Box::new(
+                    DataFusionError::External(Box::new(reader_error())),
+                ))),
+                Some("secret backtrace".into()),
+            )),
+        )));
+        assert!(core_owns_sql_error(&wrapped));
+        assert!(core_owns_sql_error(&DataFusionError::External(Box::new(
+            Box::new(reader_error())
+        ))));
+        assert!(core_owns_sql_error(&DataFusionError::External(Box::new(
+            Arc::new(reader_error())
+        ))));
+        let collection =
+            DataFusionError::External(Box::new(Arc::new(DataFusionError::Collection(vec![
+                wrapped,
+                DataFusionError::ArrowError(Box::new(ArrowError::DivideByZero), None),
+            ]))));
+        assert!(!core_owns_sql_error(&collection));
+        assert_eq!(error_source_kind(&collection), "multiple_errors");
+        for error in [
+            DataFusionError::Execution("delta reader error: secret".into()),
+            DataFusionError::External(Box::new(Unformattable)),
+        ] {
+            assert!(!core_owns_sql_error(&error));
+        }
+        let mut deep = DataFusionError::External(Box::new(reader_error()));
+        for _ in 0..32 {
+            deep = DataFusionError::Context("secret context".into(), Box::new(deep));
+        }
+        assert!(!core_owns_sql_error(&deep));
+        assert_eq!(error_source_kind(&deep), "source_chain_limit");
+    }
+
+    #[derive(Debug)]
+    struct Unformattable;
+
+    impl fmt::Display for Unformattable {
+        fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
+            panic!("raw dependency errors must not be formatted")
+        }
+    }
+
+    impl Error for Unformattable {}
 }

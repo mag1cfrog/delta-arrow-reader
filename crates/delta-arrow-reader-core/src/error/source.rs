@@ -194,12 +194,20 @@ pub fn source_kind(mut error: &(dyn Error + 'static)) -> &'static str {
         #[cfg(feature = "datafusion")]
         {
             use datafusion::common::DataFusionError;
-            let datafusion = error.downcast_ref::<DataFusionError>().or_else(|| {
-                error
-                    .downcast_ref::<Box<DataFusionError>>()
-                    .map(AsRef::as_ref)
-            });
+            let datafusion = error
+                .downcast_ref::<DataFusionError>()
+                .or_else(|| {
+                    error
+                        .downcast_ref::<Box<DataFusionError>>()
+                        .map(AsRef::as_ref)
+                })
+                .or_else(|| {
+                    error
+                        .downcast_ref::<std::sync::Arc<DataFusionError>>()
+                        .map(AsRef::as_ref)
+                });
             match datafusion {
+                Some(DataFusionError::SQL(..)) => return "sql_parse",
                 Some(DataFusionError::Plan(_)) => return "datafusion_plan",
                 Some(DataFusionError::Execution(_)) => return "datafusion_execution",
                 Some(DataFusionError::Internal(_)) => return "datafusion_internal",
@@ -456,6 +464,20 @@ mod tests {
     #[test]
     fn datafusion_boxing_preserves_categories_and_does_not_choose_one_of_many_causes() {
         use datafusion::common::DataFusionError;
+        use datafusion::sql::sqlparser::parser::ParserError;
+
+        let parse = DataFusionError::Shared(std::sync::Arc::new(DataFusionError::Context(
+            "secret-context".into(),
+            Box::new(DataFusionError::SQL(
+                Box::new(ParserError::ParserError("secret-query".into())),
+                Some("secret-backtrace".into()),
+            )),
+        )));
+        assert_eq!(source_kind(&parse), "sql_parse");
+        assert_eq!(
+            source_kind(&DataFusionError::External(Box::new(Unprintable))),
+            "unknown"
+        );
 
         let error = DeltaReaderError::DataFusionAdapter {
             reason: "scan_output_projection_failed",
@@ -485,5 +507,12 @@ mod tests {
             ])),
             "multiple_errors"
         );
+        let collection = DataFusionError::External(Box::new(std::sync::Arc::new(
+            DataFusionError::Collection(vec![
+                DataFusionError::IoError(io::ErrorKind::NotFound.into()),
+                DataFusionError::IoError(io::ErrorKind::PermissionDenied.into()),
+            ]),
+        )));
+        assert_eq!(source_kind(&collection), "multiple_errors");
     }
 }

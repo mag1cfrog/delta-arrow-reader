@@ -11,7 +11,7 @@ use pyo3::{
     types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple},
 };
 
-use crate::reader_error;
+use crate::{DeltaReaderError, core_error};
 
 const FILTER_SHAPE_ERROR: &str =
     "filters must be a list of (column, operator, value) tuples or a list of lists of these tuples";
@@ -68,11 +68,10 @@ fn parse_condition(table: &DeltaTable, condition: &Bound<'_, PyAny>) -> PyResult
         .map_err(|_| PyTypeError::new_err("filter operators must be strings"))?;
     let value = condition.get_item(2)?;
     let data_type = table.predicate_column_type(&column).map_err(|error| {
-        reader_error(
-            condition.py(),
-            error.to_string(),
-            error.phase().as_str(),
-            error.code(),
+        crate::diagnostics::validation_error(
+            &error,
+            "filters",
+            core_error::<DeltaReaderError>(condition.py(), &error),
         )
     })?;
     if matches!(operator.as_str(), "is" | "is not") {

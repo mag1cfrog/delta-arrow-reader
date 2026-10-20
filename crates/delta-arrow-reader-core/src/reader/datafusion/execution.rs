@@ -668,6 +668,11 @@ impl ExecutionPlan for DeltaScanExec {
         partition: usize,
         context: Arc<TaskContext>,
     ) -> DataFusionResult<SendableRecordBatchStream> {
+        // DataFusion-owned tasks can enter without the host's scoped subscriber.
+        let dispatch = context
+            .session_config()
+            .get_extension::<tracing::Dispatch>();
+        let _guard = dispatch.as_deref().map(tracing::dispatcher::set_default);
         let operation = StreamOperation::start_partition(
             self.plan_id,
             self.reader_plan.snapshot_version,
@@ -756,6 +761,13 @@ impl ExecutionPlan for DeltaScanExec {
             },
         );
 
+        let Some(poll_dispatch) = dispatch.clone() else {
+            return Ok(Box::pin(RecordBatchStreamAdapter::new(schema, stream)));
+        };
+        let mut stream = Box::pin(stream);
+        let stream = stream::poll_fn(move |cx| {
+            tracing::dispatcher::with_default(&poll_dispatch, || stream.poll_next_unpin(cx))
+        });
         Ok(Box::pin(RecordBatchStreamAdapter::new(schema, stream)))
     }
 
