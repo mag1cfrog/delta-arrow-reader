@@ -60,8 +60,18 @@ JSON input and file-read failures identify the supplying option in `argument`,
 such as `--predicate-file`, without exposing the filename. `expected` describes
 that input's structure, and `hint` gives a next action for malformed or incomplete
 JSON, schema violations, unreadable files, oversized inputs, or predicate limits.
-Schema hints describe the input's rules; they do not identify unknown keys or
-quote invalid operators, types, or values.
+Schema errors report known field locations in `field_path`. Invalid `op`, scalar
+`type`, or `parquet_backend` values include the permitted choices in `expected`.
+Type errors describe the required JSON type or integer range. Missing and
+duplicate fields identify the known field to add or deduplicate. For example,
+an invalid scalar type inside a comparison reports `/value/type`.
+
+`field_path` is a JSON Pointer. Unknown fields identify their containing object
+and list its permitted fields. Storage option errors also identify the containing
+object, since its keys may contain credentials. An empty path, `""`, identifies
+the document root. A missing field's path identifies where to add it. Unknown
+keys and supplied values never appear in these paths or hints. When the document
+cannot be analyzed safely, diagnostics keep the input's general guidance.
 
 Execution settings rejected by a native range check also include `field_path`,
 a JSON Pointer made from known schema fields. For example, an execution file
@@ -171,7 +181,9 @@ parser's `argument_kind`. JSON failures include `json_kind` (`Syntax`, `Data`, o
 machine mode). Oversized input and predicate validation
 use fixed reasons, such as `input_file_too_large` or
 `predicate_depth_limit_exceeded`. Serde schema failures share `Data`; their
-messages are not parsed or printed. I/O failures retain `io_kind` and an OS error
+messages are not parsed or printed. Line and column record where parsing stopped;
+field guidance may identify another problem in an input with multiple errors.
+I/O failures retain `io_kind` and an OS error
 number when available. Arrow failures use the core's safe source classifier.
 
 Provider configuration rejected during table loading is a reader failure

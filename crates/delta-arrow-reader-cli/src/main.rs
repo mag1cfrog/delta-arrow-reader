@@ -107,6 +107,7 @@ enum Error {
     InputJson {
         source: serde_json::Error,
         input: JsonInputSource,
+        correction: Option<InputCorrection>,
     },
     #[snafu(display("Invalid JSON input (reason={reason})."))]
     InputValidation {
@@ -219,7 +220,11 @@ impl Error {
         let (input, hint) = match self {
             Self::Argument { correction, .. } => return correction.clone(),
             Self::InputValidation { correction, .. } => return Some(correction.clone()),
-            Self::InputJson { source, input } => (
+            Self::InputJson {
+                correction: Some(correction),
+                ..
+            } => return Some(correction.clone()),
+            Self::InputJson { source, input, .. } => (
                 *input,
                 match source.classify() {
                     serde_json::error::Category::Syntax => {
@@ -1049,6 +1054,35 @@ mod tests {
         .to_json_diagnostic();
         assert_eq!(record["recovery"], "change_request");
         assert_eq!(record["retryable"], false);
+
+        for (source, source_kind, recovery) in [
+            (
+                object_store::Error::Unauthenticated {
+                    path: "secret-path".into(),
+                    source: Box::new(io::Error::other("secret-token: timeout, permission denied")),
+                },
+                "unauthenticated",
+                "authorize",
+            ),
+            (
+                object_store::Error::PermissionDenied {
+                    path: "secret-path".into(),
+                    source: Box::new(io::Error::other("secret-token: unauthorized, timeout")),
+                },
+                "permission_denied",
+                "request_access",
+            ),
+        ] {
+            let error = Error::ArrowIpc {
+                source: ArrowError::ExternalError(Box::new(source)),
+            };
+            let record = error.to_json_diagnostic();
+            assert_eq!(record["source_kind"], source_kind);
+            assert_eq!(record["recovery"], recovery);
+            assert_eq!(record["retryable"], false);
+            assert!(!record.to_string().contains("secret"));
+            assert!(!diagnostics::capture("trace", || error.log_failure()).contains("secret"));
+        }
     }
 
     #[test]

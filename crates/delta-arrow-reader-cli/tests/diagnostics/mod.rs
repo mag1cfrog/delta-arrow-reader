@@ -171,37 +171,168 @@ fn input_schema_corrections_omit_unknown_keys_and_values() -> Result<(), Box<dyn
 {
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("secret-input.json");
-    for (argument, inputs, expected) in [
+    for (argument, inputs) in [
         (
             "--storage-options-file",
             &[
-                r#"{"secret-key":null}"#,
-                r#"{"secret-key":"secret-value","secret-key":"secret-duplicate"}"#,
+                (
+                    r#"{"secret-key":null}"#,
+                    "",
+                    "string storage option",
+                    "expected format",
+                ),
+                (
+                    r#"{"secret-key":"secret-value","secret-key":"secret-duplicate"}"#,
+                    "",
+                    "unique object keys",
+                    "duplicate",
+                ),
+                (
+                    r#"{"op":"secret-value","op":"secret-duplicate"}"#,
+                    "",
+                    "unique object keys",
+                    "duplicate",
+                ),
             ][..],
-            "string values",
         ),
         (
             "--predicate-file",
             &[
-                r#"{"op":"secret-operator","secret-key":"secret-value"}"#,
-                r#"{"op":"eq","column":"secret-column","value":{"type":"secret-type","value":"secret-value"}}"#,
-                r#"{"op":"constant","value":true,"secret-key":"secret-value"}"#,
-                r#"{"op":"eq","column":"secret-column","value":{"type":"int32","value":"secret-value"}}"#,
-                r#"{"op":"constant","value":true,"value":false}"#,
+                (
+                    r#"{"op":"secret-operator","secret-key":"secret-value"}"#,
+                    "/op",
+                    "one of: constant, eq",
+                    "listed values",
+                ),
+                (
+                    r#"{"op":["secret-operator"]}"#,
+                    "/op",
+                    "one of: constant, eq",
+                    "listed values",
+                ),
+                (
+                    r#"{"value":true}"#,
+                    "/op",
+                    "one of: constant, eq",
+                    "missing field",
+                ),
+                (
+                    r#"{"op":"eq","column":"secret-column","value":{"type":"secret-type","value":"secret-value"}}"#,
+                    "/value/type",
+                    "one of: boolean, int8",
+                    "listed values",
+                ),
+                (
+                    r#"{"op":"constant","value":true,"secret-key":"secret-value"}"#,
+                    "",
+                    "object fields: op, value",
+                    "unsupported fields",
+                ),
+                (
+                    r#"{"op":"eq","column":"secret-column","value":{"type":"int32","value":"secret-value"}}"#,
+                    "/value/value",
+                    "canonical decimal integer string",
+                    "allowed range",
+                ),
+                (
+                    r#"{"op":"constant","value":true,"value":false}"#,
+                    "/value",
+                    "one occurrence",
+                    "duplicate field",
+                ),
+                (
+                    r#"{"op":"constant","value":true,"\u0076alue":false}"#,
+                    "/value",
+                    "one occurrence",
+                    "duplicate field",
+                ),
+                (
+                    r#"{"op":"constant","op":"constant","value":true}"#,
+                    "/op",
+                    "one occurrence",
+                    "duplicate field",
+                ),
+                (
+                    r#"{"op":"constant"}"#,
+                    "/value",
+                    "required field",
+                    "missing field",
+                ),
+                (
+                    r#"{"op":"not","arg":{"op":"and","args":[{"op":"constant","value":true},{"op":"eq","column":"secret-column","value":{"type":"secret-type","value":"secret-value"}}]}}"#,
+                    "/arg/args/1/value/type",
+                    "one of: boolean",
+                    "listed values",
+                ),
+                (
+                    r#"{"op":"not","arg":{"op":"constant","value":true,"secret-key":"secret-value"}}"#,
+                    "/arg",
+                    "object fields: op, value",
+                    "unsupported fields",
+                ),
+                (
+                    r#"{"op":"eq","column":"secret-column","value":{"type":"binary","value":[0,256]}}"#,
+                    "/value/value/1",
+                    "from 0 to 255",
+                    "expected format",
+                ),
+                (
+                    r#"{"op":"eq","column":"secret-column","value":{"type":"timestamp_us","value":"0","timezone":""}}"#,
+                    "/value/timezone",
+                    "nonempty JSON string",
+                    "timezone string",
+                ),
+                (
+                    r#"{"op":"eq","column":"secret-column","value":{"type":"decimal128","value":"1","precision":2.0,"scale":0}}"#,
+                    "/value/precision",
+                    "from 0 to 255",
+                    "expected format",
+                ),
             ][..],
-            "'op'",
         ),
         (
             "--execution-options-file",
             &[
-                r#"{"secret-key":"secret-value"}"#,
-                r#"{"parquet_backend":"secret-value"}"#,
-                r#"{"parquet_backend":"direct","parquet_backend":"secret-value"}"#,
+                (
+                    r#"{"secret-key":"secret-value"}"#,
+                    "",
+                    "object fields: parquet_backend",
+                    "unsupported fields",
+                ),
+                (
+                    r#"{"parquet_backend":"secret-value"}"#,
+                    "/parquet_backend",
+                    "direct, delta_kernel",
+                    "listed values",
+                ),
+                (
+                    r#"{"parquet_backend":"direct","parquet_backend":"secret-value"}"#,
+                    "/parquet_backend",
+                    "one occurrence",
+                    "duplicate field",
+                ),
+                (
+                    r#"{"prefetch_files_per_partition":1.0}"#,
+                    "/prefetch_files_per_partition",
+                    "JSON integer from 0",
+                    "expected format",
+                ),
+                (
+                    r#"{"max_concurrent_file_reads_per_scan":"1"}"#,
+                    "/max_concurrent_file_reads_per_scan",
+                    "JSON integer from 1",
+                    "expected format",
+                ),
+                (
+                    r#"{"parquet_metadata_size_hint_bytes":-0}"#,
+                    "/parquet_metadata_size_hint_bytes",
+                    "JSON integer from 1",
+                    "expected format",
+                ),
             ][..],
-            "execution options",
         ),
     ] {
-        for input in inputs {
+        for (input, field_path, expected, hint) in inputs {
             fs::write(&path, input)?;
             let output = run_with_timeout(
                 Command::new(env!("CARGO_BIN_EXE_dar"))
@@ -215,16 +346,73 @@ fn input_schema_corrections_omit_unknown_keys_and_values() -> Result<(), Box<dyn
             let record = assert_single_terminal_record(&output.stderr, "diagnostic");
             assert_eq!(record["argument"], argument);
             assert_eq!(record["json_kind"], "Data");
+            assert_eq!(record["code"], "invalid_input_json");
+            assert_eq!(record["reason"], "input_json_decode_failed");
+            assert_eq!(record["field_path"], *field_path);
+            assert_eq!(record["recovery"], "fix_input");
+            assert_eq!(record["retryable"], false);
             assert!(
                 record["expected"].as_str().unwrap().contains(expected),
                 "{record}"
             );
+            assert!(record["hint"].as_str().unwrap().contains(hint), "{record}");
+            let output = run_with_timeout(
+                Command::new(env!("CARGO_BIN_EXE_dar"))
+                    .args(["scan", "secret-table", argument])
+                    .arg(&path)
+                    .env("RUST_LOG", "trace"),
+            )?;
+            assert_eq!(output.status.code(), Some(2));
+            assert!(output.stdout.is_empty());
+            let text = std::str::from_utf8(&output.stderr)?;
             assert!(
-                record["hint"].as_str().unwrap().starts_with("Use "),
-                "{record}"
+                text.contains(&format!("field_path=\"{field_path}\"")),
+                "{text}"
             );
-            assert!(record.get("field_path").is_none(), "{record}");
+            assert!(text.contains(expected) && text.contains(hint), "{text}");
+            assert!(!text.contains("secret"), "{text}");
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn schema_corrections_stay_bounded_for_large_or_incomplete_input()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("secret-predicate.json");
+    let long_key = format!("secret\n{}", "secret".repeat(10_000));
+    let long_value = "secret".repeat(10_000);
+    let nested = format!("{}0{}", "[".repeat(10_000), "]".repeat(10_000));
+    for (input, field_path) in [
+        (
+            serde_json::json!({"op":"constant", "value":true, long_key:"secret-value"}).to_string(),
+            Some(""),
+        ),
+        (
+            serde_json::json!({"op":long_value}).to_string(),
+            Some("/op"),
+        ),
+        (
+            format!(r#"{{"op":"secret-operator","secret-key":{nested}}}"#),
+            Some("/op"),
+        ),
+        (r#"{"op":"secret-operator","secret-key":}"#.into(), None),
+    ] {
+        fs::write(&path, input)?;
+        let output = run_with_timeout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .args(["scan", "secret-table", "--predicate-file"])
+                .arg(&path)
+                .arg("--diagnostics=json")
+                .env("RUST_LOG", "trace"),
+        )?;
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert_eq!(record["argument"], "--predicate-file");
+        assert_eq!(record["code"], "invalid_input_json");
+        assert_eq!(record["field_path"].as_str(), field_path);
     }
     Ok(())
 }

@@ -1,14 +1,19 @@
 use serde_json::{Value, json};
-use snafu::ResultExt;
 
 use super::*;
 
 fn parse_text(text: &str) -> Result<DeltaPredicate, Error> {
-    serde_json::from_str::<PredicateInput>(text)
-        .context(crate::InputJsonSnafu {
-            input: JsonInputSource::Predicate,
-        })?
-        .into_predicate()
+    let result =
+        crate::input::parse_json::<PredicateInput>(text.as_bytes(), JsonInputSource::Predicate)?
+            .into_predicate();
+    if result.is_ok() {
+        assert!(
+            crate::input::schema_errors::correction(text.as_bytes(), JsonInputSource::Predicate)
+                .is_none(),
+            "{text}"
+        );
+    }
+    result
 }
 
 fn parse(value: Value) -> DeltaPredicate {

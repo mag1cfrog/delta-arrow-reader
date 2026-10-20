@@ -7,9 +7,9 @@ use serde::{
 };
 use snafu::{ResultExt, ensure};
 
-use crate::{
-    Error, InputIoSnafu, InputJsonSnafu, InputValidationSnafu, diagnostics::InputCorrection,
-};
+use crate::{Error, InputIoSnafu, InputValidationSnafu, diagnostics::InputCorrection};
+
+pub(crate) mod schema_errors;
 
 const MAX_JSON_BYTES: u64 = 1024 * 1024;
 
@@ -74,7 +74,25 @@ pub(crate) fn read_json_file<T: DeserializeOwned>(
             correction: input.correction("Keep the JSON input at or below 1 MiB."),
         }
     );
-    serde_json::from_slice(&bytes).context(InputJsonSnafu { input })
+    parse_json(&bytes, input)
+}
+
+pub(crate) fn parse_json<T: DeserializeOwned>(
+    bytes: &[u8],
+    input: JsonInputSource,
+) -> Result<T, Error> {
+    serde_json::from_slice(bytes).map_err(|source| {
+        let correction = if source.is_data() {
+            schema_errors::correction(bytes, input)
+        } else {
+            None
+        };
+        Error::InputJson {
+            source,
+            input,
+            correction,
+        }
+    })
 }
 
 // Serde also accepts arrays for structs and tagged enums; require objects.

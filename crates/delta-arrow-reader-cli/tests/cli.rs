@@ -145,7 +145,11 @@ fn json_input_failures_keep_distinct_safe_causes() -> Result<(), Box<dyn std::er
                 "kind=Syntax",
                 "Fix JSON syntax",
             ),
-            (br#""secret-value""#.as_slice(), "kind=Data", "Use "),
+            (
+                br#""secret-value""#.as_slice(),
+                "kind=Data",
+                "expected format",
+            ),
             (b"{".as_slice(), "kind=Eof", "Complete the JSON document"),
             (
                 oversized.as_slice(),
@@ -196,7 +200,11 @@ fn json_input_failures_keep_distinct_safe_causes() -> Result<(), Box<dyn std::er
             assert_eq!(record["retryable"], false);
             assert!(record["expected"].is_string());
             assert!(record["hint"].as_str().unwrap().contains(hint), "{record}");
-            assert!(record.get("field_path").is_none(), "{record}");
+            if detail == "kind=Data" {
+                assert_eq!(record["field_path"], "");
+            } else {
+                assert!(record.get("field_path").is_none(), "{record}");
+            }
             if let Some(kind) = detail.strip_prefix("kind=") {
                 assert_eq!(record["json_kind"], kind);
                 assert!(record["line"].as_u64().unwrap() > 0);

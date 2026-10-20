@@ -11,7 +11,7 @@ use crate::{
 };
 
 const MAX_PREDICATE_NODES: usize = 1024;
-const MAX_PREDICATE_DEPTH: usize = 32;
+pub(crate) const MAX_PREDICATE_DEPTH: usize = 32;
 
 #[derive(Deserialize)]
 #[serde(transparent)]
@@ -128,7 +128,7 @@ enum ScalarInput {
     },
 }
 
-fn deserialize_integer_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+pub(crate) fn deserialize_integer_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: Deserializer<'de>,
     T: FromStr,
@@ -145,7 +145,7 @@ where
         .map_err(|_| de::Error::custom("integer out of range"))
 }
 
-fn deserialize_timezone<'de, D: Deserializer<'de>>(
+pub(crate) fn deserialize_timezone<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<String>, D::Error> {
     let timezone = Option::<String>::deserialize(deserializer)?;

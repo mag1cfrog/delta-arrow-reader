@@ -4,16 +4,27 @@ use serde_json::json;
 use snafu::ResultExt;
 
 use super::*;
-use crate::{ConfigurationSnafu, Error, InputJsonSnafu, input::JsonObject};
+use crate::{ConfigurationSnafu, Error, input::JsonObject};
 
 fn parse(text: &str) -> Result<DeltaScanExecutionOptions, Error> {
-    serde_json::from_str::<JsonObject<ExecutionOptionsInput>>(text)
-        .context(InputJsonSnafu {
-            input: JsonInputSource::ExecutionOptions,
-        })?
-        .0
-        .into_execution_options()
-        .context(ConfigurationSnafu)
+    let result = crate::input::parse_json::<JsonObject<ExecutionOptionsInput>>(
+        text.as_bytes(),
+        JsonInputSource::ExecutionOptions,
+    )?
+    .0
+    .into_execution_options()
+    .context(ConfigurationSnafu);
+    if result.is_ok() {
+        assert!(
+            crate::input::schema_errors::correction(
+                text.as_bytes(),
+                JsonInputSource::ExecutionOptions
+            )
+            .is_none(),
+            "{text}"
+        );
+    }
+    result
 }
 
 #[test]
