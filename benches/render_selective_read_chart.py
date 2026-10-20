@@ -7,15 +7,16 @@ import math
 from pathlib import Path
 import statistics
 
-from render_selective_s3_chart import README_THEMES
-
-
 ROOT = Path(__file__).resolve().parents[1]
 READERS = ("delta-arrow-reader", "duckdb", "spark", "polars", "delta-rs")
 LABELS = ("Delta Arrow Reader", "DuckDB", "Spark (single machine)", "Polars", "delta-rs")
 LAYOUTS = ("q2.localized", "q2.scattered", "q4.localized", "q4.scattered")
 TABLE_COLUMNS = {"q2": 416, "q4": 90}
 MAX_SECONDS = {"q2": 80, "q4": 200}
+THEMES = {
+    "dark": {"background": "#0b0d10", "text": "#f0f2f5", "muted": "#98a2b0"},
+    "light": {"background": "#ffffff", "text": "#1f2328", "muted": "#68707d"},
+}
 
 
 def load_medians():
@@ -47,7 +48,7 @@ def load_medians():
 
 
 def render(theme_name, values):
-    theme = README_THEMES[theme_name]
+    theme = THEMES[theme_name]
     plot_width = 340
     accent = {"light": "#075985", "dark": "#7dd3fc"}[theme_name]
     other_bar = {"light": "#d0d7de", "dark": "#53606e"}[theme_name]
@@ -75,7 +76,7 @@ def render(theme_name, values):
                 assert 0 < value <= max_seconds, (case, reader, value)
                 width = plot_width * value / max_seconds
                 y = top + index * 28
-                color = theme["engines"]["delta_arrow_reader"] if index == 0 else other_bar
+                color = "#7dd3fc" if index == 0 else other_bar
                 label_color = accent if index == 0 else theme["muted"]
                 weight = 600 if index == 0 else 400
                 if column == 0:
@@ -92,7 +93,7 @@ def main():
     parser.add_argument("--check", action="store_true", help="verify the CSV and generated SVGs")
     args = parser.parse_args()
     values = load_medians()
-    for theme in README_THEMES:
+    for theme in THEMES:
         target = ROOT / f"crates/delta-arrow-reader-core/docs/public/assets/selective-read-readme-{theme}.svg"
         rendered = render(theme, values)
         if args.check:

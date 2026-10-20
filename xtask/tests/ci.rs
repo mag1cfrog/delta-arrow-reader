@@ -459,9 +459,7 @@ fn core_filter_preserves_benchmark_targets_and_shared_inputs() -> Result<()> {
     }
     for path in [
         "benches/query_shapes.sql",
-        "benches/render_comparison_chart.py",
         "benches/render_selective_read_chart.py",
-        "benches/render_selective_s3_chart.py",
     ] {
         assert!(!filter_matches(&filters, "code", path)?, "{path}");
     }
