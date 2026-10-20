@@ -1,6 +1,6 @@
 //! Immutable Python scan execution settings.
 
-use delta_arrow_reader::{DeltaScanExecutionOptions, ParquetReaderBackend};
+use delta_arrow_reader::{DeltaReaderError, DeltaScanExecutionOptions, ParquetReaderBackend};
 use pyo3::{
     exceptions::{PyOverflowError, PyTypeError, PyValueError},
     prelude::*,
@@ -62,6 +62,14 @@ fn parquet_metadata_size_hint(value: &Bound<'_, PyAny>) -> PyResult<Option<usize
 
 fn parquet_full_file_read_threshold(value: &Bound<'_, PyAny>) -> PyResult<Option<usize>> {
     optional_positive_usize(value, "parquet_full_file_read_threshold_bytes")
+}
+
+fn option_error(error: DeltaReaderError) -> PyErr {
+    crate::logging::validation_error(
+        &error,
+        "execution_options",
+        PyValueError::new_err(error.to_string()),
+    )
 }
 
 /// Control how a scan reads files and buffers results.
@@ -165,18 +173,18 @@ impl ScanExecutionOptions {
             options: DeltaScanExecutionOptions::new()
                 .with_parquet_backend(backend)
                 .with_max_concurrent_file_reads_per_scan(max_concurrent_file_reads_per_scan)
-                .map_err(|error| PyValueError::new_err(error.to_string()))?
+                .map_err(option_error)?
                 .with_max_concurrent_file_reads_per_partition(
                     max_concurrent_file_reads_per_partition,
                 )
-                .map_err(|error| PyValueError::new_err(error.to_string()))?
+                .map_err(option_error)?
                 .with_output_buffer_batches_per_partition(output_buffer_batches_per_partition)
-                .map_err(|error| PyValueError::new_err(error.to_string()))?
+                .map_err(option_error)?
                 .with_prefetch_files_per_partition(prefetch_files_per_partition)
                 .with_parquet_metadata_size_hint_bytes(parquet_metadata_size_hint_bytes)
-                .map_err(|error| PyValueError::new_err(error.to_string()))?
+                .map_err(option_error)?
                 .with_parquet_full_file_read_threshold_bytes(parquet_full_file_read_threshold_bytes)
-                .map_err(|error| PyValueError::new_err(error.to_string()))?,
+                .map_err(option_error)?,
         })
     }
 

@@ -7,7 +7,7 @@ use delta_arrow_reader::{
     datafusion::{ScanOptions, register_table},
     error_source_kind,
 };
-use pyo3::{exceptions::PyRuntimeError, prelude::*};
+use pyo3::prelude::*;
 
 use crate::{
     DeltaTable, export_schema, options::ScanExecutionOptions, reader_error, runtime::Runtime,
@@ -51,10 +51,7 @@ impl Session {
     #[new]
     fn new() -> PyResult<Self> {
         crate::logging::check_reentry()?;
-        let runtime = Arc::new(
-            Runtime::new()
-                .map_err(|_| PyRuntimeError::new_err("failed to create the SQL runtime"))?,
-        );
+        let runtime = Arc::new(Runtime::for_python("SQL")?);
         let context = runtime.block_on(async { SessionContext::new() });
         Ok(Self {
             state: Arc::new(SessionState {

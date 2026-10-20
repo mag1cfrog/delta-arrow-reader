@@ -16,10 +16,11 @@ use ::delta_arrow_reader::{
 };
 use arrow::{
     datatypes::{DataType, Field, Schema},
+    error::ArrowError,
     ffi::FFI_ArrowSchema,
 };
 use pyo3::{
-    exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError},
+    exceptions::{PyException, PyTypeError, PyValueError},
     prelude::*,
     types::{PyBool, PyCapsule, PyDict, PyInt, PyList, PyMapping, PyTuple},
 };
@@ -61,13 +62,21 @@ fn reader_error(py: Python<'_>, message: String, phase: &str, code: &str) -> PyE
 }
 
 fn export_schema(py: Python<'_>, schema: &Schema) -> PyResult<FFI_ArrowSchema> {
-    let export_error = || {
-        reader_error(
-            py,
-            "delta reader error: phase=schema code=schema_conversion reason=arrow_schema_export_failed"
-                .to_owned(),
-            "schema",
-            "schema_conversion",
+    let export_error = |reason: &'static str, source: Option<&ArrowError>| {
+        logging::log_failure(
+            reader_error(
+                py,
+                "delta reader error: phase=schema code=schema_conversion reason=arrow_schema_export_failed"
+                    .to_owned(),
+                "schema",
+                "schema_conversion",
+            ),
+            || {
+                tracing::error!(target: "delta_arrow_reader_python",
+                    event = "schema_export.failed", operation = "schema_export", outcome = "failed",
+                    error_phase = "schema", error_code = "schema_conversion", error_reason = reason,
+                    error_source_kind = source.map(|error| ::delta_arrow_reader::error_source_kind(error)));
+            },
         )
     };
     // Arrow 58's FFI exporter panics on NUL bytes in names or timestamp timezones.
@@ -76,9 +85,10 @@ fn export_schema(py: Python<'_>, schema: &Schema) -> PyResult<FFI_ArrowSchema> {
         .iter()
         .any(|field| field_contains_nul(field))
     {
-        return Err(export_error());
+        return Err(export_error("arrow_schema_contains_nul", None));
     }
-    FFI_ArrowSchema::try_from(schema).map_err(|_| export_error())
+    FFI_ArrowSchema::try_from(schema)
+        .map_err(|error| export_error("arrow_schema_export_failed", Some(&error)))
 }
 
 fn field_contains_nul(field: &Field) -> bool {
@@ -210,10 +220,7 @@ impl DeltaTable {
         if let Some(options) = execution_options {
             builder = builder.with_execution_options(options.options);
         }
-        let runtime = Arc::new(
-            Runtime::new()
-                .map_err(|_| PyRuntimeError::new_err("failed to create the reader runtime"))?,
-        );
+        let runtime = Arc::new(Runtime::for_python("reader")?);
         let table = runtime
             .wait_logged(py, builder.load_table())?
             .map_err(|error| {
@@ -351,7 +358,11 @@ impl DeltaTable {
             builder = builder
                 .with_target_partitions(target_partitions.extract::<usize>()?)
                 .map_err(|error| {
-                    reader_error(py, error.to_string(), error.phase().as_str(), error.code())
+                    logging::validation_error(
+                        &error,
+                        "target_partitions",
+                        reader_error(py, error.to_string(), error.phase().as_str(), error.code()),
+                    )
                 })?;
         }
         let scan = self
@@ -505,4 +516,81 @@ fn delta_arrow_reader(module: &Bound<'_, PyModule>) -> PyResult<()> {
             "Session",
         ],
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arrow::datatypes::TimeUnit;
+
+    #[test]
+    fn schema_export_keeps_distinct_safe_failure_causes() {
+        // Isolate Python's package logger from other Rust tests in this process.
+        const CHILD: &str = "DELTA_ARROW_READER_SCHEMA_LOG_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "tests::schema_export_keeps_distinct_safe_failure_causes",
+                ])
+                .env(CHILD, "1")
+                .status()
+                .unwrap();
+            assert!(status.success());
+            return;
+        }
+        Python::initialize();
+        Python::attach(|py| {
+            let locals = PyDict::new(py);
+            py.run(
+                c"
+import logging
+records = []
+class Collect(logging.Handler):
+    def emit(self, record):
+        records.append(record)
+logger = logging.getLogger('delta_arrow_reader')
+logger.handlers = [Collect()]
+logger.setLevel(logging.ERROR)
+logger.propagate = False
+",
+                Some(&locals),
+                None,
+            )
+            .unwrap();
+            for (data_type, reason, source) in [
+                (
+                    DataType::Timestamp(TimeUnit::Microsecond, Some("private\0zone".into())),
+                    "arrow_schema_contains_nul",
+                    None,
+                ),
+                (
+                    DataType::Time32(TimeUnit::Nanosecond),
+                    "arrow_schema_export_failed",
+                    Some("arrow_c_data"),
+                ),
+            ] {
+                py.run(c"records.clear()", Some(&locals), None).unwrap();
+                let schema = Schema::new(vec![Field::new("private_field", data_type, true)]);
+                let error = export_schema(py, &schema).unwrap_err();
+                assert!(error.is_instance_of::<DeltaReaderError>(py));
+                locals.set_item("reason", reason).unwrap();
+                locals.set_item("source", source).unwrap();
+                py.run(
+                    c"
+record, = records
+assert record.levelno == logging.ERROR
+assert record.dar_fields['event'] == 'schema_export.failed'
+assert record.dar_fields['error_reason'] == reason
+assert record.dar_fields.get('error_source_kind') == source
+assert 'private' not in repr(record.__dict__)
+",
+                    Some(&locals),
+                    None,
+                )
+                .unwrap();
+            }
+            export_schema(py, &Schema::empty()).unwrap();
+        });
+    }
 }

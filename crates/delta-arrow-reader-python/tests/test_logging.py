@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 import gc
+import json
 import logging
 from pathlib import Path
 import shutil
@@ -170,6 +171,197 @@ class LoggingTests(unittest.TestCase):
                     self.assertNotIn(str(FIXTURE), rendered)
         with session.sql("SELECT id FROM private_events LIMIT 1") as reader:
             self.assertEqual(reader.read_all().num_rows, 1)
+
+    def test_return_only_core_validation_has_safe_reasons_and_original_exceptions(self):
+        table = DeltaTable(FIXTURE, warmup="none")
+        cases = [
+            (lambda: table.scan(filters=[("private_missing", "==", 1)]),
+             DeltaReaderError, "filters", "column_not_found"),
+            (lambda: table.scan(filters=[("private.nested", "==", 1)]),
+             DeltaReaderError, "filters", "invalid_column_reference"),
+        ]
+        for option in ["max_concurrent_file_reads_per_scan",
+                       "max_concurrent_file_reads_per_partition",
+                       "output_buffer_batches_per_partition"]:
+            cases.append((lambda option=option: ScanExecutionOptions(**{option: sys.maxsize}),
+                          ValueError, "execution_options", option + "_exceeds_tokio_max_permits"))
+        for level in [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, 5]:
+            self.logger.setLevel(level)
+            for operation, exception, argument, reason in cases:
+                with self.subTest(level=level, reason=reason):
+                    self.collect.records.clear()
+                    with self.assertRaises(exception) as raised:
+                        operation()
+                    self.assertEqual(self.events(), ["validation.failed"])
+                    record, = self.collect.records
+                    fields = record.dar_fields
+                    self.assertEqual(record.levelno, logging.ERROR)
+                    self.assertEqual(record.dar_target, "delta_arrow_reader_python")
+                    self.assertEqual(fields["argument"], argument)
+                    self.assertEqual(fields["error_reason"], reason)
+                    phase, code = ("scan_planning", "unsupported_predicate") if argument == "filters" else (
+                        "configuration", "invalid_configuration")
+                    self.assertEqual(fields["error_phase"], phase)
+                    self.assertEqual(fields["error_code"], code)
+                    self.assertEqual(str(raised.exception),
+                                     f"delta reader error: phase={phase} code={code} reason={reason}")
+                    if exception is DeltaReaderError:
+                        self.assertEqual((raised.exception.phase, raised.exception.code), (phase, code))
+                    self.assertNotIn("private", repr(record.__dict__))
+                    self.assertNotIn(str(FIXTURE), repr(record.__dict__))
+        self.logger.disabled = True
+        self.collect.records.clear()
+        for operation, exception, _, _ in cases:
+            with self.assertRaises(exception):
+                operation()
+        self.assertEqual(self.collect.records, [])
+        with table.to_reader(limit=1) as reader:
+            self.assertEqual(reader.read_all().num_rows, 1)
+
+    def test_python_argument_and_consumer_errors_remain_exception_only(self):
+        table = DeltaTable(FIXTURE, warmup="none")
+        stream = table.scan(limit=0)
+        cases = [
+            (lambda: DeltaTable(FIXTURE, version=True), TypeError),
+            (lambda: DeltaTable(FIXTURE, warmup="private_mode"), ValueError),
+            (lambda: table.scan(limit=-1), ValueError),
+            (lambda: table.scan(limit=2**100), OverflowError),
+            (lambda: table.scan(filters=[("id", "==", True)]), TypeError),
+            (lambda: table.scan(filters=[("id", "private_operator", 1)]), ValueError),
+            (lambda: ScanExecutionOptions(output_buffer_batches_per_partition=0), ValueError),
+            (lambda: stream.__arrow_c_stream__(requested_schema="private_schema"), TypeError),
+            (lambda: stream.__arrow_c_stream__(requested_schema=pa.schema([]).__arrow_c_schema__()), ValueError),
+            (lambda: stream.__arrow_c_stream__(requested_schema=pa.int64().__arrow_c_schema__()), ValueError),
+        ]
+        self.logger.setLevel(5)
+        self.collect.records.clear()
+        for operation, exception in cases:
+            with self.subTest(exception=exception):
+                with self.assertRaises(exception):
+                    operation()
+                self.assertEqual(self.collect.records, [])
+        with pa.RecordBatchReader.from_stream(stream) as reader:
+            self.assertEqual(reader.read_all().num_rows, 0)
+        self.collect.records.clear()
+        with self.assertRaisesRegex(RuntimeError, "exported or closed"):
+            stream.__arrow_c_stream__()
+        self.assertEqual(self.collect.records, [])
+
+    def test_schema_export_failures_log_once_without_schema_contents(self):
+        session = Session()
+        with tempfile.TemporaryDirectory(prefix="private-schema-") as temporary:
+            delta_log = Path(temporary) / "_delta_log"
+            delta_log.mkdir()
+            schema = {"type": "struct", "fields": [{
+                "name": "private_parent", "nullable": True, "metadata": {},
+                "type": {"type": "struct", "fields": [{
+                    "name": "private\0field", "type": "long", "nullable": True, "metadata": {},
+                }]},
+            }]}
+            actions = [
+                {"protocol": {"minReaderVersion": 1, "minWriterVersion": 2}},
+                {"metaData": {"id": "private-id", "format": {"provider": "parquet", "options": {}},
+                              "schemaString": json.dumps(schema), "partitionColumns": [], "configuration": {}}},
+            ]
+            (delta_log / "00000000000000000000.json").write_text(
+                "".join(json.dumps(action) + "\n" for action in actions), encoding="utf-8")
+            table = DeltaTable(temporary, warmup="none")
+            for level in [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, 5]:
+                self.logger.setLevel(level)
+                for operation in [lambda: table.schema, lambda: table.scan(),
+                                  lambda: session.sql('SELECT 42 AS "private\0alias"')]:
+                    self.collect.records.clear()
+                    with self.assertRaises(DeltaReaderError) as raised:
+                        operation()
+                    self.assertEqual((raised.exception.phase, raised.exception.code), ("schema", "schema_conversion"))
+                    self.assertEqual(str(raised.exception),
+                                     "delta reader error: phase=schema code=schema_conversion reason=arrow_schema_export_failed")
+                    failures = [r for r in self.collect.records if r.levelno >= logging.ERROR]
+                    record, = failures
+                    self.assertEqual(record.dar_fields["event"], "schema_export.failed")
+                    self.assertEqual(record.dar_fields["error_reason"], "arrow_schema_contains_nul")
+                    self.assertNotIn("error_source_kind", record.dar_fields)
+                    self.assertNotIn("private", repr([r.__dict__ for r in self.collect.records]))
+                    self.assertNotIn(temporary, repr([r.__dict__ for r in self.collect.records]))
+        with session.sql("SELECT 42 AS answer") as reader:
+            self.assertEqual(reader.read_all().to_pylist(), [{"answer": 42}])
+
+    def test_synchronous_failure_handlers_preserve_exceptions_and_reject_recursion(self):
+        table = DeltaTable(FIXTURE, warmup="none")
+        for exception in [RuntimeError, KeyboardInterrupt, SystemExit]:
+            callbacks = []
+
+            class Broken(logging.Handler):
+                def emit(handler, record):
+                    callbacks.append(record)
+                    with self.assertRaisesRegex(RuntimeError, "logging callback"):
+                        table.scan()
+                    # Pure option validation is safe inside a handler and cannot log recursively.
+                    with self.assertRaises(ValueError):
+                        ScanExecutionOptions(output_buffer_batches_per_partition=sys.maxsize)
+                    raise exception("private-handler-failure")
+
+            self.logger.handlers = [Broken()]
+            expected = DeltaReaderError if exception is RuntimeError else exception
+            with self.assertRaises(expected) as raised:
+                table.scan(filters=[("private_missing", "==", 1)])
+            if exception is RuntimeError:
+                self.assertEqual(raised.exception.code, "unsupported_predicate")
+            else:
+                self.assertEqual(str(raised.exception), "private-handler-failure")
+            self.assertEqual(len(callbacks), 1)
+        self.logger.handlers = [self.collect]
+        self.collect.records.clear()
+        table.scan(limit=0).close()
+        self.assertEqual(self.events(), ["scan_planning.started", "scan_planning.completed"])
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "requires Linux file descriptor limits")
+    def test_runtime_creation_failure_is_diagnosable_and_recoverable(self):
+        result = subprocess.run([sys.executable, "-I", "-c", """
+import errno
+import logging
+import resource
+import sys
+from delta_arrow_reader import DeltaTable, Session
+records = []
+class Collect(logging.Handler):
+    def emit(self, record):
+        records.append(record)
+logger = logging.getLogger('delta_arrow_reader')
+logger.handlers = [Collect()]
+logger.propagate = False
+for level in [40, 30, 20, 10, 5]:
+    logger.setLevel(level)
+    for kind, operation in [('reader', lambda: DeltaTable(sys.argv[1], warmup='none')), ('SQL', Session)]:
+        records.clear()
+        limits = resource.getrlimit(resource.RLIMIT_NOFILE)
+        try:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (0, limits[1]))
+            try:
+                operation()
+            except RuntimeError as error:
+                assert str(error) == f'failed to create the {kind} runtime', str(error)
+            else:
+                raise AssertionError('runtime started without file descriptors')
+        finally:
+            resource.setrlimit(resource.RLIMIT_NOFILE, limits)
+        record, = records
+        assert record.levelno == logging.ERROR
+        fields = record.dar_fields
+        assert fields['event'] == 'runtime_creation.failed'
+        assert fields['runtime'] == kind
+        assert fields['error_os_code'] == errno.EMFILE, fields
+        assert fields['error_source_kind'] == 'unknown', fields
+        assert sys.argv[1] not in repr(record.__dict__)
+table = DeltaTable(sys.argv[1], warmup='none')
+session = Session()
+session.register_table('events', table)
+with session.sql('SELECT id FROM events LIMIT 1') as reader:
+    assert reader.read_all().num_rows == 1
+""", str(FIXTURE)], capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(result.stderr, "")
 
     def test_sql_planning_failures_keep_safe_source_categories(self):
         table = DeltaTable(FIXTURE, warmup="none")
@@ -562,6 +754,10 @@ assert 'datafusion_partition_execution.started' in records
         self.assertEqual(table.refresh().version, table.version)
         with self.assertRaises(DeltaReaderError):
             DeltaTable(FIXTURE / "private-missing", warmup="none")
+        with self.assertRaises(DeltaReaderError):
+            table.scan(filters=[("private_missing", "==", 1)])
+        with self.assertRaises(ValueError):
+            ScanExecutionOptions(output_buffer_batches_per_partition=sys.maxsize)
         table.scan(limit=0).close()
         with table.to_reader() as reader:
             self.assertEqual(reader.read_all().num_rows, 360)
@@ -583,7 +779,7 @@ import logging
 import sys
 root = logging.getLogger()
 previous = (root.handlers[:], root.level)
-from delta_arrow_reader import DeltaTable, DeltaReaderError, Session
+from delta_arrow_reader import DeltaTable, DeltaReaderError, ScanExecutionOptions, Session
 assert (root.handlers, root.level) == previous
 try:
     DeltaTable('unsupported-private-scheme://secret-token/private-table')
@@ -594,11 +790,14 @@ else:
 table = DeltaTable(sys.argv[1], warmup='none')
 session = Session()
 for operation in [lambda: table.scan(columns=['private_missing']),
+                  lambda: table.scan(filters=[('private_missing', '==', 1)]),
+                  lambda: ScanExecutionOptions(output_buffer_batches_per_partition=sys.maxsize),
                   lambda: session.register_table('private-invalid', table),
+                  lambda: session.sql('SELECT 42 AS "private\\0alias"'),
                   lambda: session.sql('SELECT * FROM private_missing')]:
     try:
         operation()
-    except DeltaReaderError:
+    except (DeltaReaderError, ValueError):
         pass
     else:
         raise AssertionError('invalid operation was accepted')

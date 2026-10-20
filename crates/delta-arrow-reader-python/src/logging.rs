@@ -93,6 +93,34 @@ pub(crate) fn stream_dispatch(interrupted: Arc<AtomicBool>) -> PyResult<Dispatch
     new_dispatch(HandlerInterrupts::Stream(interrupted))
 }
 
+// Synchronous conversions use the same handler interruption policy as runtime waits.
+pub(crate) fn log_failure(error: PyErr, emit: impl FnOnce()) -> PyErr {
+    // A handler's pure validation must not replace tracing's currently borrowed dispatcher.
+    if is_logging_callback() {
+        return error;
+    }
+    match dispatch() {
+        Ok((dispatch, interrupts)) => {
+            tracing::dispatcher::with_default(&dispatch, emit);
+            interrupts.try_recv().unwrap_or(error)
+        }
+        Err(interruption) => interruption,
+    }
+}
+
+pub(crate) fn validation_error(
+    error: &delta_arrow_reader::DeltaReaderError,
+    argument: &'static str,
+    exception: PyErr,
+) -> PyErr {
+    log_failure(exception, || {
+        tracing::error!(target: "delta_arrow_reader_python",
+            event = "validation.failed", operation = "validation", outcome = "failed", argument,
+            error_phase = error.phase().as_str(), error_code = error.code(),
+            error_reason = error.reason(), error_source_kind = error.source_kind());
+    })
+}
+
 enum HandlerInterrupts {
     Call(mpsc::SyncSender<PyErr>),
     // A traceback can refer back to the reader and form an uncollectable cycle.

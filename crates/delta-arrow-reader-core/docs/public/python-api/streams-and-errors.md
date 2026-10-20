@@ -98,8 +98,39 @@ performed on the first batch request. Collections of failures use
 `multiple_errors`; unknown sources use `unknown`, and classification beyond 16
 links uses `source_chain_limit`. Raw errors and query data remain omitted.
 
-Python argument validation and schema export are not yet forwarded by the
-Python bridge.
+Core helpers for predicate column lookup and scan options return errors without
+logging. At these conversion points, the binding emits ERROR `validation.failed`
+with the core's phase, code, reason, and available source category. The fixed
+`argument` field identifies `filters`, `execution_options`, or `target_partitions`.
+No argument values are included. Existing `DeltaReaderError` and `ValueError`
+exceptions remain unchanged.
+
+Schema export failures emit ERROR `schema_export.failed`. A NUL byte in a field
+name or timestamp timezone uses `error_reason = "arrow_schema_contains_nul"`;
+other export errors use `arrow_schema_export_failed` and the available Arrow
+source category. Both keep the existing Python exception's phase `schema`, code
+`schema_conversion`, and message. Schema contents and metadata are omitted.
+
+Failure to create a Tokio runtime emits ERROR `runtime_creation.failed` with
+`runtime = "reader"` or `"SQL"`, a safe source category, and `error_os_code` when
+the operating system supplies one. Some I/O failures have category `unknown`;
+the numeric OS code can distinguish causes such as exhausted file descriptors.
+The caller still receives the existing `RuntimeError` message.
+
+The remaining Python boundaries preserve exceptions without an extra log:
+
+| Boundary | Diagnostic behavior |
+| --- | --- |
+| Python argument types, ranges, filter literals, and callback conversions such as `__fspath__` | Keep the Python exception; no separate event or formatting of caller values |
+| Requested Arrow schema, repeated export, closed or unavailable exporter, and unsupported recursive reader calls | Keep the protocol or state exception; a rejected schema request leaves the stream available |
+| Package metadata, Python/PyArrow imports, capsule allocation, and consumer conversion | Preserve the original Python exception; failures from called reader operations retain their own events |
+| Signals and handler control-flow exceptions | Preserve cancellation behavior and the core's abandonment/drop records; no extra ERROR for intentional interruption |
+
+Requested-schema import errors have the fixed `ValueError` message
+`invalid requested schema`; dependency text and detailed Arrow causes are not
+exposed. The consumer can inspect or replace its requested schema and retry.
+Failures while attaching exception attributes also propagate their original
+Python exception without a second event.
 
 Handlers run synchronously on the calling thread or a reader worker. They must
 not start reader work or wait for another thread to finish reader work. Calls
@@ -113,8 +144,10 @@ a closed stream. This does not make Arrow consumers safe for concurrent reads
 and closes; follow the consumer's threading rules.
 
 Ordinary handler exceptions are ignored. Control-flow exceptions such as
-`KeyboardInterrupt` and `SystemExit` propagate to the waiting caller during
-loading or planning. During batch consumption, they interrupt the read with
+`KeyboardInterrupt` and `SystemExit` propagate to the caller during
+loading, planning, or synchronous failure reporting. Pure validation and schema
+inspection inside a handler keep their exceptions without recursively forwarding
+logs. During batch consumption, control-flow exceptions interrupt the read with
 the Arrow error `phase=execution code=python_signal reason=reader_wait_interrupted`.
 The reader repeats that safe error on subsequent reads and does not retain the
 Python exception or its traceback. A handler exception raised during an Arrow

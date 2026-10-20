@@ -1,6 +1,6 @@
 use std::{future::Future, pin::pin, time::Duration};
 
-use pyo3::prelude::*;
+use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use tracing::instrument::WithSubscriber;
 
 /// Binding-owned runtime that can be released from any owning thread.
@@ -12,6 +12,22 @@ impl Runtime {
     pub(crate) fn new() -> std::io::Result<Self> {
         tokio::runtime::Runtime::new().map(|runtime| Self {
             inner: Some(runtime),
+        })
+    }
+
+    pub(crate) fn for_python(kind: &'static str) -> PyResult<Self> {
+        Self::new().map_err(|error| {
+            crate::logging::log_failure(
+                PyRuntimeError::new_err(format!("failed to create the {kind} runtime")),
+                || {
+                    tracing::error!(target: "delta_arrow_reader_python",
+                        event = "runtime_creation.failed", operation = "runtime_creation", outcome = "failed",
+                        runtime = kind, error_phase = "execution", error_code = "runtime_creation",
+                        error_reason = "runtime_creation_failed",
+                        error_os_code = error.raw_os_error(),
+                        error_source_kind = delta_arrow_reader::error_source_kind(&error));
+                },
+            )
         })
     }
 
