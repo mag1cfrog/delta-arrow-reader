@@ -443,8 +443,17 @@ mod tests {
         let grandchild = fs::read_to_string(&pidfile)?;
         drop(observer);
         assert!(!Path::new(&format!("/proc/{pid}")).exists());
-        if let Ok(stat) = fs::read_to_string(format!("/proc/{grandchild}/stat")) {
-            assert!(stat.split(") ").nth(1).unwrap().starts_with('Z'), "{stat}");
+        let deadline = monotonic_ns()? + 2_000_000_000;
+        // Group signals can reach the grandchild after its parent has been reaped.
+        while let Ok(stat) = fs::read_to_string(format!("/proc/{grandchild}/stat")) {
+            if stat.split(") ").nth(1).unwrap().starts_with('Z') {
+                break;
+            }
+            require(
+                monotonic_ns()? < deadline,
+                "trace child survived observer cleanup",
+            )?;
+            thread::sleep(Duration::from_millis(10));
         }
         Ok(())
     }
