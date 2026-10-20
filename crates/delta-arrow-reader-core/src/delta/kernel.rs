@@ -31,12 +31,17 @@ use delta_kernel::{
 #[cfg(test)]
 pub(crate) use delta_kernel_default_engine::storage::insert_url_handler;
 use delta_kernel_default_engine::{DefaultEngineBuilder, storage::store_from_url_opts};
-use object_store::{ObjectStore, aws::AmazonS3Builder};
+use object_store::{
+    ObjectStore, aws::AmazonS3Builder, azure::MicrosoftAzureBuilder, gcp::GoogleCloudStorageBuilder,
+};
 use tokio::runtime::Handle;
 use url::Url;
 
 use super::location::{file_resolution_url, object_store_path, with_object_store_path};
-use crate::{DeltaComparison, DeltaPredicate, DeltaScalar, DeltaStorageOptions};
+use crate::{
+    DeltaComparison, DeltaPredicate, DeltaScalar, DeltaStorageCredentialProvider,
+    DeltaStorageOptions,
+};
 use versioned_engine::VersionedEngine;
 
 #[allow(dead_code)]
@@ -557,13 +562,42 @@ impl DeltaKernelEngineContext {
     pub(crate) fn try_new(
         public_table_url: Url,
         storage_options: &DeltaStorageOptions,
+        credential_provider: Option<&DeltaStorageCredentialProvider>,
     ) -> delta_kernel::DeltaResult<Self> {
         let (object_store, partial_read_builder): (Arc<dyn ObjectStore>, _) =
-            if matches!(public_table_url.scheme(), "s3" | "s3a") {
-                let (store, partial) = s3::build(&public_table_url, storage_options)?;
-                (Arc::new(store), partial)
-            } else {
-                (
+            match credential_provider {
+                Some(DeltaStorageCredentialProvider::Aws(provider)) => {
+                    let (store, partial) =
+                        s3::build(&public_table_url, storage_options, Some(provider))?;
+                    (Arc::new(store), partial)
+                }
+                Some(DeltaStorageCredentialProvider::Azure(provider)) => {
+                    let mut builder = MicrosoftAzureBuilder::new()
+                        .with_url(public_table_url.as_str())
+                        .with_credentials(Arc::clone(provider));
+                    for (key, value) in storage_options {
+                        if let Ok(key) = key.to_ascii_lowercase().parse() {
+                            builder = builder.with_config(key, value);
+                        }
+                    }
+                    (Arc::new(builder.build()?), None)
+                }
+                Some(DeltaStorageCredentialProvider::Gcp(provider)) => {
+                    let mut builder = GoogleCloudStorageBuilder::new()
+                        .with_url(public_table_url.as_str())
+                        .with_credentials(Arc::clone(provider));
+                    for (key, value) in storage_options {
+                        if let Ok(key) = key.to_ascii_lowercase().parse() {
+                            builder = builder.with_config(key, value);
+                        }
+                    }
+                    (Arc::new(builder.build()?), None)
+                }
+                None if matches!(public_table_url.scheme(), "s3" | "s3a") => {
+                    let (store, partial) = s3::build(&public_table_url, storage_options, None)?;
+                    (Arc::new(store), partial)
+                }
+                None => (
                     store_from_url_opts(
                         &public_table_url,
                         storage_options
@@ -571,7 +605,7 @@ impl DeltaKernelEngineContext {
                             .map(|(key, value)| (key.as_str(), value.as_str())),
                     )?,
                     None,
-                )
+                ),
             };
         let engine = Arc::new(DefaultEngineBuilder::new(Arc::clone(&object_store)).build());
         let file_resolution_url = file_resolution_url(public_table_url.clone(), storage_options)?;
@@ -820,7 +854,8 @@ mod tests {
         }
         let url =
             Url::from_directory_path(std::env::temp_dir()).map_err(|_| "invalid temp path")?;
-        let mut context = DeltaKernelEngineContext::try_new(url, &DeltaStorageOptions::new())?;
+        let mut context =
+            DeltaKernelEngineContext::try_new(url, &DeltaStorageOptions::new(), None)?;
         assert!(context.partial_read_store()?.is_none());
         context.partial_read_builder = Some(
             AmazonS3Builder::new()

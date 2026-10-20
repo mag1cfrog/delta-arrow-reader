@@ -46,8 +46,8 @@ pub mod diagnostics {
 pub use reader::{
     DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaScalar, DeltaScan, DeltaScanBuilder,
     DeltaScanExecutionOptions, DeltaScanMetrics, DeltaScanMetricsSnapshot, DeltaSnapshotSelection,
-    DeltaStorageOptions, DeltaTable, DeltaTableBuilder, DeltaTableSnapshot, ParquetReaderBackend,
-    WarmupMode,
+    DeltaStorageCredentialProvider, DeltaStorageOptions, DeltaTable, DeltaTableBuilder,
+    DeltaTableSnapshot, ParquetReaderBackend, WarmupMode,
 };
 /// The crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
