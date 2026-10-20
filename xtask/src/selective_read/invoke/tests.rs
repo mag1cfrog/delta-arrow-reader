@@ -15,7 +15,8 @@ fn request(root: &Path, script: &str) -> Result<Request> {
         output: root.join("invocation"),
         reference: None,
         env: None,
-        command_prefix: vec![],
+        // Parallel forks can retain a script's writable descriptor until exec.
+        command_prefix: vec!["/bin/bash".into()],
         supervised: false,
         protocols: Path::new(env!("CARGO_MANIFEST_DIR")).join("../docs/content/benchmarks"),
     })
