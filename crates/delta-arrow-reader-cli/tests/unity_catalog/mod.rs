@@ -144,11 +144,14 @@ fn inspection_uses_vended_s3_and_azure_credentials_and_actual_delta_schema() -> 
             fixture.directory.path().join("options.json"),
             serde_json::to_vec(&options)?,
         )?;
-        for historical in [false, true] {
+        for (historical, verbosity) in [(false, ""), (true, ""), (false, "trace")] {
             let mut command = fixture.inspect();
             command
                 .env("AWS_ACCESS_KEY_ID", "ambient-key")
                 .env("AZURE_STORAGE_ACCOUNT_KEY", "invalid-ambient-secret");
+            if !verbosity.is_empty() {
+                command.env("RUST_LOG", verbosity);
+            }
             if historical {
                 command.args(["--table-version", "0"]);
             }
@@ -165,7 +168,25 @@ fn inspection_uses_vended_s3_and_azure_credentials_and_actual_delta_schema() -> 
                     .map(|r| r.lines().next())
                     .collect::<Vec<_>>()
             );
-            assert!(output.stderr.is_empty());
+            let diagnostic = std::str::from_utf8(&output.stderr)?;
+            if verbosity.is_empty() {
+                assert!(diagnostic.is_empty());
+            } else {
+                assert!(diagnostic.contains("event=\"table_load.completed\""));
+                for sentinel in [
+                    PROFILE,
+                    TABLE_NAME,
+                    TABLE_ID,
+                    "secret",
+                    "test-key",
+                    "test-session",
+                    "test%2Bsignature",
+                    "bucket/table",
+                    "account.dfs",
+                ] {
+                    assert!(!diagnostic.contains(sentinel), "{diagnostic}");
+                }
+            }
             assert_eq!(
                 serde_json::from_slice::<Value>(&output.stdout)?,
                 json!({"format_version":1, "table_version":"0", "schema":schema})
@@ -191,7 +212,7 @@ fn inspection_uses_vended_s3_and_azure_credentials_and_actual_delta_schema() -> 
             "--output",
             "json",
         ];
-        assert_eq!(fixture.calls(), expected.repeat(2));
+        assert_eq!(fixture.calls(), expected.repeat(3));
         let requests = server.requests.lock().unwrap();
         assert!(!requests.is_empty());
         for request in requests.iter() {
@@ -250,7 +271,7 @@ fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResul
             fixture.directory.path().join("options.json"),
             serde_json::to_vec(&json!({key:"secret-sentinel"}))?,
         )?;
-        let output = run_with_timeout(&mut fixture.inspect())?;
+        let output = run_with_timeout(fixture.inspect().env("RUST_LOG", "trace"))?;
         check_failure(
             &output.stderr,
             "configuration",
@@ -303,7 +324,12 @@ fn invalid_responses_and_denied_credentials_are_redacted() -> TestResult {
         );
     }
     let fixture = Fixture::new(false)?;
-    let output = run_with_timeout(fixture.inspect().env("DAR_TEST_DENIED", "1"))?;
+    let output = run_with_timeout(
+        fixture
+            .inspect()
+            .env("RUST_LOG", "trace")
+            .env("DAR_TEST_DENIED", "1"),
+    )?;
     assert_eq!(output.status.code(), Some(1));
     assert!(output.stdout.is_empty());
     check_failure(&output.stderr, "execution", "uc_credential_request_failed");

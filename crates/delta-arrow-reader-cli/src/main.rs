@@ -510,6 +510,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn uc_cancellation_is_informational_and_keeps_signal_exit_status() {
+        for status in [130, 143] {
+            let error = Error::UnityCatalog {
+                source: unity_catalog::Error::Cancelled(status),
+            };
+            assert_eq!(error.exit_code(), ExitCode::from(status));
+            assert!(diagnostics::capture("warn", || error.log_failure()).is_empty());
+            let text = diagnostics::capture("info", || error.log_failure());
+            assert_eq!(text.lines().count(), 1, "{text}");
+            for field in [
+                "INFO delta_arrow_reader_cli",
+                "event=\"cli.cancelled\"",
+                "outcome=\"cancelled\"",
+                "error_code=\"uc_cancelled\"",
+            ] {
+                assert!(text.contains(field), "{text}");
+            }
+            assert!(!text.contains("ERROR"), "{text}");
+        }
+    }
+
+    #[test]
     fn inspection_format_preserves_nested_schema_and_all_metadata() {
         let schema = Schema::new_with_metadata(
             vec![
