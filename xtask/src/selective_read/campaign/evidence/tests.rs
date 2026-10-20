@@ -39,10 +39,10 @@ fn protocol_revisions_validate_behavior_without_document_byte_identity() -> Resu
                 key.as_str(),
                 "protocol_sha256" | "base_protocol_sha256" | "sampling_sha256"
             ) {
-                assert_eq!(
-                    comparison_contract(&comparison(&changed, Path::new("no-documents"))?),
-                    comparison_contract(&value),
-                );
+                assert!(same_comparison(
+                    &comparison(&changed, Path::new("no-documents"))?,
+                    &value
+                ));
             } else {
                 assert!(
                     comparison(&changed, &protocols()).is_err(),

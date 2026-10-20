@@ -355,8 +355,7 @@ fn remote_request(
         "reference differs from request",
     )?;
     require(
-        evidence::comparison_contract(&evidence::comparison(&metadata, protocols)?)
-            == evidence::comparison_contract(comparison),
+        evidence::same_comparison(&evidence::comparison(&metadata, protocols)?, comparison),
         "reference comparison/workload identity differs",
     )?;
     Ok(payload)

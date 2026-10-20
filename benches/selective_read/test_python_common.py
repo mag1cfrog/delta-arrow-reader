@@ -16,6 +16,27 @@ import run
 
 
 class ReaderBookkeeping(unittest.TestCase):
+    def test_build_audit_changes_preserve_certificates_but_artifact_changes_do_not(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            build_path, proof = root / "build.json", root / "proof.json"
+            build = {"reader_id": "test", "executable_sha256": "1" * 64, "lockfile_sha256": "2" * 64,
+                     "harness_git_commit": "before", "source_sha256": {"source": "before"}}
+            build_path.write_text(json.dumps(build))
+            request = {"purpose": "timing", "execution_mode": "open", "correctness_file": str(proof),
+                       "comparison_revision": 2, "case_id": "case", "snapshot_version": 0,
+                       "fixture_manifest_sha256": "3" * 64, "canonical_sql": "SELECT id FROM bench"}
+            identity = common.reader_identity(request, "test", build_path, {})
+            proof.write_text(json.dumps({"status": "passed", "checks": [identity | {"status": "passed", "output_rows": 3}]}))
+            for change in ({"harness_git_commit": "after"}, {"source_sha256": {"source": "after"}}):
+                build_path.write_text(json.dumps(build | change))
+                current = common.reader_identity(request, "test", build_path, {})
+                self.assertNotEqual(current["reader_build_sha256"], identity["reader_build_sha256"])
+                self.assertEqual(common.correctness(request, current)["expected_output_rows"], [3])
+            build_path.write_text(json.dumps(build | {"executable_sha256": "4" * 64}))
+            with self.assertRaisesRegex(ValueError, "stale correctness"):
+                common.correctness(request, common.reader_identity(request, "test", build_path, {}))
+
     def test_correctness_uses_result_identity_and_rows_not_oracle_source_hashes(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "correctness.json"

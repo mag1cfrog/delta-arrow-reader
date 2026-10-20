@@ -48,56 +48,10 @@ impl Mode {
 }
 
 pub(in crate::selective_read) fn comparison(value: &Value, _protocols: &Path) -> Result<Value> {
-    let revision = value["comparison_revision"]
-        .as_u64()
-        .ok_or("unknown comparison revision")?;
-    require((2..=6).contains(&revision), "unknown comparison revision")?;
-    let mut keys = vec!["comparison_revision", "protocol_sha256"];
-    if revision >= 3 {
-        require(
-            value["workload_manifest_sha256"].as_str().is_some_and(|s| {
-                s.len() == 64
-                    && s.bytes()
-                        .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
-            }),
-            "missing or stale large-workload identity",
-        )?;
-        keys.extend(["base_protocol_sha256", "workload_manifest_sha256"]);
-    } else {
-        require(
-            value["workload_manifest_sha256"].is_null(),
-            "revision 2 cannot carry large-workload identities",
-        )?;
-    }
-    if revision >= 4 {
-        keys.push("sampling_sha256");
-    }
-    if revision >= 5 {
-        require(
-            matches!(value["sampling_stage"].as_str(), Some("pilot" | "formal")),
-            "missing or invalid production sampling stage",
-        )?;
-        keys.push("sampling_stage");
-    } else {
-        require(
-            value["sampling_stage"].is_null(),
-            "historical revisions cannot carry a production sampling stage",
-        )?;
-    }
-    Ok(Value::Object(
-        keys.into_iter()
-            .map(|key| (key.into(), value[key].clone()))
-            .collect(),
-    ))
+    super::super::contract::comparison(value)
 }
 
-pub(in crate::selective_read) fn comparison_contract(value: &Value) -> [&Value; 3] {
-    [
-        &value["comparison_revision"],
-        &value["workload_manifest_sha256"],
-        &value["sampling_stage"],
-    ]
-}
+pub(in crate::selective_read) use super::super::contract::same_comparison;
 
 pub(super) fn plans(record: &Value, artifacts: &Path) -> Result<Value> {
     let mut evidence = Vec::new();
@@ -255,17 +209,11 @@ pub(in crate::selective_read) fn validate(
     let identity = field(record, "identity")?;
     let comparison = comparison(payload, protocols)?;
     require(identity["reader_id"] == reader, "reader identity changed")?;
-    for key in object(&comparison)?
-        .keys()
-        .map(String::as_str)
-        .filter(|key| {
-            !matches!(
-                *key,
-                "protocol_sha256" | "base_protocol_sha256" | "sampling_sha256"
-            )
-        })
-        .chain(["fixture_manifest_sha256", "case_id", "snapshot_version"])
-    {
+    require(
+        same_comparison(identity, &comparison),
+        "observation comparison differs",
+    )?;
+    for key in ["fixture_manifest_sha256", "case_id", "snapshot_version"] {
         require(
             field(identity, key)? == field(payload, key)?,
             &format!("observation identity differs: {key}"),

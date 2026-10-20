@@ -12,7 +12,7 @@ import sysconfig
 from time import time_ns
 from urllib.parse import urlsplit
 
-from run import BUDGET, LARGE_IDENTITY_FIELDS, SAMPLING_IDENTITY_FIELDS, PRODUCTION_IDENTITY_FIELDS, comparison_identity, digest, query_count, save
+from run import BUDGET, LARGE_IDENTITY_FIELDS, SAMPLING_IDENTITY_FIELDS, PRODUCTION_IDENTITY_FIELDS, comparison_identity, digest, identity_matches, query_count, save
 
 HERE = Path(__file__).resolve().parent
 REQUEST_FIELDS = set("table_uri snapshot_version case_id canonical_sql comparison_revision protocol_sha256 "
@@ -72,7 +72,16 @@ def checked_build(executable, reader):
 
 
 def reader_identity(request, reader, build_path, settings, expression_sha256=None):
-    return {"reader_id": reader, "reader_build_sha256": digest(build_path), "reader_config_sha256": json_hash(settings),
+    build = json.loads(build_path.read_text())
+    artifact = {key: build[key] for key in ("reader_id", "executable_sha256", "lockfile_sha256")}
+    if "runtime" in build:
+        artifact["runtime"] = build["runtime"]
+    if "bundled_sha256" in build:
+        artifact["bundled_sha256"] = {k: v for k, v in build["bundled_sha256"].items()
+                                    if k not in ("protocol.md", "large-workloads.md", "sampling.md",
+                                                 "production-workloads.md", "spark-matrix.md", "oracle.py")}
+    return {"reader_id": reader, "reader_build_sha256": digest(build_path), "reader_artifact": artifact,
+            "reader_config_sha256": json_hash(settings),
             **comparison_identity(request),
             **{name: request[name] for name in ("fixture_manifest_sha256", "case_id", "snapshot_version")},
             "canonical_sql_sha256": sha(request["canonical_sql"].encode()), "native_expression_sha256": expression_sha256}
@@ -122,6 +131,8 @@ def validate(request):
         extra.update(SAMPLING_IDENTITY_FIELDS)
     if request.get("comparison_revision") in (5, 6):
         extra.update(PRODUCTION_IDENTITY_FIELDS)
+    if "workload_contract" in request:
+        extra.add("workload_contract")
     if "validation_diagnostics" in request:
         extra.add("validation_diagnostics")
         require(type(request["validation_diagnostics"]) is bool and (not request["validation_diagnostics"] or
@@ -157,10 +168,7 @@ def correctness(request, identity):
     rows = []
     for check in proof["checks"]:
         require(check["status"] == "passed", "failed oracle check")
-        for key, value in identity.items():
-            if key in ("protocol_sha256", "base_protocol_sha256", "sampling_sha256"):
-                continue
-            require(type(check.get(key)) is type(value) and check.get(key) == value, f"stale correctness field: {key}")
+        require(identity_matches(identity, check), "stale correctness identity")
         require(type(check["output_rows"]) is int and check["output_rows"] >= 0, "missing validated row count")
         rows.append(check["output_rows"])
     return {"status": "passed", "path": str(path), "artifact_sha256": digest(path), "expected_output_rows": rows}

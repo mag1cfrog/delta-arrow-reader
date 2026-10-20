@@ -34,6 +34,10 @@ pub(super) struct Request {
 }
 
 fn conditions(config: &Value, protocols: &Path) -> Result<Value> {
+    let builds = object(field(config, "reader_builds")?)?
+        .iter()
+        .map(|(reader, build)| Ok((reader.clone(), super::contract::build(build)?)))
+        .collect::<Result<Map<_, _>>>()?;
     let server = &config["server"];
     let mut model = BTreeSet::new();
     for line in text(&server["cpu_info"])?.lines() {
@@ -61,12 +65,10 @@ fn conditions(config: &Value, protocols: &Path) -> Result<Value> {
             transport[key] = field(network, key)?.clone();
         }
     }
-    Ok(
-        json!({"reader_builds":field(config,"reader_builds")?, "resource_budget":budget(),
+    Ok(json!({"reader_builds":builds, "resource_budget":budget(),
         "gate_diagnostics":Mode::GateDiagnostics.enabled(config,protocols)?, "server_build_sha256":field(server,"build_sha256")?,
         "cpus":field(server,"cpus")?, "topology":field(server,"topology")?, "cpu_model":model, "kernel":field(server,"kernel")?,
-        "cache_policy":field(config,"cache_policy")?, "transport":transport}),
-    )
+        "cache_policy":field(config,"cache_policy")?, "transport":transport}))
 }
 
 pub(super) fn run(request: Request) -> Result<Value> {
@@ -103,6 +105,7 @@ pub(super) fn run(request: Request) -> Result<Value> {
     let mut sources = Vec::new();
     let mut shared = Value::Null;
     let mut builds = Map::new();
+    let mut build_hashes = Map::new();
     for (directory, audited) in campaigns {
         let config = read_json(&directory.join("campaign.json"))?;
         let combined = Mode::CombinedDiagnostics.enabled(&config, &protocols)?;
@@ -116,6 +119,7 @@ pub(super) fn run(request: Request) -> Result<Value> {
                     !matches!(
                         k.as_str(),
                         "workload_manifest_sha256"
+                            | "workload_contract"
                             | "protocol_sha256"
                             | "base_protocol_sha256"
                             | "sampling_sha256"
@@ -168,12 +172,18 @@ pub(super) fn run(request: Request) -> Result<Value> {
             )?;
             let gate = &row["gate"];
             if gate["identity"].is_object() && !object(&gate["identity"])?.is_empty() {
-                let build = field(&gate["identity"], "reader_build_sha256")?;
+                let build = gate["identity"]
+                    .get("reader_artifact")
+                    .unwrap_or(field(&gate["identity"], "reader_build_sha256")?);
                 require(
                     builds.get(reader).is_none_or(|previous| previous == build),
                     "native reader build changed",
                 )?;
                 builds.insert(reader.to_owned(), build.clone());
+                build_hashes.insert(
+                    reader.to_owned(),
+                    gate["identity"]["reader_build_sha256"].clone(),
+                );
             }
             let measurement = &row["measurements"];
             let eligible = measurement["eligible"]
@@ -243,7 +253,8 @@ pub(super) fn run(request: Request) -> Result<Value> {
     let mut result = identity;
     result.as_object_mut().unwrap().extend(object(&json!({"format":"selective-read-production-report-v1",
         "status":if complete_coverage { "complete" } else { "incomplete" }, "formal_coverage_complete":complete_coverage,
-        "complete_cases":complete,"publication_ready":false,"readers":readers,"conditions":shared,"reader_build_sha256":builds,
+        "complete_cases":complete,"publication_ready":false,"readers":readers,"conditions":shared,
+        "reader_build_sha256":build_hashes,"reader_artifacts":builds,
         "definition":fs::canonicalize(&definition)?,"cases":cases,"campaigns":sources,"rows":rows}))?.clone());
     fs::create_dir(&output)?;
     save(&output.join("production-report.json"), &result)?;

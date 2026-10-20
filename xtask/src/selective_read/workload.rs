@@ -41,6 +41,10 @@ const PREDICATE: &str =
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "kebab-case", deny_unknown_fields)]
 pub(super) enum Request {
+    Identity {
+        value: Value,
+        sha256: String,
+    },
     Define(Box<production::Define>),
     Load {
         value: Value,
@@ -107,6 +111,7 @@ pub(super) enum Request {
 
 pub(super) fn run(request: Request) -> Result<Value> {
     match request {
+        Request::Identity { value, sha256 } => identity(&value, &sha256),
         Request::Define(args) => production::define(*args),
         Request::Load { value, harness } => production::load(value, &harness),
         Request::Binding {
@@ -162,15 +167,17 @@ pub(super) fn run(request: Request) -> Result<Value> {
     }
 }
 
+fn identity(value: &Value, sha256: &str) -> Result<Value> {
+    let mut identity = value.clone();
+    identity["workload_manifest_sha256"] = json!(sha256);
+    identity["workload_contract"] = super::contract::workload(value)?;
+    super::contract::comparison(&identity)
+}
+
 pub(super) fn load(path: &Path, harness: &Path) -> Result<(Value, Value)> {
     let bytes = std::fs::read(path)?;
     let value: Value = serde_json::from_slice(&bytes)?;
-    let mut identity = value.clone();
-    identity["workload_manifest_sha256"] = json!(reader_sha256(bytes.as_slice())?);
-    let identity = super::campaign::evidence::comparison(
-        &identity,
-        &harness.join("../../docs/content/benchmarks"),
-    )?;
+    let identity = identity(&value, &reader_sha256(bytes.as_slice())?)?;
     let value = if value["format"] == "selective-read-production-workload-v1" {
         production::load(value, harness)?
     } else {

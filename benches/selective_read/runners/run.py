@@ -76,7 +76,12 @@ def comparison_identity(value):
         if not isinstance(value.get("workload_manifest_sha256"), str) or not re.fullmatch(
                 "[0-9a-f]{64}", value["workload_manifest_sha256"]):
             raise ValueError("missing or stale large-workload identity")
-    elif value.get("workload_manifest_sha256") is not None:
+        if "workload_contract" in value:
+            contract = value["workload_contract"]
+            if not isinstance(contract, dict) or contract.get("comparison_revision") != revision or contract.get("sampling_stage") != value.get("sampling_stage"):
+                raise ValueError("invalid workload contract")
+            fields += ("workload_contract",)
+    elif value.get("workload_manifest_sha256") is not None or "workload_contract" in value:
         raise ValueError("revision 2 cannot carry large-workload identities")
     if revision >= 4:
         fields += SAMPLING_IDENTITY_FIELDS
@@ -90,7 +95,22 @@ def comparison_identity(value):
 
 
 def comparison_contract(value):
-    return tuple(value.get(key) for key in ("comparison_revision", "workload_manifest_sha256", "sampling_stage"))
+    return (value.get("comparison_revision"), value.get("workload_contract", value.get("workload_manifest_sha256")), value.get("sampling_stage"))
+
+
+def same_comparison(left, right):
+    return (left.get("comparison_revision") == right.get("comparison_revision")
+            and left.get("sampling_stage") == right.get("sampling_stage")
+            and (left["workload_contract"] == right["workload_contract"] if "workload_contract" in left and "workload_contract" in right
+                 else left.get("workload_manifest_sha256") == right.get("workload_manifest_sha256")))
+
+
+def identity_matches(expected, actual):
+    replacements = {"reader_build_sha256": "reader_artifact", "workload_manifest_sha256": "workload_contract"}
+    return all(type(actual.get(key)) is type(value) and actual.get(key) == value for key, value in expected.items()
+               if key not in ("protocol_sha256", "base_protocol_sha256", "sampling_sha256")
+               and not (key in replacements and replacements[key] in expected and replacements[key] in actual)
+               and not (key in replacements.values() and key not in actual))
 
 
 HISTORICAL_READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft")

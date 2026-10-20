@@ -14,7 +14,8 @@ fn fixture(root: &Path, revision: u64) -> Result<Request> {
     let readers = roster(&identity)?;
     let mut config = identity.clone();
     config.as_object_mut().unwrap().extend(object(&json!({
-        "reader_builds":readers.iter().map(|reader| (reader.to_string(),json!({"version":"pinned"}))).collect::<Map<_,_>>(),
+        "reader_builds":readers.iter().map(|reader| (reader.to_string(),json!({"reader_id":reader,
+            "executable_sha256":"1".repeat(64),"lockfile_sha256":"2".repeat(64)}))).collect::<Map<_,_>>(),
         "server":{"build_sha256":"minio", "cpus":{"reader":[0,1,2,3,4,5,6,7]}, "topology":[],
             "kernel":"fixed", "cpu_info":"model name: check-cpu\ncpu MHz: 1000\n"},
         "cache_policy":"fresh clients; reused caches"
@@ -154,7 +155,10 @@ fn altered_cases_samples_builds_and_formal_conditions_are_rejected() -> Result<(
     let original = read_json(&config_path)?;
     for (pointer, value) in [
         ("/sampling_stage", json!("pilot")),
-        ("/reader_builds/spark/version", json!("changed")),
+        (
+            "/reader_builds/spark/executable_sha256",
+            json!("3".repeat(64)),
+        ),
         ("/server/cpus/reader", json!([1])),
         ("/server/cpu_info", json!("model name: different")),
     ] {
@@ -164,6 +168,7 @@ fn altered_cases_samples_builds_and_formal_conditions_are_rejected() -> Result<(
         assert!(aggregate(&request).is_err(), "{pointer}");
     }
     let mut config = original.clone();
+    config["reader_builds"]["spark"]["harness_git_commit"] = json!("different audit record");
     config["server"]["cpu_info"] = json!("cpu MHz: 3000\nmodel name: check-cpu\n");
     fs::write(&config_path, serde_json::to_vec(&config)?)?;
     assert_eq!(aggregate(&request)?["formal_coverage_complete"], true);

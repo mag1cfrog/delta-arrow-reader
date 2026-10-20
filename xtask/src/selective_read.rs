@@ -1,5 +1,8 @@
 mod campaign;
 mod checks;
+#[allow(dead_code)]
+#[path = "../../benches/selective_read/runners/contract.rs"]
+mod contract;
 mod experiment;
 mod invoke;
 mod network;

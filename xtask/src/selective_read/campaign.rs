@@ -299,18 +299,7 @@ pub(super) fn schedule(
 }
 
 fn same_reader_identity(left: &Value, right: &Value) -> bool {
-    let (Some(left), Some(right)) = (left.as_object(), right.as_object()) else {
-        return false;
-    };
-    let behavioral = |key: &str| {
-        !matches!(
-            key,
-            "protocol_sha256" | "base_protocol_sha256" | "sampling_sha256"
-        )
-    };
-    left.iter()
-        .filter(|(key, _)| behavioral(key))
-        .eq(right.iter().filter(|(key, _)| behavioral(key)))
+    super::contract::identity_matches(left, right) && super::contract::identity_matches(right, left)
 }
 
 fn warmed_gate(gate: &Value, observations: &BTreeMap<String, Value>) -> bool {

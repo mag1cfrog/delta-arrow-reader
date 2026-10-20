@@ -349,22 +349,17 @@ pub(in crate::selective_read) fn run(request: Request) -> Result<Value> {
         } => {
             let identity = comparison(&identity, &protocols)?;
             require(
-                evidence::comparison_contract(&comparison(&config, &protocols)?)
-                    == evidence::comparison_contract(&identity),
+                evidence::same_comparison(&comparison(&config, &protocols)?, &identity),
                 "campaign workload changed",
             )?;
             require(
-                evidence::comparison_contract(&comparison(summary, &protocols)?)
-                    == evidence::comparison_contract(&identity)
+                evidence::same_comparison(&comparison(summary, &protocols)?, &identity)
                     && array(slots)?
                         .iter()
                         .map(|slot| comparison(slot, &protocols))
                         .collect::<Result<Vec<_>>>()?
                         .iter()
-                        .all(|value| {
-                            evidence::comparison_contract(value)
-                                == evidence::comparison_contract(&identity)
-                        }),
+                        .all(|value| evidence::same_comparison(value, &identity)),
                 "schedule/summary workload changed",
             )?;
             let ordered_inventory: Vec<_> = object(inventory)?
@@ -429,10 +424,11 @@ pub(in crate::selective_read) fn run(request: Request) -> Result<Value> {
             for row in observations {
                 require(seen.insert(text(&row["run_id"])?), "duplicate observation")?;
                 require(
-                    evidence::comparison_contract(&comparison(row, &protocols)?)
-                        == evidence::comparison_contract(&identity)
-                        && evidence::comparison_contract(&comparison(&row["request"], &protocols)?)
-                            == evidence::comparison_contract(&identity),
+                    evidence::same_comparison(&comparison(row, &protocols)?, &identity)
+                        && evidence::same_comparison(
+                            &comparison(&row["request"], &protocols)?,
+                            &identity,
+                        ),
                     "observation workload changed",
                 )?;
                 let job = jobs
@@ -474,8 +470,10 @@ pub(in crate::selective_read) fn run(request: Request) -> Result<Value> {
                         )?;
                         let metadata = read_json(&path)?;
                         require(
-                            evidence::comparison_contract(&comparison(&metadata, &protocols)?)
-                                == evidence::comparison_contract(&identity),
+                            evidence::same_comparison(
+                                &comparison(&metadata, &protocols)?,
+                                &identity,
+                            ),
                             "reference workload changed",
                         )?;
                         oracle = select(

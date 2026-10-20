@@ -269,12 +269,20 @@ class OracleTests(unittest.TestCase):
                     write_json(identity, provenance | {"result_sha256": run.digest(result)})
                 export(table)
                 self.assertEqual(oracle.check(reference, fixtures, result, identity)["status"], "passed")
-                for field in ("workload_manifest_sha256",):
-                    altered = json.loads(identity.read_text()) | {field: "0" * 64}
-                    write_json(identity, altered)
-                    with self.assertRaisesRegex(ValueError, "identity mismatch"):
-                        oracle.check(reference, fixtures, result, identity)
-                    export(table)
+                original_workload = workload.read_bytes()
+                try:
+                    write_json(workload, value | {"source_sha256": {"planner": "updated audit record"}})
+                    self.assertEqual(oracle.check(reference, fixtures, result, identity)["status"], "passed")
+                finally:
+                    workload.write_bytes(original_workload)
+                altered = json.loads(identity.read_text()) | {"workload_manifest_sha256": "0" * 64}
+                write_json(identity, altered)
+                self.assertEqual(oracle.check(reference, fixtures, result, identity)["status"], "passed")
+                altered.pop("workload_contract")
+                write_json(identity, altered)
+                with self.assertRaisesRegex(ValueError, "comparison mismatch"):
+                    oracle.check(reference, fixtures, result, identity)
+                export(table)
                 corrupted = table.set_column(0, table.schema.field(0), pa.array([0] * table.num_rows, type=pa.int64()))
                 export(corrupted)
                 with self.assertRaises(ValueError):

@@ -6,7 +6,7 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
-from run import comparison_identity, digest
+from run import digest
 import native
 
 READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft")
@@ -30,7 +30,7 @@ def definitions(family="data", pilot_case=None):
 
 def identity(path):
     value = json.loads(Path(path).read_text())
-    return comparison_identity(value | {"workload_manifest_sha256": digest(Path(path))})
+    return native.call("workload", {"action": "identity", "value": value, "sha256": digest(Path(path))})
 
 
 def query_fields(case, manifest):

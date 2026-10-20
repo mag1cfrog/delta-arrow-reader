@@ -794,7 +794,7 @@ IDENTITY_FIELDS = ("comparison_revision", "protocol_sha256", "fixture_manifest_s
 
 
 def check(reference, fixtures, result, identity):
-    metadata = load_json(Path(reference) / "reference.json")
+    metadata = json.loads((Path(reference) / "reference.json").read_text())
     limits = metadata.get("oracle_limits") if metadata.get("comparison_revision") in (3, 4, 5, 6) else None
     if metadata.get("comparison_revision") in (3, 4, 5, 6):
         import large_workloads
@@ -806,25 +806,25 @@ def check(reference, fixtures, result, identity):
 
 def check_rows(reference, fixtures, result, identity, quota):
     reference, fixtures, result, identity = map(Path, (reference, fixtures, result, identity))
-    metadata = load_json(reference / "reference.json")
+    metadata = json.loads((reference / "reference.json").read_text())
     check_reference_build(metadata)
     sys.path.insert(0, str(Path(__file__).resolve().parent / "runners"))
-    from run import comparison_identity, comparison_contract, reader_roster
+    from run import comparison_identity, same_comparison, reader_roster
     comparison = comparison_identity(metadata)
     if metadata["comparison_revision"] in (3, 4, 5, 6):
         import large_workloads
         path = Path(metadata["workload_manifest"])
-        require(comparison_contract(comparison) == comparison_contract(large_workloads.identity(path)), "stale workload manifest")
+        require(same_comparison(comparison, large_workloads.identity(path)), "stale workload manifest")
         row = large_workloads.binding(large_workloads.load(path), fixtures, metadata["case_id"])
         require(metadata["canonical_sql"] == row["canonical_sql"] and metadata["projection"] == row["projection"], "reference workload query changed")
     require(metadata["fixture_manifest_sha256"] == digest_file(fixtures / "manifest.json"), "stale fixture manifest")
     require(metadata["reference_sha256"] == digest_file(reference / "reference.parquet"), "reference Parquet changed")
     for item in metadata["verified_objects"]:
         verify_object(fixtures, item)
-    provenance = load_json(identity)
+    provenance = json.loads(identity.read_text())
     require(provenance["reader_id"] in (set(reader_roster(metadata)) if metadata["comparison_revision"] == 6 else READERS), "unknown reader identity")
-    identity_fields = tuple(name for name in dict.fromkeys((*IDENTITY_FIELDS, *comparison))
-                           if name not in ("protocol_sha256", "base_protocol_sha256", "sampling_sha256"))
+    require(same_comparison(comparison, comparison_identity(provenance)), "result comparison mismatch")
+    identity_fields = tuple(name for name in IDENTITY_FIELDS if name != "protocol_sha256")
     for name in identity_fields:
         require(type(provenance[name]) is type(metadata[name]) and provenance[name] == metadata[name], f"result identity mismatch: {name}")
     for name in ("reader_build_sha256", "reader_config_sha256", "result_sha256"):
@@ -849,7 +849,8 @@ def check_rows(reference, fixtures, result, identity, quota):
                         quota, subset=metadata["limit"] is not None)
         require(not source.read(1), "trailing bytes after Arrow stream")
     return {
-        "status": "passed", **{name: metadata[name] for name in identity_fields},
+        "status": "passed", **{name: metadata[name] for name in identity_fields}, **comparison_identity(provenance),
+        **({"reader_artifact": provenance["reader_artifact"]} if "reader_artifact" in provenance else {}),
         **{name: provenance[name] for name in ("reader_id", "reader_build_sha256", "reader_config_sha256", "native_expression_sha256", "result_sha256")},
         "oracle_sha256": digest_file(__file__), "reference_sha256": metadata["reference_sha256"],
         "identity_sha256": digest_file(identity), "output_rows": count,

@@ -22,6 +22,10 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+#[allow(dead_code)]
+#[path = "contract.rs"]
+mod contract;
+
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 pub const TABLE: &str = "bench";
 const LOCK: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.lock"));
@@ -37,6 +41,7 @@ pub struct Request {
     protocol_sha256: String,
     base_protocol_sha256: Option<String>,
     workload_manifest_sha256: Option<String>,
+    workload_contract: Option<Value>,
     sampling_sha256: Option<String>,
     sampling_stage: Option<String>,
     fixture_manifest_sha256: String,
@@ -109,21 +114,8 @@ impl Request {
     }
 
     fn valid_comparison(&self) -> bool {
-        if self.comparison_revision >= 5 {
-            if !matches!(self.sampling_stage.as_deref(), Some("pilot" | "formal")) {
-                return false;
-            }
-        } else if self.sampling_stage.is_some() {
-            return false;
-        }
-        match self.comparison_revision {
-            2 => self.workload_manifest_sha256.is_none(),
-            3..=6 => self
-                .workload_manifest_sha256
-                .as_deref()
-                .is_some_and(is_hash),
-            _ => false,
-        }
+        (self.comparison_revision != 2 || self.workload_contract.is_none())
+            && contract::comparison(&identity(self, "", "")).is_ok()
     }
 }
 
@@ -243,6 +235,9 @@ fn identity(request: &Request, build_hash: &str, config_hash: &str) -> Value {
     if request.comparison_revision >= 3 {
         value["base_protocol_sha256"] = json!(request.base_protocol_sha256);
         value["workload_manifest_sha256"] = json!(request.workload_manifest_sha256);
+        if let Some(contract) = &request.workload_contract {
+            value["workload_contract"] = contract.clone();
+        }
     }
     if request.comparison_revision >= 4 {
         value["sampling_sha256"] = json!(request.sampling_sha256);
@@ -273,16 +268,8 @@ fn correctness(request: &Request, identity: &Value) -> Result<Value> {
         if check["status"] != "passed" {
             return Err("failed oracle check".into());
         }
-        for (key, value) in identity.as_object().ok_or("invalid identity")? {
-            if matches!(
-                key.as_str(),
-                "protocol_sha256" | "base_protocol_sha256" | "sampling_sha256"
-            ) {
-                continue;
-            }
-            if check.get(key) != Some(value) {
-                return Err(format!("stale correctness field: {key}").into());
-            }
+        if !contract::identity_matches(identity, check) {
+            return Err("stale correctness identity".into());
         }
         expected_rows.push(
             check["output_rows"]
@@ -645,11 +632,12 @@ fn run(request_path: &Path, output: &Path) -> Result<bool> {
     if let Some(count) = request.concurrent_queries {
         settings["concurrent_queries"] = json!(count);
     }
-    let input_identity = identity(
+    let mut input_identity = identity(
         &request,
         &file_digest(&build_path)?,
         &digest(&serde_json::to_vec(&settings)?),
     );
+    input_identity["reader_artifact"] = contract::build(&build)?;
     let mut record = json!({"format": "selective-read-observation-v1", "identity": input_identity,
         "campaign_id": request.campaign_id, "run_id": request.run_id, "repetition": request.repetition, "order": request.order,
         "profile": request.profile, "purpose": request.purpose, "execution_mode": request.execution_mode,

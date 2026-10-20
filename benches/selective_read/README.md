@@ -29,6 +29,13 @@ A timing certificate applies to the reader build, configuration, query, and
 inputs that passed validation. A different reader build must pass validation
 before its timings can be accepted.
 
+New requests and certificates carry a structured workload contract and reader
+artifact identity. They compare queries, layout settings, inputs, runtime and
+executable artifacts directly. Updating Git metadata or source provenance alone
+does not require new references or correctness checks. Historical records that
+only contain checksums still require their original immutable inputs. Revalidate
+exports with the current tools to produce certificates with structured identities.
+
 Build the native controller before preparing references, running readers or
 checking the independent Python oracle:
 
