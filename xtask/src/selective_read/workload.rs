@@ -9,6 +9,7 @@ use serde_json::{Map, Value, json};
 use super::{array, field, fixture_tables, object, require, text};
 use crate::{Result, artifacts::reader_sha256, selective_read_build::digest};
 
+pub(super) mod files;
 pub(super) mod fixtures;
 mod large;
 pub(super) mod matrix;
@@ -75,6 +76,10 @@ pub(super) enum Request {
         fixtures: PathBuf,
         case: String,
     },
+    FileGeometry {
+        table: Value,
+        files: u64,
+    },
     Query {
         case: String,
         manifest: Value,
@@ -115,6 +120,10 @@ pub(super) fn run(request: Request) -> Result<Value> {
             fixtures,
             case,
         } => large::binding(&value, &fixtures, &case),
+        Request::FileGeometry { table, files } => {
+            files::geometry(&table, files)?;
+            Ok(Value::Null)
+        }
         Request::Query {
             case,
             manifest,

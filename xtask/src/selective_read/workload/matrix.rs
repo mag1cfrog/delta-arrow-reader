@@ -354,7 +354,7 @@ pub(crate) fn prepare(args: Prepare) -> Result<Value> {
                 .unwrap()
                 .extend(object(&query(&case, &frozen, &manifest)?)?.clone());
             let reference = references.join(&case);
-            let metadata = worker.call(&json!({"action":"matrix-reference","fixtures":fixtures,"case_id":case,
+            let metadata = worker.call(&json!({"action":"prepare-reference","fixtures":fixtures,"case_id":case,
                 "reference":reference,"reuse":args.references.is_some(),"sql":row["canonical_sql"]}))?;
             reference_build(&metadata, &harness)?;
             require(

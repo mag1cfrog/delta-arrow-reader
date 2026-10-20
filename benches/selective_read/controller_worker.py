@@ -67,10 +67,14 @@ def dispatch(value):
         elif not actual.cast(expected.schema).equals(expected):
             raise ValueError("query result differs: " + value["path"])
         return None
-    if action == "matrix-reference":
+    if action == "repacked-values":
+        from file_organizations import batches, same_rows
+        return same_rows(batches(Path(value["parent"]), value["original"]), batches(fixtures, value["table"]))
+    if action == "prepare-reference":
         import oracle
         reference = Path(value["reference"])
-        oracle.require(oracle.case_input(fixtures, value["case_id"])[-1] == value["sql"], "oracle SQL differs from catalog")
+        if "sql" in value:
+            oracle.require(oracle.case_input(fixtures, value["case_id"])[-1] == value["sql"], "oracle SQL differs from catalog")
         metadata = (json.loads((reference / "reference.json").read_text()) if value["reuse"] else
                     oracle.prepare(fixtures, value["case_id"], reference))
         oracle.check_reference_build(metadata)

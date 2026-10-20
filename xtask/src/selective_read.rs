@@ -47,6 +47,10 @@ pub(crate) enum Task {
     PrepareMatrix(workload::matrix::Prepare),
     /// Export a validated public query matrix campaign.
     ReportMatrix(workload::matrix::Report),
+    /// Verify repacked rows and prepare independent file-organization references.
+    PrepareFiles(workload::files::Prepare),
+    /// Export a verified file-organization campaign.
+    ReportFiles(workload::files::Report),
     /// Freeze independently checked production fixtures and pinned Polars translations.
     FreezeWorkload(Box<workload::production::Define>),
     /// Probe or generate production layouts using the pinned Arrow streaming producer.
@@ -138,6 +142,18 @@ impl Task {
                 println!("{}", workload::matrix::report(args)?);
                 return Ok(());
             }
+            Self::PrepareFiles(args) => {
+                let result = workload::files::prepare(args)?;
+                println!(
+                    "{}",
+                    serde_json::json!({"status":result["status"],"cases":array(&result["cases"])?.len()})
+                );
+                return Ok(());
+            }
+            Self::ReportFiles(args) => {
+                println!("{}", workload::files::report(args)?);
+                return Ok(());
+            }
             Self::RunIntraPage(args) => return experiment::intra_page::batch::run(*args),
             Self::FreezeWorkload(args) => {
                 let value = workload::production::define(*args)?;
@@ -217,6 +233,8 @@ impl Task {
             | Self::PlanProduction(_)
             | Self::PrepareMatrix(_)
             | Self::ReportMatrix(_)
+            | Self::PrepareFiles(_)
+            | Self::ReportFiles(_)
             | Self::RunNumericPages(_)
             | Self::RunDeltaLength(_)
             | Self::UploadStorage(_)

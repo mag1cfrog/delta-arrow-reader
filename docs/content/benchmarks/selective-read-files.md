@@ -53,11 +53,12 @@ use `--profile smoke` with an existing smoke parent. That still creates exactly
 
 ## Verify rows and pruning opportunity
 
-Use the [pinned oracle environment](selective-read-oracle.md):
+Build the controller with `cargo build --locked -p xtask` and use the
+[pinned oracle environment](selective-read-oracle.md):
 
 ```sh
-../selective-read-oracle-venv/bin/python -B \
-  benches/selective_read/file_organizations.py prepare \
+target/debug/xtask selective-read prepare-files \
+  --python ../selective-read-oracle-venv/bin/python \
   --parent ../selective-read-development --fixtures ../selective-read-files \
   --output ../selective-read-files-references
 ```
@@ -123,8 +124,7 @@ Python verifies the independent references and pruning geometry; Rust audits
 the campaign and writes the JSON and CSV reports.
 
 ```sh
-../selective-read-oracle-venv/bin/python -B \
-  benches/selective_read/file_organizations.py report \
+target/debug/xtask selective-read report-files \
   --campaign ../selective-read-files-campaign \
   --references ../selective-read-files-references \
   --output ../selective-read-files-report
