@@ -24,8 +24,11 @@ come directly from the generated input.
 
 Pages are uncompressed PLAIN V1, with offset indexes, one row group per file,
 a 4 MiB page target and a 524,288-row limit. Generate the fixture with
-`numeric_pages.py generate --decimals --output PATH`. The original numeric fixture
-still reproduces exactly, including its Parquet, Delta log and reference hashes.
+`selective-read-fixtures numeric-pages --decimals --output PATH` after building
+the [Rust fixture tool](intra-page-reads.md#numeric-type-fixtures). The recorded
+results below use the original PyArrow fixture. The Rust generator preserves
+the types, selection and writer settings, but produces different values and
+file bytes. Use the same fixture directory for both reader candidates.
 
 | Decimal | File width | Base query, s | Candidate query, s | Base query MB | Candidate query MB |
 | --- | ---: | ---: | ---: | ---: | ---: |

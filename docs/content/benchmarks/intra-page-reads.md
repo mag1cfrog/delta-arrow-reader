@@ -233,13 +233,14 @@ separate reads of the same range.
 The [numeric type comparison](intra-page-numeric-types.md) records the results
 against the pre-series reader, including all four retained README cases.
 
-`numeric_pages.py` generates a separate, deterministic fixture for INT32, INT64,
+The Rust fixture tool generates a separate, deterministic fixture for INT32, INT64,
 FLOAT and DOUBLE, with nullable and required columns. It does not change the
 published revision-6 tables or oracle. Its small `numeric-pages` driver is built
 alongside the DAR runner; build the same driver against both reader revisions.
 
 ```console
-python benches/selective_read/numeric_pages.py generate --output /path/to/numeric-fixture
+cargo +1.98.1 run --release --locked --manifest-path benches/selective_read/Cargo.toml \
+  --bin selective-read-fixtures -- numeric-pages --output /path/to/numeric-fixture
 cargo xtask selective-read run-numeric-pages --python /path/to/oracle-venv/bin/python \
   --fixture /path/to/numeric-fixture --state /path/to/storage-state \
   --table s3://selective-read/verified-numeric-fixture \
@@ -255,9 +256,11 @@ including floating-point bits, in separate processes. Timings use defaults and
 report initialization and two fully consumed queries separately.
 The Rust controller runs the complete numeric and Delta-length experiments,
 including validation gates, alternating samples, statistics, deadlines and
-process cleanup. Python retains fixture generation and independent Arrow
-comparisons. The existing Python `run` commands forward to `run-numeric-pages`
-and `run-delta-length`; both native commands require the pinned `--python` path.
+process cleanup. Python retains independent Arrow comparisons; both experiment
+commands require the pinned `--python` path. The Rust generator uses SplitMix64
+and parquet-rs 58.4.0. It preserves the fixture's types, nullability, selection
+rules and writer settings, but generates different values and bytes from the
+retired Python writer. Compare readers against the same generated directory.
 
 ## Missing request-cost evidence
 

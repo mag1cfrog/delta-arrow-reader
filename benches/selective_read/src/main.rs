@@ -5,6 +5,7 @@ mod controls;
 mod dv;
 mod fixtures;
 mod large;
+mod page_fixtures;
 mod production;
 mod repack;
 
@@ -38,6 +39,7 @@ const GENERATOR_SOURCE: &str = concat!(
     include_str!("controls.rs"),
     include_str!("dv.rs"),
     include_str!("large.rs"),
+    include_str!("page_fixtures.rs"),
     include_str!("production.rs"),
     include_str!("../production_fixtures.py")
 );
@@ -286,6 +288,9 @@ impl Config {
 }
 
 fn main() -> Result<()> {
+    if let Some(command @ ("numeric-pages" | "length-pages")) = env::args().nth(1).as_deref() {
+        return page_fixtures::run(command, &env::args().skip(2).collect::<Vec<_>>());
+    }
     if env::args().nth(1).as_deref() == Some("production-write") {
         return production::run(&env::args().skip(2).collect::<Vec<_>>());
     }

@@ -63,8 +63,6 @@ def dispatch(value):
             expected = pq.read_table([fixture / f["path"] for f in manifest["files"]],
                 columns=["row_id"] + [f"{value['column_type']}_{i}" for i in range(8)])
         else:
-            if value["driver"] == "length" and pa.__version__ != manifest["pyarrow"]:
-                raise ValueError("oracle Arrow version changed")
             key = value["column_type"] if value["driver"] == "numeric" else value["selection"]
             expected = pa.ipc.open_stream(fixture / manifest["references"][key]["path"]).read_all()
         EXPECTED[value["driver"]] = expected

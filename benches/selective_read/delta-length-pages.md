@@ -184,8 +184,8 @@ Use the pinned PyArrow environment and MinIO/proxy setup in
 export CARGO_TARGET_DIR="$experiment_root/target"
 export RUSTFLAGS='-C target-cpu=x86-64'
 cargo +1.98.1 build --release --locked --features delta-length-network \
-  --bin delta-length-pages --bin delta-length-query
-python delta_length_network.py generate --case long \
+  --bin selective-read-fixtures --bin delta-length-pages --bin delta-length-query
+"$experiment_root/target/release/selective-read-fixtures" length-pages --case long \
   --binary "$experiment_root/target/release/delta-length-pages" \
   --output "$experiment_root/long"
 ```
@@ -196,8 +196,14 @@ contains two unpartitioned Delta files, a real DV per file, eight required or
 nullable UTF-8/binary payload columns, and `row_id`, `grouped` and `scattered`
 columns. `grouped = 1` selects eight adjacent rows per 2,048; `scattered = 1`
 selects one per 997. `dense` reads all live rows. DVs delete every 103rd physical
-row. The independent expected values are filtered from the Python input before
-Parquet encoding and saved as compressed Arrow IPC.
+row. Expected values are filtered from the generated Arrow input before Parquet
+encoding and saved as compressed Arrow IPC. The Python checker independently
+compares the reader's export with these references.
+
+The generator uses SplitMix64 and parquet-rs 58.4.0. Its value bytes and page
+layouts differ from the retired Python writer; compare candidates against the
+same fixture directory. The manifest records the writer, distributions, page
+layout, objects and reference checksums. Existing fixtures remain readable.
 `selected-long-batch` keeps the selected-long value-length rule but increases
 rows per file from 8,192 to 65,536 and rows per group from 4,096 to 32,768.
 This lets discovery pass the initial cost gate and tests the later fallback.
