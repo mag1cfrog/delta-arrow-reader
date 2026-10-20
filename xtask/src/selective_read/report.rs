@@ -20,6 +20,7 @@ use std::{
 const MODES: [&str; 2] = ["open", "reuse"];
 
 pub(super) mod batch;
+pub(super) mod controller;
 
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]

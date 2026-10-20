@@ -1,6 +1,5 @@
-"""Validate frozen workload bindings and export audited campaign results."""
+"""Bind the independent oracle to frozen native workload definitions."""
 
-import argparse
 import json
 from pathlib import Path
 import sys
@@ -52,28 +51,3 @@ def binding(value, fixtures, case_id):
         import production_workloads
         return production_workloads.binding(value, fixtures, case_id)
     return native.call("workload", {"action": "large-binding", "value": value, "fixtures": str(fixtures), "case": case_id})
-
-
-def report(campaign, output):
-    """Bind independent queries before the native campaign evidence audit."""
-    config = json.loads((campaign / "campaign.json").read_text())
-    path = Path(config["workload"])
-    frozen = load(path)
-    jobs = {job["id"]: job for job in config["jobs"]}
-    observed = {json.loads(line)["job_id"] for line in (campaign / "observations.jsonl").read_text().splitlines()}
-    cases = {jobs[job]["case_id"] for job in observed}
-    bindings = {case: binding(frozen, Path(config["fixtures"]), case) for case in cases}
-    return native.call("campaign-report", {"campaign": str(campaign), "output": str(output),
-        "format": {"kind": "workload", "frozen": frozen, "identity": identity(path),
-                   "bindings": bindings, "protocols": str(PROTOCOL.parent)}})
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("report",))
-    parser.add_argument("--campaign", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
-    args = parser.parse_args()
-    result = report(args.campaign, args.output)
-    print(json.dumps({"status": result["status"], "entries": len(result["rows"])}))
-    sys.exit(0 if result["status"] == "complete" else 1)

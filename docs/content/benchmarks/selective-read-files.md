@@ -260,7 +260,8 @@ the two explicit legacy case/reference arguments for a revision 2 campaign.
 The five native capability and exact-correctness gates apply to every case;
 errors, timeouts and unsupported DVs remain explicit results.
 
-Use `large_workloads.py report` for the new family. The report includes exact
+Use `cargo +1.98.1 run --locked -p xtask -- selective-read report-workload`
+for the new family. The report includes exact
 reference counts and file/DV geometry alongside the existing initialization,
 query, session and separate I/O observations. Native planning/scan clocks remain
 null with reasons where unavailable. Compare file organizations only at their
@@ -270,6 +271,6 @@ ratio is not a pure bitmap cost. All these candidate reports retain
 
 The bounded Rust check uses eight rows with different file boundaries to prove
 that a normal-file minimum missing from the repacked minima joins the shared
-set. Python checks reject undersized files and mixed scales. Actual 4,096-file
+set. Rust checks reject undersized files and mixed scales. Actual 4,096-file
 generation, native reader checks and large geometry acceptance stay outside CI;
 this extension adds no CI job or step.

@@ -4,9 +4,8 @@ Generate one overview from formal campaigns that ran native snapshots separately
 The report keeps all eight Q2/Q4 cases, all five readers and both open/reuse
 profiles visible. A completed batch can leave most of the matrix pending.
 
-Use the pinned oracle Python environment from
-[Validate public results](selective-read-oracle.md). Keep the complete frozen
-formal definition, fixture manifests, references and raw campaign artifacts.
+Keep the complete frozen formal definition, fixture manifests, references and
+raw campaign artifacts. Report generation uses the Rust controller.
 Revision 6 uses the [Spark reader roster](selective-read-spark-matrix.md).
 Revision 5 retains Daft. Use each revision's frozen harness for historical inputs;
 the report rejects mixtures of comparison revisions.
@@ -18,10 +17,8 @@ just to generate the overview.
 Supply the complete eight-case definition and each campaign once:
 
 ```sh
-cargo build --locked -p xtask
-BENCH_PYTHON=/path/to/oracle-venv/bin/python
 BENCH_RESULTS=/path/to/benchmark-results
-"$BENCH_PYTHON" -B benches/selective_read/production_report.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read report-production \
   --definition "$BENCH_RESULTS/global-definition/workload.json" \
   --campaign "$BENCH_RESULTS/campaigns/q2-scattered-spark-v6" \
   --campaign "$BENCH_RESULTS/campaigns/q2-scattered-dv-spark-v6" \
@@ -79,8 +76,8 @@ snapshots share their base snapshot's Parquet data.
 ## Input checks
 
 Each campaign passes the existing single-campaign audit before aggregation.
-Python loads the frozen definitions and oracle evidence; the compiled Rust
-controller checks cross-campaign consistency and writes the overview.
+The Rust controller loads the frozen definitions and oracle evidence, checks
+cross-campaign consistency and writes the overview.
 Its case must match the complete definition, including SQL, fixture identity,
 native expressions, writer settings and geometry. Each successful observation
 must retain the formal resource and watchdog limits.

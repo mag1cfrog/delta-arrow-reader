@@ -168,6 +168,14 @@ pub(super) fn load(path: &Path, harness: &Path) -> Result<(Value, Value)> {
     Ok((value, identity))
 }
 
+pub(super) fn binding(value: &Value, fixtures: &Path, case: &str, harness: &Path) -> Result<Value> {
+    if matches!(value["comparison_revision"].as_u64(), Some(5 | 6)) {
+        production::binding(value, fixtures, case, harness)
+    } else {
+        large::binding(value, fixtures, case)
+    }
+}
+
 fn payloads() -> Vec<String> {
     (0..64).map(|n| format!("payload_{n:02}")).collect()
 }

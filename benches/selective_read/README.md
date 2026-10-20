@@ -55,8 +55,8 @@ The Daft adapter, dependency lock, and checks are available in the
 Use the matching frozen harness for older comparisons. Their reader identities,
 expression snapshots, and published results remain available for validation.
 New workload definitions use revision 6. The old Daft-dependent creation
-commands live in the archived harness; `large_workloads.py report` still
-exports audited batch results.
+commands live in the archived harness. Export audited batches with
+`cargo +1.98.1 run --locked -p xtask -- selective-read report-workload`.
 
 - [Table layouts and queries](../../docs/content/benchmarks/selective-read-production-shapes.md)
 - [Execution contract](../../docs/content/benchmarks/selective-read-production-workloads.md)

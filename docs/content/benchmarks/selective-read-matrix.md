@@ -164,7 +164,7 @@ manifests use revision 4 and the
 [reduced sampling contract](selective-read-sampling.md).
 Creating them requires Daft and the
 [archived harness](https://github.com/mag1cfrog/delta-arrow-reader/blob/eb1f58b4be8dc0d8ec3bee1615f1777a4c41bd9f/docs/content/benchmarks/selective-read-matrix.md).
-The current `large_workloads.py` retains validation and report export.
+The Rust controller retains workload validation and report export.
 Create new revision 6 workloads with the
 [production fixture workflow](selective-read-production-fixtures.md).
 
@@ -284,7 +284,7 @@ Keep five explicit reader statuses, including native DV rejections and failures.
 Export a checked report with:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/large_workloads.py report \
+cargo +1.98.1 run --locked -p xtask -- selective-read report-workload \
   --campaign ../large-date30-campaign --output ../large-date30-report
 ```
 

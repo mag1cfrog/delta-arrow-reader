@@ -46,6 +46,10 @@ pub(crate) enum Task {
     ProductionReport,
     /// Export audited matrix, file-organization or workload results as JSON/CSV.
     CampaignReport,
+    /// Load frozen workload bindings and audit a single campaign.
+    ReportWorkload(report::controller::Batch),
+    /// Audit and combine formal production campaigns.
+    ReportProduction(report::controller::Production),
     /// Validate workload definitions and fixture metadata.
     Workload,
     /// Validate public query matrix metadata. Read the operation as JSON from stdin.
@@ -142,6 +146,27 @@ impl Task {
             Self::CheckReaders(args) => return checks::local(args),
             Self::CheckStorage(args) => return checks::remote::run(args),
             Self::CheckCapabilities(args) => return checks::capabilities::run(args),
+            Self::ReportWorkload(args) => {
+                let value = report::controller::workload_report(args)?;
+                println!(
+                    "{}",
+                    serde_json::json!({"status":value["status"],"entries":array(&value["rows"])?.len()})
+                );
+                require(
+                    value["status"] == "complete",
+                    "workload report retains incomplete campaign coverage",
+                )?;
+                return Ok(());
+            }
+            Self::ReportProduction(args) => {
+                let value = report::controller::production_report(args)?;
+                println!(
+                    "{}",
+                    serde_json::json!({"status":value["status"],"complete_cases":value["complete_cases"],
+                    "formal_coverage_complete":value["formal_coverage_complete"],"publication_ready":value["publication_ready"]})
+                );
+                return Ok(());
+            }
             Self::ProductionFixtures(args) => return workload::fixtures::run(*args),
             Self::PlanProduction(args) => return workload::planner::run(args),
             Self::PairProduction(args) => {
@@ -260,6 +285,8 @@ impl Task {
             | Self::CheckReaders(_)
             | Self::CheckStorage(_)
             | Self::CheckCapabilities(_)
+            | Self::ReportWorkload(_)
+            | Self::ReportProduction(_)
             | Self::RunIntraPage(_)
             | Self::FreezeWorkload(_)
             | Self::ProductionFixtures(_)
