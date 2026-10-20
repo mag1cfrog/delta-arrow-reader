@@ -46,6 +46,10 @@ pub(crate) enum Task {
     IntraPage,
     /// Run a complete partial-page or two-build experiment with independent validation.
     RunIntraPage(Box<experiment::intra_page::batch::Args>),
+    /// Compare numeric readers against exact independent Arrow values.
+    RunNumericPages(Box<experiment::batch::Numeric>),
+    /// Compare Delta-length policies and preserve all validation and timing samples.
+    RunDeltaLength(Box<experiment::batch::Length>),
     /// Measure raw Zstd block discovery against complete column reads.
     ZstdProbe(zstd_probe::Args),
     /// Calibrate the 200 +/- 20 ms, 150 Mbit/s proxy against signed MinIO reads.
@@ -106,6 +110,8 @@ impl Task {
         match self {
             Self::RunCampaign(args) => return campaign::controller::run(*args),
             Self::RunIntraPage(args) => return experiment::intra_page::batch::run(*args),
+            Self::RunNumericPages(args) => return experiment::batch::numeric(*args),
+            Self::RunDeltaLength(args) => return experiment::batch::length(*args),
             Self::UploadStorage(args) => {
                 let receipt = storage::upload::run(&args, storage::upload::hashes)?;
                 println!(
@@ -166,6 +172,8 @@ impl Task {
             Self::ExecReader { .. }
             | Self::RunCampaign(_)
             | Self::RunIntraPage(_)
+            | Self::RunNumericPages(_)
+            | Self::RunDeltaLength(_)
             | Self::UploadStorage(_)
             | Self::ZstdProbe(_)
             | Self::CheckNetwork { .. }

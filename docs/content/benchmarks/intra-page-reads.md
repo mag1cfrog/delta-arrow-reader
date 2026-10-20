@@ -241,7 +241,7 @@ alongside the DAR runner; build the same driver against both reader revisions.
 
 ```console
 python benches/selective_read/numeric_pages.py generate --output /path/to/numeric-fixture
-python benches/selective_read/numeric_pages.py run \
+cargo xtask selective-read run-numeric-pages --python /path/to/oracle-venv/bin/python \
   --fixture /path/to/numeric-fixture --state /path/to/storage-state \
   --table s3://selective-read/verified-numeric-fixture \
   --baseline /path/to/base/numeric-pages --candidate /path/to/change/numeric-pages \
@@ -254,9 +254,11 @@ control, a file URI for the local control, and the proxy's low-latency profile f
 the fast-network control. Validation compares independent Arrow references,
 including floating-point bits, in separate processes. Timings use defaults and
 report initialization and two fully consumed queries separately.
-The Rust controller runs the numeric and Delta-length diagnostic processes,
-enforces their deadlines and cleans up descendants. Python retains fixture
-generation and independent Arrow comparisons.
+The Rust controller runs the complete numeric and Delta-length experiments,
+including validation gates, alternating samples, statistics, deadlines and
+process cleanup. Python retains fixture generation and independent Arrow
+comparisons. The existing Python `run` commands forward to `run-numeric-pages`
+and `run-delta-length`; both native commands require the pinned `--python` path.
 
 ## Missing request-cost evidence
 

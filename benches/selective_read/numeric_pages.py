@@ -6,13 +6,12 @@ import json
 import os
 from pathlib import Path
 import random
-import statistics
+import sys
 
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
-import network
 import storage
 from storage import digest, save
 
@@ -88,65 +87,16 @@ def check(actual, expected):
         assert left.equals(right), "values differ (floats compared by bits)"
 
 
-def measure(args):
-    os.sched_setaffinity(0, storage.state(args.state)["cpus"]["observer"])
-    manifest = json.loads((args.fixture / "manifest.json").read_text())
-    assert manifest["format"] == "numeric-page-fixture-v1"
-    assert digest(args.fixture / "_delta_log/00000000000000000000.json") == manifest["log_sha256"]
-    for file in manifest["files"]:
-        assert digest(args.fixture / file["path"]) == file["sha256"]
-    ref = manifest["references"][args.type]
-    assert digest(args.fixture / ref["path"]) == ref["sha256"]
-    if args.selection == "dense":
-        expected = pq.read_table([args.fixture / f["path"] for f in manifest["files"]],
-            columns=["row_id"] + [f"{args.type}_{i}" for i in range(8)])
-    else:
-        expected = pa.ipc.open_stream(args.fixture / ref["path"]).read_all()
-    args.output.mkdir()
-    builds = {name: digest(binary) for name, binary in (("baseline", args.baseline), ("candidate", args.candidate))}
-    save(args.output / "experiment.json", {"fixture_sha256": digest(args.fixture / "manifest.json"),
-        "binaries": builds, "type": args.type, "selection": args.selection, "table_uri": args.table,
-        "network": None if args.table.startswith("file:") else network.config(args.state),
-        "driver_sha256": digest(Path(__file__)), "controller_sha256": digest(storage.native.executable()),
-        "primary_metric": "first fully consumed query after initialization", "pairs": 3})
-    samples = []
-    with storage.exclusive(args.state):
-        storage.verify_server(args.state)
-        for phase, repetition in [("validation", 0)] + [("timing", n) for n in range(3)]:
-            order = ("baseline", "candidate") if repetition % 2 == 0 else ("candidate", "baseline")
-            for name in order:
-                slot = args.output / f"{name}-{phase}-{repetition}"
-                result = storage.native.call("experiment", {"directory": str(args.state), "output": str(slot),
-                    "binary": str(getattr(args, name)), "table": args.table, "selection": args.selection,
-                    "reader": {"driver": "numeric-pages", "column_type": args.type, "validation": phase == "validation"}})
-                record, capture = result["record"], result["network"]
-                assert record["settings"]["warmup"] == "Automatic"
-                assert "experimental_intra_page_reads: true" in record["settings"]["scan_options"]
-                assert all(q["rows"] == expected.num_rows for q in record["queries"])
-                if phase == "validation":
-                    for query in range(2):
-                        check(pa.ipc.open_stream(slot / f"reader/{query}.arrow").read_all(), expected)
-                    save(slot / "correctness.json", {"status": "passed", "comparison": "independent Arrow reference, exact bits"})
-                sample = {"build": name, "phase": phase, "repetition": repetition, "record": record, "network": capture}
-                save(slot / "sample.json", sample)
-                samples.append(sample)
-                print(name, phase, repetition, [round(q["seconds"], 3) for q in record["queries"]], flush=True)
-    summary = {name: statistics.median(s["record"]["queries"][0]["seconds"] for s in samples
-              if s["build"] == name and s["phase"] == "timing") for name in builds}
-    save(args.output / "summary.json", {"samples": samples, "first_query_medians_seconds": summary})
-
-
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["run"]:
+        executable = storage.native.executable()
+        os.execv(executable, [str(executable), "selective-read", "run-numeric-pages", "--python", sys.executable,
+            "--harness", str(Path(__file__).resolve().parent), *sys.argv[2:]])
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     generate_args = commands.add_parser("generate")
     generate_args.add_argument("--output", type=Path, required=True)
     generate_args.add_argument("--decimals", action="store_true", help="generate fixed-length decimal columns instead of the original numeric fixture")
-    run_args = commands.add_parser("run")
-    for name in ("fixture", "state", "baseline", "candidate", "output"):
-        run_args.add_argument("--" + name, type=lambda p: Path(p).resolve(), required=True)
-    run_args.add_argument("--table", required=True)
-    run_args.add_argument("--type", choices=TYPES | DECIMAL_TYPES, required=True)
-    run_args.add_argument("--selection", choices=("sparse", "dense"), default="sparse")
+    commands.add_parser("run", help="run the native numeric experiment", add_help=False)
     args = parser.parse_args()
-    generate(args.output, args.decimals) if args.command == "generate" else measure(args)
+    generate(args.output, args.decimals)

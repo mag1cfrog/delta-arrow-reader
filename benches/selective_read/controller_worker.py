@@ -12,6 +12,8 @@ import matrix
 import metadata_cache
 import run
 
+EXPECTED = {}
+
 
 def check_intra(value):
     import oracle
@@ -41,6 +43,30 @@ def dispatch(value):
         return [run.digest(Path(path)) for path in value["paths"]]
     if action == "check-intra":
         return check_intra(value)
+    if action == "experiment-reference":
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+        fixture, manifest = Path(value["fixture"]), value["manifest"]
+        if value["driver"] == "numeric" and value["selection"] == "dense":
+            expected = pq.read_table([fixture / f["path"] for f in manifest["files"]],
+                columns=["row_id"] + [f"{value['column_type']}_{i}" for i in range(8)])
+        else:
+            if value["driver"] == "length" and pa.__version__ != manifest["pyarrow"]:
+                raise ValueError("oracle Arrow version changed")
+            key = value["column_type"] if value["driver"] == "numeric" else value["selection"]
+            expected = pa.ipc.open_stream(fixture / manifest["references"][key]["path"]).read_all()
+        EXPECTED[value["driver"]] = expected
+        return expected.num_rows
+    if action == "experiment-check":
+        import pyarrow as pa
+        actual = pa.ipc.open_stream(value["path"]).read_all()
+        expected = EXPECTED[value["driver"]]
+        if value["driver"] == "numeric":
+            from numeric_pages import check
+            check(actual, expected)
+        elif not actual.cast(expected.schema).equals(expected):
+            raise ValueError("query result differs: " + value["path"])
+        return None
     if action == "load":
         workload = Path(value["workload"]) if value["workload"] else None
         return {"matrix": matrix.load(Path(value["matrix"]), fixtures) if value["matrix"] else None,

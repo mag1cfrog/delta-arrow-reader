@@ -125,20 +125,6 @@ fn invoke(
     Ok(sample)
 }
 
-fn median(mut numbers: Vec<f64>) -> Result<f64> {
-    require(
-        !numbers.is_empty() && numbers.iter().all(|n| n.is_finite()),
-        "invalid timing samples",
-    )?;
-    numbers.sort_by(f64::total_cmp);
-    let middle = numbers.len() / 2;
-    Ok(if numbers.len().is_multiple_of(2) {
-        (numbers[middle - 1] + numbers[middle]) / 2.0
-    } else {
-        numbers[middle]
-    })
-}
-
 fn summarize(samples: &[Value], modes: &[&str; 2]) -> Result<Value> {
     let mut result = serde_json::Map::new();
     for mode in modes {

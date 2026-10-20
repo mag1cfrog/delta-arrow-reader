@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 import random
-import statistics
+import sys
 import subprocess
 import uuid
 
@@ -13,7 +13,6 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
-import network
 import storage
 from storage import digest, save
 
@@ -105,73 +104,11 @@ def generate(output, case, binary, compression="NONE"):
         "objects": objects, "references": refs, "layout": layouts})
 
 
-def invoke(args, mode, phase, repetition, arrays):
-    slot = args.output / f"{mode}-{phase}-{repetition}-{arrays}"
-    result = storage.native.call("experiment", {"directory": str(args.state), "output": str(slot),
-        "binary": str(args.binary), "table": args.table, "selection": args.selection,
-        "reader": {"driver": "delta-length", "mode": mode, "arrays": arrays, "phase": phase,
-                   "cost_profile": str(args.cost_profile) if args.cost_profile else None}})
-    record, capture = result["record"], result["network"]
-    if args.cost_profile:
-        assert record["cost_profile"] == args.profile_record, "fixed cost profile changed"
-    if phase == "validate":
-        actual = pa.ipc.open_stream(slot / "reader/result.arrow").read_all().cast(args.expected.schema)
-        # Both paths preserve file/row order; compare exact values and nulls without sorting large payloads.
-        assert actual.equals(args.expected), f"query result differs: {slot}"
-    assert record["output_rows"] == args.expected.num_rows
-    sample = {"mode": mode, "phase": phase, "repetition": repetition, "arrays": arrays,
-        "record": record, "query_network": capture, "process_resources": result["process_resources"]}
-    save(slot / "sample.json", sample)
-    print(mode, phase, repetition, arrays, round(record["query_seconds"], 3), flush=True)
-    return sample
-
-
-def measure(args):
-    args.output.mkdir()
-    args.profile_record = json.loads(args.cost_profile.read_text()) if args.cost_profile else None
-    if args.cost_profile:
-        args.cost_profile = args.output / "cost-profile.json"
-        save(args.cost_profile, args.profile_record)
-    manifest = json.loads((args.fixture / "manifest.json").read_text())
-    assert manifest["format"] == "delta-length-network-v1"
-    assert pa.__version__ == manifest["pyarrow"], "oracle Arrow version changed"
-    prefix = digest(args.fixture / "manifest.json")
-    assert args.table.rstrip("/") == f"s3://{storage.BUCKET}/{prefix}", "table must match the verified fixture"
-    assert network.config(args.state) is not None, "a recorded network profile is required"
-    for item in manifest["objects"]:
-        assert digest(args.fixture / item["path"]) == item["sha256"]
-    reference = manifest["references"][args.selection]
-    assert digest(args.fixture / reference["path"]) == reference["sha256"]
-    args.expected = pa.ipc.open_stream(args.fixture / reference["path"]).read_all()
-    os.sched_setaffinity(0, storage.state(args.state)["cpus"]["observer"])
-    save(args.output / "experiment.json", {"fixture_sha256": digest(args.fixture / "manifest.json"),
-        "binary_sha256": digest(args.binary), "driver_sha256": digest(Path(__file__)),
-        "controller_sha256": digest(storage.native.executable()), "network": network.config(args.state),
-        "source_sha256": {name: digest(Path(__file__).parent / name) for name in (
-            "src/bin/delta-length-query.rs", "src/delta_length_reader.rs", "src/delta_length_profile.rs", "src/delta_length_cost.rs", "src/delta_length_simulation.rs", "src/delta_length.rs", "Cargo.lock", "storage.py",
-            "../../crates/delta-arrow-reader-core/src/reader/backend/direct_parquet/range_planning.rs",
-            "../../crates/delta-arrow-reader-core/src/reader/backend/direct_parquet/cost_model/range_cost.rs")},
-        "cost_profile": {"basis": "fixed diagnostic control", "values": args.profile_record} if args.cost_profile else
-            "measured during each process initialization on the same client, including the request-duration distribution; incomplete measurements keep ordinary reads",
-        "selection": args.selection, "pairs": 3, "primary_metric": "first fully consumed query including planning, predicate and DV",
-        "acceptance": "all three pairs improve beyond the larger within-mode range; investigate >5% median or consistent smaller regressions",
-        "policy": "uncompressed flat V1; >=1 MiB pages; <=1/8 selected rows; >=64 bytes/row; complete failed-discovery fallback <=105% modeled ordinary batch cost; >=25% byte saving and >10% modeled remaining-read saving after discovery"})
-    try:
-        with storage.exclusive(args.state):
-            storage.verify_server(args.state)
-            samples = [invoke(args, mode, "validate", 0, arrays) for arrays in ("arrays", "views") for mode in ("ordinary", "experimental")]
-            for repetition in range(3):
-                order = ("ordinary", "experimental") if repetition % 2 == 0 else ("experimental", "ordinary")
-                samples.extend(invoke(args, mode, "timing", repetition, "arrays") for mode in order)
-    except BaseException as error:
-        save(args.output / "failure.json", {"error": repr(error)})
-        raise
-    medians = {mode: statistics.median(s["record"]["query_seconds"] for s in samples
-        if s["phase"] == "timing" and s["mode"] == mode) for mode in ("ordinary", "experimental")}
-    save(args.output / "summary.json", {"samples": samples, "medians_seconds": medians})
-
-
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["run"]:
+        executable = storage.native.executable()
+        os.execv(executable, [str(executable), "selective-read", "run-delta-length", "--python", sys.executable,
+            "--harness", str(Path(__file__).resolve().parent), *sys.argv[2:]])
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     gen = commands.add_parser("generate")
@@ -179,12 +116,6 @@ if __name__ == "__main__":
     gen.add_argument("--compression", choices=("NONE", "zstd"), default="NONE")
     for name in ("output", "binary"):
         gen.add_argument("--" + name, type=lambda p: Path(p).resolve(), required=True)
-    run = commands.add_parser("run")
-    for name in ("output", "binary", "state", "fixture"):
-        run.add_argument("--" + name, type=lambda p: Path(p).resolve(), required=True)
-    run.add_argument("--table", required=True)
-    run.add_argument("--cost-profile", type=lambda p: Path(p).resolve(),
-        help="fixed cost-profile JSON for diagnostic controls; default: measure during initialization")
-    run.add_argument("--selection", choices=("grouped", "scattered", "dense"), required=True)
+    commands.add_parser("run", help="run the native Delta-length experiment", add_help=False)
     args = parser.parse_args()
-    generate(args.output, args.case, args.binary, args.compression) if args.command == "generate" else measure(args)
+    generate(args.output, args.case, args.binary, args.compression)
