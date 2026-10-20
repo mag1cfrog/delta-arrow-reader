@@ -317,16 +317,21 @@ DataFusion can start tasks outside a scoped subscriber. To carry a query's
 subscriber into DAR partition setup, polling, and reader workers, put a native
 `tracing::Dispatch` in that query's `TaskContext` configuration:
 
-```rust
-use std::sync::Arc;
+```no_run
+#[cfg(feature = "datafusion")]
+async fn execute_with_current_subscriber(
+    frame: datafusion::dataframe::DataFrame,
+) -> datafusion::common::Result<datafusion::physical_plan::SendableRecordBatchStream> {
+    use std::sync::Arc;
 
-let task = frame.task_ctx();
-let config = task.session_config().clone().with_extension(Arc::new(
-    tracing::dispatcher::get_default(Clone::clone),
-));
-let task = Arc::new(task.with_session_config(config));
-let plan = frame.create_physical_plan().await?;
-let stream = datafusion::physical_plan::execute_stream(plan, task)?;
+    let task = frame.task_ctx();
+    let config = task.session_config().clone().with_extension(Arc::new(
+        tracing::dispatcher::get_default(Clone::clone),
+    ));
+    let task = Arc::new(task.with_session_config(config));
+    let plan = frame.create_physical_plan().await?;
+    datafusion::physical_plan::execute_stream(plan, task)
+}
 ```
 
 Capture this dispatch while the query's subscriber is active. Keep the extension
