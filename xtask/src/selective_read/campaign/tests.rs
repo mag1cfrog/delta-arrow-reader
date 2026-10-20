@@ -52,7 +52,7 @@ fn all_reader_subsets_match_the_python_schedule() -> Result<()> {
     Ok(())
 }
 
-fn observation(value: u64, reuse: bool) -> Value {
+pub(super) fn observation(value: u64, reuse: bool) -> Value {
     let queries: Vec<_> = (0..if reuse { 2 } else { 1 })
         .map(|index| {
             json!({

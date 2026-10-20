@@ -187,15 +187,16 @@ accounting has microsecond precision, stored as bytes and nanoseconds.
 ## Check the scheduler without a campaign
 
 ```sh
-python3 -B benches/selective_read/check_campaign.py
+cargo test --locked -p xtask --bin xtask selective_read::
+cargo test --locked -p xtask --test selective_read
 ```
 
-This bounded check covers all reader subsets, historical counterbalancing,
+These checks cover all reader subsets, historical counterbalancing,
 five-sample ordering, two-query sessions, sampling identity rejection,
 ties/losses, timer resolution, failed/missing slots and real
-subprocess crashes, malformed output and phase timeouts. It requires no reader
-builds, MinIO or additional Python packages. Campaigns and this check are manual;
-this slice adds no CI job or step.
+subprocess crashes, malformed output and phase timeouts. They also check merged
+gate diagnostics and reject missing or changed native plans. They run in the
+tooling CI job and require no reader builds, MinIO or Python packages.
 
 A successful smoke campaign verifies the execution machinery. Revision 2
 publication still requires the protocol's full 46-case and three-session inventory

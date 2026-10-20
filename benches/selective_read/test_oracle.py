@@ -519,7 +519,7 @@ class OracleTests(unittest.TestCase):
 
     def test_file_organization_report_keeps_failures(self):
         import campaign
-        from check_campaign import observation
+        from test_support import observation
         with tempfile.TemporaryDirectory(dir=self.root) as temporary:
             root = Path(temporary)
             references = root / "references"

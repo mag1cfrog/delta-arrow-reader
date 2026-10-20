@@ -12,9 +12,26 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "runners"))
 import python_common as common
+import run
 
 
 class ReaderBookkeeping(unittest.TestCase):
+    def test_python_adapters_keep_the_comparison_identity_and_reader_roster(self):
+        identity = {"comparison_revision": 6, "protocol_sha256": run.digest(run.SPARK_MATRIX),
+            "base_protocol_sha256": run.digest(run.PROTOCOL), "sampling_sha256": run.digest(run.SAMPLING),
+            "sampling_stage": "formal", "workload_manifest_sha256": "1" * 64}
+        self.assertEqual(run.comparison_identity(identity), identity)
+        for revision in range(2, 7):
+            self.assertEqual(run.reader_roster({"comparison_revision": revision}),
+                ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "spark" if revision == 6 else "daft"))
+        for change in ({"protocol_sha256": run.digest(run.PRODUCTION)}, {"sampling_stage": None},
+                       {"sampling_sha256": "0" * 64}, {"comparison_revision": 5}):
+            with self.assertRaises(ValueError):
+                run.comparison_identity(identity | change)
+        for revision in (1, 7, True, "6"):
+            with self.assertRaises(ValueError):
+                run.reader_roster({"comparison_revision": revision})
+
     def test_build_checks_and_observation_output(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -12,7 +12,7 @@ from unittest import TestCase
 import matrix
 import oracle
 import campaign
-from check_campaign import observation
+from test_support import observation
 from run import digest, save
 
 

@@ -521,4 +521,6 @@ pub(super) fn timer_resolution() -> Result<Value> {
 }
 
 #[cfg(test)]
+mod diagnostics_tests;
+#[cfg(test)]
 mod tests;

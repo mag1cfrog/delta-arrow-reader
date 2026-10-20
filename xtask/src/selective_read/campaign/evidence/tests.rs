@@ -1,10 +1,10 @@
 use super::*;
 
-fn protocols() -> std::path::PathBuf {
+pub(super) fn protocols() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../docs/content/benchmarks")
 }
 
-fn identity(revision: u64) -> Result<Value> {
+pub(super) fn identity(revision: u64) -> Result<Value> {
     let name = match revision {
         6 => "spark-matrix",
         5 => "production-workloads",
