@@ -12,5 +12,14 @@ resolver = "3"
 version = "0.7.0"
 rust-version = "1.94"
 
+[workspace.lints.rust]
+missing_docs = "deny"
+
+[workspace.lints.clippy]
+expect_used = "deny"
+mod_module_files = "deny"
+panic = "deny"
+unwrap_used = "deny"
+
 [workspace.metadata.cli-release]
 cargo-about-version = "0.9.2"

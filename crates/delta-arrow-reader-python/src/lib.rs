@@ -1,5 +1,7 @@
 //! Python package entrypoint.
 
+#![cfg_attr(test, allow(clippy::panic))]
+
 mod arrow_stream;
 mod diagnostics;
 mod filters;

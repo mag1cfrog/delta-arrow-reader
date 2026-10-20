@@ -1,3 +1,6 @@
+//! Validation record creation and immutable artifact handoff checks.
+
+#![allow(clippy::unwrap_used)]
 #![cfg(unix)]
 
 use std::{error::Error, fs, process::Command};

@@ -1,3 +1,6 @@
+//! CLI build workflow inputs, approvals, and toolchain checks.
+
+#![allow(clippy::panic, clippy::unwrap_used)]
 #![cfg(unix)]
 
 use std::{error::Error, fs, os::unix::fs::PermissionsExt, path::Path, process::Command};

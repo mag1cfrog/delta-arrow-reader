@@ -44,6 +44,35 @@ impl Drop for CallbackReader {
 }
 
 #[test]
+fn missing_native_callbacks_return_errors_and_preserve_cleanup() {
+    let dropped = Arc::new(AtomicUsize::new(0));
+    let mut stream = export(Box::new(CallbackReader {
+        next: Box::new(|| None),
+        dropped: Arc::clone(&dropped),
+        on_drop: None,
+    }));
+    // SAFETY: The stream stays live and every callback has exclusive access.
+    unsafe {
+        with_native_stream(&mut stream, |native| {
+            native.get_schema = None;
+            native.get_next = None;
+            native.get_last_error = None;
+        })
+        .unwrap();
+        let mut schema = FFI_ArrowSchema::empty();
+        let mut array = FFI_ArrowArray::empty();
+        assert_eq!(stream.get_schema.unwrap()(&mut stream, &mut schema), EINVAL);
+        assert_eq!(stream.get_next.unwrap()(&mut stream, &mut array), EINVAL);
+        assert_eq!(
+            CStr::from_ptr(stream.get_last_error.unwrap()(&mut stream)),
+            UNAVAILABLE
+        );
+    }
+    drop(stream);
+    assert_eq!(dropped.load(Ordering::SeqCst), 1);
+}
+
+#[test]
 fn recursive_close_retains_the_active_reader_and_returned_array() {
     let stream = Box::into_raw(Box::new(FFI_ArrowArrayStream::empty()));
     let address = stream as usize;

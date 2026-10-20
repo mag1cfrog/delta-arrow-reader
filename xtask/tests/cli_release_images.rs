@@ -1,3 +1,5 @@
+//! Container publication and verification against controlled registry fixtures.
+
 #![cfg(target_os = "linux")]
 
 use std::{

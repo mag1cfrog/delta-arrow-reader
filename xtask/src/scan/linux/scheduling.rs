@@ -7,7 +7,7 @@ use std::{
 
 use arrow_ipc::reader::StreamReader;
 use serde_json::json;
-use snafu::{ResultExt, ensure};
+use snafu::{OptionExt, ResultExt, ensure};
 use tokio::sync::watch;
 
 use super::{
@@ -182,7 +182,9 @@ impl ScanFixture<'_> {
                 ),
             }
         );
-        let stdout = scan.stdout.as_mut().expect("a new scan has a stdout pipe");
+        let stdout = scan.stdout.as_mut().context(InvalidInputSnafu {
+            message: "scan stdout pipe is missing",
+        })?;
         let mut reader = StreamReader::try_new(
             PipeReaderWithDeadline {
                 pipe: stdout,

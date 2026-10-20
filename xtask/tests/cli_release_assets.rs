@@ -1,3 +1,6 @@
+//! Release asset publication against a controlled GitHub fixture.
+
+#![allow(clippy::unwrap_used)]
 #![cfg(target_os = "linux")]
 
 use std::{

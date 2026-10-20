@@ -1,4 +1,10 @@
+//! CLI output, diagnostics, argument validation, and reader integration tests.
+
+#![allow(clippy::panic, clippy::unwrap_used)]
+
 mod predicates;
+#[cfg(unix)]
+mod unity_catalog;
 
 use std::{
     fs::{self, File},

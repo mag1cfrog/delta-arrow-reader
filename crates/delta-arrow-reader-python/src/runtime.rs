@@ -5,12 +5,15 @@ use tracing::instrument::WithSubscriber;
 
 /// Binding-owned runtime that can be released from any owning thread.
 pub(crate) struct Runtime {
+    // Drop takes the owner because background shutdown consumes it.
     inner: Option<tokio::runtime::Runtime>,
+    handle: tokio::runtime::Handle,
 }
 
 impl Runtime {
     pub(crate) fn new() -> std::io::Result<Self> {
         tokio::runtime::Runtime::new().map(|runtime| Self {
+            handle: runtime.handle().clone(),
             inner: Some(runtime),
         })
     }
@@ -32,10 +35,7 @@ impl Runtime {
     }
 
     pub(crate) fn block_on<F: Future>(&self, future: F) -> F::Output {
-        self.inner
-            .as_ref()
-            .expect("runtime is only taken during drop")
-            .block_on(future)
+        self.handle.block_on(future)
     }
 
     pub(crate) fn wait_logged<F>(&self, py: Python<'_>, future: F) -> PyResult<F::Output>

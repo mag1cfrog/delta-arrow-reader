@@ -1,3 +1,6 @@
+//! Python build and publication workflow permissions and defaults.
+
+#![allow(clippy::unwrap_used)]
 #![cfg(unix)]
 
 use std::{collections::BTreeSet, fs, path::Path, process::Command};

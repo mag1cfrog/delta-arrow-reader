@@ -8,7 +8,7 @@ use parquet::{
     file::properties::WriterProperties,
 };
 use serde_json::{Value, json};
-use snafu::{ResultExt, ensure};
+use snafu::{OptionExt, ResultExt, ensure};
 
 use crate::error::{ArrowSnafu, FileSnafu, InvalidInputSnafu, JsonSnafu, ParquetSnafu, Result};
 
@@ -179,7 +179,9 @@ pub(super) fn expand_repeated_table(table: &Path) -> Result<()> {
             fs::write(&path, &content).context(FileSnafu { path: &path })?;
             add["size"] = json!(content.len());
             add.as_object_mut()
-                .expect("a fixture add action is an object")
+                .context(InvalidInputSnafu {
+                    message: "fixture add action must be an object",
+                })?
                 .remove("stats");
         }
     }

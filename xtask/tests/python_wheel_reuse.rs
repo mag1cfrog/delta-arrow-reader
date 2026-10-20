@@ -1,3 +1,6 @@
+//! Reuse of verified Python wheels from release artifacts.
+
+#![allow(clippy::unwrap_used)]
 #![cfg(unix)]
 
 use std::{
