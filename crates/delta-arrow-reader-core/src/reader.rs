@@ -1,6 +1,7 @@
 //! Public Delta-to-Arrow reader and optional DataFusion adapter.
 
 pub(crate) mod backend;
+mod credentials;
 #[cfg(feature = "datafusion")]
 pub mod datafusion;
 pub(crate) mod deletion_vector;
@@ -13,6 +14,7 @@ pub(crate) mod predicate;
 pub(crate) mod scheduling;
 pub(crate) mod transform;
 
+pub use credentials::DeltaStorageCredentialProvider;
 #[doc(hidden)]
 pub use metrics::ParquetRangePlanningDiagnosticSnapshot;
 pub use metrics::{DeltaScanMetrics, DeltaScanMetricsSnapshot};
@@ -163,6 +165,7 @@ impl WarmupMode {
 pub struct DeltaTableBuilder {
     table_location: String,
     storage_options: DeltaStorageOptions,
+    credential_provider: Option<DeltaStorageCredentialProvider>,
     snapshot_selection: DeltaSnapshotSelection,
     execution_options: DeltaScanExecutionOptions,
     warmup: WarmupMode,
@@ -174,6 +177,7 @@ impl DeltaTableBuilder {
         Self {
             table_location: table_location.into(),
             storage_options: DeltaStorageOptions::new(),
+            credential_provider: None,
             snapshot_selection: DeltaSnapshotSelection::Latest,
             execution_options: DeltaScanExecutionOptions::new(),
             warmup: WarmupMode::Automatic,
@@ -183,6 +187,52 @@ impl DeltaTableBuilder {
     /// Replaces the storage options forwarded during table loading.
     pub fn with_storage_options(mut self, storage_options: DeltaStorageOptions) -> Self {
         self.storage_options = storage_options;
+        self
+    }
+
+    /// Uses a caller-owned provider for storage credentials.
+    ///
+    /// The provider must match the URL's cloud. The native client's `with_credentials`
+    /// precedence applies: the provider overrides ordinary authentication settings
+    /// in [`DeltaStorageOptions`].
+    ///
+    /// A few options remain incompatible: `skip_signature`, Azure's `use_emulator`,
+    /// and GCP's `service_account` and `service_account_key`, including their aliases.
+    /// These options can bypass the provider or load service-account data separately.
+    /// Their presence is rejected before storage reads, even for boolean values of
+    /// `false`. Omit them when supplying a provider.
+    ///
+    /// Other options keep the native client's precedence: URL-derived bucket,
+    /// account, container, and region values override options; transport and
+    /// endpoint options still apply.
+    /// Native R2 HTTPS URLs select the `auto` region and use `aws_endpoint_url_s3`
+    /// for an endpoint override.
+    ///
+    /// The provider controls caching and renewal and is retained by table clones,
+    /// scans, and refreshes. Provider failures propagate through the operation's
+    /// normal error phase without falling back to environment or file credentials.
+    /// The reader adds no authentication task, timer, or runtime.
+    ///
+    /// ```no_run
+    /// use delta_arrow_reader::{
+    ///     DeltaStorageCredentialProvider, DeltaStorageOptions, DeltaTableBuilder,
+    /// };
+    /// use object_store::aws::AwsCredentialProvider;
+    ///
+    /// # async fn open(provider: AwsCredentialProvider) -> Result<(), delta_arrow_reader::DeltaReaderError> {
+    /// // Supply an object_store provider that renews your credentials when needed.
+    /// let table = DeltaTableBuilder::new("s3://bucket/table")
+    ///     .with_storage_options(DeltaStorageOptions::from([
+    ///         ("aws_region".into(), "us-east-1".into()),
+    ///     ]))
+    ///     .with_credential_provider(DeltaStorageCredentialProvider::Aws(provider))
+    ///     .load_table()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn with_credential_provider(mut self, provider: DeltaStorageCredentialProvider) -> Self {
+        self.credential_provider = Some(provider);
         self
     }
 
@@ -246,6 +296,7 @@ impl DeltaTableBuilder {
             let snapshot = load_delta_table_snapshot(
                 self.table_location,
                 self.storage_options,
+                self.credential_provider,
                 self.snapshot_selection,
                 operation.context(),
             )
@@ -322,6 +373,7 @@ impl DeltaTableBuilder {
             let snapshot = load_kernel_table_snapshot(
                 self.table_location,
                 self.storage_options,
+                self.credential_provider,
                 self.snapshot_selection,
                 operation.context(),
             )
@@ -358,6 +410,7 @@ impl fmt::Debug for DeltaTableBuilder {
             .debug_struct("DeltaTableBuilder")
             .field("table_location", &"<redacted>")
             .field("storage_options", &"<redacted>")
+            .field("credential_provider", &self.credential_provider)
             .field("snapshot_selection", &self.snapshot_selection)
             .field("execution_options", &self.execution_options)
             .field("warmup", &self.warmup)
@@ -1091,7 +1144,8 @@ mod tests {
             if let Some((key, value)) = extra {
                 storage.insert(key.into(), value.into());
             }
-            let context = DeltaKernelEngineContext::try_new(url::Url::parse(location)?, &storage)?;
+            let context =
+                DeltaKernelEngineContext::try_new(url::Url::parse(location)?, &storage, None)?;
             assert_eq!(
                 automatic.for_table(&context, options),
                 if supported { network } else { WarmupMode::None },

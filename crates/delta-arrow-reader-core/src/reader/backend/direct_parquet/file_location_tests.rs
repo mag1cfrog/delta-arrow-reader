@@ -250,6 +250,7 @@ fn reader(table: &str, options: DeltaScanExecutionOptions) -> TestResult<DirectP
         Arc::new(DeltaKernelEngineContext::try_new(
             Url::parse(table)?,
             &storage_options,
+            None,
         )?),
         options,
         metrics(),
