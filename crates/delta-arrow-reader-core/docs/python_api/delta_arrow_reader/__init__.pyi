@@ -20,6 +20,8 @@ Messages omit sensitive details such as table paths and storage credentials.
 Attributes:
     phase: The stage that failed, such as `schema` or `datafusion`.
     code: The error category, such as `schema_conversion` or `sql_planning`.
+    reason: The Core failure reason, or `None` for a binding-owned failure.
+    source_kind: The safe Core source category, or `None` when unavailable.
 
 Invalid Python arguments can raise built-in exceptions such as `TypeError`
 or `ValueError` instead. Failures while consuming a PyArrow reader use PyArrow
@@ -27,6 +29,8 @@ exceptions; catch those around iteration or `read_all()` as well.
 """
     phase: str
     code: str
+    reason: str | None
+    source_kind: str | None
 
 class ScanExecutionOptions:
     """Control how a scan reads files and buffers results.
@@ -418,7 +422,8 @@ Args:
 Raises:
     TypeError: An argument has the wrong type.
     DeltaReaderError: Registration fails, including an invalid or duplicate
-        name. The error has phase `datafusion` and code `sql_registration`.
+        name. Core failures retain their phase, code, reason, and source
+        category. Invalid or duplicate names have code `datafusion_adapter`.
         A duplicate does not replace the existing table."""
         ...
 

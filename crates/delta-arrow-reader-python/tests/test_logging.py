@@ -92,6 +92,8 @@ class LoggingTests(unittest.TestCase):
                     self.assertEqual(failure.dar_fields["event"], "table_load.failed")
                     self.assertEqual(failure.dar_fields["error_phase"], raised.exception.phase)
                     self.assertEqual(failure.dar_fields["error_code"], raised.exception.code)
+                    self.assertEqual(failure.dar_fields["error_reason"], raised.exception.reason)
+                    self.assertEqual(failure.dar_fields["error_source_kind"], raised.exception.source_kind)
                     self.assertIn("error_reason", failure.dar_fields)
                     self.assertIn("error_source_kind", failure.dar_fields)
                     rendered = repr([r.__dict__ for r in self.collect.records])
@@ -162,9 +164,10 @@ class LoggingTests(unittest.TestCase):
                     self.assertEqual(failure.dar_fields["error_phase"], phase)
                     self.assertEqual(raised.exception.phase, phase)
                     self.assertEqual(failure.dar_fields["snapshot_version"], table.version)
-                    if event == "provider_registration.failed":
-                        self.assertEqual(raised.exception.code, "sql_registration")
-                        self.assertEqual(failure.dar_fields["error_code"], "datafusion_adapter")
+                    self.assertEqual(raised.exception.code, failure.dar_fields["error_code"])
+                    self.assertEqual(raised.exception.reason, reason)
+                    self.assertEqual(raised.exception.source_kind,
+                                     failure.dar_fields.get("error_source_kind"))
                     rendered = repr([r.__dict__ for r in self.collect.records])
                     self.assertNotIn("private_", rendered)
                     self.assertNotIn("private-invalid", rendered)
@@ -205,8 +208,9 @@ class LoggingTests(unittest.TestCase):
                     self.assertEqual(fields["error_code"], code)
                     self.assertEqual(str(raised.exception),
                                      f"delta reader error: phase={phase} code={code} reason={reason}")
-                    if exception is DeltaReaderError:
-                        self.assertEqual((raised.exception.phase, raised.exception.code), (phase, code))
+                    self.assertEqual((raised.exception.phase, raised.exception.code), (phase, code))
+                    self.assertEqual(raised.exception.reason, reason)
+                    self.assertEqual(raised.exception.source_kind, fields.get("error_source_kind"))
                     self.assertNotIn("private", repr(record.__dict__))
                     self.assertNotIn(str(FIXTURE), repr(record.__dict__))
         self.logger.disabled = True
@@ -217,6 +221,50 @@ class LoggingTests(unittest.TestCase):
         self.assertEqual(self.collect.records, [])
         with table.to_reader(limit=1) as reader:
             self.assertEqual(reader.read_all().num_rows, 1)
+
+    def test_core_error_fields_do_not_depend_on_logging(self):
+        with tempfile.TemporaryDirectory(prefix="private-errors-") as temporary:
+            location = Path(temporary) / "table"
+            shutil.copytree(FIXTURE, location)
+            table = DeltaTable(location, warmup="none")
+            session = Session()
+            (location / "_delta_log" / "00000000000000000001.json").write_text("private-invalid-json\n")
+            cases = [
+                (lambda: DeltaTable("", warmup="none"), DeltaReaderError,
+                 "table_location", "invalid_table_location", "empty_table_location", None),
+                (lambda: DeltaTable(location, warmup="none"), DeltaReaderError,
+                 "snapshot", "snapshot_load", "snapshot_load_failed", "arrow_json"),
+                (table.refresh, DeltaReaderError,
+                 "snapshot", "snapshot_load", "snapshot_refresh_failed", "arrow_json"),
+                (lambda: table.scan(columns=["private_missing"]), DeltaReaderError,
+                 "scan_planning", "invalid_projection", "column_not_found", None),
+                (lambda: table.scan(filters=[("private_missing", "==", 1)]), DeltaReaderError,
+                 "scan_planning", "unsupported_predicate", "column_not_found", None),
+                (lambda: ScanExecutionOptions(max_concurrent_file_reads_per_scan=sys.maxsize),
+                 ValueError, "configuration", "invalid_configuration",
+                 "max_concurrent_file_reads_per_scan_exceeds_tokio_max_permits", None),
+                (lambda: session.register_table("private-invalid", table), DeltaReaderError,
+                 "datafusion", "datafusion_adapter", "table_registration_name_invalid", "datafusion_plan"),
+            ]
+            for disabled in [False, True]:
+                self.logger.disabled = disabled
+                self.logger.setLevel(logging.CRITICAL)
+                self.collect.records.clear()
+                for operation, exception, phase, code, reason, source_kind in cases:
+                    with self.subTest(disabled=disabled, code=code, reason=reason):
+                        with self.assertRaises(exception) as raised:
+                            operation()
+                        error = raised.exception
+                        self.assertEqual((error.phase, error.code, error.reason, error.source_kind),
+                                         (phase, code, reason, source_kind))
+                        for text in [str(error), repr(error), repr(error.args), repr(vars(error))]:
+                            self.assertNotIn("private", text)
+                        self.assertIsNone(error.__cause__)
+                        self.assertIsNone(error.__context__)
+                self.assertEqual(self.collect.records, [])
+            self.assertEqual(table.version, 0)
+            with table.to_reader(limit=1) as reader:
+                self.assertEqual(reader.read_all().num_rows, 1)
 
     def test_python_argument_and_consumer_errors_remain_exception_only(self):
         table = DeltaTable(FIXTURE, warmup="none")
@@ -388,6 +436,8 @@ with session.sql('SELECT id FROM events LIMIT 1') as reader:
                     self.assertEqual(failure.dar_fields["error_source_kind"], category)
                     self.assertEqual((raised.exception.phase, raised.exception.code),
                                      ("datafusion", "sql_planning"))
+                    self.assertIsNone(raised.exception.reason)
+                    self.assertIsNone(raised.exception.source_kind)
                     self.assertEqual(failure.dar_fields["error_phase"], raised.exception.phase)
                     self.assertEqual(failure.dar_fields["error_code"], raised.exception.code)
                     rendered = repr(failure.__dict__)
@@ -960,7 +1010,7 @@ def check_concurrent_registration():
         results = list(pool.map(register, [False, True]))
     assert first_entered.is_set() and second_attempted.is_set()
     assert overlapped == [True], overlapped
-    assert sorted(results) == ["registered", "sql_registration"], results
+    assert sorted(results) == ["datafusion_adapter", "registered"], results
     with session.sql("SELECT id FROM events LIMIT 1") as reader:
         assert reader.read_all().num_rows == 1
 

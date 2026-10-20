@@ -10,6 +10,15 @@ Opening or planning can raise `DeltaReaderError`. Invalid Python arguments may
 raise built-in exceptions instead. While consuming rows, catch PyArrow errors
 around iteration or `read_all()` as well.
 
+Before row consumption, the binding converts core errors into Python exceptions
+with the core's `phase`, `code`, `reason`, and safe `source_kind` attributes.
+`source_kind` is `None` when the core error has no underlying source. These
+attributes remain available when logging is disabled. Core scan-option validation
+keeps its `ValueError` type and carries the same attributes. Binding-owned
+`DeltaReaderError` exceptions, such as SQL planning and schema export failures,
+have `reason = None` and `source_kind = None`; their diagnostic events carry the
+available details.
+
 ::: delta_arrow_reader.DeltaReaderError
 
 ## Configure diagnostic logging
@@ -64,9 +73,10 @@ for event meanings and redaction rules.
 Core failures during loading or planning still raise `DeltaReaderError`.
 Failures during Arrow consumption raise the consumer's exception, such as
 `pyarrow.ArrowInvalid`. Converting or replaying a failed read does not emit
-another failure record. Registration records retain the core's
-`error_code = "datafusion_adapter"`, while the Python exception keeps its existing
-`code = "sql_registration"`.
+another failure record. For invalid or duplicate SQL table names, the Python
+exception's `code` and the diagnostic event's `error_code` both use the core's
+`datafusion_adapter`. The exception's `reason` distinguishes an empty name, an
+invalid name, and a failed registration.
 
 SQL logical planning failures emit one ERROR `sql_planning.failed` event on the
 `delta_arrow_reader_python` target. Its safe `error_source_kind` distinguishes
@@ -102,8 +112,8 @@ Core helpers for predicate column lookup and scan options return errors without
 logging. At these conversion points, the binding emits ERROR `validation.failed`
 with the core's phase, code, reason, and available source category. The fixed
 `argument` field identifies `filters`, `execution_options`, or `target_partitions`.
-No argument values are included. Existing `DeltaReaderError` and `ValueError`
-exceptions remain unchanged.
+No argument values are included. These validations raise `DeltaReaderError` or
+`ValueError` with the core error attributes described above.
 
 Schema export failures emit ERROR `schema_export.failed`. A NUL byte in a field
 name or timestamp timezone uses `error_reason = "arrow_schema_contains_nul"`;

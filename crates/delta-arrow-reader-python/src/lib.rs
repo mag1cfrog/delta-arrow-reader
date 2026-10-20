@@ -20,6 +20,7 @@ use arrow::{
     ffi::FFI_ArrowSchema,
 };
 use pyo3::{
+    PyTypeInfo,
     exceptions::{PyException, PyTypeError, PyValueError},
     prelude::*,
     types::{PyBool, PyCapsule, PyDict, PyInt, PyList, PyMapping, PyTuple},
@@ -42,6 +43,8 @@ Messages omit sensitive details such as table paths and storage credentials.
 Attributes:
     phase: The stage that failed, such as `schema` or `datafusion`.
     code: The error category, such as `schema_conversion` or `sql_planning`.
+    reason: The Core failure reason, or `None` for a binding-owned failure.
+    source_kind: The safe Core source category, or `None` when unavailable.
 
 Invalid Python arguments can raise built-in exceptions such as `TypeError`
 or `ValueError` instead. Failures while consuming a PyArrow reader use PyArrow
@@ -49,12 +52,31 @@ exceptions; catch those around iteration or `read_all()` as well.
 "#
 );
 
-fn reader_error(py: Python<'_>, message: String, phase: &str, code: &str) -> PyErr {
+fn core_error<T: PyTypeInfo>(
+    py: Python<'_>,
+    error: &::delta_arrow_reader::DeltaReaderError,
+) -> PyErr {
+    let exception = PyErr::new::<T, _>(error.to_string());
+    let value = exception.value(py);
+    if let Err(error) = value
+        .setattr("phase", error.phase().as_str())
+        .and_then(|()| value.setattr("code", error.code()))
+        .and_then(|()| value.setattr("reason", error.reason()))
+        .and_then(|()| value.setattr("source_kind", error.source_kind()))
+    {
+        return error;
+    }
+    exception
+}
+
+fn binding_error(py: Python<'_>, message: String, phase: &str, code: &str) -> PyErr {
     let exception = DeltaReaderError::new_err(message);
     let value = exception.value(py);
     if let Err(error) = value
         .setattr("phase", phase)
         .and_then(|()| value.setattr("code", code))
+        .and_then(|()| value.setattr("reason", py.None()))
+        .and_then(|()| value.setattr("source_kind", py.None()))
     {
         return error;
     }
@@ -64,7 +86,7 @@ fn reader_error(py: Python<'_>, message: String, phase: &str, code: &str) -> PyE
 fn export_schema(py: Python<'_>, schema: &Schema) -> PyResult<FFI_ArrowSchema> {
     let export_error = |reason: &'static str, source: Option<&ArrowError>| {
         logging::log_failure(
-            reader_error(
+            binding_error(
                 py,
                 "delta reader error: phase=schema code=schema_conversion reason=arrow_schema_export_failed"
                     .to_owned(),
@@ -223,9 +245,7 @@ impl DeltaTable {
         let runtime = Arc::new(Runtime::for_python("reader")?);
         let table = runtime
             .wait_logged(py, builder.load_table())?
-            .map_err(|error| {
-                reader_error(py, error.to_string(), error.phase().as_str(), error.code())
-            })?;
+            .map_err(|error| core_error::<DeltaReaderError>(py, &error))?;
         Ok(Self { table, runtime })
     }
 
@@ -250,9 +270,7 @@ impl DeltaTable {
         let table = self
             .runtime
             .wait_logged(py, self.table.refresh())?
-            .map_err(|error| {
-                reader_error(py, error.to_string(), error.phase().as_str(), error.code())
-            })?;
+            .map_err(|error| core_error::<DeltaReaderError>(py, &error))?;
         Ok(Self {
             table,
             runtime: Arc::clone(&self.runtime),
@@ -361,16 +379,14 @@ impl DeltaTable {
                     logging::validation_error(
                         &error,
                         "target_partitions",
-                        reader_error(py, error.to_string(), error.phase().as_str(), error.code()),
+                        core_error::<DeltaReaderError>(py, &error),
                     )
                 })?;
         }
         let scan = self
             .runtime
             .wait_logged(py, builder.build())?
-            .map_err(|error| {
-                reader_error(py, error.to_string(), error.phase().as_str(), error.code())
-            })?;
+            .map_err(|error| core_error::<DeltaReaderError>(py, &error))?;
         // Validate before Arrow's C callback exports the schema.
         export_schema(py, scan.schema().as_ref())?;
         Ok(RecordBatchStream::new(

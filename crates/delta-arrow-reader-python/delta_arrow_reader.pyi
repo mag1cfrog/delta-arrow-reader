@@ -20,6 +20,8 @@ _Filter = (
 class DeltaReaderError(Exception):
     phase: str
     code: str
+    reason: str | None
+    source_kind: str | None
 
 class ScanExecutionOptions:
     """Immutable execution settings for a table or an individual scan."""

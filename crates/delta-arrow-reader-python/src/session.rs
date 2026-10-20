@@ -10,8 +10,8 @@ use delta_arrow_reader::{
 use pyo3::prelude::*;
 
 use crate::{
-    DeltaTable, export_schema, options::ScanExecutionOptions, reader_error, runtime::Runtime,
-    stream::RecordBatchStream,
+    DeltaReaderError, DeltaTable, binding_error, core_error, export_schema,
+    options::ScanExecutionOptions, runtime::Runtime, stream::RecordBatchStream,
 };
 
 /// Query Delta tables with SQL and read the results as PyArrow batches.
@@ -87,7 +87,8 @@ impl Session {
     /// Raises:
     ///     TypeError: An argument has the wrong type.
     ///     DeltaReaderError: Registration fails, including an invalid or duplicate
-    ///         name. The error has phase `datafusion` and code `sql_registration`.
+    ///         name. Core failures retain their phase, code, reason, and source
+    ///         category. Invalid or duplicate names have code `datafusion_adapter`.
     ///         A duplicate does not replace the existing table.
     #[pyo3(signature = (name, table, *, execution_options=None))]
     fn register_table(
@@ -114,12 +115,12 @@ impl Session {
                     error_phase = "datafusion", error_code = "sql_registration",
                     error_reason = "registration_state_poisoned");
             })?;
-            // Core owns registration failures; keep the existing Python exception below.
-            register_table(&self.state.context, name, table, options).map_err(|_| ())?;
-            runtimes.push(runtime);
-            Ok(())
-        })?;
-        result.map_err(|()| sql_error(py, "sql_registration"))
+            // Convert Core failures after releasing the lock, on the Python calling thread.
+            Ok(register_table(&self.state.context, name, table, options)
+                .map(|_| runtimes.push(runtime)))
+        })?
+        .map_err(|()| sql_error(py, "sql_registration"))?;
+        result.map_err(|error| core_error::<DeltaReaderError>(py, &error))
     }
 
     /// Run a read-only SQL query over registered tables.
@@ -181,7 +182,7 @@ impl Session {
 }
 
 fn sql_error(py: Python<'_>, code: &'static str) -> PyErr {
-    reader_error(
+    binding_error(
         py,
         format!("delta reader error: phase=datafusion code={code}"),
         "datafusion",

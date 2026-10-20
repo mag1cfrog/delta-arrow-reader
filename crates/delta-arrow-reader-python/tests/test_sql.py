@@ -103,11 +103,19 @@ class SqlTests(unittest.TestCase):
                          )[:10]])
 
     def test_registration_errors_preserve_the_catalog(self):
-        for name in ("events", "", "bad.name", "secret-name", "select"):
+        for name, reason in [
+            ("events", "table_registration_failed"),
+            ("", "table_registration_name_empty"),
+            ("bad.name", "table_registration_name_invalid"),
+            ("secret-name", "table_registration_name_invalid"),
+            ("select", "table_registration_name_invalid"),
+        ]:
             with self.subTest(name=name), self.assertRaises(DeltaReaderError) as caught:
                 self.session.register_table(name, self.table)
             self.assertEqual(caught.exception.phase, "datafusion")
-            self.assertEqual(caught.exception.code, "sql_registration")
+            self.assertEqual(caught.exception.code, "datafusion_adapter")
+            self.assertEqual(caught.exception.reason, reason)
+            self.assertIsNotNone(caught.exception.source_kind)
             self.assertNotIn("secret", str(caught.exception))
         for name, table in ((None, self.table), ("valid", object())):
             with self.subTest(name=name), self.assertRaises(TypeError):
@@ -126,7 +134,7 @@ class SqlTests(unittest.TestCase):
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(pool.map(lambda _: register(), range(2)))
-        self.assertCountEqual(results, ["registered", "sql_registration"])
+        self.assertCountEqual(results, ["registered", "datafusion_adapter"])
         self.assertEqual(self.query("SELECT COUNT(*) AS n FROM concurrent"), [{"n": len(self.rows)}])
 
     def test_rejected_sql_has_no_side_effects_or_sensitive_errors(self):
