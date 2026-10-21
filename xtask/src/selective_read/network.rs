@@ -350,10 +350,15 @@ fn finish(output: &Path, mut value: Value) -> Result<Value> {
                 value["by_class"][class] = json!({"requests":0,"response_bytes":0});
             }
             let group = &mut value["by_class"][class];
-            group["requests"] = json!(group["requests"].as_u64().unwrap() + 1);
+            group["requests"] =
+                json!(group["requests"].as_u64().ok_or("invalid request count")? + 1);
             group["response_bytes"] = json!(
-                group["response_bytes"].as_u64().unwrap()
-                    + record["response_bytes"].as_u64().unwrap()
+                group["response_bytes"]
+                    .as_u64()
+                    .ok_or("invalid response bytes")?
+                    + record["response_bytes"]
+                        .as_u64()
+                        .ok_or("invalid response bytes")?
             );
         }
     }

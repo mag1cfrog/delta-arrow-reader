@@ -222,7 +222,8 @@ fn io(record: &Value, reuse: bool) -> Result<()> {
         .collect::<Result<Vec<_>>>()?;
     require(
         times.windows(2).all(|pair| pair[0] <= pair[1])
-            && count(&record["diagnostic_process"]["exited_ns"])? >= *times.last().unwrap(),
+            && count(&record["diagnostic_process"]["exited_ns"])?
+                >= *times.last().ok_or("missing I/O lifecycle clocks")?,
         "I/O lifecycle clocks disagree",
     )
 }

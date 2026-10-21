@@ -8,6 +8,31 @@ use std::{
 };
 pub(super) mod fixtures;
 
+#[test]
+fn oracle_integer_and_date_overflow_returns_errors() -> Result<()> {
+    let layout = Layout::new(&["row_id".into()])?;
+    for value in [i64::from(i32::MIN) - 1, i64::from(i32::MAX) + 1] {
+        let row = layout.row(vec![Cell::Int(value)])?;
+        assert!(layout.batch(&[row]).is_err());
+    }
+    let layout = Layout::new(&[
+        "l_orderkey".into(),
+        "l_linenumber".into(),
+        "l_shipdate".into(),
+    ])?;
+    let row = layout.row(vec![Cell::Int(1), Cell::Int(1), Cell::Int(i64::MAX)])?;
+    assert!(layout.batch(&[row]).is_err());
+    for value in [i64::from(i32::MAX), i64::MAX] {
+        let condition = rules::Condition {
+            name: "l_shipdate".into(),
+            op: ">=",
+            values: vec![Cell::Int(value)],
+        };
+        assert!(condition.describe().is_err());
+    }
+    Ok(())
+}
+
 pub(super) fn save(path: &Path, value: &Value) -> Result<()> {
     fs::write(path, serde_json::to_vec(value)?)?;
     Ok(())

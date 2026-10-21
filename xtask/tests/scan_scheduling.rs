@@ -1,3 +1,5 @@
+//! Scan scheduling CLI checks for fixture reuse, reader failures, and summaries.
+
 #![cfg(unix)]
 
 use std::{
@@ -14,7 +16,7 @@ use serde_json::Value;
 type Result<T = ()> = std::result::Result<T, Box<dyn Error>>;
 
 fn root() -> &'static Path {
-    Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
+    Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/.."))
 }
 
 fn binary(directory: &Path, label: &str, status: &str) -> Result<PathBuf> {

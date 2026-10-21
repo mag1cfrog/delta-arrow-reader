@@ -315,7 +315,7 @@ pub(in crate::selective_read) fn run(args: Options) -> Result<()> {
         }
     }
     let mut result = summary.clone();
-    result.as_object_mut().unwrap().extend(super::super::object(&json!({
+    result.as_object_mut().ok_or("invalid capability summary")?.extend(super::super::object(&json!({
         "reader":reader,"build_sha256":digest(&args.binary.with_file_name("build.json"))?,
         "corpus_manifest_sha256":digest(&checks.corpus.join("manifest.json"))?,
         "scope":"bounded fixtures; rerun against exact campaign fixtures","observations":observations}))?.clone());

@@ -130,37 +130,46 @@ impl Layout {
         let values = batch
             .columns()
             .iter()
-            .map(|a| {
+            .map(|a| -> Result<Cell> {
                 if a.is_null(i) {
-                    return Cell::Null;
+                    return Ok(Cell::Null);
                 }
-                match a.data_type() {
-                    DataType::Int64 => {
-                        Cell::Int(a.as_any().downcast_ref::<Int64Array>().unwrap().value(i))
-                    }
+                Ok(match a.data_type() {
+                    DataType::Int64 => Cell::Int(
+                        a.as_any()
+                            .downcast_ref::<Int64Array>()
+                            .ok_or("invalid Int64 array")?
+                            .value(i),
+                    ),
                     DataType::Int32 => Cell::Int(i64::from(
-                        a.as_any().downcast_ref::<Int32Array>().unwrap().value(i),
+                        a.as_any()
+                            .downcast_ref::<Int32Array>()
+                            .ok_or("invalid Int32 array")?
+                            .value(i),
                     )),
                     DataType::Date32 => Cell::Int(i64::from(
-                        a.as_any().downcast_ref::<Date32Array>().unwrap().value(i),
+                        a.as_any()
+                            .downcast_ref::<Date32Array>()
+                            .ok_or("invalid Date32 array")?
+                            .value(i),
                     )),
                     DataType::Decimal128(_, _) => Cell::Decimal(
                         a.as_any()
                             .downcast_ref::<Decimal128Array>()
-                            .unwrap()
+                            .ok_or("invalid Decimal128 array")?
                             .value(i),
                     ),
                     DataType::Utf8 => Cell::Text(
                         a.as_any()
                             .downcast_ref::<StringArray>()
-                            .unwrap()
+                            .ok_or("invalid Utf8 array")?
                             .value(i)
                             .to_owned(),
                     ),
-                    _ => unreachable!("normalized oracle type"),
-                }
+                    _ => return Err("unsupported normalized oracle type".into()),
+                })
             })
-            .collect();
+            .collect::<Result<_>>()?;
         self.row(values)
     }
     pub(super) fn rows(&self, batch: RecordBatch) -> Result<Vec<Row>> {
@@ -203,11 +212,15 @@ impl Layout {
                 };
                 Ok(match field.data_type() {
                     DataType::Int64 => Arc::new(Int64Array::from_iter(ints())),
-                    DataType::Int32 => Arc::new(Int32Array::from_iter(
-                        ints().map(|v| v.map(|v| i32::try_from(v).expect("checked int32"))),
+                    DataType::Int32 => Arc::new(Int32Array::from(
+                        ints()
+                            .map(|v| v.map(i32::try_from).transpose())
+                            .collect::<std::result::Result<Vec<_>, _>>()?,
                     )),
-                    DataType::Date32 => Arc::new(Date32Array::from_iter(
-                        ints().map(|v| v.map(|v| i32::try_from(v).expect("checked date32"))),
+                    DataType::Date32 => Arc::new(Date32Array::from(
+                        ints()
+                            .map(|v| v.map(i32::try_from).transpose())
+                            .collect::<std::result::Result<Vec<_>, _>>()?,
                     )),
                     DataType::Decimal128(p, s) => Arc::new(
                         Decimal128Array::from_iter(rows.iter().map(|row| {

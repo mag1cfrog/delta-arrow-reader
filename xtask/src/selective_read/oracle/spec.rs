@@ -229,7 +229,7 @@ impl Spec {
             let mut files = table["files"].clone();
             for f in files.as_array_mut().ok_or("missing files")? {
                 if f.as_object_mut()
-                    .unwrap()
+                    .ok_or("invalid fixture file")?
                     .remove("deletion_vector")
                     .is_some()
                 {

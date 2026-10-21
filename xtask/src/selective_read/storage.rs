@@ -217,7 +217,8 @@ pub(super) fn endpoint(value: &Value) -> Result<&str> {
     let endpoint = text(&value["endpoint"])?;
     let url = url::Url::parse(endpoint)?;
     require(
-        url.port().is_some() && endpoint == format!("http://127.0.0.1:{}", url.port().unwrap()),
+        url.port()
+            .is_some_and(|port| endpoint == format!("http://127.0.0.1:{port}")),
         "expected a plain loopback HTTP endpoint",
     )?;
     Ok(endpoint)
@@ -318,8 +319,8 @@ pub(super) fn curl(directory: &Path, path: &str, options: &[&str]) -> Result<Chi
     if let Err(error) = child
         .stdin
         .take()
-        .unwrap()
-        .write_all(configuration.as_bytes())
+        .ok_or_else(|| std::io::Error::other("missing curl input pipe"))
+        .and_then(|mut input| input.write_all(configuration.as_bytes()))
     {
         let _ = child.kill();
         let _ = child.wait();
@@ -480,7 +481,11 @@ pub(super) fn put_verified(
         }
     }
     let mut child = curl(directory, &path, &["--fail"])?;
-    let hash = reader_sha256(child.stdout.take().unwrap());
+    let hash = child
+        .stdout
+        .take()
+        .ok_or_else(|| std::io::Error::other("missing curl output pipe"))
+        .and_then(reader_sha256);
     let output = child.wait_with_output()?;
     require(
         output.status.success() && hash? == expected,
@@ -583,7 +588,7 @@ pub(super) fn exec_reader(directory: &Path, arguments: &[OsString]) -> Result<()
         "effective reader affinity changed",
     )?;
     verify_memory(name, 8 * 1024u64.pow(3))?;
-    let output = Path::new(arguments.last().unwrap())
+    let output = Path::new(arguments.last().ok_or("missing reader output path")?)
         .parent()
         .ok_or("invalid reader output path")?;
     save(

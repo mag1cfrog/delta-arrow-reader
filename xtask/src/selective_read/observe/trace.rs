@@ -251,7 +251,7 @@ impl Trace {
         self.child.wait()?;
         self.thread
             .take()
-            .unwrap()
+            .ok_or("trace reader thread already joined")?
             .join()
             .map_err(|_| "native trace thread panicked")?;
         Ok(())

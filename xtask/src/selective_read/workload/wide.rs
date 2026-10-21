@@ -292,11 +292,14 @@ pub(crate) fn prepare(args: Prepare) -> Result<Value> {
         "fixture manifest changed during preparation",
     )?;
     let mut result = comparison;
-    result.as_object_mut().unwrap().extend(
-        object(&json!({"status":"complete","geometry":shape,
+    result
+        .as_object_mut()
+        .ok_or("invalid comparison contract")?
+        .extend(
+            object(&json!({"status":"complete","geometry":shape,
         "fixture_manifest_sha256":manifest_hash,"cases":cases}))?
-        .clone(),
-    );
+            .clone(),
+        );
     save(&output.join("wide-files.json"), &result)?;
     Ok(result)
 }

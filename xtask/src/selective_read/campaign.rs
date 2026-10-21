@@ -169,8 +169,9 @@ pub(super) fn schedule(
         require(
             cases.len() == 1
                 && jobs.len() == 2
-                && jobs.contains(*cases.first().unwrap())
-                && jobs.contains(format!("reuse.{}", cases.first().unwrap()).as_str()),
+                && cases.first().is_some_and(|case| {
+                    jobs.contains(*case) && jobs.contains(format!("reuse.{case}").as_str())
+                }),
             "gate warmup requires one snapshot with both open and reuse profiles",
         )?;
     }
@@ -217,7 +218,7 @@ pub(super) fn schedule(
                 "reader_id": reader, "stage": stage, "repetition": repetition,
                 "order": fixed_position.unwrap_or(position), "traced": traced});
             slot.as_object_mut()
-                .unwrap()
+                .ok_or("invalid campaign record")?
                 .extend(object(comparison)?.clone());
             slots.push(slot);
         }
@@ -531,14 +532,20 @@ fn summarize(
             {
                 let off: Vec<_> = overhead["observer_baseline"]
                     .iter()
-                    .map(|v| v.unwrap() as f64)
+                    .flatten()
+                    .map(|v| *v as f64)
                     .collect();
                 let on: Vec<_> = overhead["diagnostic"]
                     .iter()
-                    .map(|v| v.unwrap() as f64)
+                    .flatten()
+                    .map(|v| *v as f64)
                     .collect();
-                let off_median = distribution(off.clone())?["median"].as_f64().unwrap();
-                let on_median = distribution(on.clone())?["median"].as_f64().unwrap();
+                let off_median = distribution(off.clone())?["median"]
+                    .as_f64()
+                    .ok_or("invalid observer baseline median")?;
+                let on_median = distribution(on.clone())?["median"]
+                    .as_f64()
+                    .ok_or("invalid diagnostic median")?;
                 summary["observer_overhead"] = json!({"off_median_ns": off_median, "on_median_ns": on_median,
                     "difference_ns": on_median - off_median,
                     "ratio": if off.iter().chain(&on).all(|v| *v >= resolution) { Some(on_median / off_median) } else { None },
@@ -588,7 +595,10 @@ fn summarize(
                         json!({"value": ratio, "unavailable_reason": reason});
                 }
             }
-            reader.as_object_mut().unwrap().remove("_durations");
+            reader
+                .as_object_mut()
+                .ok_or("invalid campaign record")?
+                .remove("_durations");
         }
         result.insert(job.clone(), json!(readers));
     }

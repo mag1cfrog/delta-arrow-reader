@@ -505,14 +505,17 @@ pub(in crate::selective_read) fn run(request: Request) -> Result<Value> {
             }
             let mut result = identity.clone();
             object(&identity)?;
-            result.as_object_mut().unwrap().extend(
-                object(
-                    &json!({"status":summary["status"],"campaign_id":config["campaign_id"],
+            result
+                .as_object_mut()
+                .ok_or("invalid report identity")?
+                .extend(
+                    object(
+                        &json!({"status":summary["status"],"campaign_id":config["campaign_id"],
                 "scope":frozen["scope"], "publication_ready":false, "rows":rows,
                 "observations_sha256":observations_sha256, "summary_sha256":summary_sha256}),
-                )?
-                .clone(),
-            );
+                    )?
+                    .clone(),
+                );
             if matches!(frozen["comparison_revision"].as_u64(), Some(5 | 6)) {
                 result["core_inventory"] = field(&frozen, "inventory")?.clone();
             }

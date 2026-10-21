@@ -144,7 +144,11 @@ impl State {
         )?;
         if spec.production {
             require(
-                physical.matches == *population.counts.last().unwrap(),
+                physical.matches
+                    == *population
+                        .counts
+                        .last()
+                        .ok_or("missing predicate row counts")?,
                 "fixture/reference qualifying rows disagree",
             )?;
         }
@@ -216,7 +220,7 @@ impl State {
             "active_files":array(&spec.table["files"])?.len(),"candidate_files":physical.candidates,"matching_files":physical.matching,
             "verified_objects":verified,"reference_sha256":self.digests.digest(&reference)?});
         let predicates = rules::conditions(&spec.predicate, &spec.literals)?;
-        metadata["predicate_steps"]=json!(predicates.iter().zip(&population.counts[1..]).map(|(p,n)|json!({"predicate":p.describe(),"rows":n,"selectivity":*n as f64/population.counts[0] as f64})).collect::<Vec<_>>());
+        metadata["predicate_steps"]=json!(predicates.iter().zip(&population.counts[1..]).map(|(p,n)|Ok(json!({"predicate":p.describe()?,"rows":n,"selectivity":*n as f64/population.counts[0] as f64}))).collect::<Result<Vec<_>>>()?);
         if !geometry.is_null() {
             metadata["within_file_geometry"] = geometry;
         }

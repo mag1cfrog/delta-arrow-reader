@@ -1,3 +1,5 @@
+//! Native and Python reader build checks with pinned artifacts and isolated outputs.
+
 #![cfg(unix)]
 
 use std::{
@@ -19,7 +21,7 @@ mod python;
 
 fn write(root: &Path, path: &str, contents: &str) -> Result {
     let path = root.join(path);
-    fs::create_dir_all(path.parent().unwrap())?;
+    fs::create_dir_all(path.parent().ok_or("missing fixture parent")?)?;
     fs::write(path, contents)?;
     Ok(())
 }

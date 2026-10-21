@@ -60,7 +60,10 @@ impl Decoder {
             let output = child.stdout.take().ok_or("missing oracle Arrow stream")?;
             self.process = Some((child, output));
         }
-        let (child, output) = self.process.as_mut().unwrap();
+        let (child, output) = self
+            .process
+            .as_mut()
+            .ok_or("missing oracle decoder process")?;
         let input = child.stdin.as_mut().ok_or("missing decoder input")?;
         serde_json::to_writer(
             &mut *input,

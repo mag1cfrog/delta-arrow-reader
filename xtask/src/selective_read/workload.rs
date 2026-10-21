@@ -368,7 +368,7 @@ pub(super) fn query(case: &str, manifest: &Value) -> Result<Value> {
     }
     let sql = text(&shape["canonical_sql"])?;
     let mut result = definition.clone();
-    result.as_object_mut().unwrap().extend(object(&json!({"case_id":case, "role":"production", "query_case_id":case, "fixture_id":case,
+    result.as_object_mut().ok_or("invalid workload definition")?.extend(object(&json!({"case_id":case, "role":"production", "query_case_id":case, "fixture_id":case,
         "fixture_path":table["path"], "snapshot_version":table["snapshot_version"], "scale_factor":10, "source_rows":source["rows"],
         "physical_rows":table["rows"], "fixture_mode":manifest["mode"], "in_literals":[1], "projection":shape["projection"],
         "projection_columns":array(&shape["projection"])?.len(), "predicate":"production-eq2-in1",

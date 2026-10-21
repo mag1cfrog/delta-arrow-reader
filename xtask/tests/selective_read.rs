@@ -1,3 +1,5 @@
+//! Benchmark watchdog checks for process cleanup, deadlines, and resource limits.
+
 #![cfg(target_os = "linux")]
 
 use serde_json::{Value, json};
@@ -31,7 +33,7 @@ fn supervise(root: &Path, script: &str, payload: Value) -> Result<Value> {
     child
         .stdin
         .take()
-        .unwrap()
+        .ok_or("missing watchdog input pipe")?
         .write_all(serde_json::to_string(&input)?.as_bytes())?;
     let output = child.wait_with_output()?;
     assert!(

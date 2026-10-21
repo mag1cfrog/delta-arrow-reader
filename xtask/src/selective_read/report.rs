@@ -252,7 +252,7 @@ pub(super) fn run(request: Request) -> Result<Value> {
         .collect();
     let complete_coverage = complete.len() == cases.len();
     let mut result = identity;
-    result.as_object_mut().unwrap().extend(object(&json!({"format":"selective-read-production-report-v1",
+    result.as_object_mut().ok_or("invalid report identity")?.extend(object(&json!({"format":"selective-read-production-report-v1",
         "status":if complete_coverage { "complete" } else { "incomplete" }, "formal_coverage_complete":complete_coverage,
         "complete_cases":complete,"publication_ready":false,"readers":readers,"conditions":shared,
         "reader_build_sha256":build_hashes,"reader_artifacts":builds,

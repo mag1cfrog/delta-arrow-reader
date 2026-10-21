@@ -127,7 +127,7 @@ fn frozen_workloads_check_queries_and_scope_independently_of_source_provenance()
     let selected = BTreeSet::from([case.to_owned()]);
     let readers = campaign::roster(&json!({"comparison_revision":6}))?;
     let value = json!({"format":"selective-read-production-workload-v1","comparison_revision":6,"family":"production",
-        "cases":[row],"readers":readers,"sessions":sessions(&selected),"inventory":inventory(&selected,&readers),
+        "cases":[row],"readers":readers,"sessions":sessions(&selected),"inventory":inventory(&selected,&readers)?,
         "scope":"probe","sampling_stage":"pilot","publication_ready":false,"oracle_limits":limits(),
         "translations":{"polars":{"lock_sha256":digest(&harness.join("runners/polars/lock.json"))?,
             "expressions":{case:{"native_expression":expression,"canonical_sql":row["canonical_sql"]}}}}});

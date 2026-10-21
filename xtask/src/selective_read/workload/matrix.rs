@@ -325,7 +325,7 @@ pub(crate) fn prepare(args: Prepare) -> Result<Value> {
         let mut row = shape(&case, &frozen)?;
         let result = (|| -> Result<()> {
             row.as_object_mut()
-                .unwrap()
+                .ok_or("invalid matrix entry")?
                 .extend(object(&query(&case, &frozen, &manifest)?)?.clone());
             let reference = references.join(&case);
             let metadata = worker.call(&json!({"action":"prepare-reference","fixtures":fixtures,"case_id":case,
@@ -339,7 +339,7 @@ pub(crate) fn prepare(args: Prepare) -> Result<Value> {
                         == digest(&reference.join("reference.parquet"))?,
                 "stale independent reference",
             )?;
-            row.as_object_mut().unwrap().extend(object(&json!({"status":"prepared","reference":reference,
+            row.as_object_mut().ok_or("invalid matrix entry")?.extend(object(&json!({"status":"prepared","reference":reference,
                 "reference_metadata_sha256":digest(&reference.join("reference.json"))?,"oracle":selected(&metadata, &ORACLE_FIELDS)?}))?.clone());
             Ok(())
         })();

@@ -134,7 +134,7 @@ pub(super) fn query(case: &str, manifest: &Value) -> Result<Value> {
     let mut declared = definitions("data", None)?;
     declared
         .as_object_mut()
-        .unwrap()
+        .ok_or("invalid workload definitions")?
         .extend(object(&definitions("files", None)?)?.clone());
     let definition = field(&declared, case)?;
     let (role, fixture, name) = (

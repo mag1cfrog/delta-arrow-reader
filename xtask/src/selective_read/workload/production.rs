@@ -30,9 +30,9 @@ fn limits() -> Value {
     json!({"memory_bytes":16 * 1024u64.pow(3),"disk_bytes":1024u64.pow(3),"elapsed_seconds":1800})
 }
 
-fn inventory(selected: &BTreeSet<String>, readers: &[&str; 5]) -> Value {
+fn inventory(selected: &BTreeSet<String>, readers: &[&str; 5]) -> Result<Value> {
     let mut value = cases();
-    for (case, row) in value.as_object_mut().unwrap() {
+    for (case, row) in value.as_object_mut().ok_or("invalid workload inventory")? {
         row["status"] = json!(if selected.contains(case) {
             "prepared"
         } else {
@@ -40,7 +40,7 @@ fn inventory(selected: &BTreeSet<String>, readers: &[&str; 5]) -> Value {
         });
         row["readers"] = json!(readers);
     }
-    value
+    Ok(value)
 }
 
 fn sessions(selected: &BTreeSet<String>) -> Value {
@@ -158,7 +158,7 @@ pub(in crate::selective_read) fn define(mut args: Define) -> Result<Value> {
     let result = json!({"format":"selective-read-production-workload-v1","family":"production","comparison_revision":args.comparison_revision,
         "sampling_stage":args.stage,
         "scope":if modes.contains("probe") { "probe" } else { &args.stage }, "publication_ready":false,
-        "readers":readers, "cases":rows, "sessions":sessions(&seen), "inventory":inventory(&seen,&readers),
+        "readers":readers, "cases":rows, "sessions":sessions(&seen), "inventory":inventory(&seen,&readers)?,
         "oracle_limits":limits(),"translations":translations});
     let path = args.output.join("workload.json");
     save(&path, &result)?;
@@ -214,7 +214,7 @@ pub(super) fn load(value: Value, harness: &Path) -> Result<Value> {
     require(
         value["readers"] == json!(readers)
             && value["sessions"] == sessions(&selected)
-            && value["inventory"] == inventory(&selected, &readers),
+            && value["inventory"] == inventory(&selected, &readers)?,
         "incomplete production inventory",
     )?;
     let modes = rows

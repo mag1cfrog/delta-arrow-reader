@@ -90,7 +90,7 @@ pub(super) fn options(
     if reader == "duckdb" {
         let fields = options
             .as_object()
-            .unwrap()
+            .ok_or("invalid storage options")?
             .iter()
             .map(|(key, value)| {
                 let value = value.as_str().map_or_else(
@@ -110,7 +110,10 @@ pub(super) fn options(
         };
         options["fs.s3a.aws.credentials.provider"] =
             json!(format!("org.apache.hadoop.fs.s3a.{provider}"));
-        result["uri"] = json!(format!("s3a:{}", uri.split_once(':').unwrap().1));
+        result["uri"] = json!(format!(
+            "s3a:{}",
+            uri.split_once(':').ok_or("invalid table URI")?.1
+        ));
     }
     Ok(result)
 }

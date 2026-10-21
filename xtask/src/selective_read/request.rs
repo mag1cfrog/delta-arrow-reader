@@ -94,7 +94,7 @@ pub(super) fn run(args: Request) -> Result<Value> {
         "correctness_file":null,"campaign_id":null,"run_id":"pending","repetition":null,"order":null});
     payload
         .as_object_mut()
-        .unwrap()
+        .ok_or("invalid reader request")?
         .extend(comparison.as_object().ok_or("invalid comparison")?.clone());
     Ok(payload)
 }

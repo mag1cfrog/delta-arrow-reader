@@ -57,14 +57,14 @@ impl Arguments {
         };
         let trusted = server("trusted")?;
         let untrusted = server("untrusted")?;
-        let ports = [&trusted, &untrusted].map(|server| {
+        let port = |server: &HttpTestServer| -> Result<u16> {
             server
                 .origin
-                .parse::<hyper::Uri>()
-                .unwrap()
+                .parse::<hyper::Uri>()?
                 .port_u16()
-                .unwrap()
-        });
+                .ok_or_else(|| "HTTPS fixture has no port".into())
+        };
+        let ports = [port(&trusted)?, port(&untrusted)?];
         let proxy = ConnectProxy::start(ports)?;
         let test = |args: &[&str]| {
             let mut command = self.cargo(&core, "test");
@@ -129,7 +129,10 @@ impl Arguments {
                 if proxy.server.take_requests()?.is_empty() {
                     return Err("HTTPS checks bypassed the proxy".into());
                 }
-                let ports = proxy.upstream_ports.lock().unwrap();
+                let ports = proxy
+                    .upstream_ports
+                    .lock()
+                    .map_err(|_| "HTTPS proxy port log is poisoned")?;
                 if requests
                     .iter()
                     .any(|request| !ports.contains(&request.peer_port))

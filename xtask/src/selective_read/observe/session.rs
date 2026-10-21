@@ -298,7 +298,7 @@ pub(in crate::selective_read) fn run(request: Request) -> Result<Value> {
     if let Some(network) = network::config(&directory)? {
         record["storage_environment"]["network"] = network;
     }
-    record.as_object_mut().unwrap().entry("external_resource_limits").or_insert_with(|| json!({"status":"unverified","reason":"reader launcher did not record effective limits"}));
+    record.as_object_mut().ok_or("invalid reader observation")?.entry("external_resource_limits").or_insert_with(|| json!({"status":"unverified","reason":"reader launcher did not record effective limits"}));
     if traced {
         let proof = trace_output.join("capture.json");
         let proof = if proof.exists() {
@@ -325,7 +325,7 @@ pub(in crate::selective_read) fn run(request: Request) -> Result<Value> {
             )?;
             let external = record
                 .as_object_mut()
-                .unwrap()
+                .ok_or("invalid reader observation")?
                 .entry("external_metrics")
                 .or_insert_with(|| json!({}));
             for (key, value) in [
@@ -346,7 +346,7 @@ pub(in crate::selective_read) fn run(request: Request) -> Result<Value> {
             json!({"status":"disabled","reason":"no detailed tracing in this invocation"});
         record
             .as_object_mut()
-            .unwrap()
+            .ok_or("invalid reader observation")?
             .entry("external_metrics")
             .or_insert_with(|| json!({}))["reason"] =
             json!("request/byte metrics require a separate I/O diagnostic");
@@ -356,7 +356,7 @@ pub(in crate::selective_read) fn run(request: Request) -> Result<Value> {
             if traced {
                 let external = record
                     .as_object_mut()
-                    .unwrap()
+                    .ok_or("invalid reader observation")?
                     .entry("external_metrics")
                     .or_insert_with(|| json!({}));
                 external["requests"] = transport["requests"].clone();

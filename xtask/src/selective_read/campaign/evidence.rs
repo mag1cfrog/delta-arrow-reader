@@ -252,7 +252,7 @@ pub(in crate::selective_read) fn validate(
             == crate::selective_read::budget()["process_memory_bytes"],
         "missing enforced memory limit",
     )?;
-    if payload["comparison_revision"].as_u64().unwrap() >= 3 && payload["purpose"] == "validation" {
+    if integer(&payload["comparison_revision"])? >= 3 && payload["purpose"] == "validation" {
         require(
             field(&record["external_resource_limits"], "max_file_size_bytes")?
                 == field(record, "validation_export_limit_bytes_per_file")?,
@@ -353,11 +353,10 @@ pub(in crate::selective_read) fn validate(
         )?;
     } else {
         let init = integer(&record["initialization_ns"])? as u128;
-        let total = init
-            + queries
-                .iter()
-                .map(|q| q["completion_ns"].as_u64().unwrap() as u128)
-                .sum::<u128>();
+        let mut total = init;
+        for query in queries {
+            total += integer(&query["completion_ns"])? as u128;
+        }
         require(
             integer(&record["initialization_plus_query1_ns"])? as u128
                 == init + integer(&queries[0]["completion_ns"])? as u128

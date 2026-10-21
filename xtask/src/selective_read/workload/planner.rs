@@ -211,7 +211,10 @@ pub(crate) fn run(args: Args) -> Result<()> {
     check_counts(counts, &source)?;
     let mut sql = Map::new();
     let mut geometries = Map::new();
-    for (name, shape) in definitions.as_object_mut().unwrap() {
+    for (name, shape) in definitions
+        .as_object_mut()
+        .ok_or("invalid layout definitions")?
+    {
         let geometry = layout_geometry(shape, &analysis["statistics"][name])?;
         let (candidates, matching) = check_geometry(&geometry, shape, counts)?;
         let path = output.join(format!("{name}-files.json"));

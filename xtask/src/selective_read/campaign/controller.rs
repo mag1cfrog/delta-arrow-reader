@@ -193,8 +193,8 @@ fn select(
             cases.len() == 1
                 && jobs
                     .iter()
-                    .map(|j| j["execution_mode"].as_str().unwrap())
-                    .collect::<BTreeSet<_>>()
+                    .map(|j| text(&j["execution_mode"]))
+                    .collect::<Result<BTreeSet<_>>>()?
                     == BTreeSet::from(["open", "reuse"]),
             "gate warmup requires one snapshot with both open and reuse profiles",
         )?;
@@ -504,12 +504,12 @@ impl Campaign {
                             "repetition":0, "order":order, "traced":self.config["gate_diagnostics"]});
                         if self.args.workload.is_some() {
                             slot.as_object_mut()
-                                .unwrap()
+                                .ok_or("invalid campaign record")?
                                 .extend(object(&self.comparison)?.clone());
                         }
                         let record = self.invoke(&slot, &job, None)?;
                         let reference = &self.selection.references[case];
-                        entry.as_object_mut().unwrap().extend(object(&json!({"status":record["status"],
+                        entry.as_object_mut().ok_or("invalid campaign record")?.extend(object(&json!({"status":record["status"],
                             "runnable":record["status"] == "success", "run_id":run_id, "failure_reason":record["failure_reason"],
                             "identity":record["identity"], "correctness_file":self.args.output.join(&run_id).join("correctness.json"),
                             "reference":reference, "reference_sha256":digest(&reference.join("reference.json"))?}))?.clone());
@@ -531,10 +531,10 @@ impl Campaign {
             .jobs
             .iter()
             .map(|job| {
-                let id = job["id"].as_str().unwrap();
-                (id.to_owned(), inventory[id].clone())
+                let id = text(&job["id"])?;
+                Ok((id.to_owned(), inventory[id].clone()))
             })
-            .collect();
+            .collect::<Result<_>>()?;
         let historical = json!({});
         let slots = schedule(
             &ordered,
@@ -586,12 +586,12 @@ impl Campaign {
                 .ok_or("invalid timer resolution")?,
             intact,
         )?;
-        let failures =
-            object(&inventory)?.values().any(|entries| {
-                entries.as_object().unwrap().values().any(|entry| {
-                    !matches!(entry["status"].as_str(), Some("success" | "unsupported"))
-                })
-            });
+        let mut failures = false;
+        for entries in object(&inventory)?.values() {
+            failures |= object(entries)?
+                .values()
+                .any(|entry| !matches!(entry["status"].as_str(), Some("success" | "unsupported")));
+        }
         let failed_slots = self
             .rows
             .iter()
@@ -602,7 +602,7 @@ impl Campaign {
             "incomplete"
         };
         let mut summary = self.comparison.clone();
-        summary.as_object_mut().unwrap().extend(object(&json!({"status":status, "integrity_passed":intact,
+        summary.as_object_mut().ok_or("invalid campaign record")?.extend(object(&json!({"status":status, "integrity_passed":intact,
             "abort_reason":self.abort, "campaign_id":self.config["campaign_id"], "finished_ns":timestamp_ns()?,
             "timer_resolution":self.config["timer_resolution"], "scheduled_slots":array(&slots)?.len(),
             "recorded_slots":self.rows.iter().filter(|row| row["stage"] != "gate").count(), "jobs":jobs}))?.clone());
@@ -708,7 +708,7 @@ pub(in crate::selective_read) fn run(mut args: Args) -> Result<()> {
         server["network"] = network;
     }
     let _affinity = Affinity::pin(&server, &worker)?;
-    config.as_object_mut().unwrap().extend(object(&json!({
+    config.as_object_mut().ok_or("invalid campaign record")?.extend(object(&json!({
         "campaign_id":args.output.file_name().ok_or("missing campaign ID")?.to_str().ok_or("invalid campaign ID")?,
         "fixtures":args.fixtures, "upload":args.upload, "upload_sha256":digest(&args.upload)?,
         "server":server, "reader_builds":builds, "jobs":selection.jobs,

@@ -10,7 +10,7 @@ use snafu::ResultExt;
 use tokio::{io::copy_bidirectional, net::TcpStream, time::timeout};
 
 use crate::{
-    error::{IoSnafu, Result},
+    error::{InvalidInputSnafu, IoSnafu, Result},
     http_fixture::{HttpTestServer, table::response},
 };
 
@@ -26,16 +26,18 @@ impl ConnectProxy {
         let server = HttpTestServer::start_async(move |mut request| {
             let recorded_ports = Arc::clone(&recorded_ports);
             async move {
-                let port = request.uri().port_u16();
+                let Some(port) = request.uri().port_u16().filter(|port| ports.contains(port))
+                else {
+                    return Ok(Some(response(StatusCode::FORBIDDEN, Bytes::new())));
+                };
                 if request.method() != Method::CONNECT
                     || !matches!(request.uri().host(), Some("localhost" | "127.0.0.1"))
-                    || !port.is_some_and(|port| ports.contains(&port))
                 {
                     return Ok(Some(response(StatusCode::FORBIDDEN, Bytes::new())));
                 }
                 let mut upstream = timeout(
                     Duration::from_secs(10),
-                    TcpStream::connect(("127.0.0.1", port.unwrap())),
+                    TcpStream::connect(("127.0.0.1", port)),
                 )
                 .await
                 .unwrap_or_else(|error| {
@@ -47,7 +49,15 @@ impl ConnectProxy {
                 let local = upstream.local_addr().context(IoSnafu {
                     operation: "read the HTTPS test proxy source port",
                 })?;
-                recorded_ports.lock().unwrap().insert(local.port());
+                recorded_ports
+                    .lock()
+                    .map_err(|_| {
+                        InvalidInputSnafu {
+                            message: "HTTPS proxy port log is poisoned",
+                        }
+                        .build()
+                    })?
+                    .insert(local.port());
                 let upgraded = hyper::upgrade::on(&mut request);
                 tokio::spawn(async move {
                     // Certificate rejection can close either end before the tunnel finishes.

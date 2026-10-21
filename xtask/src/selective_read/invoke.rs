@@ -166,11 +166,12 @@ pub(super) fn run(request: &Request) -> Result<Value> {
         json!({"status":if rejected {"invalid_input"} else {"operational_failure"},
             "failure_reason":if error.is_empty() {"reader exited without an observation record".into()} else {error}})
     };
-    if returncode.is_some_and(|code| code != 0) && record["status"] == "success" {
+    if let Some(code) = returncode.filter(|code| *code != 0)
+        && record["status"] == "success"
+    {
         record["status"] = json!("operational_failure");
         record["failure_reason"] = json!(format!(
-            "reader exited with status {} after writing its record",
-            returncode.unwrap()
+            "reader exited with status {code} after writing its record"
         ));
     }
     if let Some(bytes) = export_bytes {
@@ -196,7 +197,7 @@ pub(super) fn run(request: &Request) -> Result<Value> {
             record["status"] = json!("timeout");
             record["failure_reason"] = json!("reported cleanup exceeded its deadline");
         }
-        let record_map = record.as_object_mut().unwrap();
+        let record_map = record.as_object_mut().ok_or("invalid reader observation")?;
         record_map
             .entry("queries")
             .or_insert_with(|| supervision["completed_queries"].clone());

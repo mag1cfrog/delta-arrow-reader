@@ -198,7 +198,7 @@ impl State {
         )?;
         let expected = cases
             .as_object()
-            .unwrap()
+            .ok_or("invalid workload cases")?
             .iter()
             .filter(|(_, v)| {
                 v["deletion_vectors"] == false

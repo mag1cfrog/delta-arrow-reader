@@ -18,12 +18,16 @@ fn fields(value: &Value, expected: &[&str]) -> bool {
 pub(in crate::selective_read) fn count(payload: &Value) -> io::Result<usize> {
     let reuse = payload["execution_mode"] == "reuse";
     if !payload["concurrent_queries"].is_null() {
-        let count = payload["concurrent_queries"].as_u64();
-        require(
-            matches!(count, Some(2 | 4)) && reuse && payload["comparison_revision"] == 6,
-            "concurrent queries require revision 6, reuse mode and a count of 2 or 4",
-        )?;
-        return Ok(count.unwrap() as usize);
+        return payload["concurrent_queries"]
+            .as_u64()
+            .filter(|count| matches!(count, 2 | 4) && reuse && payload["comparison_revision"] == 6)
+            .map(|count| count as usize)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "concurrent queries require revision 6, reuse mode and a count of 2 or 4",
+                )
+            });
     }
     Ok(if !reuse {
         1
@@ -193,16 +197,17 @@ impl Progress {
                     "invalid query counts",
                 )?;
                 if self.timed {
-                    let time = query["completion_ns"].as_u64();
+                    let time = query["completion_ns"].as_u64().ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "invalid query clocks")
+                    })?;
                     require(
-                        time.is_some()
-                            && (query["first_batch_ns"].is_null()
-                                || query["first_batch_ns"]
-                                    .as_u64()
-                                    .is_some_and(|first| first <= time.unwrap())),
+                        query["first_batch_ns"].is_null()
+                            || query["first_batch_ns"]
+                                .as_u64()
+                                .is_some_and(|first| first <= time),
                         "invalid query clocks",
                     )?;
-                    if time.unwrap() > self.query_ns {
+                    if time > self.query_ns {
                         return Err(io::Error::new(
                             io::ErrorKind::TimedOut,
                             "query exceeded deadline",

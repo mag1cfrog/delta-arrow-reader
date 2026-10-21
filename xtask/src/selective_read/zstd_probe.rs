@@ -166,7 +166,7 @@ fn batches(fixture: &Path) -> Result<Value> {
                 !pages.is_empty(),
                 "row group has no eligible raw Zstd pages",
             )?;
-            groups.push(json!({"key":format!("{prefix}/{}",path.file_name().unwrap().to_str().ok_or("non-UTF8 fixture filename")?),
+            groups.push(json!({"key":format!("{prefix}/{}",path.file_name().ok_or("missing fixture filename")?.to_str().ok_or("non-UTF8 fixture filename")?),
                 "row_group":group,"columns":columns,"raw_pages":pages}));
         }
     }

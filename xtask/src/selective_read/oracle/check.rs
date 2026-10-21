@@ -246,7 +246,7 @@ impl State {
         ] {
             proof[name] = provenance[name].clone();
         }
-        proof.as_object_mut().unwrap().extend(serde_json::from_value::<serde_json::Map<String,Value>>(json!({"status":"passed","reference_sha256":metadata["reference_sha256"],
+        proof.as_object_mut().ok_or("invalid correctness proof")?.extend(serde_json::from_value::<serde_json::Map<String,Value>>(json!({"status":"passed","reference_sha256":metadata["reference_sha256"],
             "identity_sha256":self.digests.digest(identity)?,"output_rows":count,"qualifying_rows":metadata["qualifying_rows"],"reported_nullability":nullability}))?);
         Ok(proof)
     }
@@ -269,7 +269,10 @@ impl State {
             )?;
             let (count, _) = self.compare_file(&result, reference, &metadata, None, false)?;
             let mut check = record["identity"].clone();
-            for (k,v) in json!({"status":"passed","output_rows":count,"reference_sha256":metadata["reference_sha256"],"result_sha256":self.digests.digest(&result)?}).as_object().unwrap() {check[k]=v.clone();}
+            check["status"] = json!("passed");
+            check["output_rows"] = json!(count);
+            check["reference_sha256"] = metadata["reference_sha256"].clone();
+            check["result_sha256"] = json!(self.digests.digest(&result)?);
             checks.push(check);
         }
         Ok(json!({"status":"passed","checks":checks}))

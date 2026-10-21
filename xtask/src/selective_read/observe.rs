@@ -95,9 +95,10 @@ fn counter(value: &str) -> Result<u64> {
 }
 
 fn parse_metrics(source: &str) -> Result<Value> {
-    static METRIC: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"^(\w+)\{(.*)\} ([^ ]+)$").unwrap());
-    static NAME: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"name="([^"]+)""#).unwrap());
+    static METRIC: LazyLock<std::result::Result<Regex, regex::Error>> =
+        LazyLock::new(|| Regex::new(r"^(\w+)\{(.*)\} ([^ ]+)$"));
+    static NAME: LazyLock<std::result::Result<Regex, regex::Error>> =
+        LazyLock::new(|| Regex::new(r#"name="([^"]+)""#));
     let mut result =
         json!({"requests":{}, "response_bytes":0, "active":0, "rejected":0, "canceled":0});
     let mut found = false;
@@ -105,7 +106,10 @@ fn parse_metrics(source: &str) -> Result<Value> {
         .lines()
         .filter(|line| line.starts_with("minio_api_requests_"))
     {
-        let values = METRIC.captures(line).ok_or("unexpected MinIO metric")?;
+        let values = METRIC
+            .as_ref()?
+            .captures(line)
+            .ok_or("unexpected MinIO metric")?;
         let key = match &values[1] {
             "minio_api_requests_total" => "requests",
             "minio_api_requests_traffic_sent_bytes" => "response_bytes",
@@ -118,6 +122,7 @@ fn parse_metrics(source: &str) -> Result<Value> {
         match key {
             "requests" => {
                 let name = NAME
+                    .as_ref()?
                     .captures(&values[2])
                     .ok_or("missing request API label")?;
                 result["requests"][&name[1]] = json!(count);
@@ -207,10 +212,15 @@ fn unquote(value: &str) -> String {
 }
 
 fn timestamp(value: &str) -> Result<i64> {
-    static STAMP: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.([0-9]{1,9}))?Z$").unwrap()
+    static STAMP: LazyLock<std::result::Result<Regex, regex::Error>> = LazyLock::new(|| {
+        Regex::new(
+            r"^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.([0-9]{1,9}))?Z$",
+        )
     });
-    let parts = STAMP.captures(value).ok_or("unexpected native timestamp")?;
+    let parts = STAMP
+        .as_ref()?
+        .captures(value)
+        .ok_or("unexpected native timestamp")?;
     let numbers: Vec<i32> = (1..=6)
         .map(|i| parts[i].parse())
         .collect::<std::result::Result<_, _>>()?;
@@ -264,8 +274,8 @@ fn header(headers: &Value, name: &str) -> Result<Value> {
 }
 
 fn sanitize(raw: &Value, scope: &str, run_id: &str, case_id: &str) -> Result<Value> {
-    static ATTEMPT: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"(?:^|[; ,])attempt=([0-9]+)").unwrap());
+    static ATTEMPT: LazyLock<std::result::Result<Regex, regex::Error>> =
+        LazyLock::new(|| Regex::new(r"(?:^|[; ,])attempt=([0-9]+)"));
     let http = &raw["http"];
     let (request, response) = (&http["request"], &http["response"]);
     let path = unquote(text(&request["path"])?);
@@ -318,6 +328,7 @@ fn sanitize(raw: &Value, scope: &str, run_id: &str, case_id: &str) -> Result<Val
     };
     let sdk = header(&request["headers"], "amz-sdk-request")?;
     let attempt = ATTEMPT
+        .as_ref()?
         .captures(sdk.as_str().unwrap_or(""))
         .map(|v| v[1].parse::<u64>())
         .transpose()?;

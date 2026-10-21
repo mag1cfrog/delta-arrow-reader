@@ -83,7 +83,10 @@ pub(super) fn date(value: &str) -> Result<Cell> {
     ))))
 }
 fn hash64(value: &str) -> u64 {
-    u64::from_le_bytes(Sha256::digest(value.as_bytes())[..8].try_into().unwrap())
+    let hash = Sha256::digest(value.as_bytes());
+    let mut prefix = [0; 8];
+    prefix.copy_from_slice(&hash[..8]);
+    u64::from_le_bytes(prefix)
 }
 pub(super) fn payload(key: [i64; 2], column: usize) -> Cell {
     let value = hash64(&format!("dar-wide-v1/{}/{}/{column:02}", key[0], key[1]));
@@ -147,15 +150,19 @@ impl Condition {
             _ => unreachable!(),
         }
     }
-    pub(super) fn describe(&self) -> String {
-        let render = |v: &Cell| match v {
-            Cell::Int(n) if self.name.ends_with("date") => Date32Type::to_naive_date_opt(*n as i32)
-                .expect("constant oracle date")
-                .to_string(),
-            Cell::Int(n) => n.to_string(),
-            Cell::Decimal(n) => format!("{}.{:02}", n / 100, n.abs() % 100),
-            Cell::Text(s) => s.clone(),
-            Cell::Null => "None".into(),
+    pub(super) fn describe(&self) -> Result<String> {
+        let render = |v: &Cell| -> Result<String> {
+            Ok(match v {
+                Cell::Int(n) if self.name.ends_with("date") => {
+                    Date32Type::to_naive_date_opt(i32::try_from(*n)?)
+                        .ok_or("oracle date is out of range")?
+                        .to_string()
+                }
+                Cell::Int(n) => n.to_string(),
+                Cell::Decimal(n) => format!("{}.{:02}", n / 100, n.abs() % 100),
+                Cell::Text(s) => s.clone(),
+                Cell::Null => "None".into(),
+            })
         };
         let value = if self.op == "IN" {
             format!(
@@ -163,13 +170,13 @@ impl Condition {
                 self.values
                     .iter()
                     .map(render)
-                    .collect::<Vec<_>>()
+                    .collect::<Result<Vec<_>>>()?
                     .join(", ")
             )
         } else {
-            render(&self.values[0])
+            render(self.values.first().ok_or("missing predicate value")?)?
         };
-        format!("{} {} {value}", self.name, self.op)
+        Ok(format!("{} {} {value}", self.name, self.op))
     }
 }
 pub(super) fn conditions(predicate: &str, literals: &[i64]) -> Result<Vec<Condition>> {
