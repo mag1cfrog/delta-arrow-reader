@@ -26,6 +26,7 @@ dar capabilities
 dar capabilities --command query
 dar capabilities --schema predicate
 dar capabilities --schema predicate --detail timestamp_us
+dar capabilities --schema completion
 dar capabilities --authorization s3
 dar capabilities --authorization s3 --full
 dar capabilities --schema completion --full > completion-schema.json
@@ -97,6 +98,12 @@ These guides describe how to use a format. Recursive predicate references lead
 to another operator or scalar choice through `detail_command`. Use a guide's
 `full_command` when a JSON Schema validator or a metadata consumer needs the
 complete definition.
+
+For result verification, `--schema completion` shows an exhausted scan and
+explains which counts, snapshot binding, and completion fields to check against
+the request and saved output. It also distinguishes a row-limited scan and a SQL
+result from a complete table read. Use `--detail FIELD` for a field's exact
+type or bounds; `--full` exports the schema for a JSON Schema validator.
 
 In full command metadata and the full inventory, `command` contains the selected
 command or complete command tree, and each argument's required status, value

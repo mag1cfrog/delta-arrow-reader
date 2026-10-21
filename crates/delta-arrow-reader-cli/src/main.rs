@@ -48,7 +48,10 @@ use snafu::{ResultExt, Snafu, ensure};
 
 /// Read Delta Lake snapshots as JSON metadata or Arrow IPC streams.
 #[derive(Parser)]
-#[command(name = command_name(), bin_name = command_name(), version)]
+#[command(
+    name = command_name(), bin_name = command_name(), version,
+    after_help = "Start with inspect TABLE for the version and column types; pin reads with --table-version N.\nGuides: capabilities --command NAME; capabilities --schema NAME [--detail FIELD_OR_TYPE].\nInput formats: predicate, storage-options, execution-options. Output formats: inspection, diagnostic, completion."
+)]
 struct Cli {
     #[command(flatten)]
     diagnostics: diagnostics::DiagnosticOptions,
@@ -98,6 +101,8 @@ enum Command {
         #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
         target_partitions: Option<NonZeroUsize>,
         /// Local typed JSON predicate; at most 1 MiB. '-' is a filename, not stdin.
+        /// Match literal types to inspected column types; integer values are strings.
+        /// Format: capabilities --schema predicate.
         #[arg(long, value_name = "PATH")]
         predicate_file: Option<String>,
         /// Local JSON execution options; at most 1 MiB. '-' is a filename, not stdin.

@@ -239,7 +239,7 @@ fn input_schema_corrections_omit_unknown_keys_and_values() -> Result<(), Box<dyn
                     r#"{"op":"eq","column":"secret-column","value":{"type":"int32","value":"secret-value"}}"#,
                     "/value/value",
                     "canonical decimal integer string",
-                    "allowed range",
+                    "inspected column",
                 ),
                 (
                     r#"{"op":"constant","value":true,"value":false}"#,

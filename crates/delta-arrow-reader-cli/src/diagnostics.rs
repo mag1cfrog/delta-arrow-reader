@@ -48,7 +48,8 @@ pub(crate) struct ErrorClassification {
 
 #[derive(Args)]
 pub(crate) struct DiagnosticOptions {
-    /// JSON Lines on stderr, including argument errors.
+    /// JSON errors and completion on stderr, including argument errors.
+    /// Verification: capabilities --schema completion.
     #[arg(
         long = "diagnostics",
         value_name = "FORMAT",

@@ -53,7 +53,7 @@ pub(crate) struct CapabilitiesArgs {
     /// Show an authorization guide for a storage or catalog service.
     #[arg(long, value_enum, conflicts_with_all = ["command", "schema", "all"])]
     authorization: Option<read_support::AuthorizationGuide>,
-    /// Return complete metadata for the selected command, schema, or authorization guide.
+    /// Export a full JSON Schema for validators, or command/authorization metadata for tooling.
     #[arg(long, requires = "full_definition_target", conflicts_with = "detail")]
     full: bool,
     /// Return the complete inventory of commands, authorization, and limits.

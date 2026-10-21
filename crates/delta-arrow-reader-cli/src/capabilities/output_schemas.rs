@@ -99,7 +99,7 @@ pub(super) fn diagnostic_schema() -> Value {
 pub(super) fn completion_schema() -> Value {
     json!({
         "title": "Terminal success completion",
-        "description": "One JSON line on stderr with --diagnostics=json. Success requires exit status 0, valid stdout, and this record. A complete limited_scan covers only the requested rows, and query covers the SQL result, including any SQL LIMIT.",
+        "description": "With --diagnostics=json, success requires exit 0, valid stdout and a terminal completion on stderr. Check command against the request; scope equals command except scan --limit uses limited_scan. Check bindings against the pinned table_version, output_bytes against saved stdout length, and scan/query rows/batches against decoded Arrow counts. Counts and table_version are canonical decimal strings from 0 to 18446744073709551615. end_of_input with has_more=false means exhaustion; row_limit with has_more=null does not. Completion covers the requested scan or SQL result, including limits.",
         "type": "object",
         "required": ["format_version", "kind", "terminal", "command", "completion", "scope", "stop_reason", "has_more", "bindings", "output_bytes"],
         "properties": {
@@ -131,6 +131,12 @@ pub(super) fn completion_schema() -> Value {
             "else": {"properties": {"bindings": {"maxItems": 0}}},
         }],
         "examples": [{
+            "format_version": 1, "kind": "completion", "terminal": true,
+            "command": "scan", "completion": "complete", "scope": "scan",
+            "stop_reason": "end_of_input", "has_more": false,
+            "bindings": [{"alias": "t", "table_version": "42"}],
+            "output_bytes": "1024", "rows": "1", "batches": "1",
+        }, {
             "format_version": 1, "kind": "completion", "terminal": true,
             "command": "scan", "completion": "complete", "scope": "limited_scan",
             "stop_reason": "row_limit", "has_more": null,
@@ -211,19 +217,21 @@ mod tests {
             error.to_json_diagnostic(),
             diagnostic_schema()["examples"][0]
         );
-        assert_eq!(
-            build_completion_record(
-                "scan",
-                Some(42),
-                StdoutStats {
-                    rows_written: 1,
-                    batches_written: 1,
-                    bytes_written: 1024,
-                },
-                Some(1)
-            ),
-            completion_schema()["examples"][0],
-        );
+        for (index, limit) in [None, Some(1)].into_iter().enumerate() {
+            assert_eq!(
+                build_completion_record(
+                    "scan",
+                    Some(42),
+                    StdoutStats {
+                        rows_written: 1,
+                        batches_written: 1,
+                        bytes_written: 1024,
+                    },
+                    limit
+                ),
+                completion_schema()["examples"][index]
+            );
+        }
 
         let validator = jsonschema::validator_for(&completion_schema()).unwrap();
         for command in [
