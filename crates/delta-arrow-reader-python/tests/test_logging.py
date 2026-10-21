@@ -260,30 +260,6 @@ class LoggingTests(unittest.TestCase):
         table.scan(limit=0).close()
         self.assertEqual(self.events(), ["scan_planning.started", "scan_planning.completed"])
 
-    def test_sql_planning_failures_keep_safe_source_categories(self):
-        table = DeltaTable(FIXTURE, warmup="none")
-        session = Session()
-        session.register_table("events", table)
-        self.logger.setLevel(5)
-        for query, category in (
-            ("SELECT 'private-literal' FROM", "sql_parse"),
-            ("SELECT * FROM private_table", "datafusion_plan"),
-            ("SELECT private_column FROM events", "schema"),
-            ("COPY events TO 's3://private-bucket/private-file' STORED AS CSV", "datafusion_plan"),
-        ):
-            with self.subTest(category=category):
-                self.collect.records.clear()
-                with self.assertRaises(DeltaReaderError) as raised:
-                    session.sql(query)
-                self.assertEqual(len(self.collect.records), 1)
-                self.assert_failure("sql_planning.failed", target="delta_arrow_reader_python",
-                                    error_source_kind=category, error_phase="datafusion",
-                                    error_code="sql_planning")
-                self.assertEqual((raised.exception.phase, raised.exception.code),
-                                 ("datafusion", "sql_planning"))
-                self.assertIsNone(raised.exception.reason)
-                self.assertIsNone(raised.exception.source_kind)
-
     def test_planning_observes_logging_changes_after_session_creation(self):
         self.logger.setLevel(logging.CRITICAL)
         table = DeltaTable(FIXTURE, warmup="none")

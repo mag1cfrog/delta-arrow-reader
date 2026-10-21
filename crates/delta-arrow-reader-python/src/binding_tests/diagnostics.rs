@@ -4,7 +4,7 @@ fn assert_diagnostics(
     error: &PyErr,
     phase: &str,
     code: &str,
-    reason: &str,
+    reason: Option<&str>,
     source: Option<&str>,
 ) -> PyResult<()> {
     Python::attach(|py| {
@@ -12,7 +12,7 @@ fn assert_diagnostics(
         for (name, expected) in [
             ("phase", Some(phase)),
             ("code", Some(code)),
-            ("reason", Some(reason)),
+            ("reason", reason),
             ("source_kind", source),
         ] {
             assert_eq!(
@@ -215,7 +215,7 @@ fn public_errors_preserve_fields_and_validation_logs() -> PyResult<()> {
                 } else {
                     assert_error::<DeltaReaderError>(result)
                 };
-                assert_diagnostics(&error, phase, code, reason, source)?;
+                assert_diagnostics(&error, phase, code, Some(reason), source)?;
                 if disabled || level == 50 {
                     assert!(records.is_empty());
                     continue;
@@ -263,6 +263,42 @@ fn public_errors_preserve_fields_and_validation_logs() -> PyResult<()> {
         table
             .call_method("scan", (), Some(&kwargs))?
             .call_method0("close")?;
+        session.call_method1("register_table", ("events", &table))?;
+        for (query, category) in [
+            ("SELECT 'secret-literal' FROM", "sql_parse"),
+            ("SELECT * FROM secret_table", "datafusion_plan"),
+            ("SELECT secret_column FROM events", "schema"),
+            (
+                "COPY events TO 's3://secret-bucket/secret-file' STORED AS CSV",
+                "datafusion_plan",
+            ),
+        ] {
+            records.call_method0("clear")?;
+            let error = assert_error::<DeltaReaderError>(session.call_method1("sql", (query,)));
+            assert_diagnostics(&error, "datafusion", "sql_planning", None, None)?;
+            assert_eq!(records.len(), 1);
+            let record = records.get_item(0)?;
+            assert_eq!(record.getattr("levelno")?.extract::<u8>()?, 40);
+            assert_eq!(
+                record.getattr("msg")?.extract::<String>()?,
+                "sql_planning.failed"
+            );
+            assert_eq!(
+                record.getattr("dar_target")?.extract::<String>()?,
+                "delta_arrow_reader_python"
+            );
+            let fields = record.getattr("dar_fields")?;
+            for (name, expected) in [
+                ("event", "sql_planning.failed"),
+                ("error_phase", "datafusion"),
+                ("error_code", "sql_planning"),
+                ("error_source_kind", category),
+            ] {
+                assert_eq!(fields.get_item(name)?.extract::<String>()?, expected);
+            }
+            let rendered = record.getattr("__dict__")?.repr()?;
+            assert!(!rendered.to_str()?.contains("secret"), "{rendered}");
+        }
         temporary.call_method0("cleanup")?;
         Ok(())
     })
