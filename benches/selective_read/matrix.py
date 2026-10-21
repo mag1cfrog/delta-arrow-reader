@@ -9,7 +9,6 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
 from run import digest, load_adapter, save
 from python_common import require
-import native
 
 
 
@@ -26,12 +25,6 @@ def translations(binary, request, output):
         expression = adapter["expression_identity"](sql)
         result["expressions"][key] = {"canonical_sql": sql, "native_expression": expression}
     save(output, result)
-
-
-def catalog():
-    return native.call("matrix", {"action": "catalog", "harness": str(HERE)})
-
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)

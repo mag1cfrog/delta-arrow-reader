@@ -107,26 +107,6 @@ class ReaderBookkeeping(unittest.TestCase):
             self.assertIs(sys.modules["python_common"], common)
             self.assertEqual(sys.path, previous_path)
 
-    def test_python_adapters_keep_the_comparison_identity_and_reader_roster(self):
-        identity = {"comparison_revision": 6, "protocol_sha256": "spark_matrix documentation",
-            "base_protocol_sha256": "protocol documentation", "sampling_sha256": "sampling documentation",
-            "sampling_stage": "formal", "workload_manifest_sha256": "1" * 64,
-            "workload_contract": {"comparison_revision": 6, "sampling_stage": "formal", "cases": []}}
-        self.assertEqual(run.comparison_identity(identity), identity)
-        for revision in range(2, 7):
-            self.assertEqual(run.reader_roster({"comparison_revision": revision}),
-                ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "spark" if revision == 6 else "daft"))
-        for change in ({"protocol_sha256": "production documentation"},
-                       {"base_protocol_sha256": "0" * 64}, {"sampling_sha256": "0" * 64}):
-            self.assertTrue(run.same_comparison(run.comparison_identity(identity | change), identity))
-        for change in ({"sampling_stage": None}, {"comparison_revision": 7},
-                       {"workload_manifest_sha256": None}, {"workload_contract": None}):
-            with self.assertRaises(ValueError):
-                run.comparison_identity(identity | change)
-        for revision in (1, 7, True, "6"):
-            with self.assertRaises(ValueError):
-                run.reader_roster({"comparison_revision": revision})
-
     def test_build_checks_and_observation_output(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -15,7 +15,6 @@ HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE / "runners")]
 import native
 
-CONTRACT = Path(__file__).resolve().parents[2] / "docs/content/benchmarks/selective-read-production-shapes.md"
 INPUT_COLUMNS = ["l_orderkey", "l_linenumber", "l_shipdate", "l_shipmode"]
 
 

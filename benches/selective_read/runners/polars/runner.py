@@ -27,7 +27,7 @@ import pyarrow as pa
 
 sys.path.insert(0, str(HERE))
 from run import digest, query_count, save
-from python_common import (checked_build, checkpoint, correctness, event, json_hash, observation,
+from python_common import (checked_build, checkpoint, correctness, event, observation,
                            reader_identity, redact_credentials, require, runner_cli, runtime_metadata,
                            scan_sql, storage_options, timing_totals, validate, write_observation)
 

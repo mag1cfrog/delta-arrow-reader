@@ -50,24 +50,6 @@ def load_adapter(binary):
                 sys.modules[name] = module
 
 
-def comparison_identity(value):
-    return native.call("reader-contract", {"action": "comparison", "value": value})
-
-
-def same_comparison(left, right):
-    return native.call("reader-contract", {"action": "same-comparison", "left": left, "right": right})
-
-
-HISTORICAL_READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft")
-
-
-def reader_roster(value):
-    revision = value.get("comparison_revision", 2)
-    if type(revision) is not int or revision not in (2, 3, 4, 5, 6):
-        raise ValueError("unknown comparison reader roster")
-    return (*HISTORICAL_READERS[:-1], "spark") if revision == 6 else HISTORICAL_READERS
-
-
 def query_count(value):
     count = value.get("concurrent_queries")
     if count is not None:
@@ -78,15 +60,3 @@ def query_count(value):
     if value["execution_mode"] == "open":
         return 1
     return 2 if value.get("comparison_revision", 2) >= 4 else 10
-
-
-def fixture_tables(manifest):
-    if manifest.get("status") != "complete":
-        raise ValueError("incomplete fixture manifest")
-    if manifest["protocol"] == "selective-read-v1":
-        return manifest["tables"]
-    if manifest["protocol"] in ("selective-read-production-fixtures-v1", "selective-read-production-pairs-v1"):
-        if manifest["writer"]["status"] != "complete":
-            raise ValueError("incomplete production writer")
-        return manifest["writer"]["tables"]
-    raise ValueError("unknown fixture manifest")
