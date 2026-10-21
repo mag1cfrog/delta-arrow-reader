@@ -20,7 +20,7 @@ jobs:
       RUSTFLAGS: -C target-cpu=x86-64
       PYTHONDONTWRITEBYTECODE: '1'
       SELECTIVE_READ_XTASK: ${{ github.workspace }}/target/selective-read/debug/xtask
-      SELECTIVE_READ_FIXTURES: ${{ runner.temp }}/selective-read-smoke
+      SELECTIVE_READ_FIXTURES: ${{ github.workspace }}/target/selective-read/smoke
     defaults:
       run:
         working-directory: benches/selective_read
