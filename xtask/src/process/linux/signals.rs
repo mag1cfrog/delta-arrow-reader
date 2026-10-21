@@ -5,7 +5,7 @@ use snafu::{ResultExt, ensure};
 
 use super::ProcessFixture;
 use crate::{
-    command::wait_with_timeout,
+    command::{KillOnDrop, wait_with_timeout},
     error::{CommandStartSnafu, FileSnafu, InvalidInputSnafu, IoSnafu, Result},
     http_fixture::HttpTestServer,
 };
@@ -105,17 +105,6 @@ pub(crate) fn check_no_child_processes(child: &Child) -> Result<()> {
         );
     }
     Ok(())
-}
-
-struct KillOnDrop {
-    child: Child,
-}
-
-impl Drop for KillOnDrop {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
 }
 
 #[cfg(test)]

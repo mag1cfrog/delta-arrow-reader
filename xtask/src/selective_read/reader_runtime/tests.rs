@@ -2,6 +2,31 @@ use super::*;
 use std::fs;
 
 #[test]
+fn correctness_gate_failures_do_not_replace_cleanup_or_query_failures() -> Result<()> {
+    for (phase, status, expected_status) in [
+        ("correctness_gate", "unsupported", "validation_failed"),
+        (
+            "correctness_gate",
+            "operational_failure",
+            "validation_failed",
+        ),
+        ("correctness_gate", "validation_failed", "validation_failed"),
+        ("correctness_gate", "success", "success"),
+        ("query", "unsupported", "unsupported"),
+        ("query", "operational_failure", "operational_failure"),
+        ("cleanup", "operational_failure", "operational_failure"),
+    ] {
+        let mut record = json!({"phase":phase, "status":status, "failure_reason":"original failure",
+            "capability":{"status":"not_checked"}, "cleanup_ns":17});
+        let mut expected = record.clone();
+        expected["status"] = json!(expected_status);
+        finish(&mut record)?;
+        assert_eq!(record, expected);
+    }
+    Ok(())
+}
+
+#[test]
 fn runtime_checks_installed_contents_and_preserves_canonical_path_maps() -> Result<()> {
     let map = BTreeMap::from([("a".into(), "1".into()), ("\u{7f}é😀".into(), "2".into())]);
     assert_eq!(
@@ -210,6 +235,56 @@ fn observations_preserve_timing_failure_precedence_and_exclusive_output() -> Res
         finish(&mut record)?;
         assert_eq!(record["status"], "operational_failure");
         assert_eq!(record["failure_reason"], "cleanup failed");
+    }
+    Ok(())
+}
+
+#[test]
+fn query_bookkeeping_keeps_clocks_exports_and_collected_api_reasons() -> Result<()> {
+    for (purpose, delivery, rows, reason) in [
+        ("timing", "streaming", 3, Value::Null),
+        ("timing", "streaming", 0, json!("empty result")),
+        ("validation", "streaming", 3, json!("untimed invocation")),
+        (
+            "timing",
+            "collected",
+            3,
+            json!("collected API; no streaming first-batch clock"),
+        ),
+        (
+            "validation",
+            "collected",
+            0,
+            json!("collected API; no streaming first-batch clock"),
+        ),
+    ] {
+        let mut record = json!({"status":"operational_failure", "purpose":purpose, "_query_count":2,
+            "settings":{"output_delivery":delivery}, "queries":[
+                {"query_index":0,"output_rows":rows,"output_batches":1,"completion_ns":17,"first_batch_ns":5},
+                {"query_index":1,"output_rows":rows,"output_batches":1,"completion_ns":23,"first_batch_ns":8,
+                 "result":"query-1.arrow","identity":"query-1.identity.json","physical_plan":"query-1.plan.txt"}]});
+        finish(&mut record)?;
+        assert!(record.get("_query_count").is_none());
+        assert_eq!(
+            record["queries"][0]["first_batch_unavailable_reason"],
+            reason
+        );
+        assert_eq!(record["queries"][0]["completion_ns"], 17);
+        assert_eq!(record["queries"][0]["first_batch_ns"], 5);
+        for field in ["result", "identity", "physical_plan"] {
+            assert_eq!(record["queries"][0].get(field), Some(&Value::Null));
+            assert!(record["queries"][1][field].is_string());
+        }
+    }
+    for (mode, revision, count) in [
+        ("open", 6, 1),
+        ("reuse", 2, 10),
+        ("reuse", 4, 2),
+        ("reuse", 6, 2),
+    ] {
+        let request = json!({"campaign_id":null,"run_id":"run","repetition":0,"order":0,"profile":"smoke","purpose":"validation",
+            "execution_mode":mode,"comparison_revision":revision,"table_uri":"file:///table","canonical_sql":"SELECT id FROM bench"});
+        assert_eq!(observation(&request)?["_query_count"], count);
     }
     Ok(())
 }

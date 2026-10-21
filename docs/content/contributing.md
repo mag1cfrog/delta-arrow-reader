@@ -181,6 +181,7 @@ python -m pip install 'build>=1.2,<2'
 python -m build --wheel --outdir target/python-wheels crates/delta-arrow-reader-python
 python -m pip install --force-reinstall target/python-wheels/*.whl
 delta-arrow-reader --version
+cargo build --locked -p xtask
 python -I -m unittest discover -s crates/delta-arrow-reader-python/tests
 cargo test --locked -p delta-arrow-reader-python
 ```
@@ -237,6 +238,11 @@ checks below exercise both native components.
 For the installed-wheel acceptance checks, run the following from a directory
 outside the checkout, using the environment where the wheel is installed.
 Replace the test directory with its absolute path:
+
+Build the native acceptance tool with `cargo build --locked -p xtask` in the
+checkout first. The tests find `target/debug/xtask` there, respecting
+`CARGO_TARGET_DIR`. Set `DELTA_ARROW_READER_XTASK` to an absolute executable path
+when using a separately built tool. It tests the CLI installed by the wheel.
 
 ```console
 python -I -m unittest discover \

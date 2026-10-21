@@ -159,6 +159,20 @@ fn ordinary_errors_survive_moves_and_close_during_failure_is_safe() {
 
 #[test]
 fn python_handler_reentry_is_rejected_before_the_native_borrow() {
+    // This test replaces the process-wide Python logger while releasing the GIL.
+    const CHILD: &str = "DELTA_ARROW_READER_REENTRY_TEST_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "arrow_stream::tests::python_handler_reentry_is_rejected_before_the_native_borrow",
+            ])
+            .env(CHILD, "1")
+            .status()
+            .unwrap();
+        assert!(status.success());
+        return;
+    }
     Python::initialize();
     for worker in [false, true] {
         Python::attach(|py| {
