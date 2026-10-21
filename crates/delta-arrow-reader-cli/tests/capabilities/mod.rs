@@ -3,6 +3,9 @@
 use super::*;
 use crate::diagnostics::assert_single_terminal_record;
 
+#[cfg(target_os = "linux")]
+mod blocked_output;
+
 pub(super) fn assert_output_matches_schema(name: &str, output: &Value) {
     use std::sync::LazyLock;
 
@@ -187,27 +190,5 @@ fn a_closed_discovery_pipe_reports_failure() -> Result<(), Box<dyn std::error::E
     let record = assert_single_terminal_record(&output.stderr, "diagnostic");
     assert_eq!(record["code"], "output_write");
     assert_eq!(record["source_kind"], "broken_pipe");
-    Ok(())
-}
-
-#[cfg(target_os = "linux")]
-#[test]
-fn blocked_discovery_output_respects_the_deadline() -> Result<(), Box<dyn std::error::Error>> {
-    use std::{io::Write, os::fd::AsRawFd};
-
-    let (reader, mut writer) = io::pipe()?;
-    // Fill the pipe before starting the child, independently of the inventory's size.
-    let capacity = unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETPIPE_SZ) };
-    assert!(capacity > 0);
-    writer.write_all(&vec![0; capacity as usize])?;
-    let output = run_with_stdout(
-        Command::new(env!("CARGO_BIN_EXE_dar")).args(["capabilities", "--diagnostics=json"]),
-        Stdio::from(writer),
-    )?;
-    drop(reader);
-    assert_eq!(output.status.code(), Some(1));
-    let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-    assert_eq!(record["reason"], "discovery_deadline_exceeded");
-    assert_eq!(record["source_kind"], "timeout");
     Ok(())
 }

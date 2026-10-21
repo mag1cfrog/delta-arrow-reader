@@ -14,13 +14,18 @@ mod schemas;
 
 pub(crate) use schemas::DiscoverySchema;
 
-use std::{io, time::Duration};
+use std::{io, process::ExitCode, time::Duration};
 
 use clap::{Arg, ArgAction, Command, CommandFactory, ValueEnum};
 use serde_json::{Value, json};
 use snafu::ResultExt;
 
-use crate::{Cli, Error, RuntimeSnafu, StdoutStats, input::JsonInputKind, signals, write_stdout};
+use crate::{
+    Cli, Error, OutputSnafu, RuntimeSnafu, StdoutStats, build_completion_record,
+    diagnostics::{self, DiagnosticFormat, FAILURE_DIAGNOSTIC_TIMEOUT},
+    input::JsonInputKind,
+    signals, write_stdout,
+};
 
 const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 const DEADLINE: Duration = Duration::from_secs(5);
@@ -60,7 +65,11 @@ fn build_capabilities() -> Value {
                 "schemas": [DiscoverySchema::Diagnostic, DiscoverySchema::Completion],
             },
         },
-        "limits": {"max_output_bytes": MAX_OUTPUT_BYTES, "deadline_ms": DEADLINE.as_millis()},
+        "limits": {
+            "max_output_bytes": MAX_OUTPUT_BYTES,
+            "deadline_ms": DEADLINE.as_millis(),
+            "failure_diagnostic_timeout_ms": FAILURE_DIAGNOSTIC_TIMEOUT.as_millis(),
+        },
     })
 }
 
@@ -131,26 +140,21 @@ fn argument_name(argument: &Arg) -> String {
         .map_or_else(|| argument.get_id().to_string(), |name| format!("--{name}"))
 }
 
-pub(crate) fn write_capabilities(schema: Option<DiscoverySchema>) -> Result<StdoutStats, Error> {
+/// Includes terminal reporting in discovery's deadline, even when stderr is blocked.
+pub(crate) fn run_capabilities(
+    schema: Option<DiscoverySchema>,
+    diagnostic_format: DiagnosticFormat,
+) -> ExitCode {
     let deadline = std::time::Instant::now() + DEADLINE;
-    let document = schema.map_or_else(build_capabilities, DiscoverySchema::schema_document);
-    let mut output = document.to_string().into_bytes();
-    output.push(b'\n');
-    if output.len() > MAX_OUTPUT_BYTES {
-        return Err(Error::OutputLimit {
-            reason: "discovery_output_too_large",
-        });
-    }
-    let stats = StdoutStats {
-        bytes_written: output.len() as u64,
-        ..Default::default()
-    };
-    let runtime = tokio::runtime::Builder::new_current_thread()
+    let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .context(RuntimeSnafu {
             reason: "runtime_build_failed",
-        })?;
+        }) {
+        Ok(runtime) => runtime,
+        Err(error) => return diagnostic_format.report_failure_with_timeout(error),
+    };
     let result = runtime.block_on(async {
         tokio::select! {
             biased;
@@ -159,16 +163,42 @@ pub(crate) fn write_capabilities(schema: Option<DiscoverySchema>) -> Result<Stdo
                 source: io::ErrorKind::TimedOut.into(),
                 reason: "discovery_deadline_exceeded",
             }),
-            result = tokio::task::spawn_blocking(move || write_stdout(&output)) => {
-                result.map_err(io::Error::other).context(RuntimeSnafu {
+            result = async {
+                let stats = tokio::task::spawn_blocking(move || {
+                    diagnostics::init_tracing(diagnostic_format);
+                    write_discovery_response(schema)
+                }).await.map_err(io::Error::other).context(RuntimeSnafu {
                     reason: "discovery_output_task_failed",
-                })?
-            }
+                })??;
+                diagnostic_format.write_terminal_record_when_writable(build_completion_record(
+                    "capabilities", None, stats, None,
+                )).await.context(OutputSnafu)
+            } => result,
         }
     });
-    // A blocked stdout worker must not extend the command's deadline during shutdown.
+    let status = match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => diagnostic_format.report_failure_with_timeout(error),
+    };
+    // stdout or text logging may still be held by a blocked worker.
     runtime.shutdown_background();
-    result.map(|()| stats)
+    status
+}
+
+fn write_discovery_response(schema: Option<DiscoverySchema>) -> Result<StdoutStats, Error> {
+    let document = schema.map_or_else(build_capabilities, DiscoverySchema::schema_document);
+    let mut output = document.to_string().into_bytes();
+    output.push(b'\n');
+    if output.len() > MAX_OUTPUT_BYTES {
+        return Err(Error::OutputLimit {
+            reason: "discovery_output_too_large",
+        });
+    }
+    write_stdout(&output)?;
+    Ok(StdoutStats {
+        bytes_written: output.len() as u64,
+        ..Default::default()
+    })
 }
 
 #[cfg(test)]
@@ -178,6 +208,20 @@ mod tests {
     use clap::Parser;
 
     use super::*;
+
+    #[test]
+    fn completion_fits_the_minimum_atomic_pipe_write_size() {
+        let record = build_completion_record(
+            "capabilities",
+            None,
+            StdoutStats {
+                bytes_written: u64::MAX,
+                ..Default::default()
+            },
+            None,
+        );
+        assert!(format!("{record}\n").len() <= 512);
+    }
 
     #[test]
     fn command_formats_cover_the_parser_without_advertising_future_commands() {

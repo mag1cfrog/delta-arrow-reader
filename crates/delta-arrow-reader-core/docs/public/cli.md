@@ -104,9 +104,18 @@ the result was received intact.
 
 Discovery needs no table, input file, credentials, Databricks executable, or
 network access. Its response is limited to 1 MiB. The command has a five-second
-deadline, including blocked stdout. A closed output pipe fails with status 3;
-an expired deadline fails with status 1. With `--diagnostics=json`, success
-produces a completion record on stderr, and failure produces a diagnostic.
+deadline, including stdout, log setup, and completion reporting on stderr.
+A closed stdout pipe fails with status 3; an expired deadline fails with
+status 1. Failure reporting has at most one additional second before exit,
+including when stderr is blocked. `limits.failure_diagnostic_timeout_ms`
+reports that allowance. Runtime initialization and argument errors use the same
+reporting allowance. With `--diagnostics=json`, success produces a completion
+record on stderr, and failure produces a diagnostic when stderr can accept it.
+In this mode, a closed stderr pipe also fails with status 3.
+Use a separate stderr pipe for each command. If the pipe is full, discovery
+waits for capacity before publishing completion; cancellation or timeout during
+that wait produces a failure instead.
+Cancellation keeps status 130 for SIGINT and 143 for Unix SIGTERM.
 
 Consumers must check `format_version` and ignore additional object fields.
 Changes to existing field types or meanings require a new format version.

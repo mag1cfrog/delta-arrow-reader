@@ -17,7 +17,9 @@
 
 use std::{
     io::{self, Write},
-    sync::Mutex,
+    process::ExitCode,
+    sync::{Mutex, TryLockError, mpsc},
+    time::Duration,
 };
 
 use clap::{
@@ -31,6 +33,10 @@ use tracing_subscriber::{
     fmt::MakeWriter,
     prelude::*,
 };
+
+mod stderr_capacity;
+
+pub(crate) const FAILURE_DIAGNOSTIC_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// Safe error fields shared by text tracing and JSON diagnostics.
 pub(crate) struct ErrorClassification {
@@ -87,6 +93,57 @@ impl DiagnosticFormat {
             Self::Text => error.log_failure(),
             Self::Json => self.write_terminal_record(error.to_json_diagnostic()),
         }
+    }
+
+    pub(crate) fn report_failure_with_timeout(self, error: crate::Error) -> ExitCode {
+        let status = error.exit_code();
+        let (finished, receiver) = mpsc::channel();
+        // This path must work even when constructing a Tokio runtime failed.
+        if std::thread::Builder::new()
+            .name("dar-diagnostic".into())
+            .spawn(move || {
+                init_tracing(self);
+                self.report_failure(&error);
+                let _ = finished.send(());
+            })
+            .is_ok()
+        {
+            let _ = receiver.recv_timeout(FAILURE_DIAGNOSTIC_TIMEOUT);
+        }
+        status
+    }
+
+    /// Waits for space before publishing a terminal record of at most 512 bytes.
+    pub(crate) async fn write_terminal_record_when_writable(self, record: Value) -> io::Result<()> {
+        if let Self::Json = self {
+            let line = format!("{record}\n");
+            // POSIX guarantees at least 512 bytes for an atomic pipe write.
+            // Discovery's completion is smaller; keep future additions within that bound.
+            if line.len() > 512 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "terminal record too large",
+                ));
+            }
+            loop {
+                let written = match TERMINAL_RECORD_WRITTEN.try_lock() {
+                    Ok(guard) => Some(guard),
+                    Err(TryLockError::Poisoned(error)) => Some(error.into_inner()),
+                    Err(TryLockError::WouldBlock) => None,
+                };
+                if let Some(mut written) = written {
+                    if *written {
+                        return Ok(());
+                    }
+                    if stderr_capacity::can_write(line.len())? {
+                        *written = true;
+                        return io::stderr().lock().write_all(line.as_bytes());
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn write_terminal_record(self, record: Value) {
@@ -237,8 +294,8 @@ pub(crate) fn init_tracing(diagnostic_format: DiagnosticFormat) {
         Err(std::env::VarError::NotUnicode(_)) => (Targets::new(), true),
         _ => (Targets::new(), false),
     };
-    subscriber(targets, io::stderr).init();
-    if invalid {
+    // Failure reporting can reach this after command setup already installed tracing.
+    if subscriber(targets, io::stderr).try_init().is_ok() && invalid {
         tracing::warn!(target: "delta_arrow_reader_cli",
             event = "cli.log_filter.invalid",
             reason = "invalid_rust_log",
@@ -312,6 +369,15 @@ mod tests {
     use crate::Error;
 
     struct PanicOnFormatError;
+
+    #[tokio::test]
+    async fn oversized_completion_is_rejected_before_writing() {
+        let error = DiagnosticFormat::Json
+            .write_terminal_record_when_writable(serde_json::json!({"padding": "x".repeat(512)}))
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    }
 
     impl fmt::Debug for PanicOnFormatError {
         fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
