@@ -7,6 +7,7 @@ mod experiment;
 mod invoke;
 mod network;
 mod observe;
+mod oracle;
 mod pairs;
 mod report;
 mod request;
@@ -38,6 +39,8 @@ pub(crate) enum Task {
     PrepareReference(validation::cli::Prepare),
     /// Check every typed value and the identity of an exported Arrow stream.
     CheckExport(validation::cli::Check),
+    /// Compare an Arrow stream from stdin against an independent Parquet reference.
+    CompareReference(oracle::Compare),
     /// Schedule and summarize a campaign. Read the operation as JSON from stdin.
     Campaign,
     /// Execute a frozen campaign, using Python only for independent data validation.
@@ -163,6 +166,7 @@ pub(crate) enum Task {
 impl Task {
     pub(crate) fn run(self) -> Result<()> {
         match self {
+            Self::CompareReference(args) => return oracle::compare_cli(args),
             Self::PrepareReference(args) => return validation::cli::prepare(args),
             Self::CheckExport(args) => return validation::cli::check(args),
             Self::UploadDeltaLength { state, fixture } => {
@@ -311,6 +315,7 @@ impl Task {
             Self::Experiment => experiment::run(serde_json::from_value(input)?)?,
             Self::IntraPage => experiment::intra_page::run(serde_json::from_value(input)?)?,
             Self::ExecReader { .. }
+            | Self::CompareReference(_)
             | Self::PrepareReference(_)
             | Self::CheckExport(_)
             | Self::UploadDeltaLength { .. }

@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 arrow-array = "58.3.0"
+arrow-cast = "58.3.0"
 arrow-ipc = "58.3.0"
 arrow-schema = "58.3.0"
 base64 = "0.22"

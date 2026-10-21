@@ -1,7 +1,7 @@
 """Independent, untimed reference for the public selective-read cases.
 
 Python evaluates predicates and payloads independently. PyArrow stores typed
-references in compressed Parquet; DuckDB only sorts actual Arrow results.
+references in compressed Parquet; Rust sorts and compares actual Arrow results.
 """
 
 import base64
@@ -18,6 +18,7 @@ import re
 import resource
 import shutil
 import signal
+import subprocess
 import sys
 import tempfile
 import uuid
@@ -390,55 +391,36 @@ def write_reference(path, rows, projection, max_bytes=None):
 
 
 def compare(batches, reference, projection, expected_count, max_bytes=None, subset=False):
-    """Sort only actual rows; Python/Arrow checks their values against the reference."""
-    input_count = 0
-
-    def inputs():
-        nonlocal input_count
-        for batch in normalized_batches(batches, projection):
-            input_count += batch.num_rows
-            yield batch
-
-    keys = ("row_id",) if "row_id" in projection else KEYS
-    with tempfile.TemporaryDirectory(prefix="oracle-sort-", dir=reference.parent) as scratch:
-        config = {"threads": 1, "memory_limit": f"{SORT_MEMORY_BYTES}B", "temp_directory": scratch,
-                  "autoload_known_extensions": False, "autoinstall_known_extensions": False}
-        with duckdb.connect(config=config) as db, pq.ParquetFile(reference) as expected:
-            if max_bytes is not None:
-                # In the pinned build the startup config reports this quota but does
-                # not enforce it on spill; setting it after connect does enforce it.
-                db.execute("SET max_temp_directory_size = ?", [f"{max_bytes}B"])
-            with pa.RecordBatchReader.from_batches(result_schema(projection), inputs()) as source:
-                db.register("actual", source)
-                # No predicate, projection, aggregation, Delta extension or reference query.
-                query = "SELECT * FROM actual ORDER BY " + ", ".join(keys)
-                try:
-                    result = db.execute(query).to_arrow_reader(BATCH_ROWS)
-                except duckdb.Error as error:
-                    raise ValueError(f"oracle sort failed: {error}") from error
-                with result:
-                    actual = ordered_batches(normalized_batches(result, projection), projection)
-                    wanted = ordered_batches(normalized_batches(expected.iter_batches(batch_size=BATCH_ROWS), projection), projection)
-                    if subset:
-                        # LIMIT accepts different valid subsets, with exact values and unique keys.
-                        reference_rows = (row for batch in wanted for row in batch.to_pylist())
-                        current = next(reference_rows, None)
-                        count = 0
-                        for batch in actual:
-                            for row in batch.to_pylist():
-                                key = tuple(row[k] for k in keys)
-                                while current is not None and tuple(current[k] for k in keys) < key:
-                                    current = next(reference_rows, None)
-                                require(current == row, f"wrong row membership or value at key {key}")
-                                count += 1
-                    else:
-                        try:
-                            count = same_rows(actual, wanted)
-                        except ValueError as error:
-                            raise ValueError(f"wrong row membership or value: {error}") from error
-    require(input_count == count == expected_count,
-            f"wrong row count: input {input_count}, sorted {count}, expected {expected_count}")
-    return count
+    import native
+    command = [str(native.executable()), "selective-read", "compare-reference", "--python", sys.executable,
+               "--harness", str(Path(__file__).parent), "--reference", str(reference),
+               "--projection", ",".join(projection), "--expected", str(expected_count),
+               "--memory-bytes", str(SORT_MEMORY_BYTES)]
+    if max_bytes is not None:
+        command += ["--max-bytes", str(max_bytes)]
+    if subset:
+        command += ["--subset"]
+    with tempfile.TemporaryFile() as errors, subprocess.Popen(command, stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=errors) as process:
+        try:
+            with pa.ipc.new_stream(process.stdin, result_schema(projection)) as writer:
+                for batch in normalized_batches(batches, projection):
+                    writer.write_batch(batch)
+        except BrokenPipeError:
+            pass
+        except BaseException:
+            process.kill()
+            raise
+        finally:
+            try:
+                process.stdin.close()
+            except BrokenPipeError:
+                pass
+        output = process.stdout.read()
+        status = process.wait()
+        errors.seek(0)
+        require(status == 0, errors.read().decode(errors="replace"))
+        return json.loads(output)
 
 
 def check_reference_build(metadata):

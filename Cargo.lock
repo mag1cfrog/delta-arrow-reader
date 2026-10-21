@@ -4141,6 +4141,7 @@ name = "xtask"
 version = "0.0.0"
 dependencies = [
  "arrow-array",
+ "arrow-cast",
  "arrow-ipc",
  "arrow-schema",
  "base64 0.22.1",
