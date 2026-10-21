@@ -56,7 +56,7 @@ impl SqlCommandFixture {
     }
 }
 
-fn decode_query_result(output: &Output) -> TestResult<RecordBatch> {
+pub(super) fn decode_query_result(output: &Output) -> TestResult<RecordBatch> {
     assert!(
         output.status.success(),
         "{}",

@@ -1,7 +1,7 @@
 //! UC scan results, renewal during file reads, and interrupted Arrow output.
 
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::HashSet,
     fs,
     io::Cursor,
     process::Command,
@@ -22,7 +22,9 @@ use super::{
     TestResult, run_with_timeout,
 };
 
-use super::super::mock_cloud_storage::{expected_partitioned_rows, partitioned_objects};
+use super::super::mock_cloud_storage::{
+    append_west_partition_removal_commit, expected_partitioned_rows, partitioned_objects,
+};
 
 const IPC_END: &[u8] = &[255, 255, 255, 255, 0, 0, 0, 0];
 
@@ -41,21 +43,6 @@ fn requested_path(request: &str) -> String {
     object_store::path::Path::from_url_path(url.path())
         .unwrap()
         .to_string()
-}
-
-/// A second snapshot drops one partition so a version-selection regression changes the rows.
-fn append_west_partition_removal_commit(objects: &mut BTreeMap<String, Vec<u8>>) {
-    let path = objects
-        .keys()
-        .find(|key| key.starts_with("table/region=west/"))
-        .unwrap();
-    let action = json!({"remove": {
-        "path": path.strip_prefix("table/").unwrap(), "deletionTimestamp": 1, "dataChange": true
-    }});
-    objects.insert(
-        "table/_delta_log/00000000000000000001.json".into(),
-        format!("{action}\n").into_bytes(),
-    );
 }
 
 fn decode_stream(bytes: &[u8]) -> Result<RecordBatch, Box<dyn std::error::Error>> {

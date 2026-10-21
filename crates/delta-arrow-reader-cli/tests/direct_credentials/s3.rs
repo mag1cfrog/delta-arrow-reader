@@ -45,7 +45,7 @@ impl DirectStorageFixture {
     }
 }
 
-fn signed_session_generations(
+pub(super) fn signed_session_generations(
     fixture: &DirectStorageFixture,
     source: &str,
 ) -> Result<Vec<usize>, Box<dyn std::error::Error>> {
