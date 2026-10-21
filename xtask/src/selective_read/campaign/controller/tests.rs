@@ -41,7 +41,6 @@ fn campaign_input_integrity_is_independent_of_tool_source_provenance() -> Result
         args.harness.join("oracle.py"),
         args.harness.join("runners/run.py"),
         args.harness.join("runners/python_common.py"),
-        args.harness.join("metadata_cache.py"),
         args.harness.join("runners/native.py"),
         root.join("project/Cargo.lock"),
         root.join("project/xtask/Cargo.toml"),

@@ -1,12 +1,11 @@
 """Bind the independent oracle to frozen native workload definitions."""
 
-import json
 from pathlib import Path
 import sys
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "runners"))
-from run import digest
+from run import same_comparison
 import native
 
 READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft")
@@ -28,26 +27,16 @@ def definitions(family="data", pilot_case=None):
         "action": "large-definitions", "family": family, "pilot_case": pilot_case}).items()}
 
 
-def identity(path):
-    value = json.loads(Path(path).read_text())
-    return native.call("workload", {"action": "identity", "value": value, "sha256": digest(Path(path))})
-
-
 def query_fields(case, manifest):
     return native.call("workload", {"action": "large-query", "case": case, "manifest": manifest})
 
 
-def load(path):
-    value = json.loads(Path(path).read_text())
-    identity(path)
-    if value["format"] == "selective-read-production-workload-v1":
-        import production_workloads
-        return production_workloads.load(path, value)
-    return native.call("workload", {"action": "large-load", "value": value, "harness": str(HERE)})
+def resolve(path, fixtures, case):
+    return native.call("workload", {"action": "resolve", "path": str(path), "fixtures": str(fixtures),
+                                    "case": case, "harness": str(HERE)})
 
 
-def binding(value, fixtures, case_id):
-    if value["comparison_revision"] in (5, 6):
-        import production_workloads
-        return production_workloads.binding(value, fixtures, case_id)
-    return native.call("workload", {"action": "large-binding", "value": value, "fixtures": str(fixtures), "case": case_id})
+def verify(context, fixtures, case):
+    current = resolve(context["path"], fixtures, case)
+    if not same_comparison(context["identity"], current["identity"]):
+        raise ValueError("workload changed during reference preparation")

@@ -7,7 +7,6 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE / "runners")]
-import metadata_cache
 import run
 
 EXPECTED = {}
@@ -98,11 +97,10 @@ def dispatch(value):
 
 
 if __name__ == "__main__":
-    with metadata_cache.bindings():
-        for line in sys.stdin:
-            try:
-                with redirect_stdout(sys.stderr):
-                    response = {"result": dispatch(json.loads(line))}
-            except Exception as error:
-                response = {"error": type(error).__name__ + ": " + str(error)}
-            print(json.dumps(response), flush=True)
+    for line in sys.stdin:
+        try:
+            with redirect_stdout(sys.stderr):
+                response = {"result": dispatch(json.loads(line))}
+        except Exception as error:
+            response = {"error": type(error).__name__ + ": " + str(error)}
+        print(json.dumps(response), flush=True)

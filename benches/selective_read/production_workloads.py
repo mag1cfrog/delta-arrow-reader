@@ -11,7 +11,6 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 import oracle
-import native
 import production_shapes as shapes
 
 HERE = Path(__file__).resolve().parent
@@ -24,15 +23,6 @@ PREDICATES = [("l_shipdate", "=", date(1995, 3, 15)), ("l_shipmode", "=", "AIR")
 _SOURCE_SCANS = {}
 _PHYSICAL_SCANS = {}
 _EXTRA_KEY_SCANS = {}
-
-
-def load(path, value):
-    return native.call("workload", {"action": "load", "value": value, "harness": str(HERE)})
-
-
-def binding(value, fixtures, case):
-    return native.call("workload", {"action": "binding", "value": value, "fixtures": str(fixtures),
-                                    "case": case, "harness": str(HERE)})
 
 
 def masks(batch):
@@ -140,11 +130,10 @@ def scan_source(fixtures, source):
     return tuple(counts), tuple(records), False
 
 
-def prepare_reference(fixtures, case, output, workload, quota):
+def prepare_reference(fixtures, case, output, context, quota):
     import large_workloads
     fixtures, output = Path(fixtures).resolve(), Path(output)
-    frozen = large_workloads.load(workload)
-    row = binding(frozen, fixtures, case)
+    frozen, row = context["workload"], context["case"]
     manifest = oracle.load_json(fixtures / "manifest.json")
     table = next(t for t in fixture_tables(manifest) if t["id"] == case)
     source = next(s for s in manifest["sources"] if s["scale_factor"] == 10)
@@ -249,7 +238,7 @@ def prepare_reference(fixtures, case, output, workload, quota):
                 and summary["live_rows"] == actual_rows - deleted_rows and summary["dv_files"] == table["file_count"], "invalid DV coverage/deletions")
     for item in verified:
         oracle.verify_object(fixtures, item)
-    metadata = {"format": "selective-read-reference-v2", "status": "complete", **large_workloads.identity(workload),
+    metadata = {"format": "selective-read-reference-v2", "status": "complete", **context["identity"],
                 "oracle_sha256": digest(Path(oracle.__file__)), "production_oracle_sha256": digest(Path(__file__)),
                 "oracle_dependencies_sha256": digest(oracle.REQUIREMENTS), "python": platform.python_version(),
                 "pyarrow": pa.__version__, "duckdb_sort": oracle.duckdb.__version__,
@@ -271,7 +260,8 @@ def prepare_reference(fixtures, case, output, workload, quota):
                     "metrics": "all stored rows, independent Arrow arithmetic"},
                 "physical_validation": scans,
                 "verified_objects": verified, "reference_sha256": digest(reference),
-                "workload_manifest": str(Path(workload).resolve()), "oracle_limits": frozen["oracle_limits"],
+                "workload_manifest": context["path"], "oracle_limits": frozen["oracle_limits"],
                 "projected_logical_bytes": projected_bytes[0]}
+    large_workloads.verify(context, fixtures, case)
     save(output / "reference.json", metadata)
     return metadata

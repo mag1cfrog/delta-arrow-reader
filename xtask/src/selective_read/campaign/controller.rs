@@ -254,7 +254,6 @@ fn source_hashes(args: &Args, config: &Value, protocols: &Path) -> Result<(Value
         "oracle.py",
         "runners/run.py",
         "runners/python_common.py",
-        "metadata_cache.py",
         "runners/native.py",
     ]
     .into_iter()

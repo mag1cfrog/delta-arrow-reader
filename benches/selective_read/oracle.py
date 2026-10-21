@@ -240,14 +240,14 @@ def base_case(case_id, large=False):
     return case_id, ""
 
 
-def case_input(fixtures, case_id, duplicate_literal=False, workload=None):
+def case_input(fixtures, case_id, duplicate_literal=False, context=None):
     require(pa.__version__ == "25.0.1" and duckdb.__version__ == "1.5.5", "oracle dependency version changed")
     manifest = load_json(Path(fixtures) / "manifest.json")
     require(manifest["status"] == "complete" and manifest["protocol"] == "selective-read-v1", "incomplete or unknown fixtures")
     row = None
-    if workload is not None:
+    if context is not None:
         import large_workloads
-        row = large_workloads.binding(large_workloads.load(workload), fixtures, case_id)
+        row = context["case"]
         require(not duplicate_literal, "large query variants need a separate workload identity")
     else:
         require(manifest["profile"] != "large", "large fixtures require a workload manifest")
@@ -617,27 +617,25 @@ def bounded(root, limits):
 
 
 def prepare(fixtures, case_id, output, duplicate_literal=False, workload=None):
-    limits = None
+    context, limits = None, None
     if workload is not None:
         import large_workloads
-        limits = large_workloads.load(workload)["oracle_limits"]
+        context = large_workloads.resolve(workload, fixtures, case_id)
+        limits = context["workload"]["oracle_limits"]
     with bounded(Path(output).parent, limits) as quota:
-        if workload is not None and large_workloads.identity(workload)["comparison_revision"] in (5, 6):
+        if context is not None and context["identity"]["comparison_revision"] in (5, 6):
             require(not duplicate_literal, "production variants need a new workload identity")
             import production_workloads
-            return production_workloads.prepare_reference(fixtures, case_id, output, workload, quota)
-        return prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota)
+            return production_workloads.prepare_reference(fixtures, case_id, output, context, quota)
+        return prepare_rows(fixtures, case_id, output, duplicate_literal, context, quota)
 
 
-def prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota):
+def prepare_rows(fixtures, case_id, output, duplicate_literal, context, quota):
     fixtures, output = Path(fixtures).resolve(), Path(output)
-    manifest, table, source, projection, predicate, limit, literals, sql = case_input(fixtures, case_id, duplicate_literal, workload)
+    manifest, table, source, projection, predicate, limit, literals, sql = case_input(fixtures, case_id, duplicate_literal, context)
     verified = objects(fixtures, table, source)
-    query_case = case_id
-    if workload is not None:
-        import large_workloads
-        query_case = large_workloads.binding(large_workloads.load(workload), fixtures, case_id)["query_case_id"]
-    case, suffix = base_case(query_case, workload is not None)
+    query_case = context["case"]["query_case_id"] if context else case_id
+    case, suffix = base_case(query_case, context is not None)
     geometry = control_geometry(fixtures, table, case) if source is None else None
     saved_keys = [tuple(key) for item in table["files"] for key in item.get("deletion_vector", {}).get("logical_ids", [])]
     require(len(saved_keys) == len(set(saved_keys)), "duplicate deleted logical ID")
@@ -697,7 +695,7 @@ def prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota):
     require(sorted(found_literals) == literals, "frozen IN literals disagree with full source")
     require(expected_deletions == saved_keys, "saved logical deletions disagree with the independent source rule")
     live_qualifying = counts[-1] - deleted_qualifying
-    if workload is not None and table["deletion_vectors"]:
+    if context is not None and table["deletion_vectors"]:
         require(deleted_qualifying > 0 and live_qualifying > 0, "large DV anchor needs qualifying deletions and survivors")
     if suffix:
         summary = table["deletion_summary"]
@@ -776,14 +774,13 @@ def prepare_rows(fixtures, case_id, output, duplicate_literal, workload, quota):
         metadata["wide_file_geometry"] = {"file_bytes_sorted": sorted(f["bytes"] for f in table["files"]),
             "excluded_files": sorted({f["path"] for f in table["files"]} - set(candidates)),
             "dv_coverage": wide_files.coverage(table, candidates, matching)}
-    if workload is not None:
+    if context is not None:
         import large_workloads
-        frozen = large_workloads.load(workload)
-        large_workloads.binding(frozen, fixtures, case_id)
-        metadata.update(large_workloads.identity(workload), workload_manifest=str(Path(workload).resolve()),
-                        oracle_limits=frozen["oracle_limits"],
+        metadata.update(context["identity"], workload_manifest=context["path"],
+                        oracle_limits=context["workload"]["oracle_limits"],
                         projected_logical_bytes=projected_bytes[0],
                         projected_logical_bytes_definition="non-null fixed-width values and actual UTF-8 string bytes; excludes null bitmaps, offsets and IPC framing")
+        large_workloads.verify(context, fixtures, case_id)
     # Completion marker last. Partial preparations cannot be accepted by check().
     (output / "reference.json").write_bytes(json_bytes(metadata))
     return metadata
@@ -795,28 +792,25 @@ IDENTITY_FIELDS = ("comparison_revision", "protocol_sha256", "fixture_manifest_s
 
 def check(reference, fixtures, result, identity):
     metadata = json.loads((Path(reference) / "reference.json").read_text())
+    context = None
     limits = metadata.get("oracle_limits") if metadata.get("comparison_revision") in (3, 4, 5, 6) else None
     if metadata.get("comparison_revision") in (3, 4, 5, 6):
         import large_workloads
-        frozen = large_workloads.load(Path(metadata["workload_manifest"]))
-        require(limits == frozen["oracle_limits"], "oracle limits differ from the workload")
+        context = large_workloads.resolve(metadata["workload_manifest"], fixtures, metadata["case_id"])
+        require(limits == context["workload"]["oracle_limits"], "oracle limits differ from the workload")
     with bounded(Path(reference).parent, limits) as quota:
-        return check_rows(reference, fixtures, result, identity, quota)
+        return check_rows(reference, fixtures, result, identity, quota, metadata, context)
 
 
-def check_rows(reference, fixtures, result, identity, quota):
+def check_rows(reference, fixtures, result, identity, quota, metadata, context):
     reference, fixtures, result, identity = map(Path, (reference, fixtures, result, identity))
-    metadata = json.loads((reference / "reference.json").read_text())
     check_reference_build(metadata)
     sys.path.insert(0, str(Path(__file__).resolve().parent / "runners"))
     from run import comparison_identity, same_comparison, reader_roster
     comparison = comparison_identity(metadata)
-    if metadata["comparison_revision"] in (3, 4, 5, 6):
-        import large_workloads
-        path = Path(metadata["workload_manifest"])
-        require(same_comparison(comparison, large_workloads.identity(path)), "stale workload manifest")
-        workload = large_workloads.load(path)
-        row = large_workloads.binding(workload, fixtures, metadata["case_id"])
+    if context is not None:
+        require(same_comparison(comparison, context["identity"]), "stale workload manifest")
+        row = context["case"]
         require(metadata["canonical_sql"] == row["canonical_sql"] and metadata["projection"] == row["projection"], "reference workload query changed")
     require(metadata["fixture_manifest_sha256"] == digest_file(fixtures / "manifest.json"), "stale fixture manifest")
     require(metadata["reference_sha256"] == digest_file(reference / "reference.parquet"), "reference Parquet changed")
@@ -835,8 +829,8 @@ def check_rows(reference, fixtures, result, identity, quota):
     expression = provenance["native_expression"]
     require(isinstance(expression, dict) if provenance["reader_id"] in ("polars", "daft") else expression is None,
             "invalid native expression")
-    if metadata["comparison_revision"] in (3, 4, 5, 6):
-        translation = workload["translations"].get(provenance["reader_id"])
+    if context is not None:
+        translation = context["workload"]["translations"].get(provenance["reader_id"])
         expected = translation["expressions"][metadata["case_id"]]["native_expression"] if translation else None
         require(expression == expected, "native translation differs from workload")
     require(digest_file(result) == provenance["result_sha256"], "result checksum mismatch")

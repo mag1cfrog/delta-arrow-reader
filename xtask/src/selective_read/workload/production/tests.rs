@@ -37,6 +37,23 @@ fn frozen_workloads_check_queries_and_scope_independently_of_source_provenance()
             "expressions":{case:{"native_expression":expression,"canonical_sql":row["canonical_sql"]}}}}});
     assert_eq!(load(value.clone(), &harness)?, value);
     assert_eq!(binding(&value, root, case, &harness)?, row);
+    let path = root.join("workload.json");
+    let resolve = || {
+        super::super::run(serde_json::from_value(
+            json!({"action":"resolve","path":path,
+            "fixtures":root,"case":case,"harness":harness}),
+        )?)
+    };
+    fs::write(&path, serde_json::to_vec(&value)?)?;
+    let context = resolve()?;
+    assert_eq!(context["workload"], value);
+    assert_eq!(context["case"], row);
+    assert_eq!(context["path"], json!(path.canonicalize()?));
+    assert_eq!(
+        context["identity"]["workload_contract"],
+        crate::selective_read::contract::workload(&value)?
+    );
+    assert!(super::super::resolve(&path, root, "missing-case", &harness).is_err());
     for (pointer, replacement) in [
         ("/definition_sha256", json!("different documentation")),
         ("/definition_controller_sha256", json!("changed")),
@@ -44,7 +61,13 @@ fn frozen_workloads_check_queries_and_scope_independently_of_source_provenance()
     ] {
         let mut changed = value.clone();
         *changed.pointer_mut(pointer).ok_or("missing test field")? = replacement;
-        assert_eq!(load(changed.clone(), &harness)?, changed);
+        fs::write(&path, serde_json::to_vec(&changed)?)?;
+        let current = resolve()?;
+        assert_eq!(current["workload"], changed);
+        assert!(crate::selective_read::contract::same_comparison(
+            &context["identity"],
+            &current["identity"]
+        ));
     }
     for (pointer, replacement) in [
         ("/format", json!("unsupported")),
@@ -56,7 +79,8 @@ fn frozen_workloads_check_queries_and_scope_independently_of_source_provenance()
     ] {
         let mut changed = value.clone();
         *changed.pointer_mut(pointer).ok_or("missing test field")? = replacement;
-        assert!(load(changed, &harness).is_err(), "{pointer}");
+        fs::write(&path, serde_json::to_vec(&changed)?)?;
+        assert!(resolve().is_err(), "{pointer}");
     }
     let mut changed = value.clone();
     changed["cases"].as_array_mut().unwrap().push(row);
@@ -75,9 +99,10 @@ fn frozen_workloads_check_queries_and_scope_independently_of_source_provenance()
             .to_string()
             .contains("SQL binding")
     );
+    fs::write(&path, serde_json::to_vec(&value)?)?;
     fs::write(root.join("manifest.json"), b"{}")?;
     assert!(
-        binding(&value, root, case, &harness)
+        resolve()
             .unwrap_err()
             .to_string()
             .contains("fixture identity")

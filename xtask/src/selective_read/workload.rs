@@ -41,17 +41,9 @@ const PREDICATE: &str =
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "kebab-case", deny_unknown_fields)]
 pub(super) enum Request {
-    Identity {
-        value: Value,
-        sha256: String,
-    },
     Define(Box<production::Define>),
-    Load {
-        value: Value,
-        harness: PathBuf,
-    },
-    Binding {
-        value: Value,
+    Resolve {
+        path: PathBuf,
         fixtures: PathBuf,
         case: String,
         harness: PathBuf,
@@ -79,15 +71,6 @@ pub(super) enum Request {
         case: String,
         manifest: Value,
     },
-    LargeLoad {
-        value: Value,
-        harness: PathBuf,
-    },
-    LargeBinding {
-        value: Value,
-        fixtures: PathBuf,
-        case: String,
-    },
     FileGeometry {
         table: Value,
         files: u64,
@@ -111,15 +94,13 @@ pub(super) enum Request {
 
 pub(super) fn run(request: Request) -> Result<Value> {
     match request {
-        Request::Identity { value, sha256 } => identity(&value, &sha256),
         Request::Define(args) => production::define(*args),
-        Request::Load { value, harness } => production::load(value, &harness),
-        Request::Binding {
-            value,
+        Request::Resolve {
+            path,
             fixtures,
             case,
             harness,
-        } => production::binding(&value, &fixtures, &case, &harness),
+        } => resolve(&path, &fixtures, &case, &harness),
         Request::Shapes {
             file_target_mib,
             page_rows,
@@ -136,12 +117,6 @@ pub(super) fn run(request: Request) -> Result<Value> {
             large::definitions(&family, pilot_case.as_deref())
         }
         Request::LargeQuery { case, manifest } => large::query(&case, &manifest),
-        Request::LargeLoad { value, harness } => large::load(value, &harness),
-        Request::LargeBinding {
-            value,
-            fixtures,
-            case,
-        } => large::binding(&value, &fixtures, &case),
         Request::FileGeometry { table, files } => {
             files::geometry(&table, files)?;
             Ok(Value::Null)
@@ -192,6 +167,13 @@ pub(super) fn binding(value: &Value, fixtures: &Path, case: &str, harness: &Path
     } else {
         large::binding(value, fixtures, case)
     }
+}
+
+fn resolve(path: &Path, fixtures: &Path, case: &str, harness: &Path) -> Result<Value> {
+    let path = path.canonicalize()?;
+    let (workload, identity) = load(&path, harness)?;
+    let row = binding(&workload, fixtures, case, harness)?;
+    Ok(json!({"path":path,"workload":workload,"identity":identity,"case":row}))
 }
 
 fn payloads() -> Vec<String> {

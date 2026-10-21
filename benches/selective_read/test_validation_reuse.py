@@ -153,9 +153,10 @@ class ValidationReuse(unittest.TestCase):
                                           "extra_logical_keys": [list(k) for k in sorted(extras)]}}
             manifest_path = root / "manifest.json"
             manifest_path.write_text(json.dumps(manifest, default=str))
-            workload = root / "workload.json"
-            workload.write_text("{}")
             row = {"shape": "q2", "projection": list(oracle.WIDE69), "canonical_sql": definition["canonical_sql"]}
+
+            context = {"path": str(root / "workload.json"), "case": row,
+                       "workload": {"oracle_limits": {}}, "identity": {"comparison_revision": 6}}
 
             def objects(fixtures, table, source):
                 items = [{"path": str(Path(group["path"]) / item["path"]), "bytes": item["bytes"], "sha256": item["sha256"]}
@@ -164,30 +165,28 @@ class ValidationReuse(unittest.TestCase):
                     oracle.verify_object(fixtures, item)
                 return items
 
-            with patch.object(large_workloads, "load", return_value={"oracle_limits": {}}), \
-                    patch.object(large_workloads, "identity", return_value={"comparison_revision": 6}), \
-                    patch.object(production, "binding", return_value=row), patch.object(oracle, "objects", side_effect=objects), \
+            with patch.object(large_workloads, "verify"), patch.object(oracle, "objects", side_effect=objects), \
                     patch.object(production, "check_metrics", wraps=production.check_metrics) as metrics:
-                cold = production.prepare_reference(root, base_case, root / "cold", workload, 1024**3)
+                cold = production.prepare_reference(root, base_case, root / "cold", context, 1024**3)
                 self.assertEqual(cold["output_rows"], 300)
                 self.assertEqual(metrics.call_count, 2)
-                warm = production.prepare_reference(root, base_case + ".dv", root / "warm", workload, 1024**3)
+                warm = production.prepare_reference(root, base_case + ".dv", root / "warm", context, 1024**3)
                 self.assertEqual(metrics.call_count, 2)
                 self.assertTrue(warm["physical_validation"]["source_scan_reused"])
                 self.assertEqual(warm["physical_validation"]["reused_full_column_scans"], 2)
                 self.assertEqual(warm["output_rows"], 300 - warm["deleted_qualifying_rows"])
-                again = production.prepare_reference(root, base_case, root / "again", workload, 1024**3)
+                again = production.prepare_reference(root, base_case, root / "again", context, 1024**3)
                 self.assertEqual(again["reference_sha256"], cold["reference_sha256"])
                 original_ordinal = dv["files"][0]["deletion_vector"]["physical_ordinals"][0]
                 dv["files"][0]["deletion_vector"]["physical_ordinals"][0] += 1
                 manifest_path.write_text(json.dumps(manifest, default=str))
                 with self.assertRaisesRegex(ValueError, "physical deletion ordinal/key"):
-                    production.prepare_reference(root, base_case + ".dv", root / "bad-dv", workload, 1024**3)
+                    production.prepare_reference(root, base_case + ".dv", root / "bad-dv", context, 1024**3)
                 dv["files"][0]["deletion_vector"]["physical_ordinals"][0] = original_ordinal
                 manifest_path.write_text(json.dumps(manifest, default=str))
                 production._SOURCE_SCANS.clear()
                 production._PHYSICAL_SCANS.clear()
-                fresh = production.prepare_reference(root, base_case + ".dv", root / "fresh", workload, 1024**3)
+                fresh = production.prepare_reference(root, base_case + ".dv", root / "fresh", context, 1024**3)
                 self.assertEqual(fresh["reference_sha256"], warm["reference_sha256"])
                 path = root / base["path"] / base["files"][0]["path"]
                 bad = pq.read_table(path).to_pydict()
@@ -197,7 +196,7 @@ class ValidationReuse(unittest.TestCase):
                     table["files"][0].update(bytes=path.stat().st_size, sha256=run.digest(path))
                 manifest_path.write_text(json.dumps(manifest, default=str))
                 with self.assertRaisesRegex(ValueError, "wrong stored metric"):
-                    production.prepare_reference(root, base_case, root / "bad-metric", workload, 1024**3)
+                    production.prepare_reference(root, base_case, root / "bad-metric", context, 1024**3)
 
 
 if __name__ == "__main__":

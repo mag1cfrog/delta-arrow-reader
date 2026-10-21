@@ -236,13 +236,36 @@ class OracleTests(unittest.TestCase):
                                       for r in ("polars", "daft")}}
             workload = root / "workload.json"
             write_json(workload, value)
-            self.assertEqual(len(large.load(workload)["cases"]), 18)
+            case = large.SESSIONS["reuse.large.date30"]
+            self.assertEqual(len(large.resolve(workload, fixtures, case)["workload"]["cases"]), 18)
             lock = harness / "runners/daft/lock.json"
             saved_lock = lock.read_bytes()
             lock.write_text("{}")
             with self.assertRaisesRegex(ValueError, "translation lock changed"):
-                large.load(workload)
+                large.resolve(workload, fixtures, case)
             lock.write_bytes(saved_lock)
+            original_write = oracle.write_reference
+            for label, replacement, error in (
+                ("limits", value | {"oracle_limits": value["oracle_limits"] | {"elapsed_seconds": 31}}, "workload changed"),
+                ("manifest", None, "fixture identity changed"),
+                ("audit", value | {"source_sha256": {"planner": "updated audit record"}}, None),
+            ):
+                def change_inputs(*args, **kwargs):
+                    original_write(*args, **kwargs)
+                    if replacement is None:
+                        write_json(fixtures / "manifest.json", manifest | {"changed": True})
+                    else:
+                        write_json(workload, replacement)
+                reference = root / ("changed-" + label)
+                with patch.object(oracle, "write_reference", side_effect=change_inputs):
+                    if error:
+                        with self.assertRaisesRegex(ValueError, error):
+                            oracle.prepare(fixtures, case, reference, workload=workload)
+                        self.assertFalse((reference / "reference.json").exists())
+                    else:
+                        self.assertEqual(oracle.prepare(fixtures, case, reference, workload=workload)["output_rows"], 144)
+                write_json(workload, value)
+                write_json(fixtures / "manifest.json", manifest)
             for case in ("large.wide.clustered.date30-wide", "large.wide.shuffled.date7-wide", "scale-control.wide.clustered.eq2-in20"):
                 reference = root / case
                 metadata = oracle.prepare(fixtures, case, reference, workload=workload)
@@ -298,7 +321,7 @@ class OracleTests(unittest.TestCase):
             for change in ({"comparison_revision": 7}, {"scales": {"data": 10, "control": 10}}, {"cases": cases[:-1]}):
                 write_json(workload, value | change)
                 with self.assertRaises(ValueError):
-                    large.load(workload)
+                    large.resolve(workload, fixtures, case)
             with self.assertRaisesRegex(ValueError, "disk allowance"):
                 oracle.write_reference(root / "quota.parquet", rows, oracle.WIDE69, max_bytes=8192)
             # A pilot can validate the real anchor without preparing the other
@@ -309,7 +332,7 @@ class OracleTests(unittest.TestCase):
                              "translations": {r: t | {"expressions": {anchor: t["expressions"][anchor]}}
                                               for r, t in value["translations"].items()}}
             write_json(workload, pilot)
-            self.assertEqual(len(large.load(workload)["cases"]), 1)
+            self.assertEqual(len(large.resolve(workload, fixtures, anchor)["workload"]["cases"]), 1)
             metadata = oracle.prepare(fixtures, anchor, root / "pilot-reference", workload=workload)
             self.assertEqual(metadata["output_rows"], 144)
             request = native.call("reader-request", {"fixtures":str(fixtures), "case_id":anchor,
@@ -320,14 +343,14 @@ class OracleTests(unittest.TestCase):
                            {"readers": list(large.READERS[:-1])}, {"scales": {"data": 2}}):
                 write_json(workload, pilot | change)
                 with self.assertRaises(ValueError):
-                    large.load(workload)
+                    large.resolve(workload, fixtures, anchor)
             for case in ("large.wide.clustered.eq2-in20", "large.wide.clustered.eq2-in20-keys"):
                 selected = pilot | {"pilot_case": case, "cases": [r for r in cases if r["case_id"] == case],
                     "sessions": {k: v for k, v in large.SESSIONS.items() if v == case},
                     "translations": {r: t | {"expressions": {case: t["expressions"][case]}}
                                      for r, t in value["translations"].items()}}
                 write_json(workload, selected)
-                self.assertEqual(large.load(workload)["cases"][0]["case_id"], case)
+                self.assertEqual(large.resolve(workload, fixtures, case)["workload"]["cases"][0]["case_id"], case)
                 metadata = oracle.prepare(fixtures, case, root / case, workload=workload)
                 self.assertEqual(metadata["output_rows"], 20)
                 self.assertEqual(len(metadata["projection"]), 2 if case.endswith("-keys") else 69)
@@ -337,7 +360,7 @@ class OracleTests(unittest.TestCase):
                                {"sessions": large.SESSIONS}):
                     write_json(workload, selected | change)
                     with self.assertRaises(ValueError):
-                        large.load(workload)
+                        large.resolve(workload, fixtures, case)
 
     def test_saved_deletions_filter_matching_rows_and_limit_membership(self):
         # The Rust check covers the native bitmap envelope and boundary ordinals.
