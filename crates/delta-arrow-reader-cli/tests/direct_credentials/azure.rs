@@ -46,7 +46,7 @@ fn storage_bearer_tokens(fixture: &DirectStorageFixture) -> Vec<String> {
         .collect()
 }
 
-fn assert_request_credentials(fixture: &DirectStorageFixture, option: &str) {
+fn assert_request_credentials(fixture: &DirectStorageFixture, option: &str) -> TestResult {
     let requests = fixture.server.requests.lock().unwrap();
     assert!(!requests.is_empty());
     for request in requests.iter() {
@@ -86,6 +86,11 @@ fn assert_request_credentials(fixture: &DirectStorageFixture, option: &str) {
         }
         assert!(!request.contains("secret-unused"), "{request}");
     }
+    drop(requests);
+    if option == "ACCESS_KEY" {
+        fixture.verify_request_signatures(json!({"account": ACCOUNT_KEY}))?;
+    }
+    Ok(())
 }
 
 #[test]
@@ -126,7 +131,7 @@ fn selected_credentials_authorize_inspection_scan_and_sql() -> TestResult {
                 assert!(!String::from_utf8_lossy(&output.stderr).contains(ACCOUNT_KEY));
                 assert_read_result(output, operation)?;
             }
-            assert_request_credentials(&fixture, option);
+            assert_request_credentials(&fixture, option)?;
         }
     }
     Ok(())
@@ -189,7 +194,7 @@ fn account_names_come_from_json_environment_or_native_urls() -> TestResult {
             command.env("AZURE_STORAGE_ACCOUNT_NAME", account);
         }
         assert_read_result(run_with_timeout(&mut command)?, "inspect")?;
-        assert_request_credentials(&fixture, "ACCESS_KEY");
+        assert_request_credentials(&fixture, "ACCESS_KEY")?;
     }
 
     let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
@@ -374,7 +379,7 @@ fn permission_denial_keeps_the_selected_identity_and_redacts_credentials() -> Te
                     assert_eq!(record["source_kind"], "permission_denied");
                 }
             }
-            assert_request_credentials(&fixture, option);
+            assert_request_credentials(&fixture, option)?;
         }
     }
     Ok(())

@@ -154,7 +154,7 @@ fn all_reads_refresh_the_selected_container_reference() -> TestResult {
                 let output = run_with_timeout(&mut command)?;
                 assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
                 assert_read_result(output, operation)?;
-                let generations = signed_session_generations(&fixture, "container");
+                let generations = signed_session_generations(&fixture, "container")?;
                 assert_eq!(generations[0], 1);
                 assert!(generations.iter().any(|generation| *generation > 1));
                 let tokens = assert_container_requests(&proxy.requests()?, endpoint);
@@ -397,7 +397,7 @@ fn acquisition_refresh_and_storage_failures_never_select_ambient_credentials() -
                         .iter()
                         .all(|token| token.as_deref() == expected_token)
                 );
-                let generations = signed_session_generations(&fixture, "container");
+                let generations = signed_session_generations(&fixture, "container")?;
                 match mode {
                     "reject" | "malformed" => {
                         assert_eq!(requests.len(), 1);
@@ -451,7 +451,7 @@ fn missing_or_invalid_pod_tokens_stop_reads_without_fallback() -> TestResult {
                 assert_single_terminal_record(&output.stderr, "diagnostic");
             }
             let requests = proxy.requests()?;
-            let generations = signed_session_generations(&fixture, "container");
+            let generations = signed_session_generations(&fixture, "container")?;
             if failure == "removed_after_read" {
                 assert_eq!(
                     assert_container_requests(&requests, EKS_HTTP_URI),

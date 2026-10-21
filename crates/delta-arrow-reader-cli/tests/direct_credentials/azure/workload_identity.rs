@@ -1,7 +1,13 @@
 //! Workload identity fixes the service principal while rereading rotated assertions.
 
-use std::{collections::HashMap, fs, process::Command};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    io::Cursor,
+    process::Command,
+};
 
+use arrow::{array::Int32Array, compute::concat_batches, ipc::reader::StreamReader};
 use serde_json::{Value, json};
 use url::form_urlencoded;
 
@@ -10,7 +16,9 @@ use super::{
     assert_read_result, assert_single_terminal_record, run_with_timeout, storage_bearer_tokens,
     token_server::AzureTokenServer,
 };
-use crate::cloud_storage::{MockCloudStorageServer, partitioned_objects};
+use crate::cloud_storage::{
+    MockCloudStorageServer, expected_partitioned_rows, partitioned_objects,
+};
 
 const INITIAL_ASSERTION: &str = "secret-initial-assertion+&=";
 const ROTATED_ASSERTION: &str = "secret-rotated-assertion+&=";
@@ -299,6 +307,96 @@ fn acquisition_refresh_and_storage_failures_never_select_ambient_credentials() -
                 }
             }
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn failed_refresh_after_rows_leaves_an_unfinished_stream_without_duplicates() -> TestResult {
+    let expected = expected_partitioned_rows()?;
+    let expected_ids = expected
+        .column_by_name("id")
+        .unwrap()
+        .as_any()
+        .downcast_ref::<Int32Array>()
+        .unwrap();
+    for parquet_backend in ["direct", "delta_kernel"] {
+        let authority = AzureTokenServer::new(usize::MAX)?;
+        let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
+        let assertion_path = fixture.directory.path().join("assertion.jwt");
+        fs::write(&assertion_path, INITIAL_ASSERTION)?;
+        let mut first_file = None;
+        let mut assertion_removed = false;
+        fixture.server = MockCloudStorageServer::with_objects(
+            CloudStorageProtocol::Azure,
+            partitioned_objects()?,
+            move |request, _| {
+                let target = request.split_whitespace().nth(1).unwrap();
+                if !target.ends_with(".parquet") {
+                    return;
+                }
+                if let Some(first_file) = &first_file {
+                    if target != first_file && !assertion_removed {
+                        fs::remove_file(&assertion_path).unwrap();
+                        assertion_removed = true;
+                    }
+                } else {
+                    first_file = Some(target.to_owned());
+                }
+            },
+        )?;
+        fixture.write_options(workload_identity_options(&fixture, &authority))?;
+        let execution_options = fixture.directory.path().join("execution.json");
+        // Serialize file reads so the first file emits rows before the second loses its credentials.
+        fs::write(
+            &execution_options,
+            serde_json::to_vec(&json!({
+                "parquet_backend": parquet_backend,
+                "max_concurrent_file_reads_per_scan": 1,
+                "max_concurrent_file_reads_per_partition": 1,
+                "output_buffer_batches_per_partition": 1,
+                "prefetch_files_per_partition": 0,
+                "parquet_full_file_read_threshold_bytes": null,
+                "parquet_metadata_size_hint_bytes": 8
+            }))?,
+        )?;
+        let output = run_with_timeout(
+            workload_identity_command(&fixture, &authority, "scan")
+                .args(["--target-partitions", "1", "--diagnostics=json"])
+                .arg("--execution-options-file")
+                .arg(execution_options),
+        )?;
+        assert_eq!(output.status.code(), Some(1), "{parquet_backend}");
+        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert_eq!(record["code"], "data_file_read");
+        assert!(!output.stdout.ends_with(&[255, 255, 255, 255, 0, 0, 0, 0]));
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("secret"));
+        let reader = StreamReader::try_new(Cursor::new(output.stdout), None)?;
+        let schema = reader.schema();
+        let actual = concat_batches(&schema, &reader.collect::<Result<Vec<_>, _>>()?)?;
+        assert!(actual.num_rows() > 0 && actual.num_rows() < expected.num_rows());
+        let actual_ids = actual
+            .column_by_name("id")
+            .unwrap()
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .unwrap();
+        let mut seen = HashSet::new();
+        for id in actual_ids.values() {
+            assert!(expected_ids.values().contains(id));
+            assert!(seen.insert(id), "duplicate output row {id}");
+        }
+        assert!(!fixture.directory.path().join("assertion.jwt").exists());
+        assert!(
+            assert_workload_requests(&authority.requests.lock().unwrap())
+                .iter()
+                .all(|assertion| assertion == INITIAL_ASSERTION)
+        );
+        assert!(
+            storage_bearer_tokens(&fixture)
+                .iter()
+                .all(|token| token.starts_with("secret-oauth-"))
+        );
     }
     Ok(())
 }

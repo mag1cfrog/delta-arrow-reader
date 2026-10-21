@@ -8,6 +8,7 @@ mod token_service_proxy;
 use std::{
     fs,
     io::Cursor,
+    path::Path,
     process::{Command, Output},
 };
 
@@ -78,6 +79,39 @@ impl DirectStorageFixture {
             .args([operation, table, "--storage-options-file"])
             .arg(self.directory.path().join("options.json"));
         command
+    }
+
+    fn verify_request_signatures(&self, signing_keys: Value) -> TestResult {
+        let protocol = match self.protocol {
+            CloudStorageProtocol::S3 => "s3",
+            CloudStorageProtocol::Azure => "azure",
+            CloudStorageProtocol::Gcs => panic!("GCS uses JWT verification"),
+        };
+        let captured_requests = self.directory.path().join("signed-requests.json");
+        fs::write(
+            &captured_requests,
+            serde_json::to_vec(&json!({
+                "protocol": protocol,
+                "requests": *self.server.requests.lock().unwrap(),
+                "signing_keys": signing_keys,
+            }))?,
+        )?;
+        let output = run_with_timeout(
+            Command::new("python3")
+                // Keep PYTHONOPTIMIZE from disabling the verifier's assertions.
+                .arg("-I")
+                .arg(
+                    Path::new(env!("CARGO_MANIFEST_DIR"))
+                        .join("tests/direct_credentials/verify_request_signatures.py"),
+                )
+                .arg(captured_requests),
+        )?;
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(())
     }
 }
 

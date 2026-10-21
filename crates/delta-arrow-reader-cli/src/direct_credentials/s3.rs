@@ -172,9 +172,11 @@ fn normalize_s3_options(
                 );
                 validate_auth_source_value(&value)?;
             }
-            AmazonS3ConfigKey::Region
-            | AmazonS3ConfigKey::DefaultRegion
-            | AmazonS3ConfigKey::Endpoint
+            AmazonS3ConfigKey::Region | AmazonS3ConfigKey::DefaultRegion => {
+                // The native signer embeds the region in an HTTP header without validation.
+                validate_auth_source_value(&value)?;
+            }
+            AmazonS3ConfigKey::Endpoint
             | AmazonS3ConfigKey::S3Endpoint
             | AmazonS3ConfigKey::VirtualHostedStyleRequest
             | AmazonS3ConfigKey::UnsignedPayload

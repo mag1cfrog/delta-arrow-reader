@@ -3,7 +3,7 @@
 mod container;
 mod web_identity;
 
-use serde_json::json;
+use serde_json::{Map, Value, json};
 use std::process::Command;
 
 use super::{
@@ -12,11 +12,20 @@ use super::{
 };
 
 impl DirectStorageFixture {
-    fn assert_request_identity(&self, key: &str, token: Option<&str>, region: &str) {
+    fn assert_signed_s3_requests(
+        &self,
+        access_key_id: &str,
+        secret_access_key: &str,
+        token: Option<&str>,
+        region: &str,
+    ) -> TestResult {
         let requests = self.server.requests.lock().unwrap();
         assert!(!requests.is_empty());
         for request in requests.iter() {
-            assert!(request.contains(&format!("Credential={key}/")), "{request}");
+            assert!(
+                request.contains(&format!("Credential={access_key_id}/")),
+                "{request}"
+            );
             assert!(
                 request.contains(&format!("/{region}/s3/aws4_request")),
                 "{request}"
@@ -30,11 +39,16 @@ impl DirectStorageFixture {
             assert_eq!(sent_token, token, "{request}");
             assert!(!request.contains("secret-unused"));
         }
+        drop(requests);
+        self.verify_request_signatures(json!({access_key_id: secret_access_key}))
     }
 }
 
-fn signed_session_generations(fixture: &DirectStorageFixture, source: &str) -> Vec<usize> {
-    fixture
+fn signed_session_generations(
+    fixture: &DirectStorageFixture,
+    source: &str,
+) -> Result<Vec<usize>, Box<dyn std::error::Error>> {
+    let generations: Vec<usize> = fixture
         .server
         .requests
         .lock()
@@ -61,7 +75,20 @@ fn signed_session_generations(fixture: &DirectStorageFixture, source: &str) -> V
             }
             generation
         })
-        .collect()
+        .collect();
+    if !generations.is_empty() {
+        let signing_keys: Map<String, Value> = generations
+            .iter()
+            .map(|generation| {
+                (
+                    format!("secret-{source}-key-{generation}"),
+                    json!(format!("secret-{source}-password-{generation}")),
+                )
+            })
+            .collect();
+        fixture.verify_request_signatures(json!(signing_keys))?;
+    }
+    Ok(generations)
 }
 
 #[test]
@@ -107,12 +134,20 @@ fn selected_credentials_sign_inspection_scan_and_sql_requests() -> TestResult {
             let output = run_with_timeout(&mut command)?;
             assert_read_result(output, operation)?;
         }
-        let (key, token) = if source == "json" {
-            ("secret-json-key", "secret-json-session")
+        let (key, secret_key, token) = if source == "json" {
+            (
+                "secret-json-key",
+                "secret-json-password",
+                "secret-json-session",
+            )
         } else {
-            ("secret-env-key", "secret-env-session")
+            (
+                "secret-env-key",
+                "secret-env-password",
+                "secret-env-session",
+            )
         };
-        fixture.assert_request_identity(key, Some(token), "eu-west-1");
+        fixture.assert_signed_s3_requests(key, secret_key, Some(token), "eu-west-1")?;
     }
     Ok(())
 }
@@ -178,6 +213,43 @@ fn invalid_sources_fail_before_storage_io_even_with_usable_ambient_credentials()
         assert_eq!(record["code"], "invalid_storage_authorization");
         assert_eq!(record["reason"], reason);
         assert_eq!(record["recovery"], "fix_input");
+    }
+    assert!(fixture.server.requests.lock().unwrap().is_empty());
+    Ok(())
+}
+
+#[test]
+fn invalid_region_options_fail_before_credentials_or_storage() -> TestResult {
+    let fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
+    for source in ["json", "env", "aws-web-identity", "aws-container"] {
+        for (key, value) in [
+            ("region", ""),
+            ("AWS_REGION", "eu-west-1\nsecret-region"),
+            ("default_region", "   "),
+            ("AWS_DEFAULT_REGION", "eu-west-1\rsecret-region"),
+        ] {
+            let mut options = json!({});
+            options[key] = json!(value);
+            if source == "json" {
+                options["access_key_id"] = json!("secret-key");
+                options["secret_access_key"] = json!("secret-password");
+            }
+            fixture.write_options(options)?;
+            let output = run_with_timeout(
+                fixture
+                    .command("inspect")
+                    .args(["--auth-source", source, "--diagnostics=json"])
+                    .env("AWS_ACCESS_KEY_ID", "secret-key")
+                    .env("AWS_SECRET_ACCESS_KEY", "secret-password")
+                    .env("AWS_REGION", "eu-west-1"),
+            )?;
+            assert_eq!(output.status.code(), Some(2));
+            assert!(output.stdout.is_empty());
+            let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+            assert_eq!(record["code"], "invalid_storage_authorization");
+            assert_eq!(record["reason"], "auth_source_invalid_value");
+            assert_eq!(record["recovery"], "fix_input");
+        }
     }
     assert!(fixture.server.requests.lock().unwrap().is_empty());
     Ok(())
@@ -274,7 +346,12 @@ fn selected_credentials_never_fall_back_after_permission_denial() -> TestResult 
                 assert_eq!(record["source_kind"], "permission_denied");
             }
         }
-        fixture.assert_request_identity("secret-selected-key", None, "eu-west-1");
+        let secret_key = if source == "json" {
+            "secret-selected-password"
+        } else {
+            "secret-environment-password"
+        };
+        fixture.assert_signed_s3_requests("secret-selected-key", secret_key, None, "eu-west-1")?;
     }
     Ok(())
 }
