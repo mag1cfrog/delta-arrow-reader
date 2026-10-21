@@ -1,0 +1,276 @@
+//! Commands, argument rules, and output formats available in this executable.
+//!
+//! `dar capabilities` returns this inventory without opening a table or resolving
+//! authorization. For example, a caller can find that `scan --column` is repeatable
+//! and that `--diagnostics` accepts `json` with an equals sign.
+
+use std::{io, time::Duration};
+
+use clap::{Arg, ArgAction, Command, CommandFactory};
+use serde_json::{Value, json};
+use snafu::ResultExt;
+
+use crate::{Cli, Error, RuntimeSnafu, StdoutStats, signals, write_stdout};
+
+const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
+const DEADLINE: Duration = Duration::from_secs(5);
+
+fn build_capabilities() -> Value {
+    let mut command = Cli::command();
+    command.build();
+    json!({
+        "format_version": 1,
+        "kind": "capabilities",
+        "cli_version": env!("CARGO_PKG_VERSION"),
+        "command": describe_command(&command),
+        "stdout_formats": {
+            "capabilities": {"format": "json", "format_version": 1},
+            "inspect": {"format": "json", "format_version": 1},
+            "scan": {"format": "arrow_ipc_stream"},
+            "query": {"format": "arrow_ipc_stream"},
+            "help": {"format": "text"},
+        },
+        "diagnostics": {
+            "stream": "stderr",
+            "default_format": "text",
+            "json": {"option": "--diagnostics=json", "format_version": 1},
+        },
+        "limits": {"max_output_bytes": MAX_OUTPUT_BYTES, "deadline_ms": DEADLINE.as_millis()},
+    })
+}
+
+fn describe_command(command: &Command) -> Value {
+    let arguments: Vec<_> = command
+        .get_arguments()
+        .filter(|argument| !argument.is_hide_set())
+        .map(|argument| describe_argument(command, argument))
+        .collect();
+    let subcommands: Vec<_> = command
+        .get_subcommands()
+        .filter(|command| !command.is_hide_set())
+        .map(describe_command)
+        .collect();
+    json!({
+        "name": command.get_name(),
+        "description": command.get_long_about().or_else(|| command.get_about()).map(ToString::to_string),
+        "arguments": arguments,
+        "subcommands": subcommands,
+    })
+}
+
+fn describe_argument(command: &Command, argument: &Arg) -> Value {
+    let values = argument.get_num_args().unwrap_or_default();
+    let defaults: Vec<_> = argument
+        .get_default_values()
+        .iter()
+        .map(|value| value.to_string_lossy())
+        .collect();
+    let choices: Vec<_> = argument
+        .get_possible_values()
+        .into_iter()
+        .filter(|value| !value.is_hide_set())
+        .map(|value| value.get_name().to_owned())
+        .collect();
+    let conflicts: Vec<_> = command
+        .get_arg_conflicts_with(argument)
+        .into_iter()
+        .map(argument_name)
+        .collect();
+    let value_names: Vec<_> = argument
+        .get_value_names()
+        .unwrap_or_default()
+        .iter()
+        .map(|value| value.as_str())
+        .collect();
+    json!({
+        "name": argument_name(argument),
+        "short": argument.get_short().map(|name| format!("-{name}")),
+        "position": argument.get_index(),
+        "description": argument.get_long_help().or_else(|| argument.get_help()).map(ToString::to_string),
+        "required": argument.is_required_set(),
+        "global": argument.is_global_set(),
+        "repeatable": matches!(argument.get_action(), ArgAction::Append | ArgAction::Count),
+        "require_equals": argument.is_require_equals_set(),
+        "value_names": value_names,
+        "min_values": values.min_values(),
+        "max_values": (values.max_values() != usize::MAX).then_some(values.max_values()),
+        "default_values": defaults,
+        "possible_values": choices,
+        "conflicts_with": conflicts,
+    })
+}
+
+fn argument_name(argument: &Arg) -> String {
+    argument
+        .get_long()
+        .map_or_else(|| argument.get_id().to_string(), |name| format!("--{name}"))
+}
+
+pub(crate) fn write_capabilities() -> Result<StdoutStats, Error> {
+    let deadline = std::time::Instant::now() + DEADLINE;
+    let mut output = build_capabilities().to_string().into_bytes();
+    output.push(b'\n');
+    if output.len() > MAX_OUTPUT_BYTES {
+        return Err(Error::OutputLimit {
+            reason: "discovery_output_too_large",
+        });
+    }
+    let stats = StdoutStats {
+        bytes_written: output.len() as u64,
+        ..Default::default()
+    };
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context(RuntimeSnafu {
+            reason: "runtime_build_failed",
+        })?;
+    let result = runtime.block_on(async {
+        tokio::select! {
+            biased;
+            status = signals::wait_for_cancellation() => Err(Error::Cancelled { status: status? }),
+            () = tokio::time::sleep_until(deadline.into()) => Err(Error::Runtime {
+                source: io::ErrorKind::TimedOut.into(),
+                reason: "discovery_deadline_exceeded",
+            }),
+            result = tokio::task::spawn_blocking(move || write_stdout(&output)) => {
+                result.map_err(io::Error::other).context(RuntimeSnafu {
+                    reason: "discovery_output_task_failed",
+                })?
+            }
+        }
+    });
+    // A blocked stdout worker must not extend the command's deadline during shutdown.
+    runtime.shutdown_background();
+    result.map(|()| stats)
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use clap::Parser;
+
+    use super::*;
+
+    #[test]
+    fn command_formats_cover_the_parser_without_advertising_future_commands() {
+        let inventory = build_capabilities();
+        let mut advertised: Vec<_> = inventory["command"]["subcommands"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|command| command["name"].as_str().unwrap())
+            .collect();
+        advertised.sort_unstable();
+        assert_eq!(
+            advertised,
+            ["capabilities", "help", "inspect", "query", "scan"]
+        );
+        assert_eq!(
+            advertised,
+            inventory["stdout_formats"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+        );
+        for name in advertised {
+            let args = if name == "help" {
+                vec!["dar", "help"]
+            } else {
+                vec!["dar", name, "--help"]
+            };
+            let error = Cli::try_parse_from(args).err().unwrap();
+            assert_eq!(error.kind(), clap::error::ErrorKind::DisplayHelp);
+        }
+        for name in ["preview", "explain"] {
+            let error = Cli::try_parse_from(["dar", name]).err().unwrap();
+            assert_eq!(error.kind(), clap::error::ErrorKind::InvalidSubcommand);
+        }
+        assert!(Cli::try_parse_from(["dar", "capabilities", "--schema", "predicate"]).is_err());
+    }
+
+    #[test]
+    fn advertised_argument_rules_match_accepted_invocations() {
+        let inventory = build_capabilities();
+        let commands = inventory["command"]["subcommands"].as_array().unwrap();
+        let scan = commands
+            .iter()
+            .find(|command| command["name"] == "scan")
+            .unwrap();
+        let arguments = scan["arguments"].as_array().unwrap();
+        let argument = |name| {
+            arguments
+                .iter()
+                .find(|argument| argument["name"] == name)
+                .unwrap()
+        };
+        assert_eq!(argument("--column")["repeatable"], true);
+        assert_eq!(argument("--column")["min_values"], 1);
+        assert_eq!(argument("--column")["max_values"], 1);
+        assert_eq!(argument("--no-columns")["max_values"], 0);
+        assert_eq!(
+            argument("--no-columns")["conflicts_with"],
+            json!(["--column"])
+        );
+        assert_eq!(argument("--diagnostics")["global"], true);
+        assert_eq!(argument("--diagnostics")["require_equals"], true);
+        assert_eq!(
+            argument("--diagnostics")["possible_values"],
+            json!(["json"])
+        );
+
+        let cli = Cli::try_parse_from([
+            "dar",
+            "scan",
+            "table",
+            "--column",
+            "id",
+            "--column",
+            "value",
+            "--diagnostics=json",
+        ])
+        .unwrap();
+        let crate::Command::Scan { columns, .. } = cli.command else {
+            panic!("expected scan")
+        };
+        assert_eq!(columns, ["id", "value"]);
+        let error = Cli::try_parse_from(["dar", "scan", "table", "--column", "id", "--no-columns"])
+            .err()
+            .unwrap();
+        assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
+        let error = Cli::try_parse_from(["dar", "scan", "table", "--diagnostics", "json"])
+            .err()
+            .unwrap();
+        assert_eq!(error.kind(), clap::error::ErrorKind::NoEquals);
+
+        let cli =
+            Cli::try_parse_from(["dar", "query", "table", "--sql-file", "query.sql"]).unwrap();
+        let crate::Command::Query(query) = cli.command else {
+            panic!("expected query")
+        };
+        let advertised = commands
+            .iter()
+            .find(|command| command["name"] == "query")
+            .unwrap();
+        let arguments = advertised["arguments"].as_array().unwrap();
+        for (name, value) in [
+            ("--max-rows", query.max_rows),
+            ("--max-output-bytes", query.max_output_bytes.get()),
+            ("--memory-limit-bytes", query.memory_limit_bytes.get()),
+        ] {
+            let argument = arguments
+                .iter()
+                .find(|argument| argument["name"] == name)
+                .unwrap();
+            assert_eq!(argument["default_values"], json!([value.to_string()]));
+        }
+        assert!(
+            !arguments
+                .iter()
+                .any(|argument| argument["name"] == "--databricks-profile")
+        );
+    }
+}

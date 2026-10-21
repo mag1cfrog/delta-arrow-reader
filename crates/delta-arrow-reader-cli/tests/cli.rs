@@ -2,6 +2,7 @@
 
 #![allow(clippy::panic, clippy::unwrap_used)]
 
+mod capabilities;
 mod diagnostics;
 mod predicates;
 mod query;
@@ -62,6 +63,7 @@ fn executable_names_preserve_help_version_and_redacted_errors()
         for (args, subcommand) in [
             (vec!["--help"], ""),
             (vec!["-h"], ""),
+            (vec!["capabilities", "--help"], " capabilities"),
             (vec!["inspect", "--help"], " inspect"),
             (vec!["help", "inspect"], " inspect"),
             (vec!["scan", "--help"], " scan"),

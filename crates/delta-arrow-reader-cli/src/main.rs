@@ -3,6 +3,7 @@
 //! `inspect` returns a snapshot's version and Arrow schema as JSON. `scan` and
 //! `query` return rows as Arrow IPC streams. Command results use stdout; diagnostics and
 //! completion records use stderr.
+//! `capabilities` describes the installed commands without opening a table.
 //!
 //! For a Delta table at `./table` with an `id` column:
 //!
@@ -17,6 +18,7 @@
 #![cfg_attr(test, allow(clippy::panic))]
 
 mod arrow_output;
+mod capabilities;
 mod diagnostics;
 mod input;
 mod query;
@@ -56,6 +58,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Print the installed commands, argument rules, and output formats as JSON.
+    ///
+    /// Offline; no table, input file, or authorization is loaded.
+    Capabilities,
     /// Print one Delta snapshot's version and full Arrow schema as JSON.
     ///
     /// Only snapshot metadata is loaded; data files are not read.
@@ -597,6 +603,10 @@ fn run() -> Result<Value, Error> {
         ensure!(!io::stdout().is_terminal(), TerminalOutputSnafu);
     }
     let (table_args, databricks_profile) = match &command {
+        Command::Capabilities => {
+            return capabilities::write_capabilities()
+                .map(|stats| build_completion_record("capabilities", None, stats, None));
+        }
         Command::Inspect {
             table,
             databricks_profile,
@@ -689,6 +699,7 @@ fn run() -> Result<Value, Error> {
         Ok::<_, Error>((table, authorized_access))
     };
     let work: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
+        Command::Capabilities => unreachable!("capabilities returned before table loading"),
         Command::Query(args) => {
             let sql_query = query::ReadOnlySqlQuery::read_file(&args.sql_file)?;
             async move {

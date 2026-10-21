@@ -5,6 +5,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 
 | Task | Command or section |
 | --- | --- |
+| Discover commands and argument rules offline | [`dar capabilities`](#discover-installed-commands) |
 | See the table's columns and version | [`dar inspect`](#inspect-a-snapshot) |
 | Save selected rows as Arrow | [`dar scan`](#scan-rows) |
 | Aggregate, group, or sort rows with SQL | [`dar query`](#query-a-snapshot) |
@@ -17,6 +18,32 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 The standalone command is `dar`. A Python wheel installs `delta-arrow-reader`
 instead; substitute that name in the examples. Both accept the same arguments.
 For packages and runtime requirements, see [Installation](installation.md).
+
+## Discover installed commands
+
+```sh
+dar capabilities
+dar capabilities --diagnostics=json > capabilities.json
+```
+
+The result is one JSON object with `kind: "capabilities"` and `format_version: 1`.
+`command` contains the command tree and each argument's required status, value
+count, defaults, allowed choices, repeatability, and conflicts. For example,
+`scan --column` is repeatable and conflicts with `--no-columns`.
+`stdout_formats` identifies each command's result format; `diagnostics` describes
+stderr formats. These describe the installed executable, including its version.
+
+Discovery needs no table, input file, credentials, Databricks executable, or
+network access. Its response is limited to 1 MiB. The command has a five-second
+deadline, including blocked stdout. A closed output pipe fails with status 3;
+an expired deadline fails with status 1. With `--diagnostics=json`, success
+produces a completion record on stderr, and failure produces a diagnostic.
+
+Consumers must check `format_version` and ignore additional object fields.
+Changes to existing field types or meanings require a new format version.
+An empty `possible_values` list means the argument has no enumerated choices;
+it does not mean every value is valid. A null `max_values` means there is no
+fixed upper count for that argument. Descriptions contain additional input rules.
 
 ## Inspect a snapshot
 
