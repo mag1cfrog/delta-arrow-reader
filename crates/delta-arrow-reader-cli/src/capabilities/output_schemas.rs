@@ -70,7 +70,10 @@ pub(super) fn diagnostic_schema() -> Value {
             "reason": {"type": "string"},
             "source_kind": {"type": ["string", "null"]},
             "message": {"type": "string"},
-            "retryable": {"type": ["boolean", "null"]},
+            "retryable": {
+                "type": ["boolean", "null"],
+                "description": "True means retry as a new command after discarding failed output. False requires the indicated recovery action first; null means retryability is unknown.",
+            },
             "recovery": {"enum": ["fix_input", "authorize", "request_access", "retry", "change_request", "adjust_budget", "unknown"]},
             "argument_kind": {"type": "string"},
             "argument": {"type": "string"},

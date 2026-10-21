@@ -136,8 +136,9 @@ For queries, end of input means the complete SQL result, including any SQL
 `LIMIT`. Output ceilings cannot produce a successful partial query completion.
 
 Consumers must check exit status 0, valid stdout, and the completion record.
-`dar capabilities --schema diagnostic` and `--schema completion` return the
-JSON Schemas for these stderr records; extract each response's `schema` field
+`dar capabilities --schema diagnostic --full` and
+`dar capabilities --schema completion --full` return the JSON Schemas for these
+stderr records; extract each response's `schema` field
 for validation. Both commands work offline.
 Records are at most 8 KiB. Ignore additional fields and JSON key order; reject
 unsupported `format_version` values. Incompatible field meanings or types

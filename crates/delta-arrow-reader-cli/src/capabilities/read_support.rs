@@ -57,9 +57,7 @@ impl AuthorizationGuide {
                 })
             }
         };
-        authorization["credential_handling"] = json!(
-            "Use an existing file or profile reference; never put credential values in arguments."
-        );
+        authorization["credential_handling"] = json!(self.credential_handling());
         json!({
             "format_version": 1,
             "kind": "authorization_guide",
@@ -75,6 +73,17 @@ impl AuthorizationGuide {
             Self::AzureBlob => "azure-blob",
             Self::Gcs => "gcs",
             Self::UnityCatalog => "unity-catalog",
+        }
+    }
+
+    fn credential_handling(self) -> &'static str {
+        match self {
+            Self::UnityCatalog => {
+                "Pass an existing Databricks profile name; never put credential values in arguments."
+            }
+            _ => {
+                "For explicit credentials, pass an existing storage-options file path; never put credential values in arguments."
+            }
         }
     }
 
@@ -110,9 +119,7 @@ impl AuthorizationGuide {
             }
             storage
         };
-        authorization["credential_handling"] = json!(
-            "Pass a file path or an existing profile name. Do not copy credential values into command arguments."
-        );
+        authorization["credential_handling"] = json!(self.credential_handling());
         json!({
             "format_version": 1,
             "kind": "authorization_capabilities",
@@ -288,6 +295,14 @@ mod tests {
             assert!(aliases.contains_key(expected_key));
             let concise = guide.guide_document();
             let selected = &concise["authorization"];
+            assert_eq!(
+                selected["credential_handling"],
+                authorization["credential_handling"]
+            );
+            let handling = selected["credential_handling"].as_str().unwrap();
+            assert!(handling.contains("storage-options file path"));
+            assert!(!handling.contains("profile"));
+            assert!(handling.contains("never put credential values in arguments"));
             assert!(
                 selected["credential_keys"]
                     .as_array()
@@ -326,6 +341,17 @@ mod tests {
             assert_eq!(authorization["storage_options_schema"], "storage-options");
         }
         let document = AuthorizationGuide::UnityCatalog.full_document();
+        let concise = AuthorizationGuide::UnityCatalog.guide_document();
+        assert_eq!(
+            concise["authorization"]["credential_handling"],
+            document["authorization"]["credential_handling"]
+        );
+        let handling = concise["authorization"]["credential_handling"]
+            .as_str()
+            .unwrap();
+        assert!(handling.contains("Databricks profile name"));
+        assert!(!handling.contains("file path"));
+        assert!(handling.contains("never put credential values in arguments"));
         assert_eq!(
             document["authorization"]["profile_argument"],
             "--databricks-profile"

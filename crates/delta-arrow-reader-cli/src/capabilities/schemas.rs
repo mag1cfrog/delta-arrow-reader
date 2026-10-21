@@ -328,6 +328,33 @@ mod tests {
     }
 
     #[test]
+    fn retryable_detail_keeps_recovery_semantics() {
+        let full = DiscoverySchema::Diagnostic.schema_document();
+        let detail = DiscoverySchema::Diagnostic
+            .guide_document(Some("retryable"))
+            .unwrap();
+        assert_eq!(
+            detail["definition"],
+            full["schema"]["properties"]["retryable"]
+        );
+        for value in [json!(true), json!(false), Value::Null] {
+            jsonschema::validate(&detail["definition"], &value).unwrap();
+        }
+        let description = detail["definition"]["description"].as_str().unwrap();
+        for rule in [
+            "True",
+            "False",
+            "null",
+            "new command",
+            "discarding failed output",
+            "recovery action",
+            "unknown",
+        ] {
+            assert!(description.contains(rule), "{rule}");
+        }
+    }
+
+    #[test]
     fn literal_details_preserve_encodings_and_units_without_expanding_other_types() {
         for (name, literal) in [
             (
