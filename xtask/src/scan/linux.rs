@@ -138,7 +138,7 @@ impl ScanFixture<'_> {
     }
 
     fn check_successful_scan(&self, output: &Output) -> Result<IpcTable> {
-        super::ipc::check_scan_output(output)
+        super::ipc::check_arrow_output(output)
     }
 
     fn check_completed_scan(&self, scan: &mut child::ScanProcess, rows: usize) -> Result<IpcTable> {

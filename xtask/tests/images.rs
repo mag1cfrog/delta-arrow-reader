@@ -1,3 +1,5 @@
+//! Container image build inputs, metadata, and cleanup checks.
+
 #![cfg(target_os = "linux")]
 
 use std::{

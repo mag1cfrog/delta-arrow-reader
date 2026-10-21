@@ -1,3 +1,7 @@
+//! Shared release configuration and release-plz workflow checks.
+
+#![allow(clippy::unwrap_used)]
+
 use std::{env, error::Error, fs, path::PathBuf, process::Command};
 
 use serde_json::Value;

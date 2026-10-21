@@ -1,3 +1,7 @@
+//! Repository build, validation, and release maintenance commands.
+
+#![cfg_attr(test, allow(clippy::panic))]
+
 mod acceptance;
 mod artifacts;
 mod binary;

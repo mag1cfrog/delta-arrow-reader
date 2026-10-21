@@ -50,8 +50,9 @@ aggregation. Delta Arrow Reader handles the Delta table reads underneath it,
 including file selection, deletion vectors, and schema changes.
 
 The adapter registers one table at a time. Your application chooses which tables
-to register and how to use the results. Applications such as Delta Funnel also
-coordinate multiple tables, configuration, reporting, and delivery.
+to register and how to use the results, including any reporting or delivery.
+For examples, use [Python SQL](https://mag1cfrog.github.io/delta-arrow-reader/python/#query-with-sql)
+or [DataFusion in Rust](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/).
 
 ## Remote I/O phases
 

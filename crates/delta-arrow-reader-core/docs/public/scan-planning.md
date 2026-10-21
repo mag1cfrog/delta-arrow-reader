@@ -16,10 +16,12 @@ It starts from available CPU parallelism, then applies memory and open-file
 limits it can determine cheaply. DataFusion's session target can also cap it.
 A smaller scan may need fewer groups, and an empty scan has none.
 
-You can supply a positive target with `DeltaScanBuilder::with_target_partitions`
-in Rust, `target_partitions` in Python, or `datafusion::ScanOptions::target_partitions`
-for SQL. An explicit target overrides the automatic resource caps and skips the
-host probes. It does not reserve memory or guarantee that a query fits in memory.
+Python's `to_reader()` and `scan()` accept a positive `target_partitions`.
+Python SQL uses the automatic choice. In Rust, use
+`DeltaScanBuilder::with_target_partitions` for direct scans or
+`datafusion::ScanOptions::target_partitions` for SQL. An explicit target overrides
+the automatic resource caps and skips the host probes. It does not reserve memory
+or guarantee that a query fits in memory.
 
 <details markdown="1">
 <summary>Automatic limits and Linux memory accounting</summary>

@@ -1,13 +1,19 @@
 ---
-title: Configuration
-description: Start with the defaults, then adjust table opening and resource use when you need to.
+title: Storage and configuration
+description: Connect to cloud storage, then adjust table opening and resource use when needed.
 ---
 
-# Configuration
+# Storage and configuration
 
-You do not need to choose settings before your first query. After the
-[Python quickstart](python.md) or [Rust quickstart](streaming-reader.md), use
-this page when opening a table takes too long or a query uses too many resources.
+<span id="configuration"></span>
+
+Use this page to connect to [S3](#read-from-s3) or [Azure](#read-from-azure),
+[reduce work before the first query](#want-less-work-before-the-first-query),
+or [limit parallel reads](#adjust-queries-when-needed).
+
+The examples use Python. See [Rust configuration](#configure-rust) for Rust; CLI
+users can pass the same storage keys in a
+[storage options file](cli.md#storage-options-file).
 
 ## Start with the defaults
 
@@ -29,9 +35,6 @@ new table.
 
 Use an `s3://bucket/table` URL in place of a local path and supply your storage
 settings. For example, if you use AWS credentials from environment variables:
-
-<details markdown="1">
-<summary>Open an S3 table with credentials from your environment</summary>
 
 Set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in your environment. When
 using temporary credentials, also set `AWS_SESSION_TOKEN`. Replace the bucket,
@@ -56,13 +59,51 @@ table = DeltaTable("s3://<bucket>/<table-prefix>", storage_options=options)
 Keep credentials out of source code. `storage_options` takes string keys and
 values; the available settings depend on the storage backend.
 
-</details>
+The URL must point to the directory containing `_delta_log`. The reader
+accesses storage directly and needs credentials that can list and read the
+table's log and data files. A Databricks table name or workspace PAT is not a
+storage location or storage credential.
+
+Use `table.to_reader()` as in the [Python quickstart](python.md#read-your-first-rows)
+to read the rows.
+
+## Read from Azure
+
+For Azure Blob Storage or ADLS Gen2, use the table's storage URL. This example
+uses a shared access signature (SAS) token with permission to list and read
+the table's files. Set `AZURE_STORAGE_SAS_TOKEN` in your environment, then
+replace the container, account, and table prefix:
+
+```python
+import os
+
+from delta_arrow_reader import DeltaTable
+
+table = DeltaTable(
+    "abfss://<container>@<account>.dfs.core.windows.net/<table-prefix>",
+    storage_options={
+        "azure_storage_sas_key": os.environ["AZURE_STORAGE_SAS_TOKEN"],
+    },
+)
+```
+
+The equivalent Blob Storage URL is
+`https://<account>.blob.core.windows.net/<container>/<table-prefix>`.
+Both URLs point to the directory containing `_delta_log`. Keep the SAS token
+in `storage_options`, outside the URL and source code. This is one authentication
+option; other credentials use the storage backend's
+[Azure configuration keys](https://docs.rs/object_store/0.13.2/object_store/azure/enum.AzureConfigKey.html).
+
+Once the table opens, use the same
+[Python reading methods](python.md#read-your-first-rows) as for a local table.
+
+## Want less work before the first query?
 
 With the default `automatic` mode on supported S3 connections, opening a table
 prepares information for later queries and checks the connection speed.
 **The connection check can take up to
 five seconds**, plus the time needed to load the file information. It may finish
-sooner. Local tables skip this extra preparation.
+sooner. Local tables and Azure skip this extra preparation.
 
 <details markdown="1">
 <summary>What the S3 preparation does</summary>
@@ -87,8 +128,6 @@ The check makes real requests and downloads data. It requires the default
 `direct` backend and a [supported S3 connection](https://mag1cfrog.github.io/delta-arrow-reader/partial-page-reads/).
 
 </details>
-
-## Want less work before the first query?
 
 Set `warmup` when opening the table. Keep the same path and any `storage_options`
 you normally use; the examples below show just the setting being changed.
@@ -132,7 +171,7 @@ Start with the default read settings. Change one setting at a time if a query
 uses more resources than your application can spare.
 
 <details markdown="1">
-<summary>Limit how many files a query reads at once</summary>
+<summary id="limit-parallel-reads">Limit how many files a query reads at once</summary>
 
 If a query uses too many resources, try a limit on concurrent file reads. This
 example allows at most four files to be read at once in one scan:
@@ -161,7 +200,7 @@ processed in parallel, see `target_partitions` in
 </details>
 
 <details markdown="1">
-<summary>Use the loaded table with Python SQL</summary>
+<summary id="configure-python-sql">Use the loaded table with Python SQL</summary>
 
 Register the table you already opened. SQL reuses its file information and any
 connection measurements. Registration does not repeat the preparation.
@@ -184,7 +223,7 @@ Omit `execution_options` to use SQL's defaults. Custom read settings passed to
 </details>
 
 <details markdown="1">
-<summary>Configure a table in Rust</summary>
+<summary id="configure-rust">Configure a table in Rust</summary>
 
 Choose the same behavior with `with_warmup`. This example skips the connection
 check and keeps the file information for later queries:
@@ -222,7 +261,61 @@ one scan. SQL uses `datafusion::ScanOptions.execution_options` when
 [registering the table](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/).
 Changing read settings later does not undo preparation already performed.
 
+### Renew temporary storage credentials
+
+Pass an `object_store` credential provider to the table builder when credentials
+may expire while a table is open. This example accepts an AWS provider from your
+application:
+
+```no_run
+use delta_arrow_reader::{
+    DeltaReaderError, DeltaStorageCredentialProvider, DeltaStorageOptions,
+    DeltaTable, DeltaTableBuilder,
+};
+use object_store::aws::AwsCredentialProvider;
+
+async fn open_with_credentials(provider: AwsCredentialProvider) -> Result<DeltaTable, DeltaReaderError> {
+    DeltaTableBuilder::new("s3://bucket/table")
+        .with_storage_options(DeltaStorageOptions::from([
+            ("aws_region".into(), "us-east-1".into()),
+        ]))
+        .with_credential_provider(DeltaStorageCredentialProvider::Aws(provider))
+        .load_table()
+        .await
+}
+```
+
+Use `Aws` for S3 or R2, `Azure` for an Azure provider returning SAS or bearer
+credentials, and `Gcp` for a GCS provider returning OAuth tokens. R2 uses a native
+`https://account.r2.cloudflarestorage.com/bucket/table` URL; GCS uses `gs://bucket/table`.
+
+The provider owns credential caching and renewal. It can be called concurrently,
+including from Delta Kernel's runtime, and must return usable credentials or an
+error. The reader retains it for scans, table clones, and snapshot refreshes.
+Updating credentials does not change the table's snapshot version.
+
+The provider takes precedence over ordinary authentication settings in
+`DeltaStorageOptions`, following the native client's `with_credentials` rules.
+For example, an AWS provider overrides static keys, and a GCP provider skips
+Application Default Credentials.
+
+Omit `skip_signature`, Azure's `use_emulator`, and GCP's `service_account` and
+`service_account_key` options, including their aliases, when supplying a provider.
+These options can bypass the provider or load service-account data separately.
+Their presence is rejected before storage reads, even when a boolean value is
+`false`. Providers for the wrong cloud also fail before reads.
+
+Transport and region options still follow the native storage client's rules:
+values derived from the URL override options. R2 selects the `auto` region and
+accepts `aws_endpoint_url_s3` for an endpoint override.
+
+If the provider fails, the operation returns an error without trying environment,
+instance, or credential-file authentication. Error `Display` and `Debug` stay
+redacted; the raw dependency error remains available through `source()`.
+The provider API is available to Rust callers.
+
 </details>
 
-For backend selection, small-file buffering and the full list of defaults,
-see the [execution options reference](https://mag1cfrog.github.io/delta-arrow-reader/reference/execution-options/).
+For the complete Python settings and defaults, see
+[ScanExecutionOptions](python-api/options.md). Rust callers can use the
+[execution options reference](https://mag1cfrog.github.io/delta-arrow-reader/reference/execution-options/).

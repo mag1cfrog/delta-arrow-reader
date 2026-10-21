@@ -9,6 +9,10 @@ Results use PyArrow, which is installed with the reader.
 table available. Use the table's directory, which contains `_delta_log`, rather
 than a single Parquet file.
 
+For a table in cloud storage, follow the [S3](configuration.md#read-from-s3) or
+[Azure](configuration.md#read-from-azure) connection example, then use the same
+reading methods below.
+
 <details markdown="1">
 <summary>Use the repository's sample table</summary>
 
@@ -78,13 +82,68 @@ with table.to_reader(
 
 Both conditions must match: `id` is at least `100` and `region` is `"east"`.
 The limit applies after filtering. Filter values must match their column types.
-For OR conditions, null checks, and other types, see
-[the filtering rules](python-api/table.md#delta_arrow_reader.DeltaTable.to_reader).
+<details markdown="1">
+<summary>Combine conditions with OR or check for nulls</summary>
+
+A list of lists combines groups with OR. This selects rows where `region` is
+`"east"` or `id` is less than `10`:
+
+```python
+with table.to_reader(
+    filters=[[("region", "==", "east")], [("id", "<", 10)]],
+    limit=10,
+) as reader:
+    print(reader.read_all().to_pydict())
+```
+
+Within each inner list, all conditions must match. To check for nulls, use
+`("region", "is", None)` or `("region", "is not", None)`. Comparisons such as
+`("region", "==", None)` are invalid.
+
+The [to_reader() reference](python-api/table.md#delta_arrow_reader.DeltaTable.to_reader)
+lists all supported operators and value types.
+
+</details>
+
+## Use Pandas or Polars
+
+Install the library you use with `python -m pip install pandas` or
+`python -m pip install polars`. Neither is required for PyArrow reads.
+Read a small result with the [table you opened earlier](#read-your-first-rows):
+
+```python
+with table.to_reader(limit=10) as reader:
+    result = reader.read_all()
+```
+
+For a Pandas DataFrame:
+
+```python
+df = result.to_pandas()
+print(df.head())
+```
+
+For a Polars DataFrame:
+
+```python
+import polars as pl
+
+df = pl.from_arrow(result)
+print(df.head())
+```
+
+These conversions keep the result in memory and may allocate additional memory.
+Choose columns and filters in `to_reader()` to reduce the data read from storage;
+filtering the DataFrame afterward does not reduce that read.
+For larger results, [process one batch at a time](#process-a-larger-result-in-batches).
+See the [PyArrow](https://arrow.apache.org/docs/python/pandas.html) and
+[Polars](https://docs.pola.rs/api/python/stable/reference/api/polars.from_arrow.html)
+documentation for conversion options and data-type behavior.
 
 ## Query with SQL
 
-If you prefer SQL, register the same table with a `Session`. The name `events`
-is how your query refers to it:
+If you prefer SQL, register the [table you opened earlier](#read-your-first-rows)
+with a `Session`. The name `events` is how your query refers to it:
 
 ```python
 from delta_arrow_reader import Session
@@ -97,7 +156,9 @@ with session.sql("SELECT * FROM events LIMIT 10") as reader:
 ```
 
 SQL returns a PyArrow reader too. The package includes DataFusion to run the
-queries; you do not need to install the separate Python `datafusion` package.
+queries locally; you do not need Spark, a Databricks cluster, or the separate
+Python `datafusion` package. `events` is a name inside this session, not a
+catalog lookup.
 
 Once that works, change the query to filter or summarize your data. For the
 `id` and `region` columns above:
@@ -121,7 +182,8 @@ registration rules and errors.
 ## Process a larger result in batches
 
 When the result may be too large to keep in memory, iterate over the reader
-instead of calling `read_all()`:
+instead of calling `read_all()`. Use the
+[table you opened earlier](#read-your-first-rows):
 
 ```python
 with table.to_reader() as reader:
@@ -136,8 +198,9 @@ a SQL reader. The `with` block closes the reader even if you `break` early.
 
 ## Read again or use newer data
 
-Reuse `table` for later queries. It stays on the version it opened, even when
-another process adds data. To load the latest version:
+Reuse the [table you opened earlier](#read-your-first-rows) for later queries.
+It stays on the version it opened, even when another process adds data.
+To load the latest version:
 
 ```python
 latest = table.refresh()
@@ -148,8 +211,26 @@ The original table and existing readers keep their version. For SQL, register
 `latest` under a new name or in a new session. Refreshing a table does not update
 an existing registration.
 
+<details markdown="1">
+<summary>Read an older version (time travel)</summary>
+
+Pass a version number when opening a table:
+
+```python
+older = DeltaTable("/path/to/table", version=0)
+print(older.version)
+```
+
+Replace `0` with the version you need and include the same `storage_options`
+as for other reads of that location. The version's log and data files must
+still be available. This selects a version by number; the Python constructor
+does not accept a timestamp.
+
+</details>
+
 ## Where to go next
 
-- [Configuration](configuration.md): read from S3, choose preparation before queries, or limit resource use.
-- [Python API reference](python-api/index.md): look up methods, parameters, defaults, and errors.
-- [Arrow streams](python-api/streams-and-errors.md): pass a scan to another Arrow consumer.
+- [Handle errors](python-api/errors.md): catch failures when opening a table or reading batches.
+- [Enable logging](python-api/logging.md): show reader progress or get more detail when investigating a problem.
+- [Configuration](configuration.md): connect to cloud storage, reduce opening work, or limit parallel reads.
+- [Python API reference](python-api/index.md#api-reference): look up methods, parameters, defaults, and errors.

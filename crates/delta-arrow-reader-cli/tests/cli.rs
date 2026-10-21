@@ -1,4 +1,12 @@
+//! CLI output, diagnostics, argument validation, and reader integration tests.
+
+#![allow(clippy::panic, clippy::unwrap_used)]
+
+mod diagnostics;
 mod predicates;
+mod query;
+#[cfg(unix)]
+mod unity_catalog;
 
 use std::{
     fs::{self, File},
@@ -57,6 +65,8 @@ fn executable_names_preserve_help_version_and_redacted_errors()
             (vec!["inspect", "--help"], " inspect"),
             (vec!["help", "inspect"], " inspect"),
             (vec!["scan", "--help"], " scan"),
+            (vec!["query", "--help"], " query"),
+            (vec!["help", "query"], " query"),
             (
                 vec!["scan", "--storage-options-file", "secret-missing", "--help"],
                 " scan",
@@ -132,11 +142,23 @@ fn json_input_failures_keep_distinct_safe_causes() -> Result<(), Box<dyn std::er
         "--predicate-file",
         "--execution-options-file",
     ] {
-        for (contents, detail) in [
-            (b"!secret-value".as_slice(), "kind=Syntax"),
-            (br#""secret-value""#.as_slice(), "kind=Data"),
-            (b"{".as_slice(), "kind=Eof"),
-            (oversized.as_slice(), "reason=input_file_too_large"),
+        for (contents, detail, hint) in [
+            (
+                b"!secret-value".as_slice(),
+                "kind=Syntax",
+                "Fix JSON syntax",
+            ),
+            (
+                br#""secret-value""#.as_slice(),
+                "kind=Data",
+                "expected format",
+            ),
+            (b"{".as_slice(), "kind=Eof", "Complete the JSON document"),
+            (
+                oversized.as_slice(),
+                "reason=input_file_too_large",
+                "Keep the JSON input at or below 1 MiB.",
+            ),
         ] {
             fs::write(&path, contents)?;
             let output = run_with_timeout(
@@ -158,7 +180,42 @@ fn json_input_failures_keep_distinct_safe_causes() -> Result<(), Box<dyn std::er
                 diagnostic.contains(&field),
                 "{option}, expected {field}: {diagnostic}"
             );
+            assert!(
+                diagnostic.contains(&format!("argument=\"{option}\"")),
+                "{diagnostic}"
+            );
+            assert!(diagnostic.contains(hint), "{diagnostic}");
             assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+
+            let output = run_with_timeout(
+                Command::new(env!("CARGO_BIN_EXE_dar"))
+                    .args(["scan", option])
+                    .arg(&path)
+                    .args(["secret-missing-table", "--diagnostics=json"])
+                    .env("RUST_LOG", "off"),
+            )?;
+            assert_eq!(output.status.code(), Some(2));
+            assert!(output.stdout.is_empty());
+            let record = diagnostics::assert_single_terminal_record(&output.stderr, "diagnostic");
+            assert_eq!(record["argument"], option);
+            assert_eq!(record["code"], "invalid_input_json");
+            assert_eq!(record["recovery"], "fix_input");
+            assert_eq!(record["retryable"], false);
+            assert!(record["expected"].is_string());
+            assert!(record["hint"].as_str().unwrap().contains(hint), "{record}");
+            if detail == "kind=Data" {
+                assert_eq!(record["field_path"], "");
+            } else {
+                assert!(record.get("field_path").is_none(), "{record}");
+            }
+            if let Some(kind) = detail.strip_prefix("kind=") {
+                assert_eq!(record["json_kind"], kind);
+                assert!(record["line"].as_u64().unwrap() > 0);
+                assert!(record["column"].as_u64().unwrap() > 0);
+            } else {
+                assert_eq!(record["reason"], "input_file_too_large");
+                assert!(record.get("line").is_none());
+            }
         }
     }
     Ok(())
@@ -169,22 +226,105 @@ fn predicate_validation_reasons_survive_json_decoding() -> Result<(), Box<dyn st
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("secret-predicate.json");
     let leaf = r#"{"op":"is_null","column":"secret-column"}"#;
-    for (predicate, reason) in [
-        (format!("{}{leaf}{}", r#"{"op":"not","arg":"#.repeat(32), "}".repeat(32)), "predicate_depth_limit_exceeded"),
-        (format!(r#"{{"op":"and","args":[{}]}}"#, [leaf; 1024].join(",")), "predicate_node_limit_exceeded"),
-        (r#"{"op":"eq","column":"secret-column","value":{"type":"float32","value":1e100}}"#.into(), "predicate_non_finite_float"),
-        (r#"{"op":"eq","column":"secret-column","value":{"type":"fixed_size_binary","size":2,"value":[1]}}"#.into(), "predicate_binary_size_mismatch"),
+    let oversized_float =
+        r#"{"op":"eq","column":"secret-column","value":{"type":"float32","value":1e100}}"#;
+    let wrong_binary_size = r#"{"op":"eq","column":"secret-column","value":{"type":"fixed_size_binary","size":2,"value":[1]}}"#;
+    let nested = |predicate: &str| {
+        format!(
+            r#"{{"op":"and","args":[{leaf},{{"op":"not","arg":{{"op":"or","args":[{leaf},{predicate}]}}}}]}}"#
+        )
+    };
+    for (predicate, reason, field_path, expected) in [
+        (
+            format!(
+                "{}{leaf}{}",
+                r#"{"op":"not","arg":"#.repeat(32),
+                "}".repeat(32)
+            ),
+            "predicate_depth_limit_exceeded",
+            "/arg".repeat(32),
+            "32 levels",
+        ),
+        (
+            format!(r#"{{"op":"and","args":[{}]}}"#, [leaf; 1024].join(",")),
+            "predicate_node_limit_exceeded",
+            "/args/1023".into(),
+            "1024 predicate nodes",
+        ),
+        (
+            oversized_float.into(),
+            "predicate_non_finite_float",
+            "/value/value".into(),
+            "finite after conversion to float32",
+        ),
+        (
+            wrong_binary_size.into(),
+            "predicate_binary_size_mismatch",
+            "/value/size".into(),
+            "byte array length",
+        ),
+        (
+            nested(oversized_float),
+            "predicate_non_finite_float",
+            "/args/1/arg/args/1/value/value".into(),
+            "finite after conversion to float32",
+        ),
+        (
+            nested(wrong_binary_size),
+            "predicate_binary_size_mismatch",
+            "/args/1/arg/args/1/value/size".into(),
+            "byte array length",
+        ),
     ] {
+        let input: Value = serde_json::from_str(&predicate)?;
+        assert!(input.pointer(&field_path).is_some(), "{field_path}");
         fs::write(&path, predicate)?;
         let output = run_with_timeout(
             Command::new(env!("CARGO_BIN_EXE_dar"))
-                .args(["scan", "--predicate-file"]).arg(&path).arg("secret-missing-table"),
+                .args(["scan", "--predicate-file"])
+                .arg(&path)
+                .arg("secret-missing-table"),
         )?;
         assert_eq!(output.status.code(), Some(2));
         assert!(output.stdout.is_empty());
         let diagnostic = check_failure(&output.stderr, "configuration", "invalid_input_json");
-        assert!(diagnostic.contains(&format!("error_reason=\"{reason}\"")), "{diagnostic}");
+        assert!(
+            diagnostic.contains(&format!("error_reason=\"{reason}\"")),
+            "{diagnostic}"
+        );
+        assert!(
+            diagnostic.contains("argument=\"--predicate-file\""),
+            "{diagnostic}"
+        );
+        assert!(
+            diagnostic.contains(&format!("field_path=\"{field_path}\"")),
+            "{diagnostic}"
+        );
+        assert!(diagnostic.contains(expected), "{diagnostic}");
+        assert!(diagnostic.contains("hint="), "{diagnostic}");
         assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+
+        let output = run_with_timeout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .args(["scan", "--predicate-file"])
+                .arg(&path)
+                .args(["secret-missing-table", "--diagnostics=json"])
+                .env("RUST_LOG", "off"),
+        )?;
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let record = diagnostics::assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert_eq!(record["code"], "invalid_input_json");
+        assert_eq!(record["reason"], reason);
+        assert_eq!(record["argument"], "--predicate-file");
+        assert_eq!(record["field_path"], field_path);
+        assert!(
+            record["expected"].as_str().unwrap().contains(expected),
+            "{record}"
+        );
+        assert_eq!(record["recovery"], "fix_input");
+        assert_eq!(record["retryable"], false);
+        assert!(record.get("line").is_none());
     }
     Ok(())
 }
@@ -337,21 +477,25 @@ fn sort_by_id(batch: &RecordBatch) -> Result<RecordBatch, arrow::error::ArrowErr
 }
 
 fn run_with_timeout(command: &mut Command) -> io::Result<Output> {
+    run_with_stdout(command, Stdio::piped())
+}
+
+fn run_with_stdout(command: &mut Command, stdout: Stdio) -> io::Result<Output> {
     // Shell logging settings must not change a fixture's expected stderr.
     if !command.get_envs().any(|(key, _)| key == "RUST_LOG") {
         command.env_remove("RUST_LOG");
     }
-    let mut child = command
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
-    let mut stdout = child.stdout.take().unwrap();
+    let mut child = command.stdout(stdout).stderr(Stdio::piped()).spawn()?;
+    let stdout = child.stdout.take();
     let mut stderr = child.stderr.take().unwrap();
     // Drain both pipes while waiting so a full pipe cannot block the child.
     thread::scope(|scope| {
         let stdout = scope.spawn(move || {
             let mut bytes = Vec::new();
-            stdout.read_to_end(&mut bytes).map(|_| bytes)
+            if let Some(mut stdout) = stdout {
+                stdout.read_to_end(&mut bytes)?;
+            }
+            Ok::<_, io::Error>(bytes)
         });
         let stderr = scope.spawn(move || {
             let mut bytes = Vec::new();
@@ -513,7 +657,7 @@ fn verbosity_preserves_stdout_and_core_failure_identity() -> Result<(), Box<dyn 
             assert!(!text.contains("secret"), "{text}");
             let failures: Vec<_> = text
                 .lines()
-                .filter(|line| line.starts_with("ERROR "))
+                .filter(|line| line.starts_with("ERROR ") && line.contains("outcome=\"failed\""))
                 .collect();
             assert_eq!(failures.len(), 1, "{text}");
             let failure = failures[0];
@@ -526,6 +670,15 @@ fn verbosity_preserves_stdout_and_core_failure_identity() -> Result<(), Box<dyn 
                 assert!(failure.contains(&field), "{field}: {text}");
             }
             assert!(!failure.contains("cli.failed"), "{text}");
+            let corrections = text
+                .lines()
+                .filter(|line| line.contains("event=\"cli.input_correction\""))
+                .count();
+            assert_eq!(
+                corrections,
+                usize::from(code == "invalid_projection"),
+                "{text}"
+            );
         }
     }
     Ok(())

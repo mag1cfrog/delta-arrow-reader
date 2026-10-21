@@ -62,9 +62,15 @@ impl HttpTable {
                         )
                     }
                 );
-                let relative = path
-                    .strip_prefix(directory)
-                    .expect("entry is inside the fixture directory");
+                let relative = path.strip_prefix(directory).map_err(|_| {
+                    InvalidInputSnafu {
+                        message: format!(
+                            "HTTP fixture entry is outside its directory: {}",
+                            path.display()
+                        ),
+                    }
+                    .build()
+                })?;
                 let url =
                     url::Url::from_file_path(Path::new("/").join(relative)).map_err(|()| {
                         InvalidInputSnafu {

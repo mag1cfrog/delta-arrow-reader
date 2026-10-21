@@ -68,7 +68,9 @@ compares initialization choices and shows how to skip sampling or change its bud
 
 ## Benchmark results
 
-### Real S3: with and without the optimization
+<span id="real-s3-with-and-without-the-optimization"></span>
+
+### S3 benchmark: with and without partial-page reads
 
 We tested two tables generated from TPC-H data, each with about 60 million rows
 and deletion vectors. Matching rows were scattered throughout the files. Tests

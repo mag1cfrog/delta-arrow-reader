@@ -14,15 +14,14 @@
 //!
 //! Small-request calibration and later partial reads use the same client, so
 //! the measured costs reflect how those reads will run. Unsupported network
-//! settings or failed calibration leave queries on ordinary reads. Other URL
-//! schemes continue through Kernel's registered handlers.
+//! settings or failed calibration leave queries on ordinary reads.
 
 mod http_pool;
 
 use std::sync::Arc;
 
 use object_store::{
-    aws::{AmazonS3, AmazonS3Builder, AmazonS3ConfigKey},
+    aws::{AmazonS3, AmazonS3Builder, AmazonS3ConfigKey, AwsCredentialProvider},
     client::{ClientConfigKey, ClientOptions, HttpClient, HttpConnector},
     path::Path,
 };
@@ -33,6 +32,7 @@ use crate::DeltaStorageOptions;
 pub(super) fn build(
     url: &Url,
     options: &DeltaStorageOptions,
+    credential_provider: Option<&AwsCredentialProvider>,
 ) -> object_store::Result<(AmazonS3, Option<AmazonS3Builder>)> {
     // Preserve the URL path validation performed by parse_url_opts.
     Path::from_url_path(url.path())?;
@@ -50,6 +50,9 @@ pub(super) fn build(
             };
             builder = builder.with_config(key, value);
         }
+    }
+    if let Some(provider) = credential_provider {
+        builder = builder.with_credentials(Arc::clone(provider));
     }
     let store = builder.clone().build()?;
     let partial = partial_reads_supported.then(|| {
@@ -84,7 +87,58 @@ impl HttpConnector for PartialReadConnector {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use async_trait::async_trait;
+    use object_store::{aws::AwsCredential, client::CredentialProvider};
+
     use super::*;
+
+    #[derive(Debug, Default)]
+    struct RotatingAwsCredentials(AtomicUsize);
+
+    #[async_trait]
+    impl CredentialProvider for RotatingAwsCredentials {
+        type Credential = AwsCredential;
+
+        async fn get_credential(&self) -> object_store::Result<Arc<AwsCredential>> {
+            let generation = self.0.load(Ordering::SeqCst);
+            Ok(Arc::new(AwsCredential {
+                key_id: format!("key-{generation}"),
+                secret_key: format!("secret-{generation}"),
+                token: Some(format!("token-{generation}")),
+            }))
+        }
+    }
+
+    #[tokio::test]
+    async fn ordinary_and_partial_stores_share_renewable_credentials()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for location in [
+            "s3://bucket/table",
+            "https://account.r2.cloudflarestorage.com/bucket/table",
+        ] {
+            let provider = Arc::new(RotatingAwsCredentials::default());
+            let credentials: AwsCredentialProvider = provider.clone();
+            let (ordinary, partial) = build(
+                &Url::parse(location)?,
+                &DeltaStorageOptions::new(),
+                Some(&credentials),
+            )?;
+            let partial = partial.ok_or("partial reads unavailable")?.build()?;
+            assert!(Arc::ptr_eq(ordinary.credentials(), &credentials));
+            assert!(Arc::ptr_eq(partial.credentials(), &credentials));
+            for generation in 0..2 {
+                provider.0.store(generation, Ordering::SeqCst);
+                for store in [&ordinary, &partial] {
+                    let credential = store.credentials().get_credential().await?;
+                    assert_eq!(credential.key_id, format!("key-{generation}"));
+                    assert_eq!(credential.token, Some(format!("token-{generation}")));
+                }
+            }
+        }
+        Ok(())
+    }
 
     #[tokio::test]
     async fn preserve_options_credentials_and_unsupported_network_settings()
@@ -97,7 +151,7 @@ mod tests {
             ("AWS_REGION".into(), "us-west-2".into()),
             ("unrecognized_option".into(), "ignored".into()),
         ]);
-        let (ordinary, partial) = build(&url, &base)?;
+        let (ordinary, partial) = build(&url, &base, None)?;
         let partial = partial
             .ok_or("default S3 configuration should support partial reads")?
             .build()?;
@@ -119,7 +173,7 @@ mod tests {
         ] {
             let mut options = base.clone();
             options.insert(key.into(), value.into());
-            let (_, partial) = build(&url, &options)?;
+            let (_, partial) = build(&url, &options, None)?;
             assert!(
                 partial.is_none(),
                 "unsupported option {key} must keep ordinary reads"
@@ -128,9 +182,9 @@ mod tests {
         let mut http = base.clone();
         http.insert("AWS_ALLOW_HTTP".into(), "true".into());
         http.insert("AWS_ENDPOINT".into(), "http://127.0.0.1:1234".into());
-        assert!(build(&url, &http)?.1.is_some());
+        assert!(build(&url, &http, None)?.1.is_some());
         http.insert("AWS_CONNECT_TIMEOUT".into(), "invalid-duration".into());
-        assert!(build(&url, &http).is_err());
+        assert!(build(&url, &http, None).is_err());
         Ok(())
     }
 }

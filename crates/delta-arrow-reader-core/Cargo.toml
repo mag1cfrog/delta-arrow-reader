@@ -20,8 +20,10 @@ exclude = [
     "tests/range_planning_benchmark_harness.rs",
     "tests/reader.rs",
     "tests/reader/**",
+    "tests/renewable_credentials.rs",
     "tests/row_filter_benchmark_harness.rs",
     "tests/scan_scheduling_benchmark_harness.rs",
+    "tests/support/cloud_http.rs",
 ]
 
 # Explicit paths let Cargo load Python sdists where benchmark sources are excluded.
@@ -73,14 +75,8 @@ targets = [
     "x86_64-pc-windows-msvc",
 ]
 
-[lints.rust]
-missing_docs = "deny"
-
-[lints.clippy]
-expect_used = "deny"
-mod_module_files = "deny"
-panic = "deny"
-unwrap_used = "deny"
+[lints]
+workspace = true
 
 [dependencies]
 async-trait = "0.1"

@@ -7,7 +7,7 @@ use std::{
 
 use clap::Args;
 use sha2::{Digest, Sha256};
-use snafu::{ResultExt, ensure};
+use snafu::{OptionExt, ResultExt, ensure};
 
 use crate::{
     artifacts::{self, ArtifactManifest, file_sha256},
@@ -64,11 +64,19 @@ impl UploadReleaseImagesArgs {
             })
             .chain([(
                 image.index_path.as_str(),
-                image.index_digest.strip_prefix("sha256:").unwrap(),
+                image
+                    .index_digest
+                    .strip_prefix("sha256:")
+                    .context(InvalidInputSnafu {
+                        message: "container image index digest must use SHA256",
+                    })?,
             )])
         {
             let path = staging.path().join(relative);
-            fs::create_dir_all(path.parent().unwrap()).context(FileSnafu { path: &path })?;
+            let parent = path.parent().context(InvalidInputSnafu {
+                message: "image publication path must have a parent directory",
+            })?;
+            fs::create_dir_all(parent).context(FileSnafu { path: &path })?;
             fs::copy(self.directory.join(relative), &path).context(FileSnafu { path: &path })?;
             ensure!(
                 file_sha256(&path)? == digest,

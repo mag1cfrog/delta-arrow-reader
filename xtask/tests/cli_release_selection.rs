@@ -1,3 +1,5 @@
+//! Selection of trusted validation records for published releases.
+
 #![cfg(unix)]
 
 use std::{env, fs, process::Command};

@@ -7,10 +7,12 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | --- | --- |
 | See the table's columns and version | [`dar inspect`](#inspect-a-snapshot) |
 | Save selected rows as Arrow | [`dar scan`](#scan-rows) |
+| Aggregate, group, or sort rows with SQL | [`dar query`](#query-a-snapshot) |
 | Select rows by a condition | [Filter rows](#filter-rows) |
 | Connect to remote storage | [Storage options file](#storage-options-file) |
+| Read a Unity Catalog table by name | [Databricks profile](#read-a-unity-catalog-table) |
 | Change parallel reads or buffering | [Execution options](#execution-options) |
-| Handle a command's result in a script | [Inspection JSON](#inspection-json) and [exit statuses](#errors-and-process-status) |
+| Handle a command's result in a script | [Inspection JSON](#inspection-json) and [exit statuses](#exit-statuses-for-scripts) |
 
 The standalone command is `dar`. A Python wheel installs `delta-arrow-reader`
 instead; substitute that name in the examples. Both accept the same arguments.
@@ -19,8 +21,10 @@ For packages and runtime requirements, see [Installation](installation.md).
 ## Inspect a snapshot
 
 `inspect` returns the table version and column schema as JSON. It reads Delta
-metadata without reading row data or deletion-vector files. A table whose scan
-protocol is unsupported can still be inspected if its snapshot and schema load.
+metadata without reading row data or deletion-vector files. For a direct path or
+storage URL, a table whose scan protocol is unsupported can still be inspected
+if its snapshot and schema load. Unity Catalog targets require a supported read
+protocol.
 
 ```sh
 dar inspect /data/orders
@@ -35,13 +39,14 @@ spaces; each must arrive as one command-line argument. `--` ends option
 parsing and allows a table name beginning with `-`.
 
 ```text
-dar inspect [--table-version N] [--storage-options-file PATH] [--] TABLE
+dar inspect [--table-version N] [--storage-options-file PATH]
+            [--databricks-profile PROFILE] [--] TABLE
 ```
 
 <details markdown="1">
 <summary>Version bounds and argument parsing</summary>
 
-Both options may appear once. Omit `--table-version` to select the latest
+Each option may appear once. Omit `--table-version` to select the latest
 snapshot, or pass unsigned decimal digits from `0` through
 `18446744073709551615`. Signs, whitespace, fractions, exponents, and overflow
 are rejected. Missing values, unknown options, and extra arguments are errors.
@@ -55,6 +60,96 @@ requested version. Kernel validates the commits and checkpoints in that listing.
 Discovery does not search numeric version gaps.
 
 </details>
+
+## Read a Unity Catalog table
+
+Use an existing Databricks CLI workspace profile to resolve a table name and
+obtain temporary cloud credentials. DAR reads the Delta log and data files from
+S3, Azure, GCS, or R2 using local compute. `inspect` returns the snapshot's schema
+and version; `scan` streams its rows as Arrow IPC. Unity Catalog column metadata
+does not determine the output schema. Neither command submits SQL or starts a
+cluster or SQL warehouse.
+
+```sh
+dar inspect uc://main.sales.orders --databricks-profile work
+dar inspect uc://main.sales.orders --databricks-profile work --table-version 0
+dar scan uc://main.sales.orders --databricks-profile work \
+  --column customer_id --limit 100 > orders.arrow
+```
+
+Install the Databricks CLI in the same environment as DAR and make it available
+on `PATH`. DAR binaries, wheels, and images do not bundle it. The required
+commands and flags were checked with Databricks CLI 1.6.0; earlier versions and
+live workspace compatibility have not been validated. The CLI must support
+`tables get --include-manifest-capabilities` and
+`temporary-table-credentials generate-temporary-table-credentials --operation READ`.
+It handles the selected profile's PAT, user OAuth, or service-principal OAuth
+authentication. DAR does not start a login flow or read the CLI's token cache.
+
+An administrator must enable external data access on the metastore. The
+requesting principal needs `USE CATALOG`, `USE SCHEMA`, `SELECT`, and explicit
+`EXTERNAL USE SCHEMA`. Both the workspace and storage endpoint must be reachable.
+See [Databricks external access setup](https://docs.databricks.com/aws/en/external-access/admin).
+Selecting a profile does not grant additional permissions.
+
+For S3, supply the bucket's region through the existing storage options file.
+The credential response does not include it, and DAR does not assume a default:
+
+```json
+{"aws_region": "eu-west-1"}
+```
+
+```sh
+dar inspect uc://main.sales.orders --databricks-profile work \
+  --storage-options-file ./storage.json
+```
+
+These rules apply to Unity Catalog targets:
+
+- Use exactly three unquoted name components, separated by dots. Each component
+  contains ASCII letters, digits, underscores, or hyphens and cannot start with
+  a hyphen. Quoted identifiers, URL escapes, query strings, and fragments are
+  unsupported. The profile must be explicit and nonempty. Quote profile names
+  containing spaces. `--databricks-profile` is invalid for direct paths or URLs.
+- Only ordinary managed or external Delta tables with a supported read
+  protocol are admitted. Views, pipeline tables, shallow clones, row filters,
+  column masks, catalog commits (`catalogManaged`), and coordinated commits
+  are unsupported. Authorization failures never fall back to cloud credentials
+  from the environment.
+- Supported credentials are S3/R2 temporary key/secret/session-token credentials,
+  Azure user-delegation SAS or Azure AD bearer tokens, and GCS OAuth bearer tokens.
+  GCS locations use `gs://bucket/path`. Azure locations must
+  identify the account and container using `abfss://` or an Azure Blob/DFS HTTPS
+  URL. R2 locations use `r2://bucket@account.r2.cloudflarestorage.com/path`
+  or the equivalent `https://account.r2.cloudflarestorage.com/bucket/path`.
+  Other credential types, S3 access points, and other Azure/R2 endpoints are
+  unsupported.
+- Storage options may supply supported region and transport settings, including
+  endpoints, timeouts, and proxies. Credential, bucket, account, container,
+  authentication-source, and unsigned-access overrides are rejected, including
+  their aliases. S3 needs one nonempty region setting. R2 uses `auto` and needs
+  no region option; an explicit region must be `auto`. To override the R2
+  transport endpoint, use `aws_endpoint_url_s3`; the generic endpoint option
+  is rejected because the R2 URL would override it. Unknown options fail.
+- Credentials stay in memory for one command. Storage requests reuse the grant
+  until it approaches expiry, then request new READ credentials for the original
+  table ID and profile. Concurrent requests share one refresh. Every replacement
+  must keep the same storage root and credential type and have a future expiry.
+  If renewal fails, the command fails without using the old grant or falling
+  back to another identity. Renewal keeps the selected Delta snapshot and does
+  not restart a scan or repeat rows already written.
+
+UC scans accept the same projection, predicate, limit, snapshot-version, and
+execution options as direct-path scans. If renewal fails after output starts,
+the process exits unsuccessfully and leaves an incomplete Arrow stream.
+
+Each Databricks subprocess has a 30-second timeout, no interactive stdin, and
+a 1 MiB limit on each output stream. DAR captures and discards child diagnostics
+instead of forwarding them. Errors use tracing diagnostics on stderr with fixed
+messages that omit profile names, table names, storage URLs, and credentials.
+See [Errors and process status](#errors-and-process-status) for output and
+filtering rules. Check the selected profile's login and permissions separately
+when a metadata or credential request fails.
 
 ## Scan rows
 
@@ -71,6 +166,7 @@ before table loading, including for `--limit 0`.
 
 ```text
 dar scan [--table-version N] [--storage-options-file PATH]
+         [--databricks-profile PROFILE]
          [--predicate-file PATH] [--column NAME ... | --no-columns]
          [--execution-options-file PATH] [--target-partitions N] [--limit N] [--] TABLE
 ```
@@ -118,6 +214,63 @@ be incomplete. Scan or encoding errors exit 1 without writing the IPC end
 marker. Stdout failures, including an early pipe close, exit 3. Status 0 means
 the end marker was written and stdout was flushed. Shell redirects can leave
 partial files after failure; discard those files.
+
+## Query a snapshot
+
+`query` runs SQL locally through the Core DataFusion table provider. It opens
+one Delta snapshot and registers it as `t`. Use a local path or direct storage
+URL for `TABLE`; Unity Catalog targets are not yet supported by this command.
+
+```sh
+cat > query.sql <<'SQL'
+SELECT customer_id, count(*) AS orders, sum(total) AS total
+FROM t
+GROUP BY customer_id
+ORDER BY total DESC
+LIMIT 100
+SQL
+dar query /data/orders --sql-file query.sql > totals.arrow
+dar query /data/orders --table-version 0 --sql-file query.sql > original.arrow
+```
+
+```text
+dar query [--table-version N] [--storage-options-file PATH]
+          --sql-file PATH [--max-rows N] [--max-output-bytes BYTES]
+          [--memory-limit-bytes BYTES] [--] TABLE
+```
+
+The SQL file must contain one read-only query in UTF-8, at most 64 KiB, with
+a parser and expression-depth limit of 128, including chains of set operations
+such as `UNION`. Paths use the working directory; `-` names a
+literal file. SQL is not read from stdin. Malformed input is rejected before
+opening the table. Projections, predicates, aggregations, grouping, ordering,
+subqueries, and nonrecursive CTEs are supported. DDL, DML, COPY, session changes,
+EXPLAIN, recursive CTEs, and table functions are rejected. SQL cannot discover
+additional tables from file paths or URLs.
+
+Results use Arrow IPC stream framing on stdout, which must be a file or pipe.
+The command streams the complete SQL result, including empty results and
+`COUNT(*)`. Use SQL `LIMIT` to select a smaller result. Queries use the same
+snapshot selection and storage options as `inspect`, and skip table warmup.
+
+| Option | Default | Behavior |
+| --- | --- | --- |
+| `--max-rows` | `1000000` | Fail if the SQL result exceeds this many rows; zero is valid |
+| `--max-output-bytes` | `1073741824` (1 GiB) | Fail if Arrow output, including schema and framing, exceeds this many bytes |
+| `--memory-limit-bytes` | `268435456` (256 MiB) | Limit DataFusion's tracked execution memory; disk spill is disabled |
+
+These options accept unsigned decimal digits in the platform's `usize` range.
+Byte and memory limits must be positive. The memory pool does not cap total
+process RSS: Core read buffers, SQL planning, and IPC encoding allocate outside
+it. Sorting and grouping can require memory before producing output. There is
+currently no total-command deadline.
+
+Exceeding a ceiling fails with status 1 and leaves incomplete output. The CLI
+does not turn a query into a successful sample or write an IPC end marker after
+failure. As with `scan`, require valid Arrow output and status 0, and discard
+partial files after failure. With `--diagnostics=json`, query completion has
+`scope: "query"`, the selected version, and row, batch, and output-byte counts.
+This option controls stderr diagnostics; query results remain Arrow.
 
 ## Filter rows
 
@@ -233,16 +386,30 @@ and leave stdout empty.
 ## Storage options file
 
 `--storage-options-file` accepts a local UTF-8 JSON file containing an object
-of string keys and string values. For example, to access an HTTP endpoint:
+of string keys and string values. For example, save this as `storage.json`
+to select an S3 region when your environment already provides credentials:
 
 ```json
-{"allow_http":"true"}
+{"aws_region":"us-west-2"}
 ```
+
+Then pass the file when opening the table:
+
+```sh
+dar inspect --storage-options-file storage.json s3://example-bucket/orders
+```
+
+Use the same option with `dar scan`. The
+[storage guide](configuration.md#read-from-s3) explains table URLs and credentials,
+including [Azure](configuration.md#read-from-azure). Use its storage keys as JSON
+keys here. Keep files containing credentials out of source control.
 
 The CLI forwards keys and values unchanged, including case, spaces, and
 commas. The core reader interprets provider options. Omitting the file supplies
 an empty explicit map and keeps the core's environment and provider credential
 behavior. An empty object is also valid.
+
+For a local HTTP test endpoint, `{"allow_http":"true"}` enables plain HTTP.
 
 <details markdown="1">
 <summary>Storage file parsing and size limits</summary>
@@ -348,7 +515,8 @@ loading. Their failures also exit 2, preserving the core's redacted
 ## Inspection JSON
 
 A successful inspection writes one UTF-8 JSON object followed by a newline to
-stdout and leaves stderr empty. This example represents an empty schema:
+stdout. Diagnostic logging uses stderr and does not change this JSON.
+This example represents an empty schema:
 
 ```json
 {"format_version":1,"table_version":"0","schema":{"fields":[],"metadata":{}}}
@@ -390,107 +558,65 @@ the table author put there.
 
 ## Errors and process status
 
-The CLI subscribes to the core's tracing events and writes plain text to stderr.
-By default it shows WARN and ERROR, so successful commands are quiet unless a
-warning occurs. Core failures retain their operation identity, phase, code,
-reason, and available source category. The CLI reports its own failures with
-the same `error_phase`, `error_code`, and `error_reason` fields. For example:
+The CLI normally shows warnings and errors in the terminal. Data goes to
+standard output (`stdout`), while log messages go to standard error (`stderr`),
+so you can save them separately.
 
-```text
-ERROR delta_arrow_reader_cli: CLI command failed event="cli.failed" operation="cli_command" outcome="failed" error_phase="configuration" error_code="invalid_cli_argument" error_reason="argument_parse_failed" argument_kind=UnknownArgument
-```
+A failed command can leave an incomplete result file. Check the command's exit
+status before using the result: zero means success, and a nonzero status means
+failure. Use `--help` if the command reports an invalid argument.
 
-This replaces the former JSON stderr object with `phase`, `code`, and `message`.
-Stderr is diagnostic text; its layout, field order, and human messages are not a
-machine-readable interface. Scripts should use the exit status and stdout
-format. Inspection JSON, Arrow IPC, and the exit statuses below are unchanged.
-Core event fields are described in the [tracing reference](reference/tracing.md).
-
-Diagnostics omit argument values, file paths, URLs, input contents, credential
-names and values, and dependency messages. Argument failures include the
-parser's `argument_kind`. JSON failures include `json_kind` (`Syntax`, `Data`, or
-`Eof`), `json_line`, and `json_column`. Oversized input and predicate validation
-use fixed reasons, such as `input_file_too_large` or
-`predicate_depth_limit_exceeded`. Serde schema failures share `Data`; their
-messages are not parsed or printed. I/O failures retain `io_kind` and an OS error
-number when available. Arrow failures use the core's safe source classifier.
-
-Set `RUST_LOG` to `error`, `warn`, `info`, `debug`, or `trace` for more or less
-detail. `off` suppresses diagnostics without changing the command's exit status.
-Comma-separated target prefixes also work, for example
-`delta_arrow_reader=debug,delta_arrow_reader_cli=warn`. A bare level sets the
-default; otherwise unmatched targets use WARN. The `delta_arrow_reader` prefix
-also matches the CLI target; a more specific CLI directive overrides it.
-Target directives follow
-`tracing-subscriber`'s `Targets` filter, without dynamic span-value or regex
-matching. An unset or empty value uses WARN. An invalid value produces a safe
-warning and falls back to WARN without printing the value.
-
-Only `delta_arrow_reader`, `delta_arrow_reader_cli`, and their `::` subtargets
-are allowed. Dependency targets remain disabled even if explicitly requested,
-including with `RUST_LOG=trace`. More detail can add lines and spans on stderr;
-it does not change stdout. There is no file sink or format flag. Redirect stderr
-with your shell:
+For scripts and agents, add the global option `--diagnostics=json` before or
+after the command:
 
 ```sh
-RUST_LOG=debug dar inspect /data/table > snapshot.json 2> dar.log
-RUST_LOG=trace dar scan /data/table > rows.arrow 2> dar.log
+dar inspect /path/to/table --diagnostics=json > snapshot.json 2> diagnostics.jsonl
 ```
 
-Use `--help` for usage. A failed command can have emitted partial stdout; check
-its exit status before accepting the result.
+Place the option before `--`, which marks the end of options. Stderr contains
+one versioned JSON terminal record, including argument errors
+or successful completion. It remains enabled with `RUST_LOG=off`; stdout and
+exit statuses are unchanged. See the
+[machine diagnostics reference](reference/cli-diagnostics.md#machine-diagnostics)
+for fields and completion checks.
+
+### Enable more detail
+
+In the default human mode, set `RUST_LOG=debug` before your command to show more detail:
+
+```sh
+RUST_LOG=debug dar inspect /path/to/table
+```
+
+To save that detail in `dar.log`, use `2>`:
+
+```sh
+RUST_LOG=debug dar inspect /path/to/table > snapshot.json 2> dar.log
+RUST_LOG=debug dar scan --limit 10 /path/to/table > rows.arrow 2> dar.log
+```
+
+`snapshot.json` or `rows.arrow` contains the result; `dar.log` contains the log.
+Use `info` for progress messages, `warn` for the default verbosity, `error` for
+failures only, or `trace` for the most detail. `off` suppresses logs while
+preserving the exit status.
+
+Changing the log level does not change the result format. Only reader and CLI
+diagnostics are enabled, even at `trace`. Use shell redirection to save logs;
+the CLI has no separate file sink. Machine mode suppresses these logs.
+
+### Exit statuses for scripts
+
+Use the exact status when a script needs to distinguish failures:
 
 | Status | Meaning |
 | --- | --- |
 | 0 | Complete success, including help and version |
 | 2 | Invalid CLI arguments or local input configuration before loading |
-| 1 | Runtime, reader, or Arrow IPC encoding failure |
+| 1 | Runtime, reader, SQL, resource-limit, or Arrow IPC encoding failure |
 | 3 | stdout write or flush failure, including a broken pipe |
 
-<details markdown="1">
-<summary>Diagnostic codes and output after a failure</summary>
-
-| CLI phase | Code | Meaning |
-| --- | --- | --- |
-| `configuration` | `invalid_cli_argument` | Invalid command, argument, or option value |
-| `configuration` | `invalid_input_json` | Invalid JSON structure, encoding, duplicate key, or size |
-| `configuration` | `input_file_io` | Input file could not be opened or read |
-| `configuration` | `invalid_configuration` | A native execution setting is outside its allowed range |
-| `execution` | `runtime_initialization` | Runtime creation failed or reader execution panicked |
-| `execution` | `output_write` | stdout could not be written or flushed |
-| `execution` | `arrow_ipc` | Arrow IPC encoding failed |
-
-Provider configuration rejected during table loading is a reader failure
-(status 1), even if the option came from a valid local JSON file.
-
-The complete inspection JSON is built before writing. Failures before output
-leave stdout empty. Consumers must check the process status and discard output
-from any unsuccessful invocation, including partial output after a write
-failure. Status 3 is preserved even when stderr cannot be written.
-
-</details>
-
-<details markdown="1">
-<summary>Threads, blocked output, cancellation, and signals</summary>
-
-Each command runs in one process. The CLI drives its asynchronous runtime on
-the main thread and ignores `TOKIO_WORKER_THREADS`. Scans use a separate output
-thread so a blocked stdout pipe does not stall network reads. The output thread
-finishes writing and flushing each batch before requesting another. The core
-uses background threads for blocking work. Runtime shutdown does not wait for
-unfinished blocking work, including core engine cleanup.
-
-An unrecoverable panic, including failure to start a reader worker, terminates
-the process with status 1 and a synchronous ERROR with code
-`runtime_initialization` and reason `process_panicked`. Panic payloads and
-backtraces are omitted. Runtime setup failures have their own reason and safe
-I/O category.
-Outside PID 1, Linux signals keep their normal termination behavior: a killed
-process is unsuccessful and need not emit an error event. This applies while loading,
-waiting for a batch, or writing to a blocked pipe. A parent that cancels the
-child must also wait for it to exit and reap it.
-
-</details>
+For target-specific filters, diagnostic fields, or process lifecycle rules,
+see the [CLI diagnostics reference](reference/cli-diagnostics.md).
 
 ## Installation alternatives
 
@@ -632,6 +758,7 @@ and exit statuses.
 
 `-h` is short for `--help`, and `-V` is short for `--version`. For inspection
 help, use `dar inspect --help` or `dar help inspect`. Scan help is available
-through `dar scan --help` or `dar help scan`.
+through `dar scan --help` or `dar help scan`. For SQL, use `dar query --help`
+or `dar help query`.
 
 </details>

@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use snafu::{ResultExt, ensure};
+use snafu::{OptionExt, ResultExt, ensure};
 
 use super::TestImageArgs;
 use crate::{
@@ -21,7 +21,7 @@ use crate::{
     process::{check_error, check_inspection},
     scan::{
         corpus::check_corpus,
-        ipc::{IpcTable, check_scan_output},
+        ipc::{IpcTable, check_arrow_output},
     },
 };
 
@@ -75,7 +75,9 @@ pub(super) fn run(args: TestImageArgs) -> Result<()> {
         name: directory
             .path()
             .file_name()
-            .unwrap()
+            .context(InvalidInputSnafu {
+                message: "image fixture directory must have a name",
+            })?
             .to_string_lossy()
             .into_owned(),
         corpus,
@@ -255,7 +257,7 @@ test -r /usr/share/doc/dar/NOTICE
                         }
                     );
                     if action == "scan" {
-                        check_scan_output(&output)?.check_matches(&expected, None)?;
+                        check_arrow_output(&output)?.check_matches(&expected, None)?;
                     } else {
                         check_inspection(&output)?;
                     }

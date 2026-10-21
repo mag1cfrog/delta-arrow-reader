@@ -1,12 +1,22 @@
 use serde_json::{Value, json};
-use snafu::ResultExt;
 
 use super::*;
 
 fn parse_text(text: &str) -> Result<DeltaPredicate, Error> {
-    serde_json::from_str::<PredicateInput>(text)
-        .context(crate::InputJsonSnafu)?
-        .into_predicate()
+    let result =
+        crate::input::parse_json::<PredicateInput>(text.as_bytes(), JsonInputKind::Predicate)?
+            .into_predicate();
+    if result.is_ok() {
+        assert!(
+            crate::input::schema_errors::diagnose_schema_error(
+                text.as_bytes(),
+                JsonInputKind::Predicate
+            )
+            .is_none(),
+            "{text}"
+        );
+    }
+    result
 }
 
 fn parse(value: Value) -> DeltaPredicate {
@@ -17,6 +27,50 @@ fn parse_scalar(value: Value) -> DeltaScalar {
     match parse(json!({"op": "eq", "column": "id", "value": value})) {
         DeltaPredicate::Compare { value, .. } => value,
         other => panic!("expected comparison, got {other:?}"),
+    }
+}
+
+#[test]
+fn integer_schema_errors_keep_nested_paths_and_the_declared_width() {
+    for (kind, value, range) in [
+        ("int8", "128", "from -128 to 127"),
+        ("int16", "32768", "from -32768 to 32767"),
+        ("int32", "2147483648", "from -2147483648 to 2147483647"),
+        ("date32", "2147483648", "from -2147483648 to 2147483647"),
+        (
+            "int64",
+            "9223372036854775808",
+            "from -9223372036854775808 to 9223372036854775807",
+        ),
+        (
+            "timestamp_us",
+            "9223372036854775808",
+            "from -9223372036854775808 to 9223372036854775807",
+        ),
+        (
+            "decimal128",
+            "170141183460469231731687303715884105728",
+            "from -170141183460469231731687303715884105728 to 170141183460469231731687303715884105727",
+        ),
+    ] {
+        let mut scalar = json!({"type": kind, "value": value});
+        if kind == "timestamp_us" {
+            scalar["timezone"] = Value::Null;
+        } else if kind == "decimal128" {
+            scalar["precision"] = json!(38);
+            scalar["scale"] = json!(0);
+        }
+        let text = json!({"op": "not", "arg": {
+            "op": "eq", "column": "secret-column", "value": scalar,
+        }})
+        .to_string();
+        let record = parse_text(&text).unwrap_err().to_json_diagnostic();
+        assert_eq!(record["field_path"], "/arg/value/value", "{kind}: {record}");
+        assert!(
+            record["expected"].as_str().unwrap().ends_with(range),
+            "{kind}: {record}"
+        );
+        assert!(!record.to_string().contains("secret"));
     }
 }
 

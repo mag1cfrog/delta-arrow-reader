@@ -1,3 +1,5 @@
+//! Python release identity checks in temporary Git repositories.
+
 use std::{env, error::Error, fs, path::PathBuf, process::Command};
 
 use serde_json::{Value, json};

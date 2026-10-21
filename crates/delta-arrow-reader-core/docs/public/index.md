@@ -11,7 +11,8 @@ instead of loading the whole result into memory. Each batch is a group of rows
 in Apache Arrow format, ready to use in your application.
 
 The reader works with existing Delta tables. It does not write tables or manage
-transactions.
+transactions. Queries run on your machine or in your application's environment,
+without a Spark or Databricks cluster. Cloud tables require direct storage access.
 
 ## Start here
 
@@ -25,8 +26,10 @@ steps for that interface:
 
 ## After your first read
 
-- Choose [initialization and resource settings](configuration.md) for your application.
+- Troubleshoot a failed read in [Python](python-api/errors.md),
+  [the command line](cli.md#errors-and-process-status), or [Rust](diagnostics.md).
+- Connect to [S3 or Azure](configuration.md), or adjust opening time and resource use.
 - Learn [how the reader works](architecture.md).
 - Review the [performance reports](benchmarks.md) and their test conditions.
-- Look up a type or method in the [Python API reference](python-api/index.md) or
+- Look up a type or method in the [Python API reference](python-api/index.md#api-reference) or
   [Rust API reference](https://docs.rs/delta-arrow-reader).

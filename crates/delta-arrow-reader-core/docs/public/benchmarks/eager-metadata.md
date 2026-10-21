@@ -53,7 +53,8 @@ processes, in seconds. Engine startup is excluded.
 
 ## Interpreting reuse savings
 
-These runs use `WarmupMode::Automatic`. For their S3 tables, DAR prepares
+These runs use automatic warmup (`warmup="automatic"` in Python,
+`WarmupMode::Automatic` in Rust). For their S3 tables, DAR prepares
 reusable metadata and samples the connection while loading the table. Both
 queries share that initialized provider. The measurements combine several
 effects: avoiding repeated initialization, reusing metadata and the connection

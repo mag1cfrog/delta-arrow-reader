@@ -1,3 +1,7 @@
+//! Python wheel contents, filenames, metadata, and archive validation.
+
+#![allow(clippy::unwrap_used)]
+
 use std::{fs, path::Path, process::Command};
 
 mod support;
