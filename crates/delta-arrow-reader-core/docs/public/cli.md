@@ -10,6 +10,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | Aggregate, group, or sort rows with SQL | [`dar query`](#query-a-snapshot) |
 | Select rows by a condition | [Filter rows](#filter-rows) |
 | Connect to remote storage | [Storage options file](#storage-options-file) |
+| Select S3 credentials from a file or environment | [S3 credential sources](#s3-credential-sources) |
 | Read a Unity Catalog table by name | [Databricks profile](#read-a-unity-catalog-table) |
 | Change parallel reads or buffering | [Execution options](#execution-options) |
 | Handle a command's result in a script | [Inspection JSON](#inspection-json) and [exit statuses](#exit-statuses-for-scripts) |
@@ -40,7 +41,7 @@ parsing and allows a table name beginning with `-`.
 
 ```text
 dar inspect [--table-version N] [--storage-options-file PATH]
-            [--databricks-profile PROFILE] [--] TABLE
+            [--auth-source json|env] [--databricks-profile PROFILE] [--] TABLE
 ```
 
 <details markdown="1">
@@ -166,7 +167,7 @@ before table loading, including for `--limit 0`.
 
 ```text
 dar scan [--table-version N] [--storage-options-file PATH]
-         [--databricks-profile PROFILE]
+         [--auth-source json|env] [--databricks-profile PROFILE]
          [--predicate-file PATH] [--column NAME ... | --no-columns]
          [--execution-options-file PATH] [--target-partitions N] [--limit N] [--] TABLE
 ```
@@ -235,6 +236,7 @@ dar query /data/orders --table-version 0 --sql-file query.sql > original.arrow
 
 ```text
 dar query [--table-version N] [--storage-options-file PATH]
+          [--auth-source json|env]
           --sql-file PATH [--max-rows N] [--max-output-bytes BYTES]
           [--memory-limit-bytes BYTES] [--] TABLE
 ```
@@ -387,7 +389,7 @@ and leave stdout empty.
 
 `--storage-options-file` accepts a local UTF-8 JSON file containing an object
 of string keys and string values. For example, save this as `storage.json`
-to select an S3 region when your environment already provides credentials:
+to select an S3 region while using explicitly selected environment credentials:
 
 ```json
 {"aws_region":"us-west-2"}
@@ -396,7 +398,7 @@ to select an S3 region when your environment already provides credentials:
 Then pass the file when opening the table:
 
 ```sh
-dar inspect --storage-options-file storage.json s3://example-bucket/orders
+dar inspect --auth-source env --storage-options-file storage.json s3://example-bucket/orders
 ```
 
 Use the same option with `dar scan`. The
@@ -404,10 +406,11 @@ Use the same option with `dar scan`. The
 including [Azure](configuration.md#read-from-azure). Use its storage keys as JSON
 keys here. Keep files containing credentials out of source control.
 
-The CLI forwards keys and values unchanged, including case, spaces, and
-commas. The core reader interprets provider options. Omitting the file supplies
-an empty explicit map and keeps the core's environment and provider credential
-behavior. An empty object is also valid.
+Without `--auth-source`, the CLI forwards keys and values unchanged, including
+case, spaces, and commas. The core reader interprets provider options. Omitting
+the file supplies an empty map; an empty object is also valid. This path does
+not automatically read AWS access keys from the environment. Use
+`--auth-source env` to select them.
 
 For a local HTTP test endpoint, `{"allow_http":"true"}` enables plain HTTP.
 
@@ -422,6 +425,64 @@ against the working directory. A path of `-` names a local file; it does not
 read standard input.
 
 </details>
+
+## S3 credential sources
+
+`inspect`, `scan`, and `query` accept `--auth-source json|env` for explicit S3
+access-key credentials. The key ID and secret key must both be present; a
+session token is optional. The source is loaded once per command. Expired or
+denied credentials fail the read without selecting another identity. Supply
+updated credentials when starting another command.
+
+`--auth-source json` requires `--storage-options-file`. That file supplies the
+credentials and storage configuration; AWS environment credentials are ignored.
+For example, provision a protected `storage.json` file with this shape:
+
+```json
+{
+  "aws_access_key_id": "<access-key-id>",
+  "aws_secret_access_key": "<secret-access-key>",
+  "aws_region": "eu-west-1"
+}
+```
+
+```sh
+dar inspect s3://example-bucket/orders --auth-source json --storage-options-file storage.json
+```
+
+`--auth-source env` reads only `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+`AWS_SESSION_TOKEN`, `AWS_REGION`, and `AWS_DEFAULT_REGION`. Provision these in
+the command's environment. An optional storage-options file may supply
+noncredential settings, but credential fields in that file are rejected.
+
+```sh
+dar query s3://example-bucket/orders --auth-source env --sql-file count.sql > count.arrow
+```
+
+JSON region settings take precedence over both environment region settings.
+Within either source, `aws_region`/`AWS_REGION` takes precedence over
+`aws_default_region`/`AWS_DEFAULT_REGION`. Without a region, the native S3
+builder uses `us-east-1`; set the bucket's region explicitly for other regions.
+
+JSON keys use the native S3 aliases and are case-insensitive. For example,
+`access_key_id` and `AWS_ACCESS_KEY_ID` refer to the same setting, as do
+`token`, `session_token`, `aws_token`, and `aws_session_token`. Supplying two
+aliases for the same setting is an error, even if their values match.
+Credentials must be nonempty and contain no control characters.
+
+Explicit source selection accepts region, endpoint, HTTP client, virtual-hosted
+request, unsigned-payload, checksum, and requester-pays settings. It rejects
+unknown keys, bucket overrides, unsigned requests, and provider-selection
+settings. It does not select AWS profiles, SSO, web identity, container
+credentials, or instance metadata. The selector currently supports S3 only;
+Unity Catalog uses `--databricks-profile` and rejects `--auth-source`.
+
+Invalid source configuration exits with status 2 and diagnostic code
+`invalid_storage_authorization`. Storage failures retain the reader's normal
+diagnostics. Credential values and file contents are omitted from both text
+and JSON diagnostics. Keep credential files out of source control and restrict
+access, for example with `chmod 600 storage.json` on Unix. A file reference does
+not isolate credentials from an agent or process that can read that file.
 
 ## Execution options
 

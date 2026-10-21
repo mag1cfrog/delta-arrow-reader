@@ -2,7 +2,11 @@
 
 #![allow(clippy::panic, clippy::unwrap_used)]
 
+#[cfg(unix)]
+mod cloud_storage;
 mod diagnostics;
+#[cfg(unix)]
+mod direct_credentials;
 mod predicates;
 mod query;
 #[cfg(unix)]
