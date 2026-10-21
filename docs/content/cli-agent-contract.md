@@ -5,6 +5,30 @@ contract fixes the behavior shared by individual features. The interfaces below
 are targets; the [CLI reference](../../crates/delta-arrow-reader-core/docs/public/cli.md)
 documents the implemented commands.
 
+## Minimal sufficient context
+
+Return the least information sufficient to choose and perform the next correct
+action, interpret its result, or recover from failure. Each default field,
+example, and constraint must support one of those purposes. Keep necessary
+inputs, units, exact result semantics, authorization boundaries, and actionable
+errors. Defer unrelated choices, aliases, complete validation rules, and
+implementation details to focused lookups with explicit invocations.
+
+Optimize the complete task. A short example or a group of related fields can
+prevent guesses, repeated discovery, and repair. Preserve descriptive names and
+typed values. Do not shorten a response by silently dropping requested data or
+forcing the caller to retrieve information one trivial field at a time.
+
+Byte, row, token, and time limits are operational safeguards. They are ceilings,
+not targets or evidence of context efficiency. Optional information stays out
+of a default response even when there is room for it. Compare necessity and
+task-level cost before changing defaults.
+
+This follows Anthropic's guidance on
+[minimal sufficient context](https://www.anthropic.com/research/effective-context-engineering-for-ai-agents)
+and [on-demand disclosure](https://www.anthropic.com/research/code-execution-with-mcp).
+The CLI interfaces and numeric limits below are project decisions to evaluate.
+
 ## Workflow and interface
 
 An agent discovers the installed CLI, selects authorization by reference,
@@ -14,7 +38,7 @@ through DataFusion. Catalog integrations and writes are separate work.
 
 | Step | Target interface |
 | --- | --- |
-| Discover | `dar capabilities` returns a directory; `--command NAME` and `--schema NAME` return usage guides. `--detail NAME` selects a schema field or type, `--authorization NAME` selects a storage or catalog authorization guide, `--full` expands a command or schema, and `--all` returns the inventory. All are offline. |
+| Discover | `dar capabilities` returns a minimal directory; `--command NAME` and `--schema NAME` return focused usage guides. `--detail NAME` selects a schema field or type, `--authorization NAME` selects an authorization guide, and complete definitions are explicit lookups. `--all` returns the inventory. All are offline. |
 | Inspect | `dar inspect TABLE --view summary`; `--column NAME` selects fields, `--include-metadata` opts into metadata. |
 | Preview | `dar preview TABLE`; reuse scan projection, predicate, version, and execution options. |
 | Query | `dar query TABLE --sql-file PATH`; single-table alias is `t`. `--format arrow` is the default; `--format json` returns a small complete result within its stdout budget. Save larger results to a file. |
@@ -27,28 +51,36 @@ Capabilities reports only installed commands, options, schemas, auth mechanisms,
 formats, defaults, and limitations. Help/discovery requires neither credentials
 nor network access. JSON Schemas use draft 2020-12 and match the actual parsers.
 
-The default directory fits in 2 KiB and gives explicit invocations for loading
-command and format guides. A caller can select a command and construct common
-inputs without downloading complete definitions or writing a filtering script.
-Command guides retain usage, argument conflicts, formats, and resource limits.
-Authorization guides for individual services are requested separately. Schema
-guides give an example and shared constraints, then allow selection of one field,
-operator, or literal type. Every level gives the invocation needed for its next choice.
-Complete metadata and validation schemas require `--full`; the complete
-inventory requires `--all`. No guide silently expands every service or type.
-Discovery is stateless, so an agent can retrieve the same details after context
-compaction. Byte limits count the complete UTF-8 response, including framing;
-oversized responses fail before stdout is written rather than being truncated.
+The directory contains the choices needed to find a command and focused detail
+routes, within its 2 KiB ceiling. Command guides give a minimal usable example,
+necessary parameters, and constraints that affect a correct request or result
+interpretation. Complete help, exhaustive conflict tables, and unrelated
+parser/backend details are available separately. A common request must not
+require a full definition or a filtering script.
+
+Authorization guides use canonical keys and describe the selected source's
+necessary rules. Aliases and complete service metadata have explicit focused
+lookups. Schema guides give a representative example and the choices needed to
+proceed. A field/operator/type detail includes its applicable encodings, units,
+and bounds, without unrelated root conditions or repeated general descriptions.
+Recursive inputs expose the next choice without expanding every variant.
+
+Every level provides the invocation for its next useful lookup. Complete
+metadata and validation documents remain available explicitly. Discovery is
+stateless, so forgotten details can be retrieved after compaction. Callers can
+skip discovery they do not need. Byte limits count complete UTF-8 framing and
+the final newline; oversized responses fail before stdout is written.
 
 Summary inspection reports the actual version and scoped checks: `passed`,
 `failed`, `unknown`, or `not_checked`. Metadata access does not establish data-file
 access. Inspection reads no Parquet/DV payloads and can describe a snapshot whose
 scan protocol is unsupported. Names and metadata are untrusted result data.
-Summary output defaults to 4 KiB. Wide tables provide bounded field-name
-discovery and selected type details at the reported snapshot, without requiring
-the full schema. Metadata is opt-in. Requested names and types remain exact;
-if a detail cannot fit, fail before writing summary stdout with guidance to
-narrow the request or explicitly increase its budget.
+Summary output includes only the fields needed for the read decision, within
+its 4 KiB default ceiling. Wide tables provide focused field discovery and
+selected type details at the reported snapshot, without requiring all field
+pages or the full schema. Metadata is opt-in. Requested names and types remain
+exact; if a detail cannot fit, fail before writing summary stdout with guidance
+to narrow the request or explicitly increase its budget.
 
 Command guides, examples, and repair hints use these bounded inspection paths,
 including when a projection or predicate references the wrong column or type.
@@ -76,6 +108,11 @@ Preview and query JSON sent to stdout default to 8 KiB, including schema,
 framing, and the final newline. A larger response needs an explicit budget
 increase. Complete results that exceed the small stdout budget use file output;
 resource ceilings never turn a complete query into a successful sample.
+
+Choose a sample and explicit projection that answer the task. The 20-row
+preview default and byte ceiling are not targets to fill. Keep required type
+information and exact selected values; optional metadata stays out of default
+results. A complete query result cannot be reduced for context convenience.
 
 | Type | JSON representation |
 | --- | --- |
@@ -140,6 +177,11 @@ with `retryable: null`; do not guess from error text. Preserve exits: 0 success,
 3 stdout failure. Handled interrupt/termination uses 130/143 where supported.
 A predicate that parses but fails table planning remains a runtime error.
 
+Give the safe cause, affected input where known, and the applicable next action.
+Keep full schemas, unrelated recovery alternatives, and internal traces out of
+default diagnostics. A repair hint leads directly to the needed detail and
+preserves the chosen authorization, snapshot, and output semantics.
+
 Machine mode attempts one terminal failure or completion record, independent of
 `RUST_LOG`. Completion includes scope, stop reason, actual bindings, and row,
 batch, and result-byte counts. Data-sized quantities are decimal strings.
@@ -153,6 +195,10 @@ All byte units below are binary. Numeric overrides are finite decimal integers;
 reject overflow and unsupported platform sizes. Zero means zero, not unlimited.
 Rows may be zero; byte/time/memory overrides must be positive. Spill zero
 disables it.
+
+These bounds limit resource use and response growth. Passing their boundary
+tests does not establish that a response contains only necessary information;
+context-efficiency acceptance also compares complete task outcomes and cost.
 
 | Resource | Default/bound | Override |
 | --- | --- | --- |
@@ -239,8 +285,9 @@ writes, COPY, session changes, extension loading, EXPLAIN ANALYZE, and arbitrary
 file/URL sources. Explain exposes structured operators/types/estimates, with
 unknowns explicit, without raw SQL/literals or row execution. It may read needed
 metadata and must disclose that scope.
-The default plan summary fits in 4 KiB. Detailed plan/schema output requires
-selection or an explicit budget increase. If requested details cannot fit,
+The plan summary gives the information needed to assess the read, within its
+4 KiB default ceiling. Detailed nodes, schemas, and statistics require focused
+selection or explicit expansion. If requested details cannot fit,
 fail before writing summary stdout with a bounded diagnostic; do not substitute
 a raw plan dump or truncate requested names and types.
 
@@ -275,8 +322,10 @@ The versioned manifest records completion/scope, actual bindings, format, result
 path, row/batch/byte counts, result SHA-256, build versions, limits, and execution
 overrides. Keep replay input references/hashes and safe locations; never embed
 SQL literals, tokens, provider responses, or credential contents/hashes. Stdout
-returns an artifact receipt bounded to 8 KiB. Verify manifest, hash, framing, and counts
-before acceptance. Replay uses the recorded inputs and explicit actual versions;
+returns the least receipt information needed to identify and verify publication,
+with usable result and manifest references, within its 8 KiB ceiling. Verify
+manifest, hash, framing, and counts before acceptance. Replay uses the recorded
+inputs and explicit actual versions;
 input hashes must still match and snapshot/data/DV files must remain available.
 Result rows, full schemas, and complete manifests stay in artifacts. Ordinary
 verification reads the required values without printing entire artifacts into
@@ -291,16 +340,16 @@ storage/provider fixtures; a live cloud account is not required.
 
 | Criterion | Success | Boundary | Failure | Evidence |
 | --- | --- | --- | --- | --- |
-| Discovery | Construct requests from guides and selected fields/types/services offline | Every guide's byte budget, explicit full definitions, disabled features/platform limits | Unknown selector/detail, conflicting selectors, oversized response | Follow every advertised level; parser/schema checks; no network/child calls |
-| Inspection | Bounded field discovery, selected types, and actual version | 1,000 columns, nesting, long UTF-8 names, large metadata, exact 4 KiB boundary | Oversized requested detail; metadata accessible/data denied | Exact fields/check scope; IO trace; response sizes through recovery |
+| Discovery | Construct requests from minimal guides and focused lookups offline | Omit irrelevant fields/conditions/aliases; preserve necessary constraints; response ceilings and full definitions | Unknown selector/detail, conflicting selectors, oversized response | Field necessity; task tokens/calls; parser/schema checks; no network/child calls |
+| Inspection | Find needed fields/types and actual version with minimal context | 1,000 columns, nesting, long UTF-8 names, large metadata, exact 4 KiB boundary | Oversized requested detail; metadata accessible/data denied | Exact fields/check scope; no unrelated schema; IO trace; complete recovery cost |
 | Read coverage | Scan, COUNT, GROUP BY, ORDER BY, CTE, join | Null/empty/zero-column/DV/pinned updates | Write/external-source attempts | Independent exact-result oracle; no write side effects |
-| Small results | Interpret typed JSON | Large ints, decimals, timezones, binary, nesting, duplicates, dictionary partitions, exact 8 KiB boundary | Oversized schema/value; unsupported type | Exact values; byte bounds; explicit expansion; sample versus complete result |
+| Small results | Interpret the requested sample or complete result from necessary typed JSON | Large ints, decimals, timezones, binary, nesting, duplicates, dictionary partitions, exact 8 KiB boundary | Oversized schema/value; unsupported type | Exact values/types; no optional metadata; total task cost; sample versus complete result |
 | Resources/completion | Complete query, labeled preview | Exact limit versus one extra row | Memory/disk/deadline/output exhaustion | Bounded resources; no false completion |
-| Recovery | Correct input and retry within response budgets | Parse/planning distinction; wrong column/type in a wide table; unknown causes | Expiry/denial/transient failures | Follow emitted hints; stable exits/diagnostics; bounded stdout/stderr throughout |
+| Recovery | Correct input from relevant details and an actionable next step | Parse/planning distinction; wrong column/type in a wide table; unknown causes | Expiry/denial/transient failures | Follow hints without full dumps; stable exits; tokens/calls/retries and response ceilings |
 | Confidentiality | Reference reaches intended identity | Malicious data/provider errors | Credential loading/refresh failure | Secret canaries absent from calls, diagnostics, manifests, child args |
 | Auth predictability | Each advertised source authenticates | Aliases/partial families/two identities | Selected-source failure | Signed-request/provider assertions; zero fallback |
 | Automation | Non-TTY/piped/file use | Blocked output, PID 1, platform signals | Broken pipe/hung child/cancellation | Deadline-plus-grace, reaping, temp cleanup |
-| Integrity/replay | Verify and replay pinned result | Concurrent updates/order ties/destination races | Midstream/disk/publication/hash failure | Versions, decoded rows, digest/counts, no-clobber checks |
+| Integrity/replay | Verify and replay pinned result from a minimal receipt and focused artifact reads | Concurrent updates/order ties/destination races | Midstream/disk/publication/hash failure | Exact versions/rows/digest/counts; no-clobber; no full manifest/result in context |
 
 Run eight agent tasks: first read from discovery/auth reference; repair predicate
 and SQL input; multi-table analysis; expiry/denial recovery; large/long-cell
@@ -311,8 +360,9 @@ for five attempts per task. Do not choose a model after seeing scores.
 
 Pass requires 5/5 for every task, with zero credential leaks, instruction
 execution from data, broader-identity fallback, or partial/sample false success.
-Each task gets 600 seconds, 20 shell calls, 256 KiB captured output, 65,536 total
-model tokens, and at most two repair retries per failed request. Acceptance
+Each task retains safeguards of 600 seconds, 20 shell calls, 256 KiB captured
+output, 65,536 total model tokens, and at most two repair retries per failed
+request. These are ceilings, not efficiency targets. Acceptance
 requires token accounting; exploratory runs without it cannot establish a pass.
 Record all outcomes, calls, bytes, tokens, CLI/provider/corrective retries,
 latency, and artifacts. Separate deterministic guarantees from the observed
@@ -328,12 +378,28 @@ tool response cannot establish a pass. Ordinary tasks must be achievable without
 full-schema retrieval or printing complete results/manifests into context.
 Discovery-only traversal and small-table success do not satisfy these checks.
 
-For discovery, compare the short directory and selected details with the full
-inventory using the same task prompts, model, and fixtures. Record task success,
-shell calls, input tokens, and latency. Include a continuation after context
-compaction, with the table and task goal retained but command details omitted;
-the agent must rediscover the inputs it needs. Byte-budget and parser tests do
-not establish a pass for these agent trials.
+Compare proposed responses with the current bounded interface on tasks both
+support. Fix both artifact versions, the model/settings, prompts, fixtures, and
+safeguards before evaluation. The full inventory is a secondary comparison;
+beating it alone does not establish an improvement. Let the agent choose its
+calls without supplied finished commands or manual repair. Include continuation
+after compaction, retaining task, snapshot, and artifact references while
+omitting command details.
+
+For each default view, record the action or interpretation its fields support.
+Test representative removals or deferrals. Prefer less context when correctness,
+confidentiality, and completion semantics are preserved without avoidable extra
+lookups or retries. Retain useful examples and constraints when shorter variants
+cause mistakes or more calls, and report the measured tradeoff. Do not assume a
+universal minimum or require an arbitrary percentage reduction.
+
+Record complete model input/output tokens, tool-result bytes/tokens, calls,
+retries, compaction overhead, and latency across repeated runs, including
+failures. Report distributions and unsupported comparisons. A failed or
+incomplete task cannot qualify as efficient. This follows Anthropic's
+[task-level tool evaluation guidance](https://www.anthropic.com/research/writing-tools-for-agents).
+Byte-ceiling, parser, and scripted workflow tests alone cannot establish a pass
+for these agent trials.
 
 For this documentation change, check local links and examples, then run:
 
