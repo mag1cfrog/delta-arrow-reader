@@ -95,3 +95,114 @@ fn rejected_calls_preserve_the_session_and_have_safe_errors() -> PyResult<()> {
         Ok(())
     })
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn runtime_creation_failures_are_diagnosable_and_recoverable() -> PyResult<()> {
+    use pyo3::{exceptions::PyRuntimeError, types::PyList};
+    use std::{
+        process::{Command, Stdio},
+        time::{Duration, Instant},
+    };
+
+    // File descriptor limits and Python logging are process-wide.
+    const CHILD: &str = "DELTA_ARROW_READER_RUNTIME_FAILURE_TEST_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let mut child = Command::new(std::env::current_exe()?)
+            .args([
+                "--exact",
+                "session::tests::runtime_creation_failures_are_diagnosable_and_recoverable",
+            ])
+            .env(CHILD, "1")
+            .stderr(Stdio::piped())
+            .spawn()?;
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while child.try_wait()?.is_none() {
+            if Instant::now() >= deadline {
+                child.kill()?;
+                child.wait()?;
+                panic!("runtime failure test timed out");
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let output = child.wait_with_output()?;
+        assert!(output.status.success(), "{output:?}");
+        assert!(output.stderr.is_empty(), "{output:?}");
+        return Ok(());
+    }
+    Python::initialize();
+    Python::attach(|py| {
+        let resource = py.import("resource")?;
+        let nofile = resource.getattr("RLIMIT_NOFILE")?;
+        let limits = resource.call_method1("getrlimit", (&nofile,))?;
+        let emfile = py.import("errno")?.getattr("EMFILE")?.extract::<i32>()?;
+        let logger = py
+            .import("logging")?
+            .call_method1("getLogger", ("delta_arrow_reader",))?;
+        let handler = py
+            .import("logging.handlers")?
+            .getattr("BufferingHandler")?
+            .call1((1000,))?;
+        let records = handler.getattr("buffer")?.cast_into::<PyList>()?;
+        logger.setattr("handlers", PyList::new(py, [&handler])?)?;
+        logger.setattr("propagate", false)?;
+        for level in [40, 30, 20, 10, 5] {
+            logger.call_method1("setLevel", (level,))?;
+            for kind in ["reader", "SQL"] {
+                records.call_method0("clear")?;
+                resource.call_method1("setrlimit", (&nofile, (0, limits.get_item(1)?)))?;
+                let result = if kind == "reader" {
+                    table(py)
+                } else {
+                    py.get_type::<Session>().call0()
+                };
+                // Restore the limit before propagating or inspecting the operation's result.
+                resource.call_method1("setrlimit", (&nofile, &limits))?;
+                let error = assert_error::<PyRuntimeError>(result);
+                assert_eq!(
+                    error.value(py).str()?.to_str()?,
+                    format!("failed to create the {kind} runtime")
+                );
+                assert_eq!(records.len(), 1);
+                let record = records.get_item(0)?;
+                assert_eq!(record.getattr("levelno")?.extract::<u8>()?, 40);
+                let fields = record.getattr("dar_fields")?;
+                for (name, expected) in [
+                    ("event", "runtime_creation.failed"),
+                    ("runtime", kind),
+                    ("error_source_kind", "unknown"),
+                ] {
+                    assert_eq!(fields.get_item(name)?.extract::<String>()?, expected);
+                }
+                assert_eq!(fields.get_item("error_os_code")?.extract::<i32>()?, emfile);
+                assert!(
+                    !record
+                        .getattr("__dict__")?
+                        .repr()?
+                        .to_str()?
+                        .contains("external_writer")
+                );
+            }
+        }
+        let table = table(py)?;
+        let session = py.get_type::<Session>().call0()?;
+        session.call_method1("register_table", ("events", table))?;
+        let state = Arc::clone(&session.extract::<PyRef<'_, Session>>()?.state);
+        let batches = state
+            .runtime
+            .wait_logged(py, async {
+                state
+                    .context
+                    .sql("SELECT id FROM events LIMIT 1")
+                    .await?
+                    .collect()
+                    .await
+            })?
+            .unwrap();
+        assert_eq!(
+            batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+            1
+        );
+        Ok(())
+    })
+}

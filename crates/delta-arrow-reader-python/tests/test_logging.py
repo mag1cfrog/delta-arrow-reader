@@ -260,54 +260,6 @@ class LoggingTests(unittest.TestCase):
         table.scan(limit=0).close()
         self.assertEqual(self.events(), ["scan_planning.started", "scan_planning.completed"])
 
-    @unittest.skipUnless(sys.platform.startswith("linux"), "requires Linux file descriptor limits")
-    def test_runtime_creation_failure_is_diagnosable_and_recoverable(self):
-        result = subprocess.run([sys.executable, "-I", "-c", """
-import errno
-import logging
-import resource
-import sys
-from delta_arrow_reader import DeltaTable, Session
-records = []
-class Collect(logging.Handler):
-    def emit(self, record):
-        records.append(record)
-logger = logging.getLogger('delta_arrow_reader')
-logger.handlers = [Collect()]
-logger.propagate = False
-for level in [40, 30, 20, 10, 5]:
-    logger.setLevel(level)
-    for kind, operation in [('reader', lambda: DeltaTable(sys.argv[1], warmup='none')), ('SQL', Session)]:
-        records.clear()
-        limits = resource.getrlimit(resource.RLIMIT_NOFILE)
-        try:
-            resource.setrlimit(resource.RLIMIT_NOFILE, (0, limits[1]))
-            try:
-                operation()
-            except RuntimeError as error:
-                assert str(error) == f'failed to create the {kind} runtime', str(error)
-            else:
-                raise AssertionError('runtime started without file descriptors')
-        finally:
-            resource.setrlimit(resource.RLIMIT_NOFILE, limits)
-        record, = records
-        assert record.levelno == logging.ERROR
-        fields = record.dar_fields
-        assert fields['event'] == 'runtime_creation.failed'
-        assert fields['runtime'] == kind
-        assert fields['error_os_code'] == errno.EMFILE, fields
-        assert fields['error_source_kind'] == 'unknown', fields
-        assert sys.argv[1] not in repr(record.__dict__)
-table = DeltaTable(sys.argv[1], warmup='none')
-session = Session()
-session.register_table('events', table)
-with session.sql('SELECT id FROM events LIMIT 1') as reader:
-    assert reader.read_all().num_rows == 1
-""", str(FIXTURE)], capture_output=True, text=True, timeout=30)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "")
-        self.assertEqual(result.stderr, "")
-
     def test_sql_planning_failures_keep_safe_source_categories(self):
         table = DeltaTable(FIXTURE, warmup="none")
         session = Session()
