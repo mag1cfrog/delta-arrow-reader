@@ -19,7 +19,7 @@ pub(super) fn configure_table_credentials(
     let credentials_path = match source {
         CredentialSource::Json => options.remove("google_application_credentials"),
         CredentialSource::Env => read_environment_value("GOOGLE_APPLICATION_CREDENTIALS")?,
-        CredentialSource::AzureWorkloadIdentity => {
+        CredentialSource::AzureWorkloadIdentity | CredentialSource::AzureManagedIdentity => {
             return StorageAuthorizationSnafu {
                 reason: "auth_source_unsupported_storage",
             }

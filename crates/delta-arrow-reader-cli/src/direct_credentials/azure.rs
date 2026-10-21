@@ -1,4 +1,4 @@
-//! Explicit Azure static credentials, client secrets, and workload identity.
+//! Explicit Azure credentials and identity providers without ambient fallback.
 
 use std::sync::Arc;
 
@@ -8,6 +8,12 @@ use snafu::{OptionExt, ensure};
 
 use super::{CredentialSource, read_environment_value, validate_auth_source_value};
 use crate::{Error, StorageAuthorizationSnafu, azure_sas};
+
+const MANAGED_IDENTITY_KEYS: [AzureConfigKey; 3] = [
+    AzureConfigKey::ClientId,
+    AzureConfigKey::ObjectId,
+    AzureConfigKey::MsiResourceId,
+];
 
 pub(super) fn configure_table_credentials(
     builder: DeltaTableBuilder,
@@ -50,6 +56,9 @@ pub(super) fn configure_table_credentials(
         AzureConfigKey::ClientSecret,
         AzureConfigKey::AuthorityId,
         AzureConfigKey::FederatedTokenFile,
+        AzureConfigKey::ObjectId,
+        AzureConfigKey::MsiResourceId,
+        AzureConfigKey::MsiEndpoint,
     ] {
         options.remove(key.as_ref());
     }
@@ -67,7 +76,9 @@ fn load_environment_options(
     if matches!(source, CredentialSource::Json) {
         return Ok(());
     }
-    if matches!(source, CredentialSource::AzureWorkloadIdentity) {
+    if matches!(source, CredentialSource::AzureManagedIdentity) {
+        load_managed_identity_environment(options)?;
+    } else if matches!(source, CredentialSource::AzureWorkloadIdentity) {
         for (name, key) in [
             ("AZURE_CLIENT_ID", AzureConfigKey::ClientId),
             ("AZURE_TENANT_ID", AzureConfigKey::AuthorityId),
@@ -106,10 +117,55 @@ fn load_environment_options(
     Ok(())
 }
 
+fn load_managed_identity_environment(options: &mut DeltaStorageOptions) -> Result<(), Error> {
+    // One explicit JSON selector replaces the environment's entire identity selection.
+    if !MANAGED_IDENTITY_KEYS
+        .iter()
+        .any(|key| options.contains_key(key.as_ref()))
+    {
+        for (name, key) in [
+            ("AZURE_CLIENT_ID", AzureConfigKey::ClientId),
+            ("AZURE_OBJECT_ID", AzureConfigKey::ObjectId),
+            ("AZURE_MSI_RESOURCE_ID", AzureConfigKey::MsiResourceId),
+        ] {
+            if let Some(value) = read_environment_value(name)? {
+                options.insert(key.as_ref().to_owned(), value);
+            }
+        }
+    }
+    if !options.contains_key("azure_msi_endpoint")
+        && let Some(endpoint) = read_environment_value("IDENTITY_ENDPOINT")?
+    {
+        options.insert("azure_msi_endpoint".into(), endpoint);
+    }
+    // The native provider reads this header; reject malformed inherited values before any IO.
+    read_environment_value("IDENTITY_HEADER")?;
+    Ok(())
+}
+
 fn validate_credential_family(
     options: &DeltaStorageOptions,
     source: CredentialSource,
 ) -> Result<(), Error> {
+    if matches!(source, CredentialSource::AzureManagedIdentity) {
+        let identity_count = MANAGED_IDENTITY_KEYS
+            .iter()
+            .filter(|key| options.contains_key(key.as_ref()))
+            .count();
+        ensure!(
+            identity_count > 0,
+            StorageAuthorizationSnafu {
+                reason: "auth_source_incomplete_credentials"
+            }
+        );
+        ensure!(
+            identity_count == 1,
+            StorageAuthorizationSnafu {
+                reason: "auth_source_conflicting_credentials"
+            }
+        );
+        return Ok(());
+    }
     if matches!(source, CredentialSource::AzureWorkloadIdentity) {
         ensure!(
             [
@@ -195,11 +251,34 @@ fn normalize_azure_options(
                 );
                 validate_auth_source_value(&value)?;
             }
-            AzureConfigKey::ClientId | AzureConfigKey::AuthorityId => {
+            AzureConfigKey::ClientId => {
                 ensure!(
                     !matches!(source, CredentialSource::Env),
                     StorageAuthorizationSnafu {
                         reason: "auth_source_conflicting_credentials"
+                    }
+                );
+                validate_auth_source_value(&value)?;
+            }
+            AzureConfigKey::AuthorityId => {
+                ensure!(
+                    matches!(
+                        source,
+                        CredentialSource::Json | CredentialSource::AzureWorkloadIdentity
+                    ),
+                    StorageAuthorizationSnafu {
+                        reason: "auth_source_conflicting_credentials"
+                    }
+                );
+                validate_auth_source_value(&value)?;
+            }
+            AzureConfigKey::ObjectId
+            | AzureConfigKey::MsiResourceId
+            | AzureConfigKey::MsiEndpoint => {
+                ensure!(
+                    matches!(source, CredentialSource::AzureManagedIdentity),
+                    StorageAuthorizationSnafu {
+                        reason: "auth_source_unsupported_option"
                     }
                 );
                 validate_auth_source_value(&value)?;
@@ -213,7 +292,16 @@ fn normalize_azure_options(
                 );
                 validate_auth_source_value(&value)?;
             }
-            AzureConfigKey::AccountName | AzureConfigKey::AuthorityHost => {
+            AzureConfigKey::AuthorityHost => {
+                ensure!(
+                    !matches!(source, CredentialSource::AzureManagedIdentity),
+                    StorageAuthorizationSnafu {
+                        reason: "auth_source_unsupported_option"
+                    }
+                );
+                validate_auth_source_value(&value)?;
+            }
+            AzureConfigKey::AccountName => {
                 validate_auth_source_value(&value)?;
             }
             AzureConfigKey::Endpoint

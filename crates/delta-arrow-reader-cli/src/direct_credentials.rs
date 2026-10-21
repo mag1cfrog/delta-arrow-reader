@@ -23,6 +23,8 @@ pub(crate) enum CredentialSource {
     Env,
     /// Use Azure workload identity with an explicitly configured token file.
     AzureWorkloadIdentity,
+    /// Use Azure managed identity with one explicitly selected identity ID.
+    AzureManagedIdentity,
 }
 
 impl CredentialSource {

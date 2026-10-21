@@ -1,4 +1,4 @@
-//! Local Azure OAuth responses shared by client-secret and workload-identity tests.
+//! Local Azure token responses shared by OAuth and managed-identity tests.
 
 use std::{
     io::{Read, Write},
@@ -68,7 +68,8 @@ impl AzureTokenServer {
                 let (status, body) = if count <= successful_token_requests {
                     (
                         200,
-                        json!({"access_token":format!("secret-oauth-{count}"), "expires_in":0}),
+                        // OAuth and metadata clients use different expiry fields.
+                        json!({"access_token":format!("secret-oauth-{count}"), "expires_in":0, "expires_on":"0"}),
                     )
                 } else {
                     (

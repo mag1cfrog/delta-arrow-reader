@@ -1,6 +1,7 @@
 //! Azure credentials are selected once and reach every storage request.
 
 mod client_secret;
+mod managed_identity;
 mod token_server;
 mod workload_identity;
 
