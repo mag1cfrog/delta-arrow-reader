@@ -106,12 +106,12 @@ fn all_reads_use_the_selected_principal_and_rotate_the_assertion() -> TestResult
     for references in ["json", "env", "mixed"] {
         for operation in ["inspect", "scan", "query"] {
             let authority = MockAzureTokenServer::new(usize::MAX)?;
-            let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
+            let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
             let assertion_path = fixture.directory.path().join("assertion.jwt");
             fs::write(&assertion_path, INITIAL_ASSERTION)?;
             let options_path = fixture.directory.path().join("options.json");
             fixture.server = MockCloudStorageServer::with_objects(
-                CloudStorageProtocol::Azure,
+                CloudStorageProtocol::AzureBlob,
                 partitioned_objects()?,
                 move |_, _| {
                     // Replace the projected token atomically, as a workload issuer would.
@@ -167,7 +167,7 @@ fn all_reads_use_the_selected_principal_and_rotate_the_assertion() -> TestResult
 fn missing_or_conflicting_references_fail_before_io() -> TestResult {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
     let authority = MockAzureTokenServer::new(usize::MAX)?;
-    let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
+    let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
     fixture.write_options(json!({}))?;
     for variable in [
         "AZURE_CLIENT_ID",
@@ -258,7 +258,7 @@ fn acquisition_refresh_and_storage_failures_never_select_ambient_credentials() -
     for successful_tokens in [0, 1, usize::MAX] {
         for machine in [false, true] {
             let authority = MockAzureTokenServer::new(successful_tokens)?;
-            let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
+            let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
             fixture.write_options(json!({}))?;
             fs::write(
                 fixture.directory.path().join("assertion.jwt"),
@@ -322,13 +322,13 @@ fn failed_refresh_after_rows_leaves_an_unfinished_stream_without_duplicates() ->
         .unwrap();
     for parquet_backend in ["direct", "delta_kernel"] {
         let authority = MockAzureTokenServer::new(usize::MAX)?;
-        let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
+        let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
         let assertion_path = fixture.directory.path().join("assertion.jwt");
         fs::write(&assertion_path, INITIAL_ASSERTION)?;
         let mut first_file = None;
         let mut assertion_removed = false;
         fixture.server = MockCloudStorageServer::with_objects(
-            CloudStorageProtocol::Azure,
+            CloudStorageProtocol::AzureBlob,
             partitioned_objects()?,
             move |request, _| {
                 let target = request.split_whitespace().nth(1).unwrap();
@@ -406,12 +406,12 @@ fn missing_assertion_at_startup_or_refresh_stops_the_read() -> TestResult {
     for remove_after_first_read in [false, true] {
         for machine in [false, true] {
             let authority = MockAzureTokenServer::new(usize::MAX)?;
-            let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
+            let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
             if remove_after_first_read {
                 let assertion_path = fixture.directory.path().join("assertion.jwt");
                 fs::write(&assertion_path, INITIAL_ASSERTION)?;
                 fixture.server = MockCloudStorageServer::with_objects(
-                    CloudStorageProtocol::Azure,
+                    CloudStorageProtocol::AzureBlob,
                     partitioned_objects()?,
                     move |_, _| {
                         let _ = fs::remove_file(&assertion_path);
@@ -445,7 +445,7 @@ fn missing_assertion_at_startup_or_refresh_stops_the_read() -> TestResult {
 }
 
 #[test]
-fn workload_source_is_azure_only_and_requires_explicit_selection() -> TestResult {
+fn workload_source_requires_azure_blob_and_explicit_selection() -> TestResult {
     for table in [
         "s3://bucket/table",
         "gs://bucket/table",
@@ -464,7 +464,7 @@ fn workload_source_is_azure_only_and_requires_explicit_selection() -> TestResult
         assert_eq!(record["reason"], "auth_source_unsupported_storage");
     }
     let authority = MockAzureTokenServer::new(usize::MAX)?;
-    let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
+    let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
     fixture.write_options(workload_identity_options(&fixture, &authority))?;
     for source in ["json", "env"] {
         let output = run_with_timeout(fixture.command("inspect").args([

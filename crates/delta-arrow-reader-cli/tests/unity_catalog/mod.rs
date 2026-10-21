@@ -29,15 +29,15 @@ const PROFILE: &str = "secret profile $(do-not-run)";
 enum StorageCredentialKind {
     S3,
     R2,
-    AzureSas,
-    AzureBearer,
+    AzureBlobSas,
+    AzureBlobBearer,
     Gcs,
 }
 
 impl StorageCredentialKind {
     fn storage_protocol(self) -> CloudStorageProtocol {
         match self {
-            Self::AzureSas | Self::AzureBearer => CloudStorageProtocol::Azure,
+            Self::AzureBlobSas | Self::AzureBlobBearer => CloudStorageProtocol::AzureBlob,
             Self::S3 | Self::R2 => CloudStorageProtocol::S3,
             Self::Gcs => CloudStorageProtocol::Gcs,
         }
@@ -55,11 +55,13 @@ impl StorageCredentialKind {
                     "access_key_id": "renewed-key", "secret_access_key": "renewed-secret", "session_token": "renewed-session"
                 });
             }
-            Self::AzureSas => {
+            Self::AzureBlobSas => {
                 response["azure_user_delegation_sas"] =
                     json!({"sas_token":"sig=renewed%2Bsignature"})
             }
-            Self::AzureBearer => response["azure_aad"] = json!({"aad_token":"renewed-azure-token"}),
+            Self::AzureBlobBearer => {
+                response["azure_aad"] = json!({"aad_token":"renewed-azure-token"})
+            }
             Self::Gcs => response["gcp_oauth_token"] = json!({"oauth_token":"renewed-gcp-token"}),
         }
     }
@@ -68,8 +70,8 @@ impl StorageCredentialKind {
     fn expected_renewed_auth_fragment(self) -> &'static str {
         match self {
             Self::S3 | Self::R2 => "credential=renewed-key/",
-            Self::AzureSas => "sig=renewed%2bsignature",
-            Self::AzureBearer => "authorization: bearer renewed-azure-token",
+            Self::AzureBlobSas => "sig=renewed%2bsignature",
+            Self::AzureBlobBearer => "authorization: bearer renewed-azure-token",
             Self::Gcs => "authorization: bearer renewed-gcp-token",
         }
     }
@@ -138,7 +140,7 @@ impl DatabricksCliFixture {
         let location = match credential_kind {
             StorageCredentialKind::S3 => "s3://bucket/table/",
             StorageCredentialKind::R2 => "r2://bucket@account.r2.cloudflarestorage.com/table/",
-            StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer => {
+            StorageCredentialKind::AzureBlobSas | StorageCredentialKind::AzureBlobBearer => {
                 "abfss://container@account.dfs.core.windows.net/table/"
             }
             StorageCredentialKind::Gcs => "gs://bucket/table/",
@@ -182,11 +184,11 @@ impl DatabricksCliFixture {
                     "session_token": "test-session"
                 });
             }
-            StorageCredentialKind::AzureSas => {
+            StorageCredentialKind::AzureBlobSas => {
                 credentials["azure_user_delegation_sas"] =
                     json!({"sas_token":"sv=test&sp=rl&sig=test%2Bsignature"});
             }
-            StorageCredentialKind::AzureBearer => {
+            StorageCredentialKind::AzureBlobBearer => {
                 credentials["azure_aad"] = json!({"aad_token":"secret-bearer-token"});
             }
             StorageCredentialKind::Gcs => {
@@ -290,7 +292,7 @@ esac
             StorageCredentialKind::R2 => json!({
                 "aws_endpoint_url_s3": endpoint, "aws_allow_http": "true"
             }),
-            StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer => json!({
+            StorageCredentialKind::AzureBlobSas | StorageCredentialKind::AzureBlobBearer => json!({
                 "azure_endpoint": endpoint, "azure_allow_http": "true"
             }),
             StorageCredentialKind::Gcs => json!({
@@ -375,8 +377,8 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
     for credential_kind in [
         StorageCredentialKind::S3,
         StorageCredentialKind::R2,
-        StorageCredentialKind::AzureSas,
-        StorageCredentialKind::AzureBearer,
+        StorageCredentialKind::AzureBlobSas,
+        StorageCredentialKind::AzureBlobBearer,
         StorageCredentialKind::Gcs,
     ] {
         let fixture = DatabricksCliFixture::new(credential_kind)?;
@@ -389,7 +391,7 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
             (false, "off", true),
             (true, "trace", true),
         ] {
-            if credential_kind == StorageCredentialKind::AzureSas && historical {
+            if credential_kind == StorageCredentialKind::AzureBlobSas && historical {
                 // Raw '+' and percent-encoded '+' must produce the same SAS signature.
                 let path = fixture.directory.path().join("credentials.json");
                 let mut credentials: Value = serde_json::from_slice(&fs::read(&path)?)?;
@@ -517,7 +519,7 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
                     );
                     assert!(!first.contains("sig="), "unexpected SAS credential");
                 }
-                StorageCredentialKind::AzureBearer => {
+                StorageCredentialKind::AzureBlobBearer => {
                     assert!(
                         request
                             .to_ascii_lowercase()
@@ -526,7 +528,7 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
                     );
                     assert!(!first.contains("sig="), "unexpected SAS credential");
                 }
-                StorageCredentialKind::AzureSas => {
+                StorageCredentialKind::AzureBlobSas => {
                     assert!(first.contains("sig=test%2Bsignature"), "{first}");
                 }
                 StorageCredentialKind::S3 | StorageCredentialKind::R2 => {
@@ -616,8 +618,8 @@ fn inspection_renews_expired_grants_without_resolving_the_table_name_again() -> 
     for kind in [
         StorageCredentialKind::S3,
         StorageCredentialKind::R2,
-        StorageCredentialKind::AzureSas,
-        StorageCredentialKind::AzureBearer,
+        StorageCredentialKind::AzureBlobSas,
+        StorageCredentialKind::AzureBlobBearer,
         StorageCredentialKind::Gcs,
     ] {
         let fixture = DatabricksCliFixture::new(kind)?;
@@ -711,7 +713,7 @@ fn refresh_failures_preserve_redacted_uc_categories_and_stop_inspection() -> Tes
             CredentialRefreshFailure::InvalidBearerToken,
         ),
         (
-            StorageCredentialKind::AzureSas,
+            StorageCredentialKind::AzureBlobSas,
             CredentialRefreshFailure::ChangedCredentialKind,
         ),
     ] {

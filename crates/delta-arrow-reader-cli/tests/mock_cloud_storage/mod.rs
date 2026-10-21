@@ -1,4 +1,4 @@
-//! Mock S3, Azure, and GCS responses shared by direct and Unity Catalog CLI tests.
+//! Mock S3, Azure Blob, and GCS responses shared by direct and Unity Catalog CLI tests.
 
 use std::{
     collections::{BTreeMap, HashMap},
@@ -22,11 +22,11 @@ use url::Url;
 #[derive(Clone, Copy)]
 pub(super) enum CloudStorageProtocol {
     S3,
-    Azure,
+    AzureBlob,
     Gcs,
 }
 
-/// A local S3/Azure/GCS server for log listings and ranged object reads.
+/// A local S3/Azure Blob/GCS server for log listings and ranged object reads.
 pub(super) struct MockCloudStorageServer {
     pub(super) endpoint: String,
     pub(super) requests: Arc<Mutex<Vec<String>>>,
@@ -61,7 +61,7 @@ impl MockCloudStorageServer {
         mut objects: BTreeMap<String, Vec<u8>>,
         mut on_request: impl FnMut(&str, &mut BTreeMap<String, Vec<u8>>) + Send + 'static,
     ) -> std::io::Result<Self> {
-        let is_azure = matches!(protocol, CloudStorageProtocol::Azure);
+        let is_azure_blob = matches!(protocol, CloudStorageProtocol::AzureBlob);
         let listener = TcpListener::bind("127.0.0.1:0")?;
         listener.set_nonblocking(true)?;
         let endpoint = format!("http://{}", listener.local_addr()?);
@@ -95,7 +95,7 @@ impl MockCloudStorageServer {
                     continue;
                 };
                 let url = Url::parse(&format!("http://localhost{target}")).unwrap();
-                // GCS encodes slashes in object keys, unlike the S3 and Azure clients.
+                // GCS encodes slashes in object keys, unlike the S3 and Azure Blob clients.
                 let request_path = object_store::path::Path::from_url_path(url.path()).unwrap();
                 let query = url.query_pairs().collect::<HashMap<_, _>>();
                 let listing = query.contains_key("list-type")
@@ -110,7 +110,7 @@ impl MockCloudStorageServer {
                         {
                             continue;
                         }
-                        let entry = if is_azure {
+                        let entry = if is_azure_blob {
                             format!(
                                 "<Blob><Name>{key}</Name><Properties><Last-Modified>Wed, 01 Jan 2020 00:00:00 GMT</Last-Modified><Etag>test</Etag><Content-Length>{}</Content-Length><Content-Type>application/octet-stream</Content-Type><BlobType>BlockBlob</BlobType></Properties></Blob>",
                                 bytes.len()
@@ -123,7 +123,7 @@ impl MockCloudStorageServer {
                         };
                         entries.push_str(&entry);
                     }
-                    let xml = if is_azure {
+                    let xml = if is_azure_blob {
                         format!(
                             "<EnumerationResults><Blobs>{entries}</Blobs><NextMarker /></EnumerationResults>"
                         )
@@ -135,7 +135,11 @@ impl MockCloudStorageServer {
                     (200, xml.into_bytes())
                 } else if let Some(bytes) = request_path
                     .as_ref()
-                    .strip_prefix(if is_azure { "container/" } else { "bucket/" })
+                    .strip_prefix(if is_azure_blob {
+                        "container/"
+                    } else {
+                        "bucket/"
+                    })
                     .and_then(|key| objects.get(key))
                 {
                     (200, bytes.clone())

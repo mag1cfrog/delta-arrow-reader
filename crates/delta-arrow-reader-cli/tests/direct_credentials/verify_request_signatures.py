@@ -46,7 +46,7 @@ def verify_s3_signature(method, target, headers, signing_keys):
     assert hmac.compare_digest(expected, fields["Signature"]), "invalid S3 signature"
 
 
-def verify_azure_signature(method, target, headers, signing_keys):
+def verify_azure_blob_signature(method, target, headers, signing_keys):
     scheme, authorization = headers["authorization"].split(" ", 1)
     assert scheme == "SharedKey"
     account, signature = authorization.split(":", 1)
@@ -56,7 +56,7 @@ def verify_azure_signature(method, target, headers, signing_keys):
         "if-unmodified-since", "range",
     ]
     values = {name: headers.get(name, "") for name in standard_headers}
-    # Modern Azure APIs sign zero Content-Length and Date with x-ms-date as empty.
+    # Modern Azure Blob APIs sign zero Content-Length and Date with x-ms-date as empty.
     if values["content-length"] == "0":
         values["content-length"] = ""
     if "x-ms-date" in headers:
@@ -77,13 +77,16 @@ def verify_azure_signature(method, target, headers, signing_keys):
     string_to_sign += "\n" + canonical_headers + canonical_resource
     account_key = base64.b64decode(signing_keys[account], validate=True)
     expected = base64.b64encode(hmac.digest(account_key, string_to_sign.encode(), "sha256"))
-    assert hmac.compare_digest(expected.decode(), signature), "invalid Azure signature"
+    assert hmac.compare_digest(expected.decode(), signature), "invalid Azure Blob signature"
 
 
 def main():
     with open(sys.argv[1]) as fixture_file:
         fixture = json.load(fixture_file)
-    verifier = {"s3": verify_s3_signature, "azure": verify_azure_signature}[fixture["protocol"]]
+    verifier = {
+        "s3": verify_s3_signature,
+        "azure_blob": verify_azure_blob_signature,
+    }[fixture["protocol"]]
     assert fixture["requests"], "no requests to verify"
     for request in fixture["requests"]:
         header_block, body = request.split("\r\n\r\n", 1)

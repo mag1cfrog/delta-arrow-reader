@@ -68,7 +68,7 @@ Discovery does not search numeric version gaps.
 
 Use an existing Databricks CLI workspace profile to resolve a table name and
 obtain temporary cloud credentials. DAR reads the Delta log and data files from
-S3, Azure, GCS, or R2 using local compute. `inspect` returns the snapshot's schema
+S3, Azure Blob, GCS, or R2 using local compute. `inspect` returns the snapshot's schema
 and version; `scan` streams its rows as Arrow IPC. Unity Catalog column metadata
 does not determine the output schema. Neither command submits SQL or starts a
 cluster or SQL warehouse.
@@ -121,11 +121,11 @@ These rules apply to Unity Catalog targets:
   from the environment.
 - Supported credentials are S3/R2 temporary key/secret/session-token credentials,
   Azure user-delegation SAS or Azure AD bearer tokens, and GCS OAuth bearer tokens.
-  GCS locations use `gs://bucket/path`. Azure locations must
+  GCS locations use `gs://bucket/path`. Azure Blob locations must
   identify the account and container using `abfss://` or an Azure Blob/DFS HTTPS
   URL. R2 locations use `r2://bucket@account.r2.cloudflarestorage.com/path`
   or the equivalent `https://account.r2.cloudflarestorage.com/bucket/path`.
-  Other credential types, S3 access points, and other Azure/R2 endpoints are
+  Other credential types, S3 access points, and other Azure Blob/R2 endpoints are
   unsupported.
 - Storage options may supply supported region and transport settings, including
   endpoints, timeouts, and proxies. Credential, bucket, account, container,
@@ -405,7 +405,7 @@ dar inspect --auth-source env --storage-options-file storage.json s3://example-b
 
 Use the same option with `dar scan`. The
 [storage guide](configuration.md#read-from-s3) explains table URLs and credentials,
-including [Azure](configuration.md#read-from-azure). Use its storage keys as JSON
+including [Azure Blob](configuration.md#read-from-azure). Use its storage keys as JSON
 keys here. Keep files containing credentials out of source control.
 
 Without `--auth-source`, the CLI forwards keys and values unchanged, including
@@ -439,10 +439,10 @@ selectors without reading input files or resolving credentials.
 | S3 | [`json` or `env`](#s3-credential-sources) | Access-key pair, with an optional session token | Supply new credentials for another command |
 | S3 | [`aws-web-identity`](#s3-web-identity) | Role ARN and web identity token file | Refreshes temporary credentials; rereads the token file |
 | S3 | [`aws-container`](#s3-container-credentials) | ECS relative URI, or EKS full URI and token file | Refreshes at the selected endpoint; rereads the EKS token file |
-| Azure | [`json` or `env`](#azure-credential-sources) | Account key, SAS token, or bearer token | Supply new credentials for another command |
-| Azure | [`json` or `env`](#azure-credential-sources) | Client ID, client secret, and tenant ID | Refreshes access tokens for the loaded principal |
-| Azure | [`azure-workload-identity`](#azure-workload-identity) | Client ID, tenant ID, and federated token file | Refreshes access tokens; rereads the token file |
-| Azure | [`azure-managed-identity`](#azure-managed-identity) | One explicit client, object, or resource ID | Refreshes access tokens for that identity |
+| Azure Blob | [`json` or `env`](#azure-credential-sources) | Account key, SAS token, or bearer token | Supply new credentials for another command |
+| Azure Blob | [`json` or `env`](#azure-credential-sources) | Client ID, client secret, and tenant ID | Refreshes access tokens for the loaded principal |
+| Azure Blob | [`azure-workload-identity`](#azure-workload-identity) | Client ID, tenant ID, and federated token file | Refreshes access tokens; rereads the token file |
+| Azure Blob | [`azure-managed-identity`](#azure-managed-identity) | One explicit client, object, or resource ID | Refreshes access tokens for that identity |
 | GCS | [`json` or `env`](#gcs-credential-sources) | Explicit service-account or authorized-user ADC file | Renews using the identity loaded from the file |
 
 Local paths do not accept `--auth-source`. Unity Catalog uses
@@ -707,7 +707,7 @@ omitted from text and JSON diagnostics.
 
 Use `--auth-source azure-workload-identity` with an Azure service principal
 configured to trust the issuer of a federated token file. It is available for
-Azure tables with `inspect`, `scan`, and `query`.
+tables in Azure Blob Storage with `inspect`, `scan`, and `query`.
 
 ```sh
 dar query abfss://orders@exampleaccount.dfs.core.windows.net/table \

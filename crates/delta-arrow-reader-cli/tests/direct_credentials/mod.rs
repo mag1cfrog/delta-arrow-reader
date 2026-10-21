@@ -1,6 +1,6 @@
 //! Explicit cloud credential sources exercised through real CLI reads.
 
-mod azure;
+mod azure_blob;
 mod gcs;
 mod mock_credential_proxy;
 mod s3;
@@ -54,7 +54,7 @@ impl DirectStorageFixture {
     fn write_options(&self, mut options: Value) -> TestResult {
         let endpoint_key = match self.protocol {
             CloudStorageProtocol::S3 => "aws_endpoint",
-            CloudStorageProtocol::Azure => "azure_storage_endpoint",
+            CloudStorageProtocol::AzureBlob => "azure_storage_endpoint",
             CloudStorageProtocol::Gcs => "google_base_url",
         };
         options[endpoint_key] = json!(self.server.endpoint);
@@ -69,7 +69,7 @@ impl DirectStorageFixture {
     fn command(&self, operation: &str) -> Command {
         let table = match self.protocol {
             CloudStorageProtocol::S3 => "s3://bucket/table",
-            CloudStorageProtocol::Azure => "az://container/table",
+            CloudStorageProtocol::AzureBlob => "az://container/table",
             CloudStorageProtocol::Gcs => "gs://bucket/table",
         };
         let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
@@ -84,7 +84,7 @@ impl DirectStorageFixture {
     fn verify_request_signatures(&self, signing_keys: Value) -> TestResult {
         let protocol = match self.protocol {
             CloudStorageProtocol::S3 => "s3",
-            CloudStorageProtocol::Azure => "azure",
+            CloudStorageProtocol::AzureBlob => "azure_blob",
             CloudStorageProtocol::Gcs => panic!("GCS uses JWT verification"),
         };
         let captured_requests = self.directory.path().join("signed-requests.json");

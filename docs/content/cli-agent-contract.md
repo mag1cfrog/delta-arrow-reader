@@ -178,7 +178,7 @@ New commands, summary inspection, and file-mode scan use these selection rules:
 | Backend | JSON/environment inputs | Provider mechanisms to expose only when verified |
 | --- | --- | --- |
 | S3 | Access-key pair plus optional session token; `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION` | `aws-web-identity`, `aws-container`, `aws-imds`; no implied AWS profile/SSO chain. |
-| Azure | One account key, SAS, bearer token, or client-secret family; `AZURE_STORAGE_ACCOUNT_NAME`, `AZURE_STORAGE_ACCOUNT_KEY`, `AZURE_STORAGE_SAS_KEY`, `AZURE_STORAGE_TOKEN`, or `AZURE_CLIENT_ID`/`AZURE_CLIENT_SECRET`/`AZURE_TENANT_ID` | `azure-cli`, `azure-workload-identity`, `azure-managed-identity`; no fallback between them. |
+| Azure Blob | One account key, SAS, bearer token, or client-secret family; `AZURE_STORAGE_ACCOUNT_NAME`, `AZURE_STORAGE_ACCOUNT_KEY`, `AZURE_STORAGE_SAS_KEY`, `AZURE_STORAGE_TOKEN`, or `AZURE_CLIENT_ID`/`AZURE_CLIENT_SECRET`/`AZURE_TENANT_ID` | `azure-cli`, `azure-workload-identity`, `azure-managed-identity`; no fallback between them. |
 | GCS | Service-account/ADC file reference; `GOOGLE_APPLICATION_CREDENTIALS` | `gcp-adc` with explicit file, or `gcp-metadata` without home-directory ADC lookup. ADC supports service-account/authorized-user content. |
 
 These provider names are candidates, not a promise of availability. The

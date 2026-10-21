@@ -1,4 +1,4 @@
-//! Azure credentials are selected once and reach every storage request.
+//! Azure Blob Storage uses the selected credentials for every request.
 
 mod client_secret_auth;
 mod managed_identity;
@@ -97,7 +97,7 @@ fn assert_request_credentials(fixture: &DirectStorageFixture, option: &str) -> T
 fn selected_credentials_authorize_inspection_scan_and_sql() -> TestResult {
     for source in ["json", "env"] {
         for (option, variable, value) in CREDENTIALS {
-            let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
+            let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
             let mut options = json!({"account_name":"account"});
             if source == "json" {
                 options[option] = json!(value);
@@ -166,7 +166,7 @@ fn account_names_come_from_json_environment_or_native_urls() -> TestResult {
             None,
         ),
     ] {
-        let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
+        let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
         let mut options = json!({});
         if source == "json" {
             options["account_key"] = json!(ACCOUNT_KEY);
@@ -197,7 +197,7 @@ fn account_names_come_from_json_environment_or_native_urls() -> TestResult {
         assert_request_credentials(&fixture, "ACCESS_KEY")?;
     }
 
-    let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
+    let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
     fixture.write_options(json!({"account_key":ACCOUNT_KEY}))?;
     let output = run_with_timeout(
         fixture
@@ -215,7 +215,7 @@ fn account_names_come_from_json_environment_or_native_urls() -> TestResult {
 
 #[test]
 fn invalid_json_sources_fail_before_io_without_using_ambient_credentials() -> TestResult {
-    let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
+    let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
     for (options, reason) in [
         (json!({}), "auth_source_incomplete_credentials"),
         (
@@ -294,7 +294,7 @@ fn invalid_json_sources_fail_before_io_without_using_ambient_credentials() -> Te
 #[test]
 fn environment_requires_exactly_one_family_and_rejects_json_credentials() -> TestResult {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
-    let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
+    let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
     for (options, token, key, reason) in [
         (json!({}), None, None, "auth_source_incomplete_credentials"),
         (
@@ -347,7 +347,7 @@ fn environment_requires_exactly_one_family_and_rejects_json_credentials() -> Tes
 fn permission_denial_keeps_the_selected_identity_and_redacts_credentials() -> TestResult {
     for source in ["json", "env"] {
         for (option, variable, value) in CREDENTIALS {
-            let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
+            let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
             fixture.server.deny_all_requests();
             let mut options = json!({"account_name":"account"});
             if source == "json" {

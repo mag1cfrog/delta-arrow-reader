@@ -1,6 +1,6 @@
 //! Explicit credential selection for direct cloud reads.
 
-mod azure;
+mod azure_blob;
 mod gcs;
 mod s3;
 
@@ -55,7 +55,7 @@ impl CredentialSource {
                 reason: "auth_source_unsupported_storage"
             }
         );
-        // Azure URLs may use container@account; passwords and embedded tokens remain invalid.
+        // Azure Blob URLs may use container@account; passwords and embedded tokens remain invalid.
         ensure!(
             (url.username().is_empty()
                 || (scheme == ObjectStoreScheme::MicrosoftAzure
@@ -75,7 +75,7 @@ impl CredentialSource {
             (
                 ObjectStoreScheme::MicrosoftAzure,
                 Self::Json | Self::Env | Self::AzureWorkloadIdentity | Self::AzureManagedIdentity,
-            ) => azure::configure_table_credentials(builder, location, options, self),
+            ) => azure_blob::configure_table_credentials(builder, location, options, self),
             (ObjectStoreScheme::GoogleCloudStorage, Self::Json | Self::Env) => {
                 gcs::configure_table_credentials(builder, location, options, self)
             }

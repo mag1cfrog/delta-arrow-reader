@@ -1,4 +1,4 @@
-//! SAS decoding shared by direct Azure access and Unity Catalog credentials.
+//! SAS decoding shared by direct Azure Blob access and Unity Catalog credentials.
 
 /// Decodes a SAS token into Azure query parameters, rejecting malformed credentials.
 pub(crate) fn parse_query_pairs(token: &str) -> Option<Vec<(String, String)>> {

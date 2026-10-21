@@ -105,8 +105,8 @@ fn scans_preserve_values_options_and_snapshot_selection_for_every_cloud() -> Tes
     for kind in [
         StorageCredentialKind::S3,
         StorageCredentialKind::R2,
-        StorageCredentialKind::AzureSas,
-        StorageCredentialKind::AzureBearer,
+        StorageCredentialKind::AzureBlobSas,
+        StorageCredentialKind::AzureBlobBearer,
         StorageCredentialKind::Gcs,
     ] {
         let fixture = DatabricksCliFixture::new(kind)?;
@@ -307,8 +307,8 @@ fn renewal_during_scans_keeps_the_original_snapshot_and_emits_each_row_once() ->
     for kind in [
         StorageCredentialKind::S3,
         StorageCredentialKind::R2,
-        StorageCredentialKind::AzureSas,
-        StorageCredentialKind::AzureBearer,
+        StorageCredentialKind::AzureBlobSas,
+        StorageCredentialKind::AzureBlobBearer,
         StorageCredentialKind::Gcs,
     ] {
         for parquet_backend in ["direct", "delta_kernel"] {
@@ -426,7 +426,7 @@ fn failed_renewal_after_rows_never_finishes_the_arrow_stream() -> TestResult {
             CredentialRefreshFailure::ExpiredCredentials,
         ),
         (
-            StorageCredentialKind::AzureSas,
+            StorageCredentialKind::AzureBlobSas,
             "direct",
             CredentialRefreshFailure::ChangedCredentialKind,
         ),

@@ -1,4 +1,4 @@
-//! Explicit Azure credentials and identity providers without ambient fallback.
+//! Explicit credentials and identity providers for Azure Blob Storage without ambient fallback.
 
 use std::sync::Arc;
 
@@ -21,7 +21,7 @@ pub(super) fn configure_table_credentials(
     options: DeltaStorageOptions,
     source: CredentialSource,
 ) -> Result<DeltaTableBuilder, Error> {
-    let mut options = normalize_azure_options(options, source)?;
+    let mut options = normalize_azure_blob_options(options, source)?;
     load_environment_options(&mut options, source)?;
     validate_credential_family(&options, source)?;
 
@@ -226,7 +226,7 @@ fn validate_credential_family(
     Ok(())
 }
 
-fn normalize_azure_options(
+fn normalize_azure_blob_options(
     options: DeltaStorageOptions,
     source: CredentialSource,
 ) -> Result<DeltaStorageOptions, Error> {

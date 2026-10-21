@@ -107,10 +107,10 @@ fn tokens_authorize_all_reads_and_refresh_the_loaded_identity() -> TestResult {
     for source in ["json", "env"] {
         for operation in ["inspect", "scan", "query"] {
             let authority = MockAzureTokenServer::new(usize::MAX)?;
-            let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
+            let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
             let options_path = fixture.directory.path().join("options.json");
             fixture.server = MockCloudStorageServer::with_objects(
-                CloudStorageProtocol::Azure,
+                CloudStorageProtocol::AzureBlob,
                 partitioned_objects()?,
                 move |_, _| {
                     // Refresh must use the loaded identity, even if its source file changes.
@@ -145,7 +145,7 @@ fn acquisition_refresh_and_permission_failures_keep_the_selected_identity() -> T
         for successful_tokens in [0, 1, usize::MAX] {
             for machine in [false, true] {
                 let authority = MockAzureTokenServer::new(successful_tokens)?;
-                let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
+                let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
                 write_client_secret_options(&fixture, &authority, source)?;
                 if successful_tokens == usize::MAX {
                     fixture.server.deny_all_requests();
@@ -195,7 +195,7 @@ fn acquisition_refresh_and_permission_failures_keep_the_selected_identity() -> T
 #[test]
 fn partial_or_mixed_client_secret_families_fail_before_io() -> TestResult {
     let authority = MockAzureTokenServer::new(usize::MAX)?;
-    let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
+    let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
     for source in ["json", "env"] {
         for present_field_indices in [
             vec![0],
@@ -258,7 +258,7 @@ fn partial_or_mixed_client_secret_families_fail_before_io() -> TestResult {
 
 #[test]
 fn duplicate_aliases_and_cross_source_fields_are_rejected() -> TestResult {
-    let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
+    let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
     for (source, extra, reason) in [
         (
             "json",
