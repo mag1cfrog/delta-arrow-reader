@@ -6,13 +6,11 @@ use serde_json::{Value, json};
 use url::Url;
 
 use super::{
-    CloudStorageProtocol, DirectStorageFixture, TestResult, assert_read_result,
-    assert_single_terminal_record, run_with_timeout, signed_session_generations,
+    CloudStorageProtocol, DirectStorageFixture, TestResult, assert_authorization_input_error,
+    assert_failure_without_stdout, assert_read_result, assert_single_terminal_record,
+    run_with_timeout, signed_session_generations,
 };
-use crate::{
-    direct_credentials::mock_credential_proxy::{CredentialService, MockCredentialProxy},
-    mock_cloud_storage::{MockCloudStorageServer, partitioned_objects},
-};
+use crate::direct_credentials::mock_credential_proxy::{CredentialService, MockCredentialProxy};
 
 const ECS_RELATIVE_URI: &str = "/v2/credentials/secret-task?scope=secret-selected";
 const EKS_HTTP_URI: &str = "http://169.254.170.23/v1/credentials?scope=secret-selected";
@@ -30,17 +28,6 @@ fn container_credential_reference_options(fixture: &DirectStorageFixture, endpoi
             "container_authorization_token_file":fixture.directory.path().join("pod-token")
         })
     }
-}
-
-fn write_container_credential_options(
-    fixture: &DirectStorageFixture,
-    proxy: &MockCredentialProxy,
-    mut options: Value,
-) -> TestResult {
-    options["proxy_url"] = json!(proxy.endpoint);
-    options["proxy_excludes"] = json!("127.0.0.1");
-    options["allow_invalid_certificates"] = json!("true");
-    fixture.write_options(options)
 }
 
 fn container_credential_command(fixture: &DirectStorageFixture, operation: &str) -> Command {
@@ -64,13 +51,6 @@ fn container_credential_command(fixture: &DirectStorageFixture, operation: &str)
             "AWS_METADATA_ENDPOINT",
             format!("{}/secret-unused-metadata", fixture.server.endpoint),
         );
-    if operation == "scan" {
-        command.args(["--column", "id"]);
-    } else if operation == "query" {
-        command
-            .arg("--sql-file")
-            .arg(fixture.directory.path().join("query.sql"));
-    }
     command
 }
 
@@ -112,17 +92,13 @@ fn all_reads_refresh_the_selected_container_reference() -> TestResult {
                 let token_path = fixture.directory.path().join("pod-token");
                 fs::write(&token_path, INITIAL_TOKEN)?;
                 let options_path = fixture.directory.path().join("options.json");
-                fixture.server = MockCloudStorageServer::with_objects(
-                    CloudStorageProtocol::S3,
-                    partitioned_objects()?,
-                    move |_, _| {
-                        let replacement = token_path.with_extension("replacement");
-                        fs::write(&replacement, ROTATED_TOKEN).unwrap();
-                        fs::rename(replacement, &token_path).unwrap();
-                        // Refresh keeps the loaded endpoint and path even if the options file changes.
-                        fs::write(&options_path, "secret-replaced-options").unwrap();
-                    },
-                )?;
+                fixture.restart_storage_with_request_hook(move |_| {
+                    let replacement = token_path.with_extension("replacement");
+                    fs::write(&replacement, ROTATED_TOKEN).unwrap();
+                    fs::rename(replacement, &token_path).unwrap();
+                    // Refresh keeps the loaded endpoint and path even if the options file changes.
+                    fs::write(&options_path, "secret-replaced-options").unwrap();
+                })?;
                 let reference = container_credential_reference_options(&fixture, endpoint);
                 let mut options = if references == "json" {
                     reference.clone()
@@ -150,7 +126,7 @@ fn all_reads_refresh_the_selected_container_reference() -> TestResult {
                 } else {
                     set_container_credential_environment(&mut command, &reference);
                 }
-                write_container_credential_options(&fixture, &proxy, options)?;
+                fixture.write_options(proxy.add_proxy_options(options))?;
                 let output = run_with_timeout(&mut command)?;
                 assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
                 assert_read_result(output, operation)?;
@@ -217,16 +193,13 @@ fn partial_and_mixed_references_fail_before_io() -> TestResult {
                         &container_credential_reference_options(&fixture, ECS_RELATIVE_URI),
                     );
                 }
-                write_container_credential_options(&fixture, &proxy, options)?;
+                fixture.write_options(proxy.add_proxy_options(options))?;
             } else {
-                write_container_credential_options(&fixture, &proxy, json!({}))?;
+                fixture.write_options(proxy.add_proxy_options(json!({})))?;
                 set_container_credential_environment(&mut command, &options);
             }
             let output = run_with_timeout(&mut command)?;
-            assert_eq!(output.status.code(), Some(2));
-            assert!(output.stdout.is_empty());
-            let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-            assert_eq!(record["reason"], reason);
+            assert_authorization_input_error(&output, reason);
         }
     }
     assert!(proxy.requests()?.is_empty());
@@ -239,7 +212,7 @@ fn malformed_references_and_conflicting_sources_fail_before_io() -> TestResult {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
     let proxy = MockCredentialProxy::new(CredentialService::AwsContainer, "refresh")?;
     let fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
-    write_container_credential_options(&fixture, &proxy, json!({}))?;
+    fixture.write_options(proxy.add_proxy_options(json!({})))?;
     for variable in [
         "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
         "AWS_CONTAINER_CREDENTIALS_FULL_URI",
@@ -261,10 +234,7 @@ fn malformed_references_and_conflicting_sources_fail_before_io() -> TestResult {
                     .arg("--diagnostics=json")
                     .env(variable, value),
             )?;
-            assert_eq!(output.status.code(), Some(2));
-            assert!(output.stdout.is_empty());
-            let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-            assert_eq!(record["reason"], reason);
+            assert_authorization_input_error(&output, reason);
         }
     }
     let mut invalid_options = vec![
@@ -336,7 +306,7 @@ fn malformed_references_and_conflicting_sources_fail_before_io() -> TestResult {
         invalid_options.push((json!({"container_credentials_full_uri":uri, "container_authorization_token_file":"secret-file"}), "auth_source_invalid_value"));
     }
     for (options, reason) in invalid_options {
-        write_container_credential_options(&fixture, &proxy, options)?;
+        fixture.write_options(proxy.add_proxy_options(options))?;
         let mut command = container_credential_command(&fixture, "inspect");
         command.arg("--diagnostics=json");
         set_container_credential_environment(
@@ -344,11 +314,7 @@ fn malformed_references_and_conflicting_sources_fail_before_io() -> TestResult {
             &container_credential_reference_options(&fixture, ECS_RELATIVE_URI),
         );
         let output = run_with_timeout(&mut command)?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["reason"], reason);
+        assert_authorization_input_error(&output, reason);
     }
     assert!(proxy.requests()?.is_empty());
     assert!(fixture.server.requests.lock().unwrap().is_empty());
@@ -363,11 +329,9 @@ fn acquisition_refresh_and_storage_failures_never_select_ambient_credentials() -
                 let proxy = MockCredentialProxy::new(CredentialService::AwsContainer, mode)?;
                 let fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
                 fs::write(fixture.directory.path().join("pod-token"), INITIAL_TOKEN)?;
-                write_container_credential_options(
-                    &fixture,
-                    &proxy,
+                fixture.write_options(proxy.add_proxy_options(
                     container_credential_reference_options(&fixture, endpoint),
-                )?;
+                ))?;
                 if mode == "storage_denied" {
                     fixture.server.deny_all_requests();
                 }
@@ -376,9 +340,7 @@ fn acquisition_refresh_and_storage_failures_never_select_ambient_credentials() -
                     command.arg("--diagnostics=json");
                 }
                 let output = run_with_timeout(&mut command)?;
-                assert_eq!(output.status.code(), Some(1));
-                assert!(output.stdout.is_empty());
-                assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+                assert_failure_without_stdout(&output, 1);
                 if machine {
                     let record = assert_single_terminal_record(&output.stderr, "diagnostic");
                     if mode == "storage_denied" {
@@ -424,29 +386,21 @@ fn missing_or_invalid_pod_tokens_stop_reads_without_fallback() -> TestResult {
             let token_path = fixture.directory.path().join("pod-token");
             if failure == "removed_after_read" {
                 fs::write(&token_path, INITIAL_TOKEN)?;
-                fixture.server = MockCloudStorageServer::with_objects(
-                    CloudStorageProtocol::S3,
-                    partitioned_objects()?,
-                    move |_, _| {
-                        let _ = fs::remove_file(&token_path);
-                    },
-                )?;
+                fixture.restart_storage_with_request_hook(move |_| {
+                    let _ = fs::remove_file(&token_path);
+                })?;
             } else if failure == "invalid_header" {
                 fs::write(&token_path, "secret-invalid\nheader")?;
             }
-            write_container_credential_options(
-                &fixture,
-                &proxy,
+            fixture.write_options(proxy.add_proxy_options(
                 container_credential_reference_options(&fixture, EKS_HTTP_URI),
-            )?;
+            ))?;
             let mut command = container_credential_command(&fixture, "inspect");
             if machine {
                 command.arg("--diagnostics=json");
             }
             let output = run_with_timeout(&mut command)?;
-            assert_eq!(output.status.code(), Some(1));
-            assert!(output.stdout.is_empty());
-            assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+            assert_failure_without_stdout(&output, 1);
             if machine {
                 assert_single_terminal_record(&output.stderr, "diagnostic");
             }
@@ -481,10 +435,7 @@ fn container_credentials_require_s3_and_explicit_selection() -> TestResult {
             "aws-container",
             "--diagnostics=json",
         ]))?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["reason"], "auth_source_unsupported_storage");
+        assert_authorization_input_error(&output, "auth_source_unsupported_storage");
     }
     let fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
     fixture.write_options(container_credential_reference_options(
@@ -497,10 +448,7 @@ fn container_credentials_require_s3_and_explicit_selection() -> TestResult {
             source,
             "--diagnostics=json",
         ]))?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["reason"], "auth_source_unsupported_option");
+        assert_authorization_input_error(&output, "auth_source_unsupported_option");
     }
     assert!(fixture.server.requests.lock().unwrap().is_empty());
     Ok(())

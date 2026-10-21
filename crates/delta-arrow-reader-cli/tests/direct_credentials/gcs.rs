@@ -9,10 +9,10 @@ use std::{
 use serde_json::{Value, json};
 
 use super::{
-    CloudStorageProtocol, DirectStorageFixture, MockCloudStorageServer, TestResult,
-    assert_read_result, assert_single_terminal_record,
+    CloudStorageProtocol, DirectStorageFixture, TestResult, assert_authorization_input_error,
+    assert_failure_without_stdout, assert_read_result, assert_single_terminal_record,
     mock_credential_proxy::{CredentialService, MockCredentialProxy},
-    partitioned_objects, run_with_timeout,
+    run_python_verifier, run_with_timeout,
 };
 
 // Public test material generated for these fixtures; it must never grant real cloud access.
@@ -82,55 +82,23 @@ impl DirectStorageFixture {
         command
     }
 
-    fn bearer_tokens(&self) -> Vec<String> {
-        let requests = self.server.requests.lock().unwrap();
-        assert!(!requests.is_empty());
-        requests
-            .iter()
-            .map(|request| {
-                assert!(!request.contains("secret-unused"), "{request}");
-                request
-                    .lines()
-                    .find_map(|line| {
-                        let (name, value) = line.split_once(':')?;
-                        name.eq_ignore_ascii_case("authorization")
-                            .then(|| value.trim().strip_prefix("Bearer "))
-                            .flatten()
-                    })
-                    .unwrap()
-                    .to_owned()
-            })
-            .collect()
-    }
-
     fn assert_no_gcs_credential_leaks(&self, output: &Output) {
+        let tokens = self.storage_bearer_tokens();
+        assert!(!tokens.is_empty());
         for bytes in [&output.stdout, &output.stderr] {
             let text = String::from_utf8_lossy(bytes);
             assert!(!text.contains("secret"), "{text}");
             assert!(!text.contains(TEST_KEY.lines().nth(1).unwrap()), "{text}");
-            for token in self.bearer_tokens() {
-                assert!(!text.contains(&token), "{text}");
+            for token in &tokens {
+                assert!(!text.contains(token), "{text}");
             }
         }
     }
 
     fn verify_service_account_jwts(&self) -> TestResult {
         let tokens = self.directory.path().join("tokens.json");
-        fs::write(&tokens, serde_json::to_vec(&self.bearer_tokens())?)?;
-        let output = run_with_timeout(
-            Command::new("python3")
-                .arg(
-                    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                        .join("tests/direct_credentials/gcs/verify_jwts.py"),
-                )
-                .arg(tokens),
-        )?;
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        Ok(())
+        fs::write(&tokens, serde_json::to_vec(&self.storage_bearer_tokens())?)?;
+        run_python_verifier("gcs/verify_jwts.py", &tokens)
     }
 }
 
@@ -143,20 +111,32 @@ fn service_account_files_sign_inspection_scan_and_sql_requests() -> TestResult {
         for operation in ["inspect", "scan", "query"] {
             let mut command = fixture.gcs_command(operation, source);
             command.arg("--diagnostics=json");
-            if operation == "scan" {
-                command.args(["--column", "id"]);
-            }
-            if operation == "query" {
-                command
-                    .arg("--sql-file")
-                    .arg(fixture.directory.path().join("query.sql"));
-            }
             let output = run_with_timeout(&mut command)?;
             fixture.assert_no_gcs_credential_leaks(&output);
             assert_read_result(output, operation)?;
         }
         fixture.verify_service_account_jwts()?;
     }
+    Ok(())
+}
+
+#[test]
+fn jwt_verifier_rejects_a_valid_signature_from_the_wrong_principal() -> TestResult {
+    let fixture = DirectStorageFixture::new(CloudStorageProtocol::Gcs)?;
+    let mut credentials = service_account_adc();
+    credentials["client_email"] = json!("secret-other@example.test");
+    fixture.write_adc(credentials)?;
+    fixture.configure_gcs_source("json", json!({}))?;
+    let output = run_with_timeout(
+        fixture
+            .gcs_command("inspect", "json")
+            .arg("--diagnostics=json"),
+    )?;
+    assert_read_result(output, "inspect")?;
+    let error = fixture
+        .verify_service_account_jwts()
+        .expect_err("a valid signature must not bypass the principal check");
+    assert!(error.to_string().contains("AssertionError"), "{error}");
     Ok(())
 }
 
@@ -241,11 +221,7 @@ fn invalid_source_configuration_never_reaches_storage_or_metadata() -> TestResul
             command.env("GOOGLE_APPLICATION_CREDENTIALS", path);
         }
         let output = run_with_timeout(&mut command)?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["code"], "invalid_storage_authorization");
-        assert_eq!(record["reason"], reason);
+        assert_authorization_input_error(&output, reason);
     }
     assert!(fixture.server.requests.lock().unwrap().is_empty());
     Ok(())
@@ -268,9 +244,7 @@ fn missing_malformed_and_unsupported_adc_files_fail_without_fallback() -> TestRe
                 let mut command = fixture.gcs_command("inspect", source);
                 if machine { command.arg("--diagnostics=json"); }
                 let output = run_with_timeout(&mut command)?;
-                assert_eq!(output.status.code(), Some(2));
-                assert!(output.stdout.is_empty());
-                assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+                assert_failure_without_stdout(&output, 2);
                 if machine {
                     let record = assert_single_terminal_record(&output.stderr, "diagnostic");
                     assert_eq!(record["reason"], "auth_source_invalid_value");
@@ -295,8 +269,7 @@ fn service_account_permission_denial_keeps_the_selected_identity() -> TestResult
                 command.arg("--diagnostics=json");
             }
             let output = run_with_timeout(&mut command)?;
-            assert_eq!(output.status.code(), Some(1));
-            assert!(output.stdout.is_empty());
+            assert_failure_without_stdout(&output, 1);
             fixture.assert_no_gcs_credential_leaks(&output);
             if machine {
                 let record = assert_single_terminal_record(&output.stderr, "diagnostic");
@@ -314,40 +287,23 @@ fn authorized_user_tokens_reach_all_reads_and_refresh_the_loaded_identity() -> T
         let proxy = MockCredentialProxy::new(CredentialService::GoogleOAuth, "refresh")?;
         let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::Gcs)?;
         let adc_path = fixture.adc_path();
-        fixture.server = MockCloudStorageServer::with_objects(
-            CloudStorageProtocol::Gcs,
-            partitioned_objects()?,
-            move |_, _| {
-                // Every token refresh must keep the credentials loaded at command startup.
-                fs::write(&adc_path, "secret-file-was-replaced").unwrap();
-            },
-        )?;
-        fixture.configure_gcs_source(
-            source,
-            json!({
-                "proxy_url":proxy.endpoint, "proxy_excludes":"127.0.0.1",
-                "allow_invalid_certificates":"true"
-            }),
-        )?;
+        fixture.restart_storage_with_request_hook(move |_| {
+            // Every token refresh must keep the credentials loaded at command startup.
+            fs::write(&adc_path, "secret-file-was-replaced").unwrap();
+        })?;
+        fixture.configure_gcs_source(source, proxy.add_proxy_options(json!({})))?;
         for operation in ["inspect", "scan", "query"] {
             fixture.write_adc(authorized_user_adc())?;
             let mut command = fixture.gcs_command(operation, source);
             command.arg("--diagnostics=json");
-            if operation == "scan" {
-                command.args(["--column", "id"]);
-            }
-            if operation == "query" {
-                command
-                    .arg("--sql-file")
-                    .arg(fixture.directory.path().join("query.sql"));
-            }
             let output = run_with_timeout(&mut command)?;
             fixture.assert_no_gcs_credential_leaks(&output);
             assert_read_result(output, operation)?;
         }
+        let tokens = fixture.storage_bearer_tokens();
+        assert!(!tokens.is_empty());
         assert!(
-            fixture
-                .bearer_tokens()
+            tokens
                 .iter()
                 .all(|token| token.starts_with("secret-oauth-"))
         );
@@ -376,20 +332,13 @@ fn authorized_user_fetch_and_refresh_failures_do_not_select_another_source() -> 
             let proxy = MockCredentialProxy::new(CredentialService::GoogleOAuth, mode)?;
             let fixture = DirectStorageFixture::new(CloudStorageProtocol::Gcs)?;
             fixture.write_adc(authorized_user_adc())?;
-            fixture.configure_gcs_source(
-                source,
-                json!({
-                    "proxy_url":proxy.endpoint, "proxy_excludes":"127.0.0.1",
-                    "allow_invalid_certificates":"true"
-                }),
-            )?;
+            fixture.configure_gcs_source(source, proxy.add_proxy_options(json!({})))?;
             let output = run_with_timeout(
                 fixture
                     .gcs_command("inspect", source)
                     .arg("--diagnostics=json"),
             )?;
-            assert_eq!(output.status.code(), Some(1));
-            assert!(output.stdout.is_empty());
+            assert_failure_without_stdout(&output, 1);
             assert_single_terminal_record(&output.stderr, "diagnostic");
             let requests = proxy.requests()?;
             assert_eq!(requests.len(), if mode == "reject" { 1 } else { 2 });
@@ -399,12 +348,9 @@ fn authorized_user_fetch_and_refresh_failures_do_not_select_another_source() -> 
             if mode == "reject" {
                 assert!(fixture.server.requests.lock().unwrap().is_empty());
             } else {
-                assert!(
-                    fixture
-                        .bearer_tokens()
-                        .iter()
-                        .all(|token| token == "secret-oauth-1")
-                );
+                let tokens = fixture.storage_bearer_tokens();
+                assert!(!tokens.is_empty());
+                assert!(tokens.iter().all(|token| token == "secret-oauth-1"));
             }
         }
     }

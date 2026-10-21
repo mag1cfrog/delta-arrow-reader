@@ -13,12 +13,10 @@ use url::form_urlencoded;
 
 use super::{
     ACCOUNT_KEY, BEARER_TOKEN, CloudStorageProtocol, DirectStorageFixture, TestResult,
-    assert_read_result, assert_single_terminal_record, mock_token_server::MockAzureTokenServer,
-    run_with_timeout, storage_bearer_tokens,
+    assert_authorization_input_error, assert_failure_without_stdout, assert_read_result,
+    assert_single_terminal_record, mock_token_server::MockAzureTokenServer, run_with_timeout,
 };
-use crate::mock_cloud_storage::{
-    MockCloudStorageServer, expected_partitioned_rows, partitioned_objects,
-};
+use crate::mock_cloud_storage::expected_partitioned_rows;
 
 const INITIAL_ASSERTION: &str = "secret-initial-assertion+&=";
 const ROTATED_ASSERTION: &str = "secret-rotated-assertion+&=";
@@ -60,13 +58,6 @@ fn workload_identity_command(
             "AZURE_MSI_ENDPOINT",
             format!("{}/secret-unused-provider", fixture.server.endpoint),
         );
-    if operation == "scan" {
-        command.args(["--column", "id"]);
-    } else if operation == "query" {
-        command
-            .arg("--sql-file")
-            .arg(fixture.directory.path().join("query.sql"));
-    }
     command
 }
 
@@ -110,18 +101,14 @@ fn all_reads_use_the_selected_principal_and_rotate_the_assertion() -> TestResult
             let assertion_path = fixture.directory.path().join("assertion.jwt");
             fs::write(&assertion_path, INITIAL_ASSERTION)?;
             let options_path = fixture.directory.path().join("options.json");
-            fixture.server = MockCloudStorageServer::with_objects(
-                CloudStorageProtocol::AzureBlob,
-                partitioned_objects()?,
-                move |_, _| {
-                    // Replace the projected token atomically, as a workload issuer would.
-                    let replacement = assertion_path.with_extension("replacement");
-                    fs::write(&replacement, ROTATED_ASSERTION).unwrap();
-                    fs::rename(replacement, &assertion_path).unwrap();
-                    // Only the assertion is reread; the selected principal and path stay fixed.
-                    fs::write(&options_path, "secret-replaced-options").unwrap();
-                },
-            )?;
+            fixture.restart_storage_with_request_hook(move |_| {
+                // Replace the projected token atomically, as a workload issuer would.
+                let replacement = assertion_path.with_extension("replacement");
+                fs::write(&replacement, ROTATED_ASSERTION).unwrap();
+                fs::rename(replacement, &assertion_path).unwrap();
+                // Only the assertion is reread; the selected principal and path stay fixed.
+                fs::write(&options_path, "secret-replaced-options").unwrap();
+            })?;
             let options = match references {
                 "json" => workload_identity_options(&fixture, &authority),
                 "mixed" => json!({"CLIENT_ID":"secret-client-id"}),
@@ -143,7 +130,7 @@ fn all_reads_use_the_selected_principal_and_rotate_the_assertion() -> TestResult
             let output = run_with_timeout(&mut command)?;
             assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
             assert_read_result(output, operation)?;
-            let tokens = storage_bearer_tokens(&fixture);
+            let tokens = fixture.storage_bearer_tokens();
             assert_eq!(tokens[0], "secret-oauth-1");
             assert!(
                 tokens
@@ -188,10 +175,7 @@ fn missing_or_conflicting_references_fail_before_io() -> TestResult {
                 command.env(variable, value);
             }
             let output = run_with_timeout(&mut command)?;
-            assert_eq!(output.status.code(), Some(2));
-            assert!(output.stdout.is_empty());
-            let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-            assert_eq!(record["reason"], reason);
+            assert_authorization_input_error(&output, reason);
         }
     }
     for (extra, reason) in [
@@ -242,11 +226,8 @@ fn missing_or_conflicting_references_fail_before_io() -> TestResult {
         let output = run_with_timeout(
             workload_identity_command(&fixture, &authority, "inspect").arg("--diagnostics=json"),
         )?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
+        assert_authorization_input_error(&output, reason);
         assert!(!String::from_utf8_lossy(&output.stderr).contains(ACCOUNT_KEY));
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["reason"], reason);
     }
     assert!(authority.requests.lock().unwrap().is_empty());
     assert!(fixture.server.requests.lock().unwrap().is_empty());
@@ -272,9 +253,7 @@ fn acquisition_refresh_and_storage_failures_never_select_ambient_credentials() -
                 command.arg("--diagnostics=json");
             }
             let output = run_with_timeout(&mut command)?;
-            assert_eq!(output.status.code(), Some(1));
-            assert!(output.stdout.is_empty());
-            assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+            assert_failure_without_stdout(&output, 1);
             if machine {
                 let record = assert_single_terminal_record(&output.stderr, "diagnostic");
                 if successful_tokens == usize::MAX {
@@ -287,7 +266,7 @@ fn acquisition_refresh_and_storage_failures_never_select_ambient_credentials() -
                     .iter()
                     .all(|assertion| assertion == INITIAL_ASSERTION)
             );
-            let tokens = storage_bearer_tokens(&fixture);
+            let tokens = fixture.storage_bearer_tokens();
             match successful_tokens {
                 0 => {
                     assert_eq!(requests.len(), 1);
@@ -327,24 +306,20 @@ fn failed_refresh_after_rows_leaves_an_unfinished_stream_without_duplicates() ->
         fs::write(&assertion_path, INITIAL_ASSERTION)?;
         let mut first_file = None;
         let mut assertion_removed = false;
-        fixture.server = MockCloudStorageServer::with_objects(
-            CloudStorageProtocol::AzureBlob,
-            partitioned_objects()?,
-            move |request, _| {
-                let target = request.split_whitespace().nth(1).unwrap();
-                if !target.ends_with(".parquet") {
-                    return;
+        fixture.restart_storage_with_request_hook(move |request| {
+            let target = request.split_whitespace().nth(1).unwrap();
+            if !target.ends_with(".parquet") {
+                return;
+            }
+            if let Some(first_file) = &first_file {
+                if target != first_file && !assertion_removed {
+                    fs::remove_file(&assertion_path).unwrap();
+                    assertion_removed = true;
                 }
-                if let Some(first_file) = &first_file {
-                    if target != first_file && !assertion_removed {
-                        fs::remove_file(&assertion_path).unwrap();
-                        assertion_removed = true;
-                    }
-                } else {
-                    first_file = Some(target.to_owned());
-                }
-            },
-        )?;
+            } else {
+                first_file = Some(target.to_owned());
+            }
+        })?;
         fixture.write_options(workload_identity_options(&fixture, &authority))?;
         let execution_options = fixture.directory.path().join("execution.json");
         // Serialize file reads so the first file emits rows before the second loses its credentials.
@@ -393,7 +368,8 @@ fn failed_refresh_after_rows_leaves_an_unfinished_stream_without_duplicates() ->
                 .all(|assertion| assertion == INITIAL_ASSERTION)
         );
         assert!(
-            storage_bearer_tokens(&fixture)
+            fixture
+                .storage_bearer_tokens()
                 .iter()
                 .all(|token| token.starts_with("secret-oauth-"))
         );
@@ -410,13 +386,9 @@ fn missing_assertion_at_startup_or_refresh_stops_the_read() -> TestResult {
             if remove_after_first_read {
                 let assertion_path = fixture.directory.path().join("assertion.jwt");
                 fs::write(&assertion_path, INITIAL_ASSERTION)?;
-                fixture.server = MockCloudStorageServer::with_objects(
-                    CloudStorageProtocol::AzureBlob,
-                    partitioned_objects()?,
-                    move |_, _| {
-                        let _ = fs::remove_file(&assertion_path);
-                    },
-                )?;
+                fixture.restart_storage_with_request_hook(move |_| {
+                    let _ = fs::remove_file(&assertion_path);
+                })?;
             }
             fixture.write_options(json!({}))?;
             let mut command = workload_identity_command(&fixture, &authority, "inspect");
@@ -424,14 +396,12 @@ fn missing_assertion_at_startup_or_refresh_stops_the_read() -> TestResult {
                 command.arg("--diagnostics=json");
             }
             let output = run_with_timeout(&mut command)?;
-            assert_eq!(output.status.code(), Some(1));
-            assert!(output.stdout.is_empty());
-            assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+            assert_failure_without_stdout(&output, 1);
             if machine {
                 assert_single_terminal_record(&output.stderr, "diagnostic");
             }
             let requests = authority.requests.lock().unwrap();
-            let tokens = storage_bearer_tokens(&fixture);
+            let tokens = fixture.storage_bearer_tokens();
             if remove_after_first_read {
                 assert_eq!(assert_workload_requests(&requests), [INITIAL_ASSERTION]);
                 assert_eq!(tokens, ["secret-oauth-1"]);
@@ -458,10 +428,7 @@ fn workload_source_requires_azure_blob_and_explicit_selection() -> TestResult {
             "azure-workload-identity",
             "--diagnostics=json",
         ]))?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["reason"], "auth_source_unsupported_storage");
+        assert_authorization_input_error(&output, "auth_source_unsupported_storage");
     }
     let authority = MockAzureTokenServer::new(usize::MAX)?;
     let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
@@ -472,16 +439,13 @@ fn workload_source_requires_azure_blob_and_explicit_selection() -> TestResult {
             source,
             "--diagnostics=json",
         ]))?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(
-            record["reason"],
+        assert_authorization_input_error(
+            &output,
             if source == "env" {
                 "auth_source_conflicting_credentials"
             } else {
                 "auth_source_unsupported_option"
-            }
+            },
         );
     }
     assert!(authority.requests.lock().unwrap().is_empty());

@@ -7,10 +7,9 @@ use url::Url;
 
 use super::{
     ACCOUNT_KEY, BEARER_TOKEN, CloudStorageProtocol, DirectStorageFixture, TestResult,
-    assert_read_result, assert_single_terminal_record, mock_token_server::MockAzureTokenServer,
-    run_with_timeout, storage_bearer_tokens,
+    assert_authorization_input_error, assert_failure_without_stdout, assert_read_result,
+    assert_single_terminal_record, mock_token_server::MockAzureTokenServer, run_with_timeout,
 };
-use crate::mock_cloud_storage::{MockCloudStorageServer, partitioned_objects};
 
 // JSON alias, advertised environment variable, metadata query key, and synthetic identity.
 const IDENTITY_SELECTORS: [(&str, &str, &str, &str); 3] = [
@@ -58,13 +57,6 @@ fn managed_identity_command(
         .env("AZURE_AUTHORITY_HOST", "http://secret-unused-authority")
         .env("AZURE_USE_AZURE_CLI", "true")
         .env("AZURE_MSI_ENDPOINT", "http://secret-unused-endpoint");
-    if operation == "scan" {
-        command.args(["--column", "id"]);
-    } else if operation == "query" {
-        command
-            .arg("--sql-file")
-            .arg(fixture.directory.path().join("query.sql"));
-    }
     command
 }
 
@@ -111,14 +103,10 @@ fn all_reads_refresh_only_the_selected_managed_identity() -> TestResult {
                 let metadata = MockAzureTokenServer::new(usize::MAX)?;
                 let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
                 let options_path = fixture.directory.path().join("options.json");
-                fixture.server = MockCloudStorageServer::with_objects(
-                    CloudStorageProtocol::AzureBlob,
-                    partitioned_objects()?,
-                    move |_, _| {
-                        // Renewal must keep the loaded identity and metadata endpoint.
-                        fs::write(&options_path, "secret-replaced-options").unwrap();
-                    },
-                )?;
+                fixture.restart_storage_with_request_hook(move |_| {
+                    // Renewal must keep the loaded identity and metadata endpoint.
+                    fs::write(&options_path, "secret-replaced-options").unwrap();
+                })?;
                 let mut options = json!({});
                 if references == "json" {
                     options[option] = json!(identity);
@@ -157,7 +145,7 @@ fn all_reads_refresh_only_the_selected_managed_identity() -> TestResult {
                         None
                     },
                 );
-                let tokens = storage_bearer_tokens(&fixture);
+                let tokens = fixture.storage_bearer_tokens();
                 assert_eq!(tokens[0], "secret-oauth-1");
                 assert!(
                     tokens
@@ -199,16 +187,13 @@ fn zero_or_multiple_identity_selectors_fail_before_io() -> TestResult {
             }
             fixture.write_options(options)?;
             let output = run_with_timeout(&mut command)?;
-            assert_eq!(output.status.code(), Some(2));
-            assert!(output.stdout.is_empty());
-            let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-            assert_eq!(
-                record["reason"],
+            assert_authorization_input_error(
+                &output,
                 if selector_indices.is_empty() {
                     "auth_source_incomplete_credentials"
                 } else {
                     "auth_source_conflicting_credentials"
-                }
+                },
             );
         }
     }
@@ -247,10 +232,7 @@ fn malformed_environment_values_and_conflicting_json_are_rejected() -> TestResul
                     .env(variable, value)
                     .arg("--diagnostics=json"),
             )?;
-            assert_eq!(output.status.code(), Some(2));
-            assert!(output.stdout.is_empty());
-            let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-            assert_eq!(record["reason"], reason);
+            assert_authorization_input_error(&output, reason);
         }
     }
     for (extra, reason) in [
@@ -309,11 +291,8 @@ fn malformed_environment_values_and_conflicting_json_are_rejected() -> TestResul
         let output = run_with_timeout(
             managed_identity_command(&fixture, &metadata, "inspect").arg("--diagnostics=json"),
         )?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
+        assert_authorization_input_error(&output, reason);
         assert!(!String::from_utf8_lossy(&output.stderr).contains(ACCOUNT_KEY));
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["reason"], reason);
     }
     assert!(metadata.requests.lock().unwrap().is_empty());
     assert!(fixture.server.requests.lock().unwrap().is_empty());
@@ -336,9 +315,7 @@ fn acquisition_refresh_and_storage_failures_never_select_another_identity() -> T
                 command.arg("--diagnostics=json");
             }
             let output = run_with_timeout(&mut command)?;
-            assert_eq!(output.status.code(), Some(1));
-            assert!(output.stdout.is_empty());
-            assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+            assert_failure_without_stdout(&output, 1);
             if machine {
                 let record = assert_single_terminal_record(&output.stderr, "diagnostic");
                 if successful_tokens == usize::MAX {
@@ -352,7 +329,7 @@ fn acquisition_refresh_and_storage_failures_never_select_another_identity() -> T
                 Some(IDENTITY_HEADER),
             );
             let requests = metadata.requests.lock().unwrap();
-            let tokens = storage_bearer_tokens(&fixture);
+            let tokens = fixture.storage_bearer_tokens();
             match successful_tokens {
                 0 => {
                     assert_eq!(requests.len(), 1);
@@ -390,10 +367,7 @@ fn managed_identity_requires_azure_blob_and_its_explicit_source() -> TestResult 
             "azure-managed-identity",
             "--diagnostics=json",
         ]))?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["reason"], "auth_source_unsupported_storage");
+        assert_authorization_input_error(&output, "auth_source_unsupported_storage");
     }
     let fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
     fixture.write_options(json!({"object_id":"secret-object-id"}))?;
@@ -403,10 +377,7 @@ fn managed_identity_requires_azure_blob_and_its_explicit_source() -> TestResult 
             source,
             "--diagnostics=json",
         ]))?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["reason"], "auth_source_unsupported_option");
+        assert_authorization_input_error(&output, "auth_source_unsupported_option");
     }
     assert!(fixture.server.requests.lock().unwrap().is_empty());
     Ok(())

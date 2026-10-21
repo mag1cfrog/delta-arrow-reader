@@ -5,29 +5,16 @@ use std::{fs, process::Command};
 use serde_json::{Value, json};
 
 use super::{
-    CloudStorageProtocol, DirectStorageFixture, TestResult, assert_read_result,
-    assert_single_terminal_record, run_with_timeout, signed_session_generations,
+    CloudStorageProtocol, DirectStorageFixture, TestResult, assert_authorization_input_error,
+    assert_failure_without_stdout, assert_read_result, assert_single_terminal_record,
+    run_with_timeout, signed_session_generations,
 };
-use crate::{
-    direct_credentials::mock_credential_proxy::{CredentialService, MockCredentialProxy},
-    mock_cloud_storage::{MockCloudStorageServer, partitioned_objects},
-};
+use crate::direct_credentials::mock_credential_proxy::{CredentialService, MockCredentialProxy};
 
 const ROLE_ARN: &str = "arn:aws:iam::123456789012:role/secret-selected-role";
 const INITIAL_ASSERTION: &str = "secret-initial-assertion+&=";
 const ROTATED_ASSERTION: &str = "secret-rotated-assertion+&=";
 const CUSTOM_STS_ENDPOINT: &str = "https://sts.secret-override.invalid/";
-
-fn write_web_identity_options(
-    fixture: &DirectStorageFixture,
-    proxy: &MockCredentialProxy,
-    mut options: Value,
-) -> TestResult {
-    options["proxy_url"] = json!(proxy.endpoint);
-    options["proxy_excludes"] = json!("127.0.0.1");
-    options["allow_invalid_certificates"] = json!("true");
-    fixture.write_options(options)
-}
 
 fn web_identity_command(fixture: &DirectStorageFixture, operation: &str) -> Command {
     let mut command = fixture.command(operation);
@@ -57,13 +44,6 @@ fn web_identity_command(fixture: &DirectStorageFixture, operation: &str) -> Comm
             "AWS_METADATA_ENDPOINT",
             format!("{}/secret-unused-metadata", fixture.server.endpoint),
         );
-    if operation == "scan" {
-        command.args(["--column", "id"]);
-    } else if operation == "query" {
-        command
-            .arg("--sql-file")
-            .arg(fixture.directory.path().join("query.sql"));
-    }
     command
 }
 
@@ -103,17 +83,13 @@ fn all_reads_refresh_the_fixed_role_with_rotated_assertions() -> TestResult {
             let assertion_path = fixture.directory.path().join("assertion.jwt");
             fs::write(&assertion_path, INITIAL_ASSERTION)?;
             let options_path = fixture.directory.path().join("options.json");
-            fixture.server = MockCloudStorageServer::with_objects(
-                CloudStorageProtocol::S3,
-                partitioned_objects()?,
-                move |_, _| {
-                    let replacement = assertion_path.with_extension("replacement");
-                    fs::write(&replacement, ROTATED_ASSERTION).unwrap();
-                    fs::rename(replacement, &assertion_path).unwrap();
-                    // Only the assertion rotates; the loaded role and file path stay fixed.
-                    fs::write(&options_path, "secret-replaced-options").unwrap();
-                },
-            )?;
+            fixture.restart_storage_with_request_hook(move |_| {
+                let replacement = assertion_path.with_extension("replacement");
+                fs::write(&replacement, ROTATED_ASSERTION).unwrap();
+                fs::rename(replacement, &assertion_path).unwrap();
+                // Only the assertion rotates; the loaded role and file path stay fixed.
+                fs::write(&options_path, "secret-replaced-options").unwrap();
+            })?;
             let options = match references {
                 "json" => json!({
                     "ROLE_ARN":ROLE_ARN, "web_identity_token_file":fixture.directory.path().join("assertion.jwt"),
@@ -123,7 +99,7 @@ fn all_reads_refresh_the_fixed_role_with_rotated_assertions() -> TestResult {
                 "mixed" => json!({"role_arn":ROLE_ARN, "region":"eu-west-1"}),
                 _ => json!({}),
             };
-            write_web_identity_options(&fixture, &proxy, options)?;
+            fixture.write_options(proxy.add_proxy_options(options))?;
             let mut command = web_identity_command(&fixture, operation);
             command.arg("--diagnostics=json");
             if references != "env" {
@@ -179,7 +155,7 @@ fn missing_malformed_and_conflicting_references_fail_before_io() -> TestResult {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
     let proxy = MockCredentialProxy::new(CredentialService::AwsSts, "refresh")?;
     let fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
-    write_web_identity_options(&fixture, &proxy, json!({}))?;
+    fixture.write_options(proxy.add_proxy_options(json!({})))?;
     for variable in ["AWS_ROLE_ARN", "AWS_WEB_IDENTITY_TOKEN_FILE"] {
         for (value, reason) in [
             (None, "auth_source_incomplete_credentials"),
@@ -199,10 +175,7 @@ fn missing_malformed_and_conflicting_references_fail_before_io() -> TestResult {
                 command.env(variable, value);
             }
             let output = run_with_timeout(&mut command)?;
-            assert_eq!(output.status.code(), Some(2));
-            assert!(output.stdout.is_empty());
-            let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-            assert_eq!(record["reason"], reason);
+            assert_authorization_input_error(&output, reason);
         }
     }
     for (options, reason) in [
@@ -245,13 +218,10 @@ fn missing_malformed_and_conflicting_references_fail_before_io() -> TestResult {
             "auth_source_unsupported_option",
         ),
     ] {
-        write_web_identity_options(&fixture, &proxy, options)?;
+        fixture.write_options(proxy.add_proxy_options(options))?;
         let output =
             run_with_timeout(web_identity_command(&fixture, "inspect").arg("--diagnostics=json"))?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["reason"], reason);
+        assert_authorization_input_error(&output, reason);
     }
     assert!(proxy.requests()?.is_empty());
     assert!(fixture.server.requests.lock().unwrap().is_empty());
@@ -268,7 +238,7 @@ fn sts_and_storage_failures_never_use_ambient_credentials() -> TestResult {
                 fixture.directory.path().join("assertion.jwt"),
                 INITIAL_ASSERTION,
             )?;
-            write_web_identity_options(&fixture, &proxy, json!({}))?;
+            fixture.write_options(proxy.add_proxy_options(json!({})))?;
             if mode == "storage_denied" {
                 fixture.server.deny_all_requests();
             }
@@ -277,9 +247,7 @@ fn sts_and_storage_failures_never_use_ambient_credentials() -> TestResult {
                 command.arg("--diagnostics=json");
             }
             let output = run_with_timeout(&mut command)?;
-            assert_eq!(output.status.code(), Some(1));
-            assert!(output.stdout.is_empty());
-            assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+            assert_failure_without_stdout(&output, 1);
             if machine {
                 let record = assert_single_terminal_record(&output.stderr, "diagnostic");
                 if mode == "storage_denied" {
@@ -324,23 +292,17 @@ fn unreadable_assertions_at_startup_or_refresh_stop_the_read() -> TestResult {
             if remove_after_first_read {
                 let assertion_path = fixture.directory.path().join("assertion.jwt");
                 fs::write(&assertion_path, INITIAL_ASSERTION)?;
-                fixture.server = MockCloudStorageServer::with_objects(
-                    CloudStorageProtocol::S3,
-                    partitioned_objects()?,
-                    move |_, _| {
-                        let _ = fs::remove_file(&assertion_path);
-                    },
-                )?;
+                fixture.restart_storage_with_request_hook(move |_| {
+                    let _ = fs::remove_file(&assertion_path);
+                })?;
             }
-            write_web_identity_options(&fixture, &proxy, json!({}))?;
+            fixture.write_options(proxy.add_proxy_options(json!({})))?;
             let mut command = web_identity_command(&fixture, "inspect");
             if machine {
                 command.arg("--diagnostics=json");
             }
             let output = run_with_timeout(&mut command)?;
-            assert_eq!(output.status.code(), Some(1));
-            assert!(output.stdout.is_empty());
-            assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+            assert_failure_without_stdout(&output, 1);
             if machine {
                 assert_single_terminal_record(&output.stderr, "diagnostic");
             }
@@ -373,19 +335,13 @@ fn allowing_http_storage_does_not_allow_plain_http_sts() -> TestResult {
         fixture.directory.path().join("assertion.jwt"),
         INITIAL_ASSERTION,
     )?;
-    write_web_identity_options(
-        &fixture,
-        &proxy,
-        json!({
-            "endpoint_url_sts":format!("{}/secret-sts", fixture.server.endpoint)
-        }),
-    )?;
+    fixture.write_options(proxy.add_proxy_options(json!({
+        "endpoint_url_sts":format!("{}/secret-sts", fixture.server.endpoint)
+    })))?;
     let output =
         run_with_timeout(web_identity_command(&fixture, "inspect").arg("--diagnostics=json"))?;
-    assert_eq!(output.status.code(), Some(1));
-    assert!(output.stdout.is_empty());
+    assert_failure_without_stdout(&output, 1);
     assert_single_terminal_record(&output.stderr, "diagnostic");
-    assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
     assert!(proxy.requests()?.is_empty());
     assert!(fixture.server.requests.lock().unwrap().is_empty());
     Ok(())
@@ -405,10 +361,7 @@ fn web_identity_requires_s3_and_its_explicit_source() -> TestResult {
             "aws-web-identity",
             "--diagnostics=json",
         ]))?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["reason"], "auth_source_unsupported_storage");
+        assert_authorization_input_error(&output, "auth_source_unsupported_storage");
     }
     let fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
     fixture.write_options(json!({"role_arn":ROLE_ARN, "web_identity_token_file":"secret-file"}))?;
@@ -418,10 +371,7 @@ fn web_identity_requires_s3_and_its_explicit_source() -> TestResult {
             source,
             "--diagnostics=json",
         ]))?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["reason"], "auth_source_unsupported_option");
+        assert_authorization_input_error(&output, "auth_source_unsupported_option");
     }
     assert!(fixture.server.requests.lock().unwrap().is_empty());
     Ok(())

@@ -11,8 +11,9 @@ use serde_json::json;
 use url::Url;
 
 use super::{
-    CloudStorageProtocol, DirectStorageFixture, TestResult, assert_read_result,
-    assert_single_terminal_record, run_with_timeout,
+    CloudStorageProtocol, DirectStorageFixture, TestResult, assert_authorization_input_error,
+    assert_failure_without_stdout, assert_read_result, assert_single_terminal_record,
+    run_with_timeout,
 };
 
 const ACCOUNT_KEY: &str = "c2VjcmV0LXNlbGVjdGVkLWtleQ==";
@@ -24,27 +25,6 @@ const CREDENTIALS: [(&str, &str, &str); 3] = [
     ("sas_token", "AZURE_STORAGE_SAS_KEY", SAS),
     ("bearer_token", "AZURE_STORAGE_TOKEN", BEARER_TOKEN),
 ];
-
-fn storage_bearer_tokens(fixture: &DirectStorageFixture) -> Vec<String> {
-    fixture
-        .server
-        .requests
-        .lock()
-        .unwrap()
-        .iter()
-        .map(|request| {
-            assert!(!request.contains("secret-unused"), "{request}");
-            request
-                .lines()
-                .find_map(|line| {
-                    let (name, value) = line.split_once(':')?;
-                    name.eq_ignore_ascii_case("authorization")
-                        .then(|| value.trim().strip_prefix("Bearer ").unwrap().to_owned())
-                })
-                .unwrap()
-        })
-        .collect()
-}
 
 fn assert_request_credentials(fixture: &DirectStorageFixture, option: &str) -> TestResult {
     let requests = fixture.server.requests.lock().unwrap();
@@ -118,13 +98,6 @@ fn selected_credentials_authorize_inspection_scan_and_sql() -> TestResult {
                     command
                         .env("AZURE_STORAGE_TOKEN", "secret-unused-token")
                         .env("AZURE_CLIENT_ID", "secret-unused-client");
-                }
-                if operation == "scan" {
-                    command.args(["--column", "id"]);
-                } else if operation == "query" {
-                    command
-                        .arg("--sql-file")
-                        .arg(fixture.directory.path().join("query.sql"));
                 }
                 let output = run_with_timeout(&mut command)?;
                 assert!(!String::from_utf8_lossy(&output.stdout).contains(ACCOUNT_KEY));
@@ -205,10 +178,7 @@ fn account_names_come_from_json_environment_or_native_urls() -> TestResult {
             .args(["--auth-source", "json", "--diagnostics=json"])
             .env("AZURE_STORAGE_ACCOUNT_NAME", "secret-unused-account"),
     )?;
-    assert_eq!(output.status.code(), Some(2));
-    assert!(output.stdout.is_empty());
-    let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-    assert_eq!(record["reason"], "auth_source_invalid_value");
+    assert_authorization_input_error(&output, "auth_source_invalid_value");
     assert!(fixture.server.requests.lock().unwrap().is_empty());
     Ok(())
 }
@@ -280,12 +250,8 @@ fn invalid_json_sources_fail_before_io_without_using_ambient_credentials() -> Te
                 .args(["--auth-source", "json", "--diagnostics=json"])
                 .env("AZURE_STORAGE_TOKEN", BEARER_TOKEN),
         )?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
+        assert_authorization_input_error(&output, reason);
         assert!(!String::from_utf8_lossy(&output.stderr).contains(ACCOUNT_KEY));
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["code"], "invalid_storage_authorization");
-        assert_eq!(record["reason"], reason);
     }
     assert!(fixture.server.requests.lock().unwrap().is_empty());
     Ok(())
@@ -334,10 +300,7 @@ fn environment_requires_exactly_one_family_and_rejects_json_credentials() -> Tes
             command.env("AZURE_STORAGE_ACCOUNT_KEY", key);
         }
         let output = run_with_timeout(&mut command)?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["reason"], reason);
+        assert_authorization_input_error(&output, reason);
     }
     assert!(fixture.server.requests.lock().unwrap().is_empty());
     Ok(())
@@ -369,10 +332,8 @@ fn permission_denial_keeps_the_selected_identity_and_redacts_credentials() -> Te
                     command.arg("--diagnostics=json");
                 }
                 let output = run_with_timeout(&mut command)?;
-                assert_eq!(output.status.code(), Some(1));
-                assert!(output.stdout.is_empty());
+                assert_failure_without_stdout(&output, 1);
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                assert!(!stderr.contains("secret"), "{stderr}");
                 assert!(!stderr.contains(ACCOUNT_KEY), "{stderr}");
                 if machine {
                     let record = assert_single_terminal_record(&output.stderr, "diagnostic");
@@ -399,10 +360,7 @@ fn table_urls_reject_embedded_credentials() -> TestResult {
             "env",
             "--diagnostics=json",
         ]))?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["reason"], "auth_source_invalid_table_url");
+        assert_authorization_input_error(&output, "auth_source_invalid_table_url");
     }
     Ok(())
 }

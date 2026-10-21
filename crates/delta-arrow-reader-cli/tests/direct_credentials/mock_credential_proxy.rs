@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
 /// Selects the request protocol and credential response used by the local service.
 pub(super) enum CredentialService {
@@ -21,7 +21,7 @@ pub(super) enum CredentialService {
 pub(super) struct MockCredentialProxy {
     directory: tempfile::TempDir,
     child: Child,
-    pub(super) endpoint: String,
+    endpoint: String,
 }
 
 impl MockCredentialProxy {
@@ -61,6 +61,14 @@ impl MockCredentialProxy {
             }
             thread::sleep(Duration::from_millis(10));
         }
+    }
+
+    /// Routes credential requests through the proxy while storage requests stay local.
+    pub(super) fn add_proxy_options(&self, mut options: Value) -> Value {
+        options["proxy_url"] = json!(self.endpoint);
+        options["proxy_excludes"] = json!("127.0.0.1");
+        options["allow_invalid_certificates"] = json!("true");
+        options
     }
 
     pub(super) fn requests(&self) -> Result<Vec<Value>, Box<dyn std::error::Error>> {

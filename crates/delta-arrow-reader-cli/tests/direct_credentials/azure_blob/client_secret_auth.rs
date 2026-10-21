@@ -7,10 +7,9 @@ use url::form_urlencoded;
 
 use super::{
     ACCOUNT_KEY, BEARER_TOKEN, CREDENTIALS, CloudStorageProtocol, DirectStorageFixture, TestResult,
-    assert_read_result, assert_single_terminal_record, mock_token_server::MockAzureTokenServer,
-    run_with_timeout, storage_bearer_tokens,
+    assert_authorization_input_error, assert_failure_without_stdout, assert_read_result,
+    assert_single_terminal_record, mock_token_server::MockAzureTokenServer, run_with_timeout,
 };
-use crate::mock_cloud_storage::{MockCloudStorageServer, partitioned_objects};
 
 // JSON aliases and the only environment variables advertised for this identity.
 const CLIENT_SECRET_FIELDS: [(&str, &str, &str); 3] = [
@@ -69,13 +68,6 @@ fn client_secret_command(fixture: &DirectStorageFixture, source: &str, operation
     if source == "json" {
         command.env("AZURE_STORAGE_TOKEN", BEARER_TOKEN);
     }
-    if operation == "scan" {
-        command.args(["--column", "id"]);
-    } else if operation == "query" {
-        command
-            .arg("--sql-file")
-            .arg(fixture.directory.path().join("query.sql"));
-    }
     command
 }
 
@@ -109,21 +101,17 @@ fn tokens_authorize_all_reads_and_refresh_the_loaded_identity() -> TestResult {
             let authority = MockAzureTokenServer::new(usize::MAX)?;
             let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
             let options_path = fixture.directory.path().join("options.json");
-            fixture.server = MockCloudStorageServer::with_objects(
-                CloudStorageProtocol::AzureBlob,
-                partitioned_objects()?,
-                move |_, _| {
-                    // Refresh must use the loaded identity, even if its source file changes.
-                    fs::write(&options_path, "secret-replaced-options").unwrap();
-                },
-            )?;
+            fixture.restart_storage_with_request_hook(move |_| {
+                // Refresh must use the loaded identity, even if its source file changes.
+                fs::write(&options_path, "secret-replaced-options").unwrap();
+            })?;
             write_client_secret_options(&fixture, &authority, source)?;
             let output = run_with_timeout(
                 client_secret_command(&fixture, source, operation).arg("--diagnostics=json"),
             )?;
             assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
             assert_read_result(output, operation)?;
-            let tokens = storage_bearer_tokens(&fixture);
+            let tokens = fixture.storage_bearer_tokens();
             assert!(tokens.len() > 1);
             assert_eq!(tokens[0], "secret-oauth-1");
             assert!(
@@ -155,10 +143,7 @@ fn acquisition_refresh_and_permission_failures_keep_the_selected_identity() -> T
                     command.arg("--diagnostics=json");
                 }
                 let output = run_with_timeout(&mut command)?;
-                assert_eq!(output.status.code(), Some(1));
-                assert!(output.stdout.is_empty());
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                assert!(!stderr.contains("secret"), "{stderr}");
+                assert_failure_without_stdout(&output, 1);
                 if machine {
                     let record = assert_single_terminal_record(&output.stderr, "diagnostic");
                     if successful_tokens == usize::MAX {
@@ -167,7 +152,7 @@ fn acquisition_refresh_and_permission_failures_keep_the_selected_identity() -> T
                 }
                 let requests = authority.requests.lock().unwrap();
                 assert_client_secret_requests(&requests);
-                let tokens = storage_bearer_tokens(&fixture);
+                let tokens = fixture.storage_bearer_tokens();
                 match successful_tokens {
                     0 => {
                         assert_eq!(requests.len(), 1);
@@ -236,17 +221,14 @@ fn partial_or_mixed_client_secret_families_fail_before_io() -> TestResult {
                 }
                 fixture.write_options(options)?;
                 let output = run_with_timeout(&mut command)?;
-                assert_eq!(output.status.code(), Some(2));
-                assert!(output.stdout.is_empty());
                 assert!(!String::from_utf8_lossy(&output.stderr).contains(ACCOUNT_KEY));
-                let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-                assert_eq!(
-                    record["reason"],
+                assert_authorization_input_error(
+                    &output,
                     if static_credential.is_some() {
                         "auth_source_conflicting_credentials"
                     } else {
                         "auth_source_incomplete_credentials"
-                    }
+                    },
                 );
             }
         }
@@ -286,10 +268,7 @@ fn duplicate_aliases_and_cross_source_fields_are_rejected() -> TestResult {
         let output = run_with_timeout(
             client_secret_command(&fixture, source, "inspect").arg("--diagnostics=json"),
         )?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["reason"], reason);
+        assert_authorization_input_error(&output, reason);
     }
     assert!(fixture.server.requests.lock().unwrap().is_empty());
     Ok(())

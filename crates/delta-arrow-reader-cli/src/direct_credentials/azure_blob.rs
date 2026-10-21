@@ -6,7 +6,9 @@ use delta_arrow_reader::{DeltaStorageCredentialProvider, DeltaStorageOptions, De
 use object_store::azure::{AzureConfigKey, MicrosoftAzureBuilder};
 use snafu::{OptionExt, ensure};
 
-use super::{CredentialSource, read_environment_value, validate_auth_source_value};
+use super::{
+    CredentialSource, normalize_storage_options, read_environment_value, validate_auth_source_value,
+};
 use crate::{Error, StorageAuthorizationSnafu, azure_sas};
 
 const MANAGED_IDENTITY_KEYS: [AzureConfigKey; 3] = [
@@ -21,7 +23,9 @@ pub(super) fn configure_table_credentials(
     options: DeltaStorageOptions,
     source: CredentialSource,
 ) -> Result<DeltaTableBuilder, Error> {
-    let mut options = normalize_azure_blob_options(options, source)?;
+    let mut options = normalize_storage_options(options, |key, value| {
+        validate_storage_option(key, value, source)
+    })?;
     load_environment_options(&mut options, source)?;
     validate_credential_family(&options, source)?;
 
@@ -226,100 +230,84 @@ fn validate_credential_family(
     Ok(())
 }
 
-fn normalize_azure_blob_options(
-    options: DeltaStorageOptions,
+fn validate_storage_option(
+    key: &AzureConfigKey,
+    value: &str,
     source: CredentialSource,
-) -> Result<DeltaStorageOptions, Error> {
-    let mut normalized = DeltaStorageOptions::new();
-    for (name, value) in options {
-        let key = name
-            .to_ascii_lowercase()
-            .parse::<AzureConfigKey>()
-            .map_err(|_| Error::StorageAuthorization {
-                reason: "auth_source_unsupported_option",
-            })?;
-        match key {
-            AzureConfigKey::AccessKey
-            | AzureConfigKey::SasKey
-            | AzureConfigKey::Token
-            | AzureConfigKey::ClientSecret => {
-                ensure!(
-                    matches!(source, CredentialSource::Json),
-                    StorageAuthorizationSnafu {
-                        reason: "auth_source_conflicting_credentials"
-                    }
-                );
-                validate_auth_source_value(&value)?;
-            }
-            AzureConfigKey::ClientId => {
-                ensure!(
-                    !matches!(source, CredentialSource::Env),
-                    StorageAuthorizationSnafu {
-                        reason: "auth_source_conflicting_credentials"
-                    }
-                );
-                validate_auth_source_value(&value)?;
-            }
-            AzureConfigKey::AuthorityId => {
-                ensure!(
-                    matches!(
-                        source,
-                        CredentialSource::Json | CredentialSource::AzureWorkloadIdentity
-                    ),
-                    StorageAuthorizationSnafu {
-                        reason: "auth_source_conflicting_credentials"
-                    }
-                );
-                validate_auth_source_value(&value)?;
-            }
-            AzureConfigKey::ObjectId
-            | AzureConfigKey::MsiResourceId
-            | AzureConfigKey::MsiEndpoint => {
-                ensure!(
-                    matches!(source, CredentialSource::AzureManagedIdentity),
-                    StorageAuthorizationSnafu {
-                        reason: "auth_source_unsupported_option"
-                    }
-                );
-                validate_auth_source_value(&value)?;
-            }
-            AzureConfigKey::FederatedTokenFile => {
-                ensure!(
-                    matches!(source, CredentialSource::AzureWorkloadIdentity),
-                    StorageAuthorizationSnafu {
-                        reason: "auth_source_unsupported_option"
-                    }
-                );
-                validate_auth_source_value(&value)?;
-            }
-            AzureConfigKey::AuthorityHost => {
-                ensure!(
-                    !matches!(source, CredentialSource::AzureManagedIdentity),
-                    StorageAuthorizationSnafu {
-                        reason: "auth_source_unsupported_option"
-                    }
-                );
-                validate_auth_source_value(&value)?;
-            }
-            AzureConfigKey::AccountName => {
-                validate_auth_source_value(&value)?;
-            }
-            AzureConfigKey::Endpoint
-            | AzureConfigKey::UseFabricEndpoint
-            | AzureConfigKey::Client(_) => {}
-            _ => {
-                return StorageAuthorizationSnafu {
-                    reason: "auth_source_unsupported_option",
+) -> Result<(), Error> {
+    match key {
+        AzureConfigKey::AccessKey
+        | AzureConfigKey::SasKey
+        | AzureConfigKey::Token
+        | AzureConfigKey::ClientSecret => {
+            ensure!(
+                matches!(source, CredentialSource::Json),
+                StorageAuthorizationSnafu {
+                    reason: "auth_source_conflicting_credentials"
                 }
-                .fail();
-            }
+            );
+            validate_auth_source_value(value)?;
         }
-        ensure!(
-            normalized.insert(key.as_ref().to_owned(), value).is_none(),
-            StorageAuthorizationSnafu {
-                reason: "auth_source_duplicate_option"
+        AzureConfigKey::ClientId => {
+            ensure!(
+                !matches!(source, CredentialSource::Env),
+                StorageAuthorizationSnafu {
+                    reason: "auth_source_conflicting_credentials"
+                }
+            );
+            validate_auth_source_value(value)?;
+        }
+        AzureConfigKey::AuthorityId => {
+            ensure!(
+                matches!(
+                    source,
+                    CredentialSource::Json | CredentialSource::AzureWorkloadIdentity
+                ),
+                StorageAuthorizationSnafu {
+                    reason: "auth_source_conflicting_credentials"
+                }
+            );
+            validate_auth_source_value(value)?;
+        }
+        AzureConfigKey::ObjectId | AzureConfigKey::MsiResourceId | AzureConfigKey::MsiEndpoint => {
+            ensure!(
+                matches!(source, CredentialSource::AzureManagedIdentity),
+                StorageAuthorizationSnafu {
+                    reason: "auth_source_unsupported_option"
+                }
+            );
+            validate_auth_source_value(value)?;
+        }
+        AzureConfigKey::FederatedTokenFile => {
+            ensure!(
+                matches!(source, CredentialSource::AzureWorkloadIdentity),
+                StorageAuthorizationSnafu {
+                    reason: "auth_source_unsupported_option"
+                }
+            );
+            validate_auth_source_value(value)?;
+        }
+        AzureConfigKey::AuthorityHost => {
+            ensure!(
+                !matches!(source, CredentialSource::AzureManagedIdentity),
+                StorageAuthorizationSnafu {
+                    reason: "auth_source_unsupported_option"
+                }
+            );
+            validate_auth_source_value(value)?;
+        }
+        AzureConfigKey::AccountName => {
+            validate_auth_source_value(value)?;
+        }
+        AzureConfigKey::Endpoint
+        | AzureConfigKey::UseFabricEndpoint
+        | AzureConfigKey::Client(_) => {}
+        _ => {
+            return StorageAuthorizationSnafu {
+                reason: "auth_source_unsupported_option",
             }
-        );
+            .fail();
+        }
     }
-    Ok(normalized)
+    Ok(())
 }

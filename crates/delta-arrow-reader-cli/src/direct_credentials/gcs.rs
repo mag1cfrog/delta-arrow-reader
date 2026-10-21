@@ -6,7 +6,9 @@ use delta_arrow_reader::{DeltaStorageCredentialProvider, DeltaStorageOptions, De
 use object_store::gcp::{GoogleCloudStorageBuilder, GoogleConfigKey};
 use snafu::{OptionExt, ensure};
 
-use super::{CredentialSource, read_environment_value, validate_auth_source_value};
+use super::{
+    CredentialSource, normalize_storage_options, read_environment_value, validate_auth_source_value,
+};
 use crate::{Error, StorageAuthorizationSnafu};
 
 pub(super) fn configure_table_credentials(
@@ -15,7 +17,9 @@ pub(super) fn configure_table_credentials(
     options: DeltaStorageOptions,
     source: CredentialSource,
 ) -> Result<DeltaTableBuilder, Error> {
-    let mut options = normalize_gcs_options(options, source)?;
+    let mut options = normalize_storage_options(options, |key, value| {
+        validate_storage_option(key, value, source)
+    })?;
     let credentials_path = match source {
         CredentialSource::Json => options.remove("google_application_credentials"),
         CredentialSource::Env => read_environment_value("GOOGLE_APPLICATION_CREDENTIALS")?,
@@ -58,42 +62,28 @@ pub(super) fn configure_table_credentials(
         ))))
 }
 
-fn normalize_gcs_options(
-    options: DeltaStorageOptions,
+fn validate_storage_option(
+    key: &GoogleConfigKey,
+    value: &str,
     source: CredentialSource,
-) -> Result<DeltaStorageOptions, Error> {
-    let mut normalized = DeltaStorageOptions::new();
-    for (name, value) in options {
-        let key = name
-            .to_ascii_lowercase()
-            .parse::<GoogleConfigKey>()
-            .map_err(|_| Error::StorageAuthorization {
-                reason: "auth_source_unsupported_option",
-            })?;
-        match key {
-            GoogleConfigKey::ApplicationCredentials => {
-                ensure!(
-                    matches!(source, CredentialSource::Json),
-                    StorageAuthorizationSnafu {
-                        reason: "auth_source_conflicting_credentials"
-                    }
-                );
-                validate_auth_source_value(&value)?;
-            }
-            GoogleConfigKey::BaseUrl | GoogleConfigKey::Client(_) => {}
-            _ => {
-                return StorageAuthorizationSnafu {
-                    reason: "auth_source_unsupported_option",
+) -> Result<(), Error> {
+    match key {
+        GoogleConfigKey::ApplicationCredentials => {
+            ensure!(
+                matches!(source, CredentialSource::Json),
+                StorageAuthorizationSnafu {
+                    reason: "auth_source_conflicting_credentials"
                 }
-                .fail();
-            }
+            );
+            validate_auth_source_value(value)?;
         }
-        ensure!(
-            normalized.insert(key.as_ref().to_owned(), value).is_none(),
-            StorageAuthorizationSnafu {
-                reason: "auth_source_duplicate_option"
+        GoogleConfigKey::BaseUrl | GoogleConfigKey::Client(_) => {}
+        _ => {
+            return StorageAuthorizationSnafu {
+                reason: "auth_source_unsupported_option",
             }
-        );
+            .fail();
+        }
     }
-    Ok(normalized)
+    Ok(())
 }

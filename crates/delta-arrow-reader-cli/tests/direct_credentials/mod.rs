@@ -51,6 +51,19 @@ impl DirectStorageFixture {
         })
     }
 
+    /// Call before write_options so the options file uses the new endpoint.
+    fn restart_storage_with_request_hook(
+        &mut self,
+        mut on_request: impl FnMut(&str) + Send + 'static,
+    ) -> TestResult {
+        self.server = MockCloudStorageServer::with_objects(
+            self.protocol,
+            partitioned_objects()?,
+            move |request, _| on_request(request),
+        )?;
+        Ok(())
+    }
+
     fn write_options(&self, mut options: Value) -> TestResult {
         let endpoint_key = match self.protocol {
             CloudStorageProtocol::S3 => "aws_endpoint",
@@ -66,6 +79,7 @@ impl DirectStorageFixture {
         Ok(())
     }
 
+    /// Scan and query use the fixture's ID projection and SQL.
     fn command(&self, operation: &str) -> Command {
         let table = match self.protocol {
             CloudStorageProtocol::S3 => "s3://bucket/table",
@@ -78,7 +92,37 @@ impl DirectStorageFixture {
             .env("RUST_LOG", "trace")
             .args([operation, table, "--storage-options-file"])
             .arg(self.directory.path().join("options.json"));
+        if operation == "scan" {
+            command.args(["--column", "id"]);
+        } else if operation == "query" {
+            command
+                .arg("--sql-file")
+                .arg(self.directory.path().join("query.sql"));
+        }
         command
+    }
+
+    /// May be empty when authorization fails before any storage request.
+    fn storage_bearer_tokens(&self) -> Vec<String> {
+        self.server
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|request| {
+                assert!(!request.contains("secret-unused"), "{request}");
+                request
+                    .lines()
+                    .find_map(|line| {
+                        let (name, value) = line.split_once(':')?;
+                        name.eq_ignore_ascii_case("authorization")
+                            .then(|| value.trim().strip_prefix("Bearer "))
+                            .flatten()
+                    })
+                    .unwrap()
+                    .to_owned()
+            })
+            .collect()
     }
 
     fn verify_request_signatures(&self, signing_keys: Value) -> TestResult {
@@ -96,23 +140,45 @@ impl DirectStorageFixture {
                 "signing_keys": signing_keys,
             }))?,
         )?;
-        let output = run_with_timeout(
-            Command::new("python3")
-                // Keep PYTHONOPTIMIZE from disabling the verifier's assertions.
-                .arg("-I")
-                .arg(
-                    Path::new(env!("CARGO_MANIFEST_DIR"))
-                        .join("tests/direct_credentials/verify_request_signatures.py"),
-                )
-                .arg(captured_requests),
-        )?;
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        Ok(())
+        run_python_verifier("verify_request_signatures.py", &captured_requests)
     }
+}
+
+fn run_python_verifier(script: &str, input: &Path) -> TestResult {
+    let output = run_with_timeout(
+        Command::new("python3")
+            // Keep PYTHONOPTIMIZE from disabling the verifier's assertions.
+            .arg("-I")
+            .arg(
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests/direct_credentials")
+                    .join(script),
+            )
+            .arg(input),
+    )?;
+    if !output.status.success() {
+        return Err(format!(
+            "Python verifier {script} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+        .into());
+    }
+    Ok(())
+}
+
+fn assert_failure_without_stdout(output: &Output, exit_code: i32) {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(exit_code), "{stderr}");
+    assert!(output.stdout.is_empty());
+    assert!(!stderr.contains("secret"), "{stderr}");
+}
+
+fn assert_authorization_input_error(output: &Output, reason: &str) {
+    assert_failure_without_stdout(output, 2);
+    let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+    assert_eq!(record["code"], "invalid_storage_authorization");
+    assert_eq!(record["reason"], reason);
+    assert_eq!(record["recovery"], "fix_input");
 }
 
 fn assert_read_result(output: Output, operation: &str) -> TestResult {
@@ -197,9 +263,7 @@ fn unexposed_provider_names_fail_before_credentials_or_storage() -> TestResult {
                 .env("AWS_ACCESS_KEY_ID", "secret-unused-key")
                 .env("AWS_SECRET_ACCESS_KEY", "secret-unused-password"),
         )?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+        assert_failure_without_stdout(&output, 2);
         let record = assert_single_terminal_record(&output.stderr, "diagnostic");
         assert_eq!(record["code"], "invalid_cli_argument");
     }

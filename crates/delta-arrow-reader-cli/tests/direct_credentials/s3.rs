@@ -7,8 +7,9 @@ use serde_json::{Map, Value, json};
 use std::process::Command;
 
 use super::{
-    CloudStorageProtocol, DirectStorageFixture, TestResult, assert_read_result,
-    assert_single_terminal_record, run_with_timeout,
+    CloudStorageProtocol, DirectStorageFixture, TestResult, assert_authorization_input_error,
+    assert_failure_without_stdout, assert_read_result, assert_single_terminal_record,
+    run_with_timeout,
 };
 
 impl DirectStorageFixture {
@@ -123,14 +124,6 @@ fn selected_credentials_sign_inspection_scan_and_sql_requests() -> TestResult {
                 .env("AWS_SKIP_SIGNATURE", "true")
                 .env("AWS_PROFILE", "secret-unused-profile")
                 .env("AWS_WEB_IDENTITY_TOKEN_FILE", "secret-unused-file");
-            if operation == "scan" {
-                command.args(["--column", "id"]);
-            }
-            if operation == "query" {
-                command
-                    .arg("--sql-file")
-                    .arg(fixture.directory.path().join("query.sql"));
-            }
             let output = run_with_timeout(&mut command)?;
             assert_read_result(output, operation)?;
         }
@@ -207,12 +200,7 @@ fn invalid_sources_fail_before_storage_io_even_with_usable_ambient_credentials()
                 .env("AWS_ACCESS_KEY_ID", "secret-ambient-key")
                 .env("AWS_SECRET_ACCESS_KEY", "secret-ambient-password"),
         )?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["code"], "invalid_storage_authorization");
-        assert_eq!(record["reason"], reason);
-        assert_eq!(record["recovery"], "fix_input");
+        assert_authorization_input_error(&output, reason);
     }
     assert!(fixture.server.requests.lock().unwrap().is_empty());
     Ok(())
@@ -243,12 +231,7 @@ fn invalid_region_options_fail_before_credentials_or_storage() -> TestResult {
                     .env("AWS_SECRET_ACCESS_KEY", "secret-password")
                     .env("AWS_REGION", "eu-west-1"),
             )?;
-            assert_eq!(output.status.code(), Some(2));
-            assert!(output.stdout.is_empty());
-            let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-            assert_eq!(record["code"], "invalid_storage_authorization");
-            assert_eq!(record["reason"], "auth_source_invalid_value");
-            assert_eq!(record["recovery"], "fix_input");
+            assert_authorization_input_error(&output, "auth_source_invalid_value");
         }
     }
     assert!(fixture.server.requests.lock().unwrap().is_empty());
@@ -296,10 +279,7 @@ fn environment_requires_one_complete_family_and_rejects_json_credentials() -> Te
             command.env("AWS_SECRET_ACCESS_KEY", password);
         }
         let output = run_with_timeout(&mut command)?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["reason"], reason);
+        assert_authorization_input_error(&output, reason);
     }
     assert!(fixture.server.requests.lock().unwrap().is_empty());
     Ok(())
@@ -338,9 +318,7 @@ fn selected_credentials_never_fall_back_after_permission_denial() -> TestResult 
                 command.arg("--diagnostics=json");
             }
             let output = run_with_timeout(&mut command)?;
-            assert_eq!(output.status.code(), Some(1));
-            assert!(output.stdout.is_empty());
-            assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+            assert_failure_without_stdout(&output, 1);
             if machine {
                 let record = assert_single_terminal_record(&output.stderr, "diagnostic");
                 assert_eq!(record["source_kind"], "permission_denied");
@@ -398,10 +376,7 @@ fn source_selection_requires_supported_targets_and_explicit_files() -> TestResul
                 .args(args)
                 .arg("--diagnostics=json"),
         )?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["reason"], reason);
+        assert_authorization_input_error(&output, reason);
     }
     Ok(())
 }

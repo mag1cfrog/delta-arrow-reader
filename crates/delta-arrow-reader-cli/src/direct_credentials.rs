@@ -4,7 +4,7 @@ mod azure_blob;
 mod gcs;
 mod s3;
 
-use std::env;
+use std::{env, str::FromStr};
 
 use clap::ValueEnum;
 use delta_arrow_reader::{DeltaStorageOptions, DeltaTableBuilder};
@@ -82,6 +82,30 @@ impl CredentialSource {
             _ => Err(unsupported_storage()),
         }
     }
+}
+
+/// Uses native aliases and rejects duplicates after the provider validates each option.
+fn normalize_storage_options<ConfigKey: FromStr + AsRef<str>>(
+    options: DeltaStorageOptions,
+    validate_option: impl Fn(&ConfigKey, &str) -> Result<(), Error>,
+) -> Result<DeltaStorageOptions, Error> {
+    let mut normalized = DeltaStorageOptions::new();
+    for (name, value) in options {
+        let key = name
+            .to_ascii_lowercase()
+            .parse::<ConfigKey>()
+            .map_err(|_| Error::StorageAuthorization {
+                reason: "auth_source_unsupported_option",
+            })?;
+        validate_option(&key, &value)?;
+        ensure!(
+            normalized.insert(key.as_ref().to_owned(), value).is_none(),
+            StorageAuthorizationSnafu {
+                reason: "auth_source_duplicate_option"
+            }
+        );
+    }
+    Ok(normalized)
 }
 
 fn read_environment_value(name: &str) -> Result<Option<String>, Error> {
