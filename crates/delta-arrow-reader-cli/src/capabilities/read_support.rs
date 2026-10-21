@@ -6,9 +6,72 @@
 //! Discovery describes these rules without checking the caller's credentials,
 //! installed provider tools, or access to any particular table.
 
+use clap::ValueEnum;
+use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::{query, unity_catalog};
+
+#[derive(Clone, Copy, Debug, ValueEnum, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub(super) enum AuthorizationProvider {
+    S3,
+    Azure,
+    Gcs,
+    UnityCatalog,
+}
+
+impl AuthorizationProvider {
+    pub(super) fn guide_document(self) -> Value {
+        let sources = authorization_sources();
+        let mut authorization = if matches!(self, Self::UnityCatalog) {
+            sources["unity_catalog"].clone()
+        } else {
+            let name = match self {
+                Self::S3 => "s3",
+                Self::Azure => "azure",
+                Self::Gcs => "gcs",
+                Self::UnityCatalog => unreachable!(),
+            };
+            let mut storage = sources["direct_storage"].clone();
+            storage["schema_command"] = json!([
+                crate::command_name(),
+                "capabilities",
+                "--schema",
+                "storage-options"
+            ]);
+            storage["credential_option_aliases"] =
+                storage["credential_option_aliases"][name].clone();
+            storage["notes"] = storage["notes"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .chain(
+                    storage["provider_notes"][name]
+                        .as_array()
+                        .into_iter()
+                        .flatten(),
+                )
+                .cloned()
+                .collect();
+            if let Some(object) = storage.as_object_mut() {
+                object.remove("provider_notes");
+            }
+            storage
+        };
+        authorization["credential_handling"] = json!(
+            "Pass a file path or an existing profile name. Do not copy credential values into command arguments."
+        );
+        json!({
+            "format_version": 1,
+            "kind": "authorization_guide",
+            "cli_version": env!("CARGO_PKG_VERSION"),
+            "provider": self,
+            "authorization": authorization,
+            "limits": super::discovery_limits(super::MAX_AUTHORIZATION_GUIDE_BYTES),
+        })
+    }
+}
 
 pub(super) fn authorization_sources() -> Value {
     json!({
@@ -47,13 +110,23 @@ pub(super) fn authorization_sources() -> Value {
                 },
             },
             "notes": [
-                "Local paths need no cloud credentials. Cloud reads use the selected backend's existing credential resolution.",
-                "The listed credential keys cover static credentials and GCS credential files. Backend provider and transport settings are also accepted through the JSON file.",
-                "S3 static credentials require an access key and secret key; a session token is optional. AWS environment variables and profile/SSO files are not imported as storage options.",
-                "Azure accepts an account key, SAS token, bearer token, or client ID/client secret/tenant ID settings. Backend precedence applies if several credential families are supplied.",
-                "GCS accepts a service-account file path, service-account JSON string, or application-credentials file path. The two service-account forms cannot be combined.",
-                "Without explicit credential settings, S3 uses instance metadata, Azure uses managed identity, and GCS checks the well-known ADC file before using metadata credentials. These lookups happen during table access, not discovery.",
+                "Cloud reads use the selected backend's existing credential resolution.",
+                "The listed keys cover authentication inputs. Backend provider and transport settings are also accepted through the JSON file.",
             ],
+            "provider_notes": {
+                "s3": [
+                    "Static credentials require an access key and secret key; a session token is optional. AWS environment variables and profile/SSO files are not imported as storage options.",
+                    "Without explicit credential settings, the backend uses instance metadata during table access.",
+                ],
+                "azure": [
+                    "Accepts an account key, SAS token, bearer token, or client ID/client secret/tenant ID settings. Backend precedence applies if several credential families are supplied.",
+                    "Without explicit credential settings, the backend uses managed identity during table access.",
+                ],
+                "gcs": [
+                    "Accepts a service-account file path, service-account JSON string, or application-credentials file path. The two service-account forms cannot be combined.",
+                    "Without explicit credential settings, the backend checks the well-known ADC file before using metadata credentials during table access.",
+                ],
+            },
         },
         "unity_catalog": {
             "commands": ["inspect", "scan"],
@@ -143,6 +216,46 @@ mod tests {
 
     use super::*;
     use crate::{Cli, unity_catalog::UnityCatalogTableTarget};
+
+    #[test]
+    fn provider_guides_only_include_the_selected_credential_family() {
+        let credential_keys = [
+            "aws_access_key_id",
+            "azure_storage_account_key",
+            "google_service_account",
+        ];
+        for (provider, expected_key) in [
+            (AuthorizationProvider::S3, credential_keys[0]),
+            (AuthorizationProvider::Azure, credential_keys[1]),
+            (AuthorizationProvider::Gcs, credential_keys[2]),
+        ] {
+            let document = provider.guide_document();
+            let authorization = &document["authorization"];
+            let aliases = authorization["credential_option_aliases"]
+                .as_object()
+                .unwrap();
+            assert!(aliases.contains_key(expected_key));
+            for other in credential_keys
+                .into_iter()
+                .filter(|key| *key != expected_key)
+            {
+                assert!(!aliases.contains_key(other));
+            }
+            assert!(authorization.get("provider_notes").is_none());
+            assert!(authorization.get("profile_argument").is_none());
+            assert_eq!(authorization["storage_options_schema"], "storage-options");
+        }
+        let document = AuthorizationProvider::UnityCatalog.guide_document();
+        assert_eq!(
+            document["authorization"]["profile_argument"],
+            "--databricks-profile"
+        );
+        assert!(
+            document["authorization"]
+                .get("credential_option_aliases")
+                .is_none()
+        );
+    }
 
     #[test]
     fn advertised_credential_aliases_resolve_to_the_same_backend_option() {

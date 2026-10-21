@@ -1,10 +1,10 @@
-//! Discover commands before loading their argument rules and schemas.
+//! Discover commands, then look up the inputs needed for a particular read.
 //!
 //! `dar capabilities` lists the installed commands and how to request details.
-//! For example, `--command scan` describes scan's arguments and authorization,
-//! and `--schema predicate` describes its row-filter file. `--all` returns the
-//! complete inventory for callers that need every command at once. All views
-//! work without opening a table or resolving authorization.
+//! For example, `--command scan` gives usage and limits, `--schema predicate`
+//! gives a filter example, and `--schema predicate --detail int64` describes
+//! one literal type. Add `--full` for a command's metadata or a validation
+//! schema. All views work without opening a table or resolving authorization.
 
 mod output_schemas;
 mod read_support;
@@ -14,7 +14,7 @@ pub(crate) use schemas::DiscoverySchema;
 
 use std::{io, process::ExitCode, time::Duration};
 
-use clap::{Arg, ArgAction, Args, Command, CommandFactory, ValueEnum, error::ErrorKind};
+use clap::{Arg, ArgAction, ArgGroup, Args, Command, CommandFactory, ValueEnum, error::ErrorKind};
 use serde_json::{Value, json};
 use snafu::ResultExt;
 
@@ -26,19 +26,37 @@ use crate::{
 };
 
 const MAX_INDEX_BYTES: usize = 2 * 1024;
-const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
+const MAX_COMMAND_GUIDE_BYTES: usize = 4 * 1024;
+const MAX_SCHEMA_GUIDE_BYTES: usize = 2 * 1024;
+const MAX_AUTHORIZATION_GUIDE_BYTES: usize = 2 * 1024;
+const MAX_FULL_RESPONSE_BYTES: usize = 1024 * 1024;
 const DEADLINE: Duration = Duration::from_secs(5);
 
 #[derive(Args)]
+#[command(group(ArgGroup::new("full_definition_target").args(["command", "schema"])))]
 pub(crate) struct CapabilitiesArgs {
-    /// Return only this command's argument rules, authorization, and limits.
-    #[arg(long, value_name = "NAME", value_parser = parse_command_name, conflicts_with_all = ["schema", "all"])]
+    /// Show usage and limits for one command.
+    #[arg(long, value_name = "NAME", value_parser = parse_command_name, conflicts_with_all = ["schema", "authorization", "all"])]
     command: Option<String>,
-    /// Return the named JSON input/output schema.
-    #[arg(long, value_enum, conflicts_with_all = ["command", "all"])]
+    /// Show an example and available fields or types for one JSON format.
+    #[arg(long, value_enum, conflicts_with_all = ["command", "authorization", "all"])]
     schema: Option<DiscoverySchema>,
+    /// Describe one field, predicate operator, or scalar type listed by --schema.
+    #[arg(
+        long,
+        value_name = "NAME",
+        requires = "schema",
+        conflicts_with_all = ["command", "authorization", "all", "full"]
+    )]
+    detail: Option<String>,
+    /// Show credential inputs and lookup rules for one provider.
+    #[arg(long, value_enum, conflicts_with_all = ["command", "schema", "all"])]
+    authorization: Option<read_support::AuthorizationProvider>,
+    /// With --command or --schema, return complete metadata or a validation schema.
+    #[arg(long, requires = "full_definition_target", conflicts_with_all = ["authorization", "detail"])]
+    full: bool,
     /// Return the complete inventory of commands, authorization, and limits.
-    #[arg(long, conflicts_with_all = ["command", "schema"])]
+    #[arg(long, conflicts_with_all = ["command", "schema", "authorization", "full"])]
     all: bool,
 }
 
@@ -89,6 +107,65 @@ fn discovery_limits(max_output_bytes: usize) -> Value {
         "deadline_ms": DEADLINE.as_millis(),
         "failure_diagnostic_timeout_ms": FAILURE_DIAGNOSTIC_TIMEOUT.as_millis(),
     })
+}
+
+fn build_command_guide(name: &str) -> Result<Value, Error> {
+    let mut cli = Cli::command();
+    cli.build();
+    let executable = cli.get_name().to_owned();
+    let command = cli.find_subcommand_mut(name).ok_or(Error::Argument {
+        kind: ErrorKind::InvalidValue,
+        correction: None,
+    })?;
+    let mut guide = build_capability_details(Some(name))?;
+    guide["kind"] = json!("command_guide");
+    guide["command"] = json!(name);
+    guide["help"] = json!(command.render_long_help().to_string());
+    let conflicts: Vec<_> = command
+        .get_arguments()
+        .filter_map(|argument| {
+            let conflicts: Vec<_> = command
+                .get_arg_conflicts_with(argument)
+                .into_iter()
+                .map(argument_name)
+                .collect();
+            (!conflicts.is_empty()).then(|| {
+                json!({
+                    "argument": argument_name(argument), "conflicts_with": conflicts,
+                })
+            })
+        })
+        .collect();
+    guide["argument_conflicts"] = json!(conflicts);
+    let mut providers = Vec::new();
+    if guide["authorization"].get("direct_storage").is_some() {
+        providers.extend(["s3", "azure", "gcs"]);
+    }
+    if guide["authorization"].get("unity_catalog").is_some() {
+        providers.push("unity-catalog");
+    }
+    if providers.is_empty() {
+        if let Some(object) = guide.as_object_mut() {
+            object.remove("authorization");
+        }
+    } else {
+        guide["authorization"] = json!({
+            "local": "Local paths need no credentials.",
+            "providers": providers,
+            "details_command": [executable, "capabilities", "--authorization", "NAME"],
+        });
+    }
+    if let Some(sql) = guide
+        .get_mut("read_support")
+        .and_then(|support| support.get_mut(name))
+        .and_then(|support| support.get_mut("sql_input"))
+        .and_then(Value::as_object_mut)
+    {
+        sql.remove("examples");
+    }
+    guide["full_command"] = json!([executable, "capabilities", "--command", name, "--full"]);
+    guide["limits"] = discovery_limits(MAX_COMMAND_GUIDE_BYTES);
+    Ok(guide)
 }
 
 fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Error> {
@@ -167,7 +244,7 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
                 "schemas": terminal_schemas,
             },
         },
-        "limits": discovery_limits(MAX_OUTPUT_BYTES),
+        "limits": discovery_limits(MAX_FULL_RESPONSE_BYTES),
     }))
 }
 
@@ -285,11 +362,27 @@ pub(crate) fn run_capabilities(
 
 fn write_discovery_response(options: CapabilitiesArgs) -> Result<StdoutStats, Error> {
     let (document, max_output_bytes) = if let Some(schema) = options.schema {
-        (schema.schema_document(), MAX_OUTPUT_BYTES)
+        if options.full {
+            (schema.schema_document(), MAX_FULL_RESPONSE_BYTES)
+        } else {
+            (
+                schema.guide_document(options.detail.as_deref())?,
+                MAX_SCHEMA_GUIDE_BYTES,
+            )
+        }
     } else if let Some(name) = options.command {
-        (build_capability_details(Some(&name))?, MAX_OUTPUT_BYTES)
+        if options.full {
+            (
+                build_capability_details(Some(&name))?,
+                MAX_FULL_RESPONSE_BYTES,
+            )
+        } else {
+            (build_command_guide(&name)?, MAX_COMMAND_GUIDE_BYTES)
+        }
+    } else if let Some(provider) = options.authorization {
+        (provider.guide_document(), MAX_AUTHORIZATION_GUIDE_BYTES)
     } else if options.all {
-        (build_capability_details(None)?, MAX_OUTPUT_BYTES)
+        (build_capability_details(None)?, MAX_FULL_RESPONSE_BYTES)
     } else {
         (build_capability_index(), MAX_INDEX_BYTES)
     };
@@ -330,6 +423,7 @@ mod tests {
         let selectors = [
             vec!["--command", "query"],
             vec!["--schema", "predicate"],
+            vec!["--authorization", "s3"],
             vec!["--all"],
         ];
         for (index, selector) in selectors.iter().enumerate() {
@@ -361,11 +455,42 @@ mod tests {
             assert!(Cli::try_parse_from(["dar", "capabilities", "--command", name]).is_err());
             assert!(build_capability_details(Some(name)).is_err());
         }
+        for invalid in [
+            vec!["--full"],
+            vec!["--all", "--full"],
+            vec!["--authorization", "s3", "--full"],
+            vec!["--detail", "rows"],
+            vec!["--command", "scan", "--detail", "rows"],
+            vec!["--authorization", "s3", "--detail", "rows"],
+            vec!["--all", "--detail", "rows"],
+            vec!["--schema", "predicate", "--detail", "int64", "--full"],
+        ] {
+            assert!(
+                Cli::try_parse_from(
+                    ["dar", "capabilities"]
+                        .into_iter()
+                        .chain(invalid.iter().copied())
+                )
+                .is_err(),
+                "{invalid:?}"
+            );
+        }
+        for valid in [
+            vec!["--command", "query", "--full"],
+            vec!["--full", "--schema", "predicate"],
+            vec!["--detail", "rows", "--schema", "completion"],
+        ] {
+            assert!(Cli::try_parse_from(["dar", "capabilities"].into_iter().chain(valid)).is_ok());
+        }
     }
 
     #[test]
     fn response_limits_include_json_framing_and_the_final_newline() {
-        for limit in [MAX_INDEX_BYTES, MAX_OUTPUT_BYTES] {
+        for limit in [
+            MAX_INDEX_BYTES,
+            MAX_COMMAND_GUIDE_BYTES,
+            MAX_FULL_RESPONSE_BYTES,
+        ] {
             let exact = json!("a".repeat(limit - 3));
             let encoded = serialize_discovery_response(&exact, limit).unwrap();
             assert_eq!(encoded.len(), limit);

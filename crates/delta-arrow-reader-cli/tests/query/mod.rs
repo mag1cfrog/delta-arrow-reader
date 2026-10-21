@@ -90,6 +90,7 @@ fn published_sql_examples_execute_with_the_advertised_table_binding() -> TestRes
         "capabilities",
         "--command",
         "query",
+        "--full",
     ]))?;
     assert!(output.status.success());
     let inventory: serde_json::Value = serde_json::from_slice(&output.stdout)?;

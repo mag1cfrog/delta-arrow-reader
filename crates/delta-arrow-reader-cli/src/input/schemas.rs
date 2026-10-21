@@ -1,4 +1,4 @@
-//! File formats returned by `dar capabilities --schema NAME`.
+//! Validation documents returned by `dar capabilities --schema NAME --full`.
 //!
 //! Each response contains a JSON Schema, examples, and the checks that remain
 //! outside schema validation. For example, the execution-options schema permits
@@ -35,11 +35,6 @@ impl JsonInputKind {
             parser_constraints["max_predicate_depth"] = json!(predicate::MAX_PREDICATE_DEPTH);
             parser_constraints["predicate_rules"] = json!([
                 "Node count and depth include the root.",
-                "Integer strings must fit the signed width stated in each value's description.",
-                "date32 values count days since 1970-01-01. timestamp_us values count microseconds since the Unix epoch; timezone is required and may be null.",
-                "decimal128 values are unscaled integers; precision and scale must be valid for the column's Decimal128 type.",
-                "Float values must remain finite after conversion to the declared width.",
-                "A fixed_size_binary size must equal the number of bytes in its value.",
                 "Column resolution, type compatibility, and decimal precision/scale checks require the selected table.",
             ]);
         }
@@ -98,7 +93,7 @@ fn execution_options_schema() -> Value {
                 "default": defaults.parquet_full_file_read_threshold_bytes(),
             },
         },
-        "examples": [{}, {
+        "examples": [{}, {"prefetch_files_per_partition": 0}, {
             "parquet_backend": "delta_kernel",
             "max_concurrent_file_reads_per_scan": 8,
             "max_concurrent_file_reads_per_partition": 2,

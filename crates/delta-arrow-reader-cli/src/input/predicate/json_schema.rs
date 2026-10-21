@@ -10,6 +10,7 @@ use serde_json::{Map, Value, json};
 pub(in crate::input) fn predicate_schema() -> Value {
     json!({
         "title": "Row predicate file",
+        "description": "Match column names and literal types to the selected table. Integer literals use decimal strings.",
         "$ref": "#/$defs/predicate",
         "$defs": {
             "predicate": {"oneOf": [
@@ -49,8 +50,12 @@ pub(in crate::input) fn predicate_schema() -> Value {
                     ("value", integer_string_schema(i16::MIN, i16::MAX)),
                 ]),
                 object_schema_with_required_fields(&[
-                    ("type", json!({"enum": ["int32", "date32"]})),
+                    ("type", json!({"enum": ["int32"]})),
                     ("value", integer_string_schema(i32::MIN, i32::MAX)),
+                ]),
+                object_schema_with_required_fields(&[
+                    ("type", json!({"enum": ["date32"]})),
+                    ("value", epoch_integer_string_schema(i32::MIN, i32::MAX, "days")),
                 ]),
                 object_schema_with_required_fields(&[
                     ("type", json!({"enum": ["int64"]})),
@@ -76,13 +81,14 @@ pub(in crate::input) fn predicate_schema() -> Value {
                 ]),
                 object_schema_with_required_fields(&[
                     ("type", json!({"enum": ["timestamp_us"]})),
-                    ("value", integer_string_schema(i64::MIN, i64::MAX)),
+                    ("value", epoch_integer_string_schema(i64::MIN, i64::MAX, "microseconds")),
                     ("timezone", json!({"type": ["string", "null"], "minLength": 1})),
                 ]),
                 object_schema_with_required_fields(&[
                     ("type", json!({"enum": ["decimal128"]})),
                     ("value", integer_string_schema(i128::MIN, i128::MAX)),
-                    ("precision", json!({"type": "integer", "minimum": 0, "maximum": u8::MAX})),
+                    ("precision", json!({"type": "integer", "minimum": 0, "maximum": u8::MAX,
+                        "description": "Value is an unscaled integer. Precision and scale must be valid for the column's Decimal128 type."})),
                     ("scale", json!({"type": "integer", "minimum": i8::MIN, "maximum": i8::MAX})),
                 ]),
             ]},
@@ -118,4 +124,15 @@ fn integer_string_schema(
         "not": {"pattern": "[^0-9-]"},
         "description": format!("Canonical decimal integer string from {minimum} to {maximum}, inclusive. The parser checks this range."),
     })
+}
+
+fn epoch_integer_string_schema(
+    minimum: impl std::fmt::Display,
+    maximum: impl std::fmt::Display,
+    unit: &str,
+) -> Value {
+    let mut schema = integer_string_schema(minimum, maximum);
+    let range = schema["description"].as_str().unwrap_or_default();
+    schema["description"] = json!(format!("{range} Counts {unit} since 1970-01-01T00:00:00Z."));
+    schema
 }

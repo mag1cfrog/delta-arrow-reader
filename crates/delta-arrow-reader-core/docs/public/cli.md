@@ -25,14 +25,16 @@ For packages and runtime requirements, see [Installation](installation.md).
 dar capabilities
 dar capabilities --command query
 dar capabilities --schema predicate
-dar capabilities --schema completion
+dar capabilities --schema predicate --detail timestamp_us
+dar capabilities --authorization s3
+dar capabilities --schema completion --full > completion-schema.json
 dar capabilities --all --diagnostics=json > capabilities.json
 ```
 
 Start with `dar capabilities` to choose a command. It returns a JSON directory
 of at most 2 KiB, with command names, short descriptions, schema names, and
 shared limitations. Each command's `details` field gives the invocation for
-its full description. `schema_command` gives the invocation for a schema;
+its usage guide. `schema_command` gives the invocation for a format guide;
 replace its `NAME` argument with one of the listed names. `all_command` gives
 the invocation for the complete inventory. These invocations are arrays of
 command-line arguments, starting with the installed executable's name.
@@ -40,23 +42,43 @@ command-line arguments, starting with the installed executable's name.
 | Invocation | JSON `kind` | Contents |
 | --- | --- | --- |
 | `dar capabilities` | `capability_index` | Short directory and commands for loading details. |
-| `dar capabilities --command query` | `command_capabilities` | Only query's arguments, formats, authorization sources, schemas, and limits. |
+| `dar capabilities --command query` | `command_guide` | Query's help, argument conflicts, formats, limits, and routes to related inputs and authorization. |
+| `dar capabilities --authorization s3` | `authorization_guide` | Credential inputs, aliases, and lookup rules for one provider. |
+| `dar capabilities --schema NAME` | `schema_guide` | One example, shared constraints, and available fields or types. |
+| `dar capabilities --schema NAME --detail FIELD_OR_TYPE` | `schema_detail` | One field, predicate operator, or scalar type from that guide. |
+| `dar capabilities --command query --full` | `command_capabilities` | Complete query argument metadata, authorization, formats, schemas, and limits. |
 | `dar capabilities --all` | `capabilities` | Complete command tree and support information. |
-| `dar capabilities --schema NAME` | `input_schema` or `output_schema` | One named JSON schema. |
+| `dar capabilities --schema NAME --full` | `input_schema` or `output_schema` | One complete JSON Schema validation document. |
 
 All responses have `format_version: 1` and `cli_version`. `--command`, `--schema`,
-and `--all` are mutually exclusive. Command names must match an installed
-top-level command. Unsupported names or conflicting selectors fail with status 2.
+`--authorization`, and `--all` are mutually exclusive. `--full` requires either
+`--command` or `--schema`. `--detail` requires `--schema` and conflicts with
+`--full`. Command names must match an installed top-level command. Unsupported
+names or conflicting selectors fail with status 2.
 For text help, use `dar query --help` or the corresponding command's help.
 
 For example, after finding `query` in the directory, run
 `dar capabilities --command query`. Its description identifies the table alias
 `t`, the `--sql-file` input, and the requirement to redirect Arrow output. Fetch
-`--schema storage-options` only if a storage-options file is needed. To recover
-these details later, repeat the same discovery commands; discovery does not
-depend on previous invocations.
+`--schema storage-options` if a storage-options file is needed, then follow
+`authorization_command` for the selected provider. Local paths need no
+credentials. To recover these details later, repeat the same discovery commands;
+discovery does not depend on previous invocations.
 
-In command details and the full inventory, `command` contains the selected
+An input schema guide's `example` can be used as the file contents, subject to the
+listed constraints. For predicates, the example's column and literal type must
+match the table. `fields`, `operators`, and `scalar_types` list names accepted by
+`detail_command`; replace its `NAME` argument with the item needed. For example,
+`--schema execution-options --detail prefetch_files_per_partition` gives one
+setting's default and bounds. `--schema predicate --detail timestamp_us` gives
+the timestamp unit, integer encoding, and required timezone field.
+
+These guides describe how to use a format. Recursive predicate references lead
+to another operator or scalar choice through `detail_command`. Use a guide's
+`full_command` when a JSON Schema validator or a metadata consumer needs the
+complete definition.
+
+In full command metadata and the full inventory, `command` contains the selected
 command or complete command tree, and each argument's required status, value
 count, defaults, allowed choices, repeatability, and conflicts. For example,
 `scan --column` is repeatable and conflicts with `--no-columns`.
@@ -66,8 +88,8 @@ arguments. `output_schemas` lists result schema names and their streams. The
 `inspect` entry in `stdout_formats` and the JSON entry in `diagnostics` identify which
 output schemas apply.
 
-`authorization` describes local access, a direct-storage JSON file, and the
-Databricks profile reference, including the commands that accept each. The
+In full metadata, `authorization` describes local access, a direct-storage JSON
+file, and the Databricks profile reference, including the commands that accept each. The
 direct-storage section lists aliases for static credentials and GCS credential
 files. It also describes the backend's default credential lookup. Discovery
 does not inspect the caller's credentials or check provider availability.
@@ -83,8 +105,9 @@ An empty `possible_values` list means the argument has no enumerated choices;
 it does not mean every value is valid. A null `max_values` means there is no
 fixed upper count for that argument. Descriptions contain additional input rules.
 
-Pass a name to `--schema` to return an object with `kind: "input_schema"` or
-`kind: "output_schema"`, `format_version: 1`, `cli_version`, `name`, and `schema`.
+Pass a name to `--schema` with `--full` to return an object with
+`kind: "input_schema"` or `kind: "output_schema"`, `format_version: 1`,
+`cli_version`, `name`, and `schema`.
 The `schema` field contains a [JSON Schema draft 2020-12](https://json-schema.org/draft/2020-12/json-schema-validation)
 document with examples.
 Extract that field when passing it to a JSON Schema validator.
@@ -123,15 +146,16 @@ and type-description shapes. Use Arrow's Rust Serde decoder to validate the nest
 `data_type` encoding. `scan` and `query` return Arrow IPC streams, whose schema
 is carried in the stream itself.
 
-For example, save `dar capabilities --schema completion` and validate the
+For example, save `dar capabilities --schema completion --full` and validate the
 command's stderr record against its `schema` field. Also check exit status 0
 and decode stdout: a matching completion record alone does not establish that
 the result was received intact.
 
 Discovery needs no table, input file, credentials, Databricks executable, or
-network access. The default directory is limited to 2 KiB; command details,
-individual schemas, and the full inventory are limited to 1 MiB each. Limits
-count UTF-8 bytes, including JSON framing and the final newline. An oversized
+network access. The directory, schema guides, schema details, and authorization
+guides are limited to 2 KiB each; command guides are limited to 4 KiB. Explicit
+full command metadata, full schemas, and the full inventory are limited to 1 MiB.
+Limits count UTF-8 bytes, including JSON framing and the final newline. An oversized
 response fails before writing stdout; discovery never truncates JSON.
 The command has a five-second deadline, including stdout, log setup, and
 completion reporting on stderr.
