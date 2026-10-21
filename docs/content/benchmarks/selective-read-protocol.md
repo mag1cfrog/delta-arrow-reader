@@ -609,7 +609,7 @@ correctness checks. Keep excluded readers and their statuses in the inventory.
 Warm up each runnable reader once in that order and once in reverse order,
 using a fresh process for each invocation.
 
-Reuse `benches/run_order.py::balanced_orders` on the runnable subset. One cycle
+The native campaign scheduler balances the runnable subset. One cycle
 contains `2*N` rounds for `N` readers, with each reader appearing once per round
 and each position and ordered adjacency represented twice per cycle. Repeat
 complete cycles until each reader has at least ten measured process samples:
