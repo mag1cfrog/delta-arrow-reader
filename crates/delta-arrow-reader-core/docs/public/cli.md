@@ -12,6 +12,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | Connect to remote storage | [Storage options file](#storage-options-file) |
 | Select S3 credentials from a file or environment | [S3 credential sources](#s3-credential-sources) |
 | Select Azure credentials from a file or environment | [Azure credential sources](#azure-credential-sources) |
+| Select a GCS credentials file | [GCS credential sources](#gcs-credential-sources) |
 | Read a Unity Catalog table by name | [Databricks profile](#read-a-unity-catalog-table) |
 | Change parallel reads or buffering | [Execution options](#execution-options) |
 | Handle a command's result in a script | [Inspection JSON](#inspection-json) and [exit statuses](#exit-statuses-for-scripts) |
@@ -543,6 +544,61 @@ Keep credential files out of source control and restrict access, for example
 with `chmod 600 storage.json` on Unix. File references do not isolate credentials
 from a process that can read the file. Credential values and file contents are
 omitted from text and JSON diagnostics.
+
+## GCS credential sources
+
+`inspect`, `scan`, and `query` accept `--auth-source json|env` to select an
+explicit Application Default Credentials (ADC) file for GCS. The installed
+native provider supports these file types:
+
+| ADC `type` | Authorization |
+| --- | --- |
+| `service_account` | Signs JWT bearer tokens with the file's RSA private key |
+| `authorized_user` | Exchanges the file's refresh token for OAuth access tokens |
+
+`--auth-source json` requires `--storage-options-file`. Use that file to point
+to the separately provisioned credentials file:
+
+```json
+{"google_application_credentials":"/run/secrets/gcs-credentials.json"}
+```
+
+```sh
+dar inspect gs://example-bucket/orders --auth-source json --storage-options-file storage.json
+```
+
+`--auth-source env` reads only `GOOGLE_APPLICATION_CREDENTIALS`, which must
+contain a nonempty file path. An optional storage-options file may contain
+noncredential settings, but an ADC reference in that file is rejected.
+
+```sh
+dar query gs://example-bucket/orders --auth-source env --sql-file count.sql > count.arrow
+```
+
+Relative credential paths use the command's working directory. The provider
+loads the selected file once and retains that identity for token renewal.
+Changing the file during a command does not change the identity. Missing,
+invalid, expired, or denied credentials never trigger home-directory ADC
+lookup, a metadata request, or selection of another source. Authorized-user
+token renewal requires access to Google's OAuth endpoint.
+
+JSON keys are case-insensitive. `application_credentials` is an alias for
+`google_application_credentials`; supplying both is an error. Storage endpoint
+(`google_base_url`/`base_url`) and HTTP client settings are accepted. Bucket
+overrides, unsigned requests, and unknown keys are rejected. Explicit source
+selection uses ADC files; it rejects the legacy `google_service_account` and
+`google_service_account_key` settings. Standard service-account files with
+`"type":"service_account"` use the ADC reference shown above. Other ADC types,
+including external-account and impersonated-service-account files, are not
+supported by the installed provider.
+
+Invalid source configuration or an unreadable or malformed ADC file exits with
+status 2 and code `invalid_storage_authorization`. Token-fetch, renewal, and
+storage failures retain the reader's normal diagnostics. Credential values and
+file contents are omitted from text and JSON diagnostics. Protect both files
+with appropriate filesystem permissions and keep credentials out of source
+control. A file reference does not prevent a process with read access from
+reading the credentials.
 
 ## Execution options
 

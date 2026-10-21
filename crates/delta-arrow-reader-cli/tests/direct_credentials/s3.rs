@@ -257,7 +257,7 @@ fn source_selection_requires_supported_targets_and_explicit_files() -> TestResul
             "auth_source_unsupported_storage",
         ),
         (
-            vec!["inspect", "gs://bucket/table", "--auth-source", "env"],
+            vec!["inspect", "memory://bucket/table", "--auth-source", "env"],
             "auth_source_unsupported_storage",
         ),
         (

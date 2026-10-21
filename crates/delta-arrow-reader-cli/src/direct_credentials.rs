@@ -1,6 +1,7 @@
 //! Explicit credential selection for direct cloud reads.
 
 mod azure;
+mod gcs;
 mod s3;
 
 use std::env;
@@ -38,7 +39,9 @@ impl CredentialSource {
         ensure!(
             matches!(
                 scheme,
-                ObjectStoreScheme::AmazonS3 | ObjectStoreScheme::MicrosoftAzure
+                ObjectStoreScheme::AmazonS3
+                    | ObjectStoreScheme::MicrosoftAzure
+                    | ObjectStoreScheme::GoogleCloudStorage
             ),
             StorageAuthorizationSnafu {
                 reason: "auth_source_unsupported_storage"
@@ -60,6 +63,9 @@ impl CredentialSource {
             ObjectStoreScheme::AmazonS3 => s3::configure_table_credentials(builder, options, self),
             ObjectStoreScheme::MicrosoftAzure => {
                 azure::configure_table_credentials(builder, location, options, self)
+            }
+            ObjectStoreScheme::GoogleCloudStorage => {
+                gcs::configure_table_credentials(builder, location, options, self)
             }
             _ => Err(unsupported_storage()),
         }

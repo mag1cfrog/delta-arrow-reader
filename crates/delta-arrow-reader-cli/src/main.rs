@@ -116,7 +116,7 @@ struct TableArgs {
     /// At most 1 MiB; '-' is a filename, not stdin.
     #[arg(long, value_name = "PATH")]
     storage_options_file: Option<String>,
-    /// Explicit S3 or Azure credential source. Without it, existing storage behavior applies.
+    /// Explicit S3, Azure, or GCS credential source. Without it, existing storage behavior applies.
     #[arg(long, value_enum)]
     auth_source: Option<direct_credentials::CredentialSource>,
 }

@@ -23,6 +23,7 @@ use url::Url;
 pub(super) enum CloudStorageProtocol {
     S3,
     Azure,
+    Gcs,
 }
 
 /// A local S3/Azure/GCS server for log listings and ranged object reads.

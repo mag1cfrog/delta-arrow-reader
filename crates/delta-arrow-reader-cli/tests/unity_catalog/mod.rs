@@ -38,7 +38,8 @@ impl StorageCredentialKind {
     fn storage_protocol(self) -> CloudStorageProtocol {
         match self {
             Self::AzureSas | Self::AzureBearer => CloudStorageProtocol::Azure,
-            Self::S3 | Self::R2 | Self::Gcs => CloudStorageProtocol::S3,
+            Self::S3 | Self::R2 => CloudStorageProtocol::S3,
+            Self::Gcs => CloudStorageProtocol::Gcs,
         }
     }
 

@@ -1,6 +1,7 @@
 //! Explicit cloud credential sources exercised through real CLI reads.
 
 mod azure;
+mod gcs;
 mod s3;
 
 use std::{
@@ -52,6 +53,7 @@ impl DirectStorageFixture {
         let endpoint_key = match self.protocol {
             CloudStorageProtocol::S3 => "aws_endpoint",
             CloudStorageProtocol::Azure => "azure_storage_endpoint",
+            CloudStorageProtocol::Gcs => "google_base_url",
         };
         options[endpoint_key] = json!(self.server.endpoint);
         options["allow_http"] = json!("true");
@@ -66,6 +68,7 @@ impl DirectStorageFixture {
         let table = match self.protocol {
             CloudStorageProtocol::S3 => "s3://bucket/table",
             CloudStorageProtocol::Azure => "az://container/table",
+            CloudStorageProtocol::Gcs => "gs://bucket/table",
         };
         let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
         command
