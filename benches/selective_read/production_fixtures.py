@@ -1,13 +1,9 @@
 """Pinned DuckDB-to-Arrow producer for native production fixture preparation."""
 
 import json
-import os
 from pathlib import Path
 import resource
 import sys
-
-HERE = Path(__file__).resolve().parent
-sys.path[:0] = [str(HERE), str(HERE / "runners")]
 
 
 def stream(output):
@@ -32,10 +28,6 @@ def stream(output):
 
 
 if __name__ == "__main__":
-    if sys.argv[1:2] == ["--stream"]:
-        stream(Path(sys.argv[2]))
-    else:
-        import native
-        binary = str(native.executable())
-        os.execv(binary, [binary, "selective-read", "production-fixtures", *sys.argv[1:],
-                         "--python", sys.executable, "--harness", str(HERE)])
+    if sys.argv[1:2] != ["--stream"]:
+        raise SystemExit("use xtask selective-read production-fixtures")
+    stream(Path(sys.argv[2]))
