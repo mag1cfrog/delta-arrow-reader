@@ -53,6 +53,8 @@ jobs:
     needs: prepare
     runs-on: ${{ matrix.os }}
     env:
+      # Exclude runner-preinstalled toolchains from the shared cache key.
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
       CARGO_PROFILE_DEV_DEBUG: line-tables-only
       AWS_LC_SYS_USE_SYSTEM: "0"
       CI_TARGET_CACHE_VERSION: "2"
@@ -205,6 +207,7 @@ jobs:
     needs: core
     runs-on: ubuntu-latest
     env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_GHA_RW_MODE: READ_WRITE
       SCCACHE_LOG: sccache::server=debug

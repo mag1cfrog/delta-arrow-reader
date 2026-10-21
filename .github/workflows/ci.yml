@@ -72,6 +72,8 @@ jobs:
           - name: DataFusion
             features: --features datafusion
 
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
     steps:
       - uses: actions/checkout@v5
       - name: Read Rust version
@@ -113,6 +115,8 @@ jobs:
             os: windows-2022
             target: x86_64-pc-windows-msvc
 
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
     steps:
       - uses: actions/checkout@v5
       - name: Read Rust version
@@ -151,6 +155,8 @@ jobs:
       matrix:
         task: [Lints and Docs, Package]
 
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
     steps:
       - uses: actions/checkout@v5
       - name: Read Rust version
@@ -195,6 +201,8 @@ jobs:
     if: needs.changes.outputs.rust_docs == 'true' && needs.changes.outputs.code != 'true'
     runs-on: ubuntu-latest
 
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
     steps:
       - uses: actions/checkout@v5
       - name: Read Rust version
@@ -229,6 +237,7 @@ jobs:
     if: needs.changes.outputs.tooling == 'true'
     runs-on: ubuntu-latest
     env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
       SCCACHE_LOG: sccache::cache::cache=warn
       SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
 
@@ -296,6 +305,8 @@ jobs:
     if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
 
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -362,6 +373,8 @@ jobs:
     if: needs.changes.outputs.cli == 'true'
     runs-on: ubuntu-latest
 
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
     steps:
       - uses: actions/checkout@v5
       - name: Read Rust version
@@ -456,6 +469,7 @@ jobs:
       pr-head-sha: ${{ steps.record.outputs.pr-head-sha }}
       version: ${{ steps.record.outputs.version }}
     env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
       CLI_RECORD_NAME: dar-cli-validation-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v5

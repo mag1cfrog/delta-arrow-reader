@@ -66,6 +66,7 @@ jobs:
       actions: write
       pull-requests: read
     env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
       CARGO_PROFILE_DEV_DEBUG: line-tables-only
       AWS_LC_SYS_USE_SYSTEM: "0"
       CI_TARGET_CACHE_VERSION: "2"

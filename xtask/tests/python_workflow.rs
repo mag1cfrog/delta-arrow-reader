@@ -141,6 +141,7 @@ fn upload_reuses_artifacts_and_only_sends_missing_files() -> Result<()> {
             })
         );
         let mut expected_env = json!({
+            "RUSTUP_HOME": "${{ github.workspace }}/../rustup",
             "EXPECTED_VERSION": "${{ needs.prepare.outputs.expected-version }}",
         });
         if target == "pypi" {
@@ -1083,6 +1084,7 @@ fn builder_reports_validation_only_after_successful_builds_and_complete_artifact
     assert_eq!(
         validation["env"],
         json!({
+            "RUSTUP_HOME": "${{ github.workspace }}/../rustup",
             "BUILD_RESULT": "${{ needs.build.result }}",
             "EXPECTED_VERSION": "${{ inputs.expected-version }}",
         })
