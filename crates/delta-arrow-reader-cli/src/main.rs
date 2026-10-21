@@ -3,6 +3,16 @@
 //! `inspect` returns a snapshot's version and Arrow schema as JSON. `scan` returns
 //! rows as an Arrow IPC stream. Command results use stdout; diagnostics and
 //! completion records use stderr.
+//!
+//! For a Delta table at `./table` with an `id` column:
+//!
+//! ```sh
+//! dar inspect ./table > snapshot.json
+//! dar scan ./table --column id --limit 10 > rows.arrow
+//! ```
+//!
+//! The first command saves the snapshot metadata. The second saves an Arrow IPC
+//! stream containing the `id` column from at most ten rows.
 
 #![cfg_attr(test, allow(clippy::panic))]
 

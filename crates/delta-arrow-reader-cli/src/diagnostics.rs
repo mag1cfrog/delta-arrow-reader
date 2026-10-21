@@ -4,6 +4,16 @@
 //! This module provides the text and JSON diagnostic formats and the correction
 //! details attached to recognized input errors. Error categories and command
 //! outcomes originate in the CLI and the reader.
+//!
+//! For example, an invalid row limit can be reported as JSON:
+//!
+//! ```sh
+//! dar scan ./table --limit invalid --diagnostics=json
+//! ```
+//!
+//! This exits with status 2 before opening the table and leaves stdout empty.
+//! The stderr record includes `code: "invalid_cli_argument"`,
+//! `argument: "--limit"`, and `recovery: "fix_input"`.
 
 use std::{
     io::{self, Write},

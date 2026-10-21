@@ -3,6 +3,15 @@
 //! The caller selects the expected object schema. This module reports missing,
 //! repeated, or invalid fields within that object. Traversal through nested
 //! predicates is handled by the predicate schema diagnostics.
+//!
+//! For example, this condition supplies `value` twice:
+//!
+//! ```json
+//! {"op":"constant","value":true,"value":false}
+//! ```
+//!
+//! The correction points to `/value` and expects `one occurrence of this field`.
+//! The duplicate is an error; neither occurrence takes precedence.
 
 use std::{fmt, marker::PhantomData};
 

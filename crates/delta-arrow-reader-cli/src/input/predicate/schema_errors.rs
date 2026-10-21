@@ -4,6 +4,21 @@
 //! with the condition or literal that contains it, using the same input definitions
 //! as predicate parsing. Checks against the table, such as whether a referenced
 //! column exists, are part of reader validation.
+//!
+//! For example, the second condition below uses a string as its boolean value:
+//!
+//! ```json
+//! {
+//!   "op": "and",
+//!   "args": [
+//!     {"op": "constant", "value": true},
+//!     {"op": "constant", "value": "true"}
+//!   ]
+//! }
+//! ```
+//!
+//! The correction points to `/args/1/value`, where array indices start at zero.
+//! Changing `"true"` to `true` makes this predicate valid.
 
 use serde::de::IgnoredAny;
 use serde_json::value::RawValue;

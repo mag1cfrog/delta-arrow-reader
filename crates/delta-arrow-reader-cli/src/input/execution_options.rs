@@ -4,6 +4,18 @@
 //! of which rows and columns it selects. A file can specify a subset of settings:
 //! omitted fields retain the reader's defaults, and supported null values clear
 //! optional settings. Validation limits come from the reader's configuration API.
+//!
+//! For example, a file passed to `--execution-options-file` can contain:
+//!
+//! ```json
+//! {
+//!   "prefetch_files_per_partition": 0,
+//!   "parquet_metadata_size_hint_bytes": null
+//! }
+//! ```
+//!
+//! This sets prefetch to zero and clears the metadata size hint. Omitting
+//! `parquet_metadata_size_hint_bytes` instead keeps the reader's default hint.
 
 use delta_arrow_reader::{DeltaReaderError, DeltaScanExecutionOptions, ParquetReaderBackend};
 use serde::{Deserialize, Deserializer, de::value::StringDeserializer};

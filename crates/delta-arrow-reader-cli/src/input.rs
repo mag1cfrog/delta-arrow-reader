@@ -4,6 +4,15 @@
 //! and value types. This module loads the files and associates read and format
 //! errors with the corresponding option. The predicate and execution-options
 //! submodules define how their file contents become reader settings.
+//!
+//! For `--execution-options-file scan.json`, these failures have different causes:
+//!
+//! - A missing `scan.json` is a file-read error.
+//! - A file containing only `{` has incomplete JSON syntax.
+//! - `{"prefetch_files_per_partition":"none"}` has valid JSON syntax but gives a
+//!   string where this option requires an integer.
+//!
+//! Each diagnostic identifies `--execution-options-file` as the input to correct.
 
 use std::{fmt, fs::File, io::Read, marker::PhantomData};
 

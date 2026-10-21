@@ -4,6 +4,19 @@
 //! Each literal includes its data type. This module defines the file format and
 //! limits the number and nesting depth of predicate nodes. The reader resolves
 //! referenced columns and checks the predicate against the selected table.
+//!
+//! For a table whose `id` column is `Int32`, this file represents `id >= 10`:
+//!
+//! ```json
+//! {
+//!   "op": "ge",
+//!   "column": "id",
+//!   "value": {"type": "int32", "value": "10"}
+//! }
+//! ```
+//!
+//! Pass the file to `--predicate-file`. Integer literals use decimal strings;
+//! the `type` field determines their width.
 
 use std::{fmt, marker::PhantomData, str::FromStr};
 

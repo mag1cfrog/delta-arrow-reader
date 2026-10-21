@@ -7,6 +7,21 @@
 //! This module supplies the field location, expected format, and correction hint
 //! for those failures. The input parser reports JSON syntax errors; the reader
 //! checks filters against the selected table's columns and types.
+//!
+//! With `--predicate-file filter.json` and `{"op":"and"}` in that file,
+//! the diagnostic includes these correction fields:
+//!
+//! ```json
+//! {
+//!   "argument": "--predicate-file",
+//!   "field_path": "/args",
+//!   "expected": "a required field",
+//!   "hint": "Supply the missing field."
+//! }
+//! ```
+//!
+//! `/args` identifies the missing field. An incomplete JSON document such as `{`
+//! is a syntax error instead and has no schema field path.
 
 use serde::de::DeserializeOwned;
 use serde_json::value::RawValue;
