@@ -489,15 +489,24 @@ not isolate credentials from an agent or process that can read that file.
 ## Azure credential sources
 
 `inspect`, `scan`, and `query` accept `--auth-source json|env` for Azure account
-keys, SAS tokens, and bearer tokens. Select exactly one credential family.
-The credentials are loaded once per command; an expired or denied credential
-fails the read without switching to another identity.
+keys, SAS tokens, bearer tokens, and service principals using a client secret.
+Select exactly one credential family. A service principal requires all three
+fields: client ID, client secret, and tenant ID. Partial or mixed families are
+rejected before reading the table.
+
+The identity is loaded once per command. Client-secret authorization uses the
+native Azure provider to obtain and refresh access tokens for that identity.
+An authorization or refresh failure fails the read without switching identities.
+Account keys, SAS tokens, and supplied bearer tokens are not refreshed.
 
 | Credential | Canonical JSON key | Environment variable |
 | --- | --- | --- |
 | Account key | `azure_storage_account_key` | `AZURE_STORAGE_ACCOUNT_KEY` |
 | SAS token | `azure_storage_sas_key` | `AZURE_STORAGE_SAS_KEY` |
 | Bearer token | `azure_storage_token` | `AZURE_STORAGE_TOKEN` |
+| Client ID | `azure_storage_client_id` | `AZURE_CLIENT_ID` |
+| Client secret | `azure_storage_client_secret` | `AZURE_CLIENT_SECRET` |
+| Tenant ID | `azure_storage_tenant_id` | `AZURE_TENANT_ID` |
 
 `--auth-source json` requires `--storage-options-file` and ignores environment
 credentials. For example, provision a protected `storage.json` file:
@@ -513,7 +522,19 @@ credentials. For example, provision a protected `storage.json` file:
 dar inspect az://orders/table --auth-source json --storage-options-file storage.json
 ```
 
-`--auth-source env` reads only the three credential variables above and
+For a service principal, replace the SAS field with the complete client-secret
+family:
+
+```json
+{
+  "azure_storage_account_name": "exampleaccount",
+  "azure_storage_client_id": "<application-id>",
+  "azure_storage_client_secret": "<client-secret>",
+  "azure_storage_tenant_id": "<tenant-id>"
+}
+```
+
+`--auth-source env` reads only the six credential variables above and
 `AZURE_STORAGE_ACCOUNT_NAME`. A storage-options file may supply noncredential
 settings, but credential fields in that file are rejected.
 
@@ -528,15 +549,20 @@ URL takes precedence, as in the native Azure builder. Otherwise, supply
 `AZURE_STORAGE_ACCOUNT_NAME`. JSON takes precedence over the environment.
 
 JSON accepts the native Azure aliases, case-insensitively. Examples include
-`access_key`/`account_key`, `sas_key`/`sas_token`, and `bearer_token`/`token`.
+`access_key`/`account_key`, `sas_key`/`sas_token`, `bearer_token`/`token`,
+`client_id`, `client_secret`, and `tenant_id`/`authority_id`.
 Duplicate aliases are rejected, even with identical values. Account keys must
 be base64-encoded. SAS tokens may start with `?` and must include a nonempty
 `sig`; literal and percent-encoded `+` characters are preserved. Bearer tokens
 must contain only visible ASCII characters.
 
 Explicit selection accepts account, endpoint, HTTP client, and Fabric endpoint
-settings. It rejects unknown keys, container overrides, emulator mode, unsigned
-requests, and provider-selection options. It does not select client-secret,
+settings. Client-secret authorization uses the native provider's public Azure
+authority by default; set `azure_storage_authority_host` in JSON to override it.
+The `authority_host` alias is also accepted. `AZURE_AUTHORITY_HOST` is not read.
+
+Unknown keys, container overrides, emulator mode, unsigned requests, and
+provider-selection options are rejected. Explicit selection does not select
 Azure CLI, workload-identity, or managed-identity providers. Invalid source
 configuration exits with status 2 and code `invalid_storage_authorization`.
 

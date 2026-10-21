@@ -1,5 +1,7 @@
 //! Azure credentials are selected once and reach every storage request.
 
+mod client_secret;
+
 use std::{collections::HashMap, process::Command};
 
 use serde_json::json;
@@ -80,12 +82,13 @@ fn selected_credentials_authorize_inspection_scan_and_sql() -> TestResult {
                     .env("AZURE_USE_AZURE_CLI", "true")
                     .env("AZURE_STORAGE_USE_EMULATOR", "true")
                     .env("AZURE_SKIP_SIGNATURE", "true")
-                    .env("AZURE_CLIENT_ID", "secret-unused-client")
                     .env("AZURE_FEDERATED_TOKEN_FILE", "secret-unused-file");
                 if source == "env" {
                     command.env(variable, value);
                 } else {
-                    command.env("AZURE_STORAGE_TOKEN", "secret-unused-token");
+                    command
+                        .env("AZURE_STORAGE_TOKEN", "secret-unused-token")
+                        .env("AZURE_CLIENT_ID", "secret-unused-client");
                 }
                 if operation == "scan" {
                     command.args(["--column", "id"]);
@@ -232,7 +235,7 @@ fn invalid_json_sources_fail_before_io_without_using_ambient_credentials() -> Te
         ),
         (
             json!({"client_id":"secret-client"}),
-            "auth_source_unsupported_option",
+            "auth_source_incomplete_credentials",
         ),
         (
             json!({"container_name":"secret-container"}),
