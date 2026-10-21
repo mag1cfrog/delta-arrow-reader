@@ -211,7 +211,7 @@ fn native_setters_enforce_zero_and_capacity_limits() {
             maximum,
         );
     }
-    assert!(input_correction("secret-unknown-reason").is_none());
+    assert!(execution_options_correction("secret-unknown-reason").is_none());
 }
 
 fn assert_configuration_correction(error: &Error, field: &str, nullable: bool, maximum: usize) {

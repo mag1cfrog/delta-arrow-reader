@@ -1,3 +1,5 @@
+//! Decode CLI predicate JSON and convert it to core predicates.
+
 use std::{fmt, marker::PhantomData, str::FromStr};
 
 use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaScalar};
@@ -11,12 +13,16 @@ use crate::{
     input::{JsonInputKind, JsonObject},
 };
 
+mod schema_errors;
+
+pub(super) use schema_errors::diagnose_schema_error;
+
 const MAX_PREDICATE_NODES: usize = 1024;
-pub(crate) const MAX_PREDICATE_DEPTH: usize = 32;
+const MAX_PREDICATE_DEPTH: usize = 32;
 
 // Schema diagnostics match these custom Serde expectations to select correction hints.
-pub(crate) const CANONICAL_INTEGER_EXPECTATION_PREFIX: &str = "canonical decimal integer string";
-pub(crate) const TIMEZONE_EXPECTATION: &str = "null or a nonempty JSON string";
+pub(super) const CANONICAL_INTEGER_EXPECTATION_PREFIX: &str = "canonical decimal integer string";
+pub(super) const TIMEZONE_EXPECTATION: &str = "null or a nonempty JSON string";
 
 #[derive(Deserialize)]
 #[serde(transparent)]
@@ -24,12 +30,19 @@ pub(crate) struct PredicateInput {
     root: JsonObject<PredicateNode>,
 }
 
+impl PredicateInput {
+    pub(crate) fn into_predicate(self) -> Result<DeltaPredicate, Error> {
+        let mut node_count = 0;
+        self.root.0.into_predicate(1, &mut node_count)
+    }
+}
+
 #[derive(Deserialize, strum::EnumDiscriminants)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
-#[strum_discriminants(name(PredicateOperator), vis(pub(crate)))]
+#[strum_discriminants(name(PredicateOperator))]
 #[strum_discriminants(derive(Deserialize, strum::VariantNames))]
 #[strum_discriminants(serde(rename_all = "snake_case"), strum(serialize_all = "snake_case"))]
-pub(crate) enum PredicateNode {
+enum PredicateNode {
     Constant(ValueFields<bool>),
     Eq(ComparisonFields),
     Ne(ComparisonFields),
@@ -46,35 +59,35 @@ pub(crate) enum PredicateNode {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ComparisonFields<T = JsonObject<ScalarInput>> {
+struct ComparisonFields<T = JsonObject<ScalarInput>> {
     column: String,
     value: T,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ColumnReferenceFields {
+struct ColumnReferenceFields {
     column: String,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct LogicalGroupFields<T = JsonObject<PredicateNode>> {
+struct LogicalGroupFields<T = JsonObject<PredicateNode>> {
     args: Vec<T>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct NegationFields<T = JsonObject<PredicateNode>> {
+struct NegationFields<T = JsonObject<PredicateNode>> {
     arg: Box<T>,
 }
 
 #[derive(Deserialize, strum::EnumDiscriminants)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
-#[strum_discriminants(name(ScalarType), vis(pub(crate)))]
+#[strum_discriminants(name(ScalarType))]
 #[strum_discriminants(derive(Deserialize, strum::VariantNames))]
 #[strum_discriminants(serde(rename_all = "snake_case"), strum(serialize_all = "snake_case"))]
-pub(crate) enum ScalarInput {
+enum ScalarInput {
     Boolean(ValueFields<bool>),
     Int8(IntegerStringFields<i8>),
     Int16(IntegerStringFields<i16>),
@@ -94,7 +107,7 @@ pub(crate) enum ScalarInput {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ValueFields<T> {
+struct ValueFields<T> {
     value: T,
 }
 
@@ -103,21 +116,21 @@ pub(crate) struct ValueFields<T> {
     deny_unknown_fields,
     bound(deserialize = "T: FromStr + Bounded + fmt::Display")
 )]
-pub(crate) struct IntegerStringFields<T> {
+struct IntegerStringFields<T> {
     #[serde(deserialize_with = "deserialize_integer_string")]
     value: T,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct FixedSizeBinaryFields {
+struct FixedSizeBinaryFields {
     size: i32,
     value: Vec<u8>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct TimestampMicrosecondFields {
+struct TimestampMicrosecondFields {
     #[serde(deserialize_with = "deserialize_integer_string")]
     value: i64,
     #[serde(deserialize_with = "deserialize_timezone")]
@@ -126,91 +139,11 @@ pub(crate) struct TimestampMicrosecondFields {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Decimal128Fields {
+struct Decimal128Fields {
     #[serde(deserialize_with = "deserialize_integer_string")]
     value: i128,
     precision: u8,
     scale: i8,
-}
-
-fn deserialize_integer_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    D: Deserializer<'de>,
-    T: FromStr + Bounded + fmt::Display,
-{
-    struct CanonicalIntegerStringVisitor<T>(PhantomData<T>);
-
-    impl<'de, T: FromStr + Bounded + fmt::Display> de::Visitor<'de>
-        for CanonicalIntegerStringVisitor<T>
-    {
-        type Value = T;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(
-                formatter,
-                "{CANONICAL_INTEGER_EXPECTATION_PREFIX} from {} to {}",
-                T::min_value(),
-                T::max_value()
-            )
-        }
-
-        fn visit_str<E: de::Error>(self, value: &str) -> Result<T, E> {
-            let digits = value.strip_prefix('-').unwrap_or(value).as_bytes();
-            if value != "0"
-                && !(matches!(digits.first(), Some(b'1'..=b'9'))
-                    && digits.iter().all(u8::is_ascii_digit))
-            {
-                return Err(E::invalid_value(de::Unexpected::Str(value), &self));
-            }
-            value
-                .parse()
-                .map_err(|_| E::invalid_value(de::Unexpected::Str(value), &self))
-        }
-    }
-
-    deserializer.deserialize_str(CanonicalIntegerStringVisitor(PhantomData))
-}
-
-fn deserialize_timezone<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Option<String>, D::Error> {
-    let timezone = Option::<String>::deserialize(deserializer)?;
-    if timezone.as_ref().is_some_and(String::is_empty) {
-        return Err(de::Error::invalid_value(
-            de::Unexpected::Str(""),
-            &TIMEZONE_EXPECTATION,
-        ));
-    }
-    Ok(timezone)
-}
-
-impl PredicateInput {
-    pub(crate) fn into_predicate(self) -> Result<DeltaPredicate, Error> {
-        let mut node_count = 0;
-        self.root.0.into_predicate(1, &mut node_count)
-    }
-}
-
-fn validation_correction(
-    field_path: &str,
-    expected: String,
-    hint: &'static str,
-) -> InputCorrection {
-    InputCorrection {
-        argument: JsonInputKind::Predicate.argument().to_owned(),
-        field_path: Some(field_path.to_owned()),
-        expected,
-        hint,
-    }
-}
-
-fn prepend_field_path(mut error: Error, prefix: &str) -> Error {
-    if let Error::InputValidation { correction, .. } = &mut error
-        && let Some(path) = &mut correction.field_path
-    {
-        path.insert_str(0, prefix);
-    }
-    error
 }
 
 impl PredicateNode {
@@ -379,6 +312,79 @@ impl ScalarInput {
             },
         })
     }
+}
+
+fn validation_correction(
+    field_path: &str,
+    expected: String,
+    hint: &'static str,
+) -> InputCorrection {
+    InputCorrection {
+        argument: JsonInputKind::Predicate.argument().to_owned(),
+        field_path: Some(field_path.to_owned()),
+        expected,
+        hint,
+    }
+}
+
+fn prepend_field_path(mut error: Error, prefix: &str) -> Error {
+    if let Error::InputValidation { correction, .. } = &mut error
+        && let Some(path) = &mut correction.field_path
+    {
+        path.insert_str(0, prefix);
+    }
+    error
+}
+
+fn deserialize_integer_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: FromStr + Bounded + fmt::Display,
+{
+    struct CanonicalIntegerStringVisitor<T>(PhantomData<T>);
+
+    impl<'de, T: FromStr + Bounded + fmt::Display> de::Visitor<'de>
+        for CanonicalIntegerStringVisitor<T>
+    {
+        type Value = T;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(
+                formatter,
+                "{CANONICAL_INTEGER_EXPECTATION_PREFIX} from {} to {}",
+                T::min_value(),
+                T::max_value()
+            )
+        }
+
+        fn visit_str<E: de::Error>(self, value: &str) -> Result<T, E> {
+            let digits = value.strip_prefix('-').unwrap_or(value).as_bytes();
+            if value != "0"
+                && !(matches!(digits.first(), Some(b'1'..=b'9'))
+                    && digits.iter().all(u8::is_ascii_digit))
+            {
+                return Err(E::invalid_value(de::Unexpected::Str(value), &self));
+            }
+            value
+                .parse()
+                .map_err(|_| E::invalid_value(de::Unexpected::Str(value), &self))
+        }
+    }
+
+    deserializer.deserialize_str(CanonicalIntegerStringVisitor(PhantomData))
+}
+
+fn deserialize_timezone<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error> {
+    let timezone = Option::<String>::deserialize(deserializer)?;
+    if timezone.as_ref().is_some_and(String::is_empty) {
+        return Err(de::Error::invalid_value(
+            de::Unexpected::Str(""),
+            &TIMEZONE_EXPECTATION,
+        ));
+    }
+    Ok(timezone)
 }
 
 #[cfg(test)]

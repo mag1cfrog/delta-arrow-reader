@@ -1,3 +1,5 @@
+//! Decode CLI execution options and apply their overrides to core defaults.
+
 use delta_arrow_reader::{DeltaReaderError, DeltaScanExecutionOptions, ParquetReaderBackend};
 use serde::{Deserialize, Deserializer, de::value::StringDeserializer};
 
@@ -52,7 +54,7 @@ impl ExecutionOptionsInput {
     }
 }
 
-pub(crate) fn input_correction(reason: &str) -> Option<InputCorrection> {
+pub(crate) fn execution_options_correction(reason: &str) -> Option<InputCorrection> {
     let field = match reason {
         "max_concurrent_file_reads_per_scan_must_be_positive"
         | "max_concurrent_file_reads_per_scan_exceeds_tokio_max_permits" => {
@@ -80,7 +82,7 @@ pub(crate) fn input_correction(reason: &str) -> Option<InputCorrection> {
     })
 }
 
-pub(crate) fn describe_integer_requirement(field: &str) -> Option<String> {
+pub(super) fn describe_integer_requirement(field: &str) -> Option<String> {
     let (minimum, maximum, nullable) = match field {
         "max_concurrent_file_reads_per_scan" => (1, tokio::sync::Semaphore::MAX_PERMITS, true),
         "max_concurrent_file_reads_per_partition" | "output_buffer_batches_per_partition" => {

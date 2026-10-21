@@ -3,9 +3,7 @@
 #![cfg_attr(test, allow(clippy::panic))]
 
 mod diagnostics;
-mod execution_options;
 mod input;
-mod predicate;
 mod signals;
 mod unity_catalog;
 
@@ -250,7 +248,7 @@ impl Error {
                 },
             ),
             Self::Configuration { source } => {
-                return execution_options::input_correction(source.reason());
+                return input::execution_options_correction(source.reason());
             }
             Self::Reader { source } => return InputCorrection::from_reader(source),
             _ => return None,
@@ -538,7 +536,7 @@ fn run() -> Result<Value, Error> {
             predicate_file: Some(path),
             ..
         } => Some(
-            input::read_json_file::<predicate::PredicateInput>(path, JsonInputKind::Predicate)?
+            input::read_json_file::<input::PredicateInput>(path, JsonInputKind::Predicate)?
                 .into_predicate()?,
         ),
         _ => None,
@@ -548,9 +546,10 @@ fn run() -> Result<Value, Error> {
             execution_options_file: Some(path),
             ..
         } => {
-            let options = input::read_json_file::<
-                input::JsonObject<execution_options::ExecutionOptionsInput>,
-            >(path, JsonInputKind::ExecutionOptions)?
+            let options = input::read_json_file::<input::JsonObject<input::ExecutionOptionsInput>>(
+                path,
+                JsonInputKind::ExecutionOptions,
+            )?
             .0;
             Some(
                 options
@@ -1105,9 +1104,10 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("secret-input.json");
         std::fs::write(&path, r#"{"secret-field":0}"#).unwrap();
-        let error = input::read_json_file::<
-            input::JsonObject<execution_options::ExecutionOptionsInput>,
-        >(path.to_str().unwrap(), JsonInputKind::ExecutionOptions)
+        let error = input::read_json_file::<input::JsonObject<input::ExecutionOptionsInput>>(
+            path.to_str().unwrap(),
+            JsonInputKind::ExecutionOptions,
+        )
         .err()
         .unwrap();
         let source = error

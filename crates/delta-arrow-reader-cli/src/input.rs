@@ -9,7 +9,12 @@ use snafu::{ResultExt, ensure};
 
 use crate::{Error, InputIoSnafu, InputValidationSnafu, diagnostics::InputCorrection};
 
-pub(crate) mod schema_errors;
+mod execution_options;
+mod predicate;
+mod schema_errors;
+
+pub(crate) use execution_options::{ExecutionOptionsInput, execution_options_correction};
+pub(crate) use predicate::PredicateInput;
 
 const MAX_JSON_BYTES: u64 = 1024 * 1024;
 

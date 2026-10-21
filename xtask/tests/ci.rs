@@ -175,7 +175,7 @@ fn cli_sources_run_separate_required_checks() -> Result<()> {
     let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
     for path in [
         "crates/delta-arrow-reader-cli/src/main.rs",
-        "crates/delta-arrow-reader-cli/src/predicate/tests.rs",
+        "crates/delta-arrow-reader-cli/src/input/predicate/tests.rs",
         "crates/delta-arrow-reader-cli/tests/cli.rs",
         "crates/delta-arrow-reader-cli/tests/predicates/mod.rs",
     ] {
