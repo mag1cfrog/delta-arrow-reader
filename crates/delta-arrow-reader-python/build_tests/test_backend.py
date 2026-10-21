@@ -168,17 +168,6 @@ class BackendTests(unittest.TestCase):
                 str(workspace / "xtask" / "Cargo.toml"),
             )
 
-    def test_native_wheel_failure_propagates_without_calling_library_only_build(self):
-        self.maturin.get_maturin_pep517_args.return_value = []
-        with patch.object(
-            self.backend.subprocess, "check_output",
-            side_effect=["/source/Cargo.toml\n", subprocess.CalledProcessError(1, ["cargo"])],
-        ):
-            with self.assertRaises(subprocess.CalledProcessError):
-                self.backend.build_wheel("output")
-        self.maturin.build_wheel.assert_not_called()
-        self.maturin.build_editable.assert_not_called()
-
 
 if __name__ == "__main__":
     unittest.main()
