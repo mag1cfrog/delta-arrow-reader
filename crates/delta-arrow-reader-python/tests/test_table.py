@@ -758,79 +758,42 @@ class TableTests(unittest.TestCase):
                 with self.subTest(method=method, value=value), self.assertRaises(TypeError):
                     method(execution_options=value)
 
-    def test_execution_capacity_defaults_and_validation(self):
-        maximum = sys.maxsize >> 2
-        for name, default in (
-            ("max_concurrent_file_reads_per_partition", 3),
-            ("max_concurrent_file_reads_per_scan", None),
-            ("output_buffer_batches_per_partition", 1),
+    def test_numeric_execution_options_validate_bounds_defaults_and_immutability(self):
+        capacity = sys.maxsize >> 2
+        usize_max = 2 * sys.maxsize + 1
+        for name, default, minimum, maximum, optional in (
+            ("max_concurrent_file_reads_per_partition", 3, 1, capacity, False),
+            ("max_concurrent_file_reads_per_scan", None, 1, capacity, True),
+            ("output_buffer_batches_per_partition", 1, 1, capacity, False),
+            ("prefetch_files_per_partition", 2, 0, usize_max, False),
+            ("parquet_metadata_size_hint_bytes", 65536, 1, usize_max, True),
+            ("parquet_full_file_read_threshold_bytes", None, 1, usize_max, True),
         ):
             self.assertEqual(getattr(ScanExecutionOptions(), name), default)
-            if default is not None:
-                with self.subTest(name=name), self.assertRaises(TypeError) as caught:
-                    ScanExecutionOptions(**{name: None})
-                self.assertIn(name, str(caught.exception))
-            for count in (1, 2, MisleadingInteger(2), maximum, default):
+            valid = [minimum, 2, MisleadingInteger(minimum), MisleadingInteger(2), maximum, default]
+            if optional:
+                valid.append(None)
+            for count in valid:
                 with self.subTest(name=name, count=count):
                     options = ScanExecutionOptions(**{name: count})
                     self.assertEqual(getattr(options, name), count)
                     with self.assertRaises(AttributeError):
                         setattr(options, name, 1)
-            for count, error_type in (
-                (True, TypeError), (False, TypeError),
-                (1.0, TypeError), ("1", TypeError), (b"1", TypeError),
-                ([], TypeError), ({}, TypeError), (object(), TypeError),
-                (0, ValueError), (MisleadingInteger(0), ValueError), (-1, ValueError),
-                (-2**100, ValueError), (MisleadingInteger(-1), ValueError),
-                (maximum + 1, ValueError), (2 * sys.maxsize + 1, ValueError),
-                (2 * sys.maxsize + 2, OverflowError), (2**100, OverflowError),
-            ):
+            invalid = [(value, TypeError) for value in (
+                True, False, 1.0, "secret-value", b"1", [], {}, object(),
+            )]
+            if not optional:
+                invalid.append((None, TypeError))
+            invalid += [
+                (minimum - 1, ValueError), (MisleadingInteger(minimum - 1), ValueError),
+                (-2**100, ValueError), (maximum + 1, ValueError if maximum < usize_max else OverflowError),
+                (usize_max + 1, OverflowError), (2**100, OverflowError),
+            ]
+            for count, error_type in invalid:
                 with self.subTest(name=name, count=count), self.assertRaises(error_type) as caught:
                     ScanExecutionOptions(**{name: count})
                 self.assertIn(name, str(caught.exception))
-
-    def test_prefetch_depth_defaults_and_validation(self):
-        self.assertEqual(ScanExecutionOptions().prefetch_files_per_partition, 2)
-        for count in (0, 1, 2, MisleadingInteger(0), MisleadingInteger(2), 2 * sys.maxsize + 1):
-            with self.subTest(count=count):
-                options = ScanExecutionOptions(prefetch_files_per_partition=count)
-                self.assertEqual(options.prefetch_files_per_partition, count)
-                with self.assertRaises(AttributeError):
-                    options.prefetch_files_per_partition = 0
-        for count, error_type in (
-            (None, TypeError), (True, TypeError), (False, TypeError),
-            (1.0, TypeError), ("1", TypeError), (b"1", TypeError),
-            ([], TypeError), ({}, TypeError), (object(), TypeError),
-            (-1, ValueError), (-2**100, ValueError), (MisleadingInteger(-1), ValueError),
-            (2 * sys.maxsize + 2, OverflowError), (2**100, OverflowError),
-        ):
-            with self.subTest(count=count), self.assertRaises(error_type) as caught:
-                ScanExecutionOptions(prefetch_files_per_partition=count)
-            self.assertIn("prefetch_files_per_partition", str(caught.exception))
-
-    def test_parquet_byte_options_defaults_and_validation(self):
-        for name, default in (
-            ("parquet_metadata_size_hint_bytes", 65536),
-            ("parquet_full_file_read_threshold_bytes", None),
-        ):
-            self.assertEqual(getattr(ScanExecutionOptions(), name), default)
-            for size in (None, 1, 65536, MisleadingInteger(2), 2 * sys.maxsize + 1):
-                with self.subTest(name=name, size=size):
-                    options = ScanExecutionOptions(**{name: size})
-                    self.assertEqual(getattr(options, name), size)
-                    with self.assertRaises(AttributeError):
-                        setattr(options, name, None)
-            for size, error_type in (
-                (True, TypeError), (False, TypeError), (1.0, TypeError),
-                ("1", TypeError), (b"1", TypeError), ([], TypeError),
-                ({}, TypeError), (object(), TypeError), (0, ValueError),
-                (MisleadingInteger(0), ValueError), (-1, ValueError), (-2**100, ValueError),
-                (MisleadingInteger(-1), ValueError), (2 * sys.maxsize + 2, OverflowError),
-                (2**100, OverflowError),
-            ):
-                with self.subTest(name=name, size=size), self.assertRaises(error_type) as caught:
-                    ScanExecutionOptions(**{name: size})
-                self.assertIn(name, str(caught.exception))
+                self.assertNotIn("secret", str(caught.exception))
 
     def test_execution_options_override_and_refresh_preserve_table_defaults(self):
         http = self.http_support()
