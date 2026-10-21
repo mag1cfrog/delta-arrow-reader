@@ -166,6 +166,7 @@ pub(crate) struct InputCorrection {
     pub(crate) argument: String,
     pub(crate) field_path: Option<String>,
     pub(crate) expected: String,
+    pub(crate) supplied: Option<Box<str>>,
     pub(crate) hint: &'static str,
 }
 
@@ -209,6 +210,7 @@ impl InputCorrection {
                         .map_or_else(|| argument.get_id().to_string(), |name| format!("--{name}")),
                     field_path: None,
                     expected,
+                    supplied: None,
                     hint: argument_error_hint(kind),
                 });
             }
@@ -219,6 +221,17 @@ impl InputCorrection {
     }
 
     pub(crate) fn from_reader(error: &delta_arrow_reader::DeltaReaderError) -> Option<Self> {
+        if let delta_arrow_reader::DeltaReaderError::PredicateTypeMismatch {
+            expected,
+            supplied,
+            path,
+            ..
+        } = error
+        {
+            return Some(crate::input::predicate_type_mismatch_correction(
+                expected, supplied, path,
+            ));
+        }
         let (argument, expected, hint) = match (error.code(), error.reason()) {
             ("invalid_projection", "column_not_found") => (
                 "--column",
@@ -240,11 +253,6 @@ impl InputCorrection {
                 "a nonempty top-level logical column name without dots",
                 "Use a top-level column from inspect; qualified names and nested field paths are not supported in predicates.",
             ),
-            ("unsupported_predicate", "scalar_type_mismatch") => (
-                "--predicate-file",
-                "a scalar type matching the column's Arrow type",
-                "Run inspect for the same table and snapshot, then match the scalar type, including decimal precision/scale or timestamp timezone, to the column.",
-            ),
             ("unsupported_predicate", "invalid_decimal") => (
                 "--predicate-file",
                 "a decimal128 value within its declared precision and valid scale",
@@ -256,6 +264,7 @@ impl InputCorrection {
             argument: argument.to_owned(),
             field_path: None,
             expected: expected.to_owned(),
+            supplied: None,
             hint,
         })
     }

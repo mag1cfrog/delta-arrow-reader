@@ -21,7 +21,7 @@ use arrow::{
     error::ArrowError,
 };
 
-use crate::{DeltaReaderError, error::UnsupportedPredicateSnafu};
+use crate::{DeltaPredicatePathStep, DeltaReaderError, error::UnsupportedPredicateSnafu};
 
 /// Comparison operation in a Delta predicate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -137,11 +137,30 @@ pub(crate) fn validate_predicate(
         DeltaPredicate::IsNull { column } | DeltaPredicate::IsNotNull { column } => {
             column_data_type(schema, column).map(|_| ())
         }
-        DeltaPredicate::And(children) | DeltaPredicate::Or(children) => children
-            .iter()
-            .try_for_each(|child| validate_predicate(child, schema)),
-        DeltaPredicate::Not(child) => validate_predicate(child, schema),
+        DeltaPredicate::And(children) | DeltaPredicate::Or(children) => {
+            children.iter().enumerate().try_for_each(|(index, child)| {
+                let step = if matches!(predicate, DeltaPredicate::And(_)) {
+                    DeltaPredicatePathStep::AndChild(index)
+                } else {
+                    DeltaPredicatePathStep::OrChild(index)
+                };
+                validate_predicate(child, schema)
+                    .map_err(|error| prepend_predicate_path(error, step))
+            })
+        }
+        DeltaPredicate::Not(child) => validate_predicate(child, schema)
+            .map_err(|error| prepend_predicate_path(error, DeltaPredicatePathStep::NotChild)),
     }
+}
+
+fn prepend_predicate_path(
+    mut error: DeltaReaderError,
+    step: DeltaPredicatePathStep,
+) -> DeltaReaderError {
+    if let DeltaReaderError::PredicateTypeMismatch { path, .. } = &mut error {
+        path.insert(0, step);
+    }
+    error
 }
 
 #[allow(dead_code)]
@@ -281,25 +300,25 @@ pub(super) fn column_data_type<'a>(
 }
 
 fn validate_scalar(data_type: &DataType, scalar: &DeltaScalar) -> Result<(), DeltaReaderError> {
-    let matches = match scalar {
-        DeltaScalar::Boolean(_) => data_type == &DataType::Boolean,
-        DeltaScalar::Int8(_) => data_type == &DataType::Int8,
-        DeltaScalar::Int16(_) => data_type == &DataType::Int16,
-        DeltaScalar::Int32(_) => data_type == &DataType::Int32,
-        DeltaScalar::Int64(_) => data_type == &DataType::Int64,
+    let scalar_type = match scalar {
+        DeltaScalar::Boolean(_) => DataType::Boolean,
+        DeltaScalar::Int8(_) => DataType::Int8,
+        DeltaScalar::Int16(_) => DataType::Int16,
+        DeltaScalar::Int32(_) => DataType::Int32,
+        DeltaScalar::Int64(_) => DataType::Int64,
         DeltaScalar::Float32(value) => {
             if !value.is_finite() {
                 return Err(unsupported_predicate("non_finite_float"));
             }
-            data_type == &DataType::Float32
+            DataType::Float32
         }
         DeltaScalar::Float64(value) => {
             if !value.is_finite() {
                 return Err(unsupported_predicate("non_finite_float"));
             }
-            data_type == &DataType::Float64
+            DataType::Float64
         }
-        DeltaScalar::Date32(_) => data_type == &DataType::Date32,
+        DeltaScalar::Date32(_) => DataType::Date32,
         DeltaScalar::Decimal128 {
             value,
             precision,
@@ -310,37 +329,37 @@ fn validate_scalar(data_type: &DataType, scalar: &DeltaScalar) -> Result<(), Del
             {
                 return Err(unsupported_predicate("invalid_decimal"));
             }
-            data_type == &DataType::Decimal128(*precision, *scale)
+            DataType::Decimal128(*precision, *scale)
         }
-        DeltaScalar::Utf8(_) => data_type == &DataType::Utf8,
-        DeltaScalar::LargeUtf8(_) => data_type == &DataType::LargeUtf8,
-        DeltaScalar::Binary(_) => data_type == &DataType::Binary,
-        DeltaScalar::LargeBinary(_) => data_type == &DataType::LargeBinary,
+        DeltaScalar::Utf8(_) => DataType::Utf8,
+        DeltaScalar::LargeUtf8(_) => DataType::LargeUtf8,
+        DeltaScalar::Binary(_) => DataType::Binary,
+        DeltaScalar::LargeBinary(_) => DataType::LargeBinary,
         DeltaScalar::FixedSizeBinary { size, value } => {
             if usize::try_from(*size).ok() != Some(value.len()) || *size <= 0 {
                 return Err(unsupported_predicate("invalid_fixed_size_binary"));
             }
-            data_type == &DataType::FixedSizeBinary(*size)
+            DataType::FixedSizeBinary(*size)
         }
-        DeltaScalar::TimestampMicrosecond { timezone, .. } => match timezone {
-            Some(timezone) => {
-                if timezone.is_empty() {
-                    return Err(unsupported_predicate("invalid_timestamp_timezone"));
-                }
-                matches!(
-                    data_type,
-                    DataType::Timestamp(TimeUnit::Microsecond, Some(field_timezone))
-                        if field_timezone.as_ref() == timezone
-                )
+        DeltaScalar::TimestampMicrosecond { timezone, .. } => {
+            if timezone
+                .as_ref()
+                .is_some_and(|timezone| timezone.is_empty())
+            {
+                return Err(unsupported_predicate("invalid_timestamp_timezone"));
             }
-            None => data_type == &DataType::Timestamp(TimeUnit::Microsecond, None),
-        },
+            DataType::Timestamp(TimeUnit::Microsecond, timezone.as_deref().map(Into::into))
+        }
     };
 
-    if matches {
+    if data_type == &scalar_type {
         Ok(())
     } else {
-        Err(unsupported_predicate("scalar_type_mismatch"))
+        Err(DeltaReaderError::PredicateTypeMismatch {
+            expected: data_type.clone(),
+            supplied: scalar_type,
+            path: Vec::new(),
+        })
     }
 }
 
@@ -368,7 +387,7 @@ mod tests {
         DeltaComparison, DeltaPredicate, DeltaScalar, evaluate_predicate, predicate_selection,
         validate_predicate,
     };
-    use crate::{DeltaReaderError, DeltaReaderPhase};
+    use crate::{DeltaPredicatePathStep, DeltaReaderError, DeltaReaderPhase};
 
     fn compare(column: &str, value: DeltaScalar) -> DeltaPredicate {
         DeltaPredicate::Compare {
@@ -573,6 +592,44 @@ mod tests {
             ]),
         ] {
             assert_unsupported(&predicate, &schema);
+        }
+    }
+
+    #[test]
+    fn type_mismatches_identify_the_comparison_without_disclosing_inputs() {
+        let schema = Schema::new(vec![Field::new("private-column", DataType::Int32, true)]);
+        let comparison = compare("private-column", DeltaScalar::Utf8("private-value".into()));
+        for (predicate, expected_path) in [
+            (comparison.clone(), vec![]),
+            (
+                DeltaPredicate::And(vec![
+                    DeltaPredicate::Constant(false),
+                    DeltaPredicate::Or(vec![DeltaPredicate::Not(Box::new(comparison))]),
+                ]),
+                vec![
+                    DeltaPredicatePathStep::AndChild(1),
+                    DeltaPredicatePathStep::OrChild(0),
+                    DeltaPredicatePathStep::NotChild,
+                ],
+            ),
+        ] {
+            let error = validate_predicate(&predicate, &schema).unwrap_err();
+            assert_eq!(error.code(), "unsupported_predicate");
+            assert_eq!(error.reason(), "scalar_type_mismatch");
+            assert_eq!(error.phase(), DeltaReaderPhase::ScanPlanning);
+            assert_eq!(error.source_kind(), None);
+            assert!(!format!("{error} {error:?}").contains("private"));
+            let DeltaReaderError::PredicateTypeMismatch {
+                expected,
+                supplied,
+                path,
+            } = error
+            else {
+                panic!("missing type mismatch details");
+            };
+            assert_eq!(expected, DataType::Int32);
+            assert_eq!(supplied, DataType::Utf8);
+            assert_eq!(path, expected_path);
         }
     }
 

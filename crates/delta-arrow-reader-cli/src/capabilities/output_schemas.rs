@@ -75,6 +75,7 @@ pub(super) fn diagnostic_schema() -> Value {
             "argument_kind": {"type": "string"},
             "argument": {"type": "string"},
             "expected": {"type": "string"},
+            "supplied": {"type": "string", "description": "Safe type description for a rejected predicate scalar; excludes literal values and timezone text."},
             "hint": {"type": "string"},
             "field_path": {"type": "string", "description": "JSON Pointer; an empty string identifies the input root."},
             "json_kind": {"type": "string"},

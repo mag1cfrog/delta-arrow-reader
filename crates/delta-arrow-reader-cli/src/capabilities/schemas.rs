@@ -43,6 +43,7 @@ impl DiscoverySchema {
                     correction: Some(InputCorrection {
                         argument: "--detail".to_owned(),
                         field_path: None,
+                        supplied: None,
                         expected: "a field, operator, or scalar type listed by the selected schema"
                             .to_owned(),
                         hint: "Run capabilities --schema NAME to list available details.",

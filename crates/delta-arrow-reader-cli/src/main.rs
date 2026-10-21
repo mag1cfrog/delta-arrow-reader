@@ -311,6 +311,7 @@ impl Error {
                     argument: (*argument).to_owned(),
                     field_path: None,
                     expected: "a readable local file".to_owned(),
+                    supplied: None,
                     hint,
                 });
             }
@@ -346,6 +347,9 @@ impl Error {
         let correction = self.input_correction();
         let argument = correction.as_ref().map(|value| value.argument.as_str());
         let expected = correction.as_ref().map(|value| value.expected.as_str());
+        let supplied = correction
+            .as_ref()
+            .and_then(|value| value.supplied.as_deref());
         let field_path = correction
             .as_ref()
             .and_then(|value| value.field_path.as_deref());
@@ -364,7 +368,7 @@ impl Error {
             if correction.is_some() {
                 tracing::error!(target: "delta_arrow_reader_cli",
                     event = "cli.input_correction", error_phase = phase, error_code = code,
-                    error_reason = reason, argument, expected, hint, field_path,
+                    error_reason = reason, argument, expected, supplied, hint, field_path,
                     "Correct the command input"
                 );
             }
@@ -399,7 +403,7 @@ impl Error {
         tracing::error!(target: "delta_arrow_reader_cli",
             event = "cli.failed", operation = "cli_command", outcome = "failed",
             error_phase = phase, error_code = code, error_reason = reason,
-            error_source_kind = source_kind, argument_kind, argument, expected, hint, field_path,
+            error_source_kind = source_kind, argument_kind, argument, expected, supplied, hint, field_path,
             json_kind, json_line, json_column, io_kind, os_error,
             "{message}"
         );
@@ -439,6 +443,11 @@ impl Error {
             "recovery": recovery,
         });
         match self {
+            Self::UnityCatalog {
+                source: source @ unity_catalog::Error::DatabricksCliNotFound,
+            } => {
+                record["hint"] = source.to_string().into();
+            }
             Self::Argument { kind, .. } => {
                 record["argument_kind"] = format!("{kind:?}").into();
                 record["hint"] = diagnostics::argument_error_hint(*kind).into();
@@ -460,6 +469,9 @@ impl Error {
             record["argument"] = correction.argument.into();
             record["expected"] = correction.expected.into();
             record["hint"] = correction.hint.into();
+            if let Some(supplied) = correction.supplied {
+                record["supplied"] = supplied.into_string().into();
+            }
             if let Some(path) = correction.field_path {
                 record["field_path"] = path.into();
             }

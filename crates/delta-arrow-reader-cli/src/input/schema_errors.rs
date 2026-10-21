@@ -214,6 +214,7 @@ impl FieldLocation {
             argument: self.input_kind.argument().to_owned(),
             field_path: Some(self.path.clone()),
             expected: expected.into(),
+            supplied: None,
             hint,
         }
     }

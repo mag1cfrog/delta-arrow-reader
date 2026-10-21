@@ -39,7 +39,9 @@ pub(crate) enum Error {
         "Supply an explicit S3 region in the storage options file for this Unity Catalog table."
     ))]
     MissingS3Region,
-    #[snafu(display("Install the Databricks CLI and make it available on PATH."))]
+    #[snafu(display(
+        "Install the Databricks CLI and make the databricks executable available on PATH, then retry with the same --databricks-profile."
+    ))]
     DatabricksCliNotFound,
     #[snafu(display("Could not run the Databricks CLI."))]
     DatabricksCommandFailed,
