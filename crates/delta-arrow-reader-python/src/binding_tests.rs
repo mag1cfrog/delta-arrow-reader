@@ -7,8 +7,9 @@ use pyo3::{
 };
 
 mod diagnostics;
+mod filters;
 
-fn assert_error<E: PyTypeInfo>(result: PyResult<Bound<'_, PyAny>>) -> PyErr {
+pub(super) fn assert_error<E: PyTypeInfo>(result: PyResult<Bound<'_, PyAny>>) -> PyErr {
     let error = result.unwrap_err();
     Python::attach(|py| assert!(error.get_type(py).is(py.get_type::<E>()), "{error}"));
     assert!(!error.to_string().contains("secret"), "{error}");
@@ -33,7 +34,7 @@ fn non_integers(py: Python<'_>) -> Vec<Bound<'_, PyAny>> {
     ]
 }
 
-fn table(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+pub(super) fn table(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned/table"
