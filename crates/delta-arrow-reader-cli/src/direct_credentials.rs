@@ -23,6 +23,8 @@ pub(crate) enum CredentialSource {
     Env,
     /// Assume an AWS role using an explicitly configured web identity token file.
     AwsWebIdentity,
+    /// Use explicitly configured ECS task or EKS pod credentials.
+    AwsContainer,
     /// Use Azure workload identity with an explicitly configured token file.
     AzureWorkloadIdentity,
     /// Use Azure managed identity with one explicitly selected identity ID.
@@ -66,9 +68,10 @@ impl CredentialSource {
             }
         );
         match (scheme, self) {
-            (ObjectStoreScheme::AmazonS3, Self::Json | Self::Env | Self::AwsWebIdentity) => {
-                s3::configure_table_credentials(builder, location, options, self)
-            }
+            (
+                ObjectStoreScheme::AmazonS3,
+                Self::Json | Self::Env | Self::AwsWebIdentity | Self::AwsContainer,
+            ) => s3::configure_table_credentials(builder, location, options, self),
             (
                 ObjectStoreScheme::MicrosoftAzure,
                 Self::Json | Self::Env | Self::AzureWorkloadIdentity | Self::AzureManagedIdentity,

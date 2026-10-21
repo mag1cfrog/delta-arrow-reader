@@ -1,4 +1,6 @@
-//! S3 access keys and renewable web identity with an explicitly selected provider.
+//! Explicit S3 access keys and identity providers without ambient fallback.
+
+mod container;
 
 use std::sync::Arc;
 
@@ -44,6 +46,8 @@ pub(super) fn configure_table_credentials(
                 options.insert(key, value);
             }
         }
+    } else if matches!(source, CredentialSource::AwsContainer) {
+        container::load_environment_options(&mut options)?;
     }
     if !matches!(source, CredentialSource::Json)
         && !options.contains_key("aws_region")
@@ -56,7 +60,18 @@ pub(super) fn configure_table_credentials(
         }
     }
     if matches!(source, CredentialSource::AwsWebIdentity) {
-        return configure_web_identity_credentials(builder, location, options);
+        ensure!(
+            options.contains_key("aws_role_arn")
+                && options.contains_key("aws_web_identity_token_file"),
+            StorageAuthorizationSnafu {
+                reason: "auth_source_incomplete_credentials"
+            }
+        );
+        return configure_native_credentials(builder, location, options);
+    }
+    if matches!(source, CredentialSource::AwsContainer) {
+        container::validate_credential_family(&options)?;
+        return configure_native_credentials(builder, location, options);
     }
     let credentials = AwsCredential {
         key_id: take_required_credential(&mut options, "aws_access_key_id")?,
@@ -71,17 +86,12 @@ pub(super) fn configure_table_credentials(
         ))))
 }
 
-fn configure_web_identity_credentials(
+fn configure_native_credentials(
     builder: DeltaTableBuilder,
     location: &str,
     mut options: DeltaStorageOptions,
 ) -> Result<DeltaTableBuilder, Error> {
-    ensure!(
-        options.contains_key("aws_role_arn") && options.contains_key("aws_web_identity_token_file"),
-        StorageAuthorizationSnafu {
-            reason: "auth_source_incomplete_credentials"
-        }
-    );
+    // Source-specific validation leaves exactly one complete native provider configuration.
     let mut storage_builder = AmazonS3Builder::new().with_url(location);
     for (name, value) in &options {
         let key = name
@@ -96,12 +106,15 @@ fn configure_web_identity_credentials(
         .map_err(|_| Error::StorageAuthorization {
             reason: "auth_source_invalid_value",
         })?;
-    // The provider owns the role and file path; renewal rereads only that file's contents.
+    // The provider owns its references; do not retain a second source in storage options.
     for key in [
         AmazonS3ConfigKey::RoleArn,
         AmazonS3ConfigKey::WebIdentityTokenFile,
         AmazonS3ConfigKey::RoleSessionName,
         AmazonS3ConfigKey::StsEndpoint,
+        AmazonS3ConfigKey::ContainerCredentialsRelativeUri,
+        AmazonS3ConfigKey::ContainerCredentialsFullUri,
+        AmazonS3ConfigKey::ContainerAuthorizationTokenFile,
     ] {
         options.remove(key.as_ref());
     }
@@ -142,6 +155,17 @@ fn normalize_s3_options(
             | AmazonS3ConfigKey::StsEndpoint => {
                 ensure!(
                     matches!(source, CredentialSource::AwsWebIdentity),
+                    StorageAuthorizationSnafu {
+                        reason: "auth_source_unsupported_option"
+                    }
+                );
+                validate_auth_source_value(&value)?;
+            }
+            AmazonS3ConfigKey::ContainerCredentialsRelativeUri
+            | AmazonS3ConfigKey::ContainerCredentialsFullUri
+            | AmazonS3ConfigKey::ContainerAuthorizationTokenFile => {
+                ensure!(
+                    matches!(source, CredentialSource::AwsContainer),
                     StorageAuthorizationSnafu {
                         reason: "auth_source_unsupported_option"
                     }

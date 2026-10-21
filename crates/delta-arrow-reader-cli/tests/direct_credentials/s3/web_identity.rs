@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use super::{
     CloudStorageProtocol, DirectStorageFixture, TestResult, assert_read_result,
-    assert_single_terminal_record, run_with_timeout,
+    assert_single_terminal_record, run_with_timeout, signed_session_generations,
 };
 use crate::{
     cloud_storage::{MockCloudStorageServer, partitioned_objects},
@@ -94,35 +94,6 @@ fn assert_sts_requests(requests: &[Value], host: &str, session_name: &str) -> Ve
         .collect()
 }
 
-fn signed_session_generations(fixture: &DirectStorageFixture) -> Vec<usize> {
-    fixture
-        .server
-        .requests
-        .lock()
-        .unwrap()
-        .iter()
-        .map(|request| {
-            let (_, credential) = request.split_once("Credential=secret-sts-key-").unwrap();
-            let generation: usize = credential.split_once('/').unwrap().0.parse().unwrap();
-            assert!(request.contains("/eu-west-1/s3/aws4_request"), "{request}");
-            assert!(request.contains("Signature="), "{request}");
-            let token = request.lines().find_map(|line| {
-                let (name, value) = line.split_once(':')?;
-                name.eq_ignore_ascii_case("x-amz-security-token")
-                    .then(|| value.trim())
-            });
-            assert_eq!(
-                token,
-                Some(format!("secret-sts-session-{generation}").as_str())
-            );
-            for forbidden in ["secret-unused", "secret-sts-password", "assertion"] {
-                assert!(!request.contains(forbidden), "{request}");
-            }
-            generation
-        })
-        .collect()
-}
-
 #[test]
 fn all_reads_refresh_the_fixed_role_with_rotated_assertions() -> TestResult {
     for references in ["json", "env", "mixed"] {
@@ -176,7 +147,7 @@ fn all_reads_refresh_the_fixed_role_with_rotated_assertions() -> TestResult {
             let output = run_with_timeout(&mut command)?;
             assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
             assert_read_result(output, operation)?;
-            let generations = signed_session_generations(&fixture);
+            let generations = signed_session_generations(&fixture, "sts");
             assert_eq!(generations[0], 1);
             assert!(generations.iter().any(|generation| *generation > 1));
             let assertions = assert_sts_requests(
@@ -325,7 +296,7 @@ fn sts_and_storage_failures_never_use_ambient_credentials() -> TestResult {
                 .iter()
                 .all(|assertion| assertion == INITIAL_ASSERTION)
             );
-            let generations = signed_session_generations(&fixture);
+            let generations = signed_session_generations(&fixture, "sts");
             match mode {
                 "reject" => {
                     assert_eq!(requests.len(), 1);
@@ -374,7 +345,7 @@ fn unreadable_assertions_at_startup_or_refresh_stop_the_read() -> TestResult {
                 assert_single_terminal_record(&output.stderr, "diagnostic");
             }
             let requests = proxy.requests()?;
-            let generations = signed_session_generations(&fixture);
+            let generations = signed_session_generations(&fixture, "sts");
             if remove_after_first_read {
                 assert_eq!(
                     assert_sts_requests(

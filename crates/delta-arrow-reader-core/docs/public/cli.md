@@ -528,6 +528,52 @@ instance metadata are not selected. An unreadable token file, failed STS
 request, or storage permission denial fails the read without switching
 identities. This source supports S3 tables only.
 
+### S3 container credentials
+
+Use `--auth-source aws-container` with `inspect`, `scan`, or `query` for
+[ECS task roles or EKS Pod Identity](https://docs.aws.amazon.com/sdkref/latest/guide/feature-container-credentials.html).
+Configure exactly one of these references:
+
+- ECS: a relative credentials URI. It is appended to `http://169.254.170.2`.
+- EKS: a full credentials URI and an authorization token file path.
+
+| Setting | Canonical JSON key | Environment variable |
+| --- | --- | --- |
+| Relative URI | `aws_container_credentials_relative_uri` | `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` |
+| Full URI | `aws_container_credentials_full_uri` | `AWS_CONTAINER_CREDENTIALS_FULL_URI` |
+| Token file path | `aws_container_authorization_token_file` | `AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE` |
+
+For example, when the container runtime supplies the environment reference:
+
+```sh
+dar query s3://example-bucket/orders --auth-source aws-container \
+  --sql-file count.sql > count.arrow
+```
+
+If `--storage-options-file` contains any container reference field, it must
+contain the complete reference. All container environment references are then
+ignored. Otherwise, the command reads the three environment variables above.
+It rejects mixed ECS/EKS references and incomplete EKS references, including
+a full URI without a token file. Region and other S3 storage settings follow
+the rules described earlier.
+
+Relative URIs must begin with a single `/` and contain no backslashes. Full
+URIs must use HTTP or HTTPS. Both forms may include a query string; embedded
+user credentials and URL fragments are rejected. The native provider allows
+HTTP for container credential endpoints independently of storage `allow_http`.
+
+The endpoint and token file path are fixed when the command starts. The native
+provider refreshes temporary credentials from that endpoint. For EKS, it
+rereads the token file and sends its contents in the `Authorization` header;
+the container runtime must provision and rotate this file. The CLI does not
+use `AWS_CONTAINER_AUTHORIZATION_TOKEN` or support a full URI without a token
+file. These limits reflect the installed provider's supported mechanisms.
+
+Unreadable token files, failed credential requests, malformed responses, and
+storage permission denials fail the read. The command does not switch to
+ambient access keys, web identity, profiles, or instance metadata. JSON fields
+selecting those other sources are rejected. This source supports S3 only.
+
 ## Azure credential sources
 
 `inspect`, `scan`, and `query` accept `--auth-source json|env` for Azure account

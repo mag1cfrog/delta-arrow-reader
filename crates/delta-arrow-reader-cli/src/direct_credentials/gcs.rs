@@ -20,6 +20,7 @@ pub(super) fn configure_table_credentials(
         CredentialSource::Json => options.remove("google_application_credentials"),
         CredentialSource::Env => read_environment_value("GOOGLE_APPLICATION_CREDENTIALS")?,
         CredentialSource::AwsWebIdentity
+        | CredentialSource::AwsContainer
         | CredentialSource::AzureWorkloadIdentity
         | CredentialSource::AzureManagedIdentity => {
             return StorageAuthorizationSnafu {

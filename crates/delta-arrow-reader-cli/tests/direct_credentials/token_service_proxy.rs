@@ -1,4 +1,4 @@
-//! Local TLS token services for native Google OAuth and AWS STS providers.
+//! Local token services for native Google OAuth and AWS credential providers.
 
 use std::{
     fs,
@@ -10,13 +10,14 @@ use std::{
 
 use serde_json::Value;
 
-/// Selects the request protocol and token response used by the local TLS service.
+/// Selects the request protocol and credential response used by the local service.
 pub(super) enum TokenService {
     GoogleOAuth,
     AwsSts,
+    AwsContainer,
 }
 
-/// Owns the local TLS token service, its request log, and process cleanup.
+/// Owns the local token service, its request log, and process cleanup.
 pub(super) struct TokenServiceProxy {
     directory: tempfile::TempDir,
     child: Child,
@@ -38,6 +39,7 @@ impl TokenServiceProxy {
             .arg(match service {
                 TokenService::GoogleOAuth => "gcs",
                 TokenService::AwsSts => "sts",
+                TokenService::AwsContainer => "container",
             })
             .arg(mode)
             .spawn()?;

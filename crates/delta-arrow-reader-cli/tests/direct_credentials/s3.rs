@@ -1,5 +1,6 @@
 //! S3 source selection reaches signed requests without credential fallback or leaks.
 
+mod container;
 mod web_identity;
 
 use serde_json::json;
@@ -30,6 +31,37 @@ impl DirectStorageFixture {
             assert!(!request.contains("secret-unused"));
         }
     }
+}
+
+fn signed_session_generations(fixture: &DirectStorageFixture, source: &str) -> Vec<usize> {
+    fixture
+        .server
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|request| {
+            let (_, credential) = request
+                .split_once(&format!("Credential=secret-{source}-key-"))
+                .unwrap();
+            let generation: usize = credential.split_once('/').unwrap().0.parse().unwrap();
+            assert!(request.contains("/eu-west-1/s3/aws4_request"), "{request}");
+            assert!(request.contains("Signature="), "{request}");
+            let token = request.lines().find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                name.eq_ignore_ascii_case("x-amz-security-token")
+                    .then(|| value.trim())
+            });
+            assert_eq!(
+                token,
+                Some(format!("secret-{source}-session-{generation}").as_str())
+            );
+            for forbidden in ["secret-unused", "password", "assertion"] {
+                assert!(!request.contains(forbidden), "{request}");
+            }
+            generation
+        })
+        .collect()
 }
 
 #[test]
