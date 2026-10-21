@@ -16,6 +16,7 @@ jobs:
     name: Build and validate fixtures
     runs-on: ubuntu-latest
     env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
       CARGO_TARGET_DIR: ${{ github.workspace }}/target/selective-read
       RUSTFLAGS: -C target-cpu=x86-64
       PYTHONDONTWRITEBYTECODE: '1'

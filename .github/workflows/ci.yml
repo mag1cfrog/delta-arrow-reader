@@ -72,6 +72,8 @@ jobs:
           - name: DataFusion
             features: --features datafusion
 
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
     steps:
       - uses: actions/checkout@v5
       - name: Read Rust version
@@ -113,6 +115,8 @@ jobs:
             os: windows-2022
             target: x86_64-pc-windows-msvc
 
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
     steps:
       - uses: actions/checkout@v5
       - name: Read Rust version
@@ -151,6 +155,8 @@ jobs:
       matrix:
         task: [Lints and Docs, Package]
 
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
     steps:
       - uses: actions/checkout@v5
       - name: Read Rust version
@@ -195,6 +201,8 @@ jobs:
     if: needs.changes.outputs.rust_docs == 'true' && needs.changes.outputs.code != 'true'
     runs-on: ubuntu-latest
 
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
     steps:
       - uses: actions/checkout@v5
       - name: Read Rust version
@@ -229,6 +237,7 @@ jobs:
     if: needs.changes.outputs.tooling == 'true'
     runs-on: ubuntu-latest
     env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
       SCCACHE_LOG: sccache::cache::cache=warn
       SCCACHE_ERROR_LOG: ${{ github.workspace }}/sccache.log
 
@@ -276,6 +285,8 @@ jobs:
           cargo test --locked --package xtask --bin xtask scan_scheduling::
           cargo test --locked --package xtask --bin xtask selective_read_chart::
           cargo test --locked --package xtask --bin xtask selective_read::
+          cargo test --locked --package xtask --bin xtask notices::
+          cargo test --locked --package xtask --test notices
           cargo test --locked --package xtask --test cli_release_plan --test cli_release_assets --test cli_release_images \
             --test cli_release_request --test cli_release_notes --test cli_release_workflow
           cargo test --locked --package xtask \
@@ -294,6 +305,8 @@ jobs:
     if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
 
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -333,7 +346,15 @@ jobs:
           tool: cargo-about@${{ steps.rust-version.outputs.cargo-about-version }}
       - name: Test Python build backend
         run: python -I -m unittest discover -s crates/delta-arrow-reader-python/build_tests
+      - name: Restore license scan reports
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/license-reports
+          key: license-reports-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/*/Cargo.toml', 'xtask/Cargo.toml', '.cargo/config.toml', 'LICENSE', 'crates/delta-arrow-reader-core/LICENSE', 'crates/delta-arrow-reader-cli/release/about.toml', 'xtask/src/notices.rs', 'xtask/src/notices/**') }}-${{ github.sha }}
+          restore-keys: license-reports-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/*/Cargo.toml', 'xtask/Cargo.toml', '.cargo/config.toml', 'LICENSE', 'crates/delta-arrow-reader-core/LICENSE', 'crates/delta-arrow-reader-cli/release/about.toml', 'xtask/src/notices.rs', 'xtask/src/notices/**') }}-
       - name: Build Python package
+        env:
+          DAR_CI_LICENSE_REPORTS: ${{ runner.temp }}/license-reports
         run: |
           python -m venv "$RUNNER_TEMP/python-tests"
           source "$RUNNER_TEMP/python-tests/bin/activate"
@@ -353,6 +374,8 @@ jobs:
     if: needs.changes.outputs.cli == 'true'
     runs-on: ubuntu-latest
 
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
     steps:
       - uses: actions/checkout@v5
       - name: Read Rust version
@@ -447,6 +470,7 @@ jobs:
       pr-head-sha: ${{ steps.record.outputs.pr-head-sha }}
       version: ${{ steps.record.outputs.version }}
     env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
       CLI_RECORD_NAME: dar-cli-validation-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v5

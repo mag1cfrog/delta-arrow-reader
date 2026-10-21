@@ -79,6 +79,8 @@ jobs:
       rust-toolchain: ${{ steps.prepare.outputs.rust-toolchain }}
       image: ${{ steps.prepare.outputs.image }}
       about-version: ${{ steps.prepare.outputs.about-version }}
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
     steps:
       - name: Require trusted main cache warming
         if: inputs.cache-only
@@ -131,6 +133,8 @@ jobs:
     if: ${{ !inputs.cache-only }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
     steps:
       - uses: actions/checkout@v5
         with:
@@ -175,6 +179,7 @@ jobs:
           - architecture: arm64
             runner: ubuntu-24.04-arm
     env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
       CLI_SOURCE_COMMIT: ${{ needs.prepare.outputs.source-commit }}
       CLI_VERSION: ${{ needs.prepare.outputs.version }}
       CLI_RUST_TOOLCHAIN: ${{ needs.prepare.outputs.rust-toolchain }}
@@ -343,6 +348,7 @@ jobs:
       artifact-url: ${{ steps.upload.outputs.artifact-url }}
       manifest-sha256: ${{ steps.complete.outputs.manifest-sha256 }}
     env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
       PREPARE_RESULT: ${{ needs.prepare.result }}
       CHECKS_RESULT: ${{ needs.checks.result }}
       BUILD_RESULT: ${{ needs.build.result }}
