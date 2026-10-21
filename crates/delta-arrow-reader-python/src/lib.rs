@@ -3,6 +3,8 @@
 #![cfg_attr(test, allow(clippy::panic))]
 
 mod arrow_stream;
+#[cfg(test)]
+mod binding_tests;
 mod diagnostics;
 mod filters;
 mod logging;

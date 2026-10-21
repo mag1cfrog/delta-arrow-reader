@@ -678,46 +678,20 @@ class TableTests(unittest.TestCase):
                 with reader:
                     self.assertEqual(reader.read_all().num_rows, 0)
 
-    def test_limit_validation_is_shared_by_both_entrypoints(self):
+    def test_scan_integer_subclasses_use_their_underlying_value(self):
         self.write_log(1, self.write_parquet("rows.parquet", [1, 2]))
         table = DeltaTable(self.location)
         for method in ("scan", "to_reader"):
-            with self.subTest(method=method):
-                result = getattr(table, method)(limit=MisleadingInteger(1))
-                reader = (pa.RecordBatchReader.from_stream(result)
-                          if method == "scan" else result)
-                with reader:
-                    self.assertEqual(reader.read_all().to_pydict(), {"id": [1]})
-                for limit, error_type in (
-                    (True, TypeError), (False, TypeError), (1.0, TypeError),
-                    ("1", TypeError), (b"1", TypeError), (object(), TypeError),
-                    (-1, ValueError), (-2**100, ValueError), (MisleadingInteger(-1), ValueError),
-                    (2 * sys.maxsize + 2, OverflowError), (2**100, OverflowError),
-                ):
-                    with self.subTest(limit=limit), self.assertRaises(error_type):
-                        getattr(table, method)(limit=limit)
-                with self.assertRaises(TypeError):
-                    getattr(table, method)(None, 1)
-
-    def test_target_partitions_validation_is_shared_by_both_entrypoints(self):
-        table = DeltaTable(self.location)
-        for method in (table.scan, table.to_reader):
-            with self.subTest(method=method.__name__):
-                for target in (None, MisleadingInteger(1), 2, 8, 2 * sys.maxsize + 1):
-                    method(target_partitions=target).close()
-                for target, error_type in (
-                    (True, TypeError), (False, TypeError), (1.0, TypeError),
-                    ("1", TypeError), (b"1", TypeError), (object(), TypeError),
-                    (0, ValueError), (MisleadingInteger(0), ValueError), (-1, ValueError),
-                    (-2**100, ValueError), (MisleadingInteger(-1), ValueError),
-                    (2 * sys.maxsize + 2, OverflowError), (2**100, OverflowError),
-                ):
-                    with self.subTest(target=target), self.assertRaises(error_type):
-                        method(target_partitions=target)
-                with self.assertRaises(TypeError):
-                    method(None, None, 1)
+            result = getattr(table, method)(limit=MisleadingInteger(1), target_partitions=MisleadingInteger(1))
+            reader = pa.RecordBatchReader.from_stream(result) if method == "scan" else result
+            with reader:
+                self.assertEqual(reader.read_all().to_pydict(), {"id": [1]})
+            for name, minimum in (("limit", 0), ("target_partitions", 1)):
+                with self.subTest(method=method, name=name), self.assertRaises(ValueError):
+                    getattr(table, method)(**{name: MisleadingInteger(minimum - 1)})
 
     def test_execution_options_signature_reports_actual_defaults(self):
+        self.assertEqual(inspect.signature(DeltaTable).parameters["warmup"].default, "automatic")
         signature = inspect.signature(ScanExecutionOptions)
         arguments = signature.bind()
         arguments.apply_defaults()
@@ -729,72 +703,20 @@ class TableTests(unittest.TestCase):
                 self.assertEqual(parameter.default, getattr(defaults, name))
                 self.assertEqual(getattr(forwarded, name), getattr(defaults, name))
 
-    def test_scan_execution_options_are_immutable_and_validate_backends(self):
-        self.assertEqual(ScanExecutionOptions().parquet_backend, "direct")
-        for backend in ("direct", "delta_kernel"):
-            with self.subTest(backend=backend):
-                options = ScanExecutionOptions(parquet_backend=backend)
-                self.assertEqual(options.parquet_backend, backend)
-                with self.assertRaises(AttributeError):
-                    options.parquet_backend = "direct"
-                with self.assertRaises(AttributeError):
-                    del options.parquet_backend
-                with self.assertRaises(AttributeError):
-                    options.extra = True
-        for value in (None, True, 1, 0.0, b"direct", [], {}, object()):
-            with self.subTest(value=value), self.assertRaises(TypeError):
-                ScanExecutionOptions(parquet_backend=value)
-        for value in ("", "DIRECT", "delta-kernel", "secret-invalid"):
-            with self.subTest(value=value), self.assertRaises(ValueError) as caught:
-                ScanExecutionOptions(parquet_backend=value)
-            self.assertNotIn("secret", str(caught.exception))
-        with self.assertRaises(TypeError):
-            ScanExecutionOptions("direct")
-
-    def test_execution_options_require_a_scan_execution_options_object(self):
-        table = DeltaTable(self.location, execution_options=None)
-        for method in (partial(DeltaTable, self.location / "missing"),
-                       table.scan, table.to_reader):
-            for value in ({}, {"parquet_backend": "direct"}, "direct", True, 1, []):
-                with self.subTest(method=method, value=value), self.assertRaises(TypeError):
-                    method(execution_options=value)
-
-    def test_numeric_execution_options_validate_bounds_defaults_and_immutability(self):
-        capacity = sys.maxsize >> 2
-        usize_max = 2 * sys.maxsize + 1
-        for name, default, minimum, maximum, optional in (
-            ("max_concurrent_file_reads_per_partition", 3, 1, capacity, False),
-            ("max_concurrent_file_reads_per_scan", None, 1, capacity, True),
-            ("output_buffer_batches_per_partition", 1, 1, capacity, False),
-            ("prefetch_files_per_partition", 2, 0, usize_max, False),
-            ("parquet_metadata_size_hint_bytes", 65536, 1, usize_max, True),
-            ("parquet_full_file_read_threshold_bytes", None, 1, usize_max, True),
+    def test_execution_options_accept_integer_subclasses_without_coercion(self):
+        for name, minimum in (
+            ("max_concurrent_file_reads_per_partition", 1),
+            ("max_concurrent_file_reads_per_scan", 1),
+            ("output_buffer_batches_per_partition", 1),
+            ("prefetch_files_per_partition", 0),
+            ("parquet_metadata_size_hint_bytes", 1),
+            ("parquet_full_file_read_threshold_bytes", 1),
         ):
-            self.assertEqual(getattr(ScanExecutionOptions(), name), default)
-            valid = [minimum, 2, MisleadingInteger(minimum), MisleadingInteger(2), maximum, default]
-            if optional:
-                valid.append(None)
-            for count in valid:
-                with self.subTest(name=name, count=count):
-                    options = ScanExecutionOptions(**{name: count})
-                    self.assertEqual(getattr(options, name), count)
-                    with self.assertRaises(AttributeError):
-                        setattr(options, name, 1)
-            invalid = [(value, TypeError) for value in (
-                True, False, 1.0, "secret-value", b"1", [], {}, object(),
-            )]
-            if not optional:
-                invalid.append((None, TypeError))
-            invalid += [
-                (minimum - 1, ValueError), (MisleadingInteger(minimum - 1), ValueError),
-                (-2**100, ValueError), (maximum + 1, ValueError if maximum < usize_max else OverflowError),
-                (usize_max + 1, OverflowError), (2**100, OverflowError),
-            ]
-            for count, error_type in invalid:
-                with self.subTest(name=name, count=count), self.assertRaises(error_type) as caught:
-                    ScanExecutionOptions(**{name: count})
-                self.assertIn(name, str(caught.exception))
-                self.assertNotIn("secret", str(caught.exception))
+            with self.subTest(name=name):
+                options = ScanExecutionOptions(**{name: MisleadingInteger(minimum)})
+                self.assertEqual(getattr(options, name), minimum)
+                with self.assertRaises(ValueError):
+                    ScanExecutionOptions(**{name: MisleadingInteger(minimum - 1)})
 
     def test_execution_options_override_and_refresh_preserve_table_defaults(self):
         http = self.http_support()
@@ -892,25 +814,6 @@ class TableTests(unittest.TestCase):
                                 finally:
                                     release.set()
                                 self.assertCountEqual(result.result(timeout=10).column("id").to_pylist(), range(4))
-
-    def test_projection_validation_is_shared_by_both_entrypoints(self):
-        table = DeltaTable(self.location)
-        for method in (table.scan, table.to_reader):
-            with self.subTest(method=method.__name__):
-                for columns in ("id", b"id", {"id"}, {"id": 1}, iter(["id"]), 1, True,
-                                [1], [None], [b"id"], ["id", object()]):
-                    with self.subTest(columns=columns), self.assertRaises(TypeError):
-                        method(columns=columns)
-                with self.assertRaises(TypeError):
-                    method(["id"])
-                for columns, reason in ((["secret-column"], "column_not_found"),
-                                        (["id", "id"], "duplicate_column")):
-                    with self.subTest(columns=columns), self.assertRaises(DeltaReaderError) as caught:
-                        method(columns=columns)
-                    self.assertEqual(caught.exception.phase, "scan_planning")
-                    self.assertEqual(caught.exception.code, "invalid_projection")
-                    self.assertIn(f"reason={reason}", str(caught.exception))
-                    self.assertNotIn("secret", str(caught.exception))
 
     def test_stream_exports_once_and_consumer_survives_close(self):
         with self.assertRaises(TypeError):
@@ -1119,16 +1022,6 @@ class TableTests(unittest.TestCase):
             with table.to_reader() as reader:
                 self.assertCountEqual(reader.read_all().column("id").to_pylist(), [1, 2, 3, 4])
 
-    def test_warmup_validation(self):
-        self.assertEqual(inspect.signature(DeltaTable).parameters["warmup"].default, "automatic")
-        for value in (None, True, 1, 0.0, b"none", [], {}, object()):
-            with self.subTest(warmup=value), self.assertRaises(TypeError):
-                DeltaTable(self.location / "missing", warmup=value)
-        for value in ("", "NONE", "query-planning", "secret-invalid"):
-            with self.subTest(warmup=value), self.assertRaises(ValueError) as caught:
-                DeltaTable(self.location / "missing", warmup=value)
-            self.assertNotIn("secret", str(caught.exception))
-
     def test_schema_and_reader_preserve_types_values_and_metadata(self):
         def field(name, datatype, nullable=True, metadata=None):
             return {
@@ -1230,28 +1123,10 @@ class TableTests(unittest.TestCase):
             pa.schema([pa.field("id", pa.int64(), nullable=False)]),
         )
 
-    def test_version_validation(self):
+    def test_version_accepts_integer_subclasses_without_coercion(self):
         self.assertEqual(DeltaTable(self.location, version=MisleadingInteger(0)).version, 0)
-        with self.assertRaises(DeltaReaderError):
-            DeltaTable(self.location, version=2**64 - 1)
-        with self.assertRaises(TypeError):
-            DeltaTable(self.location, 0)
-        cases = (
-            (True, TypeError),
-            (False, TypeError),
-            (0.0, TypeError),
-            ("0", TypeError),
-            (b"0", TypeError),
-            (object(), TypeError),
-            (-1, ValueError),
-            (-(2**100), ValueError),
-            (MisleadingInteger(-1), ValueError),
-            (2**64, OverflowError),
-            (2**100, OverflowError),
-        )
-        for version, error in cases:
-            with self.subTest(version=version), self.assertRaises(error):
-                DeltaTable(self.location / "missing", version=version)
+        with self.assertRaises(ValueError):
+            DeltaTable(self.location, version=MisleadingInteger(-1))
 
     def test_storage_options_accepts_mappings(self):
         values = {"secret-option": "secret-value"}
@@ -1262,24 +1137,8 @@ class TableTests(unittest.TestCase):
                 self.assertEqual(table.version, 0)
                 self.assertNotIn("secret", repr(table))
         self.assertEqual(values, {"secret-option": "secret-value"})
-
-    def test_storage_options_requires_string_mapping(self):
-        cases = (
-            True,
-            1,
-            "secret-option",
-            [],
-            [("key", "value")],
-            {1: "value"},
-            {b"key": "value"},
-            {"key": 1},
-            {"key": None},
-            {"key": b"value"},
-            UserDict({"key": False}),
-        )
-        for options in cases:
-            with self.subTest(options=options), self.assertRaises(TypeError):
-                DeltaTable(self.location / "missing", storage_options=options)
+        with self.assertRaises(TypeError):
+            DeltaTable(self.location, storage_options=UserDict({"key": False}))
 
     def test_storage_options_are_forwarded_and_redacted(self):
         # This invalid boolean fails during store construction, before any I/O.
@@ -1299,9 +1158,8 @@ class TableTests(unittest.TestCase):
             def __fspath__(self):
                 return b"secret-table"
 
-        for location in (None, 42, True, object(), b"secret-table", BytesPath()):
-            with self.subTest(location=location), self.assertRaises(TypeError):
-                DeltaTable(location)
+        with self.assertRaises(TypeError):
+            DeltaTable(BytesPath())
 
 
 if __name__ == "__main__":
