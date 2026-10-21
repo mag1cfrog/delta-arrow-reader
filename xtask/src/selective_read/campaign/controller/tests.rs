@@ -30,46 +30,45 @@ fn args(root: &Path) -> Args {
 }
 
 #[test]
-fn campaign_input_integrity_is_independent_of_tool_source_provenance() -> Result<()> {
+fn campaign_input_integrity_uses_only_data_and_configuration() -> Result<()> {
     let temporary = tempfile::tempdir()?;
     let root = temporary.path();
     let mut args = args(root);
-    args.harness = root.join("project/benches/selective_read");
-    let protocols = root.join("project/docs/content/benchmarks");
-    for path in [
-        args.harness.join("oracle_io.py"),
-        args.harness.join("runners/run.py"),
-        args.harness.join("runners/python_common.py"),
-        args.harness.join("runners/native.py"),
-        root.join("project/Cargo.lock"),
-        root.join("project/xtask/Cargo.toml"),
-        root.join("project/xtask/src/main.rs"),
-        protocols.join("selective-read-protocol.md"),
+    args.harness = root.join("missing-source-tree");
+    args.matrix = Some(root.join("matrix.json"));
+    args.workload = Some(root.join("workload.json"));
+    fs::create_dir_all(&args.fixtures)?;
+    fs::create_dir_all(&args.state)?;
+    fs::create_dir_all(&args.harness)?;
+    let paths = [
         args.fixtures.join("manifest.json"),
         args.upload.clone(),
-    ] {
-        fs::create_dir_all(path.parent().unwrap())?;
+        args.state.join("network.json"),
+        args.harness.join("query-matrix.json"),
+        args.matrix.clone().unwrap(),
+        args.workload.clone().unwrap(),
+    ];
+    for path in &paths {
         fs::write(path, "original")?;
     }
-    let config = json!({});
-    let (before_sources, before_inputs) = source_hashes(&args, &config, &protocols)?;
-    assert_eq!(object(&before_inputs)?.len(), 2);
-    fs::write(
-        args.harness.join("oracle_io.py"),
-        "original\n# new comment\n",
+    args.gate_diagnostics = true;
+    let mut config = modes(
+        &args,
+        &json!({"comparison_revision":6}),
+        &root.join("missing-docs"),
     )?;
-    fs::write(
-        protocols.join("selective-read-protocol.md"),
-        "reworded documentation",
-    )?;
-    let (after_sources, after_inputs) = source_hashes(&args, &config, &protocols)?;
-    assert_ne!(before_sources, after_sources);
-    assert_eq!(before_inputs, after_inputs);
-    fs::write(
-        args.fixtures.join("manifest.json"),
-        "changed data inventory",
-    )?;
-    assert_ne!(source_hashes(&args, &config, &protocols)?.1, before_inputs);
+    assert_eq!(
+        config,
+        json!({"comparison_revision":6,"combined_diagnostics":true,"gate_warmup":true,"gate_diagnostics":true})
+    );
+    config["server"] = json!({"network":{}});
+    let before = input_hashes(&args, &config)?;
+    assert_eq!(object(&before)?.len(), paths.len());
+    for path in &paths {
+        fs::write(path, "changed input")?;
+        assert_ne!(input_hashes(&args, &config)?, before);
+        fs::write(path, "original")?;
+    }
     Ok(())
 }
 
@@ -146,9 +145,7 @@ fn receipt_and_reference_must_match_the_selected_remote_table() -> Result<()> {
     assert!(storage::upload::verified(&args.state, &args.fixtures, &prepared).is_err());
     prepared["receipt"]["objects"] = objects;
     let protocol = root.join("protocols");
-    fs::create_dir(&protocol)?;
-    fs::write(protocol.join("selective-read-protocol.md"), b"protocol")?;
-    let comparison = json!({"comparison_revision":2, "protocol_sha256":digest(&protocol.join("selective-read-protocol.md"))?});
+    let comparison = json!({"comparison_revision":2});
     let reference = root.join("reference");
     fs::create_dir(&reference)?;
     let mut payload = comparison.clone();

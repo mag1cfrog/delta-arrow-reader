@@ -45,6 +45,8 @@ fn smoke_generation_keeps_resource_limits_and_identifies_an_unlinked_executable(
     assert!(child.wait()?.success());
     let manifest: Value = serde_json::from_reader(fs::File::open(output.join("manifest.json"))?)?;
     assert_eq!(manifest["status"], "complete");
+    assert!(manifest.get("protocol_sha256").is_none());
+    assert!(manifest["generator"].get("source_sha256").is_none());
     assert_eq!(manifest["generator"]["executable_sha256"], expected);
     Ok(())
 }

@@ -5,21 +5,9 @@ pub(super) fn protocols() -> std::path::PathBuf {
 }
 
 pub(super) fn identity(revision: u64) -> Result<Value> {
-    let name = match revision {
-        6 => "spark-matrix",
-        5 => "production-workloads",
-        3 | 4 => "large-workloads",
-        _ => "protocol",
-    };
-    let mut value = json!({"comparison_revision": revision,
-        "protocol_sha256": digest(&protocols().join(format!("selective-read-{name}.md")))?});
+    let mut value = json!({"comparison_revision": revision});
     if revision >= 3 {
-        value["base_protocol_sha256"] =
-            json!(digest(&protocols().join("selective-read-protocol.md"))?);
         value["workload_manifest_sha256"] = json!("1".repeat(64));
-    }
-    if revision >= 4 {
-        value["sampling_sha256"] = json!(digest(&protocols().join("selective-read-sampling.md"))?);
     }
     if revision >= 5 {
         value["sampling_stage"] = json!("formal");
@@ -35,24 +23,19 @@ pub(super) fn identity(revision: u64) -> Result<Value> {
 fn protocol_revisions_validate_behavior_without_document_byte_identity() -> Result<()> {
     for revision in 2..=6 {
         let value = identity(revision)?;
-        assert_eq!(comparison(&value, &protocols())?, value);
+        assert_eq!(comparison(&value, Path::new("no-documents"))?, value);
+        let mut legacy = value.clone();
+        for key in ["protocol_sha256", "base_protocol_sha256", "sampling_sha256"] {
+            legacy[key] = json!("old documentation fingerprint");
+        }
+        assert_eq!(comparison(&legacy, Path::new("no-documents"))?, value);
         for key in value.as_object().unwrap().keys() {
             let mut changed = value.clone();
             changed[key] = Value::Null;
-            if matches!(
-                key.as_str(),
-                "protocol_sha256" | "base_protocol_sha256" | "sampling_sha256"
-            ) {
-                assert!(same_comparison(
-                    &comparison(&changed, Path::new("no-documents"))?,
-                    &value
-                ));
-            } else {
-                assert!(
-                    comparison(&changed, &protocols()).is_err(),
-                    "{revision} {key}"
-                );
-            }
+            assert!(
+                comparison(&changed, &protocols()).is_err(),
+                "{revision} {key}"
+            );
         }
     }
     let mut value = identity(2)?;

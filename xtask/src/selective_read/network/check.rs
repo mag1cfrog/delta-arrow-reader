@@ -218,7 +218,7 @@ pub(in crate::selective_read) fn calibrate(directory: &Path, output: &Path) -> R
         &output.join("calibration.json"),
         &json!({"status":"passed","profile":profile,"first_payload_seconds":first_seconds,
         "serial_seconds":seconds,"parallel_seconds":parallel_seconds,"serial_bytes":body.len(),"parallel_bytes":16*1024*1024,
-        "controller_sha256":digest(&std::env::current_exe()?)?,"sha256":reader_sha256(body.as_slice())?,
+        "sha256":reader_sha256(body.as_slice())?,
         "boundary":BOUNDARY,"explicit_retry_attempts":2,"cancelled_transfer":"passed"}),
     )?;
     control(directory, true, false, 10.0)?;

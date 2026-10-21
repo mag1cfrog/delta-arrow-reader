@@ -52,12 +52,9 @@
   "builds": {
     "baseline": {
       "reader_git_commit": "304acea9f48910ba2ab05e78561e7dcfe8ebf732",
-      "reader_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "source_hashes_sha256": "bfe7b6b60c5578f7f3af3c410c42de82d2af64a44fa315ad7b70c4ca3decb7bc",
       "lockfile_sha256": "d53855cfdce00c9e8ecee9acec60daa8e4c4f745a6deadc7ff65e6e2aebca5c2",
       "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
       "rustflags": null,
-      "numeric_driver_sha256": "46cc3fd3d304f67b309b8e9226a4488649d8b7d574696cf6e2c539ce0fa4a18e",
       "executables_sha256": {
         "selective-read-dar": "90a0e0ca3780a40e1d58da1312c51571bb416d0d189e39a1163290a7647cf75a",
         "numeric-pages": "44860d9019ad63bea1cebc8579acf4f8b6f59469e2f21725fb9331060dbe996b"
@@ -66,12 +63,9 @@
     },
     "before-probe-fix": {
       "reader_git_commit": "304acea9f48910ba2ab05e78561e7dcfe8ebf732",
-      "reader_patch_sha256": "881291931ce0815210fdf9a3b0dc834346e6b6cb4de7de5ab8447bf269bc7146",
-      "source_hashes_sha256": "3a8b65f41f95e6ae0686369de03201dacd1950b933df9944f8a8a38e595444d0",
       "lockfile_sha256": "d53855cfdce00c9e8ecee9acec60daa8e4c4f745a6deadc7ff65e6e2aebca5c2",
       "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
       "rustflags": null,
-      "numeric_driver_sha256": "46cc3fd3d304f67b309b8e9226a4488649d8b7d574696cf6e2c539ce0fa4a18e",
       "executables_sha256": {
         "selective-read-dar": "ae6900429f3e3e5e5f29a7b3822018c1c0379778374dce381db580a36ef18772",
         "numeric-pages": "2e7760b7d583e0c61f77440e25f1db1e264abd4be90f01416b878af9b479aa4e"
@@ -80,12 +74,9 @@
     },
     "final": {
       "reader_git_commit": "304acea9f48910ba2ab05e78561e7dcfe8ebf732",
-      "reader_patch_sha256": "5b246eaff6e63ef4e8a86df46beffccd22a78cde45ff7bb87f3bcd77e8cc8aec",
-      "source_hashes_sha256": "c88851417db5f261885dfd930d5e7ba63894685dab3f145560517101934b7853",
       "lockfile_sha256": "d53855cfdce00c9e8ecee9acec60daa8e4c4f745a6deadc7ff65e6e2aebca5c2",
       "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
       "rustflags": null,
-      "numeric_driver_sha256": "46cc3fd3d304f67b309b8e9226a4488649d8b7d574696cf6e2c539ce0fa4a18e",
       "executables_sha256": {
         "selective-read-dar": "c0b408549b498cdc33e7cf20a9544c0da9f94a4786be016b14e629da47b4f0ef",
         "numeric-pages": "c9b406b251a83e5451c9fba7dcc48f53d1ec3024ef65cc76794b185f85fe55ab"
@@ -176,8 +167,7 @@
         }
       },
       "control": "SNAPPY codec, same rows and schema",
-      "source_fixture_sha256": "bb2e1a66e086c148c67300263e54bd45b961eed6cdab2675a4f766d16fc0402f",
-      "control_driver_sha256": "a563ed81d9a1c47fe086b8c4e65c5e00489472cf9c9a21c124d081bfd85dcebc"
+      "source_fixture_sha256": "bb2e1a66e086c148c67300263e54bd45b961eed6cdab2675a4f766d16fc0402f"
     },
     "decimal-zstd-fixture": {
       "manifest_sha256": "8eb6b162335cd8e120274de866da2b2ee343abf223be2689071f37e62db4aa33",
@@ -210,8 +200,7 @@
         }
       },
       "control": "ZSTD codec, same rows and schema",
-      "source_fixture_sha256": "bb2e1a66e086c148c67300263e54bd45b961eed6cdab2675a4f766d16fc0402f",
-      "control_driver_sha256": "7036f912db7d93b6154391b86915e0ecca1030e3c1aa4001436a84e27820a119"
+      "source_fixture_sha256": "bb2e1a66e086c148c67300263e54bd45b961eed6cdab2675a4f766d16fc0402f"
     }
   },
   "retained_cases": {

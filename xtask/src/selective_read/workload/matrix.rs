@@ -353,7 +353,7 @@ pub(crate) fn prepare(args: Prepare) -> Result<Value> {
     rows.sort_by(|a, b| a["case_id"].as_str().cmp(&b["case_id"].as_str()));
     let result = json!({"format":"selective-read-prepared-matrix-v1",
         "status":if rows.iter().all(|row| row["status"] == "prepared") {"complete"} else {"incomplete"},
-        "catalog_sha256":digest(&harness.join("query-matrix.json"))?,"protocol_sha256":frozen["protocol_sha256"],
+        "catalog_sha256":digest(&harness.join("query-matrix.json"))?,
         "profile":manifest["profile"],"translation_locks":frozen["translation_locks"],
         "fixture_manifest_sha256":manifest_hash,"cases":rows});
     require(

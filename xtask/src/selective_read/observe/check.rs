@@ -314,7 +314,7 @@ pub(super) fn known_requests(directory: &Path, output: &Path) -> Result<Value> {
         "unrelated trace was not redacted",
     )?;
     let result = json!({"status":"passed","capture":proof,"io":io,"client_received_partial_bytes":partial.stdout.len(),
-        "server_accepted_partial_bytes":accepted,"advertised_partial_bytes":64*1024*1024,"controller_sha256":digest(&std::env::current_exe()?)?});
+        "server_accepted_partial_bytes":accepted,"advertised_partial_bytes":64*1024*1024});
     storage::save(&output.join("checks.json"), &result)?;
     Ok(result)
 }

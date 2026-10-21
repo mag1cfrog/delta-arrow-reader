@@ -53,8 +53,8 @@ supplied SHA-256 while receiving a PUT and rejects mismatched bytes. Conditional
 PUTs still preserve existing objects; their stored checksum must match too.
 Objects without a full SHA-256, including legacy and multipart objects, receive
 the complete GET verification. ETags are not used as content checksums.
-The receipt records the requested method, actual verification counts and
-uploader source hash. The default standalone upload uses complete GETs.
+The receipt records the requested method and actual verification counts. The
+default standalone upload uses complete GETs.
 Inventory selection, upload and receipt creation run in Rust.
 
 To avoid hashing local files again in a separate campaign process, use the
@@ -90,8 +90,7 @@ These caps include native allocations.
 
 `server.json` records the CPU topology, placement, kernel, memory, mount, curl
 version/hash, server build identity, startup command and cache policy.
-`limits.json` records the actual server cgroup. Build, server, and upload records
-also identify the compiled controller by SHA-256. Keep MinIO running throughout a
+`limits.json` records the actual server cgroup. Keep MinIO running throughout a
 campaign. Clients are fresh for every invocation; server and OS caches are reused
 without flushing. Start the server once before the campaign's uploads and
 warm-ups. Do not restart it between readers or modes. Use an otherwise idle host;
@@ -230,10 +229,9 @@ limits, server identity, capture status, and I/O totals. A sibling directory wit
 the suffix `-io` holds the capture proof and sanitized `requests.jsonl`. Failed
 captures retain their artifacts and invalidate the storage observation.
 The Rust controller launches the reader, drains its cgroup and pending requests,
-and reconciles the capture before Python checks any validation exports.
-The storage observation records that controller's SHA-256.
+and reconciles the capture before the oracle checks validation exports.
 The capture process runs as `xtask selective-read capture`; its proof records
-the controller executable's SHA-256 and effective observer affinity.
+the effective observer affinity.
 
 ## Observation boundary
 

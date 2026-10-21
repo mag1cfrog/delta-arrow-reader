@@ -27,9 +27,9 @@ target/debug/xtask selective-read plan-production \
 ```
 
 The controller validates query definitions, layout settings and DV pair metadata.
-New workload manifests record its executable hash, Rust sources and dependency
-lockfile along with the Python oracle sources. Rebuild it before freezing a new
-workload; use the recorded harness and controller when replaying an older one.
+Workload manifests record the query, physical layout, source data identity and
+reader translations. Rebuild the controller before freezing a new workload; use
+the recorded harness when replaying an archived run.
 
 The planner checks the original source and computes file boundaries before any
 reader timing. Keep its output directory: the writer checks its hashes against
@@ -109,8 +109,8 @@ the estimate covers one layout. Builds have a separate allocation.
 
 The Rust controller owns the capacity checks, source copies and process cleanup.
 The pinned Python process sorts with DuckDB and sends an Arrow stream to the
-writer. New probes record the controller hash and require the same controller
-for full generation.
+writer. Full generation checks the probe's source data, layout and capacity
+evidence.
 
 The producer and writer each have an 8 GiB address-space limit. Copying,
 streaming, writer finalization and checksum verification share one elapsed
@@ -132,7 +132,8 @@ A successful run writes a native Delta version-zero log, object hashes, source
 identity, and per-file physical evidence. It preserves each source row once.
 Scattering changes order within each row group only. To prepare that variant,
 use `--layout scattered`; to prepare Q2, repeat the probe and generation with
-`--shape q2`. The probe and generation must use the same writer binary and plan.
+`--shape q2`. The probe and generation must use compatible source data and
+layout settings.
 A probe for a different file target or page setting is rejected.
 
 `matching_output_pages` counts stored projected pages that contain a matching

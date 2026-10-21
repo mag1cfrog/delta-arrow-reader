@@ -80,15 +80,6 @@ impl Capabilities {
             self.check
                 .request("li.clustered.eq2-in20", "open", "validation", "probe")?;
         base["comparison_revision"] = json!(6);
-        base["protocol_sha256"] = json!(digest(
-            &self.check.protocols.join("selective-read-spark-matrix.md")
-        )?);
-        base["base_protocol_sha256"] = json!(digest(
-            &self.check.protocols.join("selective-read-protocol.md")
-        )?);
-        base["sampling_sha256"] = json!(digest(
-            &self.check.protocols.join("selective-read-sampling.md")
-        )?);
         base["sampling_stage"] = json!("pilot");
         let corpus_hash = json!(digest(&self.corpus.join("manifest.json"))?);
         base["workload_manifest_sha256"] = corpus_hash.clone();
@@ -116,7 +107,6 @@ impl Capabilities {
             // This proof authorizes only the exactly checked bounded corpus.
             let mut check = record["identity"].clone();
             check["status"] = json!("passed");
-            check["oracle_sha256"] = json!(digest(&std::env::current_exe()?)?);
             check["output_rows"] = rows;
             let certificate = self
                 .check

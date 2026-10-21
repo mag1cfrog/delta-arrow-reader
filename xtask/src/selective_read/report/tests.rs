@@ -2,16 +2,8 @@ use super::*;
 
 fn fixture(root: &Path, revision: u64) -> Result<Request> {
     let protocols = Path::new(env!("CARGO_MANIFEST_DIR")).join("../docs/content/benchmarks");
-    let protocol = if revision == 6 {
-        "spark-matrix"
-    } else {
-        "production-workloads"
-    };
     let identity = json!({"comparison_revision":revision, "sampling_stage":"formal", "workload_manifest_sha256":"1".repeat(64),
-        "workload_contract":{"comparison_revision":revision,"sampling_stage":"formal","cases":[]},
-        "protocol_sha256":digest(&protocols.join(format!("selective-read-{protocol}.md")))?,
-        "base_protocol_sha256":digest(&protocols.join("selective-read-protocol.md"))?,
-        "sampling_sha256":digest(&protocols.join("selective-read-sampling.md"))?});
+        "workload_contract":{"comparison_revision":revision,"sampling_stage":"formal","cases":[]}});
     let readers = roster(&identity)?;
     let mut config = identity.clone();
     config.as_object_mut().unwrap().extend(object(&json!({

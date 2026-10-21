@@ -29,26 +29,10 @@ fn fixture() -> Result<tempfile::TempDir> {
     let root = temporary.path();
     for path in [
         "Cargo.toml",
-        "Cargo.lock",
-        "README.md",
-        ".cargo/config.toml",
-        "xtask/Cargo.toml",
-        "xtask/src/main.rs",
-        "xtask/src/selective_read_build.rs",
-        "crates/delta-arrow-reader-core/Cargo.toml",
-        "crates/delta-arrow-reader-core/src/lib.rs",
-        "benches/selective_read/oracle_io.py",
-        "benches/selective_read/rust-toolchain.toml",
-        "benches/selective_read/runners/common.rs",
         "benches/selective_read/runners/dar/Cargo.toml",
         "benches/selective_read/runners/dar/Cargo.lock",
         "benches/selective_read/runners/delta-rs/Cargo.toml",
         "benches/selective_read/runners/delta-rs/Cargo.lock",
-        "docs/content/benchmarks/selective-read-protocol.md",
-        "docs/content/benchmarks/selective-read-large-workloads.md",
-        "docs/content/benchmarks/selective-read-sampling.md",
-        "docs/content/benchmarks/selective-read-production-workloads.md",
-        "docs/content/benchmarks/selective-read-spark-matrix.md",
     ] {
         write(root, path, "original source\n")?;
     }
@@ -171,11 +155,11 @@ fn hash(path: &Path) -> Result<String> {
 }
 
 #[test]
-fn builds_both_readers_with_pinned_commands_and_complete_provenance() -> Result {
+fn builds_both_readers_with_pinned_artifacts_without_source_fingerprints() -> Result {
     for reader in ["dar", "delta-rs"] {
         let temporary = fixture()?;
         let root = temporary.path();
-        let result = run(root, reader, &[])?;
+        let result = run(root, reader, &[("MOCK_MUTATE", "yes")])?;
         assert!(
             result.status.success(),
             "{}",
@@ -226,15 +210,8 @@ fn builds_both_readers_with_pinned_commands_and_complete_provenance() -> Result 
         ] {
             assert_eq!(record[key], hash(&output.join(name))?);
         }
-        assert_eq!(
-            record["builder_executable_sha256"],
-            hash(Path::new(env!("CARGO_BIN_EXE_xtask")))?
-        );
-        let sources = record["source_sha256"].as_object().unwrap();
-        assert_eq!(sources.len(), 21);
-        for (path, expected) in sources {
-            assert_eq!(*expected, hash(&root.join(path))?);
-        }
+        assert!(record.get("builder_executable_sha256").is_none());
+        assert!(record.get("source_sha256").is_none());
         let manifest = root.join(format!(
             "benches/selective_read/runners/{reader}/Cargo.toml"
         ));
@@ -263,9 +240,8 @@ fn builds_both_readers_with_pinned_commands_and_complete_provenance() -> Result 
 }
 
 #[test]
-fn source_changes_and_failed_commands_cannot_produce_a_build_record() -> Result {
+fn failed_commands_cannot_produce_a_build_record() -> Result {
     for (variable, value, message) in [
-        ("MOCK_MUTATE", "yes", "source files changed"),
         ("MOCK_FAIL", "build", "19"),
         ("MOCK_FAIL", "metadata", "19"),
         ("MOCK_FAIL", "tree", "19"),

@@ -14,12 +14,16 @@ pub struct Request {
     pub case_id: String,
     pub(super) canonical_sql: String,
     pub(super) comparison_revision: u64,
-    pub(super) protocol_sha256: String,
-    pub(super) base_protocol_sha256: Option<String>,
+    // Accept legacy audit fields without forwarding them to new records.
+    #[serde(rename = "protocol_sha256", skip_serializing)]
+    _protocol_sha256: Option<String>,
+    #[serde(rename = "base_protocol_sha256", skip_serializing)]
+    _base_protocol_sha256: Option<String>,
     pub(super) workload_manifest_sha256: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) workload_contract: Option<Value>,
-    pub(super) sampling_sha256: Option<String>,
+    #[serde(rename = "sampling_sha256", skip_serializing)]
+    _sampling_sha256: Option<String>,
     pub(super) sampling_stage: Option<String>,
     pub(super) fixture_manifest_sha256: String,
     pub(super) profile: String,
@@ -187,12 +191,12 @@ pub fn comparison(value: &Value) -> Result<Value> {
         .as_u64()
         .filter(|v| (2..=6).contains(v))
         .ok_or("unknown comparison revision")?;
-    let mut keys = vec!["comparison_revision", "protocol_sha256"];
+    let mut keys = vec!["comparison_revision"];
     if revision >= 3 {
         if !is_hash(&value["workload_manifest_sha256"]) {
             return Err("missing or stale large-workload identity".into());
         }
-        keys.extend(["base_protocol_sha256", "workload_manifest_sha256"]);
+        keys.push("workload_manifest_sha256");
         let contract = &value["workload_contract"];
         if !contract.is_object()
             || contract["comparison_revision"] != revision
@@ -207,9 +211,6 @@ pub fn comparison(value: &Value) -> Result<Value> {
         || value.get("workload_contract").is_some()
     {
         return Err("revision 2 cannot carry large-workload identities".into());
-    }
-    if revision >= 4 {
-        keys.push("sampling_sha256");
     }
     if revision >= 5 {
         if !matches!(value["sampling_stage"].as_str(), Some("pilot" | "formal")) {
@@ -444,6 +445,14 @@ mod tests {
                 "{}: {result:?}",
                 case["name"]
             );
+            if result.is_ok() {
+                let request: Request = serde_json::from_value(value.clone())?;
+                let serialized = serde_json::to_value(request)?;
+                for key in ["protocol_sha256", "base_protocol_sha256", "sampling_sha256"] {
+                    assert!(serialized.get(key).is_none());
+                    assert!(comparison(&serialized)?.get(key).is_none());
+                }
+            }
             assert_eq!(
                 run(Operation::Validate { value }).is_ok(),
                 case["python_valid"],

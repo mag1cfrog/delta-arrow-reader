@@ -1,5 +1,5 @@
 use super::{array, integer, metrics, reconcile, require, sanitize, storage, text, unquote};
-use crate::{Result, selective_read::supervise::monotonic_ns, selective_read_build::digest};
+use crate::{Result, selective_read::supervise::monotonic_ns};
 use rustix::thread::{CpuSet, sched_setaffinity};
 use serde_json::{Value, json};
 use std::{
@@ -289,7 +289,6 @@ pub(in crate::selective_read) fn capture(
     )?;
     let scope = format!("{}/", unquote(table.path()).trim_matches('/'));
     require(scope != "/", "empty observer object scope")?;
-    let controller_hash = digest(&std::env::current_exe()?)?;
     let mut trace = Trace::new(
         directory,
         output,
@@ -320,7 +319,6 @@ pub(in crate::selective_read) fn capture(
         Err(error) => json!({"status":"operational_failure", "failure_reason":error.to_string()}),
     };
     summary["observer_affinity"] = json!(storage::affinity(None)?);
-    summary["observer_executable_sha256"] = json!(controller_hash);
     storage::save(&output.join("capture.json"), &summary)?;
     require(
         summary["status"] == "passed",

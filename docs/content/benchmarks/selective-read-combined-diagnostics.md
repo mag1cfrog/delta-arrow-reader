@@ -17,8 +17,8 @@ in both open and reuse profiles.
 
 Add `--combined-diagnostics` to the existing
 [campaign command](selective-read-campaign.md) with a revision 6 workload.
-The controller freezes `combined_diagnostics: true` and this document's SHA-256
-as `diagnostics_amendment_sha256` in `campaign.json`, before timing. The frozen
+The controller freezes `combined_diagnostics: true` in `campaign.json` before
+timing. The frozen
 schedule retains one warmup and five independent timed invocations per runnable
 reader/profile. All plan capture and detailed tracing follow all timing slots.
 Exact-value validation, two newly planned reuse queries, native reader builds,
@@ -31,8 +31,8 @@ for the four combined readers. DuckDB still has two separate diagnostics.
 
 ## Audit and report
 
-The audit regenerates the schedule from the declared mode, verifies the amendment
-hash and requires every successful combined diagnostic to retain reconciled I/O
+The audit regenerates the schedule from the declared mode and requires every
+successful combined diagnostic to retain reconciled I/O
 and a nonempty native plan for every query. Plan hashes bind the exported files
 to their observations. Missing plans, changed plan bytes, altered slots and
 missing tracing evidence fail the audit.
@@ -40,7 +40,7 @@ missing tracing evidence fail the audit.
 I/O totals cover the diagnostic invocation, including any work performed by
 native plan export. Raw request logs and stream-completion boundaries remain
 available; diagnostic latency never enters headline timing distributions.
-The overview retains each campaign's diagnostic mode and amendment hash. Formal
+The overview retains each campaign's diagnostic mode. Formal
 timing from separately declared diagnostic modes can share an overview because
 the diagnostic change occurs after timing and uses the same reader builds and
 execution conditions. Keep the mode visible when comparing I/O evidence.

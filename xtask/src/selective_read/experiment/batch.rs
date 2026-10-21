@@ -197,8 +197,7 @@ pub(in crate::selective_read) fn numeric(mut args: Numeric) -> Result<()> {
         "binaries":{"baseline":digest(&args.baseline)?, "candidate":digest(&args.candidate)?},
         "type":args.column_type, "selection":args.selection, "table_uri":common.table,
         "network":if common.table.starts_with("file:") { None } else { network::config(&common.state)? },
-        "generator":manifest["generator"], "value_checker_sha256":digest(&std::env::current_exe()?)?,
-        "validation_sha256":digest(&std::env::current_exe()?)?, "controller_sha256":digest(&std::env::current_exe()?)?,
+        "generator":manifest["generator"],
         "primary_metric":"first fully consumed query after initialization", "pairs":3}),
     )?;
     let _lock = storage::exclusive(&common.state)?;
@@ -360,17 +359,11 @@ pub(in crate::selective_read) fn length(mut args: Length) -> Result<()> {
         &args.selection,
         None,
     )?;
-    let sources = ["src/bin/delta-length-query.rs", "src/delta_length_reader.rs", "src/delta_length_profile.rs",
-        "src/delta_length_cost.rs", "src/delta_length_simulation.rs", "src/delta_length.rs", "Cargo.lock",
-        "../../crates/delta-arrow-reader-core/src/reader/backend/direct_parquet/range_planning.rs",
-        "../../crates/delta-arrow-reader-core/src/reader/backend/direct_parquet/cost_model/range_cost.rs"]
-        .into_iter().map(|name| Ok((name.to_owned(), json!(digest(&common.harness.join(name))?)))).collect::<Result<serde_json::Map<_,_>>>()?;
     storage::save(
         &common.output.join("experiment.json"),
         &json!({"fixture_sha256":prefix, "binary_sha256":digest(&args.binary)?,
         "generator":manifest["generator"],
-        "validation_sha256":digest(&std::env::current_exe()?)?, "controller_sha256":digest(&std::env::current_exe()?)?,
-        "network":network, "source_sha256":sources,
+        "network":network,
         "cost_profile":if args.cost_profile.is_some() { json!({"basis":"fixed diagnostic control", "values":profile}) }
             else { json!("measured during each process initialization on the same client, including the request-duration distribution; incomplete measurements keep ordinary reads") },
         "selection":args.selection, "pairs":3, "primary_metric":"first fully consumed query including planning, predicate and DV",

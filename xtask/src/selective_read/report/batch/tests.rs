@@ -179,14 +179,8 @@ fn workload_reports_keep_unrunnable_readers_and_audit_queries_and_reference_iden
     for revision in [3, 4, 5, 6] {
         let directory = root.join(revision.to_string());
         fs::create_dir(&directory)?;
-        let mut identity = json!({"comparison_revision":revision,"workload_manifest_sha256":"1".repeat(64),
-            "protocol_sha256":digest(&protocols.join(format!("selective-read-{}.md",match revision {
-                6=>"spark-matrix",5=>"production-workloads",_=>"large-workloads"})))?,
-            "base_protocol_sha256":digest(&protocols.join("selective-read-protocol.md"))?});
-        if revision >= 4 {
-            identity["sampling_sha256"] =
-                json!(digest(&protocols.join("selective-read-sampling.md"))?);
-        }
+        let mut identity =
+            json!({"comparison_revision":revision,"workload_manifest_sha256":"1".repeat(64)});
         if revision >= 5 {
             identity["sampling_stage"] = json!("formal");
         }

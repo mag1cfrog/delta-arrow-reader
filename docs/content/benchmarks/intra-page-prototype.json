@@ -72,19 +72,6 @@
     }
   ],
   "source_report_sha256": "022b18ad6d0f2ef0251df8e70c0c23f9f16a41f41f04cb5b515a28c8ad6aa708",
-  "source_sha256": {
-    "restore_q2.py": "481b105183b87b7ace076afe4ff00bb484623b540af472b0d18bcca87f33420e",
-    "prepare_storage.py": "7303212cdf1467b46e8613ec282d6d874380d4d9ec282ac1de71a01d7eb7ad57",
-    "run_queries.py": "b59c23497a40d37c3bb94c5780ac77ff05e3ab008e3be396d3982b90fb5e75e2",
-    "check_parquet.rs": "2e31a690c889fd3e8a1104bde9002b77d192c033dca7c1b7cad5297a4f5356c4",
-    "reader-changes.patch": "1c1cac4c097d9c20d114a676358d19024a1db14958c63d117daad5f3970a3295",
-    "parquet-changes.patch": "0105ff2182a0889fab1de48eebd24edbdb61ea757967cd78aa4f2aecf07455a9",
-    "parquet/src/arrow/push_decoder/reader_builder/intra_page.rs": "50bdec855ffac91527ddd51a707bf435dae543d4c924a76aadb58616bfe9f706",
-    "parquet/src/arrow/push_decoder/reader_builder/data.rs": "377e9f1e10f3e6e2a7f245439eb60eca839ffb138cce0353e535dcf6ce3bd15b",
-    "parquet/src/arrow/push_decoder/reader_builder/mod.rs": "ebb44d7d95a9acd48989b7144c0244f1afb242f2af40b77883c9935071d45513",
-    "target/release/build.json": "d07a7292bdf1d345cf32f0f99bfeb878a0d56cf157a7203f3238f93814d505ae",
-    "parquet-controls.json": "397fcc0feb847c6a3fd12cc9322e0f3c586435451bb4d65c7cb4ccde3fdc1263"
-  },
   "cases": [
     {
       "case": "production.q2.scattered.dv",

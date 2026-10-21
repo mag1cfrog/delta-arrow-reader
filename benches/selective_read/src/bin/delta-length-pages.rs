@@ -364,7 +364,7 @@ fn main() -> Result<()> {
         }
     }
     let report = json!({"format":"delta-length-decoder-proof-v1","scope":"local correctness and page-body byte accounting; not network timings",
-        "parquet":"58.4.0","source_sha256":hash_bytes(concat!(include_str!("delta-length-pages.rs"),include_str!("../delta_length.rs"))),
+        "parquet":"58.4.0",
         "lockfile_sha256":hash_bytes(include_str!("../../Cargo.lock")),"cases":results});
     fs::write(
         output.join("results.json"),

@@ -24,7 +24,7 @@ use rustix::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::{Result, artifacts::file_sha256};
+use crate::Result;
 use progress::{Progress, require};
 
 #[derive(Deserialize)]
@@ -137,7 +137,6 @@ impl Events {
 }
 
 pub(super) fn launch(input: Launch) -> Result<Value> {
-    let executable_hash = file_sha256(&std::env::current_exe()?)?;
     let start = monotonic_ns()?;
     let mut progress = Progress::new(
         &input.payload,
@@ -178,14 +177,7 @@ pub(super) fn launch(input: Launch) -> Result<Value> {
     };
     let mut child = command.spawn()?;
     drop(command); // Close the parent's copy of the progress writer.
-    let result = watch(
-        &child,
-        &mut events,
-        &mut progress,
-        start,
-        &input,
-        &executable_hash,
-    );
+    let result = watch(&child, &mut events, &mut progress, start, &input);
     if result.is_err() {
         let _ = kill_group(&child);
         let until = monotonic_ns()?.saturating_add(progress.cleanup_ns);
@@ -205,7 +197,6 @@ fn watch(
     progress: &mut Progress,
     start: u64,
     input: &Launch,
-    executable_hash: &str,
 ) -> Result<Value> {
     let mut failure = None;
     let mut kill_deadline = None;
@@ -278,6 +269,5 @@ fn watch(
         "resource_unavailable_reason": if usage.is_some() { None } else { Some("reader did not exit; wait4 accounting unavailable") },
         "resource_boundary": "Linux wait4 for the whole reader process including startup/shutdown; waited descendants contribute CPU and maximum individual RSS",
         "cpu_resolution_ns": 1000, "rss_resolution_bytes": 1024,
-        "supervisor_executable_sha256": executable_hash,
     }))
 }

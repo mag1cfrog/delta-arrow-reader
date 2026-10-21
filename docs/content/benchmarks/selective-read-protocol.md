@@ -24,10 +24,9 @@ are part of the main evidence. Three metadata-reuse session profiles are
 reported separately. No minimum speedup is a completion criterion.
 
 Revision 2 expands comparison coverage without changing the original fixture
-generation rules or object identities. A saved generator manifest keeps its
-original protocol hash as provenance. New validation and measurement records
-also identify comparison revision 2 and this document's hash; an old fixture
-manifest alone cannot satisfy the new correctness gate.
+generation rules or object identities. Validation and measurement records
+declare comparison revision 2 and the query, reader settings and input
+identities. An old fixture manifest alone cannot satisfy the correctness gate.
 
 ## Questions and existing evidence
 
@@ -442,7 +441,7 @@ but cannot stand in for the 4,096-file geometry check.
 Use the same immutable objects and explicit snapshot version per case. No
 pre-filtered file list, per-case tuning, or unmeasured table open is allowed.
 Canonical SQL defines the semantics. Native Polars/Daft expressions may express
-that same projection, predicate, and limit; freeze the translation and its hash,
+that same projection, predicate, and limit; freeze the complete translation,
 and verify it with the independent oracle. Do not replace output with an
 aggregate, change literals, or move filtering into the harness.
 
@@ -679,7 +678,7 @@ which layer pruned the data. Use plans, independent expected candidates, common
 I/O, and available internal counters together. Missing or unsupported metrics
 are null with a reason, never zero.
 
-Each raw JSONL observation must identify protocol revision/hash, campaign and
+Each raw JSONL observation must identify comparison revision, campaign and
 run ID, timing/diagnostic mode, case/profile/session and query index, repetition
 and order, reader/source/build/config identity, fixture manifest/hash, snapshot,
 expanded SQL, native expressions when applicable, capability/probe

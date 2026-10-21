@@ -83,7 +83,6 @@ pub(super) enum Request {
     Query {
         case: String,
         manifest: Value,
-        protocols: PathBuf,
     },
     Sampling {
         stage: String,
@@ -126,11 +125,7 @@ pub(super) fn run(request: Request) -> Result<Value> {
             large,
             smoke,
         } => wide::geometry(&manifest, large, smoke),
-        Request::Query {
-            case,
-            manifest,
-            protocols,
-        } => query(&case, &manifest, &protocols),
+        Request::Query { case, manifest } => query(&case, &manifest),
         Request::Sampling {
             stage,
             cases,
@@ -161,9 +156,9 @@ pub(super) fn load(path: &Path, harness: &Path) -> Result<(Value, Value)> {
     Ok((value, identity))
 }
 
-pub(super) fn binding(value: &Value, fixtures: &Path, case: &str, harness: &Path) -> Result<Value> {
+pub(super) fn binding(value: &Value, fixtures: &Path, case: &str) -> Result<Value> {
     if matches!(value["comparison_revision"].as_u64(), Some(5 | 6)) {
-        production::binding(value, fixtures, case, harness)
+        production::binding(value, fixtures, case)
     } else {
         large::binding(value, fixtures, case)
     }
@@ -172,7 +167,7 @@ pub(super) fn binding(value: &Value, fixtures: &Path, case: &str, harness: &Path
 pub(super) fn resolve(path: &Path, fixtures: &Path, case: &str, harness: &Path) -> Result<Value> {
     let path = path.canonicalize()?;
     let (workload, identity) = load(&path, harness)?;
-    let row = binding(&workload, fixtures, case, harness)?;
+    let row = binding(&workload, fixtures, case)?;
     Ok(json!({"path":path,"workload":workload,"identity":identity,"case":row}))
 }
 
@@ -240,7 +235,7 @@ fn table<'a>(manifest: &'a Value, case: &str) -> Result<&'a Value> {
         .ok_or_else(|| format!("missing production table: {case}").into())
 }
 
-pub(super) fn query(case: &str, manifest: &Value, _protocols: &Path) -> Result<Value> {
+pub(super) fn query(case: &str, manifest: &Value) -> Result<Value> {
     let all = cases();
     let definition = field(&all, case)?;
     let shape_name = text(&definition["shape"])?;

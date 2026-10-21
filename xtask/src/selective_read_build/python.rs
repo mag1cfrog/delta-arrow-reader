@@ -58,16 +58,8 @@ pub(super) fn prepare(root: &Path, args: Arguments) -> Result<()> {
         return Err("--java-home requires the Spark reader".into());
     }
     let adapter = root.join(RUNNERS).join(reader);
-    let hashes = || -> Result<BTreeMap<String, String>> {
-        let mut hashes = sources(root)?;
-        hashes.insert(
-            format!("{RUNNERS}/{reader}/lock.json"),
-            digest(&adapter.join("lock.json"))?,
-        );
-        Ok(hashes)
-    };
-    let before = hashes()?;
-    let lock: Value = serde_json::from_slice(&fs::read(adapter.join("lock.json"))?)?;
+    let lock_bytes = fs::read(adapter.join("lock.json"))?;
+    let lock: Value = serde_json::from_slice(&lock_bytes)?;
     let python = args.python.as_deref().unwrap_or(Path::new("python3"));
     let platform: Value = serde_json::from_str(&command_output(Command::new(python).args([
         "-I", "-c",
@@ -106,7 +98,6 @@ pub(super) fn prepare(root: &Path, args: Arguments) -> Result<()> {
     .into_iter()
     .map(|(name, path)| (name.to_owned(), path))
     .collect();
-    let builder_hash = digest(&env::current_exe()?)?;
     fs::create_dir(&args.output)?;
     let output = fs::canonicalize(&args.output)?;
     let downloads = output.join("artifacts");
@@ -232,7 +223,11 @@ pub(super) fn prepare(root: &Path, args: Arguments) -> Result<()> {
         }
     }
     for (name, source) in &bundled {
-        fs::copy(source, output.join(name))?;
+        if name == "lock.json" {
+            write_new_file(&output.join(name), &lock_bytes)?;
+        } else {
+            fs::copy(source, output.join(name))?;
+        }
     }
     let executable = output.join(format!("selective-read-{reader}"));
     write_new_file(
@@ -249,9 +244,6 @@ pub(super) fn prepare(root: &Path, args: Arguments) -> Result<()> {
     let runtime: Value = serde_json::from_str(&command_output(
         Command::new(&executable).arg("--describe-build"),
     )?)?;
-    if hashes()? != before {
-        return Err("source files changed during preparation; use a new output directory".into());
-    }
     let mut bundled_hashes = BTreeMap::new();
     for name in bundled
         .keys()
@@ -263,9 +255,9 @@ pub(super) fn prepare(root: &Path, args: Arguments) -> Result<()> {
         "harness_git_commit":command_output(Command::new("git").args(["rev-parse","HEAD"]).current_dir(root))?.trim(),
         "reader_git_commit":text(&lock[format!("{reader}_source")])?,
         "git_status":command_output(Command::new("git").args(["status","--porcelain"]).current_dir(root))?,
-        "source_sha256":before,"command":command,"uv_version":command_output(Command::new("uv").arg("--version"))?.trim(),
-        "executable_sha256":digest(&executable)?,"lockfile_sha256":digest(&adapter.join("lock.json"))?,
-        "bundled_sha256":bundled_hashes,"runtime":runtime,"builder_executable_sha256":builder_hash});
+        "command":command,"uv_version":command_output(Command::new("uv").arg("--version"))?.trim(),
+        "executable_sha256":digest(&executable)?,"lockfile_sha256":digest(&output.join("lock.json"))?,
+        "bundled_sha256":bundled_hashes,"runtime":runtime});
     if spark {
         record["pilot_only"] = json!(false);
         record["delta_git_commit"] = json!(text(&lock["delta_source"])?);

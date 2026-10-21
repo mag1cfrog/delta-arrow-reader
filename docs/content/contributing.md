@@ -60,8 +60,9 @@ fixture writer must support all selected shapes; every binary reads the same
 fixtures. Use `--suite performance` or `--suite progress` to select a suite, and
 `--case-filter` with a Rust regular expression to select case names.
 
-The runner saves executable copies and source snapshots, records hashes in
-`metadata.json`, writes individual runs to `runs.jsonl`, and updates measured
+The runner saves executable copies and source snapshots. It records executable,
+dependency lock and fixture checksums in `metadata.json`, writes individual runs
+to `runs.jsonl`, and updates measured
 summaries in `summary.csv`. Each measurement starts a fresh process. Execution
 timers exclude startup, fixture generation, table loading and planning; CPU and
 peak RSS include setup and the

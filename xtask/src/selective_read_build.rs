@@ -14,7 +14,7 @@ use crate::{
     Result,
     artifacts::{reader_sha256, write_new_file},
     command::{command_output, remove_cargo_package_environment, run_command},
-    repository::{cargo_workspace_root, files},
+    repository::cargo_workspace_root,
 };
 
 const TARGET: &str = "x86_64-unknown-linux-gnu";
@@ -91,47 +91,6 @@ pub(crate) fn digest(path: &Path) -> Result<String> {
     Ok(hash)
 }
 
-fn sources(root: &Path) -> Result<BTreeMap<String, String>> {
-    let mut paths: Vec<_> = [
-        "Cargo.toml",
-        "Cargo.lock",
-        "README.md",
-        ".cargo/config.toml",
-        "xtask/Cargo.toml",
-        "crates/delta-arrow-reader-core/Cargo.toml",
-        "benches/selective_read/oracle_io.py",
-        "benches/selective_read/rust-toolchain.toml",
-        "docs/content/benchmarks/selective-read-protocol.md",
-        "docs/content/benchmarks/selective-read-large-workloads.md",
-        "docs/content/benchmarks/selective-read-sampling.md",
-        "docs/content/benchmarks/selective-read-production-workloads.md",
-        "docs/content/benchmarks/selective-read-spark-matrix.md",
-    ]
-    .into_iter()
-    .map(|path| root.join(path))
-    .collect();
-    for base in ["crates/delta-arrow-reader-core/src", RUNNERS, "xtask/src"] {
-        paths.extend(files(&root.join(base))?.into_iter().filter(|path| {
-            matches!(
-                path.extension().and_then(|extension| extension.to_str()),
-                Some("rs" | "toml" | "lock" | "py")
-            )
-        }));
-    }
-    paths
-        .into_iter()
-        .map(|path| {
-            Ok((
-                path.strip_prefix(root)?
-                    .to_str()
-                    .ok_or("non-UTF-8 source path")?
-                    .to_owned(),
-                digest(&path)?,
-            ))
-        })
-        .collect()
-}
-
 fn cargo(root: &Path, target_dir: &Path) -> Command {
     let mut command = Command::new("cargo");
     command
@@ -181,8 +140,6 @@ impl Arguments {
                     .map(str::to_owned)
             })
             .collect::<std::result::Result<_, _>>()?;
-        let before = sources(&root)?;
-        let builder_hash = digest(&env::current_exe()?)?;
         run_command(&mut build)?;
         let metadata = command_output(
             cargo(&root, &target_dir)
@@ -202,9 +159,6 @@ impl Arguments {
                 .arg(&manifest)
                 .args(["--edges", "normal,build,features"]),
         )?;
-        if sources(&root)? != before {
-            return Err("source files changed during build; use a new output directory".into());
-        }
         let resolved: Metadata = serde_json::from_str(&metadata)?;
         let mut published_vcs = BTreeMap::<String, Value>::new();
         for package in &resolved.packages {
@@ -267,8 +221,6 @@ impl Arguments {
             "reader_git_commit": if self.reader == "dar" { commit.trim() } else { DELTA_RS_COMMIT },
             "published_vcs": published_vcs,
             "git_status": command_output(Command::new("git").current_dir(&root).args(["status", "--porcelain"]))?,
-            "source_sha256": before,
-            "builder_executable_sha256": builder_hash,
             "command": command,
             "rustflags": RUSTFLAGS,
             "target": TARGET,

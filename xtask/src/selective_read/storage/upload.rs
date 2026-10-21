@@ -12,7 +12,7 @@ use super::{
     BUCKET, array, exclusive, put_verified, read_json, require, save, text, timestamp_ns,
     verify_server,
 };
-use crate::{Result, artifacts::reader_sha256, selective_read_build::digest};
+use crate::{Result, selective_read_build::digest};
 
 #[derive(clap::Args, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -137,8 +137,7 @@ pub(in crate::selective_read) fn run(
         "fixture_manifest_sha256":prefix, "prefix":prefix, "objects":objects,
         "table_root":format!("s3://{BUCKET}/{prefix}"), "table_ids":args.table_ids,
         "verified_ns":timestamp_ns()?, "verification":{"requested":if args.checksum { "server-sha256" } else { "full-get" }, "methods":methods},
-        "source_sha256":reader_sha256(include_bytes!("upload.rs").as_slice())?,
-        "controller_sha256":digest(&std::env::current_exe()?)?, "elapsed_seconds":started.elapsed().as_secs_f64()});
+         "elapsed_seconds":started.elapsed().as_secs_f64()});
     save(&args.output, &receipt)?;
     Ok(receipt)
 }

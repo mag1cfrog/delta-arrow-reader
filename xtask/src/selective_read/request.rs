@@ -40,7 +40,7 @@ pub(super) fn run(args: Request) -> Result<Value> {
     let tables = fixture_tables(&manifest)?;
     let (table, sql, comparison) = if let Some(path) = &args.workload {
         let (frozen, identity) = workload::load(path, &args.harness)?;
-        let row = workload::binding(&frozen, &fixtures, &args.case_id, &args.harness)?;
+        let row = workload::binding(&frozen, &fixtures, &args.case_id)?;
         let table = tables
             .iter()
             .find(|t| t["id"] == row["fixture_id"])
@@ -76,11 +76,7 @@ pub(super) fn run(args: Request) -> Result<Value> {
                     .clone(),
             )
         };
-        (
-            table,
-            sql,
-            json!({"comparison_revision":2,"protocol_sha256":digest(&args.harness.join("../../docs/content/benchmarks/selective-read-protocol.md"))?}),
-        )
+        (table, sql, json!({"comparison_revision":2}))
     };
     text(&sql)?;
     let location = resolve(&fixtures.join(text(&table["path"])?))?;
@@ -109,16 +105,13 @@ mod tests {
     use crate::selective_read::storage::save;
 
     #[test]
-    fn public_requests_bind_queries_scale_paths_and_protocol() -> Result<()> {
+    fn public_requests_bind_queries_and_paths_without_protocol_documents() -> Result<()> {
         let temporary = tempfile::tempdir()?;
         let root = temporary.path();
         let fixtures = root.join("fixtures");
         let harness = root.join("repo/benches/selective_read");
         fs::create_dir(&fixtures)?;
         fs::create_dir_all(&harness)?;
-        let protocols = root.join("repo/docs/content/benchmarks");
-        fs::create_dir_all(&protocols)?;
-        fs::write(protocols.join("selective-read-protocol.md"), "protocol")?;
         let mut manifest = json!({"status":"complete","protocol":"selective-read-v1","profile":"smoke",
             "tables":[{"id":"wide.clustered","path":"data space","snapshot_version":0,"scale_factor":0.01,
                        "queries":{"row-groups.select":"SELECT control"}}],
@@ -140,10 +133,8 @@ mod tests {
         let request = run(input("wide.clustered.eq1"))?;
         assert_eq!(request["canonical_sql"], "SELECT wide");
         assert!(text(&request["table_uri"])?.ends_with("/data%20space"));
-        assert_eq!(
-            request["protocol_sha256"],
-            digest(&protocols.join("selective-read-protocol.md"))?
-        );
+        assert!(request.get("protocol_sha256").is_none());
+        assert_eq!(request["comparison_revision"], 2);
         assert_eq!(
             run(input("row-groups.select"))?["canonical_sql"],
             "SELECT control"

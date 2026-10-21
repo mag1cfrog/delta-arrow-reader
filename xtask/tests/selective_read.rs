@@ -82,13 +82,7 @@ fn watchdog_records_success_failures_and_resource_usage() -> Result {
         assert!(result["returncode"].is_i64());
         assert!(result["process_cpu_ns"].as_u64().unwrap() > 0);
         assert!(result["peak_rss_bytes"].as_u64().unwrap() > 0);
-        assert_eq!(
-            result["supervisor_executable_sha256"]
-                .as_str()
-                .unwrap()
-                .len(),
-            64
-        );
+        assert!(result.get("supervisor_executable_sha256").is_none());
         assert!(temporary.path().join("progress.jsonl").is_file());
     }
     Ok(())

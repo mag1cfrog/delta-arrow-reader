@@ -232,7 +232,7 @@ starts screening with two independent single queries per reader, with correctnes
 and I/O checks outside timing. Use the declared standalone invocations from the
 [storage guide](selective-read-storage.md) for screening. The revision 4
 campaign below uses five independent samples per case or session, and two
-queries per reuse session, bound by `sampling_sha256`. Screening observations
+queries per reuse session, selected by the comparison revision. Screening observations
 cannot fill formal measurement slots or freeze the full publication inventory.
 
 The archived generator binds all 18 cases in the complete large-data family
@@ -242,9 +242,8 @@ before preparing references or timing readers.
 projections, literals, native translations and oracle ceilings. Each translation
 stores its case's canonical SQL and full native expression. Definitions using
 the old hash-only bindings need regeneration before current-harness validation.
-Document, source and workload checksums remain audit provenance. References,
-reader identities, correctness certificates, campaigns, schedule slots and
-reports carry the explicit workload contract. Changed queries, translations,
+References, reader identities, correctness certificates, campaigns, schedule
+slots and reports carry the explicit workload contract. Changed queries, translations,
 fixture identities or execution settings fail validation.
 
 This definition records a **candidate**, with `publication_ready: false`. The full

@@ -61,7 +61,7 @@ summary cannot pass the existing campaign audit; keep its raw records separately
 The JSON also retains exact-gate oracle geometry and separate I/O diagnostics.
 New revision 6 campaigns can use the
 [combined diagnostic amendment](selective-read-combined-diagnostics.md).
-The overview records each campaign's mode and amendment hash. Those invocations
+The overview records each campaign's mode. Those invocations
 remain outside the timing distributions, and DuckDB EXPLAIN remains separate.
 Single-snapshot revision 6 campaigns can also declare
 [exact validation as storage warmup](selective-read-gate-warmup.md).

@@ -489,6 +489,9 @@ fn standalone_docs_skip_rust_checks() -> Result<()> {
     for path in [
         "docs/content/contributing.md",
         "docs/content/benchmarks/intra-page-reads.md",
+        "docs/content/benchmarks/selective-read-protocol.md",
+        "docs/content/benchmarks/selective-read-production-shapes.md",
+        "docs/content/benchmarks/selective-read-large-workloads.md",
         "crates/delta-arrow-reader-core/docs/public/python.md",
         "crates/delta-arrow-reader-core/docs/public/cli.md",
         "crates/delta-arrow-reader-core/docs/public/benchmarks/selective-read-results.md",
@@ -504,14 +507,6 @@ fn standalone_docs_skip_rust_checks() -> Result<()> {
             assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
         }
     }
-    for path in [
-        "docs/content/benchmarks/selective-read-protocol.md",
-        "docs/content/benchmarks/selective-read-production-shapes.md",
-        "docs/content/benchmarks/selective-read-large-workloads.md",
-    ] {
-        assert!(filter_matches(&filters, "selective_read", path)?, "{path}");
-        assert!(!filter_matches(&filters, "code", path)?, "{path}");
-    }
     Ok(())
 }
 
@@ -519,21 +514,16 @@ fn standalone_docs_skip_rust_checks() -> Result<()> {
 fn embedded_docs_trigger_their_rust_checks() -> Result<()> {
     let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
     let include = regex::Regex::new(r#"include_str!\("([^"]+\.md)"\)"#)?;
-    for (source, filter) in [
-        ("crates/delta-arrow-reader-core/src/guides.rs", "rust_docs"),
-        ("benches/selective_read/src/main.rs", "selective_read"),
-        ("benches/selective_read/src/large.rs", "selective_read"),
-    ] {
-        assert!(filter_matches(&filters, "tooling", source)?, "{source}");
-        let source = root().join(source);
-        let contents = fs::read_to_string(&source)?;
-        let documents: Vec<_> = include.captures_iter(&contents).collect();
-        assert!(!documents.is_empty(), "{}", source.display());
-        for document in documents {
-            let path = source.parent().unwrap().join(&document[1]).canonicalize()?;
-            let path = path.strip_prefix(root())?.to_str().unwrap();
-            assert!(filter_matches(&filters, filter, path)?, "{filter}: {path}");
-        }
+    let source = "crates/delta-arrow-reader-core/src/guides.rs";
+    assert!(filter_matches(&filters, "tooling", source)?);
+    let source = root().join(source);
+    let contents = fs::read_to_string(&source)?;
+    let documents: Vec<_> = include.captures_iter(&contents).collect();
+    assert!(!documents.is_empty(), "{}", source.display());
+    for document in documents {
+        let path = source.parent().unwrap().join(&document[1]).canonicalize()?;
+        let path = path.strip_prefix(root())?.to_str().unwrap();
+        assert!(filter_matches(&filters, "rust_docs", path)?, "{path}");
     }
     Ok(())
 }

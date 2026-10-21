@@ -126,8 +126,6 @@ pub(in crate::selective_read) fn prepare(output: &Path, source: Option<&Path>) -
             "embedded_modules": command_output(go().args(["version", "-m"]).arg(&binary))?,
             "version": command_output(Command::new(&binary).arg("--version"))?,
             "harness_commit": command_output(Command::new("git").args(["rev-parse", "HEAD"]).current_dir(&root))?.trim(),
-            "source_sha256": digest(&root.join("xtask/src/selective_read/storage/service.rs"))?,
-            "controller_sha256": digest(&std::env::current_exe()?)?,
         }),
     )
 }
@@ -236,9 +234,6 @@ pub(in crate::selective_read) fn start(build: &Path, directory: &Path, port: u16
             .into(),
     ]);
     let endpoint = format!("http://127.0.0.1:{port}");
-    let root = PathBuf::from(
-        command_output(Command::new("git").args(["rev-parse", "--show-toplevel"]))?.trim(),
-    );
     let curl = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
         .map(|path| path.join("curl"))
         .find(|path| {
@@ -257,8 +252,6 @@ pub(in crate::selective_read) fn start(build: &Path, directory: &Path, port: u16
         &json!({
             "format":"selective-read-storage-v1", "endpoint": endpoint, "bucket": BUCKET, "unit":unit,
             "build":build, "build_sha256":digest(&build.join("build.json"))?, "cpus":cpus, "settings":settings,
-            "source_sha256":digest(&root.join("xtask/src/selective_read/storage/service.rs"))?,
-            "controller_sha256":digest(&std::env::current_exe()?)?,
             "cache":"fresh clients; reused MinIO and OS caches; no cache flushing", "started_ns":timestamp_ns()?,
             "topology":rows, "kernel":fs::read_to_string("/proc/sys/kernel/osrelease")?.trim(),
             "cpu_info":fs::read_to_string("/proc/cpuinfo")?, "memory_info":fs::read_to_string("/proc/meminfo")?,

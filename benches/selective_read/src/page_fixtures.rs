@@ -33,7 +33,7 @@ use uuid::Uuid;
 
 use crate::{
     dv,
-    fixtures::{MIB, Result, hash_bytes, hash_file},
+    fixtures::{MIB, Result, hash_file},
 };
 
 // SplitMix64 fixes the sequence across platforms without depending on Python's RNG.
@@ -75,8 +75,7 @@ impl Random {
 }
 
 fn provenance() -> Value {
-    json!({"implementation":"rust", "random":"splitmix64-v1", "arrow":"58.4.0", "parquet":"58.4.0",
-        "source_sha256":hash_bytes(include_bytes!("page_fixtures.rs"))})
+    json!({"implementation":"rust", "random":"splitmix64-v1", "arrow":"58.4.0", "parquet":"58.4.0"})
 }
 
 fn object(root: &Path, path: &Path) -> Result<Value> {
@@ -535,7 +534,7 @@ fn length(
         json!({"format":"delta-length-network-v1", "case":case, "rows_per_file":rows, "columns":8, "seed":452,
         "compression":compression, "compression_level":if compression == "zstd" { json!(3) } else { Value::Null },
         "row_group_rows":rows/2, "page_target_bytes":page_bytes, "page_row_limit":8192, "generator":provenance(),
-        "inspector_sha256":hash_file(inspector)?, "objects":objects, "references":references, "layout":layouts}),
+        "objects":objects, "references":references, "layout":layouts}),
     )
 }
 

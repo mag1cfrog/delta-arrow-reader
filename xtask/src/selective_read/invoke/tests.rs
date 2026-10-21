@@ -1,5 +1,4 @@
 use super::*;
-use crate::selective_read_build::digest;
 use std::{os::unix::fs::PermissionsExt, path::Path};
 
 fn request(root: &Path, script: &str) -> Result<Request> {
@@ -131,9 +130,7 @@ fn validation_export_limits_apply_to_the_child_and_reject_stale_references() -> 
     )?;
     request.payload = json!({"execution_mode":"open","purpose":"validation","comparison_revision":6,"sampling_stage":"formal",
         "workload_contract":{"comparison_revision":6,"sampling_stage":"formal","cases":[{"canonical_sql":"SELECT id FROM bench"}]},
-        "protocol_sha256":digest(&request.protocols.join("selective-read-spark-matrix.md"))?,
-        "base_protocol_sha256":digest(&request.protocols.join("selective-read-protocol.md"))?,
-        "sampling_sha256":digest(&request.protocols.join("selective-read-sampling.md"))?,"workload_manifest_sha256":"1".repeat(64)});
+        "workload_manifest_sha256":"1".repeat(64)});
     let mut metadata = request.payload.clone();
     metadata["oracle_limits"] = json!({"disk_bytes":8*1024*1024+16384});
     let reference = temporary.path().join("reference.json");

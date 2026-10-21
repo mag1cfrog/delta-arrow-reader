@@ -240,8 +240,7 @@ pub(super) fn start(args: Start) -> Result<()> {
         "jitter":"uniform integer microseconds; SHA256(seed, method, request URI, Range); identical requests repeat",
         "byte_boundary":BOUNDARY, "chunk_bytes":65536, "go_version":version, "build_command":build,
         "build_environment":environment, "binary_sha256":digest(&output.join("proxy"))?,
-        "source_sha256":{"network.rs":digest(&root.join("xtask/src/selective_read/network.rs"))?, "network_proxy.go":digest(&source)?},
-        "controller_sha256":digest(&std::env::current_exe()?)?, "command":command, "started_ns":timestamp_ns()?});
+         "command":command, "started_ns":timestamp_ns()?});
     let mut published = false;
     let started = (|| -> Result<()> {
         run_command(Command::new(&command[0]).args(&command[1..]))?;

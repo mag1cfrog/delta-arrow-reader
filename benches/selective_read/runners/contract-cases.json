@@ -5,9 +5,6 @@
     "case_id": "case",
     "canonical_sql": "SELECT id FROM bench",
     "comparison_revision": 6,
-    "protocol_sha256": "documentation",
-    "base_protocol_sha256": "base documentation",
-    "sampling_sha256": "sampling documentation",
     "workload_manifest_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
     "workload_contract": {
       "comparison_revision": 6,
@@ -93,7 +90,6 @@
     },
     "snapshot_version": 0,
     "fixture_manifest_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
-    "protocol_sha256": "docs",
     "comparison_revision": 6,
     "sampling_stage": "pilot",
     "case_id": "case",

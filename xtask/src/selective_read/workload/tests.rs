@@ -108,10 +108,6 @@ fn formal_sampling_requires_every_selected_full_pair() -> Result<()> {
 
 #[test]
 fn production_metadata_binds_geometry_legacy_pages_and_unchanged_dv_data() -> Result<()> {
-    let temporary = tempfile::tempdir()?;
-    let protocols = temporary.path();
-    let contract = protocols.join("selective-read-production-shapes.md");
-    std::fs::write(&contract, b"contract")?;
     let shape = shapes(512, 20000, 1048576, 1024)?["q4"].clone();
     let columns: Vec<_> = ORIGINAL
         .into_iter()
@@ -125,17 +121,17 @@ fn production_metadata_binds_geometry_legacy_pages_and_unchanged_dv_data() -> Re
         "schema":{"fields":columns}, "file_count":1, "files":[{"rows":10,"bytes":100,"row_groups":[{}],"delta_stats":{}}],
         "file_evidence":[{}], "rows":10, "bytes":100, "writer":shape});
     let mut manifest = json!({"status":"complete", "protocol":"selective-read-production-pairs-v1", "mode":"probe",
-        "contract_sha256":digest(&contract)?, "source_parent_manifest_sha256":"parent",
+        "source_parent_manifest_sha256":"parent",
         "sources":[{"scale_factor":10.0,"rows":100}], "shape_definitions":{"q4":shape}, "writer":{"status":"complete","tables":[base]}});
     let case = "production.q4.localized";
-    let expected = query(case, &manifest, protocols)?;
+    let expected = query(case, &manifest)?;
     assert_eq!(expected["writer"]["data_page_rows"], 20000);
     let mut legacy = manifest.clone();
     legacy["shape_definitions"]["q4"]
         .as_object_mut()
         .unwrap()
         .remove("data_page_bytes");
-    assert_eq!(query(case, &legacy, protocols)?, expected);
+    assert_eq!(query(case, &legacy)?, expected);
     assert!(
         legacy["shape_definitions"]["q4"]
             .get("data_page_bytes")
@@ -145,7 +141,7 @@ fn production_metadata_binds_geometry_legacy_pages_and_unchanged_dv_data() -> Re
         let mut changed = legacy.clone();
         changed["writer"]["tables"][0]["writer"]["data_page_bytes"] = bytes;
         assert!(
-            query(case, &changed, protocols)
+            query(case, &changed)
                 .unwrap_err()
                 .to_string()
                 .contains("recorded 1 MiB")
@@ -161,7 +157,7 @@ fn production_metadata_binds_geometry_legacy_pages_and_unchanged_dv_data() -> Re
         let mut changed = manifest.clone();
         changed["writer"]["tables"][0]["writer"][key] = json!(123);
         assert!(
-            query(case, &changed, protocols)
+            query(case, &changed)
                 .unwrap_err()
                 .to_string()
                 .contains("page/group")
@@ -170,7 +166,7 @@ fn production_metadata_binds_geometry_legacy_pages_and_unchanged_dv_data() -> Re
     let mut changed = manifest.clone();
     changed["shape_definitions"]["q4"]["files"] = json!(61);
     assert!(
-        query(case, &changed, protocols)
+        query(case, &changed)
             .unwrap_err()
             .to_string()
             .contains("shape definition")
@@ -186,10 +182,10 @@ fn production_metadata_binds_geometry_legacy_pages_and_unchanged_dv_data() -> Re
         .as_array_mut()
         .unwrap()
         .push(dv);
-    query(&format!("{case}.dv"), &manifest, protocols)?;
+    query(&format!("{case}.dv"), &manifest)?;
     manifest["writer"]["tables"][1]["files"][0]["path"] = json!("changed.parquet");
     assert!(
-        query(&format!("{case}.dv"), &manifest, protocols)
+        query(&format!("{case}.dv"), &manifest)
             .unwrap_err()
             .to_string()
             .contains("DV pair changed")

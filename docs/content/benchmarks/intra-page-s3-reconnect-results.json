@@ -223,7 +223,6 @@
     "region": "us-west-2",
     "request_bytes": 4096,
     "binary_sha256": "8b9858f41af0cf2bbaa3cafd33dd8a094122c96f042a7950d916e8ab6f36e87f",
-    "source_sha256": "8cef08923ecff2fa8e5007e0ed293da263014539fffd953548e9c8ce7edcafbb",
     "cpus": [
       0,
       1,
@@ -295,8 +294,7 @@
     "native_s3_calibration": [
       "2026-10-09T04:04:32.068072Z DEBUG delta_arrow_reader::diagnostics::network_warmup: Network warmup completed status=\"timeout\" elapsed_micros=5025480 requests=1036 bytes_received=16719872 request_latency_micros=95206 throughput_bytes_per_second=27169591"
     ],
-    "native_s3_exact_exports_passed": 2,
-    "validation_source_sha256": "c78833f3141c0f5a7012aeed8f314983ad5e00372c87f9894140df5e99822620"
+    "native_s3_exact_exports_passed": 2
   },
   "isolated_pr_validation": {
     "rust_library_tests": 444,

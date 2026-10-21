@@ -13,8 +13,8 @@ samples and separate diagnostics. All five readers remain in the inventory.
 New large workloads use [revision 4 sampling](selective-read-sampling.md):
 one validation, one warmup, five independent timed samples, one plan capture
 and one I/O diagnostic per runnable reader and job. Each reuse invocation
-contains two queries. The `sampling_sha256` identity binds these counts through
-the adapters, watchdog, certificates and report. This schedule does not run
+contains two queries. The comparison revision selects these counts in the
+adapters, watchdog, certificates and report. This schedule does not run
 paired tracing-overhead experiments; report that estimate as unavailable.
 The revision 2 examples and historical schedules below remain reproducible.
 
@@ -129,7 +129,7 @@ helpers support them.
 
 | Artifact | Contents |
 | --- | --- |
-| `campaign.json` | Selected jobs, protocol and source hashes, reader build records, server identity, cache policy and timer resolution |
+| `campaign.json` | Selected jobs, comparison revision, input checksums, reader build records, server identity, cache policy and timer resolution |
 | `inventory.json` | Five entries per selected case/session, including gate evidence and exclusions |
 | `schedule.json`, `frozen.json` | Expanded run order saved before warmups/timing, plus hashes of the frozen inputs |
 | `observations.jsonl` | Every attempted or skipped scheduled slot, its request, validation prerequisite and complete observation |
@@ -186,7 +186,7 @@ stops further launches and records the remaining slots as `not_run`.
 The watchdog retains completed-query counters and clocks if a process crashes or
 times out. It cannot reconstruct rows consumed inside an interrupted query;
 native partial-query records are retained when the reader managed to write them.
-Oracle checking, source hashing, result serialization and reporting occur outside
+Oracle checking, input integrity checks, result serialization and reporting occur outside
 measured query intervals. Oracle comparison also occurs after process/I/O cleanup.
 
 Linux `wait4` supplies whole-process user/system CPU and peak RSS, including

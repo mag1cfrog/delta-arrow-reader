@@ -33,8 +33,6 @@ pub(super) struct Request {
     disk_gib: u64,
     seconds: u32,
     layout: Option<String>,
-    contract_sha256: String,
-    driver_sha256: String,
 }
 
 #[derive(clap::Args)]
@@ -51,12 +49,9 @@ pub(crate) struct Args {
     elapsed_limit_seconds: u32,
     #[arg(long, value_parser = ["localized", "scattered"])]
     layout: Option<String>,
-    #[arg(long, default_value = "benches/selective_read")]
-    harness: PathBuf,
 }
 
 pub(super) fn prepare(args: Args) -> Result<Value> {
-    let protocols = fs::canonicalize(args.harness.join("../../docs/content/benchmarks"))?;
     let fixtures = args
         .fixtures
         .iter()
@@ -65,7 +60,7 @@ pub(super) fn prepare(args: Args) -> Result<Value> {
             let bytes = fs::read(path.join("manifest.json"))?;
             let manifest: Value = serde_json::from_slice(&bytes)?;
             for table in fixture_tables(&manifest)? {
-                workload::query(text(&table["id"])?, &manifest, &protocols)?;
+                workload::query(text(&table["id"])?, &manifest)?;
             }
             Ok(Fixture {
                 path,
@@ -80,8 +75,6 @@ pub(super) fn prepare(args: Args) -> Result<Value> {
         disk_gib: args.disk_limit_gib,
         seconds: args.elapsed_limit_seconds,
         layout: args.layout,
-        contract_sha256: digest(&protocols.join("selective-read-production-shapes.md"))?,
-        driver_sha256: reader_sha256(include_bytes!("pairs.rs").as_slice())?,
     })
 }
 
@@ -358,7 +351,7 @@ pub(super) fn run(request: Request) -> Result<Value> {
     }
     let mode = modes.first().ok_or("missing fixture mode")?;
     let mut payload = json!({"format":"selective-read-production-pairs-request-v1",
-        "contract_sha256":request.contract_sha256,"mode":mode,"tables":tables,"output_limit_bytes":limit});
+        "mode":mode,"tables":tables,"output_limit_bytes":limit});
     if let Some(layout) = &request.layout {
         payload["layout"] = json!(layout);
     }
@@ -400,12 +393,12 @@ pub(super) fn run(request: Request) -> Result<Value> {
         .chain(array(&result["tables"])?)
         .collect();
     let mut manifest = json!({"protocol":"selective-read-production-pairs-v1","status":"complete","mode":mode,
-        "contract_sha256":request.contract_sha256,"source_parent_manifest_sha256":source_hashes.first(),
+        "source_parent_manifest_sha256":source_hashes.first(),
         "parents":parents,"sources":[original.1],"shape_definitions":definitions,
         "production_dv":{"base_case_ids":bases.keys().collect::<Vec<_>>(),"extra_logical_keys":field(&result,"extra_logical_keys")?},
         "writer":{"status":"complete","generator":result["generator"],"tables":tables},
-        "dv_result_sha256":digest(&result_path)?,"driver_sha256":request.driver_sha256,
-        "controller_sha256":digest(&std::env::current_exe()?)?,"native_campaign_ready":false,"publication_ready":false});
+        "dv_result_sha256":digest(&result_path)?,
+        "native_campaign_ready":false,"publication_ready":false});
     if let Some(layout) = &request.layout {
         manifest["production_dv"]["layout"] = json!(layout);
     }

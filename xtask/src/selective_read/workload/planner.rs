@@ -235,9 +235,7 @@ pub(crate) fn run(args: Args) -> Result<()> {
     )?;
     save(&output.join("sql.json"), &json!(sql))?;
     let result = json!({"format":"selective-read-production-shape-plan-v1","status":"logical_geometry_checked",
-        "publication_ready":false,"native_campaign_ready":false,"contract_sha256":digest(&fixtures::contract(&harness))?,
-        "planner_sha256":digest(&harness.join("production_shapes.py"))?,
-        "planner_controller_sha256":digest(&std::env::current_exe()?)?,
+        "publication_ready":false,"native_campaign_ready":false,
         "source_manifest_sha256":manifest_hash,"source_scale":10,"predicate_stage_rows":counts,
         "file_target_mib":args.file_target_mib,"data_page_rows":args.page_rows,"data_page_bytes":args.page_bytes,
         "write_batch_rows":args.write_batch_rows,"duckdb":analysis["duckdb"],"shapes":definitions,"cases":cases(),

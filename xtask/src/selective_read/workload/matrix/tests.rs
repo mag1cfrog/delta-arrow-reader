@@ -105,20 +105,23 @@ fn loaded_matrix_rejects_missing_cases_changed_references_counts_and_shapes() ->
             .unwrap()
             .extend(object(&query(&case, &frozen, &manifest)?)?.clone());
         let mut metadata = row.clone();
-        metadata.as_object_mut().unwrap().extend(object(&json!({"format":"selective-read-reference-v2",
-            "comparison_revision":2,"status":"complete","oracle_sha256":digest(&harness.join("oracle_io.py"))?,
+        metadata.as_object_mut().unwrap().extend(
+            object(&json!({"format":"selective-read-reference-v2",
+            "comparison_revision":2,"status":"complete",
             "oracle_dependencies_sha256":digest(&harness.join("oracle-requirements.txt"))?,
             "pyarrow":"25.0.1","duckdb_sort":"1.5.5","fixture_manifest_sha256":"fixture",
             "protocol_sha256":frozen["protocol_sha256"],"source_rows":100,"qualifying_rows":3,
             "output_rows":3,"qualifying_selectivity":0.03,"predicate_steps":[],
-            "active_files":2,"candidate_files":["part"],"matching_files":["part"]}))?.clone());
+            "active_files":2,"candidate_files":["part"],"matching_files":["part"]}))?
+            .clone(),
+        );
         save(&reference.join("reference.json"), &metadata)?;
         row.as_object_mut().unwrap().extend(object(&json!({"status":"prepared","reference":reference,
             "reference_metadata_sha256":digest(&reference.join("reference.json"))?,"oracle":selected(&metadata, &ORACLE_FIELDS)?}))?.clone());
         rows.push(row);
     }
     let value = json!({"format":"selective-read-prepared-matrix-v1","status":"complete",
-        "catalog_sha256":digest(&harness.join("query-matrix.json"))?,"protocol_sha256":frozen["protocol_sha256"],
+        "catalog_sha256":digest(&harness.join("query-matrix.json"))?,
         "fixture_manifest_sha256":"fixture","profile":"smoke","translation_locks":frozen["translation_locks"],"cases":rows});
     check_loaded(&value, &frozen, &manifest, "fixture")?;
     let mut audit = value.clone();

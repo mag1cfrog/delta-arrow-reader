@@ -5,24 +5,17 @@ use crate::selective_read::campaign::{roster, tests::observation};
 #[test]
 fn diagnostic_modes_require_valid_dependencies_independently_of_documentation() -> Result<()> {
     let comparison = identity(6)?;
-    for (mode, key, hash, name) in [
+    for (mode, key, hash) in [
         (
             Mode::CombinedDiagnostics,
             "combined_diagnostics",
             "diagnostics_amendment_sha256",
-            "combined-diagnostics",
         ),
-        (
-            Mode::GateWarmup,
-            "gate_warmup",
-            "warmup_amendment_sha256",
-            "gate-warmup",
-        ),
+        (Mode::GateWarmup, "gate_warmup", "warmup_amendment_sha256"),
         (
             Mode::GateDiagnostics,
             "gate_diagnostics",
             "gate_diagnostics_amendment_sha256",
-            "gate-diagnostics",
         ),
     ] {
         assert!(!mode.enabled(&comparison, &protocols())?);
@@ -30,9 +23,6 @@ fn diagnostic_modes_require_valid_dependencies_independently_of_documentation() 
         config["combined_diagnostics"] = json!(true);
         config["gate_warmup"] = json!(true);
         config[key] = json!(true);
-        config[hash] = json!(digest(
-            &protocols().join(format!("selective-read-{name}.md"))
-        )?);
         assert!(mode.enabled(&config, &protocols())?);
         for (key, value) in [(key, json!(1)), ("comparison_revision", json!(5))] {
             let mut changed = config.clone();
@@ -75,32 +65,12 @@ fn merged_diagnostics_preserve_timings_and_reject_missing_or_changed_evidence() 
         let root = tempfile::tempdir()?;
         let mut config = identity(6)?;
         config["campaign_id"] = json!("check");
-        for (enabled, key, hash, name) in [
-            (
-                combined,
-                "combined_diagnostics",
-                "diagnostics_amendment_sha256",
-                "combined-diagnostics",
-            ),
-            (
-                warmup,
-                "gate_warmup",
-                "warmup_amendment_sha256",
-                "gate-warmup",
-            ),
-            (
-                merged,
-                "gate_diagnostics",
-                "gate_diagnostics_amendment_sha256",
-                "gate-diagnostics",
-            ),
+        for (enabled, key) in [
+            (combined, "combined_diagnostics"),
+            (warmup, "gate_warmup"),
+            (merged, "gate_diagnostics"),
         ] {
             config[key] = json!(enabled);
-            if enabled {
-                config[hash] = json!(digest(
-                    &protocols().join(format!("selective-read-{name}.md"))
-                )?);
-            }
         }
         let readers = roster(&config)?;
         let inventory: Vec<(String,Value)> = ["production.q2.scattered","reuse.production.q2.scattered"].iter().map(|job| {

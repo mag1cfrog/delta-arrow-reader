@@ -118,7 +118,7 @@ The identity file has these fields:
 | `reader_artifact` | Executable, dependency lock, runtime and bundled runtime file identities |
 | `reader_config` | The invocation's resolved reader configuration |
 | `native_expression` | The executed native expression description for Polars; null for a reader executing canonical SQL directly |
-| `protocol_sha256`, `reader_build_sha256` | Audit provenance; documentation and build-record edits alone do not invalidate a proof |
+| `reader_build_sha256` | Identifies the saved build record; compatibility compares its reader artifact and runtime fields |
 | `result_sha256` | SHA-256 of the completed IPC stream file |
 
 SQL, configuration and native expressions are compared directly. File checksums
@@ -153,9 +153,7 @@ are recorded separately, while actual null values must agree.
 
 Keep export, integrity checks and sorting outside query timing. Correctness
 binds the explicit workload definition, query, reader artifact and settings.
-Source and documentation hashes record provenance; editing those records alone
-does not invalidate a matching result. File checksums detect changed data and
-exports. Values are compared directly, including nulls and duplicate keys.
+File checksums detect changed data and exports. Values are compared directly, including nulls and duplicate keys.
 
 
 ## Resource use and checks
@@ -201,8 +199,8 @@ is part of these checks.
 
 Pass `--workload PATH/workload.json` to prepare a revision 3 reference. The
 [large query guide](selective-read-matrix.md#large-workload-candidates) describes
-the 18 case bindings and two native reuse profiles. The reference binds the explicit workload contract and retains the base
-protocol, amendment and workload-manifest hashes as provenance. Large-profile
+the 18 case bindings and two native reuse profiles. The reference records the
+explicit workload contract and the workload-manifest checksum. Large-profile
 fixtures require this explicit workload; omitting it cannot create a revision 2
 result. Existing revision 2 inputs keep their original cases.
 

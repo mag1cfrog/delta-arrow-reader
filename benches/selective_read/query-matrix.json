@@ -1,7 +1,6 @@
 {
   "comparison_revision": 2,
   "format": "selective-read-query-matrix-v1",
-  "protocol_sha256": "affe5fde898c1e39c03792fadbfd79d17b6af8a16dbdaa48988869a4567d5efe",
   "scales": {
     "0.01": {
       "in_literals": [
@@ -18,7 +17,6 @@
           "executable_sha256": "8741158d272d2ce5556f7f83ef0c9e26712c43128ed2a67e635092a7009b7945",
           "lockfile_sha256": "564fb9f39e8c13fbd19a22ea449c1a8652a0facaef13bb438777a13fb691fa1c",
           "parquet": "58.4.0",
-          "source_sha256": "9eff57c625a5963bf73bc1cee99129d2ea7baa2d7eb9df2ff59a1a680004b371",
           "target": "x86_64-linux",
           "tpchgen": "3.0.0",
           "tpchgen_git": "4f6bf4c5ab40511c8fdef5888fc8d022e5e546d7"
@@ -2178,7 +2176,6 @@
           "executable_sha256": "750e500a3c697eb7b17d1d612c264ce0edc7d31b3a4b1e1bbe2013231e1f34ac",
           "lockfile_sha256": "dbb91313507b5ec682ca5fd585957599ba4a2501b8281eab38b312f064603da0",
           "parquet": "58.4.0",
-          "source_sha256": "bc69b138e49c2807293f3705a43737cf9eb7411b2e5599487eff759e424777ee",
           "target": "x86_64-linux",
           "tpchgen": "3.0.0",
           "tpchgen_git": "4f6bf4c5ab40511c8fdef5888fc8d022e5e546d7"
@@ -4338,7 +4335,6 @@
           "executable_sha256": "c2e9db3255a45eb2979646aeee51379527220b85a321f6836cf60633b8f9049e",
           "lockfile_sha256": "564fb9f39e8c13fbd19a22ea449c1a8652a0facaef13bb438777a13fb691fa1c",
           "parquet": "58.4.0",
-          "source_sha256": "b05f95da47a80c803475276fd11861e4fd4065e2289d328229dbf72e66e794ed",
           "target": "x86_64-linux",
           "tpchgen": "3.0.0",
           "tpchgen_git": "4f6bf4c5ab40511c8fdef5888fc8d022e5e546d7"

@@ -175,7 +175,7 @@ pub fn generate(config: &Config, input: &Path) -> Result<Value> {
         LOCKFILE.as_bytes(),
     )?;
     let manifest = json!({
-        "protocol": "selective-read-v1", "protocol_sha256": fixtures::hash_bytes(PROTOCOL.as_bytes()),
+        "protocol": "selective-read-v1",
         "profile": config.profile.name(), "status": "complete", "generator": generator_identity()?,
         "recipe": parent["recipe"], "writer": fixtures::writer_settings(), "sources": [source], "tables": tables,
         "repacked_from": {"manifest_sha256": fixtures::hash_bytes(&parent_bytes), "fixture_id": "li.clustered",
@@ -331,7 +331,7 @@ pub fn wide_pair(config: &Config, input: &Path, capacity: Option<Value>) -> Resu
         &config.output.join("generator-Cargo.lock"),
         LOCKFILE.as_bytes(),
     )?;
-    let mut manifest = json!({"protocol": "selective-read-v1", "protocol_sha256": fixtures::hash_bytes(PROTOCOL.as_bytes()),
+    let mut manifest = json!({"protocol": "selective-read-v1",
         "status": "complete", "profile": config.profile.name(), "generator": generator_identity()?,
         "recipe": parent["recipe"], "writer": fixtures::writer_settings(), "sources": [source], "tables": tables,
         "repacked_from": {"manifest_sha256": fixtures::hash_bytes(&parent_bytes), "fixture_id": "wide.clustered",

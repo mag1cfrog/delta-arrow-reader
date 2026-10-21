@@ -224,8 +224,7 @@ pub(super) fn run(request: Request) -> Result<Value> {
         sources.push(json!({"path":fs::canonicalize(&directory)?, "campaign_id":audited["campaign_id"],
             "upload_verification":config["upload_verification"], "in_process_upload":config.get("in_process_upload").unwrap_or(&json!(false)),
             "combined_diagnostics":combined, "gate_warmup":warmup, "gate_diagnostics":gate_diagnostics,
-            "gate_diagnostics_amendment_sha256":config["gate_diagnostics_amendment_sha256"], "warmup_amendment_sha256":config["warmup_amendment_sha256"],
-            "diagnostics_amendment_sha256":config["diagnostics_amendment_sha256"], "status":audited["status"], "workload_manifest_sha256":declared["workload_manifest_sha256"],
+            "status":audited["status"], "workload_manifest_sha256":declared["workload_manifest_sha256"],
             "observations_sha256":field(&audited,"observations_sha256")?, "summary_sha256":field(&audited,"summary_sha256")?,
             "config_sha256":digest(&directory.join("campaign.json"))?, "frozen_sha256":digest(&directory.join("frozen.json"))?}));
     }

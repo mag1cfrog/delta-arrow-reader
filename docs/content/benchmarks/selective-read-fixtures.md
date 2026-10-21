@@ -26,9 +26,8 @@ and a feature-only control.
 The comparison now includes DAR, delta-rs, DuckDB, Polars, and Daft. Its paired
 wide 4,096-file workload, with and without DVs, is prepared in a later slice
 from these same public rows. This generator supplies the base inputs. Comparison
-revision 2 retains their physical generation rules and checksums; keep the
-manifest's original protocol hash and record the active comparison revision
-separately when validating and measuring them.
+revision 2 retains their physical generation rules and checksums. Validation
+and measurement records declare the active comparison revision.
 
 ## Generate a profile
 
@@ -126,8 +125,8 @@ adding payloads, without retaining another narrow table. Existing development
 or report sources at the requested scale can also be reused.
 
 Large table UUIDs include `large-sf{scale}` in their namespace. Their manifests
-record the amendment hash, base protocol hash, selected scale/fixture, source
-provenance and file-size summary. The full file/page metadata remains available.
+record the generator contract, selected scale/fixture, source data identity
+and file-size summary. The full file/page metadata remains available.
 These are generator identities. Comparison revision 3 queries, oracle bindings
 and reader adoption are delivered separately by
 [#344](https://github.com/mag1cfrog/delta-arrow-reader/issues/344); existing

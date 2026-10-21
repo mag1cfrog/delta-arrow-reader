@@ -292,7 +292,7 @@ pub(in crate::selective_read) fn run(request: Request) -> Result<Value> {
     drop(observer);
     record["storage_environment"] = json!({
         "server_record":fs::canonicalize(directory.join("server.json"))?,"server_sha256":digest(&directory.join("server.json"))?,
-        "trace_enabled":traced,"controller_sha256":digest(&std::env::current_exe()?)?,
+        "trace_enabled":traced,
         "reader_affinity":config["cpus"]["reader"],"server_affinity":config["cpus"]["server"],"observer_affinity":config["cpus"]["observer"]
     });
     if let Some(network) = network::config(&directory)? {

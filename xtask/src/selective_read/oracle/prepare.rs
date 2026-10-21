@@ -204,18 +204,10 @@ impl State {
         for item in &verified {
             self.digests.verify(&fixtures, item)?;
         }
-        let protocols = self
-            .harness
-            .parent()
-            .and_then(Path::parent)
-            .ok_or("invalid harness path")?
-            .join("docs/content/benchmarks");
         let mut metadata = json!({"format":"selective-read-reference-v2","status":"complete","comparison_revision":2,
-            "protocol_sha256":self.digests.digest(&protocols.join("selective-read-protocol.md"))?,"oracle_sha256":self.digests.digest(&std::env::current_exe()?)?,
-            "oracle_implementation":"rust-v1","python":self.python_version,"pyarrow":"25.0.1","oracle_io_sha256":self.digests.digest(&self.harness.join("oracle_io.py"))?,"sort_backend":"rust-external-merge-v1",
-            "oracle_dependencies_sha256":self.digests.digest(&self.harness.join("oracle-requirements.txt"))?,
+            "oracle_implementation":"rust-v1","python":self.python_version,"pyarrow":"25.0.1","sort_backend":"rust-external-merge-v1",
             "reference_storage":{"format":"parquet","compression":"zstd","row_group_rows":131072},"sort_memory_bytes":super::MEMORY,"sort_threads":1,
-            "fixture_manifest_sha256":self.digests.digest(&fixtures.join("manifest.json"))?,"generator_protocol_sha256":if spec.production {&spec.manifest["contract_sha256"]} else {&spec.manifest["protocol_sha256"]},
+            "fixture_manifest_sha256":self.digests.digest(&fixtures.join("manifest.json"))?,
             "case_id":case,"snapshot_version":spec.table["snapshot_version"],"profile":if spec.production {json!(format!("production-{}",text(&spec.manifest["mode"])?))} else {spec.manifest["profile"].clone()},
             "query_variant":if duplicate {"duplicate-in"} else {"canonical"},"canonical_sql":spec.sql,"in_literals":spec.literals,"projection":spec.projection,"limit":spec.limit,
             "source_rows":population.counts[0],"qualifying_rows":live,"physical_qualifying_rows":population.counts.last(),"deleted_qualifying_rows":population.deleted_matches,

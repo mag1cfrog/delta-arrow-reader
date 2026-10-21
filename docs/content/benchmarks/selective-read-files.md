@@ -41,7 +41,7 @@ It retains every column and the source's frozen SQL and IN list.
 Each file descriptor includes its ordinal range, byte size, SHA-256,
 Delta statistics, and actual group/page metadata. The generator rereads all
 written columns to verify their statistics. `repacked_from` records the parent
-manifest hash, while `generator` records the repacking executable and source.
+manifest hash, while `generator` records the repacking executable and dependency versions.
 The parent lockfile remains identified by the parent manifest; it need not be
 byte-identical to the repacker's lockfile.
 

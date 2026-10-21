@@ -10,7 +10,6 @@ use serde_json::{Map, Value, json};
 use super::{array, evidence, object, require, roster, schedule, summarize, text};
 use crate::{
     Result,
-    repository::files,
     selective_read::{
         network, observe, request, storage,
         validation::{Affinity, Worker},
@@ -209,101 +208,41 @@ fn select(
 
 fn modes(args: &Args, comparison: &Value, protocols: &Path) -> Result<Value> {
     let mut config = comparison.clone();
-    for (key, enabled, hash, file, mode) in [
+    for (key, enabled, mode) in [
         (
             "combined_diagnostics",
             args.combined_diagnostics || args.gate_diagnostics,
-            "diagnostics_amendment_sha256",
-            "combined-diagnostics",
             evidence::Mode::CombinedDiagnostics,
         ),
         (
             "gate_warmup",
             args.gate_warmup || args.gate_diagnostics,
-            "warmup_amendment_sha256",
-            "gate-warmup",
             evidence::Mode::GateWarmup,
         ),
         (
             "gate_diagnostics",
             args.gate_diagnostics,
-            "gate_diagnostics_amendment_sha256",
-            "gate-diagnostics",
             evidence::Mode::GateDiagnostics,
         ),
     ] {
         config[key] = json!(enabled);
-        if enabled {
-            config[hash] = json!(digest(
-                &protocols.join(format!("selective-read-{file}.md"))
-            )?);
-        }
         mode.enabled(&config, protocols)?;
     }
     Ok(config)
 }
 
-fn source_hashes(args: &Args, config: &Value, protocols: &Path) -> Result<(Value, Value)> {
-    let root = args
-        .harness
-        .parent()
-        .and_then(Path::parent)
-        .ok_or("invalid harness directory")?;
-    let mut sources: Vec<_> = [
-        "oracle_io.py",
-        "runners/run.py",
-        "runners/python_common.py",
-        "runners/native.py",
-    ]
-    .into_iter()
-    .map(|p| args.harness.join(p))
-    .collect();
-    sources.extend([
-        std::env::current_exe()?,
-        root.join("Cargo.lock"),
-        root.join("xtask/Cargo.toml"),
-        protocols.join("selective-read-protocol.md"),
-    ]);
-    sources.extend(
-        files(&root.join("xtask/src"))?
-            .into_iter()
-            .filter(|p| p.extension().is_some_and(|e| e == "rs")),
-    );
+fn input_hashes(args: &Args, config: &Value) -> Result<Value> {
     let mut inputs = vec![args.fixtures.join("manifest.json"), args.upload.clone()];
     if !config["server"]["network"].is_null() {
         inputs.push(args.state.join("network.json"));
     }
-    for (enabled, name) in [
-        (
-            config["combined_diagnostics"] == true,
-            "combined-diagnostics",
-        ),
-        (config["gate_warmup"] == true, "gate-warmup"),
-        (config["gate_diagnostics"] == true, "gate-diagnostics"),
-    ] {
-        if enabled {
-            sources.push(protocols.join(format!("selective-read-{name}.md")));
-        }
-    }
     if let Some(matrix) = &args.matrix {
-        sources.push(args.harness.join("matrix.py"));
         inputs.extend([args.harness.join("query-matrix.json"), matrix.clone()]);
     }
     if let Some(workload) = &args.workload {
         inputs.push(workload.clone());
-        sources.extend([protocols.join("selective-read-large-workloads.md")]);
-        if config["comparison_revision"].as_u64().unwrap_or(0) >= 4 {
-            sources.push(protocols.join("selective-read-sampling.md"));
-        }
-        if matches!(config["comparison_revision"].as_u64(), Some(5 | 6)) {
-            sources.extend([protocols.join(if config["comparison_revision"] == 6 {
-                "selective-read-spark-matrix.md"
-            } else {
-                "selective-read-production-workloads.md"
-            })]);
-        }
     }
-    Ok((hashes(&sources)?, hashes(&inputs)?))
+    hashes(&inputs)
 }
 
 fn hashes(paths: &[PathBuf]) -> Result<Value> {
@@ -747,10 +686,7 @@ pub(in crate::selective_read) fn run(mut args: Args) -> Result<()> {
     let (frozen, comparison) = if let Some(path) = &args.workload {
         workload::load(path, &args.harness)?
     } else {
-        (
-            Value::Null,
-            json!({"comparison_revision":2,"protocol_sha256":digest(&protocols.join("selective-read-protocol.md"))?}),
-        )
+        (Value::Null, json!({"comparison_revision":2}))
     };
     let comparison = evidence::comparison(&comparison, &protocols)?;
     let mut config = modes(&args, &comparison, &protocols)?;
@@ -782,9 +718,7 @@ pub(in crate::selective_read) fn run(mut args: Args) -> Result<()> {
         "cache_policy":"fresh clients, reused MinIO/OS caches, no flushes; complete warmup/run history in observations.jsonl",
         "scope":"requested cases/sessions only; not a complete publication campaign"
     }))?.clone());
-    let (sources, inputs) = source_hashes(&args, &config, &protocols)?;
-    config["source_sha256"] = sources;
-    config["input_sha256"] = inputs;
+    config["input_sha256"] = input_hashes(&args, &config)?;
     save(&args.output.join("campaign.json"), &config)?;
     let journal = File::create_new(args.output.join("observations.jsonl"))?;
     let mut campaign = Campaign {

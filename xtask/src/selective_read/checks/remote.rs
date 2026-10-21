@@ -1,6 +1,6 @@
 use super::*;
 use crate::selective_read::{experiment::median, object, observe, storage};
-use crate::{artifacts::reader_sha256, selective_read_build::digest};
+use crate::selective_read_build::digest;
 
 #[derive(clap::Args)]
 pub(crate) struct StorageArgs {
@@ -292,8 +292,8 @@ pub(crate) fn run(args: StorageArgs) -> Result<()> {
         .collect::<Result<BTreeMap<_, _>>>()?;
     save(
         &remote.check.output.join("checks.json"),
-        &json!({"status":"passed","source_sha256":reader_sha256(include_bytes!("remote.rs").as_slice())?,
-        "controller_sha256":digest(&std::env::current_exe()?)?,"known":known,"readers":records,"observer_overhead":overheads,
+        &json!({"status":"passed",
+        "known":known,"readers":records,"observer_overhead":overheads,
         "server_sha256":digest(&remote.state.join("server.json"))?,"fixture_manifest_sha256":digest(&remote.check.fixtures.join("manifest.json"))?,
         "builds":builds}),
     )?;

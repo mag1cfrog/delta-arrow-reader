@@ -134,7 +134,6 @@ fn pairing_requires_complete_inputs_and_preserves_writer_identity_and_layout() -
             disk_limit_gib: 1,
             elapsed_limit_seconds: 10,
             layout: None,
-            harness: Path::new(env!("CARGO_MANIFEST_DIR")).join("../benches/selective_read"),
         })
         .is_err()
     );
@@ -161,7 +160,7 @@ echo writer output
     let input = json!({"fixtures":[{"path":localized.path,"manifest_sha256":localized.manifest_sha256},
         {"path":scattered.path,"manifest_sha256":scattered.manifest_sha256}],
         "binary":binary,"output":root.path().join("paired"),"disk_gib":1,"seconds":10,
-        "layout":null,"contract_sha256":"contract","driver_sha256":"driver"});
+        "layout":null});
     let manifest = run(serde_json::from_value(input.clone())?)?;
     assert_eq!(
         manifest["production_dv"]["base_case_ids"],

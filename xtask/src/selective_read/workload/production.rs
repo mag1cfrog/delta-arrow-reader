@@ -3,7 +3,6 @@ use std::{collections::BTreeMap, fs, process::Command};
 use super::*;
 use crate::{
     command::command_output,
-    repository::files,
     selective_read::{
         campaign,
         storage::{read_json, save},
@@ -25,47 +24,6 @@ pub(crate) struct Define {
     comparison_revision: u64,
     #[arg(long, default_value = "benches/selective_read")]
     harness: PathBuf,
-}
-
-fn protocols(harness: &Path) -> Result<PathBuf> {
-    Ok(harness
-        .parent()
-        .and_then(Path::parent)
-        .ok_or("invalid harness directory")?
-        .join("docs/content/benchmarks"))
-}
-
-fn sources(harness: &Path) -> Result<Value> {
-    let root = harness
-        .parent()
-        .and_then(Path::parent)
-        .ok_or("invalid harness directory")?;
-    let mut paths: Vec<_> = [
-        "oracle_io.py",
-        "oracle-requirements.txt",
-        "production_shapes.py",
-        "matrix.py",
-        "runners/run.py",
-        "runners/native.py",
-    ]
-    .into_iter()
-    .map(|name| (name.to_owned(), harness.join(name)))
-    .collect();
-    paths.push(("../../Cargo.lock".into(), root.join("Cargo.lock")));
-    for path in files(&root.join("xtask/src"))? {
-        if path.extension().is_some_and(|extension| extension == "rs") {
-            paths.push((
-                format!("../../{}", path.strip_prefix(root)?.display()),
-                path,
-            ));
-        }
-    }
-    Ok(json!(
-        paths
-            .into_iter()
-            .map(|(name, path)| Ok((name, json!(digest(&path)?))))
-            .collect::<Result<Map<_, _>>>()?
-    ))
 }
 
 fn limits() -> Value {
@@ -151,7 +109,7 @@ fn translate(rows: &[Value], binaries: &[PathBuf], output: &Path, harness: &Path
         })
         .collect();
     let translation = json!({"reader":build["reader_id"],"lock_sha256":build["lockfile_sha256"],
-        "adapter_sha256":adapter_hash,"expressions":expressions});
+        "expressions":expressions});
     save(&output.join("polars-translations.json"), &translation)?;
     Ok(json!({"polars":translation}))
 }
@@ -162,7 +120,6 @@ pub(in crate::selective_read) fn define(mut args: Define) -> Result<Value> {
         "new workloads use revision 6; use the archived harness for Daft revisions",
     )?;
     args.harness = fs::canonicalize(args.harness)?;
-    let protocols = protocols(&args.harness)?;
     let readers = campaign::roster(&json!({"comparison_revision":args.comparison_revision}))?;
     let mut rows = Vec::new();
     let mut seen = BTreeSet::new();
@@ -176,7 +133,7 @@ pub(in crate::selective_read) fn define(mut args: Define) -> Result<Value> {
                 !table["delta_log"].is_null(),
                 "raw probes need native Delta logs before reader validation",
             )?;
-            let mut row = query(case, &manifest, &protocols)?;
+            let mut row = query(case, &manifest)?;
             row["fixtures"] = json!(root);
             row["fixture_manifest_sha256"] = json!(digest(&root.join("manifest.json"))?);
             rows.push(row);
@@ -199,12 +156,8 @@ pub(in crate::selective_read) fn define(mut args: Define) -> Result<Value> {
     args.output = fs::canonicalize(args.output)?;
     let translations = translate(&rows, &args.binaries, &args.output, &args.harness)?;
     let result = json!({"format":"selective-read-production-workload-v1","family":"production","comparison_revision":args.comparison_revision,
-        "protocol_sha256":digest(&protocols.join("selective-read-spark-matrix.md"))?,
-        "base_protocol_sha256":digest(&protocols.join("selective-read-protocol.md"))?,
-        "sampling_sha256":digest(&protocols.join("selective-read-sampling.md"))?,
-        "sampling_stage":args.stage,"definition_sha256":digest(&protocols.join("selective-read-production-shapes.md"))?,
+        "sampling_stage":args.stage,
         "scope":if modes.contains("probe") { "probe" } else { &args.stage }, "publication_ready":false,
-        "source_sha256":sources(&args.harness)?, "definition_controller_sha256":digest(&std::env::current_exe()?)?,
         "readers":readers, "cases":rows, "sessions":sessions(&seen), "inventory":inventory(&seen,&readers),
         "oracle_limits":limits(),"translations":translations});
     let path = args.output.join("workload.json");
@@ -213,8 +166,8 @@ pub(in crate::selective_read) fn define(mut args: Define) -> Result<Value> {
     load(result, &args.harness)
 }
 
-fn check_binding(row: &Value, manifest: &Value, protocols: &Path) -> Result<()> {
-    let expected = query(text(&row["case_id"])?, manifest, protocols)?;
+fn check_binding(row: &Value, manifest: &Value) -> Result<()> {
+    let expected = query(text(&row["case_id"])?, manifest)?;
     require(
         object(&expected)?
             .iter()
@@ -223,7 +176,7 @@ fn check_binding(row: &Value, manifest: &Value, protocols: &Path) -> Result<()> 
     )
 }
 
-pub(super) fn binding(value: &Value, fixtures: &Path, case: &str, harness: &Path) -> Result<Value> {
+pub(super) fn binding(value: &Value, fixtures: &Path, case: &str) -> Result<Value> {
     let row = array(&value["cases"])?
         .iter()
         .find(|row| row["case_id"] == case)
@@ -233,13 +186,12 @@ pub(super) fn binding(value: &Value, fixtures: &Path, case: &str, harness: &Path
         row["fixture_manifest_sha256"] == digest(&path)?,
         "production fixture identity changed",
     )?;
-    check_binding(row, &read_json(&path)?, &protocols(harness)?)?;
+    check_binding(row, &read_json(&path)?)?;
     Ok(row.clone())
 }
 
 pub(super) fn load(value: Value, harness: &Path) -> Result<Value> {
     let harness = fs::canonicalize(harness)?;
-    let protocols = protocols(&harness)?;
     let readers = campaign::roster(&value)?;
     require(
         value["format"] == "selective-read-production-workload-v1"
@@ -338,7 +290,7 @@ pub(super) fn load(value: Value, harness: &Path) -> Result<Value> {
             row["fixture_manifest_sha256"] == *hash,
             "production fixture identity changed",
         )?;
-        check_binding(row, manifest, &protocols)?;
+        check_binding(row, manifest)?;
         if row["deletion_vectors"] == true {
             let keys = field(&manifest["production_dv"], "extra_logical_keys")?;
             let previous = unions

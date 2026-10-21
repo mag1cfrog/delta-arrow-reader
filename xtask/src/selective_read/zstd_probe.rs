@@ -275,7 +275,7 @@ pub(super) fn run(args: Args) -> Result<()> {
     storage::save(
         &args.output.join("experiment.json"),
         &json!({
-            "fixture_sha256":digest(&args.fixture.join("manifest.json"))?,"controller_sha256":digest(&std::env::current_exe()?)?,
+            "fixture_sha256":digest(&args.fixture.join("manifest.json"))?,
             "groups":groups,"network":profile,
             "scope":"Optimistic discovery diagnostic, not queries. Offline inspection supplies raw-page eligibility and page-header lengths; block positions must be discovered over the network. Length/value reads and reconstruction are omitted.",
             "client":"Same curl SigV4 client in both modes; up to 32 worker threads; curl process/connection overhead is included.",

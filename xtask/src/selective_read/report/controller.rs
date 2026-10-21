@@ -51,12 +51,7 @@ pub(crate) fn workload_report(args: Batch) -> Result<Value> {
     let bindings = cases
         .into_iter()
         .map(|case| {
-            let row = workload::binding(
-                &frozen,
-                Path::new(text(&config["fixtures"])?),
-                &case,
-                &harness,
-            )?;
+            let row = workload::binding(&frozen, Path::new(text(&config["fixtures"])?), &case)?;
             Ok((case, row))
         })
         .collect::<Result<Map<_, _>>>()?;

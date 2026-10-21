@@ -19,10 +19,10 @@ Follow the version, input, and execution requirements in each guide.
 
 The current tools check compatibility through format and comparison revisions,
 queries, projections, layout settings, and independently verified Arrow values.
-Source, controller, and protocol-document hashes record provenance; editing a
-comment or rebuilding the controller does not invalidate an otherwise compatible
-plan, workload, or reference. Historical guides describe the checks used for
-their recorded runs.
+New records omit source, controller, and protocol-document fingerprints.
+Build records retain checkout versions, dirty status, dependency versions and
+commands. Older records can still be read; their optional audit fields do not
+determine plan, workload or reference compatibility.
 
 Checksums still verify data files, exports, and packaged reader artifacts.
 A timing certificate applies to the reader build, configuration, query, and
@@ -31,8 +31,8 @@ before its timings can be accepted.
 
 Requests and certificates carry the workload contract, SQL, reader settings,
 native expressions, and reader artifact identity. Compatibility checks compare
-these values directly. Updating Git metadata or source provenance alone does not
-require new references or correctness checks. Certificates containing only hashes
+these values directly. Updating Git metadata alone does not require new references or correctness
+checks. Certificates containing only hashes
 are rejected, even if those hashes match. Rebuild readers and rerun validation
 to replace them. Regenerate older requests, references, and prepared matrices
 with the current tools so they carry the same explicit execution fields.
@@ -125,7 +125,6 @@ cargo xtask selective-read zstd-probe \
 The Rust probe compares complete column reads with sequential block-header
 discovery in three alternating pairs. Both modes use curl and at most 32 worker
 threads. Each request range, checksum, discovered block and proxy count is checked.
-The output records the controller hash because timings include client overhead.
 This diagnostic measures discovery alone; it does not execute queries.
 
 ## Maintain the report charts

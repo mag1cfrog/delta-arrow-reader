@@ -46,7 +46,7 @@ cat "$(dirname "$0")/../../probe.json"
     let translation = &result["polars"];
     assert_eq!(translation["reader"], "polars");
     assert_eq!(translation["lock_sha256"], "lock");
-    assert_eq!(translation["adapter_sha256"], adapter_hash);
+    assert!(translation.get("adapter_sha256").is_none());
     for (case, sql) in object(&sql)? {
         assert_eq!(translation["expressions"][case]["canonical_sql"], *sql);
         assert_eq!(
@@ -102,7 +102,6 @@ cat "$(dirname "$0")/../../probe.json"
 fn frozen_workloads_check_queries_and_scope_independently_of_source_provenance() -> Result<()> {
     let harness =
         fs::canonicalize(crate::repository::repository_root().join("benches/selective_read"))?;
-    let protocols = protocols(&harness)?;
     let temporary = tempfile::tempdir()?;
     let root = temporary.path();
     let shape = shapes(512, 20000, 1048576, 1024)?["q4"].clone();
@@ -115,26 +114,25 @@ fn frozen_workloads_check_queries_and_scope_independently_of_source_provenance()
         .collect();
     let case = "production.q4.localized";
     let manifest = json!({"status":"complete","protocol":"selective-read-production-pairs-v1","mode":"probe",
-        "contract_sha256":digest(&protocols.join("selective-read-production-shapes.md"))?, "source_parent_manifest_sha256":"parent",
+        "source_parent_manifest_sha256":"parent",
         "sources":[{"scale_factor":10,"rows":100}],"shape_definitions":{"q4":shape},"writer":{"status":"complete","tables":[{
             "id":case,"path":case,"deletion_vectors":false,"snapshot_version":0,"layout":"localized","scale_factor":10,"file_target_mib":512,
             "schema":{"fields":fields},"file_count":1,"files":[{"rows":10,"bytes":100,"row_groups":[{}]}],
             "file_evidence":[{}],"rows":10,"bytes":100,"writer":shape}]}});
     save(&root.join("manifest.json"), &manifest)?;
-    let mut row = query(case, &manifest, &protocols)?;
+    let mut row = query(case, &manifest)?;
     let expression = json!({"projection":["l_orderkey"],"filter":null});
     row["fixtures"] = json!(root);
     row["fixture_manifest_sha256"] = json!(digest(&root.join("manifest.json"))?);
     let selected = BTreeSet::from([case.to_owned()]);
     let readers = campaign::roster(&json!({"comparison_revision":6}))?;
-    let value = json!({"format":"selective-read-production-workload-v1","comparison_revision":6,"family":"production","definition_sha256":digest(&protocols.join("selective-read-production-shapes.md"))?,
-        "definition_controller_sha256":digest(&std::env::current_exe()?)?,"source_sha256":sources(&harness)?,
+    let value = json!({"format":"selective-read-production-workload-v1","comparison_revision":6,"family":"production",
         "cases":[row],"readers":readers,"sessions":sessions(&selected),"inventory":inventory(&selected,&readers),
         "scope":"probe","sampling_stage":"pilot","publication_ready":false,"oracle_limits":limits(),
         "translations":{"polars":{"lock_sha256":digest(&harness.join("runners/polars/lock.json"))?,
             "expressions":{case:{"native_expression":expression,"canonical_sql":row["canonical_sql"]}}}}});
     assert_eq!(load(value.clone(), &harness)?, value);
-    assert_eq!(binding(&value, root, case, &harness)?, row);
+    assert_eq!(binding(&value, root, case)?, row);
     let path = root.join("workload.json");
     let resolve = || {
         super::super::run(serde_json::from_value(
@@ -152,13 +150,16 @@ fn frozen_workloads_check_queries_and_scope_independently_of_source_provenance()
         crate::selective_read::contract::workload(&value)?
     );
     assert!(super::super::resolve(&path, root, "missing-case", &harness).is_err());
-    for (pointer, replacement) in [
-        ("/definition_sha256", json!("different documentation")),
-        ("/definition_controller_sha256", json!("changed")),
-        ("/source_sha256/oracle_io.py", json!("changed")),
+    for (key, replacement) in [
+        ("definition_sha256", json!("historical documentation")),
+        (
+            "definition_controller_sha256",
+            json!("historical controller"),
+        ),
+        ("source_sha256", json!({"oracle_io.py":"historical source"})),
     ] {
         let mut changed = value.clone();
-        *changed.pointer_mut(pointer).ok_or("missing test field")? = replacement;
+        changed[key] = replacement;
         fs::write(&path, serde_json::to_vec(&changed)?)?;
         let current = resolve()?;
         assert_eq!(current["workload"], changed);

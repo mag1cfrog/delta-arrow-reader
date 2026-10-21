@@ -93,7 +93,7 @@ pub fn generate(config: &Config) -> Result<Value> {
         LOCKFILE.as_bytes(),
     )?;
     let manifest = json!({
-        "protocol": "selective-read-v1", "protocol_sha256": fixtures::hash_bytes(PROTOCOL.as_bytes()),
+        "protocol": "selective-read-v1",
         "profile": config.profile.name(), "status": "complete", "generator": generator_identity()?,
         "recipe": "fixed synthetic within-file controls; independent of TPC-H scale", "sources": [], "tables": tables,
         "preparation": {"memory_limit_bytes": config.profile.memory_bytes(), "disk_limit_bytes": disk_limit,

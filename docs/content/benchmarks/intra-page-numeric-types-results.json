@@ -11,11 +11,6 @@
       "executable_sha256": "3ceaa43fb421ebb850eabf4a6b6dfd036cd2b8810b8ea03be500ed068d0dcfc2",
       "lockfile_sha256": "d53855cfdce00c9e8ecee9acec60daa8e4c4f745a6deadc7ff65e6e2aebca5c2",
       "cargo_tree_sha256": "ed9c6df6903919a8dad0ddd2cb129d04f14042a6baacd2d5765eb4d50a43d559",
-      "source_sha256": {
-        "src/reader/backend/direct_parquet/intra_page.rs": "b0b49b51d76359ad6668e4b2eb30db0b6142ff86bc3982920dc18eae9962078a",
-        "src/reader/backend/direct_parquet/intra_page/page.rs": "5de63375a361b3bd3b5665e7321d0d3cc7a389d41bed1a95acf96a33441dbefe",
-        "src/reader/options.rs": "01b615a37e79734233508b0fd45f4ba181591af741f5a9e81fc4a2bd27acef6b"
-      },
       "record_sha256": "97c5429eb5bd53356e30c1b85b6bf1f4989db0e975dff7c91e0257b8d33b88fd"
     },
     "candidate-required-guard": {
@@ -26,12 +21,6 @@
       "executable_sha256": "08c93c91c979dee110d74eda0f79070496674c121a51530c2696db0e9ce02c74",
       "lockfile_sha256": "d53855cfdce00c9e8ecee9acec60daa8e4c4f745a6deadc7ff65e6e2aebca5c2",
       "cargo_tree_sha256": "ed9c6df6903919a8dad0ddd2cb129d04f14042a6baacd2d5765eb4d50a43d559",
-      "source_sha256": {
-        "benches/selective_read/runners/dar/src/bin/numeric-pages.rs": "78d1442d098aeb646a5e27a86fc31cc31aa9c3a2c9a753fe18f91ab5568a2851",
-        "src/reader/backend/direct_parquet/intra_page.rs": "834eab9522f9efb9acb14c7a2634f42baa01a6b0a222588c653a1c691d7258a5",
-        "src/reader/backend/direct_parquet/intra_page/page.rs": "a2135cd4be4390a81b5a593de0c484f71cb594ca75b3bf77c33356b37566597f",
-        "src/reader/options.rs": "a5346f7ed2b8ec654b8e0eee341f0ce3f6bc46aa52ed7b4b728ce862f2b67ed0"
-      },
       "record_sha256": "44022f9a050c200727995e5d90195898d8d4a02cd09a7d7fac8b79147b97b444"
     },
     "candidate-review-fixed": {
@@ -42,13 +31,6 @@
       "executable_sha256": "e3948ad85c5e98713cabb698c63eb2328618e255b4573b350fe5405473b4166c",
       "lockfile_sha256": "d53855cfdce00c9e8ecee9acec60daa8e4c4f745a6deadc7ff65e6e2aebca5c2",
       "cargo_tree_sha256": "ed9c6df6903919a8dad0ddd2cb129d04f14042a6baacd2d5765eb4d50a43d559",
-      "diagnostic_patch_sha256": "f6b56c226155c5b67a2e40c027a896002dd391b573d82416808ab9106dc05143",
-      "source_sha256": {
-        "benches/selective_read/runners/dar/src/bin/numeric-pages.rs": "78d1442d098aeb646a5e27a86fc31cc31aa9c3a2c9a753fe18f91ab5568a2851",
-        "src/reader/backend/direct_parquet/intra_page.rs": "57ea56816df355f1a87945df3f5a143285bd2877da9a0515b83304e6500c7c58",
-        "src/reader/backend/direct_parquet/intra_page/page.rs": "4320d98df714338a08ac12a25e6675a2181c5f2df6f9a90b073a124c39cca9ea",
-        "src/reader/options.rs": "a5346f7ed2b8ec654b8e0eee341f0ce3f6bc46aa52ed7b4b728ce862f2b67ed0"
-      },
       "source_verified_commit": "046c65757972d4417cf64299ac3b90dbcb1fb116",
       "record_sha256": "373a0cf58e890a967177c4918a1176f6f1e3b241509ee08a8f90b11c0728a64a"
     }
@@ -316,7 +298,7 @@
     }
   ],
   "resource_scope": "CPU and peak RSS cover the entire process; query timings exclude initialization, result validation and tracing.",
-  "source_note": "Initial candidates were built before committing; source hashes identify their code. The reviewed build was verified against commit 046c657. All earlier samples and original README fixtures remain unchanged.",
+  "source_note": "Initial candidates were built before committing. The reviewed build was verified against commit 046c657. All earlier samples and original README fixtures remain unchanged.",
   "retained_attempts": [
     "numeric-int32",
     "numeric-int64",

@@ -318,7 +318,6 @@ pub(in crate::selective_read) fn run(args: Options) -> Result<()> {
     result.as_object_mut().unwrap().extend(super::super::object(&json!({
         "reader":reader,"build_sha256":digest(&args.binary.with_file_name("build.json"))?,
         "corpus_manifest_sha256":digest(&checks.corpus.join("manifest.json"))?,
-        "controller_sha256":digest(&std::env::current_exe()?)?,
         "scope":"bounded fixtures; rerun against exact campaign fixtures","observations":observations}))?.clone());
     if reader == "spark" {
         result["publication_ready"] = json!(false);

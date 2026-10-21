@@ -171,7 +171,7 @@ indexes. The verifier checks the actual page type, encoding and compression.
 Each complete and partially cleared file is decoded into ordinary arrays and
 the Utf8View/BinaryView array types used by DataFusion. Expected values come from
 the original input batch, before Parquet encoding. The program checks values,
-nulls and row IDs, then records the fixture, source and lockfile hashes.
+nulls and row IDs, then records the fixture and lockfile checksums.
 
 ## Run the network experiment
 

@@ -175,7 +175,7 @@ pub(crate) fn run(mut args: Args) -> Result<()> {
         save(
             &args.output.join("pilot-inputs.json"),
             &json!({"upload_sha256":digest(args.upload.as_deref().ok_or("missing upload")?)?,
-            "command_sha256":digest(&std::env::current_exe()?)?,"pilot_only":true,"publication_ready":false}),
+            "pilot_only":true,"publication_ready":false}),
         )?;
         result["pilot_only"] = json!(true);
         result["publication_ready"] = json!(false);

@@ -113,7 +113,7 @@ fn fixture_selection_is_independent_of_comparison_order() -> Result {
             "runner_executable_sha256",
             "production_source_sha256",
         ] {
-            assert_eq!(metadata[key].as_str().unwrap().len(), 64);
+            assert!(metadata.get(key).is_none());
         }
         identities.push(metadata["fixtures"].clone());
         let samples = runs(&output)?;

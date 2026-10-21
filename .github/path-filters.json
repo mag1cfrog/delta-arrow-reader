@@ -147,9 +147,6 @@
     ".github/path-filters.json",
     ".github/workflows/benchmark-fixtures.yml",
     "clippy.toml",
-    "benches/selective_read/**",
-    "docs/content/benchmarks/selective-read-protocol.md",
-    "docs/content/benchmarks/selective-read-production-shapes.md",
-    "docs/content/benchmarks/selective-read-large-workloads.md"
+    "benches/selective_read/**"
   ]
 }

@@ -49,11 +49,10 @@ The runner verifies its actual executable and compiled lockfile hashes before
 opening a table.
 
 Build artifacts include the lockfile, complete Cargo metadata and enabled
-features, Cargo dependency tree, source hashes (including xtask), the build helper's
-executable hash, checkout commit and dirty status,
-compiler/Cargo/linker versions, command, and executable hash. A source change
-during compilation fails the build helper. Use a clean committed checkout for
-measurement artifacts; development builds retain their dirty status.
+features, Cargo dependency tree, checkout commit and dirty status,
+compiler/Cargo/linker versions, command, and executable hash. Use a clean
+committed checkout for measurement artifacts; development builds retain their
+dirty status.
 Published delta-rs VCS metadata is retained alongside the archive checksums in
 the lockfile, including any dirty flag recorded by its publisher.
 
@@ -76,7 +75,7 @@ The four built-in extensions are part of the pinned DuckDB wheel.
 The Rust builder checks the supplied Python interpreter, downloads and verifies
 the artifacts, creates a dedicated environment,
 and writes `selective-read-duckdb` beside `build.json`. The build record includes
-the adapter sources, interpreter build/ABI/hash, installed package file hashes,
+the packaged adapter, interpreter build/ABI/hash, installed package file hashes,
 wheel metadata, and every loaded extension's version. Each invocation checks
 these identities and extension hashes before opening a table. Imports and local
 extension loading occur before the query clock. Automatic extension installation

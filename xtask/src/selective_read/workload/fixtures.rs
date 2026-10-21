@@ -236,10 +236,6 @@ fn check_probe(probe: &Value, plan: &Value, shape: &Value, name: &str) -> Result
     )
 }
 
-pub(super) fn contract(harness: &Path) -> PathBuf {
-    harness.join("../../docs/content/benchmarks/selective-read-production-shapes.md")
-}
-
 fn probe_selection(files: &[Value], stripes: u64) -> Result<Vec<usize>> {
     let mut selected: BTreeSet<_> = files
         .iter()
@@ -474,8 +470,6 @@ pub(crate) fn run(args: Args) -> Result<()> {
     let harness = fs::canonicalize(&args.harness)?;
     let writer_binary = fs::canonicalize(&args.writer)?;
     let writer_hash = digest(&writer_binary)?;
-    let driver_hash = digest(&harness.join("production_fixtures.py"))?;
-    let controller_hash = digest(&std::env::current_exe()?)?;
     let plan_hash = digest(&args.plan)?;
     let Inputs {
         plan,
@@ -562,8 +556,8 @@ pub(crate) fn run(args: Args) -> Result<()> {
     save(&output.join("capacity.json"), &allocation)?;
     let request = json!({"format":"selective-read-production-write-v1","mode":args.mode,"shape":args.shape,
         "file_target_mib":shape["file_target_mib"],"data_page_rows":shape["data_page_rows"],"data_page_bytes":shape["data_page_bytes"],
-        "write_batch_rows":shape["write_batch_rows"],"layout":args.layout,"contract_sha256":digest(&contract(&harness))?,
-        "driver_sha256":driver_hash,"files":files,"selected":selected,"projection":shape["projection"],
+        "write_batch_rows":shape["write_batch_rows"],"layout":args.layout,
+        "files":files,"selected":selected,"projection":shape["projection"],
         "output_limit_bytes":phase["native_output_limit_bytes"]});
     let request_path = output.join("writer-request.json");
     save(&request_path, &request)?;
@@ -640,8 +634,8 @@ pub(crate) fn run(args: Args) -> Result<()> {
         "use the pinned oracle Python environment",
     )?;
     let manifest = json!({"protocol":"selective-read-production-fixtures-v1","status":"complete","mode":args.mode,
-        "shape":args.shape,"layout":args.layout,"plan_sha256":plan_hash,"contract_sha256":request["contract_sha256"],
-        "driver_sha256":driver_hash,"controller_sha256":controller_hash,"source_parent_manifest_sha256":plan["source_manifest_sha256"],
+        "shape":args.shape,"layout":args.layout,"plan_sha256":plan_hash,
+        "source_parent_manifest_sha256":plan["source_manifest_sha256"],
         "sources":[source],"shape_definition":shape,"writer":result,"writer_result_sha256":hash_before(&result_path, deadline)?,
         "source_sort":{"engine":"duckdb","version":sort["version"],"pyarrow":sort["pyarrow"],"python":sort["python"],
             "threads":4,"memory_limit_bytes":2 * GIB,"spill_limit_bytes":SPILL,"ipc_batch_rows":8192},

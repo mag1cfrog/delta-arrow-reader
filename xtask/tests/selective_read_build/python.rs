@@ -102,7 +102,10 @@ if [ "$1" = --version ]; then
 else
     test "$1 $2" = 'pip sync'
     printf '%s\n' "$*" > uv-command
-    if [ "${MOCK_MUTATE-no}" = yes ]; then printf 'changed\n' >> README.md; fi
+    if [ "${MOCK_MUTATE-no}" = yes ]; then
+        printf 'changed\n' >> README.md
+        printf 'changed lock\n' > "benches/selective_read/runners/$MOCK_READER/lock.json"
+    fi
 fi
 "#,
         ),
@@ -139,6 +142,7 @@ fn run(root: &Path, reader: &str, extra: &[(&str, &str)]) -> Result<Output> {
             "PATH",
             format!("{}:/usr/bin:/bin", root.join("bin").display()),
         )
+        .env("MOCK_READER", reader)
         .env("CARGO", root.join("bin/cargo"))
         .envs(extra.iter().copied());
     if reader == "spark" {
@@ -152,7 +156,13 @@ fn prepares_all_python_readers_offline_with_frozen_artifacts_and_build_provenanc
     for reader in ["duckdb", "polars", "spark"] {
         let temporary = fixture(reader)?;
         let root = temporary.path();
-        let result = run(root, reader, &[])?;
+        let expected_lock =
+            fs::read(root.join(format!("benches/selective_read/runners/{reader}/lock.json")))?;
+        let result = run(
+            root,
+            reader,
+            &[("MOCK_MUTATE", "yes"), ("MOCK_EARLY_MUTATE", "yes")],
+        )?;
         assert!(
             result.status.success(),
             "{}",
@@ -168,11 +178,10 @@ fn prepares_all_python_readers_offline_with_frozen_artifacts_and_build_provenanc
         );
         assert_eq!(record["runtime"]["packages"]["package"]["version"], "1");
         assert_eq!(record["executable_sha256"], hash(&executable)?);
-        assert_eq!(
-            record["builder_executable_sha256"],
-            hash(Path::new(env!("CARGO_BIN_EXE_xtask")))?
-        );
+        assert!(record.get("builder_executable_sha256").is_none());
+        assert!(record.get("source_sha256").is_none());
         assert_eq!(record["lockfile_sha256"], hash(&output.join("lock.json"))?);
+        assert_eq!(fs::read(output.join("lock.json"))?, expected_lock);
         assert_eq!(record["reader_git_commit"], "reader source");
         let command = record["command"].as_array().unwrap();
         assert!(
@@ -203,11 +212,8 @@ fn prepares_all_python_readers_offline_with_frozen_artifacts_and_build_provenanc
         );
         assert_eq!(
             serde_json::from_slice::<Value>(&probe.stdout)?,
-            json!({"comparison_revision":2,"protocol_sha256":"old docs"})
+            json!({"comparison_revision":2})
         );
-        for (name, checksum) in record["source_sha256"].as_object().unwrap() {
-            assert_eq!(*checksum, hash(&root.join(name))?);
-        }
         let shebang = fs::read_to_string(&executable)?;
         assert!(shebang.starts_with(&format!(
             "#!{} {}\n",
@@ -237,17 +243,8 @@ fn prepares_all_python_readers_offline_with_frozen_artifacts_and_build_provenanc
 }
 
 #[test]
-fn rejects_changed_artifacts_interpreters_jdks_extensions_and_sources() -> Result {
-    for failure in [
-        "wheel",
-        "extension",
-        "python",
-        "java",
-        "sources",
-        "early-sources",
-        "path",
-        "archive",
-    ] {
+fn rejects_changed_artifacts_interpreters_jdks_and_extensions() -> Result {
+    for failure in ["wheel", "extension", "python", "java", "path", "archive"] {
         let reader = if matches!(failure, "java" | "archive") {
             "spark"
         } else {
@@ -260,8 +257,6 @@ fn rejects_changed_artifacts_interpreters_jdks_extensions_and_sources() -> Resul
             "wheel" => write(root, "saved/package.whl", "changed")?,
             "python" => extra.push(("MOCK_VERSION", "3.13.0")),
             "java" => write(root, "java/release", "wrong JDK")?,
-            "sources" => extra.push(("MOCK_MUTATE", "yes")),
-            "early-sources" => extra.push(("MOCK_EARLY_MUTATE", "yes")),
             field => {
                 let path = root.join(format!("benches/selective_read/runners/{reader}/lock.json"));
                 let mut lock: Value = serde_json::from_slice(&fs::read(&path)?)?;

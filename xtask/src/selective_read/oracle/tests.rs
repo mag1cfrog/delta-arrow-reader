@@ -68,6 +68,15 @@ fn public_matrix_exact_values_corruption_identity_and_limit_membership() -> Resu
                 let case = format!("{family}.{organization}.{query}");
                 let reference = root.join(&case);
                 let metadata=state.prepare(&json!({"fixtures":fixtures,"case_id":case,"reference":reference,"reuse":false}))?;
+                for key in [
+                    "protocol_sha256",
+                    "oracle_sha256",
+                    "oracle_io_sha256",
+                    "oracle_dependencies_sha256",
+                    "generator_protocol_sha256",
+                ] {
+                    assert!(metadata.get(key).is_none(), "{key}");
+                }
                 if case == "li.clustered.all-keys" {
                     let mut reuse = json!({"fixtures":fixtures,"case_id":case,"reference":reference,"reuse":true,"sql":metadata["canonical_sql"]});
                     assert_eq!(state.prepare(&reuse)?, metadata);

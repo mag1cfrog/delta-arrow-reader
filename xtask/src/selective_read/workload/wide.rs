@@ -230,7 +230,7 @@ pub(crate) fn prepare(args: Prepare) -> Result<Value> {
                 "wide.files4096.eq2-in20".to_owned(),
                 "wide.files4096.eq2-in20.dv".to_owned(),
             ],
-            json!({"comparison_revision":2,"protocol_sha256":digest(&harness.join("../../docs/content/benchmarks/selective-read-protocol.md"))?}),
+            json!({"comparison_revision":2}),
         )
     };
     let shape = geometry(&manifest, is_large, manifest["profile"] == "smoke")?;
