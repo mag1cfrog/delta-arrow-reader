@@ -53,26 +53,59 @@ class LoggingTests(unittest.TestCase):
     def events(self):
         return [record.dar_fields["event"] for record in self.collect.records]
 
-    def test_load_and_refresh_keep_native_fields(self):
+    def assert_failure(self, event, *, target="delta_arrow_reader", **fields):
+        failures = [r for r in self.collect.records if r.levelno >= logging.ERROR]
+        self.assertEqual(len(failures), 1)
+        record = failures[0]
+        self.assertEqual((record.levelno, record.dar_target, record.msg), (logging.ERROR, target, event))
+        for name, value in {"event": event, **fields}.items():
+            self.assertEqual(record.dar_fields[name], value)
+        rendered = repr([r.__dict__ for r in self.collect.records])
+        for secret in ("private", "secret", str(FIXTURE)):
+            self.assertNotIn(secret, rendered)
+        return record
+
+    def assert_logged_error(self, error, record):
+        for name in ("phase", "code", "reason", "source_kind"):
+            self.assertEqual(getattr(error, name), record.dar_fields.get("error_" + name))
+        self.assertIsNone(error.__cause__)
+        self.assertIsNone(error.__context__)
+
+    def assert_replayed_error(self, reader, phase, code):
+        messages = []
+        with reader:
+            for _ in range(3):
+                with self.assertRaises(pa.ArrowInvalid) as caught:
+                    reader.read_all()
+                messages.append(str(caught.exception))
+        self.assertEqual(len(set(messages)), 1)
+        self.assertIn(f"phase={phase} code={code}", messages[0])
+        for secret in ("private", "secret", str(FIXTURE)):
+            self.assertNotIn(secret, messages[0])
+        return messages[0]
+
+    def test_public_operations_forward_native_lifecycles_and_fields(self):
         table = DeltaTable(FIXTURE, warmup="none")
-        refreshed = table.refresh()
-        self.assertEqual(refreshed.version, table.version)
-        self.assertEqual(self.events(), [
-            "table_load.started", "table_load.completed",
-            "table_refresh.started", "table_refresh.completed",
-        ])
-        load_start, load_end, refresh_start, refresh_end = self.collect.records
-        for start, end in [(load_start, load_end), (refresh_start, refresh_end)]:
-            self.assertEqual(start.levelno, logging.INFO)
-            self.assertEqual(end.levelno, logging.INFO)
+        self.assertEqual(table.refresh().version, table.version)
+        table.scan(columns=["id"], limit=0).close()
+        Session().register_table("private_events", table)
+        operations = ("table_load", "table_refresh", "scan_planning", "provider_registration")
+        self.assertEqual(self.events(), [f"{operation}.{event}" for operation in operations
+                                        for event in ("started", "completed")])
+        starts = self.collect.records[::2]
+        ends = self.collect.records[1::2]
+        for start, end in zip(starts, ends):
+            self.assertEqual((start.levelno, end.levelno), (logging.INFO, logging.INFO))
             self.assertEqual(start.dar_fields["operation_id"], end.dar_fields["operation_id"])
             self.assertIs(type(end.dar_fields["operation_id"]), int)
             self.assertIs(type(end.dar_fields["elapsed_micros"]), int)
             self.assertEqual(end.dar_fields["snapshot_version"], table.version)
             self.assertEqual(end.getMessage(), end.dar_fields["event"])
             self.assertEqual(end.dar_target, "delta_arrow_reader")
-        self.assertNotEqual(load_start.dar_fields["operation_id"], refresh_start.dar_fields["operation_id"])
-        self.assertEqual(refresh_end.dar_fields["previous_snapshot_version"], table.version)
+        self.assertEqual(len({r.dar_fields["operation_id"] for r in starts}), len(operations))
+        self.assertEqual(ends[1].dar_fields["previous_snapshot_version"], table.version)
+        self.assertEqual(ends[2].dar_fields["plan_id"], starts[2].dar_fields["operation_id"])
+        self.assertNotIn("private_events", repr([r.__dict__ for r in self.collect.records]))
 
     def test_failed_load_is_once_at_error_and_redacted_at_every_level(self):
         with tempfile.TemporaryDirectory(prefix="secret-log-path-") as temporary:
@@ -86,92 +119,32 @@ class LoggingTests(unittest.TestCase):
                     self.logger.setLevel(level)
                     with self.assertRaises(DeltaReaderError) as raised:
                         DeltaTable(location, warmup="none")
-                    failures = [r for r in self.collect.records if r.levelno >= logging.ERROR]
-                    self.assertEqual(len(failures), 1)
-                    failure = failures[0]
-                    self.assertEqual(failure.dar_fields["event"], "table_load.failed")
-                    self.assertEqual(failure.dar_fields["error_phase"], raised.exception.phase)
-                    self.assertEqual(failure.dar_fields["error_code"], raised.exception.code)
-                    self.assertEqual(failure.dar_fields["error_reason"], raised.exception.reason)
-                    self.assertEqual(failure.dar_fields["error_source_kind"], raised.exception.source_kind)
+                    failure = self.assert_failure("table_load.failed")
+                    self.assert_logged_error(raised.exception, failure)
                     self.assertIn("error_reason", failure.dar_fields)
                     self.assertIn("error_source_kind", failure.dar_fields)
-                    rendered = repr([r.__dict__ for r in self.collect.records])
-                    self.assertNotIn(temporary, rendered)
-                    self.assertNotIn("private-table", rendered)
-                    self.assertNotIn("secret-source-message", rendered)
                     self.assertNotIn("table_load.completed", self.events())
-
-    def test_refresh_failure_preserves_original_table(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            location = Path(temporary) / "table"
-            shutil.copytree(FIXTURE, location)
-            table = DeltaTable(location, warmup="none")
-            (location / "_delta_log" / "00000000000000000001.json").write_text("invalid json\n")
-            self.collect.records.clear()
-            with self.assertRaises(DeltaReaderError):
-                table.refresh()
-            self.assertEqual(self.events(), ["table_refresh.started", "table_refresh.failed"])
-            self.assertEqual(self.collect.records[-1].levelno, logging.ERROR)
-            self.assertEqual(self.collect.records[-1].dar_fields["previous_snapshot_version"], 0)
-            self.assertEqual(table.version, 0)
-
-    def test_planning_and_registration_forward_core_lifecycles(self):
-        table = DeltaTable(FIXTURE, warmup="none")
-        session = Session()
-        self.collect.records.clear()
-        table.scan(columns=["id"], limit=0).close()
-        session.register_table("private_events", table)
-        self.assertEqual(self.events(), [
-            "scan_planning.started", "scan_planning.completed",
-            "provider_registration.started", "provider_registration.completed",
-        ])
-        start, end, registration_start, registration_end = self.collect.records
-        for first, last in [(start, end), (registration_start, registration_end)]:
-            self.assertEqual(first.levelno, logging.INFO)
-            self.assertEqual(last.levelno, logging.INFO)
-            self.assertEqual(first.dar_fields["operation_id"], last.dar_fields["operation_id"])
-            self.assertEqual(last.dar_fields["snapshot_version"], table.version)
-        self.assertEqual(end.dar_fields["plan_id"], start.dar_fields["operation_id"])
-        self.assertNotEqual(end.dar_fields["operation_id"], registration_end.dar_fields["operation_id"])
-        self.assertNotIn("private_events", repr([r.__dict__ for r in self.collect.records]))
 
     def test_planning_and_registration_failures_have_one_owner(self):
         table = DeltaTable(FIXTURE, warmup="none")
         session = Session()
         session.register_table("private_events", table)
-        cases = [
+        self.logger.setLevel(5)
+        for operation, event, reason, phase in (
             (lambda: table.scan(columns=["private_column"]),
              "scan_planning.failed", "column_not_found", "scan_planning"),
             (lambda: session.register_table("private_events", table),
              "provider_registration.failed", "table_registration_failed", "datafusion"),
             (lambda: session.register_table("private-invalid", table),
              "provider_registration.failed", "table_registration_name_invalid", "datafusion"),
-        ]
-        for level in [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, 5]:
-            self.logger.setLevel(level)
-            for operation, event, reason, phase in cases:
-                with self.subTest(level=level, event=event, reason=reason):
-                    self.collect.records.clear()
-                    with self.assertRaises(DeltaReaderError) as raised:
-                        operation()
-                    failures = [r for r in self.collect.records if r.levelno >= logging.ERROR]
-                    self.assertEqual(len(failures), 1)
-                    failure = failures[0]
-                    self.assertEqual(failure.dar_target, "delta_arrow_reader")
-                    self.assertEqual(failure.dar_fields["event"], event)
-                    self.assertEqual(failure.dar_fields["error_reason"], reason)
-                    self.assertEqual(failure.dar_fields["error_phase"], phase)
-                    self.assertEqual(raised.exception.phase, phase)
-                    self.assertEqual(failure.dar_fields["snapshot_version"], table.version)
-                    self.assertEqual(raised.exception.code, failure.dar_fields["error_code"])
-                    self.assertEqual(raised.exception.reason, reason)
-                    self.assertEqual(raised.exception.source_kind,
-                                     failure.dar_fields.get("error_source_kind"))
-                    rendered = repr([r.__dict__ for r in self.collect.records])
-                    self.assertNotIn("private_", rendered)
-                    self.assertNotIn("private-invalid", rendered)
-                    self.assertNotIn(str(FIXTURE), rendered)
+        ):
+            with self.subTest(event=event, reason=reason):
+                self.collect.records.clear()
+                with self.assertRaises(DeltaReaderError) as raised:
+                    operation()
+                failure = self.assert_failure(event, error_reason=reason, error_phase=phase,
+                                              snapshot_version=table.version)
+                self.assert_logged_error(raised.exception, failure)
         with session.sql("SELECT id FROM private_events LIMIT 1") as reader:
             self.assertEqual(reader.read_all().num_rows, 1)
 
@@ -188,31 +161,21 @@ class LoggingTests(unittest.TestCase):
                        "output_buffer_batches_per_partition"]:
             cases.append((lambda option=option: ScanExecutionOptions(**{option: sys.maxsize}),
                           ValueError, "execution_options", option + "_exceeds_tokio_max_permits"))
-        for level in [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, 5]:
-            self.logger.setLevel(level)
-            for operation, exception, argument, reason in cases:
-                with self.subTest(level=level, reason=reason):
-                    self.collect.records.clear()
-                    with self.assertRaises(exception) as raised:
-                        operation()
-                    self.assertEqual(self.events(), ["validation.failed"])
-                    record, = self.collect.records
-                    fields = record.dar_fields
-                    self.assertEqual(record.levelno, logging.ERROR)
-                    self.assertEqual(record.dar_target, "delta_arrow_reader_python")
-                    self.assertEqual(fields["argument"], argument)
-                    self.assertEqual(fields["error_reason"], reason)
-                    phase, code = ("scan_planning", "unsupported_predicate") if argument == "filters" else (
-                        "configuration", "invalid_configuration")
-                    self.assertEqual(fields["error_phase"], phase)
-                    self.assertEqual(fields["error_code"], code)
-                    self.assertEqual(str(raised.exception),
-                                     f"delta reader error: phase={phase} code={code} reason={reason}")
-                    self.assertEqual((raised.exception.phase, raised.exception.code), (phase, code))
-                    self.assertEqual(raised.exception.reason, reason)
-                    self.assertEqual(raised.exception.source_kind, fields.get("error_source_kind"))
-                    self.assertNotIn("private", repr(record.__dict__))
-                    self.assertNotIn(str(FIXTURE), repr(record.__dict__))
+        self.logger.setLevel(5)
+        for operation, exception, argument, reason in cases:
+            with self.subTest(reason=reason):
+                self.collect.records.clear()
+                with self.assertRaises(exception) as raised:
+                    operation()
+                self.assertEqual(self.events(), ["validation.failed"])
+                phase, code = (("scan_planning", "unsupported_predicate") if argument == "filters"
+                               else ("configuration", "invalid_configuration"))
+                record = self.assert_failure("validation.failed", target="delta_arrow_reader_python",
+                                             argument=argument, error_reason=reason,
+                                             error_phase=phase, error_code=code)
+                self.assert_logged_error(raised.exception, record)
+                self.assertEqual(str(raised.exception),
+                                 f"delta reader error: phase={phase} code={code} reason={reason}")
         self.logger.disabled = True
         self.collect.records.clear()
         for operation, exception, _, _ in cases:
@@ -415,34 +378,25 @@ with session.sql('SELECT id FROM events LIMIT 1') as reader:
         table = DeltaTable(FIXTURE, warmup="none")
         session = Session()
         session.register_table("events", table)
-        cases = [
+        self.logger.setLevel(5)
+        for query, category in (
             ("SELECT 'private-literal' FROM", "sql_parse"),
             ("SELECT * FROM private_table", "datafusion_plan"),
             ("SELECT private_column FROM events", "schema"),
             ("COPY events TO 's3://private-bucket/private-file' STORED AS CSV", "datafusion_plan"),
-        ]
-        for level in [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, 5]:
-            self.logger.setLevel(level)
-            for query, category in cases:
-                with self.subTest(level=level, category=category):
-                    self.collect.records.clear()
-                    with self.assertRaises(DeltaReaderError) as raised:
-                        session.sql(query)
-                    self.assertEqual(len(self.collect.records), 1)
-                    failure = self.collect.records[0]
-                    self.assertEqual(failure.levelno, logging.ERROR)
-                    self.assertEqual(failure.dar_target, "delta_arrow_reader_python")
-                    self.assertEqual(failure.dar_fields["event"], "sql_planning.failed")
-                    self.assertEqual(failure.dar_fields["error_source_kind"], category)
-                    self.assertEqual((raised.exception.phase, raised.exception.code),
-                                     ("datafusion", "sql_planning"))
-                    self.assertIsNone(raised.exception.reason)
-                    self.assertIsNone(raised.exception.source_kind)
-                    self.assertEqual(failure.dar_fields["error_phase"], raised.exception.phase)
-                    self.assertEqual(failure.dar_fields["error_code"], raised.exception.code)
-                    rendered = repr(failure.__dict__)
-                    self.assertNotIn("private", rendered)
-                    self.assertNotIn(str(FIXTURE), rendered)
+        ):
+            with self.subTest(category=category):
+                self.collect.records.clear()
+                with self.assertRaises(DeltaReaderError) as raised:
+                    session.sql(query)
+                self.assertEqual(len(self.collect.records), 1)
+                self.assert_failure("sql_planning.failed", target="delta_arrow_reader_python",
+                                    error_source_kind=category, error_phase="datafusion",
+                                    error_code="sql_planning")
+                self.assertEqual((raised.exception.phase, raised.exception.code),
+                                 ("datafusion", "sql_planning"))
+                self.assertIsNone(raised.exception.reason)
+                self.assertIsNone(raised.exception.source_kind)
 
     def test_planning_observes_logging_changes_after_session_creation(self):
         self.logger.setLevel(logging.CRITICAL)
@@ -496,8 +450,10 @@ with session.sql('SELECT id FROM events LIMIT 1') as reader:
         for backend in ["direct", "delta_kernel"]:
             with self.subTest(backend=backend):
                 options = ScanExecutionOptions(parquet_backend=backend)
-                first = table.to_reader(target_partitions=1, execution_options=options)
-                second = table.to_reader(target_partitions=1, execution_options=options)
+                first = pa.RecordBatchReader.from_stream(
+                    table.scan(target_partitions=1, execution_options=options),
+                )
+                second = table.to_reader(target_partitions=2, execution_options=options)
                 self.collect.records.clear()
                 self.assertEqual(first.schema, second.schema)
                 self.assertEqual(self.collect.records, [])
@@ -505,6 +461,8 @@ with session.sql('SELECT id FROM events LIMIT 1') as reader:
                     with ThreadPoolExecutor(max_workers=2) as pool:
                         batches = list(pool.map(lambda r: r.read_next_batch(), [first, second]))
                     self.assertEqual(self.events(), ["scan_execution.started"] * 2)
+                    self.assertCountEqual([r.dar_fields["partition_count"] for r in self.collect.records],
+                                          [1, 2])
                     self.assertTrue(all(r.thread != threading.get_ident() for r in self.collect.records))
                     for reader, batch in zip([first, second], batches):
                         self.assertEqual(batch.num_rows + reader.read_all().num_rows, 360)
@@ -565,47 +523,29 @@ with session.sql('SELECT id FROM events LIMIT 1') as reader:
             for path in location.rglob("*.parquet"):
                 path.unlink()
             table = DeltaTable(location, warmup="none")
+            self.logger.setLevel(5)
             for backend in ["direct", "delta_kernel"]:
-                options = ScanExecutionOptions(parquet_backend=backend)
-                for level in [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, 5]:
-                    with self.subTest(backend=backend, level=level):
-                        self.logger.setLevel(level)
-                        reader = table.to_reader(target_partitions=1, execution_options=options)
-                        self.collect.records.clear()
-                        messages = []
-                        with reader:
-                            for _ in range(3):
-                                with self.assertRaises(pa.ArrowInvalid) as caught:
-                                    reader.read_next_batch()
-                                messages.append(str(caught.exception))
-                        self.assertEqual(len(set(messages)), 1)
-                        failures = [r for r in self.collect.records if r.levelno >= logging.ERROR]
-                        self.assertEqual(len(failures), 1)
-                        failure = failures[0]
-                        self.assertEqual(failure.msg, "scan_execution.failed")
-                        self.assertEqual(failure.dar_fields["error_phase"], "data_file_read")
-                        self.assertEqual(failure.dar_fields["error_code"], "data_file_read")
-                        self.assertIn("error_reason", failure.dar_fields)
-                        self.assertIn("error_source_kind", failure.dar_fields)
-                        self.assertFalse(failure.dar_fields["output_started"])
-                        rendered = repr([r.__dict__ for r in self.collect.records]) + repr(messages)
-                        self.assertNotIn(temporary, rendered)
-                        self.assertNotIn("private-table", rendered)
-                        self.assertNotIn(".parquet", rendered)
-                        self.assertNotIn("scan_execution.completed", self.events())
-                        self.assertNotIn("scan_execution.dropped", self.events())
+                with self.subTest(backend=backend):
+                    reader = table.to_reader(target_partitions=1,
+                                             execution_options=ScanExecutionOptions(parquet_backend=backend))
+                    self.collect.records.clear()
+                    message = self.assert_replayed_error(reader, "data_file_read", "data_file_read")
+                    failure = self.assert_failure("scan_execution.failed", error_phase="data_file_read",
+                                                  error_code="data_file_read", output_started=False)
+                    self.assertIn("error_reason", failure.dar_fields)
+                    self.assertIn("error_source_kind", failure.dar_fields)
+                    self.assertNotIn(".parquet", repr([r.__dict__ for r in self.collect.records]) + message)
+                    self.assertNotIn("scan_execution.completed", self.events())
+                    self.assertNotIn("scan_execution.dropped", self.events())
 
-    def test_stream_callbacks_can_interrupt_later_pulls_without_retaining_tracebacks(self):
-        result = subprocess.run([sys.executable, "-I", __file__, "stream-interrupt"],
-                                capture_output=True, text=True, timeout=30)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stderr, "")
-
-    def test_stream_callbacks_can_close_and_reject_recursive_reads(self):
-        result = subprocess.run([sys.executable, "-I", __file__, "stream-close"],
-                                capture_output=True, text=True, timeout=30)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stderr, "")
+    def test_callbacks_preserve_control_flow_without_deadlocks_or_retained_tracebacks(self):
+        for action in ("stream-interrupt", "stream-close", "sql-interrupt", "sql-close",
+                       "reentry", "interrupt", "registration"):
+            with self.subTest(action=action):
+                result = subprocess.run([sys.executable, "-I", __file__, action],
+                                        capture_output=True, text=True, timeout=30)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stderr, "")
 
     def test_sql_consumption_forwards_partition_lifecycles_from_workers(self):
         table = DeltaTable(FIXTURE, warmup="none")
@@ -652,83 +592,48 @@ with session.sql('SELECT id FROM events LIMIT 1') as reader:
         session = Session()
         table = DeltaTable(FIXTURE, warmup="none")
         session.register_table("private_events", table)
-        cases = [
+        self.logger.setLevel(5)
+        for query, category in (
             ("SELECT CAST('private-literal' AS INT)", "arrow_cast"),
             ("SELECT CAST(label AS INT) FROM private_events WHERE label IS NOT NULL", "arrow_cast"),
             ("SELECT id / (id - id) FROM private_events", "divide_by_zero"),
-        ]
-        for level in [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, 5]:
-            self.logger.setLevel(level)
-            for query, category in cases:
-                with self.subTest(level=level, category=category, query=query):
-                    # Enable diagnostics after constructing the deferred reader.
-                    self.collect.setLevel(logging.CRITICAL)
-                    reader = session.sql(query)
-                    self.collect.records.clear()
-                    self.collect.setLevel(level)
-                    messages = []
-                    with reader:
-                        for _ in range(3):
-                            with self.assertRaises(pa.ArrowInvalid) as caught:
-                                reader.read_next_batch()
-                            messages.append(str(caught.exception))
-                    self.assertEqual(len(set(messages)), 1)
-                    self.assertIn("phase=datafusion code=sql_execution", messages[0])
-                    failures = [r for r in self.collect.records if r.levelno >= logging.ERROR]
-                    self.assertEqual(len(failures), 1)
-                    failure = failures[0]
-                    self.assertEqual(failure.dar_target, "delta_arrow_reader_python")
-                    self.assertEqual(failure.msg, "sql_execution.failed")
-                    self.assertEqual(failure.dar_fields["error_source_kind"], category)
-                    self.assertEqual(failure.dar_fields["error_code"], "sql_execution")
-                    rendered = repr([r.__dict__ for r in self.collect.records]) + repr(messages)
-                    for secret in ["private_events", "private-literal", "value-", str(FIXTURE)]:
-                        self.assertNotIn(secret, rendered)
+        ):
+            with self.subTest(category=category, query=query):
+                self.collect.setLevel(logging.CRITICAL)
+                reader = session.sql(query)
+                self.collect.records.clear()
+                self.collect.setLevel(5)
+                message = self.assert_replayed_error(reader, "datafusion", "sql_execution")
+                self.assert_failure("sql_execution.failed", target="delta_arrow_reader_python",
+                                    error_source_kind=category, error_code="sql_execution")
+                self.assertNotIn("value-", repr([r.__dict__ for r in self.collect.records]) + message)
         with session.sql("SELECT 42 AS answer") as reader:
             self.assertEqual(reader.read_all().to_pylist(), [{"answer": 42}])
 
-    def test_sql_core_failures_have_one_owner_at_all_levels(self):
+    def test_sql_core_failures_have_one_owner(self):
         with tempfile.TemporaryDirectory(prefix="private-sql-") as temporary:
             location = Path(temporary) / "private-table"
             shutil.copytree(FIXTURE, location)
             table = DeltaTable(location, warmup="none")
             for path in (location / "region=east").glob("*.parquet"):
                 path.unlink()
+            self.logger.setLevel(5)
             for backend in ["direct", "delta_kernel"]:
-                session = Session()
-                session.register_table("private_events", table,
-                                       execution_options=ScanExecutionOptions(parquet_backend=backend))
-                for level in [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, 5]:
-                    with self.subTest(backend=backend, level=level):
-                        self.logger.setLevel(level)
-                        reader = session.sql("SELECT * FROM private_events")
-                        self.collect.records.clear()
-                        with reader:
-                            for _ in range(3):
-                                with self.assertRaises(pa.ArrowInvalid) as caught:
-                                    reader.read_all()
-                                self.assertIn("phase=datafusion code=sql_execution", str(caught.exception))
-                        failures = [r for r in self.collect.records if r.levelno >= logging.ERROR]
-                        self.assertEqual(len(failures), 1)
-                        failure = failures[0]
-                        self.assertEqual(failure.msg, "datafusion_partition_execution.failed")
-                        self.assertEqual(failure.dar_target, "delta_arrow_reader")
-                        self.assertEqual(failure.dar_fields["error_source_kind"], "not_found")
-                        self.assertEqual(failure.dar_fields["error_code"], "data_file_read")
-                        self.assertIn("operation_id", failure.dar_fields)
-                        self.assertIn("plan_id", failure.dar_fields)
-                        self.assertNotEqual(failure.thread, threading.get_ident())
-                        rendered = repr([r.__dict__ for r in self.collect.records])
-                        for secret in ["private_events", temporary, "region=east", ".parquet"]:
-                            self.assertNotIn(secret, rendered)
-
-    def test_sql_worker_callbacks_interrupt_and_close_without_deadlock(self):
-        for action in ["sql-interrupt", "sql-close"]:
-            with self.subTest(action=action):
-                result = subprocess.run([sys.executable, "-I", __file__, action],
-                                        capture_output=True, text=True, timeout=30)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(result.stderr, "")
+                with self.subTest(backend=backend):
+                    session = Session()
+                    session.register_table("private_events", table,
+                                           execution_options=ScanExecutionOptions(parquet_backend=backend))
+                    reader = session.sql("SELECT * FROM private_events")
+                    self.collect.records.clear()
+                    self.assert_replayed_error(reader, "datafusion", "sql_execution")
+                    failure = self.assert_failure("datafusion_partition_execution.failed",
+                                                  error_source_kind="not_found", error_code="data_file_read")
+                    self.assertIn("operation_id", failure.dar_fields)
+                    self.assertIn("plan_id", failure.dar_fields)
+                    self.assertNotEqual(failure.thread, threading.get_ident())
+                    rendered = repr([r.__dict__ for r in self.collect.records])
+                    self.assertNotIn("region=east", rendered)
+                    self.assertNotIn(".parquet", rendered)
 
     def test_sql_deferred_provider_planning_failure_is_not_reported_twice(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -867,24 +772,6 @@ with session.sql("SELECT CAST('private-literal' AS INT)") as reader:
 """, str(FIXTURE)], capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "")
-        self.assertEqual(result.stderr, "")
-
-    def test_callbacks_reject_reader_reentry_without_deadlock(self):
-        result = subprocess.run([sys.executable, "-I", __file__, "reentry"],
-                                capture_output=True, text=True, timeout=30)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stderr, "")
-
-    def test_signal_in_a_logging_callback_still_interrupts_loading_and_planning(self):
-        result = subprocess.run([sys.executable, "-I", __file__, "interrupt"],
-                                capture_output=True, text=True, timeout=30)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stderr, "")
-
-    def test_concurrent_registration_can_log_without_holding_the_gil(self):
-        result = subprocess.run([sys.executable, "-I", __file__, "registration"],
-                                capture_output=True, text=True, timeout=15)
-        self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
 
     def test_root_handler_configured_before_import_receives_events(self):

@@ -629,8 +629,10 @@ class TableTests(unittest.TestCase):
             __int__ = __str__
             __bool__ = __str__
 
-        table = DeltaTable(self.location)
+        table = DeltaTable(self.location, warmup="none")
         (self.log / f"{0:020}.json").unlink()
+        with self.assertRaises(DeltaReaderError):
+            table.scan()
         malformed = (
             True, 1, "secret-filter", {}, ("id", "is", None),
             [("id", "is")], [("id", "is", None, "secret-extra")],
