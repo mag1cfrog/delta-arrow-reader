@@ -15,7 +15,7 @@ use url::Url;
 
 use super::{
     check_failure,
-    cloud_storage::{CloudStorageProtocol, MockCloudStorageServer},
+    mock_cloud_storage::{CloudStorageProtocol, MockCloudStorageServer},
     run_with_timeout,
 };
 

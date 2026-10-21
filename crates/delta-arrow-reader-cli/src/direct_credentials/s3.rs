@@ -1,6 +1,6 @@
 //! Explicit S3 access keys and identity providers without ambient fallback.
 
-mod container;
+mod container_credentials;
 
 use std::sync::Arc;
 
@@ -47,7 +47,7 @@ pub(super) fn configure_table_credentials(
             }
         }
     } else if matches!(source, CredentialSource::AwsContainer) {
-        container::load_environment_options(&mut options)?;
+        container_credentials::load_environment_options(&mut options)?;
     }
     if !matches!(source, CredentialSource::Json)
         && !options.contains_key("aws_region")
@@ -70,7 +70,7 @@ pub(super) fn configure_table_credentials(
         return configure_native_credentials(builder, location, options);
     }
     if matches!(source, CredentialSource::AwsContainer) {
-        container::validate_credential_family(&options)?;
+        container_credentials::validate_credential_family(&options)?;
         return configure_native_credentials(builder, location, options);
     }
     let credentials = AwsCredential {

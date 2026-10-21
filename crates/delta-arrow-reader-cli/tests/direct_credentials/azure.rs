@@ -1,8 +1,8 @@
 //! Azure credentials are selected once and reach every storage request.
 
-mod client_secret;
+mod client_secret_auth;
 mod managed_identity;
-mod token_server;
+mod mock_token_server;
 mod workload_identity;
 
 use std::{collections::HashMap, process::Command};

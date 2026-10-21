@@ -1,4 +1,4 @@
-//! Azure client-secret identities stay fixed across reads and token refreshes.
+//! Azure authentication with a client secret keeps one identity across reads and token refreshes.
 
 use std::{collections::HashMap, fs, process::Command};
 
@@ -7,10 +7,10 @@ use url::form_urlencoded;
 
 use super::{
     ACCOUNT_KEY, BEARER_TOKEN, CREDENTIALS, CloudStorageProtocol, DirectStorageFixture, TestResult,
-    assert_read_result, assert_single_terminal_record, run_with_timeout, storage_bearer_tokens,
-    token_server::AzureTokenServer,
+    assert_read_result, assert_single_terminal_record, mock_token_server::MockAzureTokenServer,
+    run_with_timeout, storage_bearer_tokens,
 };
-use crate::cloud_storage::{MockCloudStorageServer, partitioned_objects};
+use crate::mock_cloud_storage::{MockCloudStorageServer, partitioned_objects};
 
 // JSON aliases and the only environment variables advertised for this identity.
 const CLIENT_SECRET_FIELDS: [(&str, &str, &str); 3] = [
@@ -32,7 +32,7 @@ fn client_secret_json_fields() -> Value {
 
 fn write_client_secret_options(
     fixture: &DirectStorageFixture,
-    authority: &AzureTokenServer,
+    authority: &MockAzureTokenServer,
     source: &str,
 ) -> TestResult {
     let mut options = if source == "json" {
@@ -106,7 +106,7 @@ fn assert_client_secret_requests(requests: &[String]) {
 fn tokens_authorize_all_reads_and_refresh_the_loaded_identity() -> TestResult {
     for source in ["json", "env"] {
         for operation in ["inspect", "scan", "query"] {
-            let authority = AzureTokenServer::new(usize::MAX)?;
+            let authority = MockAzureTokenServer::new(usize::MAX)?;
             let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
             let options_path = fixture.directory.path().join("options.json");
             fixture.server = MockCloudStorageServer::with_objects(
@@ -144,7 +144,7 @@ fn acquisition_refresh_and_permission_failures_keep_the_selected_identity() -> T
         // Zero or one token exercises acquisition or refresh failure; unlimited tests storage denial.
         for successful_tokens in [0, 1, usize::MAX] {
             for machine in [false, true] {
-                let authority = AzureTokenServer::new(successful_tokens)?;
+                let authority = MockAzureTokenServer::new(successful_tokens)?;
                 let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
                 write_client_secret_options(&fixture, &authority, source)?;
                 if successful_tokens == usize::MAX {
@@ -194,7 +194,7 @@ fn acquisition_refresh_and_permission_failures_keep_the_selected_identity() -> T
 
 #[test]
 fn partial_or_mixed_client_secret_families_fail_before_io() -> TestResult {
-    let authority = AzureTokenServer::new(usize::MAX)?;
+    let authority = MockAzureTokenServer::new(usize::MAX)?;
     let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
     for source in ["json", "env"] {
         for present_field_indices in [

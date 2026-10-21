@@ -1,4 +1,4 @@
-//! Local token services for native Google OAuth and AWS credential providers.
+//! Mock Google OAuth and AWS credential endpoints exposed through a local proxy.
 
 use std::{
     fs,
@@ -11,35 +11,35 @@ use std::{
 use serde_json::Value;
 
 /// Selects the request protocol and credential response used by the local service.
-pub(super) enum TokenService {
+pub(super) enum CredentialService {
     GoogleOAuth,
     AwsSts,
     AwsContainer,
 }
 
-/// Owns the local token service, its request log, and process cleanup.
-pub(super) struct TokenServiceProxy {
+/// Owns the mock credential proxy, its request log, and process cleanup.
+pub(super) struct MockCredentialProxy {
     directory: tempfile::TempDir,
     child: Child,
     pub(super) endpoint: String,
 }
 
-impl TokenServiceProxy {
+impl MockCredentialProxy {
     pub(super) fn new(
-        service: TokenService,
+        service: CredentialService,
         mode: &str,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
         let child = Command::new("python3")
             .arg(
                 PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .join("tests/direct_credentials/token_service_proxy.py"),
+                    .join("tests/direct_credentials/mock_credential_proxy.py"),
             )
             .arg(directory.path())
             .arg(match service {
-                TokenService::GoogleOAuth => "gcs",
-                TokenService::AwsSts => "sts",
-                TokenService::AwsContainer => "container",
+                CredentialService::GoogleOAuth => "gcs",
+                CredentialService::AwsSts => "sts",
+                CredentialService::AwsContainer => "container",
             })
             .arg(mode)
             .spawn()?;
@@ -57,7 +57,7 @@ impl TokenServiceProxy {
                 return Ok(fixture);
             }
             if fixture.child.try_wait()?.is_some() || started.elapsed() > Duration::from_secs(15) {
-                return Err("local token service did not start".into());
+                return Err("mock credential proxy did not start".into());
             }
             thread::sleep(Duration::from_millis(10));
         }
@@ -73,7 +73,7 @@ impl TokenServiceProxy {
     }
 }
 
-impl Drop for TokenServiceProxy {
+impl Drop for MockCredentialProxy {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();

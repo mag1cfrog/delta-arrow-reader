@@ -9,8 +9,8 @@ use super::{
     assert_single_terminal_record, run_with_timeout, signed_session_generations,
 };
 use crate::{
-    cloud_storage::{MockCloudStorageServer, partitioned_objects},
-    direct_credentials::token_service_proxy::{TokenService, TokenServiceProxy},
+    direct_credentials::mock_credential_proxy::{CredentialService, MockCredentialProxy},
+    mock_cloud_storage::{MockCloudStorageServer, partitioned_objects},
 };
 
 const ROLE_ARN: &str = "arn:aws:iam::123456789012:role/secret-selected-role";
@@ -20,7 +20,7 @@ const CUSTOM_STS_ENDPOINT: &str = "https://sts.secret-override.invalid/";
 
 fn write_web_identity_options(
     fixture: &DirectStorageFixture,
-    proxy: &TokenServiceProxy,
+    proxy: &MockCredentialProxy,
     mut options: Value,
 ) -> TestResult {
     options["proxy_url"] = json!(proxy.endpoint);
@@ -98,7 +98,7 @@ fn assert_sts_requests(requests: &[Value], host: &str, session_name: &str) -> Ve
 fn all_reads_refresh_the_fixed_role_with_rotated_assertions() -> TestResult {
     for references in ["json", "env", "mixed"] {
         for operation in ["inspect", "scan", "query"] {
-            let proxy = TokenServiceProxy::new(TokenService::AwsSts, "refresh")?;
+            let proxy = MockCredentialProxy::new(CredentialService::AwsSts, "refresh")?;
             let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
             let assertion_path = fixture.directory.path().join("assertion.jwt");
             fs::write(&assertion_path, INITIAL_ASSERTION)?;
@@ -177,7 +177,7 @@ fn all_reads_refresh_the_fixed_role_with_rotated_assertions() -> TestResult {
 #[test]
 fn missing_malformed_and_conflicting_references_fail_before_io() -> TestResult {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
-    let proxy = TokenServiceProxy::new(TokenService::AwsSts, "refresh")?;
+    let proxy = MockCredentialProxy::new(CredentialService::AwsSts, "refresh")?;
     let fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
     write_web_identity_options(&fixture, &proxy, json!({}))?;
     for variable in ["AWS_ROLE_ARN", "AWS_WEB_IDENTITY_TOKEN_FILE"] {
@@ -262,7 +262,7 @@ fn missing_malformed_and_conflicting_references_fail_before_io() -> TestResult {
 fn sts_and_storage_failures_never_use_ambient_credentials() -> TestResult {
     for mode in ["reject", "reject_refresh", "storage_denied"] {
         for machine in [false, true] {
-            let proxy = TokenServiceProxy::new(TokenService::AwsSts, mode)?;
+            let proxy = MockCredentialProxy::new(CredentialService::AwsSts, mode)?;
             let fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
             fs::write(
                 fixture.directory.path().join("assertion.jwt"),
@@ -319,7 +319,7 @@ fn sts_and_storage_failures_never_use_ambient_credentials() -> TestResult {
 fn unreadable_assertions_at_startup_or_refresh_stop_the_read() -> TestResult {
     for remove_after_first_read in [false, true] {
         for machine in [false, true] {
-            let proxy = TokenServiceProxy::new(TokenService::AwsSts, "refresh")?;
+            let proxy = MockCredentialProxy::new(CredentialService::AwsSts, "refresh")?;
             let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
             if remove_after_first_read {
                 let assertion_path = fixture.directory.path().join("assertion.jwt");
@@ -367,7 +367,7 @@ fn unreadable_assertions_at_startup_or_refresh_stop_the_read() -> TestResult {
 
 #[test]
 fn allowing_http_storage_does_not_allow_plain_http_sts() -> TestResult {
-    let proxy = TokenServiceProxy::new(TokenService::AwsSts, "refresh")?;
+    let proxy = MockCredentialProxy::new(CredentialService::AwsSts, "refresh")?;
     let fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
     fs::write(
         fixture.directory.path().join("assertion.jwt"),

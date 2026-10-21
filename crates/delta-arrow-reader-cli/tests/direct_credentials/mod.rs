@@ -2,8 +2,8 @@
 
 mod azure;
 mod gcs;
+mod mock_credential_proxy;
 mod s3;
-mod token_service_proxy;
 
 use std::{
     fs,
@@ -16,11 +16,11 @@ use arrow::{compute::concat_batches, ipc::reader::StreamReader};
 use serde_json::{Value, json};
 
 use super::{
-    cloud_storage::{
+    diagnostics::assert_single_terminal_record,
+    mock_cloud_storage::{
         CloudStorageProtocol, MockCloudStorageServer, expected_partitioned_rows,
         partitioned_objects,
     },
-    diagnostics::assert_single_terminal_record,
     run_with_timeout, sort_by_id,
 };
 

@@ -1,4 +1,4 @@
-"""Local token services. CONNECT requests terminate here and never leave the host."""
+"""Mock credential services. CONNECT requests terminate here and never leave the host."""
 
 import http.server
 import json
@@ -10,7 +10,7 @@ import threading
 from urllib.parse import parse_qs, urlsplit
 
 
-class TokenEndpoint(http.server.BaseHTTPRequestHandler):
+class CredentialEndpointHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass
 
@@ -90,7 +90,7 @@ class TokenEndpoint(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-class TokenServiceProxy(TokenEndpoint):
+class CredentialProxyHandler(CredentialEndpointHandler):
     def do_CONNECT(self):
         hosts = {
             "gcs": {"accounts.google.com:443"},
@@ -103,7 +103,7 @@ class TokenServiceProxy(TokenEndpoint):
         self.send_response(200)
         self.end_headers()
         with self.server.tls.wrap_socket(self.connection, server_side=True) as connection:
-            TokenEndpoint(connection, self.client_address, self.server)
+            CredentialEndpointHandler(connection, self.client_address, self.server)
 
 
 def main():
@@ -115,7 +115,7 @@ def main():
          "-subj", "/CN=accounts.google.com", "-out", str(certificate)],
         check=True, capture_output=True, timeout=10,
     )
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), TokenServiceProxy)
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), CredentialProxyHandler)
     server.directory = directory
     server.service = sys.argv[2]
     assert server.service in {"gcs", "sts", "container"}

@@ -1,6 +1,6 @@
 //! S3 source selection reaches signed requests without credential fallback or leaks.
 
-mod container;
+mod container_credentials;
 mod web_identity;
 
 use serde_json::{Map, Value, json};

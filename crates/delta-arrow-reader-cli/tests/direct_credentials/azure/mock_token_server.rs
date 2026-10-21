@@ -1,4 +1,4 @@
-//! Local Azure token responses shared by OAuth and managed-identity tests.
+//! Mock Azure token responses shared by OAuth and managed identity tests.
 
 use std::{
     io::{Read, Write},
@@ -13,15 +13,15 @@ use std::{
 
 use serde_json::json;
 
-/// Records OAuth requests and issues expired tokens to force refresh without sleeps.
-pub(super) struct AzureTokenServer {
+/// Records OAuth and metadata requests, issuing expired tokens to force refresh without sleeps.
+pub(super) struct MockAzureTokenServer {
     pub(super) endpoint: String,
     pub(super) requests: Arc<Mutex<Vec<String>>>,
     stop: Arc<AtomicBool>,
     thread: Option<thread::JoinHandle<()>>,
 }
 
-impl AzureTokenServer {
+impl MockAzureTokenServer {
     /// Rejects token requests after the given number of successful responses.
     pub(super) fn new(successful_token_requests: usize) -> std::io::Result<Self> {
         let listener = TcpListener::bind("127.0.0.1:0")?;
@@ -94,7 +94,7 @@ impl AzureTokenServer {
     }
 }
 
-impl Drop for AzureTokenServer {
+impl Drop for MockAzureTokenServer {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
         self.thread.take().unwrap().join().unwrap();

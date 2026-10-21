@@ -22,7 +22,7 @@ use super::{
     TestResult, run_with_timeout,
 };
 
-use super::super::cloud_storage::{expected_partitioned_rows, partitioned_objects};
+use super::super::mock_cloud_storage::{expected_partitioned_rows, partitioned_objects};
 
 const IPC_END: &[u8] = &[255, 255, 255, 255, 0, 0, 0, 0];
 

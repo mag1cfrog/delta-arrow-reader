@@ -7,10 +7,10 @@ use url::Url;
 
 use super::{
     ACCOUNT_KEY, BEARER_TOKEN, CloudStorageProtocol, DirectStorageFixture, TestResult,
-    assert_read_result, assert_single_terminal_record, run_with_timeout, storage_bearer_tokens,
-    token_server::AzureTokenServer,
+    assert_read_result, assert_single_terminal_record, mock_token_server::MockAzureTokenServer,
+    run_with_timeout, storage_bearer_tokens,
 };
-use crate::cloud_storage::{MockCloudStorageServer, partitioned_objects};
+use crate::mock_cloud_storage::{MockCloudStorageServer, partitioned_objects};
 
 // JSON alias, advertised environment variable, metadata query key, and synthetic identity.
 const IDENTITY_SELECTORS: [(&str, &str, &str, &str); 3] = [
@@ -37,7 +37,7 @@ const IDENTITY_HEADER: &str = "secret-identity-header";
 
 fn managed_identity_command(
     fixture: &DirectStorageFixture,
-    metadata: &AzureTokenServer,
+    metadata: &MockAzureTokenServer,
     operation: &str,
 ) -> Command {
     let mut command = fixture.command(operation);
@@ -69,7 +69,7 @@ fn managed_identity_command(
 }
 
 fn assert_metadata_requests(
-    metadata: &AzureTokenServer,
+    metadata: &MockAzureTokenServer,
     query_key: &str,
     identity: &str,
     identity_header: Option<&str>,
@@ -108,7 +108,7 @@ fn all_reads_refresh_only_the_selected_managed_identity() -> TestResult {
     for references in ["json", "env"] {
         for (option, variable, query_key, identity) in IDENTITY_SELECTORS {
             for operation in ["inspect", "scan", "query"] {
-                let metadata = AzureTokenServer::new(usize::MAX)?;
+                let metadata = MockAzureTokenServer::new(usize::MAX)?;
                 let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
                 let options_path = fixture.directory.path().join("options.json");
                 fixture.server = MockCloudStorageServer::with_objects(
@@ -182,7 +182,7 @@ fn all_reads_refresh_only_the_selected_managed_identity() -> TestResult {
 
 #[test]
 fn zero_or_multiple_identity_selectors_fail_before_io() -> TestResult {
-    let metadata = AzureTokenServer::new(usize::MAX)?;
+    let metadata = MockAzureTokenServer::new(usize::MAX)?;
     let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
     for references in ["json", "env"] {
         for selector_indices in [vec![], vec![0, 1], vec![0, 2], vec![1, 2]] {
@@ -220,7 +220,7 @@ fn zero_or_multiple_identity_selectors_fail_before_io() -> TestResult {
 #[test]
 fn malformed_environment_values_and_conflicting_json_are_rejected() -> TestResult {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
-    let metadata = AzureTokenServer::new(usize::MAX)?;
+    let metadata = MockAzureTokenServer::new(usize::MAX)?;
     let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
     fixture.write_options(json!({}))?;
     for variable in [
@@ -324,7 +324,7 @@ fn malformed_environment_values_and_conflicting_json_are_rejected() -> TestResul
 fn acquisition_refresh_and_storage_failures_never_select_another_identity() -> TestResult {
     for successful_tokens in [0, 1, usize::MAX] {
         for machine in [false, true] {
-            let metadata = AzureTokenServer::new(successful_tokens)?;
+            let metadata = MockAzureTokenServer::new(successful_tokens)?;
             let fixture = DirectStorageFixture::new(CloudStorageProtocol::Azure)?;
             fixture.write_options(json!({}))?;
             if successful_tokens == usize::MAX {

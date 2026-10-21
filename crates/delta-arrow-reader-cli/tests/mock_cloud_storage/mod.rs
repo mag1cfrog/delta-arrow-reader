@@ -1,4 +1,4 @@
-//! Local cloud storage responses shared by direct and Unity Catalog CLI tests.
+//! Mock S3, Azure, and GCS responses shared by direct and Unity Catalog CLI tests.
 
 use std::{
     collections::{BTreeMap, HashMap},

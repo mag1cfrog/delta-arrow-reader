@@ -1,4 +1,4 @@
-//! Selects one complete ECS task or EKS pod credential reference.
+//! ECS task and EKS Pod Identity credential configuration.
 
 use delta_arrow_reader::DeltaStorageOptions;
 use object_store::aws::AmazonS3ConfigKey;
