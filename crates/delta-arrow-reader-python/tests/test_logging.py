@@ -195,6 +195,8 @@ class LoggingTests(unittest.TestCase):
             cases = [
                 (lambda: DeltaTable("", warmup="none"), DeltaReaderError,
                  "table_location", "invalid_table_location", "empty_table_location", None),
+                (lambda: DeltaTable("unknown://private-user:private-password@host/table?token=private-token"),
+                 DeltaReaderError, "storage", "storage_initialization", "storage_initialization_failed", "unknown"),
                 (lambda: DeltaTable(location, warmup="none"), DeltaReaderError,
                  "snapshot", "snapshot_load", "snapshot_load_failed", "arrow_json"),
                 (table.refresh, DeltaReaderError,
@@ -279,7 +281,8 @@ class LoggingTests(unittest.TestCase):
             table = DeltaTable(temporary, warmup="none")
             for level in [logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, 5]:
                 self.logger.setLevel(level)
-                for operation in [lambda: table.schema, lambda: table.scan(),
+                for operation in [lambda: table.schema, lambda: pa.schema(table),
+                                  lambda: table.scan(), lambda: table.to_reader(),
                                   lambda: session.sql('SELECT 42 AS "private\0alias"')]:
                     self.collect.records.clear()
                     with self.assertRaises(DeltaReaderError) as raised:
@@ -287,12 +290,11 @@ class LoggingTests(unittest.TestCase):
                     self.assertEqual((raised.exception.phase, raised.exception.code), ("schema", "schema_conversion"))
                     self.assertEqual(str(raised.exception),
                                      "delta reader error: phase=schema code=schema_conversion reason=arrow_schema_export_failed")
-                    failures = [r for r in self.collect.records if r.levelno >= logging.ERROR]
-                    record, = failures
-                    self.assertEqual(record.dar_fields["event"], "schema_export.failed")
-                    self.assertEqual(record.dar_fields["error_reason"], "arrow_schema_contains_nul")
+                    self.assertIsNone(raised.exception.__cause__)
+                    self.assertIsNone(raised.exception.__context__)
+                    record = self.assert_failure("schema_export.failed", target="delta_arrow_reader_python",
+                                                 error_reason="arrow_schema_contains_nul")
                     self.assertNotIn("error_source_kind", record.dar_fields)
-                    self.assertNotIn("private", repr([r.__dict__ for r in self.collect.records]))
                     self.assertNotIn(temporary, repr([r.__dict__ for r in self.collect.records]))
         with session.sql("SELECT 42 AS answer") as reader:
             self.assertEqual(reader.read_all().to_pylist(), [{"answer": 42}])
