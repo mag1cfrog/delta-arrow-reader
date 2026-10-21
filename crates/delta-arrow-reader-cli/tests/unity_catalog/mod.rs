@@ -376,6 +376,21 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
         let fixture = DatabricksCliFixture::new(credential_kind)?;
         let server = MockCloudStorageServer::new(credential_kind, log.clone())?;
         fixture.use_storage_endpoint(credential_kind, &server.endpoint)?;
+        let discovery = run_with_timeout(&mut fixture.command(&[
+            "capabilities",
+            "--authorization",
+            "unity-catalog",
+        ]))?;
+        assert!(discovery.status.success());
+        assert!(discovery.stderr.is_empty());
+        assert!(fixture.recorded_arguments().is_empty());
+        let guide: Value = serde_json::from_slice(&discovery.stdout)?;
+        let authorization = &guide["authorization"];
+        assert_eq!(authorization["fallback_to_other_identity"], false);
+        let target = authorization["target"]
+            .as_str()
+            .unwrap()
+            .replace("catalog.schema.table", TABLE_NAME);
         for (historical, verbosity, machine) in [
             (false, "", false),
             (true, "", false),
@@ -391,7 +406,15 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
                     json!({"sas_token":"?sv=test&sp=rl&sig=test+signature"});
                 fs::write(path, serde_json::to_vec(&credentials)?)?;
             }
-            let mut command = fixture.inspect();
+            let mut command = fixture.command(&[
+                "inspect",
+                &target,
+                authorization["profile_argument"].as_str().unwrap(),
+                PROFILE,
+            ]);
+            command
+                .arg("--storage-options-file")
+                .arg(fixture.directory.path().join("options.json"));
             command
                 .env("AWS_ACCESS_KEY_ID", "ambient-key")
                 .env("AZURE_STORAGE_ACCOUNT_KEY", "invalid-ambient-secret")
@@ -560,6 +583,8 @@ fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResul
         vec!["capabilities", "--command", "scan", "--full"],
         vec!["capabilities", "--authorization", "unity-catalog"],
         vec!["capabilities", "--authorization", "s3"],
+        vec!["capabilities", "--authorization", "unity-catalog", "--full"],
+        vec!["capabilities", "--authorization", "s3", "--full"],
         vec!["capabilities", "--schema", "storage-options"],
         vec!["capabilities", "--schema", "execution-options"],
         vec!["capabilities", "--schema", "predicate"],

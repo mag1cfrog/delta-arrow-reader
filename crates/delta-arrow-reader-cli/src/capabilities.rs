@@ -3,8 +3,9 @@
 //! `dar capabilities` lists the installed commands and how to request details.
 //! For example, `--command scan` gives usage and limits, `--schema predicate`
 //! gives a filter example, and `--schema predicate --detail int64` describes
-//! one literal type. Add `--full` for a command's metadata or a validation
-//! schema. All views work without opening a table or resolving authorization.
+//! one literal type. Add `--full` for complete command or authorization metadata,
+//! or a validation schema. All views work without opening a table or resolving
+//! authorization.
 
 mod output_schemas;
 mod read_support;
@@ -33,7 +34,7 @@ const MAX_FULL_RESPONSE_BYTES: usize = 1024 * 1024;
 const DEADLINE: Duration = Duration::from_secs(5);
 
 #[derive(Args)]
-#[command(group(ArgGroup::new("full_definition_target").args(["command", "schema"])))]
+#[command(group(ArgGroup::new("full_definition_target").args(["command", "schema", "authorization"])))]
 pub(crate) struct CapabilitiesArgs {
     /// Show usage and limits for one command.
     #[arg(long, value_name = "NAME", value_parser = parse_command_name, conflicts_with_all = ["schema", "authorization", "all"])]
@@ -52,8 +53,8 @@ pub(crate) struct CapabilitiesArgs {
     /// Show an authorization guide for a storage or catalog service.
     #[arg(long, value_enum, conflicts_with_all = ["command", "schema", "all"])]
     authorization: Option<read_support::AuthorizationGuide>,
-    /// With --command or --schema, return complete metadata or a validation schema.
-    #[arg(long, requires = "full_definition_target", conflicts_with_all = ["authorization", "detail"])]
+    /// Return complete metadata for the selected command, schema, or authorization guide.
+    #[arg(long, requires = "full_definition_target", conflicts_with = "detail")]
     full: bool,
     /// Return the complete inventory of commands, authorization, and limits.
     #[arg(long, conflicts_with_all = ["command", "schema", "authorization", "full"])]
@@ -92,12 +93,6 @@ fn build_capability_index() -> Value {
         "schemas": DiscoverySchema::value_variants(),
         "schema_command": [executable, "capabilities", "--schema", "NAME"],
         "all_command": [executable, "capabilities", "--all"],
-        "notes": [
-            "scan and query return Arrow IPC; redirect stdout to a file or pipe.",
-            "query reads one direct table location as t; Unity Catalog requires inspect or scan.",
-            "Table commands have no total deadline; inspect and scan have no output byte limit.",
-        ],
-        "limits": discovery_limits(MAX_INDEX_BYTES),
     })
 }
 
@@ -112,59 +107,133 @@ fn discovery_limits(max_output_bytes: usize) -> Value {
 fn build_command_guide(name: &str) -> Result<Value, Error> {
     let mut cli = Cli::command();
     cli.build();
-    let executable = cli.get_name().to_owned();
-    let command = cli.find_subcommand_mut(name).ok_or(Error::Argument {
+    let executable = cli.get_name();
+    let command = cli.find_subcommand(name).ok_or(Error::Argument {
         kind: ErrorKind::InvalidValue,
         correction: None,
     })?;
-    let mut guide = build_capability_details(Some(name))?;
-    guide["kind"] = json!("command_guide");
-    guide["command"] = json!(name);
-    guide["help"] = json!(command.render_long_help().to_string());
-    let conflicts: Vec<_> = command
+    let mut guide = match name {
+        "inspect" => json!({
+            "example": [executable, "--diagnostics=json", "inspect", "./table"],
+            "stdout": "json",
+            "notes": [
+                "Reports the version and full Arrow schema from metadata only; this does not verify data-file access.",
+                "No output byte limit or total deadline; redirect large schemas to a file.",
+            ],
+        }),
+        "scan" => json!({
+            "example": [executable, "--diagnostics=json", "scan", "./table", "--limit", "1"],
+            "stdout": "arrow_ipc_stream",
+            "notes": [
+                "Redirect stdout to a file or pipe; terminal output is rejected.",
+                "--limit selects a sample. No output byte limit or total deadline.",
+            ],
+        }),
+        "query" => json!({
+            "example": [executable, "--diagnostics=json", "query", "./table", "--sql-file", "query.sql"],
+            "stdout": "arrow_ipc_stream",
+            "sql": {
+                "argument": "--sql-file", "table": "t",
+                "example": "SELECT count(*) AS row_count FROM t",
+                "max_file_bytes": crate::query::MAX_SQL_BYTES,
+            },
+            "notes": [
+                "One read-only SQL statement in a UTF-8 file, over one direct table as t. Unity Catalog targets are unsupported.",
+                "Redirect stdout to a file or pipe. Resource ceilings fail the query; SQL LIMIT selects a smaller result.",
+                "No total deadline. Memory is limited to the DataFusion pool, not process RSS; disk spill is disabled.",
+            ],
+        }),
+        _ => json!({
+            "example": [executable, name],
+            "stdout": if name == "capabilities" { "json" } else { "text" },
+        }),
+    };
+    let options: serde_json::Map<_, _> = command
         .get_arguments()
-        .filter_map(|argument| {
-            let conflicts: Vec<_> = command
-                .get_arg_conflicts_with(argument)
-                .into_iter()
-                .map(argument_name)
-                .collect();
-            (!conflicts.is_empty()).then(|| {
-                json!({
-                    "argument": argument_name(argument), "conflicts_with": conflicts,
-                })
-            })
+        .filter(|argument| {
+            matches!(
+                argument.get_id().as_str(),
+                "table" | "table_version" | "columns" | "limit"
+            )
+        })
+        .map(|argument| {
+            (
+                argument_name(argument),
+                json!(argument.get_help().map(ToString::to_string)),
+            )
         })
         .collect();
-    guide["argument_conflicts"] = json!(conflicts);
+    if !options.is_empty() {
+        guide["options"] = json!(options);
+    }
+    if name == "query" {
+        let ceilings: serde_json::Map<_, _> = command
+            .get_arguments()
+            .filter(|argument| {
+                matches!(
+                    argument.get_id().as_str(),
+                    "max_rows" | "max_output_bytes" | "memory_limit_bytes"
+                )
+            })
+            .filter_map(|argument| {
+                argument
+                    .get_default_values()
+                    .first()
+                    .map(|value| (argument_name(argument), json!(value.to_string_lossy())))
+            })
+            .collect();
+        guide["resource_defaults"] = json!(ceilings);
+    }
+    let input_schemas: Vec<_> = JsonInputKind::value_variants()
+        .iter()
+        .filter(|kind| {
+            command
+                .get_arguments()
+                .any(|argument| argument_name(argument) == kind.argument())
+        })
+        .map(|kind| json!({"name": kind, "argument": kind.argument()}))
+        .collect();
+    if !input_schemas.is_empty() {
+        guide["input_schemas"] = json!(input_schemas);
+    }
     let mut authorization_guides = Vec::new();
-    if guide["authorization"].get("direct_storage").is_some() {
+    if command
+        .get_arguments()
+        .any(|argument| argument.get_id() == "storage_options_file")
+    {
         authorization_guides.extend(["s3", "azure-blob", "gcs"]);
     }
-    if guide["authorization"].get("unity_catalog").is_some() {
+    if command
+        .get_arguments()
+        .any(|argument| argument.get_id() == "databricks_profile")
+    {
         authorization_guides.push("unity-catalog");
     }
-    if authorization_guides.is_empty() {
-        if let Some(object) = guide.as_object_mut() {
-            object.remove("authorization");
-        }
-    } else {
+    if !authorization_guides.is_empty() {
         guide["authorization"] = json!({
             "local": "Local paths need no credentials.",
             "guides": authorization_guides,
             "details_command": [executable, "capabilities", "--authorization", "NAME"],
         });
     }
-    if let Some(sql) = guide
-        .get_mut("read_support")
-        .and_then(|support| support.get_mut(name))
-        .and_then(|support| support.get_mut("sql_input"))
-        .and_then(Value::as_object_mut)
-    {
-        sql.remove("examples");
+    let mut output_schemas = vec![DiscoverySchema::Diagnostic];
+    if name != "help" {
+        output_schemas.push(DiscoverySchema::Completion);
     }
+    if name == "inspect" {
+        output_schemas.push(DiscoverySchema::Inspection);
+    }
+    guide["output_schemas"] = json!(output_schemas);
+    guide["schema_command"] = json!([executable, "capabilities", "--schema", "NAME"]);
+    guide["format_version"] = json!(1);
+    guide["kind"] = json!("command_guide");
+    guide["command"] = json!(name);
+    guide["help_command"] = if name == "help" {
+        json!([executable, "--help"])
+    } else {
+        json!([executable, name, "--help"])
+    };
     guide["full_command"] = json!([executable, "capabilities", "--command", name, "--full"]);
-    guide["limits"] = discovery_limits(MAX_COMMAND_GUIDE_BYTES);
     Ok(guide)
 }
 
@@ -380,7 +449,11 @@ fn write_discovery_response(options: CapabilitiesArgs) -> Result<StdoutStats, Er
             (build_command_guide(&name)?, MAX_COMMAND_GUIDE_BYTES)
         }
     } else if let Some(guide) = options.authorization {
-        (guide.document(), MAX_AUTHORIZATION_GUIDE_BYTES)
+        if options.full {
+            (guide.full_document(), MAX_FULL_RESPONSE_BYTES)
+        } else {
+            (guide.guide_document(), MAX_AUTHORIZATION_GUIDE_BYTES)
+        }
     } else if options.all {
         (build_capability_details(None)?, MAX_FULL_RESPONSE_BYTES)
     } else {
@@ -415,6 +488,72 @@ mod tests {
     use clap::Parser;
 
     use super::*;
+
+    #[test]
+    fn command_examples_parse_and_link_to_complete_help() {
+        let mut cli = Cli::command();
+        cli.build();
+        for command in cli.get_subcommands() {
+            let guide = build_command_guide(command.get_name()).unwrap();
+            let example: Vec<_> = guide["example"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|arg| arg.as_str().unwrap())
+                .collect();
+            if command.get_name() == "help" {
+                assert_eq!(
+                    Cli::try_parse_from(example).err().unwrap().kind(),
+                    ErrorKind::DisplayHelp
+                );
+            } else {
+                Cli::try_parse_from(example).unwrap();
+            }
+            let help: Vec<_> = guide["help_command"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|arg| arg.as_str().unwrap())
+                .collect();
+            let error = Cli::try_parse_from(help).err().unwrap();
+            assert_eq!(error.kind(), ErrorKind::DisplayHelp);
+            for omitted in [
+                "help",
+                "argument_conflicts",
+                "read_support",
+                "limits",
+                "cli_version",
+            ] {
+                assert!(guide.get(omitted).is_none(), "{omitted}");
+            }
+        }
+        let guide = build_command_guide("query").unwrap();
+        let file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(file.path(), guide["sql"]["example"].as_str().unwrap()).unwrap();
+        crate::query::ReadOnlySqlQuery::read_file(file.path().to_str().unwrap()).unwrap();
+        let parsed =
+            Cli::try_parse_from(["dar", "query", "table", "--sql-file", "query.sql"]).unwrap();
+        let crate::Command::Query(args) = parsed.command else {
+            panic!("query expected")
+        };
+        assert_eq!(
+            guide["resource_defaults"]["--max-rows"],
+            args.max_rows.to_string()
+        );
+        assert_eq!(
+            guide["resource_defaults"]["--max-output-bytes"],
+            args.max_output_bytes.to_string()
+        );
+        assert_eq!(
+            guide["resource_defaults"]["--memory-limit-bytes"],
+            args.memory_limit_bytes.to_string()
+        );
+        let guide = build_command_guide("scan").unwrap();
+        assert!(guide["options"].get("--column").is_some());
+        assert!(guide["options"].get("--table-version").is_some());
+        assert!(guide["options"].get("--limit").is_some());
+        assert!(guide["options"].get("--target-partitions").is_none());
+    }
 
     #[test]
     fn discovery_selectors_are_mutually_exclusive_and_describe_their_conflicts() {
@@ -458,7 +597,6 @@ mod tests {
         for invalid in [
             vec!["--full"],
             vec!["--all", "--full"],
-            vec!["--authorization", "s3", "--full"],
             vec!["--detail", "rows"],
             vec!["--command", "scan", "--detail", "rows"],
             vec!["--authorization", "s3", "--detail", "rows"],
@@ -476,6 +614,7 @@ mod tests {
             );
         }
         for valid in [
+            vec!["--authorization", "s3", "--full"],
             vec!["--command", "query", "--full"],
             vec!["--full", "--schema", "predicate"],
             vec!["--detail", "rows", "--schema", "completion"],

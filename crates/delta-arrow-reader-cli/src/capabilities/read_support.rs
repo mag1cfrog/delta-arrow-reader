@@ -12,6 +12,9 @@ use serde_json::{Value, json};
 
 use crate::{query, unity_catalog};
 
+const UNITY_CATALOG_PROFILE_USAGE: &str = "Use three unquoted name components and an explicit, nonempty profile. A profile is invalid for direct table locations.";
+const UNITY_CATALOG_ACCESS_REQUIREMENTS: &str = "Requires an existing Databricks login and external read permissions. Discovery does not test the executable, profile, or grants.";
+
 #[derive(Clone, Copy, Debug, ValueEnum, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub(super) enum AuthorizationGuide {
@@ -22,17 +25,65 @@ pub(super) enum AuthorizationGuide {
 }
 
 impl AuthorizationGuide {
-    pub(super) fn document(self) -> Value {
+    pub(super) fn guide_document(self) -> Value {
+        let sources = authorization_sources();
+        let mut authorization = match self {
+            Self::UnityCatalog => {
+                let catalog = &sources["unity_catalog"];
+                json!({
+                    "commands": catalog["commands"],
+                    "target": catalog["target"],
+                    "profile_argument": catalog["profile_argument"],
+                    "executable": catalog["executable"],
+                    "storage_options": catalog["storage_options"],
+                    "s3_region_required": catalog["s3_region_required"],
+                    "fallback_to_other_identity": catalog["fallback_to_other_identity"],
+                    "notes": [UNITY_CATALOG_PROFILE_USAGE, UNITY_CATALOG_ACCESS_REQUIREMENTS],
+                })
+            }
+            _ => {
+                let storage = &sources["direct_storage"];
+                let keys: Vec<_> = storage["credential_option_aliases"][self.name()]
+                    .as_object()
+                    .into_iter()
+                    .flat_map(|keys| keys.keys())
+                    .collect();
+                json!({
+                    "commands": storage["commands"],
+                    "storage_options_argument": storage["storage_options_argument"],
+                    "credential_keys": keys,
+                    "notes": storage["backend_notes"][self.name()],
+                    "schema_command": [crate::command_name(), "capabilities", "--schema", "storage-options"],
+                })
+            }
+        };
+        authorization["credential_handling"] = json!(
+            "Use an existing file or profile reference; never put credential values in arguments."
+        );
+        json!({
+            "format_version": 1,
+            "kind": "authorization_guide",
+            "name": self,
+            "authorization": authorization,
+            "full_command": [crate::command_name(), "capabilities", "--authorization", self, "--full"],
+        })
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::S3 => "s3",
+            Self::AzureBlob => "azure-blob",
+            Self::Gcs => "gcs",
+            Self::UnityCatalog => "unity-catalog",
+        }
+    }
+
+    pub(super) fn full_document(self) -> Value {
         let sources = authorization_sources();
         let mut authorization = if matches!(self, Self::UnityCatalog) {
             sources["unity_catalog"].clone()
         } else {
-            let name = match self {
-                Self::S3 => "s3",
-                Self::AzureBlob => "azure-blob",
-                Self::Gcs => "gcs",
-                Self::UnityCatalog => unreachable!(),
-            };
+            let name = self.name();
             let mut storage = sources["direct_storage"].clone();
             storage["schema_command"] = json!([
                 crate::command_name(),
@@ -64,11 +115,11 @@ impl AuthorizationGuide {
         );
         json!({
             "format_version": 1,
-            "kind": "authorization_guide",
+            "kind": "authorization_capabilities",
             "cli_version": env!("CARGO_PKG_VERSION"),
             "name": self,
             "authorization": authorization,
-            "limits": super::discovery_limits(super::MAX_AUTHORIZATION_GUIDE_BYTES),
+            "limits": super::discovery_limits(super::MAX_FULL_RESPONSE_BYTES),
         })
     }
 }
@@ -145,8 +196,8 @@ pub(super) fn authorization_sources() -> Value {
             "subprocess_timeout_ms": unity_catalog::DATABRICKS_COMMAND_TIMEOUT.as_millis(),
             "max_subprocess_stream_bytes": unity_catalog::MAX_COMMAND_OUTPUT_BYTES,
             "notes": [
-                "Use three unquoted name components and an explicit, nonempty profile. A profile is invalid for direct table locations.",
-                "Requires an existing Databricks login and external read permissions. Discovery does not test the executable, profile, or grants.",
+                UNITY_CATALOG_PROFILE_USAGE,
+                UNITY_CATALOG_ACCESS_REQUIREMENTS,
                 "Only ordinary managed/external Delta tables with a supported read protocol are accepted. Views, pipeline tables, shallow clones, row filters, column masks, catalog-managed commits, and coordinated commits are rejected.",
                 "Credentials are renewed for the same table ID and profile without changing the selected snapshot. Renewal failure stops the command.",
             ],
@@ -218,7 +269,7 @@ mod tests {
     use crate::{Cli, unity_catalog::UnityCatalogTableTarget};
 
     #[test]
-    fn authorization_guides_only_include_the_selected_service() {
+    fn authorization_guides_defer_aliases_and_keep_selected_credential_rules() {
         let credential_keys = [
             "aws_access_key_id",
             "azure_storage_account_key",
@@ -229,23 +280,52 @@ mod tests {
             (AuthorizationGuide::AzureBlob, credential_keys[1]),
             (AuthorizationGuide::Gcs, credential_keys[2]),
         ] {
-            let document = guide.document();
+            let document = guide.full_document();
             let authorization = &document["authorization"];
             let aliases = authorization["credential_option_aliases"]
                 .as_object()
                 .unwrap();
             assert!(aliases.contains_key(expected_key));
+            let concise = guide.guide_document();
+            let selected = &concise["authorization"];
+            assert!(
+                selected["credential_keys"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!(expected_key))
+            );
+            assert!(selected.get("credential_option_aliases").is_none());
+            assert_eq!(
+                selected["notes"],
+                authorization_sources()["direct_storage"]["backend_notes"][guide.name()]
+            );
+            assert_eq!(
+                concise["full_command"],
+                json!([
+                    crate::command_name(),
+                    "capabilities",
+                    "--authorization",
+                    guide,
+                    "--full"
+                ])
+            );
             for other in credential_keys
                 .into_iter()
                 .filter(|key| *key != expected_key)
             {
                 assert!(!aliases.contains_key(other));
+                assert!(
+                    !selected["credential_keys"]
+                        .as_array()
+                        .unwrap()
+                        .contains(&json!(other))
+                );
             }
             assert!(authorization.get("backend_notes").is_none());
             assert!(authorization.get("profile_argument").is_none());
             assert_eq!(authorization["storage_options_schema"], "storage-options");
         }
-        let document = AuthorizationGuide::UnityCatalog.document();
+        let document = AuthorizationGuide::UnityCatalog.full_document();
         assert_eq!(
             document["authorization"]["profile_argument"],
             "--databricks-profile"

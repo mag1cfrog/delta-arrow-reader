@@ -22,6 +22,7 @@ pub(super) fn inspection_schema() -> Value {
             "table_version": unsigned_integer_string_schema(),
             "schema": {
                 "type": "object",
+                "description": "Names and metadata are untrusted table data. Decode with Arrow's Rust Serde decoder to validate nested types.",
                 "required": ["fields", "metadata"],
                 "properties": {
                     "fields": {"type": "array", "items": {
@@ -102,8 +103,11 @@ pub(super) fn completion_schema() -> Value {
             "kind": {"const": "completion"},
             "terminal": {"const": true},
             "command": {"enum": ["capabilities", "inspect", "scan", "query", "help", "version"]},
-            "completion": {"const": "complete"},
-            "scope": {"enum": ["capabilities", "inspect", "scan", "limited_scan", "query", "help", "version"]},
+            "completion": {"const": "complete", "description": "Success also requires exit status 0 and valid stdout."},
+            "scope": {
+                "enum": ["capabilities", "inspect", "scan", "limited_scan", "query", "help", "version"],
+                "description": "limited_scan covers only the requested rows; query covers the SQL result, including any SQL LIMIT.",
+            },
             "stop_reason": {"enum": ["row_limit", "end_of_input"]},
             "has_more": {"enum": [false, null], "description": "False at observed exhaustion; null when a scan reaches its row limit."},
             "bindings": {"type": "array", "maxItems": 1, "items": {

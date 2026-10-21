@@ -87,10 +87,12 @@ fn execution_options_schema() -> Value {
             "parquet_metadata_size_hint_bytes": {
                 "type": ["integer", "null"], "minimum": 1, "maximum": usize::MAX,
                 "default": defaults.parquet_metadata_size_hint_bytes(),
+                "description": "Null clears the size hint; omitting this field keeps the default.",
             },
             "parquet_full_file_read_threshold_bytes": {
                 "type": ["integer", "null"], "minimum": 1, "maximum": usize::MAX,
                 "default": defaults.parquet_full_file_read_threshold_bytes(),
+                "description": "Null disables full-file reads by size; omitting this field keeps the default.",
             },
         },
         "examples": [{}, {"prefetch_files_per_partition": 0}, {

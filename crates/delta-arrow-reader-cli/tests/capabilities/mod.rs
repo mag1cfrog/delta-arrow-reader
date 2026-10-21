@@ -156,6 +156,14 @@ fn discovery_is_deterministic_without_credentials_or_a_search_path()
             "schema_detail",
         ),
         (vec!["--authorization", "s3"], "authorization_guide"),
+        (
+            vec!["--authorization", "s3", "--full"],
+            "authorization_capabilities",
+        ),
+        (
+            vec!["--authorization", "unity-catalog", "--full"],
+            "authorization_capabilities",
+        ),
         (vec!["--authorization", "azure-blob"], "authorization_guide"),
         (vec!["--authorization", "gcs"], "authorization_guide"),
         (
@@ -176,13 +184,19 @@ fn discovery_is_deterministic_without_credentials_or_a_search_path()
         assert!(baseline.stdout.len() <= 1024 * 1024);
         let inventory: Value = serde_json::from_slice(&baseline.stdout)?;
         assert_eq!(inventory["kind"], kind);
-        if selectors.is_empty() {
-            assert!(baseline.stdout.len() <= 2048);
-            assert_eq!(inventory["limits"]["max_output_bytes"], 2048);
-        }
+        let limit = match kind {
+            "capability_index" | "schema_guide" | "schema_detail" | "authorization_guide" => 2048,
+            "command_guide" => 4096,
+            _ => 1024 * 1024,
+        };
+        assert!(baseline.stdout.len() <= limit);
         assert_eq!(inventory["format_version"], 1);
-        assert_eq!(inventory["cli_version"], env!("CARGO_PKG_VERSION"));
-        assert_eq!(inventory["limits"]["deadline_ms"], 5000);
+        if limit == 1024 * 1024 {
+            assert_eq!(inventory["cli_version"], env!("CARGO_PKG_VERSION"));
+            assert_eq!(inventory["limits"]["deadline_ms"], 5000);
+        } else {
+            assert!(inventory.get("limits").is_none());
+        }
 
         command
             .env("AWS_ACCESS_KEY_ID", "secret-access-key")
@@ -227,172 +241,205 @@ fn discovery_is_deterministic_without_credentials_or_a_search_path()
 #[test]
 fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
 -> Result<(), Box<dyn std::error::Error>> {
-    let output = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).arg("capabilities"))?;
-    assert!(output.status.success());
-    assert!(output.stdout.len() <= 2048);
-    let index: Value = serde_json::from_slice(&output.stdout)?;
-    assert_eq!(index["kind"], "capability_index");
-    assert!(index.get("authorization").is_none());
-    assert!(index.get("read_support").is_none());
-    let run_advertised = |invocation: &Value| -> Result<Value, Box<dyn std::error::Error>> {
-        let args: Vec<_> = invocation
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|arg| arg.as_str().unwrap())
-            .collect();
-        assert_eq!(args[0], "dar");
-        let output = run_with_timeout(
-            Command::new(env!("CARGO_BIN_EXE_dar"))
-                .env_clear()
-                .args(&args[1..]),
-        )?;
-        assert!(output.status.success(), "{output:?}");
-        assert!(output.stderr.is_empty());
-        let document: Value = serde_json::from_slice(&output.stdout)?;
-        let limit = match document["kind"].as_str().unwrap() {
-            "command_guide" => 4096,
-            "schema_guide" | "schema_detail" | "authorization_guide" => 2048,
-            _ => 1024 * 1024,
-        };
-        assert!(
-            output.stdout.len() <= limit,
-            "{args:?}: {} bytes",
-            output.stdout.len()
-        );
-        Ok(document)
-    };
-    let full = run_advertised(&index["all_command"])?;
-    assert_eq!(full["kind"], "capabilities");
-    let commands = index["commands"].as_array().unwrap();
-    assert_eq!(
-        commands.len(),
-        full["command"]["subcommands"].as_array().unwrap().len()
-    );
-    for entry in commands {
-        assert!(entry.get("arguments").is_none());
-        let name = entry["name"].as_str().unwrap();
-        let guide = run_advertised(&entry["details"])?;
-        assert_eq!(guide["kind"], "command_guide");
-        assert_eq!(guide["command"], name);
-        assert!(guide["help"].as_str().unwrap().contains("Usage:"));
-        assert!(guide["authorization"].get("direct_storage").is_none());
-        assert!(guide["authorization"].get("unity_catalog").is_none());
-        for guide_name in guide["authorization"]["guides"]
-            .as_array()
-            .into_iter()
-            .flatten()
-        {
-            let mut invocation = guide["authorization"]["details_command"].clone();
-            *invocation.as_array_mut().unwrap().last_mut().unwrap() = guide_name.clone();
-            let authorization = run_advertised(&invocation)?;
-            assert_eq!(authorization["kind"], "authorization_guide");
-            assert_eq!(&authorization["name"], guide_name);
+    let directory = tempfile::tempdir()?;
+    for executable_name in ["dar", "delta-arrow-reader"] {
+        let executable = directory
+            .path()
+            .join(format!("{executable_name}{}", std::env::consts::EXE_SUFFIX));
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_dar"), &executable)?;
+        #[cfg(not(unix))]
+        fs::copy(env!("CARGO_BIN_EXE_dar"), &executable)?;
+        let output = run_with_timeout(Command::new(&executable).arg("capabilities"))?;
+        assert!(output.status.success());
+        assert!(output.stdout.len() <= 2048);
+        let index: Value = serde_json::from_slice(&output.stdout)?;
+        assert_eq!(index["kind"], "capability_index");
+        assert!(index.get("authorization").is_none());
+        assert!(index.get("read_support").is_none());
+        let run_advertised = |invocation: &Value| -> Result<Value, Box<dyn std::error::Error>> {
+            let args: Vec<_> = invocation
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|arg| arg.as_str().unwrap())
+                .collect();
+            assert_eq!(args[0], executable_name);
+            let output = run_with_timeout(Command::new(&executable).env_clear().args(&args[1..]))?;
+            assert!(output.status.success(), "{output:?}");
+            assert!(output.stderr.is_empty());
+            let document: Value = serde_json::from_slice(&output.stdout)?;
+            let limit = match document["kind"].as_str().unwrap() {
+                "command_guide" => 4096,
+                "schema_guide" | "schema_detail" | "authorization_guide" => 2048,
+                _ => 1024 * 1024,
+            };
             assert!(
-                authorization["authorization"]["commands"]
-                    .as_array()
-                    .unwrap()
-                    .contains(&guide["command"])
+                output.stdout.len() <= limit,
+                "{args:?}: {} bytes",
+                output.stdout.len()
             );
-        }
-        let details = run_advertised(&guide["full_command"])?;
-        assert_eq!(details["kind"], "command_capabilities");
-        let complete_command = full["command"]["subcommands"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|command| command["name"] == name)
-            .unwrap();
-        assert_eq!(&details["command"], complete_command);
-        assert_eq!(details["stdout_formats"].as_object().unwrap().len(), 1);
-        assert_eq!(
-            details["stdout_formats"][name],
-            full["stdout_formats"][name]
-        );
-        assert_eq!(details["read_support"][name], full["read_support"][name]);
-        assert!(
-            details["read_support"]
-                .as_object()
-                .unwrap()
-                .keys()
-                .all(|key| key == name)
-        );
-        let expected_sources = match name {
-            "inspect" | "scan" => vec!["direct_storage", "local", "unity_catalog"],
-            "query" => vec!["direct_storage", "local"],
-            _ => vec![],
+            Ok(document)
         };
+        let full = run_advertised(&index["all_command"])?;
+        assert_eq!(full["kind"], "capabilities");
+        let commands = index["commands"].as_array().unwrap();
         assert_eq!(
-            details["authorization"]
-                .as_object()
-                .unwrap()
-                .keys()
-                .map(String::as_str)
-                .collect::<Vec<_>>(),
-            expected_sources
+            commands.len(),
+            full["command"]["subcommands"].as_array().unwrap().len()
         );
-        for source in expected_sources {
+        for entry in commands {
+            assert!(entry.get("arguments").is_none());
+            let name = entry["name"].as_str().unwrap();
+            let guide = run_advertised(&entry["details"])?;
+            assert_eq!(guide["kind"], "command_guide");
+            assert_eq!(guide["command"], name);
+            assert!(guide.get("help").is_none());
+            assert!(guide.get("argument_conflicts").is_none());
+            assert!(guide.get("read_support").is_none());
+            let help: Vec<_> = guide["help_command"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|arg| arg.as_str().unwrap())
+                .collect();
+            let output = run_with_timeout(Command::new(&executable).args(&help[1..]))?;
+            assert!(output.status.success(), "{output:?}");
+            assert!(String::from_utf8_lossy(&output.stdout).contains("Usage:"));
+            assert!(guide["authorization"].get("direct_storage").is_none());
+            assert!(guide["authorization"].get("unity_catalog").is_none());
+            for guide_name in guide["authorization"]["guides"]
+                .as_array()
+                .into_iter()
+                .flatten()
+            {
+                let mut invocation = guide["authorization"]["details_command"].clone();
+                *invocation.as_array_mut().unwrap().last_mut().unwrap() = guide_name.clone();
+                let authorization = run_advertised(&invocation)?;
+                assert_eq!(authorization["kind"], "authorization_guide");
+                assert_eq!(&authorization["name"], guide_name);
+                assert!(
+                    authorization["authorization"]
+                        .get("credential_option_aliases")
+                        .is_none()
+                );
+                let expanded = run_advertised(&authorization["full_command"])?;
+                assert_eq!(expanded["kind"], "authorization_capabilities");
+                assert_eq!(&expanded["name"], guide_name);
+                assert!(
+                    authorization["authorization"]["commands"]
+                        .as_array()
+                        .unwrap()
+                        .contains(&guide["command"])
+                );
+            }
+            let details = run_advertised(&guide["full_command"])?;
+            assert_eq!(details["kind"], "command_capabilities");
+            let complete_command = full["command"]["subcommands"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|command| command["name"] == name)
+                .unwrap();
+            assert_eq!(&details["command"], complete_command);
+            assert_eq!(details["stdout_formats"].as_object().unwrap().len(), 1);
             assert_eq!(
-                details["authorization"][source],
-                full["authorization"][source]
+                details["stdout_formats"][name],
+                full["stdout_formats"][name]
             );
+            assert_eq!(details["read_support"][name], full["read_support"][name]);
+            assert!(
+                details["read_support"]
+                    .as_object()
+                    .unwrap()
+                    .keys()
+                    .all(|key| key == name)
+            );
+            let expected_sources = match name {
+                "inspect" | "scan" => vec!["direct_storage", "local", "unity_catalog"],
+                "query" => vec!["direct_storage", "local"],
+                _ => vec![],
+            };
+            assert_eq!(
+                details["authorization"]
+                    .as_object()
+                    .unwrap()
+                    .keys()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+                expected_sources
+            );
+            for source in expected_sources {
+                assert_eq!(
+                    details["authorization"][source],
+                    full["authorization"][source]
+                );
+            }
+            let input_names: Vec<_> = details["input_schemas"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|schema| schema["name"].as_str().unwrap())
+                .collect();
+            let expected_inputs = match name {
+                "scan" => vec!["storage-options", "predicate", "execution-options"],
+                "inspect" | "query" => vec!["storage-options"],
+                _ => vec![],
+            };
+            assert_eq!(input_names, expected_inputs);
+            let output_names: Vec<_> = details["output_schemas"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|schema| schema["name"].as_str().unwrap())
+                .collect();
+            let expected_outputs = match name {
+                "inspect" => vec!["inspection", "diagnostic", "completion"],
+                "help" => vec!["diagnostic"],
+                _ => vec!["diagnostic", "completion"],
+            };
+            assert_eq!(output_names, expected_outputs);
         }
-        let input_names: Vec<_> = details["input_schemas"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|schema| schema["name"].as_str().unwrap())
-            .collect();
-        let expected_inputs = match name {
-            "scan" => vec!["storage-options", "predicate", "execution-options"],
-            "inspect" | "query" => vec!["storage-options"],
-            _ => vec![],
-        };
-        assert_eq!(input_names, expected_inputs);
-        let output_names: Vec<_> = details["output_schemas"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|schema| schema["name"].as_str().unwrap())
-            .collect();
-        let expected_outputs = match name {
-            "inspect" => vec!["inspection", "diagnostic", "completion"],
-            "help" => vec!["diagnostic"],
-            _ => vec!["diagnostic", "completion"],
-        };
-        assert_eq!(output_names, expected_outputs);
-    }
-    for name in index["schemas"].as_array().unwrap() {
-        let mut invocation = index["schema_command"].clone();
-        *invocation.as_array_mut().unwrap().last_mut().unwrap() = name.clone();
-        let guide = run_advertised(&invocation)?;
-        assert_eq!(guide["kind"], "schema_guide");
-        assert_eq!(&guide["name"], name);
-        assert!(guide.get("schema").is_none());
-        for guide_name in guide["authorization_guides"]
-            .as_array()
-            .into_iter()
-            .flatten()
-        {
-            let mut invocation = guide["authorization_command"].clone();
-            *invocation.as_array_mut().unwrap().last_mut().unwrap() = guide_name.clone();
-            let authorization = run_advertised(&invocation)?;
-            assert_eq!(authorization["kind"], "authorization_guide");
-            assert_eq!(&authorization["name"], guide_name);
-        }
-        let full = run_advertised(&guide["full_command"])?;
-        assert_eq!(&full["name"], name);
-        jsonschema::validate(&full["schema"], &guide["example"])
-            .map_err(|error| io::Error::other(error.to_string()))?;
-        for field in ["fields", "operators", "scalar_types"] {
-            for name in guide[field].as_array().into_iter().flatten() {
-                let mut invocation = guide["detail_command"].clone();
-                *invocation.as_array_mut().unwrap().last_mut().unwrap() = name.clone();
-                let detail = run_advertised(&invocation)?;
-                assert_eq!(detail["kind"], "schema_detail");
-                assert_eq!(&detail["detail"], name);
-                assert!(detail.get("schema").is_none());
-                assert!(detail["definition"].is_object());
+        for name in index["schemas"].as_array().unwrap() {
+            let mut invocation = index["schema_command"].clone();
+            *invocation.as_array_mut().unwrap().last_mut().unwrap() = name.clone();
+            let guide = run_advertised(&invocation)?;
+            assert_eq!(guide["kind"], "schema_guide");
+            assert_eq!(&guide["name"], name);
+            assert!(guide.get("schema").is_none());
+            for guide_name in guide["authorization_guides"]
+                .as_array()
+                .into_iter()
+                .flatten()
+            {
+                let mut invocation = guide["authorization_command"].clone();
+                *invocation.as_array_mut().unwrap().last_mut().unwrap() = guide_name.clone();
+                let authorization = run_advertised(&invocation)?;
+                assert_eq!(authorization["kind"], "authorization_guide");
+                assert_eq!(&authorization["name"], guide_name);
+                assert!(
+                    authorization["authorization"]
+                        .get("credential_option_aliases")
+                        .is_none()
+                );
+                let expanded = run_advertised(&authorization["full_command"])?;
+                assert_eq!(expanded["kind"], "authorization_capabilities");
+                assert_eq!(&expanded["name"], guide_name);
+            }
+            let full = run_advertised(&guide["full_command"])?;
+            assert_eq!(&full["name"], name);
+            jsonschema::validate(&full["schema"], &guide["example"])
+                .map_err(|error| io::Error::other(error.to_string()))?;
+            for field in ["fields", "operators", "scalar_types"] {
+                for name in guide[field].as_array().into_iter().flatten() {
+                    let mut invocation = guide["detail_command"].clone();
+                    *invocation.as_array_mut().unwrap().last_mut().unwrap() = name.clone();
+                    let detail = run_advertised(&invocation)?;
+                    assert_eq!(detail["kind"], "schema_detail");
+                    assert_eq!(&detail["detail"], name);
+                    assert!(detail.get("schema").is_none());
+                    assert!(detail["definition"].is_object());
+                }
             }
         }
     }
@@ -464,18 +511,66 @@ fn discovered_guides_support_pinned_reads_and_predicate_repair()
             discover(&entry["details"])
         };
         let inspect_guide = command_guide("inspect")?;
-        assert_eq!(inspect_guide["stdout_formats"]["inspect"]["format"], "json");
-        let inspection = run_with_timeout(
-            Command::new(&executable)
-                .env_clear()
-                .args(["--diagnostics=json", "inspect"])
-                .arg(&table),
-        )?;
+        assert_eq!(inspect_guide["stdout"], "json");
+        let inspect_args: Vec<_> = inspect_guide["example"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .skip(1)
+            .map(|arg| {
+                if arg == "./table" {
+                    table.to_str().unwrap()
+                } else {
+                    arg.as_str().unwrap()
+                }
+            })
+            .collect();
+        let inspection =
+            run_with_timeout(Command::new(&executable).env_clear().args(inspect_args))?;
         assert!(inspection.status.success(), "{inspection:?}");
         let snapshot: Value = serde_json::from_slice(&inspection.stdout)?;
         let version = snapshot["table_version"].as_str().unwrap();
 
         let scan_guide = command_guide("scan")?;
+        let sample_args: Vec<_> = scan_guide["example"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .skip(1)
+            .map(|arg| {
+                if arg == "./table" {
+                    table.to_str().unwrap()
+                } else {
+                    arg.as_str().unwrap()
+                }
+            })
+            .collect();
+        let sample = run_with_timeout(Command::new(&executable).env_clear().args(sample_args))?;
+        assert!(sample.status.success(), "{sample:?}");
+        let reader = StreamReader::try_new(Cursor::new(&sample.stdout), None)?;
+        let rows = concat_batches(&reader.schema(), &reader.collect::<Result<Vec<_>, _>>()?)?;
+        assert_eq!(rows.num_rows(), 1);
+        assert_eq!(rows.schema(), expected.schema());
+        let sample_completion: Value = serde_json::from_slice(&sample.stderr)?;
+        assert_eq!(sample_completion["scope"], "limited_scan");
+        assert_eq!(sample_completion["has_more"], Value::Null);
+        let mut invocation = scan_guide["schema_command"].clone();
+        *invocation.as_array_mut().unwrap().last_mut().unwrap() = json!("completion");
+        let completion_guide = discover(&invocation)?;
+        let mut invocation = completion_guide["detail_command"].clone();
+        *invocation.as_array_mut().unwrap().last_mut().unwrap() = json!("has_more");
+        let has_more = discover(&invocation)?;
+        assert!(jsonschema::is_valid(
+            &has_more["definition"],
+            &sample_completion["has_more"]
+        ));
+        assert!(has_more.get("conditions").is_none());
+        assert!(
+            has_more["definition"]["description"]
+                .as_str()
+                .unwrap()
+                .contains("row limit")
+        );
         let input = scan_guide["input_schemas"]
             .as_array()
             .unwrap()
@@ -527,25 +622,39 @@ fn discovered_guides_support_pinned_reads_and_predicate_repair()
         assert_eq!(completion["kind"], "completion");
         assert_eq!(completion["scope"], "scan");
         assert_eq!(completion["has_more"], false);
+        assert!(jsonschema::is_valid(
+            &has_more["definition"],
+            &completion["has_more"]
+        ));
         assert_eq!(completion["bindings"][0]["table_version"], version);
         assert_eq!(completion["rows"], rows.num_rows().to_string());
         assert_eq!(completion["output_bytes"], output.stdout.len().to_string());
 
         let query_guide = command_guide("query")?;
-        let support = &query_guide["read_support"]["query"];
-        let alias = support["registered_tables"][0].as_str().unwrap();
+        let sql = &query_guide["sql"];
+        let alias = sql["table"].as_str().unwrap();
         let sql_file = directory.path().join("count rows.sql");
         fs::write(
             &sql_file,
-            format!("SELECT count(*) AS n FROM {alias} WHERE id >= 100"),
+            format!("{} WHERE id >= 100", sql["example"].as_str().unwrap()),
         )?;
+        assert_eq!(alias, "t");
+        let query_args: Vec<_> = query_guide["example"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .skip(1)
+            .map(|arg| match arg.as_str().unwrap() {
+                "./table" => table.to_str().unwrap(),
+                "query.sql" => sql_file.to_str().unwrap(),
+                argument => argument,
+            })
+            .collect();
         let output = run_with_timeout(
             Command::new(&executable)
                 .env_clear()
-                .args(["--diagnostics=json", "query", "--table-version", version])
-                .arg(support["sql_input"]["argument"].as_str().unwrap())
-                .arg(&sql_file)
-                .arg(&table),
+                .args(query_args)
+                .args(["--table-version", version]),
         )?;
         assert!(output.status.success(), "{output:?}");
         let reader = StreamReader::try_new(Cursor::new(&output.stdout), None)?;
