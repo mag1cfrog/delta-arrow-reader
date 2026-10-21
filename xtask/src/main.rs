@@ -8,6 +8,7 @@ mod binary;
 mod build;
 mod command;
 mod error;
+mod external_fixtures;
 #[cfg(target_os = "linux")]
 mod http_fixture;
 mod image;
@@ -68,6 +69,8 @@ struct Arguments {
 
 #[derive(Subcommand)]
 enum Task {
+    /// Validate Spark-produced fixtures and finish their corpus manifest.
+    FinalizeExternalFixtures { directory: PathBuf },
     /// Test core HTTPS certificate verification and proxy routing on Linux.
     #[cfg(target_os = "linux")]
     TestHttps(test_https::Arguments),
@@ -218,6 +221,7 @@ fn main() -> ExitCode {
 
 fn run_task(task: Task) -> Result<()> {
     match task {
+        Task::FinalizeExternalFixtures { directory } => external_fixtures::run(&directory),
         #[cfg(target_os = "linux")]
         Task::TestHttps(args) => args.run(),
         #[cfg(target_os = "linux")]
