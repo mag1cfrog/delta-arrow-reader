@@ -18,6 +18,7 @@ mod notices;
 mod platform;
 mod process;
 mod python_cli;
+mod python_cli_acceptance;
 mod python_cli_audit;
 mod python_release;
 mod python_sdist;
@@ -142,6 +143,8 @@ enum Task {
     },
     /// Audit an installed wheel CLI's native dependencies and platform baseline.
     AuditPythonCli(python_cli_audit::AuditPythonCliArgs),
+    /// Exercise the CLI installed by a Python wheel, without build-time library paths.
+    CheckInstalledPythonCli(python_cli_acceptance::Arguments),
     /// Validate the complete set of Python wheel artifacts.
     CheckPythonArtifacts {
         directory: PathBuf,
@@ -264,6 +267,7 @@ fn run_task(task: Task) -> Result<()> {
             platform_tag,
         } => python_wheels::check_wheel(&path, &expected_version, &platform_tag),
         Task::AuditPythonCli(args) => args.run().map_err(Into::into),
+        Task::CheckInstalledPythonCli(args) => args.run(),
         Task::CheckPythonArtifacts {
             directory,
             expected_version,

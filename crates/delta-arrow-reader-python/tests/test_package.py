@@ -1,11 +1,9 @@
-from concurrent.futures import ThreadPoolExecutor
 import importlib
 import importlib.machinery
 import importlib.metadata
 import json
 import os
 from pathlib import Path
-import signal
 import subprocess
 import sys
 import sysconfig
@@ -14,7 +12,6 @@ import unittest
 
 import delta_arrow_reader
 import pyarrow as pa
-import pyarrow.parquet as pq
 
 
 class PackageTests(unittest.TestCase):
@@ -88,32 +85,16 @@ class InstalledCliTests(unittest.TestCase):
         self.assertEqual(result.stderr, b"")
         return result.stdout
 
-    def assert_diagnostic(self, stderr, phase, code):
-        text = stderr.decode("utf-8")
-        self.assertTrue(text.endswith("\n"), text)
-        self.assertEqual(len(text.splitlines()), 1, text)
-        self.assertTrue(text.startswith(("ERROR delta_arrow_reader: ",
-                                         "ERROR delta_arrow_reader_cli: ")), text)
-        fields = text.split()
-        self.assertIn(f'error_phase="{phase}"', fields)
-        self.assertIn(f'error_code="{code}"', fields)
-        self.assertIn('outcome="failed"', fields)
-        self.assertTrue(any(field.startswith('error_reason="') for field in fields), text)
-        self.assertNotIn("\x1b", text)
-        self.assertNotIn(b"secret", stderr)
-        self.assertNotIn(b"Traceback", stderr)
-
-    def test_installed_cli_help_and_version(self):
-        self.assertEqual(
-            self.successful_output("--version").decode(),
-            f"delta-arrow-reader {delta_arrow_reader.__version__}\n",
-        )
-        for command in ((), ("inspect",), ("scan",)):
-            with self.subTest(command=command):
-                help_text = self.successful_output(*command, "--help").decode()
-                usage = " ".join(("Usage: delta-arrow-reader", *command)) + " "
-                self.assertIn(usage, help_text)
-                self.assertNotIn("secret", help_text)
+    def test_installed_cli_process_contract(self):
+        root = Path(__file__).resolve().parents[3]
+        target = Path(os.environ.get("CARGO_TARGET_DIR", root / "target"))
+        name = "xtask.exe" if os.name == "nt" else "xtask"
+        native = os.environ.get("DELTA_ARROW_READER_XTASK", target / "debug" / name)
+        subprocess.run([
+            str(native), "check-installed-python-cli", str(self.executable),
+            "--expected-version", delta_arrow_reader.__version__,
+            "--fixture", str(self.fixture), "--python-base-prefix", sys.base_prefix,
+        ], check=True, timeout=180)
 
     def test_installed_cli_reads_external_writer_fixture(self):
         with pa.ipc.open_file(self.fixture / "expected.arrow") as reader:
@@ -146,90 +127,6 @@ class InstalledCliTests(unittest.TestCase):
                 for row in table.to_pylist():
                     self.assertEqual(row["label"], expected_rows[row["id"]])
 
-    def test_installed_cli_errors_are_redacted(self):
-        malformed = self.directory / "secret-options.json"
-        malformed.write_text('{"token": "secret-value",', encoding="utf-8")
-        for command in ("inspect", "scan"):
-            for arguments, status, phase, code in (
-                ((self.fixture / "table", "--storage-options-file", malformed),
-                 2, "configuration", "invalid_input_json"),
-                ((self.directory / "secret-missing-table",),
-                 1, "table_location", "invalid_table_location"),
-                ((self.fixture / "table", "--table-version", "secret-version"),
-                 2, "configuration", "invalid_cli_argument"),
-            ):
-                with self.subTest(command=command, code=code):
-                    result = self.run_cli(command, *arguments)
-                    self.assertEqual(result.returncode, status, result.stderr)
-                    self.assertEqual(result.stdout, b"")
-                    self.assert_diagnostic(result.stderr, phase, code)
-
-    def test_installed_cli_closed_stdout_returns_status_three(self):
-        for arguments in (("--help",), ("inspect", self.fixture / "table"),
-                          ("scan", self.fixture / "table")):
-            with self.subTest(arguments=arguments):
-                reader, writer = os.pipe()
-                os.close(reader)
-                with os.fdopen(writer, "wb") as stdout:
-                    result = subprocess.run(
-                        [str(self.executable), *map(str, arguments)],
-                        cwd=self.directory, env=self.environment, stdin=subprocess.DEVNULL,
-                        stdout=stdout, stderr=subprocess.PIPE, timeout=30,
-                    )
-                self.assertEqual(result.returncode, 3, result.stderr)
-                self.assert_diagnostic(result.stderr, "execution", "output_write")
-
-    def test_installed_cli_external_termination(self):
-        table = self.directory / "table"
-        log = table / "_delta_log"
-        log.mkdir(parents=True)
-        log_name = "00000000000000000000.json"
-        actions = [json.loads(line) for line in
-                   (self.fixture / "table/_delta_log" / log_name).read_text(encoding="utf-8").splitlines()]
-        add = next(action["add"] for action in actions if "add" in action)
-        data = pq.ParquetFile(self.fixture / "table" / add["path"]).read()
-        label = data.schema.get_field_index("label")
-        # Exceed the platforms' pipe capacity so the scan cannot exit before termination.
-        data = data.set_column(label, data.schema.field(label),
-                               pa.array(["x" * 32768] * data.num_rows))
-        self.assertGreater(data.nbytes, 1024 * 1024)
-        pq.write_table(data, table / "part.parquet")
-        add.update(path="part.parquet", size=(table / "part.parquet").stat().st_size)
-        add.pop("stats", None)
-        actions = [action for action in actions if "protocol" in action or "metaData" in action]
-        actions.append({"add": add})
-        (log / log_name).write_text(
-            "".join(json.dumps(action) + "\n" for action in actions), encoding="utf-8",
-        )
-
-        signals = (signal.SIGINT, signal.SIGTERM) if os.name != "nt" else (None,)
-        for termination_signal in signals:
-            with self.subTest(signal=termination_signal), ThreadPoolExecutor(max_workers=1) as pool:
-                child = subprocess.Popen(
-                    [str(self.executable), "scan", str(table)],
-                    cwd=self.directory, env=self.environment, stdin=subprocess.DEVNULL,
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                )
-                try:
-                    output = pool.submit(child.stdout.read, 1)
-                    self.assertEqual(output.result(timeout=30), b"\xff")
-                    self.assertIsNone(child.poll(), "scan exited before termination")
-                    if termination_signal is None:
-                        child.terminate()
-                    else:
-                        child.send_signal(termination_signal)
-                    child.wait(timeout=30)
-                    self.assertEqual(child.stderr.read(), b"")
-                    if termination_signal is None:
-                        self.assertNotEqual(child.returncode, 0)
-                    else:
-                        self.assertEqual(child.returncode, -termination_signal)
-                finally:
-                    if child.poll() is None:
-                        child.kill()
-                    child.wait(timeout=30)
-                    child.stdout.close()
-                    child.stderr.close()
 
 
 if __name__ == "__main__":

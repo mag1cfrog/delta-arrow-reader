@@ -112,6 +112,8 @@
     "crates/delta-arrow-reader-cli/release/**",
     "xtask/src/main.rs",
     "xtask/src/python_cli.rs",
+    "xtask/src/python_cli_acceptance.rs",
+    "xtask/src/process.rs",
     "xtask/src/python_cli/**",
     "xtask/src/python_sdist.rs",
     "xtask/src/python_sdist/**",

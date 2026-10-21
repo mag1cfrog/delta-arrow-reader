@@ -115,7 +115,6 @@ fn run_on_single_cpu<T: Send>(operation: impl FnOnce() -> Result<T> + Send) -> R
 }
 
 /// Capture stderr while sending stdout to the supplied destination; Output.stdout is empty.
-#[cfg(target_os = "linux")]
 pub(crate) fn output_with_redirected_stdout(
     command: &mut Command,
     stdout: Stdio,
@@ -189,6 +188,17 @@ pub(crate) fn wait_with_timeout(child: &mut Child, timeout: Duration) -> io::Res
         let _ = child.wait();
     }
     status
+}
+
+pub(crate) struct KillOnDrop {
+    pub(crate) child: Child,
+}
+
+impl Drop for KillOnDrop {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
 }
 
 #[cfg(test)]
