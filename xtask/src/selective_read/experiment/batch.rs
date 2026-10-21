@@ -197,8 +197,8 @@ pub(in crate::selective_read) fn numeric(mut args: Numeric) -> Result<()> {
         "binaries":{"baseline":digest(&args.baseline)?, "candidate":digest(&args.candidate)?},
         "type":args.column_type, "selection":args.selection, "table_uri":common.table,
         "network":if common.table.starts_with("file:") { None } else { network::config(&common.state)? },
-        "generator":manifest["generator"], "value_checker_sha256":digest(&common.harness.join("numeric_pages.py"))?,
-        "validation_sha256":digest(&common.harness.join("controller_worker.py"))?, "controller_sha256":digest(&std::env::current_exe()?)?,
+        "generator":manifest["generator"], "value_checker_sha256":digest(&std::env::current_exe()?)?,
+        "validation_sha256":digest(&std::env::current_exe()?)?, "controller_sha256":digest(&std::env::current_exe()?)?,
         "primary_metric":"first fully consumed query after initialization", "pairs":3}),
     )?;
     let _lock = storage::exclusive(&common.state)?;
@@ -369,7 +369,7 @@ pub(in crate::selective_read) fn length(mut args: Length) -> Result<()> {
         &common.output.join("experiment.json"),
         &json!({"fixture_sha256":prefix, "binary_sha256":digest(&args.binary)?,
         "generator":manifest["generator"],
-        "validation_sha256":digest(&common.harness.join("controller_worker.py"))?, "controller_sha256":digest(&std::env::current_exe()?)?,
+        "validation_sha256":digest(&std::env::current_exe()?)?, "controller_sha256":digest(&std::env::current_exe()?)?,
         "network":network, "source_sha256":sources,
         "cost_profile":if args.cost_profile.is_some() { json!({"basis":"fixed diagnostic control", "values":profile}) }
             else { json!("measured during each process initialization on the same client, including the request-duration distribution; incomplete measurements keep ordinary reads") },

@@ -73,16 +73,6 @@ impl Worker {
         )
     }
 
-    pub(super) fn python(python: &Path, harness: &Path, stderr: Stdio) -> Result<Self> {
-        Self::spawn(
-            Command::new(python)
-                .args(["-I", "-B", "-u"])
-                .arg(harness.join("controller_worker.py"))
-                .env("SELECTIVE_READ_XTASK", std::env::current_exe()?)
-                .stderr(stderr),
-        )
-    }
-
     fn spawn(command: &mut Command) -> Result<Self> {
         let parent = std::process::id();
         // SAFETY: the child only sets its parent-death signal before exec.

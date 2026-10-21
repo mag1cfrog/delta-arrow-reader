@@ -37,7 +37,6 @@ fn campaign_input_integrity_is_independent_of_tool_source_provenance() -> Result
     args.harness = root.join("project/benches/selective_read");
     let protocols = root.join("project/docs/content/benchmarks");
     for path in [
-        args.harness.join("controller_worker.py"),
         args.harness.join("oracle_io.py"),
         args.harness.join("runners/run.py"),
         args.harness.join("runners/python_common.py"),
@@ -250,10 +249,6 @@ fn preparation_failures_launch_no_readers_and_aborts_keep_scheduled_rows() -> Re
     let args = args(root);
     fs::create_dir(&args.state)?;
     fs::create_dir(&args.output)?;
-    fs::write(
-        root.join("controller_worker.py"),
-        "import sys\nfor line in sys.stdin:\n print('{\"error\":\"missing reference\"}', flush=True)\n",
-    )?;
     let worker = Worker::start(Path::new("python3"), root, &args.output)?;
     let job = json!({"id":"a","case_id":"a","execution_mode":"open"});
     let mut campaign = Campaign {

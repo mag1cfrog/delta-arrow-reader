@@ -5,13 +5,7 @@ use std::io::Write;
 fn fixture(reader: &str) -> Result<tempfile::TempDir> {
     let temporary = super::fixture()?;
     let root = temporary.path();
-    for path in [
-        "run.py",
-        "python_common.py",
-        "native.py",
-        "check.py",
-        "capabilities.py",
-    ] {
+    for path in ["run.py", "python_common.py", "native.py"] {
         write(
             root,
             &format!("benches/selective_read/runners/{path}"),

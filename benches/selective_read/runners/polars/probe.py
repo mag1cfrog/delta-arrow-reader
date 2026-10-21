@@ -7,7 +7,8 @@ from unittest import TestCase
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import run
-from capabilities import CORPUS
+
+CORPUS = Path(__file__).resolve().parents[4] / "crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus"
 
 
 def native_probes(binary, output):

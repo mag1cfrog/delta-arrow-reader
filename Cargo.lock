@@ -4151,6 +4151,7 @@ dependencies = [
  "arrow-cast",
  "arrow-ipc",
  "arrow-schema",
+ "arrow-select",
  "base64 0.22.1",
  "clap",
  "csv",

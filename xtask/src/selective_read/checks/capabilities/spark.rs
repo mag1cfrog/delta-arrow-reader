@@ -44,7 +44,7 @@ fn timing(record: &Value, reuse: bool) -> Result<()> {
 }
 
 impl Capabilities {
-    pub(super) fn spark(&mut self, harness: &Path, observations: &mut Vec<Value>) -> Result<()> {
+    pub(super) fn spark(&mut self, observations: &mut Vec<Value>) -> Result<()> {
         let base = self
             .check
             .request("li.clustered.eq2-in20", "open", "diagnostic", "invalid")?;
@@ -116,7 +116,7 @@ impl Capabilities {
             // This proof authorizes only the exactly checked bounded corpus.
             let mut check = record["identity"].clone();
             check["status"] = json!("passed");
-            check["oracle_sha256"] = json!(digest(&harness.join("runners/capabilities.py"))?);
+            check["oracle_sha256"] = json!(digest(&std::env::current_exe()?)?);
             check["output_rows"] = rows;
             let certificate = self
                 .check

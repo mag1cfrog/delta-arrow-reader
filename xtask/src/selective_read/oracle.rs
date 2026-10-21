@@ -5,7 +5,9 @@ use std::path::PathBuf;
 use super::require;
 use crate::Result;
 
+mod capabilities;
 pub(super) mod check;
+mod experiments;
 mod extras;
 mod files;
 mod geometry;
@@ -17,6 +19,7 @@ mod rows;
 mod rules;
 mod sort;
 mod spec;
+mod table;
 
 const MEMORY: usize = 512 * 1024 * 1024;
 
@@ -29,7 +32,7 @@ struct State {
     cache: production::Cache,
     extras: std::collections::HashMap<Vec<files::Identity>, std::collections::BTreeSet<[i64; 2]>>,
     spark: bool,
-    legacy: Option<super::validation::Worker>,
+    experiments: std::collections::HashMap<String, arrow_array::RecordBatch>,
 }
 impl State {
     fn new(python: &std::path::Path, harness: &std::path::Path) -> Result<Self> {
@@ -56,7 +59,7 @@ impl State {
             cache: Default::default(),
             extras: Default::default(),
             spark: false,
-            legacy: None,
+            experiments: Default::default(),
         })
     }
     fn call(&mut self, value: &serde_json::Value) -> Result<serde_json::Value> {
@@ -84,20 +87,11 @@ impl State {
                 &value["table"]
             )?)),
             "source-counts" => self.source_counts(value),
-            "capability-export"
-            | "capability-stream"
-            | "capability-corrupt"
-            | "experiment-reference"
-            | "experiment-check" => {
-                if self.legacy.is_none() {
-                    self.legacy = Some(super::validation::Worker::python(
-                        &self.python,
-                        &self.harness,
-                        std::process::Stdio::inherit(),
-                    )?);
-                }
-                self.legacy.as_mut().unwrap().call(value)
-            }
+            "capability-export" => self.capability_export(value),
+            "capability-stream" => self.capability_stream(value),
+            "capability-corrupt" => capabilities::corrupt(value),
+            "experiment-reference" => self.experiment_reference(value),
+            "experiment-check" => self.experiment_check(value),
             _ => Err("unknown oracle operation".into()),
         }
     }

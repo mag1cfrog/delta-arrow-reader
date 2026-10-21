@@ -297,7 +297,7 @@ pub(in crate::selective_read) fn run(args: Options) -> Result<()> {
     match reader {
         "duckdb" => checks.duckdb(&args.python, &mut observations)?,
         "polars" => checks.polars(&args.harness, &mut observations)?,
-        _ => checks.spark(&args.harness, &mut observations)?,
+        _ => checks.spark(&mut observations)?,
     }
     let mut summary = json!({"status":"passed"});
     if reader == "spark" {
