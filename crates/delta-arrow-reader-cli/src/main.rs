@@ -26,8 +26,8 @@ use clap::{Args, Parser, Subcommand, error::ErrorKind};
 use delta_arrow_reader::{
     DeltaReaderError, DeltaSnapshotSelection, DeltaTableBuilder, WarmupMode, error_source_kind,
 };
-use diagnostics::DiagnosticFormat;
-use futures_util::TryStreamExt;
+use diagnostics::{DiagnosticFormat, ErrorClassification};
+use futures_util::{FutureExt, TryStreamExt, future::LocalBoxFuture};
 use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu, ensure};
 
@@ -46,7 +46,13 @@ enum Command {
     /// Print one Delta snapshot's version and full Arrow schema as JSON.
     ///
     /// Only snapshot metadata is loaded; data files are not read.
-    Inspect(TableArgs),
+    Inspect {
+        #[command(flatten)]
+        table: TableArgs,
+        /// Existing Databricks CLI profile; required for uc://catalog.schema.table targets.
+        #[arg(long, value_name = "PROFILE")]
+        databricks_profile: Option<String>,
+    },
     /// Run one read-only SQL query over a Delta snapshot, registered as t.
     ///
     /// Results stream as Arrow IPC. Redirect stdout to a file or pipe.
@@ -57,6 +63,9 @@ enum Command {
     Scan {
         #[command(flatten)]
         table: TableArgs,
+        /// Existing Databricks CLI profile; required for uc://catalog.schema.table targets.
+        #[arg(long, value_name = "PROFILE")]
+        databricks_profile: Option<String>,
         /// Logical column name; repeat to select columns in argument order.
         #[arg(long = "column", value_name = "NAME")]
         columns: Vec<String>,
@@ -78,9 +87,10 @@ enum Command {
     },
 }
 
+/// Table location, snapshot selection, and storage configuration shared by all commands.
 #[derive(Args)]
 struct TableArgs {
-    /// UTF-8 local path, storage URL, or uc://catalog.schema.table.
+    /// UTF-8 local path or storage URL.
     /// Relative paths use the working directory.
     /// Use '--' before a table path beginning with '-'.
     table: String,
@@ -91,9 +101,6 @@ struct TableArgs {
     /// At most 1 MiB; '-' is a filename, not stdin.
     #[arg(long, value_name = "PATH")]
     storage_options_file: Option<String>,
-    /// Existing Databricks CLI profile; required for uc:// inspect/scan targets.
-    #[arg(long, value_name = "PROFILE")]
-    databricks_profile: Option<String>,
 }
 
 #[derive(Snafu)]
@@ -159,75 +166,81 @@ impl fmt::Debug for Error {
 }
 
 impl Error {
-    fn classification(
-        &self,
-    ) -> (
-        &'static str,
-        &'static str,
-        &'static str,
-        Option<&'static str>,
-    ) {
+    fn classification(&self) -> ErrorClassification {
         match self {
-            Self::Reader { source } | Self::Configuration { source } => (
-                source.phase().as_str(),
-                source.code(),
-                source.reason(),
-                source.source_kind(),
-            ),
-            Self::Argument { .. } => (
-                "configuration",
-                "invalid_cli_argument",
-                "argument_parse_failed",
-                None,
-            ),
-            Self::TerminalOutput => (
-                "configuration",
-                "invalid_cli_argument",
-                "stdout_is_terminal",
-                None,
-            ),
-            Self::InputJson { .. } => (
-                "configuration",
-                "invalid_input_json",
-                "input_json_decode_failed",
-                None,
-            ),
-            Self::InputValidation { reason } => {
-                ("configuration", "invalid_input_json", *reason, None)
-            }
-            Self::InputIo { source } => (
-                "configuration",
-                "input_file_io",
-                "input_file_read_failed",
-                Some(error_source_kind(source)),
-            ),
-            Self::Runtime { source, reason } => (
-                "execution",
-                "runtime_initialization",
-                *reason,
-                Some(error_source_kind(source)),
-            ),
-            Self::Output { source } => (
-                "execution",
-                "output_write",
-                "stdout_write_failed",
-                Some(error_source_kind(source)),
-            ),
-            Self::ArrowIpc { source } => (
-                "execution",
-                "arrow_ipc",
-                "arrow_ipc_encode_failed",
-                Some(error_source_kind(source)),
-            ),
-            Self::UnityCatalog { source } => (source.phase(), source.code(), source.code(), None),
-            Self::Query { source } => source.classification(),
-            Self::OutputLimit { reason } => (
-                "execution",
-                "output_limit",
+            Self::Reader { source } | Self::Configuration { source } => ErrorClassification {
+                phase: source.phase().as_str(),
+                code: source.code(),
+                reason: source.reason(),
+                source_kind: source.source_kind(),
+            },
+            Self::Argument { .. } => ErrorClassification {
+                phase: "configuration",
+                code: "invalid_cli_argument",
+                reason: "argument_parse_failed",
+                source_kind: None,
+            },
+            Self::TerminalOutput => ErrorClassification {
+                phase: "configuration",
+                code: "invalid_cli_argument",
+                reason: "stdout_is_terminal",
+                source_kind: None,
+            },
+            Self::InputJson { .. } => ErrorClassification {
+                phase: "configuration",
+                code: "invalid_input_json",
+                reason: "input_json_decode_failed",
+                source_kind: None,
+            },
+            Self::InputValidation { reason } => ErrorClassification {
+                phase: "configuration",
+                code: "invalid_input_json",
                 reason,
-                Some("resource_exhausted"),
-            ),
-            Self::Cancelled { .. } => ("execution", "command_cancelled", "command_cancelled", None),
+                source_kind: None,
+            },
+            Self::InputIo { source } => ErrorClassification {
+                phase: "configuration",
+                code: "input_file_io",
+                reason: "input_file_read_failed",
+                source_kind: Some(error_source_kind(source)),
+            },
+            Self::Runtime { source, reason } => ErrorClassification {
+                phase: "execution",
+                code: "runtime_initialization",
+                reason,
+                source_kind: Some(error_source_kind(source)),
+            },
+            Self::Output { source } => ErrorClassification {
+                phase: "execution",
+                code: "output_write",
+                reason: "stdout_write_failed",
+                source_kind: Some(error_source_kind(source)),
+            },
+            Self::ArrowIpc { source } => ErrorClassification {
+                phase: "execution",
+                code: "arrow_ipc",
+                reason: "arrow_ipc_encode_failed",
+                source_kind: Some(error_source_kind(source)),
+            },
+            Self::UnityCatalog { source } => ErrorClassification {
+                phase: source.phase(),
+                code: source.code(),
+                reason: source.code(),
+                source_kind: None,
+            },
+            Self::Query { source } => source.classification(),
+            Self::OutputLimit { reason } => ErrorClassification {
+                phase: "execution",
+                code: "output_limit",
+                reason,
+                source_kind: Some("resource_exhausted"),
+            },
+            Self::Cancelled { .. } => ErrorClassification {
+                phase: "execution",
+                code: "command_cancelled",
+                reason: "command_cancelled",
+                source_kind: None,
+            },
         }
     }
 
@@ -255,7 +268,12 @@ impl Error {
         if matches!(self, Self::Reader { .. }) {
             return;
         }
-        let (phase, code, reason, source_kind) = self.classification();
+        let ErrorClassification {
+            phase,
+            code,
+            reason,
+            source_kind,
+        } = self.classification();
         let argument_kind = match self {
             Self::Argument { kind } => Some(tracing::field::debug(kind)),
             _ => None,
@@ -277,6 +295,7 @@ impl Error {
         };
         let message: &dyn fmt::Display = match self {
             Self::UnityCatalog { source } => source,
+            Self::Query { source } => source,
             _ => &"CLI command failed",
         };
         tracing::error!(target: "delta_arrow_reader_cli",
@@ -288,7 +307,12 @@ impl Error {
     }
 
     fn to_json_diagnostic(&self) -> Value {
-        let (phase, code, reason, source_kind) = self.classification();
+        let ErrorClassification {
+            phase,
+            code,
+            reason,
+            source_kind,
+        } = self.classification();
         let (recovery, retryable) = match source_kind {
             Some("resource_exhausted") => ("adjust_budget", Some(false)),
             Some("unauthenticated") => ("authorize", Some(false)),
@@ -460,24 +484,31 @@ fn run() -> Result<Value, Error> {
     if matches!(command, Command::Scan { .. } | Command::Query(_)) {
         ensure!(!io::stdout().is_terminal(), TerminalOutputSnafu);
     }
-    let table_args = match &command {
-        Command::Inspect(table) | Command::Scan { table, .. } => table,
-        Command::Query(args) => &args.table,
-    };
-    let uc_target = unity_catalog::UnityCatalogTableTarget::parse(
-        &table_args.table,
-        table_args.databricks_profile.as_deref(),
-    )
-    .context(UnityCatalogSnafu)?;
-    let sql_query = match &command {
-        Command::Query(args) => {
-            if uc_target.is_some() {
-                return Err(query::QueryError::UnsupportedTarget).context(QuerySnafu);
-            }
-            Some(query::ReadOnlySqlQuery::read_file(&args.sql_file)?)
+    let (table_args, databricks_profile) = match &command {
+        Command::Inspect {
+            table,
+            databricks_profile,
         }
-        _ => None,
+        | Command::Scan {
+            table,
+            databricks_profile,
+            ..
+        } => (table, databricks_profile.as_deref()),
+        Command::Query(args) => {
+            if args
+                .table
+                .table
+                .get(..5)
+                .is_some_and(|scheme| scheme.eq_ignore_ascii_case("uc://"))
+            {
+                return Err(query::QueryError::UnsupportedUnityCatalogQuery).context(QuerySnafu);
+            }
+            (&args.table, None)
+        }
     };
+    let uc_target =
+        unity_catalog::UnityCatalogTableTarget::parse(&table_args.table, databricks_profile)
+            .context(UnityCatalogSnafu)?;
     let storage_options = match &table_args.storage_options_file {
         Some(path) => input::read_json_file::<input::StorageOptionsInput>(path)?.0,
         None => Default::default(),
@@ -506,15 +537,7 @@ fn run() -> Result<Value, Error> {
         }
         _ => None,
     };
-    // Drive async work on the calling thread. A dedicated Tokio worker can
-    // occupy the last OS thread and leave blocking loads queued forever.
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .context(RuntimeSnafu {
-            reason: "runtime_build_failed",
-        })?;
-    let work = async {
+    let load_table = async {
         let snapshot_selection = table_args.table_version.map_or(
             DeltaSnapshotSelection::Latest,
             DeltaSnapshotSelection::Version,
@@ -531,7 +554,7 @@ fn run() -> Result<Value, Error> {
                 table
             }
             None => {
-                // Inspect needs only metadata. Scan planning happens explicitly below.
+                // Each command plans its own reads after the snapshot is loaded.
                 DeltaTableBuilder::new(&table_args.table)
                     .with_warmup(WarmupMode::None)
                     .with_snapshot_selection(snapshot_selection)
@@ -541,19 +564,19 @@ fn run() -> Result<Value, Error> {
                     .context(ReaderSnafu)?
             }
         };
-        let version = table.version();
-        match &command {
-            Command::Query(args) => {
-                let sql_query = sql_query.ok_or(Error::Query {
-                    source: query::QueryError::Input {
-                        reason: "sql_query_missing",
-                    },
-                })?;
+        Ok::<_, Error>((table, authorized_access))
+    };
+    let work: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
+        Command::Query(args) => {
+            let sql_query = query::ReadOnlySqlQuery::read_file(&args.sql_file)?;
+            async move {
+                let (table, _) = load_table.await?;
+                let version = table.version();
                 let stream = sql_query
                     .execute_stream(table, args.memory_limit_bytes.get())
                     .await?;
                 let schema = stream.schema();
-                let stdout_stats = arrow_output::write_arrow_stream(
+                let stdout_stats = arrow_output::write_arrow_stream_to_stdout(
                     schema,
                     stream.map_err(|source| Error::Query {
                         source: query::QueryError::Execution { source },
@@ -571,81 +594,96 @@ fn run() -> Result<Value, Error> {
                     None,
                 ))
             }
-            Command::Inspect(_) => {
-                let output = encode_inspection_json(version, table.schema().as_ref());
-                let stdout_stats = StdoutStats {
-                    bytes_written: output.len() as u64,
-                    ..Default::default()
-                };
-                if uc_target.is_some() {
-                    // Keep the UC cancellation handler responsive when stdout is blocked.
-                    tokio::task::spawn_blocking(move || write_stdout(&output))
-                        .await
-                        .map_err(io::Error::other)
-                        .context(RuntimeSnafu {
-                            reason: "inspection_output_task_failed",
-                        })?
-                } else {
-                    write_stdout(&output)
-                }?;
-                Ok(build_completion_record(
-                    "inspect",
-                    Some(version),
-                    stdout_stats,
-                    None,
-                ))
-            }
-            Command::Scan {
-                columns,
-                no_columns,
-                limit,
-                target_partitions,
-                ..
-            } => {
-                let mut builder = table.scan();
-                if *no_columns || !columns.is_empty() {
-                    builder = builder.with_projection(columns.iter().cloned());
-                }
-                if let Some(limit) = limit {
-                    builder = builder.with_limit(*limit);
-                }
-                if let Some(predicate) = predicate {
-                    builder = builder.with_predicate(predicate);
-                }
-                if let Some(execution_options) = execution_options {
-                    builder = builder.with_execution_options(execution_options);
-                }
-                if let Some(target_partitions) = target_partitions {
-                    builder = builder
-                        .with_target_partitions(target_partitions.get())
-                        .context(ConfigurationSnafu)?;
-                }
-                let scan_result = async {
-                    let scan = builder.build().await.context(ReaderSnafu)?;
-                    arrow_output::write_arrow_stream(
-                        scan.schema(),
-                        scan.into_stream()
-                            .map_err(|source| Error::Reader { source }),
-                        None,
-                    )
-                    .await
-                }
-                .await;
-                let stdout_stats = match (scan_result, &authorized_access) {
-                    (Err(Error::Reader { source }), Some(access)) => {
-                        return Err(access.map_reader_error(source).await);
-                    }
-                    (result, _) => result?,
-                };
-                Ok(build_completion_record(
-                    "scan",
-                    Some(version),
-                    stdout_stats,
-                    *limit,
-                ))
-            }
+            .boxed_local()
         }
+        Command::Inspect { .. } => async move {
+            let (table, _authorized_access) = load_table.await?;
+            let version = table.version();
+            let output = encode_inspection_json(version, table.schema().as_ref());
+            let stdout_stats = StdoutStats {
+                bytes_written: output.len() as u64,
+                ..Default::default()
+            };
+            if uc_target.is_some() {
+                // Keep the UC cancellation handler responsive when stdout is blocked.
+                tokio::task::spawn_blocking(move || write_stdout(&output))
+                    .await
+                    .map_err(io::Error::other)
+                    .context(RuntimeSnafu {
+                        reason: "inspection_output_task_failed",
+                    })?
+            } else {
+                write_stdout(&output)
+            }?;
+            Ok(build_completion_record(
+                "inspect",
+                Some(version),
+                stdout_stats,
+                None,
+            ))
+        }
+        .boxed_local(),
+        Command::Scan {
+            columns,
+            no_columns,
+            limit,
+            target_partitions,
+            ..
+        } => async move {
+            let (table, authorized_access) = load_table.await?;
+            let version = table.version();
+            let mut builder = table.scan();
+            if *no_columns || !columns.is_empty() {
+                builder = builder.with_projection(columns.iter().cloned());
+            }
+            if let Some(limit) = limit {
+                builder = builder.with_limit(*limit);
+            }
+            if let Some(predicate) = predicate {
+                builder = builder.with_predicate(predicate);
+            }
+            if let Some(execution_options) = execution_options {
+                builder = builder.with_execution_options(execution_options);
+            }
+            if let Some(target_partitions) = target_partitions {
+                builder = builder
+                    .with_target_partitions(target_partitions.get())
+                    .context(ConfigurationSnafu)?;
+            }
+            let scan_result = async {
+                let scan = builder.build().await.context(ReaderSnafu)?;
+                arrow_output::write_arrow_stream_to_stdout(
+                    scan.schema(),
+                    scan.into_stream()
+                        .map_err(|source| Error::Reader { source }),
+                    None,
+                )
+                .await
+            }
+            .await;
+            let stdout_stats = match (scan_result, &authorized_access) {
+                (Err(Error::Reader { source }), Some(access)) => {
+                    return Err(access.map_reader_error(source).await);
+                }
+                (result, _) => result?,
+            };
+            Ok(build_completion_record(
+                "scan",
+                Some(version),
+                stdout_stats,
+                *limit,
+            ))
+        }
+        .boxed_local(),
     };
+    // Drive async work on the calling thread. A dedicated Tokio worker can
+    // occupy the last OS thread and leave blocking loads queued forever.
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context(RuntimeSnafu {
+            reason: "runtime_build_failed",
+        })?;
     let result = if uc_target.is_some() || matches!(command, Command::Query(_)) {
         runtime.block_on(async {
             tokio::select! {
@@ -801,7 +839,7 @@ mod tests {
             let cli =
                 Cli::try_parse_from(["dar", "inspect", "--table-version", text, "table"]).unwrap();
             assert!(
-                matches!(cli.command, Command::Inspect(TableArgs {table_version: Some(version), ..}) if version == text.parse::<u64>().unwrap())
+                matches!(cli.command, Command::Inspect { table: TableArgs {table_version: Some(version), ..}, .. } if version == text.parse::<u64>().unwrap())
             );
         }
     }

@@ -27,7 +27,9 @@ use delta_arrow_reader::{
 };
 use snafu::{ResultExt, Snafu};
 
-use crate::{InputIoSnafu, QuerySnafu, TableArgs, parse_unsigned_decimal};
+use crate::{
+    InputIoSnafu, QuerySnafu, TableArgs, diagnostics::ErrorClassification, parse_unsigned_decimal,
+};
 
 const MAX_SQL_BYTES: u64 = 64 * 1024;
 const SQL_RECURSION_LIMIT: usize = 128;
@@ -57,7 +59,7 @@ pub(crate) enum QueryError {
     #[snafu(display("Invalid SQL input (reason={reason}). Use one read-only query over table t."))]
     Input { reason: &'static str },
     #[snafu(display("Unity Catalog SQL queries are not supported yet."))]
-    UnsupportedTarget,
+    UnsupportedUnityCatalogQuery,
     #[snafu(display("Could not initialize the SQL runtime."))]
     Initialization { source: DataFusionError },
     #[snafu(display("Could not plan the SQL query."))]
@@ -73,22 +75,20 @@ impl fmt::Debug for QueryError {
 }
 
 impl QueryError {
-    pub(crate) fn classification(
-        &self,
-    ) -> (
-        &'static str,
-        &'static str,
-        &'static str,
-        Option<&'static str>,
-    ) {
+    pub(crate) fn classification(&self) -> ErrorClassification {
         match self {
-            Self::Input { reason } => ("configuration", "invalid_sql_input", reason, None),
-            Self::UnsupportedTarget => (
-                "configuration",
-                "unsupported_uc_query",
-                "unsupported_uc_query",
-                None,
-            ),
+            Self::Input { reason } => ErrorClassification {
+                phase: "configuration",
+                code: "invalid_sql_input",
+                reason,
+                source_kind: None,
+            },
+            Self::UnsupportedUnityCatalogQuery => ErrorClassification {
+                phase: "configuration",
+                code: "unsupported_uc_query",
+                reason: "unsupported_uc_query",
+                source_kind: None,
+            },
             Self::Initialization { source }
             | Self::Planning { source }
             | Self::Execution { source } => {
@@ -103,14 +103,19 @@ impl QueryError {
                     } else {
                         error_source_kind(source)
                     };
-                ("datafusion", code, code, Some(source_kind))
+                ErrorClassification {
+                    phase: "datafusion",
+                    code,
+                    reason: code,
+                    source_kind: Some(source_kind),
+                }
             }
         }
     }
 
     pub(crate) fn exit_status(&self) -> u8 {
         match self {
-            Self::Input { .. } | Self::UnsupportedTarget => 2,
+            Self::Input { .. } | Self::UnsupportedUnityCatalogQuery => 2,
             _ => 1,
         }
     }
@@ -341,7 +346,10 @@ mod tests {
                 )),
             ),
         };
-        assert_eq!(error.classification().3, Some("resource_exhausted"));
+        assert_eq!(
+            error.classification().source_kind,
+            Some("resource_exhausted")
+        );
         assert!(!format!("{error} {error:?}").contains("secret"));
     }
 }

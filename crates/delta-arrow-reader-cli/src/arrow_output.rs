@@ -44,7 +44,8 @@ impl<W: Write> Write for ByteCountingWriter<W> {
     }
 }
 
-pub(crate) async fn write_arrow_stream(
+/// Writes IPC to stdout on a dedicated thread so a full pipe cannot block the async runtime.
+pub(crate) async fn write_arrow_stream_to_stdout(
     schema: SchemaRef,
     stream: impl Stream<Item = Result<RecordBatch, Error>> + Send + 'static,
     limits: Option<ArrowOutputLimits>,

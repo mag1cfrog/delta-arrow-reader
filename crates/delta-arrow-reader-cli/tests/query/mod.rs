@@ -325,7 +325,7 @@ fn explicit_snapshot_selection_keeps_deleted_rows_in_the_historical_query() -> T
 }
 
 #[test]
-fn sql_cannot_discover_unregistered_files_or_use_unimplemented_uc_bindings() -> TestResult {
+fn sql_cannot_discover_unregistered_files() -> TestResult {
     let fixture = SqlCommandFixture::new(fixture_path("partitioned").join("table"), "SELECT 1")?;
     let external = fixture.directory.path().join("secret.csv");
     fs::write(&external, "id\n99\n")?;
@@ -341,19 +341,54 @@ fn sql_cannot_discover_unregistered_files_or_use_unimplemented_uc_bindings() -> 
         "sql_planning"
     );
 
-    let fixture = SqlCommandFixture::new("uc://main.sales.orders", "SELECT * FROM t")?;
-    let output = run_with_timeout(
-        fixture
-            .command()
-            .args(["--databricks-profile", "secret-profile"])
-            .env("PATH", ""),
-    )?;
-    assert_eq!(output.status.code(), Some(2));
-    assert!(output.stdout.is_empty());
-    assert_eq!(
-        assert_single_terminal_record(&output.stderr, "diagnostic")["code"],
-        "unsupported_uc_query"
-    );
+    Ok(())
+}
+
+#[test]
+fn query_arguments_only_offer_direct_storage() -> TestResult {
+    let output =
+        run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).args(["query", "--help"]))?;
+    assert!(output.status.success());
+    let help = String::from_utf8(output.stdout)?;
+    assert!(!help.contains("--databricks-profile"));
+    assert!(!help.contains("uc://"));
+
+    for table in ["uc://main.sales.orders", "UC://main.sales.orders"] {
+        // Reject the unsupported target before attempting SQL file I/O or authorization.
+        let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
+        command
+            .args(["query", table, "--sql-file", "secret-missing.sql"])
+            .env("PATH", "");
+        let output = run_with_timeout(&mut command)?;
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let diagnostic = String::from_utf8(output.stderr)?;
+        assert!(diagnostic.contains("Unity Catalog SQL queries are not supported yet."));
+        assert!(!diagnostic.contains("Databricks profile"));
+
+        let output = run_with_timeout(command.arg("--diagnostics=json"))?;
+        assert_eq!(output.status.code(), Some(2));
+        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert_eq!(record["code"], "unsupported_uc_query");
+        assert_eq!(record["phase"], "configuration");
+        assert_eq!(record["recovery"], "fix_input");
+    }
+    for table in ["secret-table", "uc://main.sales.orders"] {
+        let output = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).args([
+            "query",
+            table,
+            "--sql-file",
+            "secret-missing.sql",
+            "--databricks-profile",
+            "secret-profile",
+            "--diagnostics=json",
+        ]))?;
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert_eq!(record["code"], "invalid_cli_argument");
+        assert_eq!(record["argument_kind"], "UnknownArgument");
+    }
     Ok(())
 }
 

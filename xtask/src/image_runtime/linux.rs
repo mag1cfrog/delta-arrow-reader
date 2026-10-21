@@ -21,7 +21,7 @@ use crate::{
     process::{check_error, check_inspection},
     scan::{
         corpus::check_corpus,
-        ipc::{IpcTable, check_scan_output},
+        ipc::{IpcTable, check_arrow_output},
     },
 };
 
@@ -257,7 +257,7 @@ test -r /usr/share/doc/dar/NOTICE
                         }
                     );
                     if action == "scan" {
-                        check_scan_output(&output)?.check_matches(&expected, None)?;
+                        check_arrow_output(&output)?.check_matches(&expected, None)?;
                     } else {
                         check_inspection(&output)?;
                     }
