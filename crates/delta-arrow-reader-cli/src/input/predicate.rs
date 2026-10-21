@@ -31,12 +31,14 @@ use crate::{
     input::{JsonInputKind, JsonObject},
 };
 
+mod json_schema;
 mod schema_errors;
 
+pub(super) use json_schema::predicate_schema;
 pub(super) use schema_errors::diagnose_schema_error;
 
-const MAX_PREDICATE_NODES: usize = 1024;
-const MAX_PREDICATE_DEPTH: usize = 32;
+pub(super) const MAX_PREDICATE_NODES: usize = 1024;
+pub(super) const MAX_PREDICATE_DEPTH: usize = 32;
 
 // Schema diagnostics match these custom Serde expectations to select correction hints.
 pub(super) const CANONICAL_INTEGER_EXPECTATION_PREFIX: &str = "canonical decimal integer string";

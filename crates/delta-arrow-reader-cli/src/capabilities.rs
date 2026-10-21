@@ -1,16 +1,17 @@
-//! Commands, argument rules, and output formats available in this executable.
+//! Commands, input schemas, and output formats available in this executable.
 //!
 //! `dar capabilities` returns this inventory without opening a table or resolving
 //! authorization. For example, a caller can find that `scan --column` is repeatable
 //! and that `--diagnostics` accepts `json` with an equals sign.
+//! `dar capabilities --schema predicate` returns the JSON row-filter schema.
 
 use std::{io, time::Duration};
 
-use clap::{Arg, ArgAction, Command, CommandFactory};
+use clap::{Arg, ArgAction, Command, CommandFactory, ValueEnum};
 use serde_json::{Value, json};
 use snafu::ResultExt;
 
-use crate::{Cli, Error, RuntimeSnafu, StdoutStats, signals, write_stdout};
+use crate::{Cli, Error, RuntimeSnafu, StdoutStats, input::JsonInputKind, signals, write_stdout};
 
 const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 const DEADLINE: Duration = Duration::from_secs(5);
@@ -18,11 +19,16 @@ const DEADLINE: Duration = Duration::from_secs(5);
 fn build_capabilities() -> Value {
     let mut command = Cli::command();
     command.build();
+    let input_schemas: Vec<_> = JsonInputKind::value_variants()
+        .iter()
+        .map(|kind| json!({"name": kind, "argument": kind.argument()}))
+        .collect();
     json!({
         "format_version": 1,
         "kind": "capabilities",
         "cli_version": env!("CARGO_PKG_VERSION"),
         "command": describe_command(&command),
+        "input_schemas": input_schemas,
         "stdout_formats": {
             "capabilities": {"format": "json", "format_version": 1},
             "inspect": {"format": "json", "format_version": 1},
@@ -106,9 +112,10 @@ fn argument_name(argument: &Arg) -> String {
         .map_or_else(|| argument.get_id().to_string(), |name| format!("--{name}"))
 }
 
-pub(crate) fn write_capabilities() -> Result<StdoutStats, Error> {
+pub(crate) fn write_capabilities(schema: Option<JsonInputKind>) -> Result<StdoutStats, Error> {
     let deadline = std::time::Instant::now() + DEADLINE;
-    let mut output = build_capabilities().to_string().into_bytes();
+    let document = schema.map_or_else(build_capabilities, JsonInputKind::schema_document);
+    let mut output = document.to_string().into_bytes();
     output.push(b'\n');
     if output.len() > MAX_OUTPUT_BYTES {
         return Err(Error::OutputLimit {
@@ -189,7 +196,7 @@ mod tests {
             let error = Cli::try_parse_from(["dar", name]).err().unwrap();
             assert_eq!(error.kind(), clap::error::ErrorKind::InvalidSubcommand);
         }
-        assert!(Cli::try_parse_from(["dar", "capabilities", "--schema", "predicate"]).is_err());
+        assert!(Cli::try_parse_from(["dar", "capabilities", "--schema", "tables"]).is_err());
     }
 
     #[test]
@@ -272,5 +279,52 @@ mod tests {
                 .iter()
                 .any(|argument| argument["name"] == "--databricks-profile")
         );
+    }
+
+    #[test]
+    fn schema_catalog_matches_clap_choices_and_existing_file_arguments() {
+        let inventory = build_capabilities();
+        let commands = inventory["command"]["subcommands"].as_array().unwrap();
+        let discovery = commands
+            .iter()
+            .find(|command| command["name"] == "capabilities")
+            .unwrap();
+        let schema_argument = discovery["arguments"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|argument| argument["name"] == "--schema")
+            .unwrap();
+        let catalog = inventory["input_schemas"].as_array().unwrap();
+        let names: Vec<_> = catalog
+            .iter()
+            .map(|schema| schema["name"].clone())
+            .collect();
+        assert_eq!(schema_argument["possible_values"], json!(names));
+        assert_eq!(
+            names,
+            [
+                json!("storage-options"),
+                json!("predicate"),
+                json!("execution-options")
+            ]
+        );
+        for schema in catalog {
+            let name = schema["name"].as_str().unwrap();
+            let cli = Cli::try_parse_from(["dar", "capabilities", "--schema", name]).unwrap();
+            let crate::Command::Capabilities { schema: Some(kind) } = cli.command else {
+                panic!("expected named schema")
+            };
+            let document = kind.schema_document();
+            assert_eq!(document["name"], name);
+            assert_eq!(document["argument"], schema["argument"]);
+            assert!(commands.iter().any(|command| {
+                command["arguments"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|argument| argument["name"] == schema["argument"])
+            }));
+        }
     }
 }

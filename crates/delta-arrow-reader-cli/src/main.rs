@@ -58,10 +58,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Print the installed commands, argument rules, and output formats as JSON.
+    /// Print installed command capabilities or a named JSON input schema.
     ///
     /// Offline; no table, input file, or authorization is loaded.
-    Capabilities,
+    Capabilities {
+        /// Return the named JSON input schema instead of the command inventory.
+        #[arg(long, value_enum)]
+        schema: Option<input::JsonInputKind>,
+    },
     /// Print one Delta snapshot's version and full Arrow schema as JSON.
     ///
     /// Only snapshot metadata is loaded; data files are not read.
@@ -603,8 +607,8 @@ fn run() -> Result<Value, Error> {
         ensure!(!io::stdout().is_terminal(), TerminalOutputSnafu);
     }
     let (table_args, databricks_profile) = match &command {
-        Command::Capabilities => {
-            return capabilities::write_capabilities()
+        Command::Capabilities { schema } => {
+            return capabilities::write_capabilities(*schema)
                 .map(|stats| build_completion_record("capabilities", None, stats, None));
         }
         Command::Inspect {
@@ -699,7 +703,7 @@ fn run() -> Result<Value, Error> {
         Ok::<_, Error>((table, authorized_access))
     };
     let work: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
-        Command::Capabilities => unreachable!("capabilities returned before table loading"),
+        Command::Capabilities { .. } => unreachable!("capabilities returned before table loading"),
         Command::Query(args) => {
             let sql_query = query::ReadOnlySqlQuery::read_file(&args.sql_file)?;
             async move {

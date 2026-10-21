@@ -24,14 +24,45 @@ For packages and runtime requirements, see [Installation](installation.md).
 ```sh
 dar capabilities
 dar capabilities --diagnostics=json > capabilities.json
+dar capabilities --schema predicate
 ```
 
-The result is one JSON object with `kind: "capabilities"` and `format_version: 1`.
+Without `--schema`, the result is one JSON object with `kind: "capabilities"`
+and `format_version: 1`.
 `command` contains the command tree and each argument's required status, value
 count, defaults, allowed choices, repeatability, and conflicts. For example,
 `scan --column` is repeatable and conflicts with `--no-columns`.
 `stdout_formats` identifies each command's result format; `diagnostics` describes
 stderr formats. These describe the installed executable, including its version.
+`input_schemas` lists the available schema names and their file arguments.
+
+An empty `possible_values` list means the argument has no enumerated choices;
+it does not mean every value is valid. A null `max_values` means there is no
+fixed upper count for that argument. Descriptions contain additional input rules.
+
+Pass a name to `--schema` to return an object with `kind: "input_schema"`,
+`format_version: 1`, `name`, `argument`, `schema`, and `parser_constraints`.
+The `schema` field contains a [JSON Schema draft 2020-12](https://json-schema.org/draft/2020-12/json-schema-validation)
+document with examples.
+Extract that field when passing it to a JSON Schema validator. The available
+names are:
+
+| Schema name | File argument | Contents |
+| --- | --- | --- |
+| `storage-options` | `--storage-options-file` | A map of option names to string values. The selected backend checks their meanings. |
+| `execution-options` | `--execution-options-file` | Optional scan settings with their defaults, accepted nulls, and integer bounds for this build. |
+| `predicate` | `--predicate-file` | Row-filter operators and typed literals, including nested boolean groups. |
+
+Schema validation checks the JSON structure. `parser_constraints` records the
+additional file and value rules: files may contain at most 1 MiB, object keys
+must be unique, and integer fields reject fractions, exponents, and negative
+zero.
+
+Predicate trees allow 1,024 nodes and 32 levels, counting the root.
+Integer strings must fit their declared width, floats must remain finite after
+conversion, and fixed-size binary lengths must match. Predicate column and type
+checks still require a table. These rules also apply to the published examples;
+for instance, the example using `id` as `int32` requires an `Int32` column.
 
 Discovery needs no table, input file, credentials, Databricks executable, or
 network access. Its response is limited to 1 MiB. The command has a five-second
@@ -41,9 +72,9 @@ produces a completion record on stderr, and failure produces a diagnostic.
 
 Consumers must check `format_version` and ignore additional object fields.
 Changes to existing field types or meanings require a new format version.
-An empty `possible_values` list means the argument has no enumerated choices;
-it does not mean every value is valid. A null `max_values` means there is no
-fixed upper count for that argument. Descriptions contain additional input rules.
+Schema names describe inputs accepted by that installed CLI version. Unsupported
+names are argument errors. Input files retain their existing formats: do not add
+the discovery envelope or `format_version` to them.
 
 ## Inspect a snapshot
 

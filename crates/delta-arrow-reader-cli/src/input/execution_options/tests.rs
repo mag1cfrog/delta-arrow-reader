@@ -15,6 +15,16 @@ fn parse(text: &str) -> Result<DeltaScanExecutionOptions, Error> {
     .into_execution_options()
     .context(ConfigurationSnafu);
     if result.is_ok() {
+        static SCHEMA: std::sync::LazyLock<jsonschema::Validator> =
+            std::sync::LazyLock::new(|| {
+                jsonschema::validator_for(
+                    &JsonInputKind::ExecutionOptions.schema_document()["schema"],
+                )
+                .unwrap()
+            });
+        SCHEMA
+            .validate(&serde_json::from_str(text).unwrap())
+            .unwrap();
         assert!(
             crate::input::schema_errors::diagnose_schema_error(
                 text.as_bytes(),

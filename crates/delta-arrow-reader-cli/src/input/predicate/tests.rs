@@ -7,6 +7,14 @@ fn parse_text(text: &str) -> Result<DeltaPredicate, Error> {
         crate::input::parse_json::<PredicateInput>(text.as_bytes(), JsonInputKind::Predicate)?
             .into_predicate();
     if result.is_ok() {
+        static SCHEMA: std::sync::LazyLock<jsonschema::Validator> =
+            std::sync::LazyLock::new(|| {
+                jsonschema::validator_for(&JsonInputKind::Predicate.schema_document()["schema"])
+                    .unwrap()
+            });
+        SCHEMA
+            .validate(&serde_json::from_str(text).unwrap())
+            .unwrap();
         assert!(
             crate::input::schema_errors::diagnose_schema_error(
                 text.as_bytes(),
@@ -17,6 +25,29 @@ fn parse_text(text: &str) -> Result<DeltaPredicate, Error> {
         );
     }
     result
+}
+
+#[test]
+fn schema_lists_every_operator_and_scalar_type() {
+    use strum::VariantNames;
+
+    let document = JsonInputKind::Predicate.schema_document();
+    for (definition, tag, variants) in [
+        ("predicate", "op", PredicateOperator::VARIANTS),
+        ("scalar", "type", ScalarType::VARIANTS),
+    ] {
+        let mut advertised: Vec<_> = document["schema"]["$defs"][definition]["oneOf"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|schema| schema["properties"][tag]["enum"].as_array().unwrap())
+            .map(|name| name.as_str().unwrap())
+            .collect();
+        let mut expected = variants.to_vec();
+        advertised.sort_unstable();
+        expected.sort_unstable();
+        assert_eq!(advertised, expected);
+    }
 }
 
 fn parse(value: Value) -> DeltaPredicate {

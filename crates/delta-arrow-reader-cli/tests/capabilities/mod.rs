@@ -4,6 +4,75 @@ use super::*;
 use crate::diagnostics::assert_single_terminal_record;
 
 #[test]
+fn named_schemas_are_offline_deterministic_and_use_the_same_diagnostics()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    for name in ["storage-options", "execution-options", "predicate"] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
+        command
+            .env_clear()
+            .env("PATH", "")
+            .current_dir(directory.path())
+            .args(["capabilities", "--schema", name]);
+        let baseline = run_with_timeout(&mut command)?;
+        assert!(baseline.status.success(), "{baseline:?}");
+        assert!(baseline.stderr.is_empty());
+        assert!(baseline.stdout.len() <= 1024 * 1024);
+        let document: Value = serde_json::from_slice(&baseline.stdout)?;
+        assert_eq!(document["kind"], "input_schema");
+        assert_eq!(document["format_version"], 1);
+        assert_eq!(document["cli_version"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(document["name"], name);
+        jsonschema::meta::validate(&document["schema"])
+            .map_err(|error| io::Error::other(error.to_string()))?;
+
+        command
+            .env("AWS_SECRET_ACCESS_KEY", "secret-access-secret")
+            .env("DATABRICKS_CONFIG_FILE", "secret-missing-profile")
+            .env(
+                "GOOGLE_APPLICATION_CREDENTIALS",
+                "secret-missing-credentials.json",
+            )
+            .env("RUST_LOG", "secret=invalid")
+            .arg("--diagnostics=json");
+        let output = run_with_timeout(&mut command)?;
+        assert!(output.status.success());
+        assert_eq!(baseline.stdout, output.stdout);
+        let completion = assert_single_terminal_record(&output.stderr, "completion");
+        assert_eq!(completion["command"], "capabilities");
+        assert_eq!(completion["bindings"], serde_json::json!([]));
+        assert_eq!(completion["output_bytes"], output.stdout.len().to_string());
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("secret"));
+    }
+    assert_eq!(fs::read_dir(directory.path())?.count(), 0);
+    Ok(())
+}
+
+#[test]
+fn unknown_schema_names_are_argument_errors_without_reading_or_echoing_them()
+-> Result<(), Box<dyn std::error::Error>> {
+    let output = run_with_timeout(
+        Command::new(env!("CARGO_BIN_EXE_dar"))
+            .env_clear()
+            .env("PATH", "")
+            .args([
+                "--diagnostics=json",
+                "capabilities",
+                "--schema",
+                "secret-missing-input.json",
+            ]),
+    )?;
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+    assert_eq!(record["code"], "invalid_cli_argument");
+    assert_eq!(record["argument"], "--schema");
+    assert_eq!(record["argument_kind"], "InvalidValue");
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+    Ok(())
+}
+
+#[test]
 fn discovery_is_deterministic_without_credentials_or_a_search_path()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::Builder::new().prefix("secret-home-").tempdir()?;
