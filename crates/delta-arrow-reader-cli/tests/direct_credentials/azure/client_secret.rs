@@ -1,7 +1,5 @@
 //! Azure client-secret identities stay fixed across reads and token refreshes.
 
-mod token_server;
-
 use std::{collections::HashMap, fs, process::Command};
 
 use serde_json::{Value, json};
@@ -9,10 +7,10 @@ use url::form_urlencoded;
 
 use super::{
     ACCOUNT_KEY, BEARER_TOKEN, CREDENTIALS, CloudStorageProtocol, DirectStorageFixture, TestResult,
-    assert_read_result, assert_single_terminal_record, run_with_timeout,
+    assert_read_result, assert_single_terminal_record, run_with_timeout, storage_bearer_tokens,
+    token_server::AzureTokenServer,
 };
 use crate::cloud_storage::{MockCloudStorageServer, partitioned_objects};
-use token_server::AzureTokenServer;
 
 // JSON aliases and the only environment variables advertised for this identity.
 const CLIENT_SECRET_FIELDS: [(&str, &str, &str); 3] = [
@@ -102,27 +100,6 @@ fn assert_client_secret_requests(requests: &[String]) {
             ])
         );
     }
-}
-
-fn storage_bearer_tokens(fixture: &DirectStorageFixture) -> Vec<String> {
-    fixture
-        .server
-        .requests
-        .lock()
-        .unwrap()
-        .iter()
-        .map(|request| {
-            assert!(!request.contains("secret-unused"), "{request}");
-            request
-                .lines()
-                .find_map(|line| {
-                    let (name, value) = line.split_once(':')?;
-                    name.eq_ignore_ascii_case("authorization")
-                        .then(|| value.trim().strip_prefix("Bearer ").unwrap().to_owned())
-                })
-                .unwrap()
-        })
-        .collect()
 }
 
 #[test]

@@ -43,7 +43,7 @@ parsing and allows a table name beginning with `-`.
 
 ```text
 dar inspect [--table-version N] [--storage-options-file PATH]
-            [--auth-source json|env] [--databricks-profile PROFILE] [--] TABLE
+            [--auth-source SOURCE] [--databricks-profile PROFILE] [--] TABLE
 ```
 
 <details markdown="1">
@@ -169,7 +169,7 @@ before table loading, including for `--limit 0`.
 
 ```text
 dar scan [--table-version N] [--storage-options-file PATH]
-         [--auth-source json|env] [--databricks-profile PROFILE]
+         [--auth-source SOURCE] [--databricks-profile PROFILE]
          [--predicate-file PATH] [--column NAME ... | --no-columns]
          [--execution-options-file PATH] [--target-partitions N] [--limit N] [--] TABLE
 ```
@@ -238,7 +238,7 @@ dar query /data/orders --table-version 0 --sql-file query.sql > original.arrow
 
 ```text
 dar query [--table-version N] [--storage-options-file PATH]
-          [--auth-source json|env]
+          [--auth-source SOURCE]
           --sql-file PATH [--max-rows N] [--max-output-bytes BYTES]
           [--memory-limit-bytes BYTES] [--] TABLE
 ```
@@ -559,17 +559,60 @@ must contain only visible ASCII characters.
 Explicit selection accepts account, endpoint, HTTP client, and Fabric endpoint
 settings. Client-secret authorization uses the native provider's public Azure
 authority by default; set `azure_storage_authority_host` in JSON to override it.
-The `authority_host` alias is also accepted. `AZURE_AUTHORITY_HOST` is not read.
+The `authority_host` alias is also accepted. The `json` and `env` sources do not
+read `AZURE_AUTHORITY_HOST`.
 
 Unknown keys, container overrides, emulator mode, unsigned requests, and
-provider-selection options are rejected. Explicit selection does not select
-Azure CLI, workload-identity, or managed-identity providers. Invalid source
-configuration exits with status 2 and code `invalid_storage_authorization`.
+provider-selection options are rejected. Workload identity requires its own
+source selector, described below. Azure CLI and managed-identity providers are
+not offered by `--auth-source`. Invalid source configuration exits with status 2
+and code `invalid_storage_authorization`.
 
 Keep credential files out of source control and restrict access, for example
 with `chmod 600 storage.json` on Unix. File references do not isolate credentials
 from a process that can read the file. Credential values and file contents are
 omitted from text and JSON diagnostics.
+
+### Azure workload identity
+
+Use `--auth-source azure-workload-identity` with an Azure service principal
+configured to trust the issuer of a federated token file. It is available for
+Azure tables with `inspect`, `scan`, and `query`.
+
+```sh
+dar query abfss://orders@exampleaccount.dfs.core.windows.net/table \
+  --auth-source azure-workload-identity --sql-file count.sql > count.arrow
+```
+
+Provision all three required references in the environment or a protected
+storage-options file:
+
+| Reference | Canonical JSON key | Environment variable |
+| --- | --- | --- |
+| Client ID | `azure_storage_client_id` | `AZURE_CLIENT_ID` |
+| Tenant ID | `azure_storage_tenant_id` | `AZURE_TENANT_ID` |
+| Token file path | `azure_federated_token_file` | `AZURE_FEDERATED_TOKEN_FILE` |
+
+JSON accepts native aliases such as `client_id`, `tenant_id`, and
+`federated_token_file`. Each JSON field takes precedence over its environment
+counterpart. Missing, empty, and duplicate references are rejected before
+reading the table. Account names follow the same URL, JSON, and environment
+precedence as the other Azure sources.
+
+The optional `azure_storage_authority_host` JSON setting takes precedence over
+`AZURE_AUTHORITY_HOST`. If both are absent, the native provider uses the public
+Azure authority. Endpoint and HTTP client settings remain in the storage-options
+file.
+
+The native provider fixes the client ID, tenant ID, authority, and token file
+path for the command. When an access token needs renewal, it rereads the same
+file, so the workload issuer can rotate its contents. Unreadable files, rejected
+assertions, and refresh failures fail the read without selecting another
+identity. The CLI does not create the file or manage its rotation.
+
+Other credential families in JSON are rejected. Ambient account keys, SAS
+tokens, bearer tokens, and client secrets are ignored by this source. Token
+contents are not passed in command arguments or included in diagnostics.
 
 ## GCS credential sources
 

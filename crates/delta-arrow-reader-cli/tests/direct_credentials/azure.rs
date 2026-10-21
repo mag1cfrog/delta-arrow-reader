@@ -1,6 +1,8 @@
 //! Azure credentials are selected once and reach every storage request.
 
 mod client_secret;
+mod token_server;
+mod workload_identity;
 
 use std::{collections::HashMap, process::Command};
 
@@ -21,6 +23,27 @@ const CREDENTIALS: [(&str, &str, &str); 3] = [
     ("sas_token", "AZURE_STORAGE_SAS_KEY", SAS),
     ("bearer_token", "AZURE_STORAGE_TOKEN", BEARER_TOKEN),
 ];
+
+fn storage_bearer_tokens(fixture: &DirectStorageFixture) -> Vec<String> {
+    fixture
+        .server
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|request| {
+            assert!(!request.contains("secret-unused"), "{request}");
+            request
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("authorization")
+                        .then(|| value.trim().strip_prefix("Bearer ").unwrap().to_owned())
+                })
+                .unwrap()
+        })
+        .collect()
+}
 
 fn assert_request_credentials(fixture: &DirectStorageFixture, option: &str) {
     let requests = fixture.server.requests.lock().unwrap();

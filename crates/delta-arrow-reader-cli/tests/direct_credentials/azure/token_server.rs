@@ -1,4 +1,4 @@
-//! Local Azure token responses for acquisition, expiry, and refresh tests.
+//! Local Azure OAuth responses shared by client-secret and workload-identity tests.
 
 use std::{
     io::{Read, Write},

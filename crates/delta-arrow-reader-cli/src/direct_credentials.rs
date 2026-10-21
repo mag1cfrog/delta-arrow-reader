@@ -21,10 +21,12 @@ pub(crate) enum CredentialSource {
     Json,
     /// Read the advertised credential variables from the inherited environment.
     Env,
+    /// Use Azure workload identity with an explicitly configured token file.
+    AzureWorkloadIdentity,
 }
 
 impl CredentialSource {
-    /// Pins the selected credentials and retains noncredential storage options.
+    /// Pins the selected identity and retains noncredential storage options.
     pub(crate) fn configure_table_credentials(
         self,
         builder: DeltaTableBuilder,
@@ -59,12 +61,14 @@ impl CredentialSource {
                 reason: "auth_source_invalid_table_url"
             }
         );
-        match scheme {
-            ObjectStoreScheme::AmazonS3 => s3::configure_table_credentials(builder, options, self),
-            ObjectStoreScheme::MicrosoftAzure => {
+        match (scheme, self) {
+            (ObjectStoreScheme::AmazonS3, Self::Json | Self::Env) => {
+                s3::configure_table_credentials(builder, options, self)
+            }
+            (ObjectStoreScheme::MicrosoftAzure, _) => {
                 azure::configure_table_credentials(builder, location, options, self)
             }
-            ObjectStoreScheme::GoogleCloudStorage => {
+            (ObjectStoreScheme::GoogleCloudStorage, Self::Json | Self::Env) => {
                 gcs::configure_table_credentials(builder, location, options, self)
             }
             _ => Err(unsupported_storage()),
