@@ -13,11 +13,14 @@ pub(crate) fn tables_manifest_schema() -> Value {
         .collect();
     json!({
         "title": "Named table snapshots",
-        "description": "Bind each alias once to its own snapshot and authorization. Snapshots do not form a cross-table transaction.",
+        "description": "Relative locations use the manifest directory. Omit table_version for latest at load time; updates and credential refresh never retarget a loaded snapshot. Snapshots do not form a cross-table transaction.",
         "type": "object", "additionalProperties": false,
         "required": ["format_version", "tables"],
         "properties": {
-            "format_version": {"type": "integer", "const": 1},
+            "format_version": {
+                "type": "integer", "const": 1,
+                "description": "JSON integer 1; fraction and exponent notation are invalid.",
+            },
             "tables": {
                 "type": "array", "minItems": 1, "maxItems": super::MAX_TABLES,
                 "items": {"$ref": "#/$defs/table"},

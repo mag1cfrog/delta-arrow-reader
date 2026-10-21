@@ -37,12 +37,22 @@ impl DiscoverySchema {
             "full_command": [executable, "capabilities", "--schema", self, "--full"],
             "limits": super::discovery_limits(super::MAX_SCHEMA_GUIDE_BYTES),
         });
-        for field in ["argument", "stream", "parser_constraints"] {
+        for field in ["argument", "stream"] {
             if let Some(value) = document.get(field) {
                 guide[field] = value.clone();
             }
         }
-        if let Some(description) = schema.get("description") {
+        if !matches!(self, Self::Tables) {
+            if let Some(constraints) = document.get("parser_constraints") {
+                guide["parser_constraints"] = constraints.clone();
+            }
+        } else if detail.is_none() {
+            guide["max_file_bytes"] = document["parser_constraints"]["max_file_bytes"].clone();
+            guide["max_tables"] = schema["properties"]["tables"]["maxItems"].clone();
+        }
+        if (detail.is_none() || !matches!(self, Self::Tables))
+            && let Some(description) = schema.get("description")
+        {
             guide["description"] = description.clone();
         }
         let operators = variant_names(schema, "predicate", "op");
@@ -83,6 +93,10 @@ impl DiscoverySchema {
                     });
                 } else if name == "tables[].authorization" {
                     guide["definition"] = schema["$defs"]["authorization"].clone();
+                    guide["fields"] = json!([
+                        "tables[].authorization.source",
+                        "tables[].authorization.storage_options_file",
+                    ]);
                 }
             }
             if let Some(conditions) = schema.get("allOf") {
@@ -93,16 +107,10 @@ impl DiscoverySchema {
                 .into_iter()
                 .flat_map(|properties| properties.keys().cloned())
                 .collect();
-            if matches!(self, Self::Tables) {
-                for (prefix, definition) in [
-                    ("tables[].", "table"),
-                    ("tables[].authorization.", "authorization"),
-                ] {
-                    if let Some(properties) = schema["$defs"][definition]["properties"].as_object()
-                    {
-                        fields.extend(properties.keys().map(|field| format!("{prefix}{field}")));
-                    }
-                }
+            if matches!(self, Self::Tables)
+                && let Some(properties) = schema["$defs"]["table"]["properties"].as_object()
+            {
+                fields.extend(properties.keys().map(|field| format!("tables[].{field}")));
             }
             if properties.is_some() {
                 guide["fields"] = json!(fields);
@@ -130,10 +138,13 @@ impl DiscoverySchema {
                 "NAME"
             ]);
         }
-        if matches!(self, Self::StorageOptions | Self::Tables) {
+        if matches!(self, Self::StorageOptions)
+            || (matches!(self, Self::Tables)
+                && detail.is_some_and(|name| name.starts_with("tables[].authorization")))
+        {
             guide["authorization_command"] =
                 json!([executable, "capabilities", "--authorization", "NAME"]);
-            guide["providers"] = json!(["s3", "azure", "gcs"]);
+            guide["authorization_guides"] = json!(["s3", "azure-blob", "gcs"]);
         }
         Ok(guide)
     }

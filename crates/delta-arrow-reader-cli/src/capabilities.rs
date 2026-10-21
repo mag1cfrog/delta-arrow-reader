@@ -49,9 +49,9 @@ pub(crate) struct CapabilitiesArgs {
         conflicts_with_all = ["command", "authorization", "all", "full"]
     )]
     detail: Option<String>,
-    /// Show credential inputs and lookup rules for one provider.
+    /// Show an authorization guide for a storage or catalog service.
     #[arg(long, value_enum, conflicts_with_all = ["command", "schema", "all"])]
-    authorization: Option<read_support::AuthorizationProvider>,
+    authorization: Option<read_support::AuthorizationGuide>,
     /// With --command or --schema, return complete metadata or a validation schema.
     #[arg(long, requires = "full_definition_target", conflicts_with_all = ["authorization", "detail"])]
     full: bool,
@@ -120,9 +120,14 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
     let mut guide = build_capability_details(Some(name))?;
     guide["kind"] = json!("command_guide");
     guide["command"] = json!(name);
-    guide["help"] = json!(command.render_help().to_string());
+    if name == "query" {
+        describe_query_usage(&mut guide, command, &executable);
+    } else {
+        guide["help"] = json!(command.render_help().to_string());
+    }
     let conflicts: Vec<_> = command
         .get_arguments()
+        .filter(|argument| name != "query" || argument.get_id() == "tables_file")
         .filter_map(|argument| {
             let conflicts: Vec<_> = command
                 .get_arg_conflicts_with(argument)
@@ -137,21 +142,21 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
         })
         .collect();
     guide["argument_conflicts"] = json!(conflicts);
-    let mut providers = Vec::new();
+    let mut authorization_guides = Vec::new();
     if guide["authorization"].get("direct_storage").is_some() {
-        providers.extend(["s3", "azure", "gcs"]);
+        authorization_guides.extend(["s3", "azure-blob", "gcs"]);
     }
     if guide["authorization"].get("unity_catalog").is_some() {
-        providers.push("unity-catalog");
+        authorization_guides.push("unity-catalog");
     }
-    if providers.is_empty() {
+    if authorization_guides.is_empty() {
         if let Some(object) = guide.as_object_mut() {
             object.remove("authorization");
         }
     } else {
         guide["authorization"] = json!({
             "local": "Local paths need no credentials.",
-            "providers": providers,
+            "guides": authorization_guides,
             "details_command": [executable, "capabilities", "--authorization", "NAME"],
         });
     }
@@ -166,6 +171,59 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
     guide["full_command"] = json!([executable, "capabilities", "--command", name, "--full"]);
     guide["limits"] = discovery_limits(MAX_COMMAND_GUIDE_BYTES);
     Ok(guide)
+}
+
+/// Keep a usable SQL request and its result semantics together; full parser rules remain opt-in.
+fn describe_query_usage(guide: &mut Value, command: &Command, executable: &str) {
+    guide["examples"] = json!({
+        "single_table": {
+            "command": [executable, "--diagnostics=json", "query", "TABLE", "--sql-file", "query.sql"],
+            "sql": "SELECT count(*) AS row_count FROM t",
+        },
+        "join": {
+            "command": [executable, "--diagnostics=json", "query", "--tables-file", "tables.json", "--sql-file", "query.sql"],
+            "sql": "SELECT o.id, c.id FROM orders o LEFT JOIN customers c ON o.id = c.id WHERE o.id <= 5 ORDER BY o.id, c.id",
+        },
+    });
+    guide["help_command"] = json!([executable, "query", "--help"]);
+    guide["result_limits"] = command
+        .get_arguments()
+        .filter(|argument| {
+            matches!(
+                argument.get_long(),
+                Some("max-rows" | "max-output-bytes" | "memory-limit-bytes")
+            )
+        })
+        .map(|argument| {
+            json!({
+                "argument": argument_name(argument),
+                "default": argument.get_default_values().first().map(|value| value.to_string_lossy()),
+                "description": argument.get_help().map(ToString::to_string),
+            })
+        })
+        .collect();
+    if let Some(support) = guide["read_support"]["query"].as_object_mut() {
+        support.retain(|name, _| {
+            matches!(
+                name.as_str(),
+                "scope"
+                    | "positional_alias"
+                    | "required_table_input"
+                    | "snapshot_selection"
+                    | "ordering"
+                    | "sql_input"
+                    | "requires_redirected_stdout"
+            )
+        });
+    }
+    if let Some(sql) = guide["read_support"]["query"]["sql_input"].as_object_mut() {
+        sql.retain(|name, _| {
+            matches!(
+                name.as_str(),
+                "argument" | "encoding" | "max_file_bytes" | "max_statements" | "statement_kind"
+            )
+        });
+    }
 }
 
 fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Error> {
@@ -379,8 +437,8 @@ fn write_discovery_response(options: CapabilitiesArgs) -> Result<StdoutStats, Er
         } else {
             (build_command_guide(&name)?, MAX_COMMAND_GUIDE_BYTES)
         }
-    } else if let Some(provider) = options.authorization {
-        (provider.guide_document(), MAX_AUTHORIZATION_GUIDE_BYTES)
+    } else if let Some(guide) = options.authorization {
+        (guide.document(), MAX_AUTHORIZATION_GUIDE_BYTES)
     } else if options.all {
         (build_capability_details(None)?, MAX_FULL_RESPONSE_BYTES)
     } else {

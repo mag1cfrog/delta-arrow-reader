@@ -46,8 +46,8 @@ command-line arguments, starting with the installed executable's name.
 | Invocation | JSON `kind` | Contents |
 | --- | --- | --- |
 | `dar capabilities` | `capability_index` | Short directory and commands for loading details. |
-| `dar capabilities --command query` | `command_guide` | Query's help, argument conflicts, formats, limits, and routes to related inputs and authorization. |
-| `dar capabilities --authorization s3` | `authorization_guide` | Canonical credential inputs and lookup rules for one provider. |
+| `dar capabilities --command query` | `command_guide` | Executable examples, table-input conflicts, result semantics and limits, and routes to input and authorization details. |
+| `dar capabilities --authorization s3` | `authorization_guide` | Canonical credential inputs and lookup rules for one storage or catalog service. |
 | `dar capabilities --schema NAME` | `schema_guide` | One example, shared constraints, and available fields or types. |
 | `dar capabilities --schema NAME --detail FIELD_OR_TYPE` | `schema_detail` | One field, predicate operator, or scalar type from that guide. |
 | `dar capabilities --command query --full` | `command_capabilities` | Complete query argument metadata, authorization, formats, schemas, and limits. |
@@ -61,14 +61,27 @@ All responses have `format_version: 1` and `cli_version`. `--command`, `--schema
 names or conflicting selectors fail with status 2.
 For text help, use `dar query --help` or the corresponding command's help.
 
-For example, after finding `query` in the directory, run
-`dar capabilities --command query`. Its description identifies positional alias
-`t`, named tables through `--tables-file`, the `--sql-file` input, and the
-requirement to redirect Arrow output. Fetch
-`--schema storage-options` if a storage-options file is needed, then follow
-`authorization_command` for the selected provider. Local paths need no
-credentials. To recover these details later, repeat the same discovery commands;
-discovery does not depend on previous invocations.
+For a local join, follow the directory's `query` entry, then request the `tables`
+input listed by that command guide. The command guide's `examples.join` gives
+SQL and an invocation; the tables guide supplies the manifest example and
+relative-path rules. Replace the example locations and select columns that
+exist in those tables. Write the SQL and manifest to the referenced files, then
+redirect query stdout to an Arrow file. With `--diagnostics=json`, the completion
+record on stderr reports each alias's actual version in `bindings`.
+
+This path uses three discovery responses, including the directory. It needs
+no full definitions or authorization lookup for local tables. The query guide
+also includes a single-table example, result ceilings, and ordering constraints.
+Follow `help_command` for complete text help or `full_command` for full metadata.
+Discovery is stateless; repeat any lookup to recover its details.
+
+Authorization guide names are `s3`, `azure-blob`, `gcs`, and
+`unity-catalog`. The first three describe direct storage access; Unity Catalog
+describes access through a Databricks profile. Command guides list the applicable
+names in `authorization.guides`; the storage-options guide lists
+`authorization_guides`. Each authorization response identifies its guide in
+`name`. For example, use `dar capabilities --authorization azure-blob`
+for Azure Blob Storage, including its Data Lake Storage Gen2 capabilities.
 
 An input schema guide's `example` can be used as the file contents, subject to the
 listed constraints. For predicates, the example's column and literal type must
@@ -77,10 +90,12 @@ match the table. `fields`, `operators`, and `scalar_types` list names accepted b
 `--schema execution-options --detail prefetch_files_per_partition` gives one
 setting's default and bounds. `--schema predicate --detail timestamp_us` gives
 the timestamp unit, integer encoding, and required timezone field.
-For a join, `--schema tables` gives a two-table example.
-`--schema tables --detail 'tables[].authorization.source'` lists the installed
-credential sources, and `--detail 'tables[].table_version'` explains version
-selection. Nested field names use the spelling listed in `fields`.
+For a join, `--schema tables` gives a two-table example. Select
+`--detail 'tables[].authorization'` for credential references and routes to the
+authorization guides. Its `fields` list exposes the source and file details;
+`--detail 'tables[].table_version'` explains version selection. Complete
+validation rules are available through `full_command`. Nested field names use
+the spelling listed in `fields`.
 
 These guides describe how to use a format. Recursive predicate references lead
 to another operator or scalar choice through `detail_command`. Use a guide's
@@ -100,10 +115,10 @@ output schemas apply.
 In full metadata, `authorization` describes local access, direct-storage sources
 and configuration files, and Databricks profiles, including the commands that
 accept each. Direct storage supports explicit source selection per command or
-manifest table. Its provider guide lists supported sources, credential inputs,
+manifest table. Its authorization guide lists supported sources, credential inputs,
 and the backend lookup used when source selection is omitted. Discovery
 does not inspect the caller's credentials or check provider availability.
-The provider guide's `full_command` returns the full inventory, including
+The authorization guide's `full_command` returns the full inventory, including
 credential option aliases.
 
 `read_support` describes each command's scope and limits. For example, `query`

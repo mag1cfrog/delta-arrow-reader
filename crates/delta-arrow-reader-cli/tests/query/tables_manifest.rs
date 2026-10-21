@@ -54,19 +54,92 @@ fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -
             &directory.path().join("data").join(name),
         )?;
     }
+    let mut discovery_bytes = Vec::new();
+    let mut discover = |invocation: &Value| -> TestResult<Value> {
+        let arguments: Vec<_> = invocation
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap())
+            .collect();
+        assert_eq!(arguments[0], "dar");
+        assert!(!arguments.iter().any(|argument| {
+            matches!(
+                *argument,
+                "--full" | "--all" | "--detail" | "--authorization"
+            )
+        }));
+        let output = run_with_timeout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .env_clear()
+                .args(&arguments[1..]),
+        )?;
+        assert!(output.status.success(), "{arguments:?}: {output:?}");
+        assert!(output.stderr.is_empty());
+        discovery_bytes.push(output.stdout.len());
+        Ok(serde_json::from_slice(&output.stdout)?)
+    };
+    let index = discover(&json!(["dar", "capabilities"]))?;
+    let query = index["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|command| command["name"] == "query")
+        .unwrap();
+    let query_guide = discover(&query["details"])?;
+    assert_eq!(
+        query_guide["argument_conflicts"].as_array().unwrap().len(),
+        1
+    );
+    let conflicts = &query_guide["argument_conflicts"][0];
+    assert_eq!(conflicts["argument"], "--tables-file");
+    for argument in [
+        "table",
+        "--table-version",
+        "--storage-options-file",
+        "--auth-source",
+    ] {
+        assert!(
+            conflicts["conflicts_with"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(argument))
+        );
+    }
+    let input = query_guide["input_schemas"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|input| input["argument"] == "--tables-file")
+        .unwrap();
+    let mut invocation = query_guide["schema_command"].clone();
+    *invocation.as_array_mut().unwrap().last_mut().unwrap() = input["name"].clone();
+    let guide = discover(&invocation)?;
+    assert!(guide.get("schema").is_none());
+    assert!(guide.get("parser_constraints").is_none());
+    assert!(guide.get("authorization_guides").is_none());
+    assert!(
+        guide["description"]
+            .as_str()
+            .unwrap()
+            .contains("manifest directory")
+    );
     fs::write(
         directory.path().join("query.sql"),
-        "SELECT o.id, c.id FROM orders o LEFT JOIN customers c ON o.id = c.id WHERE o.id <= 5 ORDER BY o.id",
+        query_guide["examples"]["join"]["sql"].as_str().unwrap(),
     )?;
-    let discovery = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).env_clear().args([
-        "capabilities",
-        "--schema",
-        "tables",
-    ]))?;
-    assert!(discovery.status.success(), "{discovery:?}");
-    assert!(discovery.stdout.len() <= 2048);
-    let guide: Value = serde_json::from_slice(&discovery.stdout)?;
-    assert!(guide.get("schema").is_none());
+    let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
+    command.env_clear().current_dir(directory.path()).args(
+        query_guide["examples"]["join"]["command"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .skip(1)
+            .map(|value| match value.as_str().unwrap() {
+                "tables.json" => "inputs/tables.json",
+                argument => argument,
+            }),
+    );
     let mut manifest = guide["example"].clone();
     assert_eq!(manifest["tables"].as_array().unwrap().len(), 2);
     manifest["tables"][0]["location"] = json!("../data/partitioned");
@@ -80,7 +153,7 @@ fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -
             manifest["tables"][1]["table_version"] = json!("0");
         }
         fs::write(&path, manifest.to_string())?;
-        let output = run_with_timeout(&mut manifest_command(directory.path()))?;
+        let output = run_with_timeout(&mut command)?;
         let actual = decode_query_result(&output)?;
         assert_eq!(actual.num_columns(), 2);
         assert_eq!(actual.schema().field(0).name(), "id");
@@ -100,6 +173,11 @@ fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -
         );
         assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
     }
+    eprintln!(
+        "JOIN discovery: {} lookups, {} bytes, no full definitions or authorization lookups",
+        discovery_bytes.len(),
+        discovery_bytes.iter().sum::<usize>(),
+    );
     Ok(())
 }
 

@@ -14,24 +14,22 @@ use crate::{query, unity_catalog};
 
 #[derive(Clone, Copy, Debug, ValueEnum, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub(super) enum AuthorizationProvider {
+pub(super) enum AuthorizationGuide {
     S3,
-    #[value(name = "azure")]
-    #[serde(rename = "azure")]
     AzureBlob,
     Gcs,
     UnityCatalog,
 }
 
-impl AuthorizationProvider {
-    pub(super) fn guide_document(self) -> Value {
+impl AuthorizationGuide {
+    pub(super) fn document(self) -> Value {
         let sources = authorization_sources();
         let mut authorization = if matches!(self, Self::UnityCatalog) {
             sources["unity_catalog"].clone()
         } else {
             let name = match self {
                 Self::S3 => "s3",
-                Self::AzureBlob => "azure",
+                Self::AzureBlob => "azure-blob",
                 Self::Gcs => "gcs",
                 Self::UnityCatalog => unreachable!(),
             };
@@ -55,7 +53,7 @@ impl AuthorizationProvider {
                 .into_iter()
                 .flatten()
                 .chain(
-                    storage["provider_notes"][name]
+                    storage["backend_notes"][name]
                         .as_array()
                         .into_iter()
                         .flatten(),
@@ -63,7 +61,7 @@ impl AuthorizationProvider {
                 .cloned()
                 .collect();
             if let Some(object) = storage.as_object_mut() {
-                object.remove("provider_notes");
+                object.remove("backend_notes");
                 object.remove("credential_option_aliases");
             }
             storage
@@ -75,7 +73,7 @@ impl AuthorizationProvider {
             "format_version": 1,
             "kind": "authorization_guide",
             "cli_version": env!("CARGO_PKG_VERSION"),
-            "provider": self,
+            "name": self,
             "authorization": authorization,
             "full_command": [crate::command_name(), "capabilities", "--all"],
             "limits": super::discovery_limits(super::MAX_AUTHORIZATION_GUIDE_BYTES),
@@ -97,7 +95,7 @@ pub(super) fn authorization_sources() -> Value {
             "explicit_source_selection": true,
             "explicit_sources": {
                 "s3": ["json", "env", "aws-web-identity", "aws-container"],
-                "azure": ["json", "env", "azure-workload-identity", "azure-managed-identity"],
+                "azure-blob": ["json", "env", "azure-workload-identity", "azure-managed-identity"],
                 "gcs": ["json", "env"],
             },
             "env_file_input": false,
@@ -109,7 +107,7 @@ pub(super) fn authorization_sources() -> Value {
                     "aws_secret_access_key": ["secret_access_key"],
                     "aws_session_token": ["aws_token", "session_token", "token"],
                 },
-                "azure": {
+                "azure-blob": {
                     "azure_storage_account_key": ["azure_storage_access_key", "azure_storage_master_key", "master_key", "account_key", "access_key"],
                     "azure_storage_sas_key": ["azure_storage_sas_token", "sas_key", "sas_token"],
                     "azure_storage_token": ["bearer_token", "token"],
@@ -127,13 +125,13 @@ pub(super) fn authorization_sources() -> Value {
                 "json requires a storage-options file; env reads only supported credential variables. Explicit sources reject conflicting credentials and never fall back to another identity.",
                 "Manifest authorization selects the source separately for each table. Files may also supply allowed transport settings.",
             ],
-            "provider_notes": {
+            "backend_notes": {
                 "s3": [
                     "json/env require key ID and secret; session token is optional. env reads AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN and AWS_REGION or AWS_DEFAULT_REGION.",
                     "aws-web-identity needs role_arn and web_identity_token_file; aws-container needs container_credentials_full_uri or container_credentials_relative_uri. Their corresponding AWS_ variables are accepted. Both refresh the selected identity.",
                     "Omitting the source preserves backend lookup, including instance metadata. AWS profiles and SSO are not imported.",
                 ],
-                "azure": [
+                "azure-blob": [
                     "env uses AZURE_STORAGE_ACCOUNT_KEY, AZURE_STORAGE_SAS_TOKEN, AZURE_STORAGE_TOKEN, or AZURE_CLIENT_ID + AZURE_CLIENT_SECRET + AZURE_TENANT_ID. json/env select exactly one credential family.",
                     "azure-workload-identity requires tenant ID, client ID and federated token file. azure-managed-identity requires one client ID, object ID or MSI resource ID. Identity providers renew credentials.",
                     "The account name comes from the URL or JSON; env also accepts AZURE_STORAGE_ACCOUNT_NAME.",
@@ -154,7 +152,7 @@ pub(super) fn authorization_sources() -> Value {
             "executable_bundled": false,
             "interactive_login": false,
             "credential_operation": "READ",
-            "credential_backends": ["s3", "r2", "azure", "gcs"],
+            "credential_backends": ["s3", "r2", "azure-blob", "gcs"],
             "credential_refresh": true,
             "fallback_to_other_identity": false,
             "storage_options": "transport_and_region_only",
@@ -198,7 +196,7 @@ pub(super) fn command_read_support() -> Value {
             "required_table_input": {"one_of": ["TABLE", "--tables-file"]},
             "tables_file_argument": "--tables-file",
             "max_table_bindings": query::tables_manifest::MAX_TABLES,
-            "snapshot_selection": "Each alias loads once; completion reports actual versions in declaration order. No cross-table transaction.",
+            "snapshot_selection": "Each alias loads once. With --diagnostics=json, the stderr completion record's bindings lists alias and table_version in declaration order; versions are actual decimal strings. No cross-table transaction.",
             "ordering": "Use ORDER BY with tie-breaking columns for repeatable row order.",
             "self_joins": true,
             "external_table_discovery": false,
@@ -239,19 +237,27 @@ mod tests {
     use crate::{Cli, unity_catalog::UnityCatalogTableTarget};
 
     #[test]
-    fn provider_guides_only_include_the_selected_credential_family() {
+    fn authorization_guides_only_include_the_selected_service() {
         let credential_keys = [
             "aws_access_key_id",
             "azure_storage_account_key",
             "google_service_account",
         ];
-        for (provider, expected_key) in [
-            (AuthorizationProvider::S3, credential_keys[0]),
-            (AuthorizationProvider::AzureBlob, credential_keys[1]),
-            (AuthorizationProvider::Gcs, credential_keys[2]),
+        for (guide, expected_key) in [
+            (AuthorizationGuide::S3, credential_keys[0]),
+            (AuthorizationGuide::AzureBlob, credential_keys[1]),
+            (AuthorizationGuide::Gcs, credential_keys[2]),
         ] {
-            let document = provider.guide_document();
+            let document = guide.document();
             let authorization = &document["authorization"];
+            for source in ["json", "env"] {
+                assert!(
+                    authorization["explicit_sources"]
+                        .as_array()
+                        .unwrap()
+                        .contains(&json!(source))
+                );
+            }
             let options = authorization["credential_options"].as_array().unwrap();
             assert!(options.contains(&json!(expected_key)));
             for other in credential_keys
@@ -261,11 +267,11 @@ mod tests {
                 assert!(!options.contains(&json!(other)));
             }
             assert!(authorization.get("credential_option_aliases").is_none());
-            assert!(authorization.get("provider_notes").is_none());
+            assert!(authorization.get("backend_notes").is_none());
             assert!(authorization.get("profile_argument").is_none());
             assert_eq!(authorization["storage_options_schema"], "storage-options");
         }
-        let document = AuthorizationProvider::UnityCatalog.guide_document();
+        let document = AuthorizationGuide::UnityCatalog.document();
         assert_eq!(
             document["authorization"]["profile_argument"],
             "--databricks-profile"
@@ -292,7 +298,7 @@ mod tests {
                             alias.parse::<AmazonS3ConfigKey>().unwrap(),
                             canonical.parse().unwrap()
                         ),
-                        "azure" => assert_eq!(
+                        "azure-blob" => assert_eq!(
                             alias.parse::<AzureConfigKey>().unwrap(),
                             canonical.parse().unwrap()
                         ),

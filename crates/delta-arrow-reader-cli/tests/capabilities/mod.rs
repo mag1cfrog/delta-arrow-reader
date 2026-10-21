@@ -157,7 +157,7 @@ fn discovery_is_deterministic_without_credentials_or_a_search_path()
             "schema_detail",
         ),
         (vec!["--authorization", "s3"], "authorization_guide"),
-        (vec!["--authorization", "azure"], "authorization_guide"),
+        (vec!["--authorization", "azure-blob"], "authorization_guide"),
         (vec!["--authorization", "gcs"], "authorization_guide"),
         (
             vec!["--authorization", "unity-catalog"],
@@ -290,19 +290,25 @@ fn assert_discovery_routes(
         let guide = run_advertised(&entry["details"])?;
         assert_eq!(guide["kind"], "command_guide");
         assert_eq!(guide["command"], name);
-        assert!(guide["help"].as_str().unwrap().contains("Usage:"));
+        if name == "query" {
+            assert!(guide.get("help").is_none());
+            assert_eq!(guide["help_command"][1], "query");
+            assert!(guide["examples"]["join"]["command"].is_array());
+        } else {
+            assert!(guide["help"].as_str().unwrap().contains("Usage:"));
+        }
         assert!(guide["authorization"].get("direct_storage").is_none());
         assert!(guide["authorization"].get("unity_catalog").is_none());
-        for provider in guide["authorization"]["providers"]
+        for guide_name in guide["authorization"]["guides"]
             .as_array()
             .into_iter()
             .flatten()
         {
             let mut invocation = guide["authorization"]["details_command"].clone();
-            *invocation.as_array_mut().unwrap().last_mut().unwrap() = provider.clone();
+            *invocation.as_array_mut().unwrap().last_mut().unwrap() = guide_name.clone();
             let authorization = run_advertised(&invocation)?;
             assert_eq!(authorization["kind"], "authorization_guide");
-            assert_eq!(&authorization["provider"], provider);
+            assert_eq!(&authorization["name"], guide_name);
             assert!(
                 authorization["authorization"]["commands"]
                     .as_array()
@@ -385,6 +391,17 @@ fn assert_discovery_routes(
         assert_eq!(guide["kind"], "schema_guide");
         assert_eq!(&guide["name"], name);
         assert!(guide.get("schema").is_none());
+        for guide_name in guide["authorization_guides"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            let mut invocation = guide["authorization_command"].clone();
+            *invocation.as_array_mut().unwrap().last_mut().unwrap() = guide_name.clone();
+            let authorization = run_advertised(&invocation)?;
+            assert_eq!(authorization["kind"], "authorization_guide");
+            assert_eq!(&authorization["name"], guide_name);
+        }
         let full = run_advertised(&guide["full_command"])?;
         assert_eq!(&full["name"], name);
         jsonschema::validate(&full["schema"], &guide["example"])
@@ -398,6 +415,23 @@ fn assert_discovery_routes(
                 assert_eq!(&detail["detail"], name);
                 assert!(detail.get("schema").is_none());
                 assert!(detail["definition"].is_object());
+                for field in detail["fields"].as_array().into_iter().flatten() {
+                    let mut invocation = detail["detail_command"].clone();
+                    *invocation.as_array_mut().unwrap().last_mut().unwrap() = field.clone();
+                    let selected = run_advertised(&invocation)?;
+                    assert_eq!(&selected["detail"], field);
+                    assert!(selected["definition"].is_object());
+                }
+                for guide_name in detail["authorization_guides"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                {
+                    let mut invocation = detail["authorization_command"].clone();
+                    *invocation.as_array_mut().unwrap().last_mut().unwrap() = guide_name.clone();
+                    let authorization = run_advertised(&invocation)?;
+                    assert_eq!(&authorization["name"], guide_name);
+                }
             }
         }
     }
@@ -537,21 +571,21 @@ fn discovered_guides_support_pinned_reads_and_predicate_repair()
         assert_eq!(completion["output_bytes"], output.stdout.len().to_string());
 
         let query_guide = command_guide("query")?;
-        let support = &query_guide["read_support"]["query"];
-        let alias = support["positional_alias"].as_str().unwrap();
+        let example = &query_guide["examples"]["single_table"];
         let sql_file = directory.path().join("count rows.sql");
-        fs::write(
-            &sql_file,
-            format!("SELECT count(*) AS n FROM {alias} WHERE id >= 100"),
-        )?;
-        let output = run_with_timeout(
-            Command::new(&executable)
-                .env_clear()
-                .args(["--diagnostics=json", "query", "--table-version", version])
-                .arg(support["sql_input"]["argument"].as_str().unwrap())
-                .arg(&sql_file)
-                .arg(&table),
-        )?;
+        fs::write(&sql_file, example["sql"].as_str().unwrap())?;
+        assert_eq!(example["command"][0], name);
+        let mut query = Command::new(&executable);
+        query.env_clear();
+        for argument in example["command"].as_array().unwrap().iter().skip(1) {
+            query.arg(match argument.as_str().unwrap() {
+                "TABLE" => table.as_os_str(),
+                "query.sql" => sql_file.as_os_str(),
+                argument => argument.as_ref(),
+            });
+        }
+        query.args(["--table-version", version]);
+        let output = run_with_timeout(&mut query)?;
         assert!(output.status.success(), "{output:?}");
         let reader = StreamReader::try_new(Cursor::new(&output.stdout), None)?;
         let rows = concat_batches(&reader.schema(), &reader.collect::<Result<Vec<_>, _>>()?)?;
@@ -562,7 +596,7 @@ fn discovered_guides_support_pinned_reads_and_predicate_repair()
             .downcast_ref::<Int64Array>()
             .unwrap()
             .value(0);
-        assert_eq!(count as usize, selected_rows.num_rows());
+        assert_eq!(count as usize, expected.num_rows());
         let completion: Value = serde_json::from_slice(&output.stderr)?;
         assert_eq!(completion["kind"], "completion");
         assert_eq!(completion["scope"], "query");
