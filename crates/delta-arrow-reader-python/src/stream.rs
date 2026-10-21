@@ -448,6 +448,65 @@ mod tests {
     use delta_arrow_reader::{DeltaScanExecutionOptions, error_source_kind};
 
     #[test]
+    fn rejected_schema_requests_leave_the_stream_available() -> PyResult<()> {
+        use pyo3::types::PyString;
+        use std::collections::HashMap;
+
+        Python::initialize();
+        Python::attach(|py| {
+            let table = crate::binding_tests::table(py)?;
+            let actual = table
+                .extract::<PyRef<'_, crate::DeltaTable>>()?
+                .table
+                .schema();
+            let metadata = HashMap::from([("secret".into(), "value".into())]);
+            let with_first_field = |field| {
+                let mut fields = actual.fields().to_vec();
+                fields[0] = Arc::new(field);
+                Schema::new_with_metadata(fields, actual.metadata().clone())
+            };
+            let first = actual.field(0);
+            let mut cases = vec![(
+                PyString::new(py, "secret-object").into_any(),
+                py.get_type::<PyTypeError>(),
+            )];
+            for schema in [
+                Schema::empty(),
+                with_first_field(first.clone().with_name("secret-field")),
+                with_first_field(first.clone().with_nullable(!first.is_nullable())),
+                actual.as_ref().clone().with_metadata(metadata.clone()),
+                with_first_field(first.clone().with_metadata(metadata)),
+            ] {
+                cases.push((
+                    PyCapsule::new_with_value(
+                        py,
+                        FFI_ArrowSchema::try_from(&schema).unwrap(),
+                        c"arrow_schema",
+                    )?
+                    .into_any(),
+                    py.get_type::<PyValueError>(),
+                ));
+            }
+            for (requested, expected_error) in cases {
+                let stream = table.call_method0("scan")?;
+                let error = stream
+                    .call_method1("__arrow_c_stream__", (requested,))
+                    .unwrap_err();
+                assert!(error.get_type(py).is(&expected_error), "{error}");
+                assert!(!error.to_string().contains("secret"), "{error}");
+                let capsule = stream.call_method1(
+                    "__arrow_c_stream__",
+                    (table.call_method0("__arrow_c_schema__")?,),
+                )?;
+                capsule
+                    .cast::<PyCapsule>()?
+                    .pointer_checked(Some(c"arrow_array_stream"))?;
+            }
+            Ok(())
+        })
+    }
+
+    #[test]
     fn requested_schema_types_distinguish_alternates_from_incompatible_changes() {
         use DataType::*;
         use arrow::datatypes::TimeUnit;
