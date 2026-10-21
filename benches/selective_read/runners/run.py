@@ -1,8 +1,6 @@
 """Shared Python adapter identities, protocol checks and immutable artifacts."""
 
-import hashlib
 import json
-import os
 from pathlib import Path
 import runpy
 import sys
@@ -10,24 +8,8 @@ import sys
 import native
 
 
-_DIGESTS = {}
-
-
-def file_identity(path):
-    stat = os.stat(path)
-    return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
-
-
 def digest(path):
-    """Hash an unchanged local inode once per process, including hard links."""
-    with Path(path).open("rb") as source:
-        identity = file_identity(source.fileno())
-        previous = _DIGESTS.get(identity[:2])
-        value = previous[1] if previous and previous[0] == identity else hashlib.file_digest(source, "sha256").hexdigest()
-        if file_identity(source.fileno()) != identity or file_identity(path) != identity:
-            raise ValueError(f"file changed during checksum: {path}")
-        _DIGESTS[identity[:2]] = identity, value
-        return value
+    return native.call("reader-runtime", {"action": "digest", "path": str(path)})
 
 
 def save(path, value):
@@ -51,12 +33,6 @@ def load_adapter(binary):
 
 
 def query_count(value):
-    count = value.get("concurrent_queries")
-    if count is not None:
-        if (type(count) is not int or count not in (2, 4) or value["execution_mode"] != "reuse"
-                or value.get("comparison_revision") != 6):
-            raise ValueError("concurrent queries require revision 6, reuse mode and a count of 2 or 4")
-        return count
     if value["execution_mode"] == "open":
         return 1
     return 2 if value.get("comparison_revision", 2) >= 4 else 10

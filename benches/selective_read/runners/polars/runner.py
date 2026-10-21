@@ -26,10 +26,10 @@ import polars as pl
 import pyarrow as pa
 
 sys.path.insert(0, str(HERE))
-from run import digest, query_count, save
-from python_common import (checked_build, checkpoint, correctness, event, observation,
+from run import query_count
+from python_common import (checked_build, checkpoint, correctness, event, export_result, observation,
                            reader_identity, redact_credentials, require, runner_cli, runtime_metadata,
-                           scan_sql, storage_options, timing_totals, validate, write_observation)
+                           scan_sql, storage_options, validate, write_observation)
 
 DELTA_OPTIONS = {"without_files": False, "log_buffer_size": 8, "skip_stats": False}
 COLLECT_OPTIONS = {"chunk_size": 8192, "maintain_order": False, "lazy": False, "engine": "streaming"}
@@ -134,18 +134,14 @@ def execute(request, options, output, record):
                        "first_batch_unavailable_reason": "untimed invocation" if not timed else "empty result" if not rows else None,
                        "result": None, "identity": None, "physical_plan": None}
         if writer is not None:
-            name = f"query-{index}.identity.json"
-            save(output / name, record["identity"] | {"result_sha256": digest(result)})
-            observation.update(result=result.name, identity=name)
+            observation.update(export_result(output, index, record["identity"]))
         if request["purpose"] == "diagnostic" or request.get("validation_diagnostics"):
             name = f"query-{index}.plan.dot"
             (output / name).write_text(plan.show_graph(raw_output=True, show=False, engine="streaming", plan_stage="physical"))
             observation["physical_plan"] = name
         record["queries"].append(observation)
         del plan
-    if timed:
-        timing_totals(record)
-    elif request["purpose"] != "io":
+    if not timed and request["purpose"] != "io":
         record["provider_evidence"] = {"schema": {k: str(v) for k, v in source.collect_schema().items()},
                                        "native_expression": expression_identity(request["canonical_sql"])}
     record["phase"] = "complete"
@@ -179,8 +175,6 @@ def run(request_path, output):
         record.update(identity=identity, settings=settings, build_record=str(build_path), phase="correctness_gate")
         record["correctness"] = correctness(request, identity)
         execute(request, storage["options"], output, record)
-        if request["purpose"] == "timing" and [q["output_rows"] for q in record["queries"]] != record["correctness"]["expected_output_rows"]:
-            record.update(status="validation_failed", failure_reason="timed output row count differs from the validated result")
     except Exception as error:
         unsupported = isinstance(error, DeltaProtocolError) or (
             isinstance(error, DeltaError) and str(error).startswith("Kernel error: Unsupported:"))

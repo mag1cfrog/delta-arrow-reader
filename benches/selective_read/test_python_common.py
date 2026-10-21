@@ -16,69 +16,25 @@ import run
 
 
 class ReaderBookkeeping(unittest.TestCase):
-    def test_shared_native_contract_cases(self):
-        cases = json.loads((Path(__file__).parent / "runners/contract-cases.json").read_text())
-        for case in cases["requests"]:
-            with self.subTest(request=case["name"]):
-                request = cases["request"] | case["change"]
-                for key in case.get("remove", []):
-                    request.pop(key)
-                if case["python_valid"]:
-                    common.validate(request)
-                else:
-                    with self.assertRaises(ValueError):
-                        common.validate(request)
+    def test_native_bridge_preserves_exports_and_failures(self):
+        request = json.loads((Path(__file__).parent / "runners/contract-cases.json").read_text())["request"]
+        common.validate(request)
+        with self.assertRaises(ValueError):
+            common.validate(request | {"surprise": True})
         with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "proof.json"
-            request = cases["request"] | {"purpose": "timing", "correctness_file": str(path)}
-            for case in cases["proofs"]:
-                with self.subTest(proof=case["name"]):
-                    check = cases["identity"] | {"status": "passed", "output_rows": 3} | case["change"]
-                    for key in case.get("remove", []):
-                        check.pop(key)
-                    path.write_text(json.dumps({"status": case.get("status", "passed"),
-                                               "checks": [check] * case.get("checks", 2)}))
-                    if case["valid"]:
-                        self.assertEqual(common.correctness(request, cases["identity"])["expected_output_rows"], [3, 3])
-                    else:
-                        with self.assertRaises(ValueError):
-                            common.correctness(request, cases["identity"])
+            output = Path(temporary)
+            (output / "query-0.arrow").write_bytes(b"export")
+            exported = common.export_result(output, 0, {"case_id": "case"})
+            self.assertEqual(exported, {"result": "query-0.arrow", "identity": "query-0.identity.json"})
+            self.assertEqual(json.loads((output / exported["identity"]).read_text())["result_sha256"], run.digest(output / exported["result"]))
+            with redirect_stdout(io.StringIO()) as stdout:
+                self.assertEqual(common.write_observation(output, {"status": "success"}), 0)
+            self.assertEqual(json.loads(stdout.getvalue()), {"status": "success"})
+            with self.assertRaises(ValueError):
+                common.write_observation(output, {"status": "validation_failed"})
+            self.assertEqual(json.loads((output / "record.json").read_text()), {"status": "success"})
 
-    def test_build_audit_changes_preserve_certificates_but_artifact_changes_do_not(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            build_path, proof = root / "build.json", root / "proof.json"
-            build = {"reader_id": "test", "executable_sha256": "1" * 64, "lockfile_sha256": "2" * 64,
-                     "harness_git_commit": "before", "source_sha256": {"source": "before"}}
-            build_path.write_text(json.dumps(build))
-            request = {"purpose": "timing", "execution_mode": "open", "correctness_file": str(proof),
-                       "comparison_revision": 2, "case_id": "case", "snapshot_version": 0,
-                       "fixture_manifest_sha256": "3" * 64, "canonical_sql": "SELECT id FROM bench"}
-            identity = common.reader_identity(request, "test", build_path, {})
-            proof.write_text(json.dumps({"status": "passed", "checks": [identity | {"status": "passed", "output_rows": 3}]}))
-            for change in ({"harness_git_commit": "after"}, {"source_sha256": {"source": "after"}}):
-                build_path.write_text(json.dumps(build | change))
-                current = common.reader_identity(request, "test", build_path, {})
-                self.assertNotEqual(current["reader_build_sha256"], identity["reader_build_sha256"])
-                self.assertEqual(common.correctness(request, current)["expected_output_rows"], [3])
-            build_path.write_text(json.dumps(build | {"executable_sha256": "4" * 64}))
-            with self.assertRaisesRegex(ValueError, "stale correctness"):
-                common.correctness(request, common.reader_identity(request, "test", build_path, {}))
 
-    def test_correctness_uses_result_identity_and_rows_not_oracle_source_hashes(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "correctness.json"
-            identity = json.loads((Path(__file__).parent / "runners/contract-cases.json").read_text())["identity"]
-            check = identity | {"status": "passed", "output_rows": 3, "oracle_sha256": "older source",
-                                "protocol_sha256": "older documentation"}
-            request = {"purpose": "timing", "execution_mode": "open", "correctness_file": str(path)}
-            path.write_text(json.dumps({"status": "passed", "checks": [check]}))
-            self.assertEqual(common.correctness(request, identity)["expected_output_rows"], [3])
-            for change in ({"status": "failed"}, {"output_rows": -1}, {"output_rows": True},
-                           {"canonical_sql": "different query"}, {"reader_artifact": {"executable_sha256": "different reader"}}):
-                with self.subTest(change=change), self.assertRaises(ValueError):
-                    path.write_text(json.dumps({"status": "passed", "checks": [check | change]}))
-                    common.correctness(request, identity)
 
     def test_adapter_probes_use_bundled_helpers_and_restore_controller_imports(self):
         previous_path = sys.path.copy()
@@ -107,46 +63,6 @@ class ReaderBookkeeping(unittest.TestCase):
             self.assertIs(sys.modules["python_common"], common)
             self.assertEqual(sys.path, previous_path)
 
-    def test_build_checks_and_observation_output(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            executable = root / "selective-read-test"
-            files = {executable: b"reader", root / "lock.json": b"{}", root / "shared.py": b"shared"}
-            for path, content in files.items():
-                path.write_bytes(content)
-            build = {"reader_id": "test", "executable_sha256": common.digest(executable),
-                     "lockfile_sha256": common.digest(root / "lock.json"),
-                     "bundled_sha256": {"shared.py": common.digest(root / "shared.py")}}
-            common.save(root / "build.json", build)
-            self.assertEqual(common.checked_build(executable, "test"), (root / "build.json", build))
-            with self.assertRaisesRegex(ValueError, "stale runner build"):
-                common.checked_build(executable, "wrong-reader")
-            for path, original in files.items():
-                path.write_bytes(b"changed")
-                with self.assertRaisesRegex(ValueError, "stale runner build"):
-                    common.checked_build(executable, "test")
-                path.write_bytes(original)
-            for mode, durations, totals in (
-                ("open", [0], {"open_query_ns": 0}),
-                ("reuse", [3, 5], {"initialization_plus_query1_ns": 10, "initialization_plus_all_queries_ns": 15}),
-                ("reuse", [2] * 10, {"initialization_plus_query1_ns": 9, "initialization_plus_all_queries_ns": 27}),
-            ):
-                for status, code in (("success", 0), ("validation_failed", 1)):
-                    record = {"execution_mode": mode, "initialization_ns": 7, "status": status,
-                              "queries": [{"completion_ns": value} for value in durations]}
-                    expected = record | totals
-                    common.timing_totals(record)
-                    self.assertEqual(record, expected)
-                    output = root / f"{mode}-{len(durations)}-{status}"
-                    output.mkdir()
-                    with redirect_stdout(io.StringIO()) as stdout:
-                        self.assertEqual(common.write_observation(output, record), code)
-                    self.assertEqual(json.loads(stdout.getvalue()), expected)
-                    saved = output / "record.json"
-                    self.assertEqual(json.loads(saved.read_text()), expected)
-                    with self.assertRaises(FileExistsError):
-                        common.write_observation(output, {"status": "success"})
-                    self.assertEqual(json.loads(saved.read_text()), expected)
 
     def test_cli_and_credentials(self):
         calls = []
@@ -178,18 +94,6 @@ class ReaderBookkeeping(unittest.TestCase):
         self.assertEqual(json.loads(stderr.getvalue()), {"status": "invalid_input", "failure_reason": "cleanup failed"})
         with patch.dict(os.environ, AWS_ACCESS_KEY_ID="fake-key", AWS_SECRET_ACCESS_KEY="fake-secret", AWS_SESSION_TOKEN=""):
             self.assertEqual(common.redact_credentials("fake-key/fake-secret/fake-key"), "[redacted]/[redacted]/[redacted]")
-
-
-    def test_concurrent_request_counts(self):
-        payload = {"execution_mode": "reuse", "comparison_revision": 6,
-                   "purpose": "timing", "concurrent_queries": 4}
-        for count in (0, 1, 3, True, "4"):
-            with self.subTest(count=count), self.assertRaises(ValueError):
-                run.query_count(payload | {"concurrent_queries": count})
-        with self.assertRaises(ValueError):
-            run.query_count(payload | {"execution_mode": "open"})
-        with self.assertRaises(ValueError):
-            run.query_count(payload | {"comparison_revision": 5})
 
 
 if __name__ == "__main__":

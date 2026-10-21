@@ -4,11 +4,13 @@ mod checks;
 #[path = "../../benches/selective_read/runners/contract.rs"]
 mod contract;
 mod experiment;
+mod file_digests;
 mod invoke;
 mod network;
 mod observe;
 mod oracle;
 mod pairs;
+mod reader_runtime;
 mod report;
 mod request;
 mod storage;
@@ -43,6 +45,8 @@ pub(crate) enum Task {
     Oracle,
     /// Keep independent validation scans and file digests in a dedicated process.
     OracleWorker(oracle::Worker),
+    /// Check SDK reader artifacts and assemble records outside query clocks.
+    ReaderRuntime,
     /// Schedule and summarize a campaign. Read the operation as JSON from stdin.
     Campaign,
     /// Execute a frozen campaign and validate its untimed exports.
@@ -306,6 +310,7 @@ impl Task {
             Self::Invoke => invoke::run(&serde_json::from_value(input)?)?,
             Self::ReaderRequest => request::run(serde_json::from_value(input)?)?,
             Self::ReaderContract => contract::run(serde_json::from_value(input)?)?,
+            Self::ReaderRuntime => reader_runtime::run(serde_json::from_value(input)?)?,
             Self::Campaign => campaign::run(serde_json::from_value(input)?)?,
             Self::Storage => storage::run(serde_json::from_value(input)?)?,
             Self::Observe => observe::run(serde_json::from_value(input)?)?,

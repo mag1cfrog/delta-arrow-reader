@@ -15,9 +15,9 @@ import pyarrow as pa
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from run import digest, query_count, save
-from python_common import (checked_build, checkpoint, correctness, event, observation, reader_identity,
-                           require, runner_cli, runtime_metadata, storage_options, timing_totals, validate, write_observation)
+from run import digest, query_count
+from python_common import (checked_build, checkpoint, correctness, event, export_result, observation, reader_identity,
+                           require, runner_cli, runtime_metadata, storage_options, validate, write_observation)
 
 CONFIG = {"threads": 8, "memory_limit": "4GiB", "enable_external_file_cache": False,
           "autoload_known_extensions": False, "autoinstall_known_extensions": False,
@@ -156,19 +156,14 @@ def execute(connection, request, output, record):
                  "first_batch_unavailable_reason": "untimed invocation" if not timed else "empty result" if not rows else None,
                  "result": None, "identity": None, "physical_plan": None}
         if writer is not None:
-            exported = record["identity"] | {"result_sha256": digest(result)}
-            identity_name = f"query-{index}.identity.json"
-            save(output / identity_name, exported)
-            query.update(result=result.name, identity=identity_name)
+            query.update(export_result(output, index, record["identity"]))
         if request["purpose"] == "diagnostic":
             name = f"query-{index}.plan.txt"
             plan = connection.sql("EXPLAIN " + request["canonical_sql"]).fetchall()
             (output / name).write_text("\n".join(f"{k}\n{v}" for k, v in plan) + "\n")
             query["physical_plan"] = name
         record["queries"].append(query)
-    if timed:
-        timing_totals(record)
-    elif request["purpose"] != "io" and not request.get("validation_diagnostics"):
+    if not timed and request["purpose"] != "io" and not request.get("validation_diagnostics"):
         record["provider_evidence"] = {"schema": connection.sql("DESCRIBE bench").fetchall(),
                                        "attach_options": record["settings"]["provider"]}
     elif request.get("validation_diagnostics"):
@@ -203,9 +198,6 @@ def run(request_path, output):
         record.update(identity=identity, settings=settings, build_record=str(build_path), phase="correctness_gate")
         record["correctness"] = correctness(request, identity)
         execute(connection, request, output, record)
-        if request["purpose"] == "timing":
-            if [q["output_rows"] for q in record["queries"]] != record["correctness"]["expected_output_rows"]:
-                record.update(status="validation_failed", failure_reason="timed output row count differs from the validated result")
     except Exception as error:
         record["status"] = "validation_failed" if record["phase"] == "correctness_gate" else failure_status(error)
         record["failure_reason"] = str(error)

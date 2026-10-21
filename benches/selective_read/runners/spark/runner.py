@@ -12,10 +12,10 @@ sys.path[:0] = [str(HERE), str(HERE / "spark")]
 import pyarrow as pa
 import pyspark
 from pyspark.sql import SparkSession
-from run import digest, query_count, save
-from python_common import (checkpoint, correctness, event, json_hash, observation, reader_identity,
+from run import query_count
+from python_common import (checked_build, checkpoint, correctness, event, export_result, observation, reader_identity,
                            redact_credentials, require, runner_cli, runtime_metadata, scan_sql,
-                           storage_options, timing_totals, validate, write_observation)
+                           storage_options, validate, write_observation)
 
 CONFIG = {"spark.master": "local[8]", "spark.driver.memory": "4g", "spark.default.parallelism": "8",
           "spark.sql.shuffle.partitions": "8", "spark.databricks.delta.snapshotPartitions": "8",
@@ -29,19 +29,10 @@ CONFIG = {"spark.master": "local[8]", "spark.driver.memory": "4g", "spark.defaul
           "spark.ui.enabled": "false", "spark.ui.showConsoleProgress": "false"}
 
 
-def files_hash(root):
-    return json_hash({str(p.relative_to(root)): digest(p) for p in sorted(root.rglob("*"))
-                      if p.is_file() and p.suffix != ".pyc"})
-
-
 def runtime():
     lock = json.loads((HERE / "lock.json").read_text())
     require(pyspark.__version__ == lock["spark_version"], "wrong Spark version")
-    require(all(digest(HERE / "jars" / j["filename"]) == j["sha256"] for j in lock["jars"]), "JAR checksum mismatch")
-    return runtime_metadata({"spark_version": pyspark.__version__, "delta_version": lock["delta_version"],
-                             "spark_distribution_sha256": files_hash(HERE / "spark"),
-                             "java_sha256": files_hash(HERE / "java"),
-                             "jar_sha256": {j["filename"]: j["sha256"] for j in lock["jars"]}})
+    return runtime_metadata({"spark_version": pyspark.__version__, "delta_version": lock["delta_version"]})
 
 
 def connect():
@@ -90,11 +81,8 @@ def run(request_path, output):
                   publication_ready=False, startup_ns=None, pilot_initialization_ns=None)
     session = None
     try:
-        build = json.loads((HERE / "build.json").read_text())
-        require(build["reader_id"] == "spark" and not build["pilot_only"]
-                and build["executable_sha256"] == digest(Path(__file__))
-                and all(digest(HERE / name) == value for name, value in build["bundled_sha256"].items())
-                and runtime() == build["runtime"], "stale Spark runtime/build")
+        build_path, build = checked_build(Path(__file__), "spark")
+        require(not build["pilot_only"] and runtime() == build["runtime"], "stale Spark runtime/build")
         start = clock()
         session = connect()
         record["startup_ns"] = clock() - start
@@ -104,8 +92,8 @@ def run(request_path, output):
                     "provider": {"api": "spark.read.format(delta).option(versionAsOf, n).load(uri)",
                                  "query_api": "spark.sql(canonical_sql).toArrow()", "cache_or_persist": False},
                     "output_delivery": "collected", "runtime_scope": "revision 6; historical untimed pilot only"}
-        identity = reader_identity(request, "spark", HERE / "build.json", settings)
-        record.update(identity=identity, settings=settings, build_record=str(HERE / "build.json"),
+        identity = reader_identity(request, "spark", build_path, settings)
+        record.update(identity=identity, settings=settings, build_record=str(build_path),
                       native_session_configuration=dict(session.sparkContext.getConf().getAll()))
         record["phase"] = "correctness_gate"
         record["correctness"] = correctness(request, identity)
@@ -147,19 +135,13 @@ def run(request_path, output):
                 with result.open("xb") as sink, pa.ipc.new_stream(sink, table.schema) as writer:
                     for batch in table.to_batches(8192):
                         writer.write_batch(batch)
-                name = f"query-{index}.identity.json"
-                save(output / name, identity | {"result_sha256": digest(result)})
-                query.update(result=result.name, identity=name)
+                query.update(export_result(output, index, identity))
             if request["purpose"] == "diagnostic" or request.get("validation_diagnostics"):
                 name = f"query-{index}.plan.txt"
                 (output / name).write_text(relation._jdf.queryExecution().toString() + "\n")
                 query["physical_plan"] = name
             record["queries"].append(query)
             del relation, table
-        if timed:
-            timing_totals(record)
-            if [q["output_rows"] for q in record["queries"]] != record["correctness"]["expected_output_rows"]:
-                record.update(status="validation_failed", failure_reason="timed output row count differs from the validated result")
         record.update(phase="complete", capability={"status": "supported", "scope": "requested query and snapshot"})
     except Exception as error:
         reason = redact_credentials(str(error))

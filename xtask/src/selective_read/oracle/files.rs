@@ -1,7 +1,5 @@
 use std::{
-    collections::HashMap,
-    fs::{self, File},
-    os::unix::fs::MetadataExt,
+    fs,
     path::{Path, PathBuf},
 };
 
@@ -12,45 +10,11 @@ use super::{
     Result, require,
     rules::{integer, key},
 };
-use crate::{
-    artifacts::reader_sha256,
-    selective_read::{array, storage::read_json, text},
-};
+use crate::selective_read::{array, storage::read_json, text};
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(super) struct Identity([u64; 7]);
-pub(super) fn identity(path: &Path) -> Result<Identity> {
-    from_metadata(&fs::metadata(path)?)
-}
-fn from_metadata(m: &fs::Metadata) -> Result<Identity> {
-    require(m.is_file(), "expected a regular fixture file")?;
-    Ok(Identity([
-        m.dev(),
-        m.ino(),
-        m.len(),
-        m.mtime() as u64,
-        m.mtime_nsec() as u64,
-        m.ctime() as u64,
-        m.ctime_nsec() as u64,
-    ]))
-}
-#[derive(Default)]
-pub(super) struct Digests(HashMap<Identity, String>);
+pub(super) use crate::selective_read::file_digests::{Digests, Identity, identity};
+
 impl Digests {
-    pub(super) fn digest(&mut self, path: &Path) -> Result<String> {
-        let mut file = File::open(path)?;
-        let before = from_metadata(&file.metadata()?)?;
-        let hash = match self.0.get(&before) {
-            Some(hash) => hash.clone(),
-            None => reader_sha256(&mut file)?,
-        };
-        require(
-            from_metadata(&file.metadata()?)? == before && identity(path)? == before,
-            "file changed during digest",
-        )?;
-        self.0.insert(before, hash.clone());
-        Ok(hash)
-    }
     pub(super) fn verify(&mut self, root: &Path, item: &Value) -> Result<PathBuf> {
         let path = inside(root, text(&item["path"])?)?;
         require(
@@ -314,22 +278,8 @@ pub(super) fn objects(
 mod tests {
     use super::*;
     #[test]
-    fn digest_cache_tracks_hardlinks_writes_and_replacements_and_paths_cannot_escape() -> Result<()>
-    {
+    fn fixture_paths_cannot_escape() -> Result<()> {
         let root = tempfile::tempdir()?;
-        let path = root.path().join("data");
-        fs::write(&path, b"first")?;
-        let mut hashes = Digests::default();
-        let link = root.path().join("link");
-        fs::hard_link(&path, &link)?;
-        let old = hashes.digest(&path)?;
-        assert_eq!(hashes.digest(&link)?, old);
-        assert_eq!(hashes.0.len(), 1);
-        fs::write(&path, b"later")?;
-        assert_ne!(hashes.digest(&path)?, old);
-        fs::remove_file(&path)?;
-        fs::write(&path, b"first")?;
-        assert_eq!(hashes.digest(&path)?, old);
         assert!(inside(root.path(), "..").is_err());
         std::os::unix::fs::symlink("/", root.path().join("escape"))?;
         assert!(inside(root.path(), "escape").is_err());
