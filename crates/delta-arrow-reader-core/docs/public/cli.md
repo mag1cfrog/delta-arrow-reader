@@ -43,7 +43,7 @@ command-line arguments, starting with the installed executable's name.
 | --- | --- | --- |
 | `dar capabilities` | `capability_index` | Short directory and commands for loading details. |
 | `dar capabilities --command query` | `command_guide` | Query's help, argument conflicts, formats, limits, and routes to related inputs and authorization. |
-| `dar capabilities --authorization s3` | `authorization_guide` | Credential inputs, aliases, and lookup rules for one provider. |
+| `dar capabilities --authorization s3` | `authorization_guide` | Credential inputs, aliases, and lookup rules for one storage or catalog service. |
 | `dar capabilities --schema NAME` | `schema_guide` | One example, shared constraints, and available fields or types. |
 | `dar capabilities --schema NAME --detail FIELD_OR_TYPE` | `schema_detail` | One field, predicate operator, or scalar type from that guide. |
 | `dar capabilities --command query --full` | `command_capabilities` | Complete query argument metadata, authorization, formats, schemas, and limits. |
@@ -61,9 +61,17 @@ For example, after finding `query` in the directory, run
 `dar capabilities --command query`. Its description identifies the table alias
 `t`, the `--sql-file` input, and the requirement to redirect Arrow output. Fetch
 `--schema storage-options` if a storage-options file is needed, then follow
-`authorization_command` for the selected provider. Local paths need no
+`authorization_command` for the selected service. Local paths need no
 credentials. To recover these details later, repeat the same discovery commands;
 discovery does not depend on previous invocations.
+
+Authorization guide names are `s3`, `azure-blob`, `gcs`, and
+`unity-catalog`. The first three describe direct storage access; Unity Catalog
+describes access through a Databricks profile. Command guides list the applicable
+names in `authorization.guides`; the storage-options guide lists
+`authorization_guides`. Each authorization response identifies its guide in
+`name`. For example, use `dar capabilities --authorization azure-blob`
+for Azure Blob Storage, including its Data Lake Storage Gen2 capabilities.
 
 An input schema guide's `example` can be used as the file contents, subject to the
 listed constraints. For predicates, the example's column and literal type must

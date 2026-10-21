@@ -156,7 +156,7 @@ fn discovery_is_deterministic_without_credentials_or_a_search_path()
             "schema_detail",
         ),
         (vec!["--authorization", "s3"], "authorization_guide"),
-        (vec!["--authorization", "azure"], "authorization_guide"),
+        (vec!["--authorization", "azure-blob"], "authorization_guide"),
         (vec!["--authorization", "gcs"], "authorization_guide"),
         (
             vec!["--authorization", "unity-catalog"],
@@ -278,16 +278,16 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
         assert!(guide["help"].as_str().unwrap().contains("Usage:"));
         assert!(guide["authorization"].get("direct_storage").is_none());
         assert!(guide["authorization"].get("unity_catalog").is_none());
-        for provider in guide["authorization"]["providers"]
+        for guide_name in guide["authorization"]["guides"]
             .as_array()
             .into_iter()
             .flatten()
         {
             let mut invocation = guide["authorization"]["details_command"].clone();
-            *invocation.as_array_mut().unwrap().last_mut().unwrap() = provider.clone();
+            *invocation.as_array_mut().unwrap().last_mut().unwrap() = guide_name.clone();
             let authorization = run_advertised(&invocation)?;
             assert_eq!(authorization["kind"], "authorization_guide");
-            assert_eq!(&authorization["provider"], provider);
+            assert_eq!(&authorization["name"], guide_name);
             assert!(
                 authorization["authorization"]["commands"]
                     .as_array()
@@ -369,6 +369,17 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
         assert_eq!(guide["kind"], "schema_guide");
         assert_eq!(&guide["name"], name);
         assert!(guide.get("schema").is_none());
+        for guide_name in guide["authorization_guides"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            let mut invocation = guide["authorization_command"].clone();
+            *invocation.as_array_mut().unwrap().last_mut().unwrap() = guide_name.clone();
+            let authorization = run_advertised(&invocation)?;
+            assert_eq!(authorization["kind"], "authorization_guide");
+            assert_eq!(&authorization["name"], guide_name);
+        }
         let full = run_advertised(&guide["full_command"])?;
         assert_eq!(&full["name"], name);
         jsonschema::validate(&full["schema"], &guide["example"])

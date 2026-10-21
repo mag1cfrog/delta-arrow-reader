@@ -107,7 +107,7 @@ impl DiscoverySchema {
         if matches!(self, Self::StorageOptions) {
             guide["authorization_command"] =
                 json!([executable, "capabilities", "--authorization", "NAME"]);
-            guide["providers"] = json!(["s3", "azure", "gcs"]);
+            guide["authorization_guides"] = json!(["s3", "azure-blob", "gcs"]);
         }
         Ok(guide)
     }

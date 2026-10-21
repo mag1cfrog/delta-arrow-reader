@@ -14,7 +14,7 @@ through DataFusion. Catalog integrations and writes are separate work.
 
 | Step | Target interface |
 | --- | --- |
-| Discover | `dar capabilities` returns a directory; `--command NAME` and `--schema NAME` return usage guides. `--detail NAME` selects a schema field or type, `--authorization NAME` selects a provider, `--full` expands a command or schema, and `--all` returns the inventory. All are offline. |
+| Discover | `dar capabilities` returns a directory; `--command NAME` and `--schema NAME` return usage guides. `--detail NAME` selects a schema field or type, `--authorization NAME` selects a storage or catalog authorization guide, `--full` expands a command or schema, and `--all` returns the inventory. All are offline. |
 | Inspect | `dar inspect TABLE --view summary`; `--column NAME` selects fields, `--include-metadata` opts into metadata. |
 | Preview | `dar preview TABLE`; reuse scan projection, predicate, version, and execution options. |
 | Query | `dar query TABLE --sql-file PATH`; single-table alias is `t`. `--format arrow` is the default; `--format json` returns a small complete result within its stdout budget. Save larger results to a file. |
@@ -31,11 +31,11 @@ The default directory fits in 2 KiB and gives explicit invocations for loading
 command and format guides. A caller can select a command and construct common
 inputs without downloading complete definitions or writing a filtering script.
 Command guides retain usage, argument conflicts, formats, and resource limits.
-Provider-specific authorization is requested separately. Schema guides give an
-example and shared constraints, then allow selection of one field, operator, or
-literal type. Every level gives the invocation needed for its next choice.
+Authorization guides for individual services are requested separately. Schema
+guides give an example and shared constraints, then allow selection of one field,
+operator, or literal type. Every level gives the invocation needed for its next choice.
 Complete metadata and validation schemas require `--full`; the complete
-inventory requires `--all`. No guide silently expands every provider or type.
+inventory requires `--all`. No guide silently expands every service or type.
 Discovery is stateless, so an agent can retrieve the same details after context
 compaction. Byte limits count the complete UTF-8 response, including framing;
 oversized responses fail before stdout is written rather than being truncated.
@@ -164,7 +164,7 @@ disables it.
 | Query/file-mode scan | 1,000,000 rows, 300 seconds; query JSON on stdout 8 KiB, JSON in a file 16 MiB, Arrow 1 GiB | `--max-rows`, `--deadline-ms`, `--max-output-bytes` |
 | Artifact receipt | 8 KiB total serialized stdout | None |
 | Query memory/spill | 256 MiB pool, spill disabled | `--memory-limit-bytes`; positive `--spill-limit-bytes` requires `--spill-dir` |
-| Discovery | Directory, schema guides/details, authorization guides: 2 KiB each; command guides: 4 KiB; explicit full definitions/inventory: 1 MiB; 5 seconds | Select a command, schema, field/type, or provider; expand with `--full` or `--all` |
+| Discovery | Directory, schema guides/details, authorization guides: 2 KiB each; command guides: 4 KiB; explicit full definitions/inventory: 1 MiB; 5 seconds | Select a command, schema, field/type, or authorization guide; expand with `--full` or `--all` |
 | Provider capture/manifest | 1 MiB per child stream or manifest | None |
 | Diagnostics | 8 KiB per record; 64 KiB optional records plus terminal reserve | None |
 
@@ -291,7 +291,7 @@ storage/provider fixtures; a live cloud account is not required.
 
 | Criterion | Success | Boundary | Failure | Evidence |
 | --- | --- | --- | --- | --- |
-| Discovery | Construct requests from guides and selected fields/types/providers offline | Every guide's byte budget, explicit full definitions, disabled features/platform limits | Unknown selector/detail, conflicting selectors, oversized response | Follow every advertised level; parser/schema checks; no network/child calls |
+| Discovery | Construct requests from guides and selected fields/types/services offline | Every guide's byte budget, explicit full definitions, disabled features/platform limits | Unknown selector/detail, conflicting selectors, oversized response | Follow every advertised level; parser/schema checks; no network/child calls |
 | Inspection | Bounded field discovery, selected types, and actual version | 1,000 columns, nesting, long UTF-8 names, large metadata, exact 4 KiB boundary | Oversized requested detail; metadata accessible/data denied | Exact fields/check scope; IO trace; response sizes through recovery |
 | Read coverage | Scan, COUNT, GROUP BY, ORDER BY, CTE, join | Null/empty/zero-column/DV/pinned updates | Write/external-source attempts | Independent exact-result oracle; no write side effects |
 | Small results | Interpret typed JSON | Large ints, decimals, timezones, binary, nesting, duplicates, dictionary partitions, exact 8 KiB boundary | Oversized schema/value; unsupported type | Exact values; byte bounds; explicit expansion; sample versus complete result |
