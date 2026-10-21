@@ -26,10 +26,9 @@ import polars as pl
 import pyarrow as pa
 
 sys.path.insert(0, str(HERE))
-from run import query_count
 from python_common import (checked_build, checkpoint, correctness, event, export_result, observation,
                            reader_identity, redact_credentials, require, runner_cli, runtime_metadata,
-                           scan_sql, storage_options, validate, write_observation)
+                           scan_sql, storage_options, write_observation)
 
 DELTA_OPTIONS = {"without_files": False, "log_buffer_size": 8, "skip_stats": False}
 COLLECT_OPTIONS = {"chunk_size": 8192, "maintain_order": False, "lazy": False, "engine": "streaming"}
@@ -87,7 +86,7 @@ def execute(request, options, output, record):
     initialization = clock() - session_start
     if timed and reuse:
         record["initialization_ns"] = initialization
-    count = query_count(request)
+    count = record.pop("_query_count")
     for index in range(count):
         record["phase"] = "query"
         if reuse:
@@ -122,17 +121,14 @@ def execute(request, options, output, record):
                     elif request["purpose"] in ("diagnostic", "io") or request.get("validation_diagnostics"):
                         record["diagnostic_session_ns"] = clock() - session_start
                     record["_cleanup_start"] = clock()
-                checkpoint(record, "query_end", index, {"query_index": index, "output_rows": rows, "output_batches": batches,
-                    "completion_ns": completion if timed else None, "first_batch_ns": first if timed else None})
+                observation = {"query_index": index, "output_rows": rows, "output_batches": batches,
+                               "completion_ns": completion if timed else None, "first_batch_ns": first if timed else None}
+                checkpoint(record, "query_end", index, observation)
                 del stream
         except Exception:
             record["partial_query"] = {"query_index": index, "output_rows": rows, "output_batches": batches,
                                        "elapsed_ns": clock() - start if timed else None, "first_batch_ns": first if timed else None}
             raise
-        observation = {"query_index": index, "output_rows": rows, "output_batches": batches,
-                       "completion_ns": completion if timed else None, "first_batch_ns": first if timed else None,
-                       "first_batch_unavailable_reason": "untimed invocation" if not timed else "empty result" if not rows else None,
-                       "result": None, "identity": None, "physical_plan": None}
         if writer is not None:
             observation.update(export_result(output, index, record["identity"]))
         if request["purpose"] == "diagnostic" or request.get("validation_diagnostics"):
@@ -150,9 +146,8 @@ def execute(request, options, output, record):
 
 def run(request_path, output):
     request = json.loads(request_path.read_text())
-    validate(request)
-    output.mkdir()
     record = observation(request)
+    output.mkdir()
     try:
         build_path, build = checked_build(Path(__file__), "polars")
         require(runtime_metadata(engine()) == build["runtime"], "runtime differs from the prepared build")

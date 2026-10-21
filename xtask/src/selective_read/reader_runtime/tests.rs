@@ -213,3 +213,53 @@ fn observations_preserve_timing_failure_precedence_and_exclusive_output() -> Res
     }
     Ok(())
 }
+
+#[test]
+fn query_bookkeeping_keeps_clocks_exports_and_collected_api_reasons() -> Result<()> {
+    for (purpose, delivery, rows, reason) in [
+        ("timing", "streaming", 3, Value::Null),
+        ("timing", "streaming", 0, json!("empty result")),
+        ("validation", "streaming", 3, json!("untimed invocation")),
+        (
+            "timing",
+            "collected",
+            3,
+            json!("collected API; no streaming first-batch clock"),
+        ),
+        (
+            "validation",
+            "collected",
+            0,
+            json!("collected API; no streaming first-batch clock"),
+        ),
+    ] {
+        let mut record = json!({"status":"operational_failure", "purpose":purpose, "_query_count":2,
+            "settings":{"output_delivery":delivery}, "queries":[
+                {"query_index":0,"output_rows":rows,"output_batches":1,"completion_ns":17,"first_batch_ns":5},
+                {"query_index":1,"output_rows":rows,"output_batches":1,"completion_ns":23,"first_batch_ns":8,
+                 "result":"query-1.arrow","identity":"query-1.identity.json","physical_plan":"query-1.plan.txt"}]});
+        finish(&mut record)?;
+        assert!(record.get("_query_count").is_none());
+        assert_eq!(
+            record["queries"][0]["first_batch_unavailable_reason"],
+            reason
+        );
+        assert_eq!(record["queries"][0]["completion_ns"], 17);
+        assert_eq!(record["queries"][0]["first_batch_ns"], 5);
+        for field in ["result", "identity", "physical_plan"] {
+            assert_eq!(record["queries"][0].get(field), Some(&Value::Null));
+            assert!(record["queries"][1][field].is_string());
+        }
+    }
+    for (mode, revision, count) in [
+        ("open", 6, 1),
+        ("reuse", 2, 10),
+        ("reuse", 4, 2),
+        ("reuse", 6, 2),
+    ] {
+        let request = json!({"campaign_id":null,"run_id":"run","repetition":0,"order":0,"profile":"smoke","purpose":"validation",
+            "execution_mode":mode,"comparison_revision":revision,"table_uri":"file:///table","canonical_sql":"SELECT id FROM bench"});
+        assert_eq!(observation(&request)?["_query_count"], count);
+    }
+    Ok(())
+}

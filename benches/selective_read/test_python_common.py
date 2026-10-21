@@ -16,25 +16,19 @@ import run
 
 
 class ReaderBookkeeping(unittest.TestCase):
-    def test_native_bridge_preserves_exports_and_failures(self):
+    def test_native_bridge_preserves_validation_and_exclusive_records(self):
         request = json.loads((Path(__file__).parent / "runners/contract-cases.json").read_text())["request"]
-        common.validate(request)
+        self.assertEqual(common.observation(request)["_query_count"], 2)
         with self.assertRaises(ValueError):
-            common.validate(request | {"surprise": True})
+            common.observation(request | {"surprise": True})
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)
-            (output / "query-0.arrow").write_bytes(b"export")
-            exported = common.export_result(output, 0, {"case_id": "case"})
-            self.assertEqual(exported, {"result": "query-0.arrow", "identity": "query-0.identity.json"})
-            self.assertEqual(json.loads((output / exported["identity"]).read_text())["result_sha256"], run.digest(output / exported["result"]))
             with redirect_stdout(io.StringIO()) as stdout:
                 self.assertEqual(common.write_observation(output, {"status": "success"}), 0)
             self.assertEqual(json.loads(stdout.getvalue()), {"status": "success"})
             with self.assertRaises(ValueError):
                 common.write_observation(output, {"status": "validation_failed"})
             self.assertEqual(json.loads((output / "record.json").read_text()), {"status": "success"})
-
-
 
     def test_adapter_probes_use_bundled_helpers_and_restore_controller_imports(self):
         previous_path = sys.path.copy()

@@ -12,10 +12,9 @@ sys.path[:0] = [str(HERE), str(HERE / "spark")]
 import pyarrow as pa
 import pyspark
 from pyspark.sql import SparkSession
-from run import query_count
 from python_common import (checked_build, checkpoint, correctness, event, export_result, observation, reader_identity,
                            redact_credentials, require, runner_cli, runtime_metadata, scan_sql,
-                           storage_options, validate, write_observation)
+                           storage_options, write_observation)
 
 CONFIG = {"spark.master": "local[8]", "spark.driver.memory": "4g", "spark.default.parallelism": "8",
           "spark.sql.shuffle.partitions": "8", "spark.databricks.delta.snapshotPartitions": "8",
@@ -70,12 +69,11 @@ def failure_status(error):
 
 def run(request_path, output):
     request = json.loads(request_path.read_text())
-    validate(request)
+    record = observation(request)
     scan_sql(request["canonical_sql"])
     require(request["comparison_revision"] == 6 or request["purpose"] != "timing" and request["campaign_id"] is None,
             "Spark is a pilot only; formal timing needs the new reader-roster contract")
     output.mkdir()
-    record = observation(request)
     timed = request["purpose"] == "timing"
     record.update(pilot_only=request.get("sampling_stage") != "formal" or request["comparison_revision"] < 6,
                   publication_ready=False, startup_ns=None, pilot_initialization_ns=None)
@@ -108,7 +106,8 @@ def run(request_path, output):
         record["pilot_initialization_ns"] = clock() - session_start
         if timed and reuse:
             record["initialization_ns"] = record["pilot_initialization_ns"]
-        for index in range(query_count(request)):
+        count = record.pop("_query_count")
+        for index in range(count):
             record["phase"] = "query"
             if reuse:
                 checkpoint(record, "query", index)
@@ -120,9 +119,8 @@ def run(request_path, output):
             event(record, "stream_complete", index)
             query = {"query_index": index, "output_rows": table.num_rows,
                      "output_batches": len(table.to_batches(8192)), "completion_ns": completion if timed else None, "first_batch_ns": None,
-                     "first_batch_unavailable_reason": "collected API; no streaming first-batch clock",
-                     "pilot_completion_ns": completion, "result": None, "identity": None, "physical_plan": None}
-            if index + 1 == query_count(request):
+                     "pilot_completion_ns": completion}
+            if index + 1 == count:
                 if timed:
                     record["session_elapsed_ns"] = clock() - session_start
                 elif request["purpose"] in ("diagnostic", "io") or request.get("validation_diagnostics"):

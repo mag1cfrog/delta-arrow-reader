@@ -15,9 +15,9 @@ import pyarrow as pa
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from run import digest, query_count
+from run import digest
 from python_common import (checked_build, checkpoint, correctness, event, export_result, observation, reader_identity,
-                           require, runner_cli, runtime_metadata, storage_options, validate, write_observation)
+                           require, runner_cli, runtime_metadata, storage_options, write_observation)
 
 CONFIG = {"threads": 8, "memory_limit": "4GiB", "enable_external_file_cache": False,
           "autoload_known_extensions": False, "autoinstall_known_extensions": False,
@@ -110,7 +110,7 @@ def execute(connection, request, output, record):
     initialization = clock() - session_start
     if timed and reuse:
         record["initialization_ns"] = initialization
-    count = query_count(request)
+    count = record.pop("_query_count")
     for index in range(count):
         record["phase"] = "query"
         if reuse:
@@ -144,17 +144,14 @@ def execute(connection, request, output, record):
                     elif request["purpose"] in ("diagnostic", "io") or request.get("validation_diagnostics"):
                         record["diagnostic_session_ns"] = clock() - session_start
                     record["_cleanup_start"] = clock()
-                checkpoint(record, "query_end", index, {"query_index": index, "output_rows": rows, "output_batches": batches,
-                    "completion_ns": completion if timed else None, "first_batch_ns": first if timed else None})
+                query = {"query_index": index, "output_rows": rows, "output_batches": batches,
+                         "completion_ns": completion if timed else None, "first_batch_ns": first if timed else None}
+                checkpoint(record, "query_end", index, query)
             del relation
         except Exception:
             record["partial_query"] = {"query_index": index, "output_rows": rows, "output_batches": batches,
                                        "elapsed_ns": clock() - start if timed else None, "first_batch_ns": first if timed else None}
             raise
-        query = {"query_index": index, "output_rows": rows, "output_batches": batches,
-                 "completion_ns": completion if timed else None, "first_batch_ns": first if timed else None,
-                 "first_batch_unavailable_reason": "untimed invocation" if not timed else "empty result" if not rows else None,
-                 "result": None, "identity": None, "physical_plan": None}
         if writer is not None:
             query.update(export_result(output, index, record["identity"]))
         if request["purpose"] == "diagnostic":
@@ -175,10 +172,9 @@ def execute(connection, request, output, record):
 
 def run(request_path, output):
     request = json.loads(request_path.read_text())
-    validate(request)
+    record = observation(request)
     output.mkdir()
     connection = None
-    record = observation(request)
     try:
         build_path, build = checked_build(Path(__file__), "duckdb")
         connection, engine = connect()
