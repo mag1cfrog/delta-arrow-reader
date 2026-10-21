@@ -430,16 +430,30 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
             assert_eq!(&full["name"], name);
             jsonschema::validate(&full["schema"], &guide["example"])
                 .map_err(|error| io::Error::other(error.to_string()))?;
-            for field in ["fields", "operators", "scalar_types"] {
+            let mut detail_names = std::collections::BTreeSet::new();
+            for field in ["other_fields", "operators", "scalar_types"] {
                 for name in guide[field].as_array().into_iter().flatten() {
-                    let mut invocation = guide["detail_command"].clone();
-                    *invocation.as_array_mut().unwrap().last_mut().unwrap() = name.clone();
-                    let detail = run_advertised(&invocation)?;
-                    assert_eq!(detail["kind"], "schema_detail");
-                    assert_eq!(&detail["detail"], name);
-                    assert!(detail.get("schema").is_none());
-                    assert!(detail["definition"].is_object());
+                    assert!(detail_names.insert(name.as_str().unwrap().to_owned()));
                 }
+            }
+            if let Some(properties) = full["schema"]["properties"].as_object() {
+                assert!(guide.get("fields").is_none());
+                for name in guide["example"].as_object().unwrap().keys() {
+                    assert!(detail_names.insert(name.clone()), "repeated field: {name}");
+                }
+                assert_eq!(detail_names, properties.keys().cloned().collect());
+                if let Some(other_fields) = guide.get("other_fields") {
+                    assert!(!other_fields.as_array().unwrap().is_empty());
+                }
+            }
+            for name in detail_names {
+                let mut invocation = guide["detail_command"].clone();
+                *invocation.as_array_mut().unwrap().last_mut().unwrap() = name.clone().into();
+                let detail = run_advertised(&invocation)?;
+                assert_eq!(detail["kind"], "schema_detail");
+                assert_eq!(detail["detail"], name);
+                assert!(detail.get("schema").is_none());
+                assert!(detail["definition"].is_object());
             }
         }
     }

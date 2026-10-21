@@ -61,6 +61,10 @@ are mutually exclusive. `--full` requires `--command`, `--schema`, or
 names or conflicting selectors fail with status 2.
 For text help, use `dar query --help` or the corresponding command's help.
 
+For output and execution-option schemas, `--detail` accepts the example's
+top-level field names and any names in `other_fields`. The latter lists only
+fields absent from the example; it is omitted when the example shows them all.
+
 For example, after finding `query` in the directory, run
 `dar capabilities --command query`. Its `example` is an argument array with
 placeholder paths. The `sql` field gives the table alias `t`, the `--sql-file`

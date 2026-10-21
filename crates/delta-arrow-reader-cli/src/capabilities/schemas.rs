@@ -119,9 +119,6 @@ impl DiscoverySchema {
             if let Some(max_file_bytes) = document["parser_constraints"].get("max_file_bytes") {
                 guide["max_file_bytes"] = max_file_bytes.clone();
             }
-            if let Some(properties) = properties {
-                guide["fields"] = json!(properties.keys().collect::<Vec<_>>());
-            }
             if !operators.is_empty() {
                 guide["operators"] = json!(operators);
                 guide["scalar_types"] = json!(scalar_types);
@@ -133,6 +130,15 @@ impl DiscoverySchema {
                     .or_else(|| examples.first())
                     .cloned()
                     .unwrap_or(Value::Null);
+            }
+            if let Some(properties) = properties {
+                let other_fields: Vec<_> = properties
+                    .keys()
+                    .filter(|name| guide["example"].get(name.as_str()).is_none())
+                    .collect();
+                if !other_fields.is_empty() {
+                    guide["other_fields"] = json!(other_fields);
+                }
             }
         }
         if (detail.is_none() && properties.is_some())
