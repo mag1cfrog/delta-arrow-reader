@@ -105,17 +105,20 @@ fn wide_pruning_checks_inclusive_bounds_nulls_and_calendar_dates() -> Result<()>
 }
 
 #[test]
-fn preparation_requires_identical_live_rows_within_each_dv_state() -> Result<()> {
+fn preparation_compares_values_within_each_dv_state_without_requiring_equal_storage_hashes()
+-> Result<()> {
     let mut references = vec![
-        json!({"case_id":"large.files.normal.eq2-in20","reference_sha256":"base"}),
-        json!({"case_id":"large.files4096.eq2-in20","reference_sha256":"base"}),
-        json!({"case_id":"large.files.normal.eq2-in20.dv","reference_sha256":"deleted"}),
-        json!({"case_id":"large.files4096.eq2-in20.dv","reference_sha256":"deleted"}),
+        json!({"case_id":"large.files.normal.eq2-in20","reference_sha256":"storage-a","rows":[1,2]}),
+        json!({"case_id":"large.files4096.eq2-in20","reference_sha256":"storage-b","rows":[1,2]}),
+        json!({"case_id":"large.files.normal.eq2-in20.dv","reference_sha256":"storage-c","rows":[2]}),
+        json!({"case_id":"large.files4096.eq2-in20.dv","reference_sha256":"storage-d","rows":[2]}),
     ];
-    paired_results(&references)?;
-    paired_results(&references[1..3])?;
-    references[3]["reference_sha256"] = json!("different");
-    assert!(paired_results(&references).is_err());
-    assert!(paired_results(&references[..2]).is_err());
+    let compare =
+        |left: &Value, right: &Value| require(left["rows"] == right["rows"], "different values");
+    paired_results(&references, compare)?;
+    paired_results(&references[1..3], compare)?;
+    references[3]["rows"] = json!([3]);
+    assert!(paired_results(&references, compare).is_err());
+    assert!(paired_results(&references[..2], compare).is_err());
     Ok(())
 }

@@ -99,7 +99,7 @@ fn sources(root: &Path) -> Result<BTreeMap<String, String>> {
         ".cargo/config.toml",
         "xtask/Cargo.toml",
         "crates/delta-arrow-reader-core/Cargo.toml",
-        "benches/selective_read/oracle.py",
+        "benches/selective_read/oracle_io.py",
         "benches/selective_read/rust-toolchain.toml",
         "docs/content/benchmarks/selective-read-protocol.md",
         "docs/content/benchmarks/selective-read-large-workloads.md",

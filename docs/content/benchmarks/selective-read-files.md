@@ -226,7 +226,7 @@ Delta data objects or supplied to readers as a selected file list.
 
 Creating the revision 4 definition requires Daft and the
 [archived workload generator](https://github.com/mag1cfrog/delta-arrow-reader/blob/eb1f58b4be8dc0d8ec3bee1615f1777a4c41bd9f/docs/content/benchmarks/selective-read-files.md).
-Its creation CLI has been removed from the current `large_workloads.py`;
+Its creation CLI has been removed from the current harness;
 validation and report export remain. With a matching frozen harness and
 definition, prepare the independent references:
 

@@ -106,7 +106,7 @@ fn loaded_matrix_rejects_missing_cases_changed_references_counts_and_shapes() ->
             .extend(object(&query(&case, &frozen, &manifest)?)?.clone());
         let mut metadata = row.clone();
         metadata.as_object_mut().unwrap().extend(object(&json!({"format":"selective-read-reference-v2",
-            "comparison_revision":2,"status":"complete","oracle_sha256":digest(&harness.join("oracle.py"))?,
+            "comparison_revision":2,"status":"complete","oracle_sha256":digest(&harness.join("oracle_io.py"))?,
             "oracle_dependencies_sha256":digest(&harness.join("oracle-requirements.txt"))?,
             "pyarrow":"25.0.1","duckdb_sort":"1.5.5","fixture_manifest_sha256":"fixture",
             "protocol_sha256":frozen["protocol_sha256"],"source_rows":100,"qualifying_rows":3,

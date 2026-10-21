@@ -36,16 +36,22 @@ def corrupt_export(source, output):
         writer.write_table(pa.Table.from_pylist(rows, schema=values.schema))
 
 
+def logical_type(kind):
+    if pa.types.is_dictionary(kind):
+        kind = kind.value_type
+    return pa.string() if (pa.types.is_string(kind) or pa.types.is_large_string(kind)
+                           or pa.types.is_string_view(kind)) else kind
+
+
 def exported(record, output, expected):
-    import oracle
     assert record["status"] == "success", record
     for query in record["queries"]:
         with pa.ipc.open_stream(output / "reader" / query["result"]) as stream:
             batches = list(stream)  # These fixtures have at most twelve rows.
             assert all(b.num_rows <= 8192 for b in batches)
             actual = pa.Table.from_batches(batches, schema=stream.schema)
-        assert [(f.name, oracle.logical_type(f.type)) for f in actual.schema] == [
-            (f.name, oracle.logical_type(f.type)) for f in expected.schema]
+        assert [(f.name, logical_type(f.type)) for f in actual.schema] == [
+            (f.name, logical_type(f.type)) for f in expected.schema]
         assert actual.sort_by("id").to_pylist() == expected.sort_by("id").to_pylist()
         assert query["output_rows"] == expected.num_rows and query["completion_ns"] is None
 

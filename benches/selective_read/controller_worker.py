@@ -1,4 +1,4 @@
-"""Keep independent Python validation caches alive for a native campaign."""
+"""Keep SDK fixtures and bit-exact Arrow experiment checks in one process."""
 
 from contextlib import redirect_stdout
 import json
@@ -7,39 +7,12 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE / "runners")]
-import run
 
 EXPECTED = {}
 
 
-def check_intra(value):
-    import oracle
-    import pyarrow as pa
-    reference = Path(value["reference"])
-    record = value["record"]
-    metadata = json.loads((reference / "reference.json").read_text())
-    for field in oracle.IDENTITY_FIELDS:
-        if field == "protocol_sha256":
-            continue
-        oracle.require(record["identity"][field] == metadata[field], "reference identity mismatch: " + field)
-    checks = []
-    for query in record["queries"]:
-        path = Path(value["output"]) / "reader" / query["result"]
-        with path.open("rb") as source, pa.ipc.open_stream(source) as batches:
-            oracle.check_schema(batches.schema, metadata["projection"])
-            rows = oracle.compare(batches, reference / "reference.parquet", metadata["projection"], metadata["output_rows"])
-            oracle.require(not source.read(1), "trailing Arrow bytes")
-        checks.append(record["identity"] | {"status": "passed", "output_rows": rows,
-            "oracle_sha256": run.digest(HERE / "oracle.py"), "reference_sha256": metadata["reference_sha256"],
-            "result_sha256": run.digest(path)})
-    return {"status": "passed", "checks": checks}
-
-
 def dispatch(value):
     action = value["action"]
-    fixtures = Path(value["fixtures"]) if "fixtures" in value else None
-    if action == "hashes":
-        return [run.digest(Path(path)) for path in value["paths"]]
     if action == "capability-export":
         from capabilities import export_corpus
         return export_corpus(value["record"], Path(value["output"]), value["deleted"], value["ids"], value.get("semantics"))
@@ -49,11 +22,6 @@ def dispatch(value):
     if action == "capability-corrupt":
         from capabilities import corrupt_export
         return corrupt_export(Path(value["input"]), Path(value["output"]))
-    if action == "check-export":
-        import oracle
-        return oracle.check(Path(value["reference"]), fixtures, Path(value["result"]), Path(value["identity"]))
-    if action == "check-intra":
-        return check_intra(value)
     if action == "experiment-reference":
         import pyarrow as pa
         import pyarrow.parquet as pq
@@ -75,23 +43,6 @@ def dispatch(value):
             check(actual, expected)
         elif not actual.cast(expected.schema).equals(expected):
             raise ValueError("query result differs: " + value["path"])
-        return None
-    if action == "repacked-values":
-        from file_organizations import batches, same_rows
-        return same_rows(batches(Path(value["parent"]), value["original"]), batches(fixtures, value["table"]))
-    if action == "prepare-reference":
-        import oracle
-        reference = Path(value["reference"])
-        if "sql" in value:
-            oracle.require(oracle.case_input(fixtures, value["case_id"])[-1] == value["sql"], "oracle SQL differs from catalog")
-        metadata = (json.loads((reference / "reference.json").read_text()) if value["reuse"] else
-                    oracle.prepare(fixtures, value["case_id"], reference, value.get("duplicate_in_literal", False),
-                                   workload=Path(value["workload"]) if value.get("workload") else None))
-        oracle.check_reference_build(metadata)
-        return metadata
-    if action == "spark-pilot":
-        import oracle
-        oracle.READERS.add("spark")
         return None
     raise ValueError("unknown controller worker operation")
 

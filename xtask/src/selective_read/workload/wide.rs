@@ -180,21 +180,23 @@ pub(super) fn geometry(manifest: &Value, large: bool, smoke: bool) -> Result<Val
     )
 }
 
-fn paired_results(references: &[Value]) -> Result<()> {
+fn paired_results(
+    references: &[Value],
+    mut compare: impl FnMut(&Value, &Value) -> Result<()>,
+) -> Result<()> {
     for dv in [false, true] {
-        let hashes = references
+        let group = references
             .iter()
             .filter(|r| {
                 r["case_id"]
                     .as_str()
                     .is_some_and(|id| id.ends_with(".dv") == dv)
             })
-            .map(|r| text(&r["reference_sha256"]))
-            .collect::<Result<BTreeSet<_>>>()?;
-        require(
-            hashes.len() == 1,
-            "file organizations have different exact live results",
-        )?;
+            .collect::<Vec<_>>();
+        require(!group.is_empty(), "missing file-organization reference")?;
+        for pair in group.windows(2) {
+            compare(pair[0], pair[1])?;
+        }
     }
     Ok(())
 }
@@ -243,7 +245,20 @@ pub(crate) fn prepare(args: Prepare) -> Result<Value> {
             "reference":output.join(case),"reuse":false,"workload":args.workload}),
         )?);
     }
-    paired_results(&references)?;
+    paired_results(&references, |left, right| {
+        let table = |reference: &Value| -> Result<Value> {
+            let directory = output.join(text(&reference["case_id"])?);
+            Ok(
+                json!({"path":".","files":[{"path":"reference.parquet","bytes":fs::metadata(directory.join("reference.parquet"))?.len(),"sha256":reference["reference_sha256"]}]}),
+            )
+        };
+        let rows=worker.call(&json!({"action":"repacked-values","parent":output.join(text(&left["case_id"])?),"original":table(left)?,
+            "fixtures":output.join(text(&right["case_id"])?),"table":table(right)?}))?;
+        require(
+            rows == left["qualifying_rows"] && rows == right["qualifying_rows"],
+            "file organizations have different live results",
+        )
+    })?;
     let cases = references
         .iter()
         .map(|reference| {

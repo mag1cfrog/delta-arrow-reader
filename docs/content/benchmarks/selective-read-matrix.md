@@ -137,15 +137,14 @@ It does not reproduce private historical data or establish the old speedups.
 ## Check the retained catalog
 
 Rust tests cover prepared metadata, paired projections and reports that retain
-failed and unsupported entries. Python tests compare every frozen SQL statement
+failed and unsupported entries. Oracle tests compare every frozen SQL statement
 and literal set with the independent oracle definitions:
 
 ```sh
 cargo test --locked -p xtask selective_read::workload::matrix
 cargo test --locked -p xtask selective_read::report::batch
-PYTHONPATH=benches/selective_read:benches/selective_read/runners \
-  ../selective-read-oracle-venv/bin/python -B -m unittest \
-  test_oracle.OracleTests.test_retained_matrix_matches_independent_oracle_definitions
+cargo test --locked -p xtask \
+  selective_read::oracle::tests::retained_catalog_matches_independent_sql_projections_and_literals
 ```
 
 Real engine correctness still requires the campaign.

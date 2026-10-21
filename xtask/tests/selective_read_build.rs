@@ -37,7 +37,7 @@ fn fixture() -> Result<tempfile::TempDir> {
         "xtask/src/selective_read_build.rs",
         "crates/delta-arrow-reader-core/Cargo.toml",
         "crates/delta-arrow-reader-core/src/lib.rs",
-        "benches/selective_read/oracle.py",
+        "benches/selective_read/oracle_io.py",
         "benches/selective_read/rust-toolchain.toml",
         "benches/selective_read/runners/common.rs",
         "benches/selective_read/runners/dar/Cargo.toml",

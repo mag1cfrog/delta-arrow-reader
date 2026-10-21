@@ -116,7 +116,7 @@ impl Capabilities {
             // This proof authorizes only the exactly checked bounded corpus.
             let mut check = record["identity"].clone();
             check["status"] = json!("passed");
-            check["oracle_sha256"] = json!(digest(&harness.join("oracle.py"))?);
+            check["oracle_sha256"] = json!(digest(&harness.join("runners/capabilities.py"))?);
             check["output_rows"] = rows;
             let certificate = self
                 .check

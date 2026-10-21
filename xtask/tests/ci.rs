@@ -358,7 +358,7 @@ fn benchmark_checks_exclude_unrelated_ci_changes() -> Result<()> {
         ("benches/selective_read/Cargo.toml", true),
         ("benches/selective_read/Cargo.lock", true),
         ("benches/selective_read/src/fixtures.rs", true),
-        ("benches/selective_read/oracle.py", true),
+        ("benches/selective_read/oracle_io.py", true),
         (
             "crates/delta-arrow-reader-core/src/reader/options.rs",
             false,
@@ -456,7 +456,7 @@ fn core_filter_preserves_benchmark_targets_and_shared_inputs() -> Result<()> {
         "benches/selective_read/src/large.rs",
         "benches/selective_read/src/tests.rs",
         "benches/selective_read/tests/large_cli.rs",
-        "benches/selective_read/oracle.py",
+        "benches/selective_read/oracle_io.py",
         "benches/selective_read/runners/dar/src/main.rs",
     ] {
         assert!(!filter_matches(&filters, "code", path)?, "{path}");

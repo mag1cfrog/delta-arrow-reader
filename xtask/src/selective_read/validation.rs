@@ -64,6 +64,17 @@ impl Worker {
 
     pub(super) fn oracle(python: &Path, harness: &Path, stderr: Stdio) -> Result<Self> {
         Self::spawn(
+            Command::new(std::env::current_exe()?)
+                .args(["selective-read", "oracle-worker", "--python"])
+                .arg(python)
+                .arg("--harness")
+                .arg(harness)
+                .stderr(stderr),
+        )
+    }
+
+    pub(super) fn python(python: &Path, harness: &Path, stderr: Stdio) -> Result<Self> {
+        Self::spawn(
             Command::new(python)
                 .args(["-I", "-B", "-u"])
                 .arg(harness.join("controller_worker.py"))
@@ -73,6 +84,19 @@ impl Worker {
     }
 
     fn spawn(command: &mut Command) -> Result<Self> {
+        let parent = std::process::id();
+        // SAFETY: the child only sets its parent-death signal before exec.
+        unsafe {
+            command.pre_exec(move || {
+                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                if libc::getppid() as u32 != parent {
+                    return Err(io::Error::other("validation parent exited"));
+                }
+                Ok(())
+            });
+        }
         let worker = Self(
             command
                 .stdin(Stdio::piped())

@@ -41,11 +41,9 @@ fn sources(harness: &Path) -> Result<Value> {
         .and_then(Path::parent)
         .ok_or("invalid harness directory")?;
     let mut paths: Vec<_> = [
-        "production_workloads.py",
-        "oracle.py",
+        "oracle_io.py",
         "oracle-requirements.txt",
         "production_shapes.py",
-        "large_workloads.py",
         "matrix.py",
         "runners/run.py",
         "runners/native.py",

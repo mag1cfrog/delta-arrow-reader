@@ -31,7 +31,9 @@ class ProductionShapeCheck(unittest.TestCase):
             rows.append({"l_orderkey": 2 * i + 1, "l_linenumber": 2 if i == 4 else 1,
                          "l_shipdate": date(1995, 3, 14 if i < 3 else 15 if i < 5 else 16),
                          "l_shipmode": "AIR"})
-        table = pa.Table.from_pylist(list(reversed(rows)))
+        table = pa.Table.from_pylist(list(reversed(rows)), schema=pa.schema([
+            ("l_orderkey", pa.int64()), ("l_linenumber", pa.int32()),
+            ("l_shipdate", pa.date32()), ("l_shipmode", pa.string())]))
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "source.parquet"
             pq.write_table(table, path)

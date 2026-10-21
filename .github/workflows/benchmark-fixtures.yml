@@ -69,7 +69,10 @@ jobs:
         run: cargo build --locked --package xtask --manifest-path ../../Cargo.toml -j8
       - name: Validate independent oracle and public query results
         env:
+          SELECTIVE_READ_ORACLE_PYTHON: python
           SELECTIVE_READ_FIXTURES: ${{ runner.temp }}/selective-read-smoke
         run: |
           python -m pip install --require-hashes -r oracle-requirements.txt
-          python -m unittest -v test_oracle
+          cargo test --locked --package xtask --bin xtask --manifest-path ../../Cargo.toml \
+            selective_read::oracle -- --include-ignored --test-threads=1
+          python -m unittest discover -p 'test_*.py'

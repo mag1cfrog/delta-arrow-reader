@@ -585,7 +585,7 @@ pub(crate) fn run(args: Args) -> Result<()> {
     )?;
     save(
         &output.join("producer-request.json"),
-        &json!({"paths":copied_paths,"stripes":shape["stripes"]}),
+        &json!({"paths":copied_paths,"query":format!("SELECT {} FROM source ORDER BY l_orderkey % {}, l_shipdate, l_shipmode, l_linenumber, l_orderkey",super::ORIGINAL.join(", "), count(&shape["stripes"])?)}),
     )?;
     let log = fs::File::create_new(output.join("writer.log"))?;
     let mut producer = spawn(

@@ -137,58 +137,109 @@ impl<'a> Sorted<'a> {
         max: Option<u64>,
         memory: usize,
     ) -> Result<Self> {
-        require(memory >= 1024, "oracle sort memory allowance is too small")?;
-        let scratch = tempfile::Builder::new()
-            .prefix("oracle-sort-")
-            .tempdir_in(parent)?;
-        let used = Rc::new(Cell::new(0));
-        let mut paths = Vec::new();
-        let mut rows = Vec::new();
-        let mut bytes = 0;
-        let mut serial = 0;
-        let mut flush = |rows: &mut Vec<Row>, paths: &mut Vec<PathBuf>| -> Result<()> {
-            rows.sort_unstable();
-            let path = scratch.path().join(format!("run-{serial}.arrow"));
-            serial += 1;
-            write_run(layout, &path, rows.drain(..).map(Ok), &used, max)?;
-            paths.push(path);
-            Ok(())
-        };
+        let mut spool = Spool::new(layout, parent, max, memory)?;
         for batch in batches {
             for row in layout.rows(batch?)? {
-                bytes += row.bytes();
-                rows.push(row);
-                if bytes >= memory / 4 {
-                    flush(&mut rows, &mut paths)?;
-                    bytes = 0;
-                }
+                spool.push(row)?;
             }
         }
-        if !rows.is_empty() {
-            flush(&mut rows, &mut paths)?;
+        spool.finish()
+    }
+}
+
+pub(super) struct Spool<'a> {
+    layout: &'a Layout,
+    scratch: TempDir,
+    used: Rc<Cell<u64>>,
+    max: Option<u64>,
+    memory: usize,
+    paths: Vec<PathBuf>,
+    rows: Vec<Row>,
+    bytes: usize,
+    serial: usize,
+}
+impl<'a> Spool<'a> {
+    pub(super) fn new(
+        layout: &'a Layout,
+        parent: &Path,
+        max: Option<u64>,
+        memory: usize,
+    ) -> Result<Self> {
+        require(memory >= 1024, "oracle sort memory allowance is too small")?;
+        Ok(Self {
+            layout,
+            scratch: tempfile::Builder::new()
+                .prefix("oracle-sort-")
+                .tempdir_in(parent)?,
+            used: Rc::new(Cell::new(0)),
+            max,
+            memory,
+            paths: Vec::new(),
+            rows: Vec::new(),
+            bytes: 0,
+            serial: 0,
+        })
+    }
+    fn next_path(&mut self) -> PathBuf {
+        let path = self
+            .scratch
+            .path()
+            .join(format!("run-{}.arrow", self.serial));
+        self.serial += 1;
+        path
+    }
+    fn flush(&mut self) -> Result<()> {
+        self.rows.sort_unstable();
+        let path = self.next_path();
+        write_run(
+            self.layout,
+            &path,
+            self.rows.drain(..).map(Ok),
+            &self.used,
+            self.max,
+        )?;
+        self.paths.push(path);
+        self.bytes = 0;
+        Ok(())
+    }
+    pub(super) fn push(&mut self, row: Row) -> Result<()> {
+        self.bytes += row.bytes();
+        self.rows.push(row);
+        if self.bytes >= self.memory / 4 {
+            self.flush()?;
+        }
+        Ok(())
+    }
+    pub(super) fn finish(mut self) -> Result<Sorted<'a>> {
+        if !self.rows.is_empty() {
+            self.flush()?;
         }
         // Bound both open files and decoded batches during every merge pass.
-        while paths.len() > 8 {
-            let mut merged = Vec::new();
+        while self.paths.len() > 8 {
+            let paths = std::mem::take(&mut self.paths);
             for chunk in paths.chunks(8) {
-                let path = scratch.path().join(format!("run-{serial}.arrow"));
-                serial += 1;
-                write_run(layout, &path, Merge::open(chunk, layout)?, &used, max)?;
+                let path = self.next_path();
+                write_run(
+                    self.layout,
+                    &path,
+                    Merge::open(chunk, self.layout)?,
+                    &self.used,
+                    self.max,
+                )?;
                 for old in chunk {
-                    used.set(used.get() - fs::metadata(old)?.len());
+                    self.used.set(self.used.get() - fs::metadata(old)?.len());
                     fs::remove_file(old)?;
                 }
-                merged.push(path);
+                self.paths.push(path);
             }
-            paths = merged;
         }
-        let merge = Merge::open(&paths, layout)?;
-        Ok(Self {
-            merge,
-            _scratch: scratch,
+        Ok(Sorted {
+            merge: Merge::open(&self.paths, self.layout)?,
+            _scratch: self.scratch,
         })
     }
 }
+
 impl Iterator for Sorted<'_> {
     type Item = Result<Row>;
     fn next(&mut self) -> Option<Self::Item> {
@@ -306,6 +357,41 @@ mod tests {
             )
             .is_err()
         );
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod spill_tests {
+    use super::*;
+    #[test]
+    fn bounded_external_sort_merges_six_hundred_thousand_keys() -> Result<()> {
+        use super::super::rows::Cell;
+        let root = tempfile::tempdir()?;
+        let layout = Layout::new(&["l_orderkey".into(), "l_linenumber".into()])?;
+        let row = |n| Row {
+            key: [n, 1],
+            values: vec![Cell::Int(n), Cell::Int(1)],
+        };
+        let mut spool = Spool::new(
+            &layout,
+            root.path(),
+            Some(32 * 1024 * 1024),
+            8 * 1024 * 1024,
+        )?;
+        for n in (0..600000).rev() {
+            spool.push(row(n))?;
+        }
+        assert_eq!(
+            compare(
+                spool.finish()?,
+                (0..600000).map(|n| Ok(row(n))),
+                600000,
+                false
+            )?,
+            600000
+        );
+        assert_eq!(fs::read_dir(root.path())?.count(), 0);
         Ok(())
     }
 }

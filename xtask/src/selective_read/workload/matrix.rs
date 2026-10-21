@@ -210,13 +210,10 @@ fn selected(value: &Value, fields: &[&str]) -> Result<Value> {
 }
 
 fn reference_build(metadata: &Value) -> Result<()> {
+    crate::selective_read::oracle::check::build(metadata)?;
     require(
-        metadata["format"] == "selective-read-reference-v2"
-            && metadata["status"] == "complete"
-            && metadata["comparison_revision"] == 2
-            && metadata["pyarrow"] == "25.0.1"
-            && metadata["duckdb_sort"] == "1.5.5",
-        "unsupported reference format or runtime",
+        metadata["comparison_revision"] == 2,
+        "unsupported matrix comparison revision",
     )
 }
 

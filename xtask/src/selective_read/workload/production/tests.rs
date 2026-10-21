@@ -57,7 +57,7 @@ fn frozen_workloads_check_queries_and_scope_independently_of_source_provenance()
     for (pointer, replacement) in [
         ("/definition_sha256", json!("different documentation")),
         ("/definition_controller_sha256", json!("changed")),
-        ("/source_sha256/oracle.py", json!("changed")),
+        ("/source_sha256/oracle_io.py", json!("changed")),
     ] {
         let mut changed = value.clone();
         *changed.pointer_mut(pointer).ok_or("missing test field")? = replacement;

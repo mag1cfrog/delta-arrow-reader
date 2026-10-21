@@ -43,11 +43,11 @@ engine versions and clock boundaries follow the existing protocol.
 ## Validation and sampling
 
 The independent oracle scans the original source with PyArrow, evaluates the
-three predicates, and derives payload values in Python. It checks the exact
+three predicates, and derives payload values in Rust. It checks the exact
 output values, types, nulls and multiplicity. It scans fixture batches without
 Parquet filters, checks stored metric columns independently, and compares every
-qualifying fixture row against the source reference. DuckDB only sorts actual
-results for exact comparison. Preparation counts cannot certify correctness.
+qualifying fixture row against the source reference. Rust sorts actual rows
+and compares their complete typed values. Preparation counts cannot certify correctness.
 
 DV pairs retain identical Parquet bytes. Deletions use the existing logical-key
 hash rule plus a shared union of nonmatching file minima and the minimum

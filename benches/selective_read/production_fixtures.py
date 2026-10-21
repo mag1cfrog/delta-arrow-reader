@@ -13,18 +13,15 @@ sys.path[:0] = [str(HERE), str(HERE / "runners")]
 def stream(output):
     import duckdb
     import pyarrow as pa
-    from oracle import ORIGINAL, require
 
-    require(duckdb.__version__ == "1.5.5" and pa.__version__ == "25.0.1",
-            "use the pinned oracle Python environment")
+    if duckdb.__version__ != "1.5.5" or pa.__version__ != "25.0.1":
+        raise ValueError("use the pinned oracle Python environment")
     request = json.loads((output / "producer-request.json").read_text())
     with duckdb.connect(config={"memory_limit": "2GiB", "threads": "4",
                                 "temp_directory": str(output / "spill"),
                                 "max_temp_directory_size": "16GiB"}) as connection:
         connection.read_parquet(request["paths"]).create_view("source")
-        query = ("SELECT " + ", ".join(ORIGINAL) + " FROM source ORDER BY l_orderkey % "
-                 + str(int(request["stripes"])) + ", l_shipdate, l_shipmode, l_linenumber, l_orderkey")
-        batches = connection.execute(query).to_arrow_reader(8192)
+        batches = connection.execute(request["query"]).to_arrow_reader(8192)
         with pa.ipc.new_stream(sys.stdout.buffer, batches.schema) as writer:
             for batch in batches:
                 writer.write_batch(batch)

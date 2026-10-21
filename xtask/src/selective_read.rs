@@ -39,11 +39,13 @@ pub(crate) enum Task {
     PrepareReference(validation::cli::Prepare),
     /// Check every typed value and the identity of an exported Arrow stream.
     CheckExport(validation::cli::Check),
-    /// Compare an Arrow stream from stdin against an independent Parquet reference.
-    CompareReference(oracle::Compare),
+    /// Run one independent oracle operation from JSON stdin.
+    Oracle,
+    /// Keep independent validation scans and file digests in a dedicated process.
+    OracleWorker(oracle::Worker),
     /// Schedule and summarize a campaign. Read the operation as JSON from stdin.
     Campaign,
-    /// Execute a frozen campaign, using Python only for independent data validation.
+    /// Execute a frozen campaign and validate its untimed exports.
     RunCampaign(Box<campaign::controller::Args>),
     /// Check real local readers, correctness gates, clocks and failure propagation.
     CheckReaders(checks::Args),
@@ -166,7 +168,7 @@ pub(crate) enum Task {
 impl Task {
     pub(crate) fn run(self) -> Result<()> {
         match self {
-            Self::CompareReference(args) => return oracle::compare_cli(args),
+            Self::OracleWorker(args) => return oracle::worker(args),
             Self::PrepareReference(args) => return validation::cli::prepare(args),
             Self::CheckExport(args) => return validation::cli::check(args),
             Self::UploadDeltaLength { state, fixture } => {
@@ -299,6 +301,7 @@ impl Task {
         }
         let input: Value = serde_json::from_reader(std::io::stdin().lock())?;
         let result = match self {
+            Self::Oracle => oracle::run(input)?,
             Self::Supervise => supervise::launch(serde_json::from_value(input)?)?,
             Self::Invoke => invoke::run(&serde_json::from_value(input)?)?,
             Self::ReaderRequest => request::run(serde_json::from_value(input)?)?,
@@ -315,7 +318,7 @@ impl Task {
             Self::Experiment => experiment::run(serde_json::from_value(input)?)?,
             Self::IntraPage => experiment::intra_page::run(serde_json::from_value(input)?)?,
             Self::ExecReader { .. }
-            | Self::CompareReference(_)
+            | Self::OracleWorker(_)
             | Self::PrepareReference(_)
             | Self::CheckExport(_)
             | Self::UploadDeltaLength { .. }

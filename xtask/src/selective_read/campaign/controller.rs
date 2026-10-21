@@ -251,7 +251,7 @@ fn source_hashes(args: &Args, config: &Value, protocols: &Path) -> Result<(Value
         .ok_or("invalid harness directory")?;
     let mut sources: Vec<_> = [
         "controller_worker.py",
-        "oracle.py",
+        "oracle_io.py",
         "runners/run.py",
         "runners/python_common.py",
         "runners/native.py",
@@ -292,22 +292,16 @@ fn source_hashes(args: &Args, config: &Value, protocols: &Path) -> Result<(Value
     }
     if let Some(workload) = &args.workload {
         inputs.push(workload.clone());
-        sources.extend([
-            args.harness.join("large_workloads.py"),
-            protocols.join("selective-read-large-workloads.md"),
-        ]);
+        sources.extend([protocols.join("selective-read-large-workloads.md")]);
         if config["comparison_revision"].as_u64().unwrap_or(0) >= 4 {
             sources.push(protocols.join("selective-read-sampling.md"));
         }
         if matches!(config["comparison_revision"].as_u64(), Some(5 | 6)) {
-            sources.extend([
-                args.harness.join("production_workloads.py"),
-                protocols.join(if config["comparison_revision"] == 6 {
-                    "selective-read-spark-matrix.md"
-                } else {
-                    "selective-read-production-workloads.md"
-                }),
-            ]);
+            sources.extend([protocols.join(if config["comparison_revision"] == 6 {
+                "selective-read-spark-matrix.md"
+            } else {
+                "selective-read-production-workloads.md"
+            })]);
         }
     }
     Ok((hashes(&sources)?, hashes(&inputs)?))

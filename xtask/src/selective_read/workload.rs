@@ -169,7 +169,7 @@ pub(super) fn binding(value: &Value, fixtures: &Path, case: &str, harness: &Path
     }
 }
 
-fn resolve(path: &Path, fixtures: &Path, case: &str, harness: &Path) -> Result<Value> {
+pub(super) fn resolve(path: &Path, fixtures: &Path, case: &str, harness: &Path) -> Result<Value> {
     let path = path.canonicalize()?;
     let (workload, identity) = load(&path, harness)?;
     let row = binding(&workload, fixtures, case, harness)?;
@@ -212,7 +212,7 @@ fn shapes(file_target: u64, page_rows: u64, page_bytes: u64, batch_rows: u64) ->
     Ok(json!(shapes))
 }
 
-fn cases() -> Value {
+pub(super) fn cases() -> Value {
     let mut cases = Map::new();
     for shape in ["q2", "q4"] {
         for layout in ["localized", "scattered"] {

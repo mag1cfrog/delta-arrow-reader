@@ -38,7 +38,7 @@ fn campaign_input_integrity_is_independent_of_tool_source_provenance() -> Result
     let protocols = root.join("project/docs/content/benchmarks");
     for path in [
         args.harness.join("controller_worker.py"),
-        args.harness.join("oracle.py"),
+        args.harness.join("oracle_io.py"),
         args.harness.join("runners/run.py"),
         args.harness.join("runners/python_common.py"),
         args.harness.join("runners/native.py"),
@@ -55,7 +55,10 @@ fn campaign_input_integrity_is_independent_of_tool_source_provenance() -> Result
     let config = json!({});
     let (before_sources, before_inputs) = source_hashes(&args, &config, &protocols)?;
     assert_eq!(object(&before_inputs)?.len(), 2);
-    fs::write(args.harness.join("oracle.py"), "original\n# new comment\n")?;
+    fs::write(
+        args.harness.join("oracle_io.py"),
+        "original\n# new comment\n",
+    )?;
     fs::write(
         protocols.join("selective-read-protocol.md"),
         "reworded documentation",

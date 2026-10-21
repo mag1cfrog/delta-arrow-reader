@@ -110,7 +110,7 @@ impl Layout {
         Ok(())
     }
 
-    pub(super) fn rows(&self, batch: RecordBatch) -> Result<Vec<Row>> {
+    pub(super) fn normalize(&self, batch: RecordBatch) -> Result<RecordBatch> {
         self.check(batch.schema().as_ref())?;
         let columns = batch
             .columns()
@@ -124,43 +124,49 @@ impl Layout {
                 Ok(arrow_cast::cast(array, field.data_type())?)
             })
             .collect::<Result<Vec<_>>>()?;
-        (0..batch.num_rows())
-            .map(|i| {
-                let values = columns
-                    .iter()
-                    .map(|a| {
-                        if a.is_null(i) {
-                            return Cell::Null;
-                        }
-                        match a.data_type() {
-                            DataType::Int64 => {
-                                Cell::Int(a.as_any().downcast_ref::<Int64Array>().unwrap().value(i))
-                            }
-                            DataType::Int32 => Cell::Int(i64::from(
-                                a.as_any().downcast_ref::<Int32Array>().unwrap().value(i),
-                            )),
-                            DataType::Date32 => Cell::Int(i64::from(
-                                a.as_any().downcast_ref::<Date32Array>().unwrap().value(i),
-                            )),
-                            DataType::Decimal128(_, _) => Cell::Decimal(
-                                a.as_any()
-                                    .downcast_ref::<Decimal128Array>()
-                                    .unwrap()
-                                    .value(i),
-                            ),
-                            DataType::Utf8 => Cell::Text(
-                                a.as_any()
-                                    .downcast_ref::<StringArray>()
-                                    .unwrap()
-                                    .value(i)
-                                    .to_owned(),
-                            ),
-                            _ => unreachable!("normalized oracle type"),
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                self.row(values)
+        Ok(RecordBatch::try_new(self.schema.clone(), columns)?)
+    }
+    pub(super) fn read_row(&self, batch: &RecordBatch, i: usize) -> Result<Row> {
+        let values = batch
+            .columns()
+            .iter()
+            .map(|a| {
+                if a.is_null(i) {
+                    return Cell::Null;
+                }
+                match a.data_type() {
+                    DataType::Int64 => {
+                        Cell::Int(a.as_any().downcast_ref::<Int64Array>().unwrap().value(i))
+                    }
+                    DataType::Int32 => Cell::Int(i64::from(
+                        a.as_any().downcast_ref::<Int32Array>().unwrap().value(i),
+                    )),
+                    DataType::Date32 => Cell::Int(i64::from(
+                        a.as_any().downcast_ref::<Date32Array>().unwrap().value(i),
+                    )),
+                    DataType::Decimal128(_, _) => Cell::Decimal(
+                        a.as_any()
+                            .downcast_ref::<Decimal128Array>()
+                            .unwrap()
+                            .value(i),
+                    ),
+                    DataType::Utf8 => Cell::Text(
+                        a.as_any()
+                            .downcast_ref::<StringArray>()
+                            .unwrap()
+                            .value(i)
+                            .to_owned(),
+                    ),
+                    _ => unreachable!("normalized oracle type"),
+                }
             })
+            .collect();
+        self.row(values)
+    }
+    pub(super) fn rows(&self, batch: RecordBatch) -> Result<Vec<Row>> {
+        let batch = self.normalize(batch)?;
+        (0..batch.num_rows())
+            .map(|i| self.read_row(&batch, i))
             .collect()
     }
 
