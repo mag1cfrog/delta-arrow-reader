@@ -4,12 +4,15 @@ use super::*;
 
 fn parse_text(text: &str) -> Result<DeltaPredicate, Error> {
     let result =
-        crate::input::parse_json::<PredicateInput>(text.as_bytes(), JsonInputSource::Predicate)?
+        crate::input::parse_json::<PredicateInput>(text.as_bytes(), JsonInputKind::Predicate)?
             .into_predicate();
     if result.is_ok() {
         assert!(
-            crate::input::schema_errors::correction(text.as_bytes(), JsonInputSource::Predicate)
-                .is_none(),
+            crate::input::schema_errors::diagnose_schema_error(
+                text.as_bytes(),
+                JsonInputKind::Predicate
+            )
+            .is_none(),
             "{text}"
         );
     }

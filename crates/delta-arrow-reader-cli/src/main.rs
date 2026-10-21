@@ -26,7 +26,7 @@ use delta_arrow_reader::{
     error_source_kind,
 };
 use diagnostics::{DiagnosticFormat, InputCorrection};
-use input::JsonInputSource;
+use input::JsonInputKind;
 use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu, ensure};
 
@@ -106,7 +106,7 @@ enum Error {
     ))]
     InputJson {
         source: serde_json::Error,
-        input: JsonInputSource,
+        input_kind: JsonInputKind,
         correction: Option<InputCorrection>,
     },
     #[snafu(display("Invalid JSON input (reason={reason})."))]
@@ -117,7 +117,7 @@ enum Error {
     #[snafu(display("Could not read the input file."))]
     InputIo {
         source: io::Error,
-        input: JsonInputSource,
+        input_kind: JsonInputKind,
     },
     #[snafu(display("The reader runtime failed."))]
     Runtime {
@@ -217,15 +217,17 @@ impl Error {
     }
 
     fn input_correction(&self) -> Option<InputCorrection> {
-        let (input, hint) = match self {
+        let (input_kind, hint) = match self {
             Self::Argument { correction, .. } => return correction.clone(),
             Self::InputValidation { correction, .. } => return Some(correction.clone()),
             Self::InputJson {
                 correction: Some(correction),
                 ..
             } => return Some(correction.clone()),
-            Self::InputJson { source, input, .. } => (
-                *input,
+            Self::InputJson {
+                source, input_kind, ..
+            } => (
+                *input_kind,
                 match source.classify() {
                     serde_json::error::Category::Syntax => {
                         "Fix JSON syntax at the reported line and column."
@@ -233,12 +235,12 @@ impl Error {
                     serde_json::error::Category::Eof => {
                         "Complete the JSON document at the reported line and column."
                     }
-                    serde_json::error::Category::Data => input.schema_hint(),
+                    serde_json::error::Category::Data => input_kind.schema_hint(),
                     serde_json::error::Category::Io => "Check that the input file is readable.",
                 },
             ),
-            Self::InputIo { source, input } => (
-                *input,
+            Self::InputIo { source, input_kind } => (
+                *input_kind,
                 match source.kind() {
                     io::ErrorKind::NotFound => {
                         "Provide an existing input file; relative paths use the working directory."
@@ -253,7 +255,7 @@ impl Error {
             Self::Reader { source } => return InputCorrection::from_reader(source),
             _ => return None,
         };
-        Some(input.correction(hint))
+        Some(input_kind.correction(hint))
     }
 
     fn log_failure(&self) {
@@ -525,7 +527,7 @@ fn run() -> Result<Value, Error> {
         Some(path) => {
             input::read_json_file::<input::StorageOptionsInput>(
                 path,
-                JsonInputSource::StorageOptions,
+                JsonInputKind::StorageOptions,
             )?
             .0
         }
@@ -536,7 +538,7 @@ fn run() -> Result<Value, Error> {
             predicate_file: Some(path),
             ..
         } => Some(
-            input::read_json_file::<predicate::PredicateInput>(path, JsonInputSource::Predicate)?
+            input::read_json_file::<predicate::PredicateInput>(path, JsonInputKind::Predicate)?
                 .into_predicate()?,
         ),
         _ => None,
@@ -548,7 +550,7 @@ fn run() -> Result<Value, Error> {
         } => {
             let options = input::read_json_file::<
                 input::JsonObject<execution_options::ExecutionOptionsInput>,
-            >(path, JsonInputSource::ExecutionOptions)?
+            >(path, JsonInputKind::ExecutionOptions)?
             .0;
             Some(
                 options
@@ -951,7 +953,7 @@ mod tests {
             (
                 Error::InputIo {
                     source: io::Error::new(io::ErrorKind::NotFound, "secret path"),
-                    input: JsonInputSource::StorageOptions,
+                    input_kind: JsonInputKind::StorageOptions,
                 },
                 "not_found",
                 "io_kind=NotFound",
@@ -959,7 +961,7 @@ mod tests {
             (
                 Error::InputIo {
                     source: io::Error::new(io::ErrorKind::PermissionDenied, "secret path"),
-                    input: JsonInputSource::Predicate,
+                    input_kind: JsonInputKind::Predicate,
                 },
                 "permission_denied",
                 "io_kind=PermissionDenied",
@@ -1005,8 +1007,8 @@ mod tests {
             let record = error.to_json_diagnostic();
             assert_eq!(record["source_kind"], source_kind);
             assert!(!record.to_string().contains("secret"));
-            if let Error::InputIo { input, source } = &error {
-                assert_eq!(record["argument"], input.argument());
+            if let Error::InputIo { input_kind, source } = &error {
+                assert_eq!(record["argument"], input_kind.argument());
                 assert!(record.get("field_path").is_none());
                 if source.kind() == io::ErrorKind::PermissionDenied {
                     assert_eq!(record["recovery"], "request_access");
@@ -1105,7 +1107,7 @@ mod tests {
         std::fs::write(&path, r#"{"secret-field":0}"#).unwrap();
         let error = input::read_json_file::<
             input::JsonObject<execution_options::ExecutionOptionsInput>,
-        >(path.to_str().unwrap(), JsonInputSource::ExecutionOptions)
+        >(path.to_str().unwrap(), JsonInputKind::ExecutionOptions)
         .err()
         .unwrap();
         let source = error
@@ -1122,7 +1124,7 @@ mod tests {
         std::fs::write(&path, b" \n !secret").unwrap();
         let error = input::read_json_file::<input::StorageOptionsInput>(
             path.to_str().unwrap(),
-            JsonInputSource::StorageOptions,
+            JsonInputKind::StorageOptions,
         )
         .err()
         .unwrap();
@@ -1139,7 +1141,7 @@ mod tests {
 
         let error = Err::<(), _>(io::Error::other("secret input path"))
             .context(InputIoSnafu {
-                input: JsonInputSource::StorageOptions,
+                input_kind: JsonInputKind::StorageOptions,
             })
             .unwrap_err();
         assert!(error.source().unwrap().is::<io::Error>());

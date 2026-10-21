@@ -9,16 +9,16 @@ use crate::{ConfigurationSnafu, Error, input::JsonObject};
 fn parse(text: &str) -> Result<DeltaScanExecutionOptions, Error> {
     let result = crate::input::parse_json::<JsonObject<ExecutionOptionsInput>>(
         text.as_bytes(),
-        JsonInputSource::ExecutionOptions,
+        JsonInputKind::ExecutionOptions,
     )?
     .0
     .into_execution_options()
     .context(ConfigurationSnafu);
     if result.is_ok() {
         assert!(
-            crate::input::schema_errors::correction(
+            crate::input::schema_errors::diagnose_schema_error(
                 text.as_bytes(),
-                JsonInputSource::ExecutionOptions
+                JsonInputKind::ExecutionOptions
             )
             .is_none(),
             "{text}"

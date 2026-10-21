@@ -14,13 +14,13 @@ pub(crate) mod schema_errors;
 const MAX_JSON_BYTES: u64 = 1024 * 1024;
 
 #[derive(Clone, Copy)]
-pub(crate) enum JsonInputSource {
+pub(crate) enum JsonInputKind {
     StorageOptions,
     Predicate,
     ExecutionOptions,
 }
 
-impl JsonInputSource {
+impl JsonInputKind {
     pub(crate) fn argument(self) -> &'static str {
         match self {
             Self::StorageOptions => "--storage-options-file",
@@ -60,36 +60,36 @@ impl JsonInputSource {
 
 pub(crate) fn read_json_file<T: DeserializeOwned>(
     path: &str,
-    input: JsonInputSource,
+    input_kind: JsonInputKind,
 ) -> Result<T, Error> {
-    let file = File::open(path).context(InputIoSnafu { input })?;
+    let file = File::open(path).context(InputIoSnafu { input_kind })?;
     let mut bytes = Vec::new();
     file.take(MAX_JSON_BYTES + 1)
         .read_to_end(&mut bytes)
-        .context(InputIoSnafu { input })?;
+        .context(InputIoSnafu { input_kind })?;
     ensure!(
         bytes.len() as u64 <= MAX_JSON_BYTES,
         InputValidationSnafu {
             reason: "input_file_too_large",
-            correction: input.correction("Keep the JSON input at or below 1 MiB."),
+            correction: input_kind.correction("Keep the JSON input at or below 1 MiB."),
         }
     );
-    parse_json(&bytes, input)
+    parse_json(&bytes, input_kind)
 }
 
 pub(crate) fn parse_json<T: DeserializeOwned>(
     bytes: &[u8],
-    input: JsonInputSource,
+    input_kind: JsonInputKind,
 ) -> Result<T, Error> {
     serde_json::from_slice(bytes).map_err(|source| {
         let correction = if source.is_data() {
-            schema_errors::correction(bytes, input)
+            schema_errors::diagnose_schema_error(bytes, input_kind)
         } else {
             None
         };
         Error::InputJson {
             source,
-            input,
+            input_kind,
             correction,
         }
     })

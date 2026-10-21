@@ -1,7 +1,7 @@
 use delta_arrow_reader::{DeltaReaderError, DeltaScanExecutionOptions, ParquetReaderBackend};
 use serde::{Deserialize, Deserializer, de::value::StringDeserializer};
 
-use crate::{diagnostics::InputCorrection, input::JsonInputSource};
+use crate::{diagnostics::InputCorrection, input::JsonInputKind};
 
 #[derive(Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -73,14 +73,14 @@ pub(crate) fn input_correction(reason: &str) -> Option<InputCorrection> {
         _ => return None,
     };
     Some(InputCorrection {
-        argument: JsonInputSource::ExecutionOptions.argument().to_owned(),
+        argument: JsonInputKind::ExecutionOptions.argument().to_owned(),
         field_path: Some(format!("/{field}")),
-        expected: expected_integer(field)?,
+        expected: describe_integer_requirement(field)?,
         hint: "Set this field within the accepted range, or omit it to use the default.",
     })
 }
 
-pub(crate) fn expected_integer(field: &str) -> Option<String> {
+pub(crate) fn describe_integer_requirement(field: &str) -> Option<String> {
     let (minimum, maximum, nullable) = match field {
         "max_concurrent_file_reads_per_scan" => (1, tokio::sync::Semaphore::MAX_PERMITS, true),
         "max_concurrent_file_reads_per_partition" | "output_buffer_batches_per_partition" => {

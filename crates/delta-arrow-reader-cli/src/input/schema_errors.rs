@@ -1,3 +1,8 @@
+//! Best-effort diagnostics after normal deserialization rejects a JSON input.
+//! Helpers returning `Result<(), InputCorrection>` propagate corrections through `Err`.
+//! `Ok(())` means no correction was found, including when analysis was skipped;
+//! it does not establish that the input is valid.
+
 use std::{fmt, marker::PhantomData};
 
 use serde::{
@@ -11,51 +16,52 @@ use serde_json::value::RawValue;
 use serde_value::DeserializerError;
 use strum::VariantNames;
 
-use super::{JsonInputSource, StorageOptionsInput};
+use super::{JsonInputKind, StorageOptionsInput};
 use crate::{diagnostics::InputCorrection, execution_options, predicate};
 
-pub(crate) fn correction(bytes: &[u8], input: JsonInputSource) -> Option<InputCorrection> {
+pub(crate) fn diagnose_schema_error(
+    bytes: &[u8],
+    input_kind: JsonInputKind,
+) -> Option<InputCorrection> {
     // Analyze only rejected input; raw values preserve duplicate keys and numeric token types.
     let raw = serde_json::from_slice::<&RawValue>(bytes).ok()?;
     let location = FieldLocation {
-        input,
+        input_kind,
         path: String::new(),
     };
-    match input {
-        JsonInputSource::StorageOptions => {
-            deserialize_flat_input::<StorageOptionsInput>(raw, &location)
+    match input_kind {
+        JsonInputKind::StorageOptions => diagnose_flat_input::<StorageOptionsInput>(raw, &location),
+        JsonInputKind::ExecutionOptions => {
+            diagnose_flat_input::<execution_options::ExecutionOptionsInput>(raw, &location)
         }
-        JsonInputSource::ExecutionOptions => {
-            deserialize_flat_input::<execution_options::ExecutionOptionsInput>(raw, &location)
-        }
-        JsonInputSource::Predicate => predicate_node(raw, &location, 1),
+        JsonInputKind::Predicate => diagnose_predicate_node(raw, &location, 1),
     }
     .err()
 }
 
 struct FieldLocation {
-    input: JsonInputSource,
+    input_kind: JsonInputKind,
     path: String,
 }
 
 impl FieldLocation {
     fn field(&self, name: &'static str) -> Self {
         Self {
-            input: self.input,
+            input_kind: self.input_kind,
             path: format!("{}/{name}", self.path),
         }
     }
 
     fn index(&self, index: usize) -> Self {
         Self {
-            input: self.input,
+            input_kind: self.input_kind,
             path: format!("{}/{index}", self.path),
         }
     }
 
     fn invalid(&self, expected: impl Into<String>, hint: &'static str) -> InputCorrection {
         InputCorrection {
-            argument: self.input.argument().to_owned(),
+            argument: self.input_kind.argument().to_owned(),
             field_path: Some(self.path.clone()),
             expected: expected.into(),
             hint,
@@ -142,7 +148,7 @@ impl<'de> ObjectFields<&'de RawValue> {
             })
     }
 
-    fn deserialize_payload<T: DeserializeOwned>(
+    fn diagnose_variant_fields<T: DeserializeOwned>(
         &self,
         tag: &'static str,
         location: &FieldLocation,
@@ -156,12 +162,16 @@ impl<'de> ObjectFields<&'de RawValue> {
                     .map(|value| (name.clone(), value))
             })
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| location.input.correction(location.input.schema_hint()))?;
-        deserialize_fields::<T>(ObjectFields(fields), location, Some(tag))
+            .map_err(|_| {
+                location
+                    .input_kind
+                    .correction(location.input_kind.schema_hint())
+            })?;
+        diagnose_fields::<T>(ObjectFields(fields), location, Some(tag))
     }
 }
 
-fn deserialize_flat_input<T: DeserializeOwned>(
+fn diagnose_flat_input<T: DeserializeOwned>(
     raw: &RawValue,
     location: &FieldLocation,
 ) -> Result<(), InputCorrection> {
@@ -177,10 +187,10 @@ fn deserialize_flat_input<T: DeserializeOwned>(
         // shortcut: deeply nested invalid values keep the generic hint; revisit for nested options.
         Err(_) => return Ok(()),
     };
-    deserialize_fields::<T>(fields, location, None)
+    diagnose_fields::<T>(fields, location, None)
 }
 
-fn deserialize_fields<T: DeserializeOwned>(
+fn diagnose_fields<T: DeserializeOwned>(
     fields: ObjectFields<serde_value::Value>,
     location: &FieldLocation,
     tag: Option<&'static str>,
@@ -192,7 +202,7 @@ fn deserialize_fields<T: DeserializeOwned>(
             Ok(_) => return Ok(()),
             Err(error) => error,
         };
-    let storage = matches!(location.input, JsonInputSource::StorageOptions);
+    let storage = matches!(location.input_kind, JsonInputKind::StorageOptions);
     let (mut expected, hint) = match error.inner() {
         DeserializerError::UnknownField(_, fields) => {
             let fields = tag
@@ -226,15 +236,19 @@ fn deserialize_fields<T: DeserializeOwned>(
         DeserializerError::InvalidType(_, expected)
         | DeserializerError::InvalidValue(_, expected) => (
             expected.clone(),
-            if expected.starts_with("canonical decimal integer string") {
+            if expected.starts_with(predicate::CANONICAL_INTEGER_EXPECTATION_PREFIX) {
                 "Use a decimal string within the allowed range, with no '+', leading zeros, or negative zero."
-            } else if expected == "null or a nonempty JSON string" {
+            } else if expected == predicate::TIMEZONE_EXPECTATION {
                 "Supply null or a nonempty timezone string matching the column's timezone."
             } else {
                 "Supply a value matching this field's expected format."
             },
         ),
-        _ => return Err(location.input.correction(location.input.schema_hint())),
+        _ => {
+            return Err(location
+                .input_kind
+                .correction(location.input_kind.schema_hint()));
+        }
     };
     if storage {
         return Err(location.invalid("string storage option values", hint));
@@ -246,12 +260,16 @@ fn deserialize_fields<T: DeserializeOwned>(
         match segment {
             Segment::Map { key } => path.push_str(&format!("/{key}")),
             Segment::Seq { index } => path.push_str(&format!("/{index}")),
-            _ => return Err(location.input.correction(location.input.schema_hint())),
+            _ => {
+                return Err(location
+                    .input_kind
+                    .correction(location.input_kind.schema_hint()));
+            }
         }
     }
-    if matches!(location.input, JsonInputSource::ExecutionOptions) {
-        expected =
-            execution_options::expected_integer(path.trim_start_matches('/')).unwrap_or(expected);
+    if matches!(location.input_kind, JsonInputKind::ExecutionOptions) {
+        expected = execution_options::describe_integer_requirement(path.trim_start_matches('/'))
+            .unwrap_or(expected);
     } else {
         expected = match expected.as_str() {
             "u8" => "a JSON integer from 0 to 255".to_owned(),
@@ -266,7 +284,7 @@ fn deserialize_fields<T: DeserializeOwned>(
     })
 }
 
-fn predicate_node(
+fn diagnose_predicate_node(
     raw: &RawValue,
     location: &FieldLocation,
     depth: usize,
@@ -282,36 +300,36 @@ fn predicate_node(
     }
     let fields: ObjectFields<&RawValue> = location.parse(raw, "a JSON predicate object")?;
     use predicate::{
-        ColumnInput, ComparisonInput, PredicateChildInput, PredicateChildrenInput,
-        PredicateOperator, ScalarValueInput,
+        ColumnReferenceFields, ComparisonFields, LogicalGroupFields, NegationFields,
+        PredicateOperator, ValueFields,
     };
     let op = fields.tag::<PredicateOperator>("op", location)?;
     // Decode one node at a time; internally tagged enums otherwise erase nested error paths.
     match op {
         PredicateOperator::Constant => {
-            fields.deserialize_payload::<ScalarValueInput<bool>>("op", location)?
+            fields.diagnose_variant_fields::<ValueFields<bool>>("op", location)?
         }
         PredicateOperator::And | PredicateOperator::Or => {
-            fields.deserialize_payload::<PredicateChildrenInput<IgnoredAny>>("op", location)?;
+            fields.diagnose_variant_fields::<LogicalGroupFields<IgnoredAny>>("op", location)?;
             let args = location.field("args");
             let children: Vec<&RawValue> = args.parse(
                 fields.required("args", location)?,
                 "an array of predicate objects",
             )?;
             for (index, child) in children.into_iter().enumerate() {
-                predicate_node(child, &args.index(index), depth + 1)?;
+                diagnose_predicate_node(child, &args.index(index), depth + 1)?;
             }
         }
         PredicateOperator::Not => {
-            fields.deserialize_payload::<PredicateChildInput<IgnoredAny>>("op", location)?;
-            predicate_node(
+            fields.diagnose_variant_fields::<NegationFields<IgnoredAny>>("op", location)?;
+            diagnose_predicate_node(
                 fields.required("arg", location)?,
                 &location.field("arg"),
                 depth + 1,
             )?;
         }
         PredicateOperator::IsNull | PredicateOperator::IsNotNull => {
-            fields.deserialize_payload::<ColumnInput>("op", location)?
+            fields.diagnose_variant_fields::<ColumnReferenceFields>("op", location)?
         }
         PredicateOperator::Eq
         | PredicateOperator::Ne
@@ -319,8 +337,8 @@ fn predicate_node(
         | PredicateOperator::Le
         | PredicateOperator::Gt
         | PredicateOperator::Ge => {
-            fields.deserialize_payload::<ComparisonInput<IgnoredAny>>("op", location)?;
-            scalar(
+            fields.diagnose_variant_fields::<ComparisonFields<IgnoredAny>>("op", location)?;
+            diagnose_scalar(
                 fields.required("value", location)?,
                 &location.field("value"),
             )?;
@@ -329,43 +347,45 @@ fn predicate_node(
     Ok(())
 }
 
-fn scalar(raw: &RawValue, location: &FieldLocation) -> Result<(), InputCorrection> {
+fn diagnose_scalar(raw: &RawValue, location: &FieldLocation) -> Result<(), InputCorrection> {
     use predicate::{
-        DecimalScalarInput, FixedSizeBinaryScalarInput, IntegerScalarInput, ScalarType,
-        ScalarValueInput, TimestampScalarInput,
+        Decimal128Fields, FixedSizeBinaryFields, IntegerStringFields, ScalarType,
+        TimestampMicrosecondFields, ValueFields,
     };
     let fields: ObjectFields<&RawValue> = location.parse(raw, "a typed JSON scalar object")?;
     match fields.tag::<ScalarType>("type", location)? {
         ScalarType::Boolean => {
-            fields.deserialize_payload::<ScalarValueInput<bool>>("type", location)
+            fields.diagnose_variant_fields::<ValueFields<bool>>("type", location)
         }
-        ScalarType::Int8 => fields.deserialize_payload::<IntegerScalarInput<i8>>("type", location),
+        ScalarType::Int8 => {
+            fields.diagnose_variant_fields::<IntegerStringFields<i8>>("type", location)
+        }
         ScalarType::Int16 => {
-            fields.deserialize_payload::<IntegerScalarInput<i16>>("type", location)
+            fields.diagnose_variant_fields::<IntegerStringFields<i16>>("type", location)
         }
         ScalarType::Int32 | ScalarType::Date32 => {
-            fields.deserialize_payload::<IntegerScalarInput<i32>>("type", location)
+            fields.diagnose_variant_fields::<IntegerStringFields<i32>>("type", location)
         }
         ScalarType::Int64 => {
-            fields.deserialize_payload::<IntegerScalarInput<i64>>("type", location)
+            fields.diagnose_variant_fields::<IntegerStringFields<i64>>("type", location)
         }
         ScalarType::Float32 | ScalarType::Float64 => {
-            fields.deserialize_payload::<ScalarValueInput<f64>>("type", location)
+            fields.diagnose_variant_fields::<ValueFields<f64>>("type", location)
         }
         ScalarType::Utf8 | ScalarType::LargeUtf8 => {
-            fields.deserialize_payload::<ScalarValueInput<String>>("type", location)
+            fields.diagnose_variant_fields::<ValueFields<String>>("type", location)
         }
         ScalarType::Binary | ScalarType::LargeBinary => {
-            fields.deserialize_payload::<ScalarValueInput<Vec<u8>>>("type", location)
+            fields.diagnose_variant_fields::<ValueFields<Vec<u8>>>("type", location)
         }
         ScalarType::FixedSizeBinary => {
-            fields.deserialize_payload::<FixedSizeBinaryScalarInput>("type", location)
+            fields.diagnose_variant_fields::<FixedSizeBinaryFields>("type", location)
         }
         ScalarType::TimestampUs => {
-            fields.deserialize_payload::<TimestampScalarInput>("type", location)
+            fields.diagnose_variant_fields::<TimestampMicrosecondFields>("type", location)
         }
         ScalarType::Decimal128 => {
-            fields.deserialize_payload::<DecimalScalarInput>("type", location)
+            fields.diagnose_variant_fields::<Decimal128Fields>("type", location)
         }
     }
 }

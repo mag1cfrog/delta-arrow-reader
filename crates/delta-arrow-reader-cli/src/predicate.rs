@@ -8,11 +8,15 @@ use snafu::ensure;
 use crate::{
     Error, InputValidationSnafu,
     diagnostics::InputCorrection,
-    input::{JsonInputSource, JsonObject},
+    input::{JsonInputKind, JsonObject},
 };
 
 const MAX_PREDICATE_NODES: usize = 1024;
 pub(crate) const MAX_PREDICATE_DEPTH: usize = 32;
+
+// Schema diagnostics match these custom Serde expectations to select correction hints.
+pub(crate) const CANONICAL_INTEGER_EXPECTATION_PREFIX: &str = "canonical decimal integer string";
+pub(crate) const TIMEZONE_EXPECTATION: &str = "null or a nonempty JSON string";
 
 #[derive(Deserialize)]
 #[serde(transparent)]
@@ -26,42 +30,42 @@ pub(crate) struct PredicateInput {
 #[strum_discriminants(derive(Deserialize, strum::VariantNames))]
 #[strum_discriminants(serde(rename_all = "snake_case"), strum(serialize_all = "snake_case"))]
 pub(crate) enum PredicateNode {
-    Constant(ScalarValueInput<bool>),
-    Eq(ComparisonInput),
-    Ne(ComparisonInput),
-    Lt(ComparisonInput),
-    Le(ComparisonInput),
-    Gt(ComparisonInput),
-    Ge(ComparisonInput),
-    IsNull(ColumnInput),
-    IsNotNull(ColumnInput),
-    And(PredicateChildrenInput),
-    Or(PredicateChildrenInput),
-    Not(PredicateChildInput),
+    Constant(ValueFields<bool>),
+    Eq(ComparisonFields),
+    Ne(ComparisonFields),
+    Lt(ComparisonFields),
+    Le(ComparisonFields),
+    Gt(ComparisonFields),
+    Ge(ComparisonFields),
+    IsNull(ColumnReferenceFields),
+    IsNotNull(ColumnReferenceFields),
+    And(LogicalGroupFields),
+    Or(LogicalGroupFields),
+    Not(NegationFields),
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ComparisonInput<T = JsonObject<ScalarInput>> {
+pub(crate) struct ComparisonFields<T = JsonObject<ScalarInput>> {
     column: String,
     value: T,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ColumnInput {
+pub(crate) struct ColumnReferenceFields {
     column: String,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct PredicateChildrenInput<T = JsonObject<PredicateNode>> {
+pub(crate) struct LogicalGroupFields<T = JsonObject<PredicateNode>> {
     args: Vec<T>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct PredicateChildInput<T = JsonObject<PredicateNode>> {
+pub(crate) struct NegationFields<T = JsonObject<PredicateNode>> {
     arg: Box<T>,
 }
 
@@ -71,26 +75,26 @@ pub(crate) struct PredicateChildInput<T = JsonObject<PredicateNode>> {
 #[strum_discriminants(derive(Deserialize, strum::VariantNames))]
 #[strum_discriminants(serde(rename_all = "snake_case"), strum(serialize_all = "snake_case"))]
 pub(crate) enum ScalarInput {
-    Boolean(ScalarValueInput<bool>),
-    Int8(IntegerScalarInput<i8>),
-    Int16(IntegerScalarInput<i16>),
-    Int32(IntegerScalarInput<i32>),
-    Int64(IntegerScalarInput<i64>),
-    Float32(ScalarValueInput<f64>),
-    Float64(ScalarValueInput<f64>),
-    Utf8(ScalarValueInput<String>),
-    LargeUtf8(ScalarValueInput<String>),
-    Binary(ScalarValueInput<Vec<u8>>),
-    LargeBinary(ScalarValueInput<Vec<u8>>),
-    FixedSizeBinary(FixedSizeBinaryScalarInput),
-    Date32(IntegerScalarInput<i32>),
-    TimestampUs(TimestampScalarInput),
-    Decimal128(DecimalScalarInput),
+    Boolean(ValueFields<bool>),
+    Int8(IntegerStringFields<i8>),
+    Int16(IntegerStringFields<i16>),
+    Int32(IntegerStringFields<i32>),
+    Int64(IntegerStringFields<i64>),
+    Float32(ValueFields<f64>),
+    Float64(ValueFields<f64>),
+    Utf8(ValueFields<String>),
+    LargeUtf8(ValueFields<String>),
+    Binary(ValueFields<Vec<u8>>),
+    LargeBinary(ValueFields<Vec<u8>>),
+    FixedSizeBinary(FixedSizeBinaryFields),
+    Date32(IntegerStringFields<i32>),
+    TimestampUs(TimestampMicrosecondFields),
+    Decimal128(Decimal128Fields),
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ScalarValueInput<T> {
+pub(crate) struct ValueFields<T> {
     value: T,
 }
 
@@ -99,21 +103,21 @@ pub(crate) struct ScalarValueInput<T> {
     deny_unknown_fields,
     bound(deserialize = "T: FromStr + Bounded + fmt::Display")
 )]
-pub(crate) struct IntegerScalarInput<T> {
+pub(crate) struct IntegerStringFields<T> {
     #[serde(deserialize_with = "deserialize_integer_string")]
     value: T,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct FixedSizeBinaryScalarInput {
+pub(crate) struct FixedSizeBinaryFields {
     size: i32,
     value: Vec<u8>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct TimestampScalarInput {
+pub(crate) struct TimestampMicrosecondFields {
     #[serde(deserialize_with = "deserialize_integer_string")]
     value: i64,
     #[serde(deserialize_with = "deserialize_timezone")]
@@ -122,7 +126,7 @@ pub(crate) struct TimestampScalarInput {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct DecimalScalarInput {
+pub(crate) struct Decimal128Fields {
     #[serde(deserialize_with = "deserialize_integer_string")]
     value: i128,
     precision: u8,
@@ -144,7 +148,7 @@ where
         fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(
                 formatter,
-                "canonical decimal integer string from {} to {}",
+                "{CANONICAL_INTEGER_EXPECTATION_PREFIX} from {} to {}",
                 T::min_value(),
                 T::max_value()
             )
@@ -174,7 +178,7 @@ fn deserialize_timezone<'de, D: Deserializer<'de>>(
     if timezone.as_ref().is_some_and(String::is_empty) {
         return Err(de::Error::invalid_value(
             de::Unexpected::Str(""),
-            &"null or a nonempty JSON string",
+            &TIMEZONE_EXPECTATION,
         ));
     }
     Ok(timezone)
@@ -193,7 +197,7 @@ fn validation_correction(
     hint: &'static str,
 ) -> InputCorrection {
     InputCorrection {
-        argument: JsonInputSource::Predicate.argument().to_owned(),
+        argument: JsonInputKind::Predicate.argument().to_owned(),
         field_path: Some(field_path.to_owned()),
         expected,
         hint,
@@ -237,28 +241,30 @@ impl PredicateNode {
         );
         *node_count += 1;
         Ok(match self {
-            Self::Constant(ScalarValueInput { value }) => DeltaPredicate::Constant(value),
-            Self::Eq(ComparisonInput { column, value }) => {
+            Self::Constant(ValueFields { value }) => DeltaPredicate::Constant(value),
+            Self::Eq(ComparisonFields { column, value }) => {
                 convert_comparison(column, DeltaComparison::Eq, value)?
             }
-            Self::Ne(ComparisonInput { column, value }) => {
+            Self::Ne(ComparisonFields { column, value }) => {
                 convert_comparison(column, DeltaComparison::NotEq, value)?
             }
-            Self::Lt(ComparisonInput { column, value }) => {
+            Self::Lt(ComparisonFields { column, value }) => {
                 convert_comparison(column, DeltaComparison::Lt, value)?
             }
-            Self::Le(ComparisonInput { column, value }) => {
+            Self::Le(ComparisonFields { column, value }) => {
                 convert_comparison(column, DeltaComparison::LtEq, value)?
             }
-            Self::Gt(ComparisonInput { column, value }) => {
+            Self::Gt(ComparisonFields { column, value }) => {
                 convert_comparison(column, DeltaComparison::Gt, value)?
             }
-            Self::Ge(ComparisonInput { column, value }) => {
+            Self::Ge(ComparisonFields { column, value }) => {
                 convert_comparison(column, DeltaComparison::GtEq, value)?
             }
-            Self::IsNull(ColumnInput { column }) => DeltaPredicate::IsNull { column },
-            Self::IsNotNull(ColumnInput { column }) => DeltaPredicate::IsNotNull { column },
-            Self::And(PredicateChildrenInput { args }) => DeltaPredicate::And(
+            Self::IsNull(ColumnReferenceFields { column }) => DeltaPredicate::IsNull { column },
+            Self::IsNotNull(ColumnReferenceFields { column }) => {
+                DeltaPredicate::IsNotNull { column }
+            }
+            Self::And(LogicalGroupFields { args }) => DeltaPredicate::And(
                 args.into_iter()
                     .enumerate()
                     .map(|(index, arg)| {
@@ -268,7 +274,7 @@ impl PredicateNode {
                     })
                     .collect::<Result<_, _>>()?,
             ),
-            Self::Or(PredicateChildrenInput { args }) => DeltaPredicate::Or(
+            Self::Or(LogicalGroupFields { args }) => DeltaPredicate::Or(
                 args.into_iter()
                     .enumerate()
                     .map(|(index, arg)| {
@@ -278,7 +284,7 @@ impl PredicateNode {
                     })
                     .collect::<Result<_, _>>()?,
             ),
-            Self::Not(PredicateChildInput { arg }) => DeltaPredicate::Not(Box::new(
+            Self::Not(NegationFields { arg }) => DeltaPredicate::Not(Box::new(
                 arg.0
                     .into_predicate(depth + 1, node_count)
                     .map_err(|error| prepend_field_path(error, "/arg"))?,
@@ -305,12 +311,12 @@ fn convert_comparison(
 impl ScalarInput {
     fn into_scalar(self) -> Result<DeltaScalar, Error> {
         Ok(match self {
-            Self::Boolean(ScalarValueInput { value }) => DeltaScalar::Boolean(value),
-            Self::Int8(IntegerScalarInput { value }) => DeltaScalar::Int8(value),
-            Self::Int16(IntegerScalarInput { value }) => DeltaScalar::Int16(value),
-            Self::Int32(IntegerScalarInput { value }) => DeltaScalar::Int32(value),
-            Self::Int64(IntegerScalarInput { value }) => DeltaScalar::Int64(value),
-            Self::Float32(ScalarValueInput { value }) => {
+            Self::Boolean(ValueFields { value }) => DeltaScalar::Boolean(value),
+            Self::Int8(IntegerStringFields { value }) => DeltaScalar::Int8(value),
+            Self::Int16(IntegerStringFields { value }) => DeltaScalar::Int16(value),
+            Self::Int32(IntegerStringFields { value }) => DeltaScalar::Int32(value),
+            Self::Int64(IntegerStringFields { value }) => DeltaScalar::Int64(value),
+            Self::Float32(ValueFields { value }) => {
                 let value = value as f32;
                 ensure!(
                     value.is_finite(),
@@ -326,7 +332,7 @@ impl ScalarInput {
                 );
                 DeltaScalar::Float32(value)
             }
-            Self::Float64(ScalarValueInput { value }) => {
+            Self::Float64(ValueFields { value }) => {
                 ensure!(
                     value.is_finite(),
                     InputValidationSnafu {
@@ -340,11 +346,11 @@ impl ScalarInput {
                 );
                 DeltaScalar::Float64(value)
             }
-            Self::Utf8(ScalarValueInput { value }) => DeltaScalar::Utf8(value),
-            Self::LargeUtf8(ScalarValueInput { value }) => DeltaScalar::LargeUtf8(value),
-            Self::Binary(ScalarValueInput { value }) => DeltaScalar::Binary(value),
-            Self::LargeBinary(ScalarValueInput { value }) => DeltaScalar::LargeBinary(value),
-            Self::FixedSizeBinary(FixedSizeBinaryScalarInput { size, value }) => {
+            Self::Utf8(ValueFields { value }) => DeltaScalar::Utf8(value),
+            Self::LargeUtf8(ValueFields { value }) => DeltaScalar::LargeUtf8(value),
+            Self::Binary(ValueFields { value }) => DeltaScalar::Binary(value),
+            Self::LargeBinary(ValueFields { value }) => DeltaScalar::LargeBinary(value),
+            Self::FixedSizeBinary(FixedSizeBinaryFields { size, value }) => {
                 ensure!(
                     size > 0 && size as usize == value.len(),
                     InputValidationSnafu {
@@ -358,11 +364,11 @@ impl ScalarInput {
                 );
                 DeltaScalar::FixedSizeBinary { size, value }
             }
-            Self::Date32(IntegerScalarInput { value }) => DeltaScalar::Date32(value),
-            Self::TimestampUs(TimestampScalarInput { value, timezone }) => {
+            Self::Date32(IntegerStringFields { value }) => DeltaScalar::Date32(value),
+            Self::TimestampUs(TimestampMicrosecondFields { value, timezone }) => {
                 DeltaScalar::TimestampMicrosecond { value, timezone }
             }
-            Self::Decimal128(DecimalScalarInput {
+            Self::Decimal128(Decimal128Fields {
                 value,
                 precision,
                 scale,
