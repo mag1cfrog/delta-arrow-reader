@@ -3,6 +3,11 @@
     ".cargo/**",
     ".github/path-filters.json",
     "xtask/Cargo.toml",
+    "xtask/src/test_https.rs",
+    "xtask/src/test_https/**",
+    "xtask/src/http_fixture.rs",
+    "xtask/src/http_fixture/**",
+    "xtask/src/command.rs",
     ".github/workflows/cache-warm.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/cli-build.yml",
@@ -30,9 +35,9 @@
     "crates/delta-arrow-reader-core/benches/row_filter.rs",
     "crates/delta-arrow-reader-core/benches/scan_scheduling.rs",
     "benches/selective_read/src/control_rows.rs",
-    "benches/scan_scheduling.py",
-    "benches/test_scan_scheduling.py",
-    "benches/run_order.py",
+    "xtask/src/scan_scheduling.rs",
+    "xtask/src/scan_scheduling/**",
+    "xtask/tests/scan_scheduling.rs",
     "crates/delta-arrow-reader-core/NOTICE",
     "crates/delta-arrow-reader-python/README.md",
     "crates/delta-arrow-reader-core/LICENSE"
@@ -52,6 +57,8 @@
     "crates/delta-arrow-reader-core/docs/public/reference/metrics.md"
   ],
   "tooling": [
+    "crates/delta-arrow-reader-core/docs/public/benchmarks/selective-read-current-timings.csv",
+    "crates/delta-arrow-reader-core/docs/public/assets/selective-read-readme-*.svg",
     ".cargo/**",
     ".github/path-filters.json",
     ".github/workflows/ci.yml",
@@ -99,7 +106,6 @@
     "NOTICE",
     "crates/delta-arrow-reader-core/src/**",
     "crates/delta-arrow-reader-python/**",
-    "crates/delta-arrow-reader-core/tests/reader/https.py",
     "crates/delta-arrow-reader-core/tests/reader/fixtures/**",
     "crates/delta-arrow-reader-cli/src/**",
     "crates/delta-arrow-reader-cli/build.rs",
@@ -134,13 +140,13 @@
     "crates/delta-arrow-reader-core/tests/reader/fixtures/**"
   ],
   "selective_read": [
+    "xtask/src/selective_read.rs",
+    "xtask/src/selective_read/**",
+    "xtask/tests/selective_read.rs",
     ".cargo/**",
     ".github/path-filters.json",
     ".github/workflows/benchmark-fixtures.yml",
     "clippy.toml",
-    "benches/selective_read/**",
-    "docs/content/benchmarks/selective-read-protocol.md",
-    "docs/content/benchmarks/selective-read-production-shapes.md",
-    "docs/content/benchmarks/selective-read-large-workloads.md"
+    "benches/selective_read/**"
   ]
 }

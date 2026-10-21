@@ -5,7 +5,7 @@ use std::{
     error::Error,
     fs::{self, File},
     io::{BufReader, BufWriter, Read, Write},
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
@@ -18,152 +18,18 @@ use datafusion::{
     prelude::{SessionConfig, SessionContext},
 };
 use futures_util::StreamExt;
-use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+#[allow(dead_code)]
+#[path = "contract.rs"]
+mod contract;
+
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 pub const TABLE: &str = "bench";
-const PROTOCOL: &[u8] =
-    include_bytes!("../../../docs/content/benchmarks/selective-read-protocol.md");
-const AMENDMENT: &[u8] =
-    include_bytes!("../../../docs/content/benchmarks/selective-read-large-workloads.md");
-const SAMPLING: &[u8] =
-    include_bytes!("../../../docs/content/benchmarks/selective-read-sampling.md");
-const PRODUCTION: &[u8] =
-    include_bytes!("../../../docs/content/benchmarks/selective-read-production-workloads.md");
-const SPARK_MATRIX: &[u8] =
-    include_bytes!("../../../docs/content/benchmarks/selective-read-spark-matrix.md");
-const ORACLE: &[u8] = include_bytes!("../oracle.py");
 const LOCK: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.lock"));
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Request {
-    pub table_uri: String,
-    pub snapshot_version: u64,
-    pub case_id: String,
-    canonical_sql: String,
-    comparison_revision: u64,
-    protocol_sha256: String,
-    base_protocol_sha256: Option<String>,
-    workload_manifest_sha256: Option<String>,
-    sampling_sha256: Option<String>,
-    sampling_stage: Option<String>,
-    fixture_manifest_sha256: String,
-    profile: String,
-    execution_mode: String,
-    concurrent_queries: Option<usize>,
-    purpose: String,
-    #[serde(default)]
-    validation_diagnostics: bool,
-    resource_budget: Value,
-    correctness_file: Option<PathBuf>,
-    campaign_id: Option<String>,
-    run_id: String,
-    repetition: Option<u64>,
-    order: Option<u64>,
-}
-
-impl Request {
-    pub fn reuse(&self) -> bool {
-        self.execution_mode == "reuse"
-    }
-    fn query_count(&self) -> usize {
-        if let Some(count) = self.concurrent_queries {
-            count
-        } else if !self.reuse() {
-            1
-        } else if self.comparison_revision >= 4 {
-            2
-        } else {
-            10
-        }
-    }
-    fn timed(&self) -> bool {
-        self.purpose == "timing"
-    }
-
-    fn validate(&self) -> Result<()> {
-        let uri = url::Url::parse(&self.table_uri)?;
-        if !matches!(uri.scheme(), "file" | "s3")
-            || !uri.username().is_empty()
-            || uri.password().is_some()
-            || uri.query().is_some()
-            || uri.fragment().is_some()
-        {
-            return Err(
-                "expected a file/s3 table URL without embedded credentials, query or fragment"
-                    .into(),
-            );
-        }
-        if !matches!(self.execution_mode.as_str(), "open" | "reuse")
-            || !matches!(
-                self.purpose.as_str(),
-                "timing" | "validation" | "diagnostic" | "io"
-            )
-            || self.concurrent_queries.is_some_and(|count| {
-                !matches!(count, 2 | 4) || !self.reuse() || self.comparison_revision != 6
-            })
-            || !self.valid_comparison()
-            || !is_hash(&self.fixture_manifest_sha256)
-            || self.case_id.is_empty()
-            || self.run_id.is_empty()
-            || self.canonical_sql.trim().is_empty()
-            || self.resource_budget != budget()
-            || self.validation_diagnostics
-                && (self.comparison_revision != 6 || self.purpose != "validation")
-        {
-            return Err("invalid request or settings differ from the frozen protocol".into());
-        }
-        Ok(())
-    }
-
-    fn valid_comparison(&self) -> bool {
-        if self.comparison_revision >= 5 {
-            if !matches!(self.sampling_stage.as_deref(), Some("pilot" | "formal")) {
-                return false;
-            }
-        } else if self.sampling_stage.is_some() {
-            return false;
-        }
-        match self.comparison_revision {
-            2 => {
-                self.protocol_sha256 == digest(PROTOCOL)
-                    && self.base_protocol_sha256.is_none()
-                    && self.workload_manifest_sha256.is_none()
-                    && self.sampling_sha256.is_none()
-            }
-            3..=6 => {
-                self.protocol_sha256
-                    == digest(if self.comparison_revision == 6 {
-                        SPARK_MATRIX
-                    } else if self.comparison_revision == 5 {
-                        PRODUCTION
-                    } else {
-                        AMENDMENT
-                    })
-                    && self.base_protocol_sha256.as_deref() == Some(digest(PROTOCOL).as_str())
-                    && self
-                        .workload_manifest_sha256
-                        .as_deref()
-                        .is_some_and(is_hash)
-                    && if self.comparison_revision >= 4 {
-                        self.sampling_sha256.as_deref() == Some(digest(SAMPLING).as_str())
-                    } else {
-                        self.sampling_sha256.is_none()
-                    }
-            }
-            _ => false,
-        }
-    }
-}
-
-fn budget() -> Value {
-    json!({"worker_threads": 8, "max_blocking_threads": 64, "target_partitions": 8,
-        "batch_rows": 8192, "datafusion_pool_bytes": 4_u64 * 1024 * 1024 * 1024,
-        "process_memory_bytes": 8_u64 * 1024 * 1024 * 1024, "logical_cpus": 8})
-}
+pub use contract::Request;
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
@@ -184,13 +50,6 @@ fn file_digest(path: &Path) -> Result<String> {
         hash.update(&buffer[..n]);
     }
     Ok(hex(&hash.finalize()))
-}
-
-fn is_hash(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 fn read_json(path: &Path) -> Result<Value> {
@@ -231,27 +90,6 @@ fn context() -> Result<SessionContext> {
     Ok(SessionContext::new_with_config_rt(config, runtime))
 }
 
-fn identity(request: &Request, build_hash: &str, config_hash: &str) -> Value {
-    let mut value = json!({"reader_id": crate::READER, "reader_build_sha256": build_hash,
-        "reader_config_sha256": config_hash, "comparison_revision": request.comparison_revision,
-        "protocol_sha256": request.protocol_sha256,
-        "fixture_manifest_sha256": request.fixture_manifest_sha256,
-        "case_id": request.case_id, "snapshot_version": request.snapshot_version,
-        "canonical_sql_sha256": digest(request.canonical_sql.as_bytes()),
-        "native_expression_sha256": null});
-    if request.comparison_revision >= 3 {
-        value["base_protocol_sha256"] = json!(request.base_protocol_sha256);
-        value["workload_manifest_sha256"] = json!(request.workload_manifest_sha256);
-    }
-    if request.comparison_revision >= 4 {
-        value["sampling_sha256"] = json!(request.sampling_sha256);
-    }
-    if request.comparison_revision >= 5 {
-        value["sampling_stage"] = json!(request.sampling_stage);
-    }
-    value
-}
-
 fn correctness(request: &Request, identity: &Value) -> Result<Value> {
     if !request.timed() {
         return Ok(json!({"status": "not_checked", "reason": "untimed invocation"}));
@@ -261,28 +99,7 @@ fn correctness(request: &Request, identity: &Value) -> Result<Value> {
         .as_ref()
         .ok_or("timing requires a correctness certificate")?;
     let proof = read_json(path)?;
-    let checks = proof["checks"]
-        .as_array()
-        .ok_or("missing correctness checks")?;
-    if proof["status"] != "passed" || checks.len() != request.query_count() {
-        return Err("failed or incomplete correctness certificate".into());
-    }
-    let mut expected_rows = Vec::new();
-    for check in checks {
-        if check["status"] != "passed" || check["oracle_sha256"] != digest(ORACLE) {
-            return Err("failed or stale oracle check".into());
-        }
-        for (key, value) in identity.as_object().ok_or("invalid identity")? {
-            if check.get(key) != Some(value) {
-                return Err(format!("stale correctness field: {key}").into());
-            }
-        }
-        expected_rows.push(
-            check["output_rows"]
-                .as_u64()
-                .ok_or("missing validated row count")?,
-        );
-    }
+    let expected_rows = contract::correctness(&proof, identity, request.query_count())?;
     Ok(
         json!({"status": "passed", "artifact_sha256": file_digest(path)?, "path": path,
         "expected_output_rows": expected_rows}),
@@ -638,11 +455,14 @@ fn run(request_path: &Path, output: &Path) -> Result<bool> {
     if let Some(count) = request.concurrent_queries {
         settings["concurrent_queries"] = json!(count);
     }
-    let input_identity = identity(
-        &request,
+    let input_identity = contract::identity(
+        &serde_json::to_value(&request)?,
+        crate::READER,
+        &build,
+        settings.clone(),
+        Value::Null,
         &file_digest(&build_path)?,
-        &digest(&serde_json::to_vec(&settings)?),
-    );
+    )?;
     let mut record = json!({"format": "selective-read-observation-v1", "identity": input_identity,
         "campaign_id": request.campaign_id, "run_id": request.run_id, "repetition": request.repetition, "order": request.order,
         "profile": request.profile, "purpose": request.purpose, "execution_mode": request.execution_mode,
@@ -739,5 +559,43 @@ pub fn main() {
             );
             std::process::exit(1);
         }
+    }
+}
+
+#[cfg(test)]
+mod contract_tests {
+    use super::contract::budget;
+    use super::*;
+
+    #[test]
+    fn comparison_uses_revisions_and_sampling_not_bundled_document_hashes() -> Result<()> {
+        for revision in 2..=6 {
+            let value = json!({
+                "table_uri":"file:///fixture", "snapshot_version":0, "case_id":"case",
+                "canonical_sql":"SELECT id FROM bench", "comparison_revision":revision,
+                "protocol_sha256":"older documentation", "base_protocol_sha256":"older base",
+                "sampling_sha256":"older sampling",
+                "workload_manifest_sha256":if revision >= 3 {json!("1".repeat(64))} else {Value::Null},
+                "sampling_stage":if revision >= 5 {json!("formal")} else {Value::Null},
+                "fixture_manifest_sha256":"2".repeat(64), "profile":"smoke", "execution_mode":"open",
+                "purpose":"validation", "resource_budget":budget(), "run_id":"run"
+            });
+            let mut request: Request = serde_json::from_value(value)?;
+            if revision >= 3 {
+                request.workload_contract = Some(json!({"comparison_revision":revision,
+                    "sampling_stage":request.sampling_stage, "cases":[]}));
+            }
+            request.validate()?;
+            if revision >= 3 {
+                request.workload_manifest_sha256 = Some("invalid input identity".into());
+                assert!(request.validate().is_err());
+                request.workload_manifest_sha256 = Some("1".repeat(64));
+            }
+            request.sampling_stage = Some("unknown".into());
+            assert!(request.validate().is_err());
+            request.comparison_revision = 7;
+            assert!(request.validate().is_err());
+        }
+        Ok(())
     }
 }

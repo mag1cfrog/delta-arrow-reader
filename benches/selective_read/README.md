@@ -15,7 +15,47 @@ The archive audit regenerates the published report and CSVs without the full tab
 
 Run commands from the repository root and keep generated tables outside Git.
 The recorded runs use pinned inputs, reader builds, and execution contracts.
-Follow the version and hash requirements in each guide.
+Follow the version, input, and execution requirements in each guide.
+
+The current tools check compatibility through format and comparison revisions,
+queries, projections, layout settings, and independently verified Arrow values.
+New records omit source, controller, and protocol-document fingerprints.
+Build records retain checkout versions, dirty status, dependency versions and
+commands. Older records can still be read; their optional audit fields do not
+determine plan, workload or reference compatibility.
+
+Checksums still verify data files, exports, and packaged reader artifacts.
+A timing certificate applies to the reader build, configuration, query, and
+inputs that passed validation. A different reader build must pass validation
+before its timings can be accepted.
+
+Requests and certificates carry the workload contract, SQL, reader settings,
+native expressions, and reader artifact identity. Compatibility checks compare
+these values directly. Updating Git metadata alone does not require new references or correctness
+checks. Certificates containing only hashes
+are rejected, even if those hashes match. Rebuild readers and rerun validation
+to replace them. Regenerate older requests, references, and prepared matrices
+with the current tools so they carry the same explicit execution fields.
+
+The native readers and Python adapters share the Rust request, identity and
+certificate checks. Python reader packages include the compiled controller and
+call it during setup, before query timers start. Rebuild reader packages to pick
+up changes to these checks. The independent oracle runs from the harness and is
+not copied into reader packages.
+
+Build the native controller before preparing references, running readers or
+checking the independent Python oracle:
+
+```sh
+cargo build --locked -p xtask
+export SELECTIVE_READ_XTASK="$(pwd)/target/debug/xtask"
+```
+
+With `CARGO_TARGET_DIR`, point `SELECTIVE_READ_XTASK` at that directory's
+`debug/xtask` instead. The controller handles schedules, timing summaries,
+result validation, watchdog deadlines, and process accounting. It checks frozen
+inputs and recomputes summaries from the journal before reporting results. It is
+never compiled during a reader invocation.
 
 1. [Generate the public source](../../docs/content/benchmarks/selective-read-fixtures.md),
    then [write the wide tables and deletion-vector pairs](../../docs/content/benchmarks/selective-read-production-fixtures.md).
@@ -34,7 +74,16 @@ the reader and harness revisions and records the extent of delivery checks.
 These contracts preserve earlier revisions as well as the final comparison.
 Older Daft references, page settings, and pending-work notes are historical;
 use the [reproduction guide](EVIDENCE.md) and public report for revision 6.
-Keep the frozen documents unchanged when checking recorded hashes.
+The frozen documents remain part of the historical evidence archive.
+
+The current checkout provides DAR, delta-rs, DuckDB, Polars, and Spark adapters.
+The Daft adapter, dependency lock, and checks are available in the
+[historical reader checkout](https://github.com/mag1cfrog/delta-arrow-reader/tree/eb1f58b4be8dc0d8ec3bee1615f1777a4c41bd9f/benches/selective_read/runners/daft).
+Use the matching frozen harness for older comparisons. Their reader identities,
+expression snapshots, and published results remain available for validation.
+New workload definitions use revision 6. The old Daft-dependent creation
+commands live in the archived harness. Export audited batches with
+`cargo +1.98.1 run --locked -p xtask -- selective-read report-workload`.
 
 - [Table layouts and queries](../../docs/content/benchmarks/selective-read-production-shapes.md)
 - [Execution contract](../../docs/content/benchmarks/selective-read-production-workloads.md)
@@ -48,8 +97,8 @@ Keep the frozen documents unchanged when checking recorded hashes.
 Frozen case IDs use `production.q2.*` for the 416-column table and
 `production.q4.*` for the 90-column table. The `localized` layout is called
 "grouped" in the public reports; `scattered` keeps the same name. Keep these
-IDs, document bytes, and source paths unchanged when replaying recorded runs:
-the harness binds them by hash. Use table width, match layout, and
+case IDs and workload contents unchanged when replaying recorded runs.
+Use table width, match layout, and
 deletion-vector state as names in current explanations.
 
 ## Additional experiments
@@ -63,12 +112,27 @@ deletion-vector state as names in current explanations.
 - [Large-workload planning](../../docs/content/benchmarks/selective-read-large-workloads.md)
 - [Recorded capacity check](../../docs/content/benchmarks/selective-read-pilot-capacity.md)
 
+For the isolated raw Zstd block discovery diagnostic, prepare and upload a `long`
+Zstd fixture, attach the network proxy, then run:
+
+```sh
+cargo xtask selective-read zstd-probe \
+  --fixture /path/to/long-zstd-fixture \
+  --state /path/to/minio-state \
+  --output /path/to/new-probe-results
+```
+
+The Rust probe compares complete column reads with sequential block-header
+discovery in three alternating pairs. Both modes use curl and at most 32 worker
+threads. Each request range, checksum, discovered block and proxy count is checked.
+This diagnostic measures discovery alone; it does not execute queries.
+
 ## Maintain the report charts
 
 The README charts use the four deletion-vector cases from
 `selective-read-current-timings.csv`. All five readers are shown, with bar lengths
 proportional to median query time. The two columns use separate linear scales
 starting at zero: 0-80 seconds for 416 columns and 0-200 for 90 columns.
-Regenerate them with `python -B benches/render_selective_read_chart.py`, or
+Regenerate them with `cargo xtask render-selective-read-chart`, or
 add `--check` to verify the checked-in SVGs. Update the README's pinned image URLs
 when publishing changed chart assets.

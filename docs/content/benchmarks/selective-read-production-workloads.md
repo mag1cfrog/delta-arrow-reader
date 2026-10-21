@@ -28,10 +28,10 @@ page limit remain sensitivity controls outside the eight main cases. The
 generation-shape contract retains its historical identity; these main settings
 follow the accepted physical calibration.
 
-Revision 5 uses this document as `protocol_sha256`, retains the base protocol
-and sampling amendment hashes, and adds `sampling_stage` to the identity.
-The workload hash binds all remaining input and harness identities. Revisions
-2, 3 and 4 retain their original meanings and replay rules.
+Revision 5 declares its comparison revision and `sampling_stage`. The harness
+compares the explicit workload definition, SQL, native expressions and reader
+settings. Historical runs retain their
+recorded comparison revisions and artifacts.
 
 Readers open a Delta table at a fixed snapshot through their native APIs. Each
 reader decides which files and row groups to read. The harness supplies no
@@ -41,11 +41,11 @@ engine versions and clock boundaries follow the existing protocol.
 ## Validation and sampling
 
 The independent oracle scans the original source with PyArrow, evaluates the
-three predicates, and derives payload values in Python. It checks the exact
+three predicates, and derives payload values in Rust. It checks the exact
 output values, types, nulls and multiplicity. It scans fixture batches without
 Parquet filters, checks stored metric columns independently, and compares every
-qualifying fixture row against the source reference. DuckDB only sorts actual
-results for exact comparison. Preparation counts cannot certify correctness.
+qualifying fixture row against the source reference. Rust sorts actual rows
+and compares their complete typed values. Preparation counts cannot certify correctness.
 
 DV pairs retain identical Parquet bytes. Deletions use the existing logical-key
 hash rule plus a shared union of nonmatching file minima and the minimum
@@ -70,7 +70,7 @@ requires all eight cases and their native reuse profiles, fresh independent
 exact-result gates and every predeclared formal slot. Pilot and historical
 samples cannot fill those slots. Batch reports retain `publication_ready: false`.
 
-Freeze the complete case definitions, source and generated-object hashes,
+Freeze the complete case definitions, input and generated-object checksums,
 SQL/native expressions, reference provenance, builds, resources, transport and
 schedule before formal timing. Completed generation manifests can define an
 input whose bulk objects have been reclaimed; record physical residency

@@ -64,7 +64,6 @@
   "source_verification": {
     "all_match_main": true,
     "diagnostic_changed_source": "crates/delta-arrow-reader-core/src/delta/kernel/s3.rs",
-    "patch_sha256": "70c132770c7111edf1d2e6bbbcfc7098c405757928b32e2af1f17084285fb35c",
     "production_source_files": 90
   },
   "tables": {

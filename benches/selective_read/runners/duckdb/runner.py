@@ -15,9 +15,9 @@ import pyarrow as pa
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from run import digest, query_count, save
-from python_common import (checked_build, checkpoint, correctness, event, observation, reader_identity,
-                           require, runner_cli, runtime_metadata, timing_totals, validate, write_observation)
+from run import digest, query_count
+from python_common import (checked_build, checkpoint, correctness, event, export_result, observation, reader_identity,
+                           require, runner_cli, runtime_metadata, storage_options, validate, write_observation)
 
 CONFIG = {"threads": 8, "memory_limit": "4GiB", "enable_external_file_cache": False,
           "autoload_known_extensions": False, "autoinstall_known_extensions": False,
@@ -56,28 +56,14 @@ def connect():
 
 
 def storage(connection, uri):
-    if urlsplit(uri).scheme != "s3":
-        return {"credentials": "none"}
-    options = {"REGION": os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))}
-    for option, env in (("KEY_ID", "AWS_ACCESS_KEY_ID"), ("SECRET", "AWS_SECRET_ACCESS_KEY"), ("SESSION_TOKEN", "AWS_SESSION_TOKEN")):
-        if env in os.environ:
-            options[option] = os.environ[env]
-    endpoint = os.environ.get("AWS_ENDPOINT_URL")
-    if endpoint:
-        parsed = urlsplit(endpoint)
-        require(parsed.scheme in ("http", "https") and parsed.netloc and not (parsed.username or parsed.password
-                or parsed.query or parsed.fragment) and parsed.path in ("", "/"), "invalid AWS_ENDPOINT_URL")
-        options.update(ENDPOINT=parsed.netloc, URL_STYLE="path")
-    sql = "CREATE SECRET bench_s3 (TYPE s3, " + ", ".join(f"{k} {literal(v)}" for k, v in options.items())
-    if endpoint:
-        sql += ", USE_SSL " + ("true" if parsed.scheme == "https" else "false")
+    config = storage_options("duckdb", uri)
     try:
-        connection.execute(sql + ")")
+        if config["sql"]:
+            connection.execute(config["sql"])
     except duckdb.Error:
         # A parser error can include the secret-bearing SQL. Never put it in a record.
         raise ValueError("could not configure the S3 secret from AWS environment variables") from None
-    return {"credentials": "AWS environment", "region": options["REGION"], "endpoint": endpoint,
-            "url_style": options.get("URL_STYLE", "vhost")}
+    return config["settings"]
 
 
 def attach(connection, request):
@@ -170,19 +156,14 @@ def execute(connection, request, output, record):
                  "first_batch_unavailable_reason": "untimed invocation" if not timed else "empty result" if not rows else None,
                  "result": None, "identity": None, "physical_plan": None}
         if writer is not None:
-            exported = record["identity"] | {"result_sha256": digest(result)}
-            identity_name = f"query-{index}.identity.json"
-            save(output / identity_name, exported)
-            query.update(result=result.name, identity=identity_name)
+            query.update(export_result(output, index, record["identity"]))
         if request["purpose"] == "diagnostic":
             name = f"query-{index}.plan.txt"
             plan = connection.sql("EXPLAIN " + request["canonical_sql"]).fetchall()
             (output / name).write_text("\n".join(f"{k}\n{v}" for k, v in plan) + "\n")
             query["physical_plan"] = name
         record["queries"].append(query)
-    if timed:
-        timing_totals(record)
-    elif request["purpose"] != "io" and not request.get("validation_diagnostics"):
+    if not timed and request["purpose"] != "io" and not request.get("validation_diagnostics"):
         record["provider_evidence"] = {"schema": connection.sql("DESCRIBE bench").fetchall(),
                                        "attach_options": record["settings"]["provider"]}
     elif request.get("validation_diagnostics"):
@@ -204,22 +185,19 @@ def run(request_path, output):
         require(runtime_metadata(engine) == build["runtime"], "runtime differs from the prepared build")
         statements = connection.extract_statements(request["canonical_sql"])
         require(len(statements) == 1 and statements[0].type == duckdb.StatementType.SELECT, "expected a single SELECT")
-        storage_options = storage(connection, request["table_uri"])
+        storage_record = storage(connection, request["table_uri"])
         settings = {"duckdb": native_settings(connection),
                     "provider": {"api": "ATTACH ... (TYPE delta, READ_ONLY, VERSION n)",
                                  "pin_snapshot": request["execution_mode"] == "reuse", "pushdown_filters": "all",
                                  "pushdown_partition_info": True, "initialization": "ATTACH + DESCRIBE bench" if request["execution_mode"] == "reuse" else "ATTACH",
                                  "query_api": "connection.sql(canonical_sql).to_arrow_reader(8192)"},
-                    "delta_executor_environment": {"TOKIO_WORKER_THREADS": "8"}, "storage": storage_options,
+                    "delta_executor_environment": {"TOKIO_WORKER_THREADS": "8"}, "storage": storage_record,
                     "resource_budget": request["resource_budget"], "table_uri": request["table_uri"],
                     "execution_mode": request["execution_mode"], "output_delivery": "streaming"}
         identity = reader_identity(request, "duckdb", build_path, settings)
         record.update(identity=identity, settings=settings, build_record=str(build_path), phase="correctness_gate")
         record["correctness"] = correctness(request, identity)
         execute(connection, request, output, record)
-        if request["purpose"] == "timing":
-            if [q["output_rows"] for q in record["queries"]] != record["correctness"]["expected_output_rows"]:
-                record.update(status="validation_failed", failure_reason="timed output row count differs from the validated result")
     except Exception as error:
         record["status"] = "validation_failed" if record["phase"] == "correctness_gate" else failure_status(error)
         record["failure_reason"] = str(error)

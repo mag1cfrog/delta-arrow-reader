@@ -1,7 +1,7 @@
 //! Process-isolated streaming measurements for issue #122.
 //!
 //! Build with `cargo bench --locked --bench scan_scheduling --no-run`, then use
-//! `python3 benches/scan_scheduling.py --help` to run the matrix. Fixture creation,
+//! `cargo xtask scan-scheduling --help` to run the matrix. Fixture creation,
 //! table loading, and planning are outside the execution timer. Each run consumes
 //! batches without collecting them and validates the full scan's row count and ID sum.
 //! HTTP measurements include the existing controlled server in the child process.

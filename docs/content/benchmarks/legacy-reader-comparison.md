@@ -112,7 +112,7 @@ discarded those results. We then used balanced, process-isolated run orders:
 eight measured rounds for each four-reader workload and ten rounds for the
 five-reader text workload. Every reader appeared in every position twice, and
 every ordered pair of adjacent readers appeared twice. The exact
-[run-order generator](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/benches/run_order.py)
+[run-order generator](https://github.com/mag1cfrog/delta-arrow-reader/blob/a9170602294c13f13be23f8f094469d1b859442c/benches/run_order.py)
 is checked in.
 
 Delta Arrow Reader and delta-rs used two builds of the same Rust harness. Each
@@ -138,8 +138,26 @@ expected 200 rows.
 
 The [anonymized per-run results](reader-results.csv) include the
 timing, resource use, and parity outcome for all 146 measured processes, along
-with the three unsupported Daft probes. The chart generator validates the file
-and computes the plotted medians.
+with the three unsupported Daft probes. The
+[frozen chart generator](https://github.com/mag1cfrog/delta-arrow-reader/blob/a9170602294c13f13be23f8f094469d1b859442c/benches/render_comparison_chart.py)
+validates the file and computes the plotted medians.
+
+To validate the recorded measurements and regenerate the six historical SVGs,
+extract the generator and its inputs into a temporary directory. Run these
+commands from a repository clone containing the pinned commit:
+
+```sh
+chart_archive=$(mktemp -d)
+git archive --format=tar --output="$chart_archive/source.tar" \
+  a9170602294c13f13be23f8f094469d1b859442c \
+  benches/render_comparison_chart.py \
+  docs/content/benchmarks/legacy-reader-comparison.md \
+  docs/content/benchmarks/reader-results.csv docs/content/assets
+tar -xf "$chart_archive/source.tar" -C "$chart_archive"
+python3 "$chart_archive/benches/render_comparison_chart.py"
+```
+
+The regenerated SVGs are under `$chart_archive/docs/content/assets`.
 
 The readers did not always represent values in memory in exactly the same way.
 We allowed differences in string encoding, timestamp units, dictionary

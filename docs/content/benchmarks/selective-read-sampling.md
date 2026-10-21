@@ -59,9 +59,9 @@ Screening uses two independent single-query trials and cannot fill formal slots.
 ## Identity and compatibility
 
 Every revision 4 workload, request, result, correctness certificate, campaign
-slot and report carries this file's SHA-256 as `sampling_sha256`, alongside
-the existing protocol and workload identities. Reject missing or changed
-sampling identities, incomplete query sequences and altered schedules.
+slot and report declares its comparison revision and workload contract. The
+harness checks the resulting query counts and schedule directly. Incomplete
+query sequences and altered schedules fail validation.
 
 The request helper, native readers, watchdog, export limits and reports use
 the same revision's query count. Revisions 2 and 3 retain their ten-query reuse

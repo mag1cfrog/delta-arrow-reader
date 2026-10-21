@@ -1,57 +1,14 @@
-"""Create one public-case request, invoke a reader, and optionally validate every export.
+"""Shared Python adapter identities, protocol checks and immutable artifacts."""
 
-This is a single invocation, not a performance campaign or resource scheduler.
-"""
-
-import argparse
-from contextlib import contextmanager
-import hashlib
 import json
-import os
-from pathlib import Path
-import re
-import resource
-import subprocess
+import runpy
 import sys
-import time
 
-
-HERE = Path(__file__).resolve().parent
-PROTOCOL = HERE.parents[2] / "docs/content/benchmarks/selective-read-protocol.md"
-AMENDMENT = PROTOCOL.with_name("selective-read-large-workloads.md")
-SAMPLING = PROTOCOL.with_name("selective-read-sampling.md")
-PRODUCTION = PROTOCOL.with_name("selective-read-production-workloads.md")
-SPARK_MATRIX = PROTOCOL.with_name("selective-read-spark-matrix.md")
-if (HERE / "protocol.md").exists():
-    PROTOCOL, AMENDMENT = HERE / "protocol.md", HERE / "large-workloads.md"
-    SAMPLING = HERE / "sampling.md"
-    PRODUCTION = HERE / "production-workloads.md"
-    SPARK_MATRIX = HERE / "spark-matrix.md"
-COMPARISON_FIELDS = ("comparison_revision", "protocol_sha256")
-LARGE_IDENTITY_FIELDS = ("base_protocol_sha256", "workload_manifest_sha256")
-SAMPLING_IDENTITY_FIELDS = ("sampling_sha256",)
-PRODUCTION_IDENTITY_FIELDS = ("sampling_stage",)
-BUDGET = {"worker_threads": 8, "max_blocking_threads": 64, "target_partitions": 8,
-          "batch_rows": 8192, "datafusion_pool_bytes": 4 * 1024**3,
-          "process_memory_bytes": 8 * 1024**3, "logical_cpus": 8}
-_DIGESTS = {}
-
-
-def file_identity(path):
-    stat = os.stat(path)
-    return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
+import native
 
 
 def digest(path):
-    """Hash an unchanged local inode once per process, including hard links."""
-    with Path(path).open("rb") as source:
-        identity = file_identity(source.fileno())
-        previous = _DIGESTS.get(identity[:2])
-        value = previous[1] if previous and previous[0] == identity else hashlib.file_digest(source, "sha256").hexdigest()
-        if file_identity(source.fileno()) != identity or file_identity(path) != identity:
-            raise ValueError(f"file changed during checksum: {path}")
-        _DIGESTS[identity[:2]] = identity, value
-        return value
+    return native.call("reader-runtime", {"action": "digest", "path": str(path)})
 
 
 def save(path, value):
@@ -60,227 +17,21 @@ def save(path, value):
         out.write("\n")
 
 
-def comparison_identity(value):
-    revision = value["comparison_revision"]
-    if type(revision) is not int or revision not in (2, 3, 4, 5, 6):
-        raise ValueError("unknown comparison revision")
-    fields = COMPARISON_FIELDS + (LARGE_IDENTITY_FIELDS if revision >= 3 else ())
-    expected = digest(SPARK_MATRIX if revision == 6 else PRODUCTION if revision == 5 else AMENDMENT if revision >= 3 else PROTOCOL)
-    if value["protocol_sha256"] != expected:
-        raise ValueError("stale comparison protocol")
-    if revision >= 3:
-        if value.get("base_protocol_sha256") != digest(PROTOCOL) or not isinstance(value.get("workload_manifest_sha256"), str) or not re.fullmatch(
-                "[0-9a-f]{64}", value["workload_manifest_sha256"]):
-            raise ValueError("missing or stale large-workload identity")
-    elif any(value.get(key) is not None for key in LARGE_IDENTITY_FIELDS):
-        raise ValueError("revision 2 cannot carry large-workload identities")
-    if revision >= 4:
-        if value.get("sampling_sha256") != digest(SAMPLING):
-            raise ValueError("missing or stale sampling identity")
-        fields += SAMPLING_IDENTITY_FIELDS
-    elif value.get("sampling_sha256") is not None:
-        raise ValueError("historical revisions cannot carry a sampling amendment")
-    if revision >= 5:
-        if value.get("sampling_stage") not in ("pilot", "formal"):
-            raise ValueError("missing or invalid production sampling stage")
-        fields += PRODUCTION_IDENTITY_FIELDS
-    elif value.get("sampling_stage") is not None:
-        raise ValueError("historical revisions cannot carry a production sampling stage")
-    return {key: value[key] for key in fields}
-
-
-HISTORICAL_READERS = ("delta-arrow-reader", "delta-rs", "duckdb", "polars", "daft")
-
-
-def reader_roster(value):
-    revision = value.get("comparison_revision", 2)
-    if type(revision) is not int or revision not in (2, 3, 4, 5, 6):
-        raise ValueError("unknown comparison reader roster")
-    return (*HISTORICAL_READERS[:-1], "spark") if revision == 6 else HISTORICAL_READERS
+def load_adapter(binary):
+    """Import the built adapter with its bundled helpers in a probe interpreter."""
+    previous = {name: sys.modules.pop(name, None) for name in ("run", "python_common", "native")}
+    search_path = sys.path.copy()
+    try:
+        return runpy.run_path(str(binary.resolve()), run_name="native_probe")
+    finally:
+        sys.path[:] = search_path
+        for name, module in previous.items():
+            sys.modules.pop(name, None)
+            if module is not None:
+                sys.modules[name] = module
 
 
 def query_count(value):
-    count = value.get("concurrent_queries")
-    if count is not None:
-        if (type(count) is not int or count not in (2, 4) or value["execution_mode"] != "reuse"
-                or value.get("comparison_revision") != 6):
-            raise ValueError("concurrent queries require revision 6, reuse mode and a count of 2 or 4")
-        return count
     if value["execution_mode"] == "open":
         return 1
     return 2 if value.get("comparison_revision", 2) >= 4 else 10
-
-
-def fixture_tables(manifest):
-    if manifest.get("status") != "complete":
-        raise ValueError("incomplete fixture manifest")
-    if manifest["protocol"] == "selective-read-v1":
-        return manifest["tables"]
-    if manifest["protocol"] in ("selective-read-production-fixtures-v1", "selective-read-production-pairs-v1"):
-        if manifest["writer"]["status"] != "complete":
-            raise ValueError("incomplete production writer")
-        return manifest["writer"]["tables"]
-    raise ValueError("unknown fixture manifest")
-
-
-def request(fixtures, case_id, execution_mode, purpose, run_id, table_uri=None, correctness=None, *, workload=None):
-    manifest_path = fixtures / "manifest.json"
-    manifest = json.loads(manifest_path.read_text())
-    tables = fixture_tables(manifest)
-    comparison = {"comparison_revision": 2, "protocol_sha256": digest(PROTOCOL)}
-    if workload is not None:
-        sys.path.insert(0, str(HERE.parent))
-        import large_workloads
-        frozen = large_workloads.load(workload)
-        row = large_workloads.binding(frozen, fixtures, case_id)
-        comparison = large_workloads.identity(workload)
-        table = next(t for t in tables if t["id"] == row["fixture_id"])
-        sql = row["canonical_sql"]
-    else:
-        if manifest["protocol"] != "selective-read-v1" or manifest["profile"] == "large":
-            raise ValueError("large fixtures require an explicit workload manifest")
-        fixture_id, query = case_id.rsplit(".", 1)
-        table = next((t for t in manifest["tables"] if case_id in t.get("queries", {})), None)
-    if workload is None and table is not None:
-        sql = table["queries"][case_id]
-    elif workload is None:
-        table = next(t for t in manifest["tables"] if t["id"] == fixture_id)
-        source = next(s for s in manifest["sources"] if s["scale_factor"] == table["scale_factor"])
-        sql = source["wide_queries" if fixture_id.startswith("wide.") else "queries"][query]
-    location = (fixtures / table["path"]).resolve()
-    if not location.is_relative_to(fixtures.resolve()):
-        raise ValueError("table path escapes fixture root")
-    return {
-        "table_uri": table_uri or location.as_uri(), "snapshot_version": table["snapshot_version"],
-        "case_id": case_id, "canonical_sql": sql, **comparison,
-        "fixture_manifest_sha256": digest(manifest_path),
-        "profile": manifest.get("profile", "production-" + manifest.get("mode", "unknown")), "execution_mode": execution_mode, "purpose": purpose,
-        "resource_budget": BUDGET, "correctness_file": str(correctness.resolve()) if correctness else None,
-        "campaign_id": None, "run_id": run_id, "repetition": None, "order": None,
-    }
-
-
-def check_result(record, output, fixtures, reference, payload):
-    sys.path.insert(0, str(HERE.parent))
-    import oracle
-    checks = []
-    try:
-        if [q["query_index"] for q in record["queries"]] != list(range(query_count(payload))):
-            raise ValueError("incomplete validation query sequence")
-        for query in record["queries"]:
-            checks.append(oracle.check(reference, fixtures,
-                output / "reader" / query["result"], output / "reader" / query["identity"]))
-        proof = {"status": "passed", "checks": checks}
-    except (OSError, ValueError, KeyError, TypeError) as error:
-        proof = {"status": "validation_failed", "checks": checks, "failure_reason": str(error)}
-        record.update(status="validation_failed", failure_reason=str(error))
-    save(output / "correctness.json", proof)
-    record["correctness"] = {"status": proof["status"], "path": str((output / "correctness.json").resolve()),
-                             "artifact_sha256": digest(output / "correctness.json")}
-
-
-@contextmanager
-def export_limit(payload, reference):
-    if payload.get("comparison_revision") not in (3, 4, 5, 6) or payload["purpose"] != "validation":
-        yield None
-        return
-    metadata = json.loads((reference / "reference.json").read_text())
-    if comparison_identity(metadata) != comparison_identity(payload):
-        raise ValueError("export/reference workload mismatch")
-    # Half the allowance holds every export in this session; the other half
-    # holds the reference and sort spill.
-    limit = (metadata["oracle_limits"]["disk_bytes"] - 8 * 1024**2) // (2 * query_count(payload))
-    if limit <= 0:
-        raise ValueError("insufficient validation export allowance")
-    previous = resource.getrlimit(resource.RLIMIT_FSIZE)
-    if previous[0] != resource.RLIM_INFINITY:
-        limit = min(limit, previous[0])
-    resource.setrlimit(resource.RLIMIT_FSIZE, (limit, previous[1]))
-    try:
-        yield limit
-    finally:
-        resource.setrlimit(resource.RLIMIT_FSIZE, previous)
-
-
-def invoke(binary, payload, output, fixtures=None, reference=None, *, env=None, command_prefix=(), supervised=False, defer_validation=False):
-    output.mkdir()
-    save(output / "request.json", payload)
-    supervision = None
-    with (output / "stdout.jsonl").open("x") as stdout, (output / "stderr.log").open("x") as stderr, export_limit(payload, reference) as export_bytes:
-        started = time.time_ns()
-        command = [*command_prefix, str(binary.resolve()), str((output / "request.json").resolve()), str((output / "reader").resolve())]
-        if supervised:
-            import supervise
-            supervision = supervise.launch(command, payload, output, stdout, stderr, env)
-            returncode = supervision["returncode"]
-            save(output / "process.json", supervision)
-        else:
-            returncode = subprocess.run(command, stdout=stdout, stderr=stderr, env=env).returncode
-        exited = time.time_ns()
-    record_path = output / "reader/record.json"
-    if record_path.exists():
-        try:
-            record = json.loads(record_path.read_text())
-            if not isinstance(record, dict) or not isinstance(record.get("status"), str):
-                raise ValueError("missing observation status")
-        except (ValueError, TypeError) as error:
-            record = {"status": "operational_failure", "failure_reason": "malformed reader record: " + str(error)}
-    else:
-        error = (output / "stderr.log").read_text()
-        try:
-            rejected = json.loads(error).get("status") == "invalid_input"
-        except (ValueError, AttributeError):
-            rejected = False
-        record = {"status": "invalid_input" if rejected else "operational_failure",
-                  "failure_reason": error or "reader exited without an observation record"}
-    if returncode and record["status"] == "success":
-        record["status"] = "operational_failure"
-        record["failure_reason"] = f"reader exited with status {returncode} after writing its record"
-    if export_bytes is not None:
-        record["validation_export_limit_bytes_per_file"] = export_bytes
-    if supervision:
-        record["supervision"] = supervision
-        if supervision["status"] != "success":
-            record.update(status=supervision["status"], failure_reason=supervision["failure_reason"])
-        if record["status"] == "success" and (supervision["last_phase"] != "cleanup" or
-                len(supervision["completed_queries"]) != query_count(payload)):
-            record.update(status="operational_failure", failure_reason="reader did not complete the watchdog lifecycle")
-        if type(record.get("cleanup_ns")) is int and record["cleanup_ns"] > supervision["cleanup_deadline_seconds"] * 10**9:
-            record.update(status="timeout", failure_reason="reported cleanup exceeded its deadline")
-        record.setdefault("queries", supervision["completed_queries"])
-        record.setdefault("external_metrics", {}).update({k: supervision[k] for k in (
-            "process_user_cpu_ns", "process_system_cpu_ns", "process_cpu_ns", "peak_rss_bytes", "process_elapsed_ns")})
-    if returncode == 0 and record["status"] == "success" and payload["purpose"] == "validation" and not defer_validation:
-        check_result(record, output, fixtures, reference, payload)
-    if payload["purpose"] in ("diagnostic", "io") or payload.get("validation_diagnostics"):
-        record["diagnostic_process"] = {"started_ns": started, "exited_ns": exited}
-    save(output / "observation.json", record)
-    return record
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--binary", type=Path, required=True)
-    parser.add_argument("--fixtures", type=Path, required=True)
-    parser.add_argument("--case", required=True)
-    parser.add_argument("--workload", type=Path, help="explicit workload manifest")
-    parser.add_argument("--execution", choices=("open", "reuse"), default="open")
-    parser.add_argument("--purpose", choices=("validation", "timing", "diagnostic", "io"), required=True)
-    parser.add_argument("--reference", type=Path)
-    parser.add_argument("--correctness", type=Path)
-    parser.add_argument("--table-uri")
-    parser.add_argument("--output", type=Path, required=True)
-    args = parser.parse_args()
-    if args.purpose == "validation" and args.reference is None:
-        parser.error("validation requires --reference")
-    if args.purpose == "timing" and args.correctness is None:
-        parser.error("timing requires --correctness")
-    payload = request(args.fixtures, args.case, args.execution, args.purpose, args.output.name,
-                      args.table_uri, args.correctness, workload=args.workload)
-    record = invoke(args.binary, payload, args.output, args.fixtures, args.reference)
-    print(json.dumps({"status": record["status"], "observation": str(args.output / "observation.json")}))
-    return 0 if record["status"] == "success" else 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())

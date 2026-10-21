@@ -20,7 +20,7 @@ not copy the large AWS SDK JAR into a scratch file under the validation-export
 size limit.
 
 ```sh
-python3 -B benches/selective_read/runners/spark/prepare.py \
+cargo xtask build-selective-read --reader spark --python python3 \
   --java-home /path/to/temurin-21.0.8 \
   --output /path/to/build-spark
 ```
@@ -36,7 +36,8 @@ JDK and native JARs before table access. See the official
 Use the pinned oracle environment and a prepared smoke fixture:
 
 ```sh
-"$BENCH_PYTHON" -B benches/selective_read/runners/spark/check.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read check-capabilities \
+  --python "$BENCH_PYTHON" \
   --binary /path/to/build-spark/selective-read-spark \
   --fixtures /path/to/smoke-fixtures \
   --output /path/to/spark-capability-check
@@ -55,7 +56,8 @@ rejected. These bounded checks do not establish workload performance.
 Use a verified selected-snapshot upload and an independent reference:
 
 ```sh
-"$BENCH_PYTHON" -B benches/selective_read/runners/spark/pilot.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read run-reader \
+  --spark-pilot --python "$BENCH_PYTHON" \
   --binary /path/to/build-spark/selective-read-spark \
   --state /path/to/minio-state \
   --fixtures /path/to/production-pair \

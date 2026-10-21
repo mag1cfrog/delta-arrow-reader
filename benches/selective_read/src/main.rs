@@ -5,6 +5,7 @@ mod controls;
 mod dv;
 mod fixtures;
 mod large;
+mod page_fixtures;
 mod production;
 mod repack;
 
@@ -28,20 +29,7 @@ use tpchgen::generators::LineItemGenerator;
 
 use fixtures::{BATCH_ROWS, Budget, MIB, Result, TableWriter, original_schema};
 
-const PROTOCOL: &str = include_str!("../../../docs/content/benchmarks/selective-read-protocol.md");
 const LOCKFILE: &str = include_str!("../Cargo.lock");
-const GENERATOR_SOURCE: &str = concat!(
-    include_str!("main.rs"),
-    include_str!("fixtures.rs"),
-    include_str!("repack.rs"),
-    include_str!("control_rows.rs"),
-    include_str!("controls.rs"),
-    include_str!("dv.rs"),
-    include_str!("large.rs"),
-    include_str!("production.rs"),
-    include_str!("../production_fixtures.py")
-);
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Profile {
     Smoke,
@@ -286,6 +274,9 @@ impl Config {
 }
 
 fn main() -> Result<()> {
+    if let Some(command @ ("numeric-pages" | "length-pages")) = env::args().nth(1).as_deref() {
+        return page_fixtures::run(command, &env::args().skip(2).collect::<Vec<_>>());
+    }
     if env::args().nth(1).as_deref() == Some("production-write") {
         return production::run(&env::args().skip(2).collect::<Vec<_>>());
     }
@@ -577,7 +568,7 @@ async fn generate(config: &Config) -> Result<Value> {
     let spilling = runtime.disk_manager.spilling_progress();
     let mut manifest = json!({
         "protocol": "selective-read-v1",
-        "protocol_sha256": fixtures::hash_bytes(PROTOCOL.as_bytes()),
+
         "profile": config.profile.name(), "status": "complete",
         "generator": generator_identity()?,
         "recipe": {
@@ -629,7 +620,6 @@ fn generator_identity() -> Result<Value> {
     Ok(json!({
             "tpchgen": "3.0.0", "tpchgen_git": "4f6bf4c5ab40511c8fdef5888fc8d022e5e546d7",
             "arrow": "58.4.0", "parquet": "58.4.0", "datafusion_sort": "54.1.0",
-            "source_sha256": fixtures::hash_bytes(GENERATOR_SOURCE.as_bytes()),
             "lockfile_sha256": fixtures::hash_bytes(LOCKFILE.as_bytes()),
             // Read the running inode even when a concurrent build replaces its pathname.
             "executable_sha256": fixtures::hash_file(Path::new("/proc/self/exe"))?,

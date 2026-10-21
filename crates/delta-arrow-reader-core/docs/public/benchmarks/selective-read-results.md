@@ -284,15 +284,20 @@ within a case's five-run set.
 The [original report](https://github.com/mag1cfrog/delta-arrow-reader/blob/cd3064e7551bf04b4c763b540d855b285d65a738/docs/public/benchmarks/selective-read-results.md)
 and its [400 timing samples](selective-read-timings.csv),
 [summary](selective-read-summary.csv), [I/O](selective-read-io.csv), and
-[provenance](selective-read-provenance.json) remain unchanged. They include the
-older DAR build and measurements that open a fresh table for each query.
+[provenance](selective-read-provenance.json) include the older DAR build and
+measurements that open a fresh table for each query.
 Those opening times are not used in the current chart.
+
+The provenance files omit fingerprints of source code, helper scripts, and
+protocol documents. All measurement values and checksums for data and reader
+artifacts are unchanged.
 
 The [evidence release](https://github.com/mag1cfrog/delta-arrow-reader/releases/tag/selective-read-benchmarks-2026-10-07)
 contains the original campaign archive. The default-policy update is a separate
 archive, `selective-read-defaults-cd3064e.tar.gz`, with its raw runs, reference
 results, exact exports, diagnostics, frozen sources, and replay script.
 Bulk tables and installed engines are excluded.
+Hashes of archived input records refer to the original records in these archives.
 
 The [reproduction guide](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/benches/selective_read/EVIDENCE.md)
 explains archive verification and the pinned fixture and reader setup.

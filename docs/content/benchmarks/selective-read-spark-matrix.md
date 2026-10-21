@@ -55,9 +55,8 @@ Native Spark plans and I/O evidence are separate invocations after timing.
 
 ## Freeze and report
 
-Revision 6 requests, references, workloads, schedules and observations use this
-document's SHA-256 as `protocol_sha256`, retain the base and sampling hashes, and
-bind the new workload manifest. Its reader order, inventory and translation locks
+Requests, references, workloads, schedules and observations declare revision 6
+and include the explicit workload contract. Its reader order, inventory and translation locks
 must match the fixed roster. Only Polars needs a native-expression translation;
 the other readers parse the canonical SQL directly.
 

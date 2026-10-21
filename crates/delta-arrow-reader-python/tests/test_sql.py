@@ -217,8 +217,8 @@ class SqlTests(unittest.TestCase):
                          )])
 
     def test_lazy_execution_partition_pruning_and_residual_filter(self):
-        support = self.root / "crates/delta-arrow-reader-core/tests/reader/https.py"
-        spec = importlib.util.spec_from_file_location("reader_https", support)
+        support = Path(__file__).with_name("_http.py")
+        spec = importlib.util.spec_from_file_location("reader_http", support)
         http = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(http)
         data_requested = Event()

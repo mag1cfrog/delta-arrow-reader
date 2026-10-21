@@ -171,7 +171,7 @@ indexes. The verifier checks the actual page type, encoding and compression.
 Each complete and partially cleared file is decoded into ordinary arrays and
 the Utf8View/BinaryView array types used by DataFusion. Expected values come from
 the original input batch, before Parquet encoding. The program checks values,
-nulls and row IDs, then records the fixture, source and lockfile hashes.
+nulls and row IDs, then records the fixture and lockfile checksums.
 
 ## Run the network experiment
 
@@ -184,8 +184,8 @@ Use the pinned PyArrow environment and MinIO/proxy setup in
 export CARGO_TARGET_DIR="$experiment_root/target"
 export RUSTFLAGS='-C target-cpu=x86-64'
 cargo +1.98.1 build --release --locked --features delta-length-network \
-  --bin delta-length-pages --bin delta-length-query
-python delta_length_network.py generate --case long \
+  --bin selective-read-fixtures --bin delta-length-pages --bin delta-length-query
+"$experiment_root/target/release/selective-read-fixtures" length-pages --case long \
   --binary "$experiment_root/target/release/delta-length-pages" \
   --output "$experiment_root/long"
 ```
@@ -196,8 +196,14 @@ contains two unpartitioned Delta files, a real DV per file, eight required or
 nullable UTF-8/binary payload columns, and `row_id`, `grouped` and `scattered`
 columns. `grouped = 1` selects eight adjacent rows per 2,048; `scattered = 1`
 selects one per 997. `dense` reads all live rows. DVs delete every 103rd physical
-row. The independent expected values are filtered from the Python input before
-Parquet encoding and saved as compressed Arrow IPC.
+row. Expected values are filtered from the generated Arrow input before Parquet
+encoding and saved as compressed Arrow IPC. The Python checker independently
+compares the reader's export with these references.
+
+The generator uses SplitMix64 and parquet-rs 58.4.0. Its value bytes and page
+layouts differ from the retired Python writer; compare candidates against the
+same fixture directory. The manifest records the writer, distributions, page
+layout, objects and reference checksums. Existing fixtures remain readable.
 `selected-long-batch` keeps the selected-long value-length rule but increases
 rows per file from 8,192 to 65,536 and rows per group from 4,096 to 32,768.
 This lets discovery pass the initial cost gate and tests the later fallback.
@@ -220,27 +226,16 @@ MinIO server. This uses the existing upload verification without re-reading
 whole files when MinIO provides a full-object checksum:
 
 ```sh
-python - "$experiment_root/long" "$experiment_root/storage" <<'PY'
-import json
-import sys
-from pathlib import Path
-import storage
-fixture, state = map(Path, sys.argv[1:])
-manifest = json.loads((fixture / "manifest.json").read_text())
-prefix = storage.digest(fixture / "manifest.json")
-with storage.exclusive(state):
-    storage.verify_server(state)
-    for item in manifest["objects"]:
-        storage.put_verified(state, prefix + "/" + item["path"],
-            fixture / item["path"], item["sha256"], checksum=True)
-print(f"s3://{storage.BUCKET}/{prefix}/")
-PY
+cargo +1.98.1 run --manifest-path ../../Cargo.toml --locked -p xtask -- selective-read upload-delta-length \
+  --fixture "$experiment_root/long" --state "$experiment_root/storage"
 ```
 
-Use the printed URI as `table_uri`, with the paced proxy running:
+Use the printed `table_root` URI as `table_uri`, with the paced proxy running:
 
 ```sh
-python delta_length_network.py run --fixture "$experiment_root/long" \
+cargo +1.98.1 run --manifest-path ../../Cargo.toml --locked -p xtask -- selective-read run-delta-length \
+  --python /path/to/oracle-venv/bin/python --harness . \
+  --fixture "$experiment_root/long" \
   --state "$experiment_root/storage" --table "$table_uri" --selection scattered \
   --binary "$experiment_root/target/release/delta-length-query" \
   --output "$experiment_root/slow-long-scattered"

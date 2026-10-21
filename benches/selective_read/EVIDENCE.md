@@ -144,8 +144,8 @@ RUN_ROOT="$PWD/run"
 
 From `readers`, prepare `build-dar`, `build-delta-rs`, `build-duckdb`,
 `build-polars`, and `build-spark` under `RUN_ROOT`, using
-[the reader build commands](../../docs/content/benchmarks/selective-read-runners.md)
-and [the Spark preparation command](../../docs/content/benchmarks/selective-read-spark.md).
+[the reader build commands](https://github.com/mag1cfrog/delta-arrow-reader/blob/eb1f58b4be8dc0d8ec3bee1615f1777a4c41bd9f/docs/content/benchmarks/selective-read-runners.md)
+and [the Spark preparation command](https://github.com/mag1cfrog/delta-arrow-reader/blob/eb1f58b4be8dc0d8ec3bee1615f1777a4c41bd9f/docs/content/benchmarks/selective-read-spark.md).
 The pinned roster is DAR 0.6.1, delta-rs 1.6.6, DuckDB 1.5.5, Polars 1.44.2,
 and Spark 4.1.1 with Delta Lake 4.3.1. Do not prepare the historical Daft adapter.
 Keep the build records beside the executables. New machines/builds retain their
@@ -167,7 +167,7 @@ WRITER="$RUN_ROOT/target/release/selective-read-fixtures"
   --page-bytes 1048576 --write-batch-rows 1024 --output "$RUN_ROOT/plan"
 ```
 
-Follow [probe, generation, and pairing](../../docs/content/benchmarks/selective-read-production-fixtures.md)
+Follow [probe, generation, and pairing](https://github.com/mag1cfrog/delta-arrow-reader/blob/09b262a158d185adc4cd31dc58c6957fbf2d9f57/docs/content/benchmarks/selective-read-production-fixtures.md)
 for `q2` and `q4`, each with `localized` and `scattered` layouts. Use the source,
 plan, writer, and output paths under `RUN_ROOT`. For one-layout staging, pass
 `--layout` to both the probe and pairing commands. Keep the probe until its full

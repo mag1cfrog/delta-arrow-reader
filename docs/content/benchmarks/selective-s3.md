@@ -376,15 +376,23 @@ query, and round, including the discarded warmups. It contains enough data to
 recompute every median, range, and aggregate ratio on this page without
 revealing SQL, names, paths, literals, identifiers, or result fingerprints.
 
-Validate the measurements and confirm that all eight generated SVG files match
-the CSV:
+The [frozen chart generator](https://github.com/mag1cfrog/delta-arrow-reader/blob/a9170602294c13f13be23f8f094469d1b859442c/benches/render_selective_s3_chart.py)
+validates the measurements and checks that all eight historical SVGs match the
+CSV. Extract the generator and its inputs into a temporary directory, then run
+the check. These commands require a repository clone containing the pinned commit:
 
-```console
-python benches/render_selective_s3_chart.py --check
+```sh
+chart_archive=$(mktemp -d)
+git archive --format=tar --output="$chart_archive/source.tar" \
+  a9170602294c13f13be23f8f094469d1b859442c \
+  benches/render_selective_s3_chart.py \
+  docs/content/benchmarks/selective-s3-results.csv docs/content/assets
+tar -xf "$chart_archive/source.tar" -C "$chart_archive"
+python3 "$chart_archive/benches/render_selective_s3_chart.py" --check
 ```
 
-Run the script without `--check` to regenerate all four charts in light and
-dark themes.
+Run the extracted script without `--check` to regenerate all four charts in
+light and dark themes under `$chart_archive/docs/content/assets`.
 
 ## Independence
 

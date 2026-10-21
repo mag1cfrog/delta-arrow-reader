@@ -71,7 +71,7 @@ fn python_filter_excludes_unrelated_sources_and_tools() -> Result<()> {
         ("crates/delta-arrow-reader-cli/build.rs", true),
         ("crates/delta-arrow-reader-python/src/lib.rs", true),
         ("crates/delta-arrow-reader-python/tests/test_table.py", true),
-        ("crates/delta-arrow-reader-core/tests/reader/https.py", true),
+        ("xtask/src/test_https.rs", false),
         (
             "crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/table/data.parquet",
             true,
@@ -361,7 +361,7 @@ fn benchmark_checks_exclude_unrelated_ci_changes() -> Result<()> {
         ("benches/selective_read/Cargo.toml", true),
         ("benches/selective_read/Cargo.lock", true),
         ("benches/selective_read/src/fixtures.rs", true),
-        ("benches/selective_read/oracle.py", true),
+        ("benches/selective_read/oracle_io.py", true),
         (
             "crates/delta-arrow-reader-core/src/reader/options.rs",
             false,
@@ -438,9 +438,14 @@ fn core_filter_preserves_benchmark_targets_and_shared_inputs() -> Result<()> {
         "crates/delta-arrow-reader-core/benches/range_planning/controlled_http.rs",
         "crates/delta-arrow-reader-core/benches/range_planning/plan_diagnostics.rs",
         "benches/selective_read/src/control_rows.rs",
-        "benches/scan_scheduling.py",
-        "benches/test_scan_scheduling.py",
-        "benches/run_order.py",
+        "xtask/src/scan_scheduling.rs",
+        "xtask/src/scan_scheduling/tests.rs",
+        "xtask/tests/scan_scheduling.rs",
+        "xtask/src/test_https.rs",
+        "xtask/src/test_https/proxy.rs",
+        "xtask/src/http_fixture.rs",
+        "xtask/src/http_fixture/table.rs",
+        "xtask/src/command.rs",
     ] {
         assert!(filter_matches(&filters, "code", path)?, "{path}");
     }
@@ -454,7 +459,7 @@ fn core_filter_preserves_benchmark_targets_and_shared_inputs() -> Result<()> {
         "benches/selective_read/src/large.rs",
         "benches/selective_read/src/tests.rs",
         "benches/selective_read/tests/large_cli.rs",
-        "benches/selective_read/oracle.py",
+        "benches/selective_read/oracle_io.py",
         "benches/selective_read/runners/dar/src/main.rs",
     ] {
         assert!(!filter_matches(&filters, "code", path)?, "{path}");
@@ -462,12 +467,22 @@ fn core_filter_preserves_benchmark_targets_and_shared_inputs() -> Result<()> {
     }
     for path in [
         "benches/query_shapes.sql",
-        "benches/render_comparison_chart.py",
-        "benches/render_selective_read_chart.py",
-        "benches/render_selective_s3_chart.py",
+        "xtask/src/selective_read_chart.rs",
+        "xtask/src/selective_read_chart/tests.rs",
     ] {
         assert!(!filter_matches(&filters, "code", path)?, "{path}");
     }
+    Ok(())
+}
+
+#[test]
+fn feature_tests_use_the_native_https_harness() -> Result<()> {
+    let ci: Value = serde_yaml_ng::from_str(include_str!("../../.github/workflows/ci.yml"))?;
+    let steps = ci["jobs"]["feature-tests"]["steps"].as_array().unwrap();
+    assert!(steps.iter().any(|step| {
+        step["name"] == "Verify HTTPS certificates and proxies"
+            && step["run"] == "cargo xtask test-https ${{ matrix.features }}"
+    }));
     Ok(())
 }
 
@@ -477,6 +492,9 @@ fn standalone_docs_skip_rust_checks() -> Result<()> {
     for path in [
         "docs/content/contributing.md",
         "docs/content/benchmarks/intra-page-reads.md",
+        "docs/content/benchmarks/selective-read-protocol.md",
+        "docs/content/benchmarks/selective-read-production-shapes.md",
+        "docs/content/benchmarks/selective-read-large-workloads.md",
         "crates/delta-arrow-reader-core/docs/public/python.md",
         "crates/delta-arrow-reader-core/docs/public/cli.md",
         "crates/delta-arrow-reader-core/docs/public/benchmarks/selective-read-results.md",
@@ -492,14 +510,6 @@ fn standalone_docs_skip_rust_checks() -> Result<()> {
             assert!(!filter_matches(&filters, name, path)?, "{name}: {path}");
         }
     }
-    for path in [
-        "docs/content/benchmarks/selective-read-protocol.md",
-        "docs/content/benchmarks/selective-read-production-shapes.md",
-        "docs/content/benchmarks/selective-read-large-workloads.md",
-    ] {
-        assert!(filter_matches(&filters, "selective_read", path)?, "{path}");
-        assert!(!filter_matches(&filters, "code", path)?, "{path}");
-    }
     Ok(())
 }
 
@@ -507,22 +517,16 @@ fn standalone_docs_skip_rust_checks() -> Result<()> {
 fn embedded_docs_trigger_their_rust_checks() -> Result<()> {
     let filters: Value = serde_json::from_str(include_str!("../../.github/path-filters.json"))?;
     let include = regex::Regex::new(r#"include_str!\("([^"]+\.md)"\)"#)?;
-    for (source, filter) in [
-        ("crates/delta-arrow-reader-core/src/guides.rs", "rust_docs"),
-        ("benches/selective_read/src/main.rs", "selective_read"),
-        ("benches/selective_read/src/production.rs", "selective_read"),
-        ("benches/selective_read/src/large.rs", "selective_read"),
-    ] {
-        assert!(filter_matches(&filters, "tooling", source)?, "{source}");
-        let source = root().join(source);
-        let contents = fs::read_to_string(&source)?;
-        let documents: Vec<_> = include.captures_iter(&contents).collect();
-        assert!(!documents.is_empty(), "{}", source.display());
-        for document in documents {
-            let path = source.parent().unwrap().join(&document[1]).canonicalize()?;
-            let path = path.strip_prefix(root())?.to_str().unwrap();
-            assert!(filter_matches(&filters, filter, path)?, "{filter}: {path}");
-        }
+    let source = "crates/delta-arrow-reader-core/src/guides.rs";
+    assert!(filter_matches(&filters, "tooling", source)?);
+    let source = root().join(source);
+    let contents = fs::read_to_string(&source)?;
+    let documents: Vec<_> = include.captures_iter(&contents).collect();
+    assert!(!documents.is_empty(), "{}", source.display());
+    for document in documents {
+        let path = source.parent().unwrap().join(&document[1]).canonicalize()?;
+        let path = path.strip_prefix(root())?.to_str().unwrap();
+        assert!(filter_matches(&filters, "rust_docs", path)?, "{path}");
     }
     Ok(())
 }

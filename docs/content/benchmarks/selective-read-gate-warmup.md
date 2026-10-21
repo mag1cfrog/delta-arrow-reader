@@ -17,8 +17,7 @@ or remove initialization from query clocks.
 
 Add `--gate-warmup` to the existing revision 6 campaign command. Select exactly one
 case and retain both profiles. The flag can accompany `--combined-diagnostics`.
-The controller freezes `gate_warmup: true` and this document's SHA-256 as
-`warmup_amendment_sha256` in the campaign configuration. Every inventory entry
+The controller freezes `gate_warmup: true` in the campaign configuration. Every inventory entry
 also declares the method before timing. Earlier campaigns retain their standalone
 warmup rules and identities.
 
@@ -35,7 +34,7 @@ reference is needed.
 
 ## Compare and reproduce results
 
-The overview records each campaign's warming method and amendment hash. Gate
+The overview records each campaign's warming method. Gate
 warmup and standalone warmup are distinct preparation methods. Compare readers
 within the same case and declared method; never pool samples across methods or
 retag completed observations. All method changes must precede the new campaign.

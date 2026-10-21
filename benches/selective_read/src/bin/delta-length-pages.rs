@@ -328,29 +328,6 @@ fn main() -> Result<()> {
     if args.len() == 3 && args[1] == "inspect" {
         return inspect(Path::new(&args[2]));
     }
-    if args.len() == 5 && args[1] == "dv" {
-        use delta_kernel::actions::deletion_vector_writer::{
-            KernelDeletionVector, StreamingDeletionVectorWriter,
-        };
-        let rows: u64 = args[2].to_str().ok_or("row count")?.parse()?;
-        if rows == 0 || rows > 1048576 {
-            return Err("DV fixture row bound".into());
-        }
-        let uuid = uuid::Uuid::parse_str(args[3].to_str().ok_or("DV UUID")?)?;
-        let mut bitmap = KernelDeletionVector::new();
-        bitmap.add_deleted_row_indexes((0..rows).step_by(103));
-        let mut bytes = Vec::new();
-        let mut writer = StreamingDeletionVectorWriter::new(&mut bytes);
-        let descriptor = writer.write_deletion_vector(bitmap)?;
-        writer.finalize()?;
-        std::io::Write::write_all(&mut File::create_new(&args[4])?, &bytes)?;
-        println!(
-            "{}",
-            json!({"storageType":"u","pathOrInlineDv":z85::encode(uuid.as_bytes()),
-            "offset":descriptor.offset,"sizeInBytes":descriptor.size_in_bytes,"cardinality":descriptor.cardinality})
-        );
-        return Ok(());
-    }
     if args.len() != 2 {
         return Err("delta-length-pages NEW_OUTPUT_DIRECTORY".into());
     }
@@ -387,7 +364,7 @@ fn main() -> Result<()> {
         }
     }
     let report = json!({"format":"delta-length-decoder-proof-v1","scope":"local correctness and page-body byte accounting; not network timings",
-        "parquet":"58.4.0","source_sha256":hash_bytes(concat!(include_str!("delta-length-pages.rs"),include_str!("../delta_length.rs"))),
+        "parquet":"58.4.0",
         "lockfile_sha256":hash_bytes(include_str!("../../Cargo.lock")),"cases":results});
     fs::write(
         output.join("results.json"),

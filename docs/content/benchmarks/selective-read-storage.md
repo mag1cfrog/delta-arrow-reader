@@ -17,15 +17,17 @@ Use Linux x86-64 with cgroup v2, a working systemd user manager, `taskset`, `cur
 with `--aws-sigv4`, Go toolchain downloads, and an authenticated `gh` CLI.
 Prepare the [five reader builds](selective-read-runners.md), the
 [oracle environment](selective-read-oracle.md), and
-[public fixtures](selective-read-fixtures.md) first. Run from the repository root:
+[public fixtures](selective-read-fixtures.md) first. Also build the
+[native controller](../../../benches/selective_read/README.md#reproduce-a-run)
+for supervised reader invocations. Run from the repository root:
 
 ```sh
-python3 -B benches/selective_read/storage.py prepare \
+cargo xtask selective-read prepare-storage \
   --output ../selective-read-minio-build
-python3 -B benches/selective_read/storage.py start \
+cargo xtask selective-read start-storage \
   --build ../selective-read-minio-build --state ../selective-read-storage \
   --port 19000
-python3 -B benches/selective_read/storage.py upload \
+cargo xtask selective-read upload-storage \
   --state ../selective-read-storage --fixtures ../selective-read-smoke \
   --output ../selective-read-upload.json
 ```
@@ -34,7 +36,7 @@ Build and state directories must be new. Preparation checks out source commit
 `07c3a429bfed433e49018cb0f78a52145d4bedeb` and builds release
 `RELEASE.2025-09-07T16-13-09Z` with Go 1.24.7, `CGO_ENABLED=0`, Linux/amd64 and
 `GOAMD64=v1`. To reuse an existing clean checkout at that exact commit, pass
-`--source PATH` to `prepare`. Keep the binary, build record, Go module files and
+`--source PATH` to `prepare-storage`. Keep the binary, build record, Go module files and
 license together.
 
 The service binds only to `127.0.0.1`. Generated credentials live in the private
@@ -51,8 +53,9 @@ supplied SHA-256 while receiving a PUT and rejects mismatched bytes. Conditional
 PUTs still preserve existing objects; their stored checksum must match too.
 Objects without a full SHA-256, including legacy and multipart objects, receive
 the complete GET verification. ETags are not used as content checksums.
-The receipt records the requested method, actual verification counts and
-uploader source hash. The default standalone upload uses complete GETs.
+The receipt records the requested method and actual verification counts. The
+default standalone upload uses complete GETs.
+Inventory selection, upload and receipt creation run in Rust.
 
 To avoid hashing local files again in a separate campaign process, use the
 campaign's `--upload-table` option described in the
@@ -64,7 +67,7 @@ mtime or ctime forces a fresh hash. Upload preparation stays outside query clock
 For a large staged pair, upload one native table at a time:
 
 ```sh
-python3 -B benches/selective_read/storage.py upload \
+cargo xtask selective-read upload-storage \
   --state ../selective-read-storage --fixtures ../production-q2-pairs \
   --table production.q2.scattered --output ../q2-scattered-upload.json
 ```
@@ -77,12 +80,13 @@ upload selection does not block it. Pass this receipt and the matching `--case`
 to the campaign runner. Other tables need their own verified upload. Keep both
 snapshots and all eight main cases in the complete publication inventory.
 
-The launcher selects eight logical CPUs for the reader, two separate physical
+The Rust controller selects eight logical CPUs for the reader, two separate physical
 cores for MinIO, and a third separate core for the trace process. It never splits
 SMT siblings across these groups. Insufficient CPU topology fails setup. MinIO
 gets a 4 GiB memory cap; readers get 8 GiB. Both disable swap. Setup verifies
 MinIO's effective affinity and cgroup limits; every reader launch verifies and
-saves its own limits before table I/O. These caps include native allocations.
+saves its own limits before table I/O through `xtask selective-read exec-reader`.
+These caps include native allocations.
 
 `server.json` records the CPU topology, placement, kernel, memory, mount, curl
 version/hash, server build identity, startup command and cache policy.
@@ -98,10 +102,10 @@ To measure a remote-network profile, attach the optional proxy after starting
 MinIO and uploading the fixtures:
 
 ```sh
-python3 -B benches/selective_read/network.py start \
+cargo xtask selective-read start-network \
   --state ../selective-read-storage --output ../selective-read-network \
   --latency-ms 200 --jitter-ms 20 --mbps 150 --seed 0
-python3 -B benches/selective_read/check_network.py \
+cargo xtask selective-read check-network \
   --state ../selective-read-storage --output ../selective-read-network-check
 ```
 
@@ -156,10 +160,10 @@ The campaign records and hashes the attached network configuration.
 To detach the proxy while keeping MinIO running:
 
 ```sh
-python3 -B benches/selective_read/network.py stop --state ../selective-read-storage
+cargo xtask selective-read stop-network --state ../selective-read-storage
 ```
 
-Stopping MinIO through `storage.py stop` also stops its attached proxy. The
+Stopping MinIO through `cargo xtask selective-read stop-storage` also stops its attached proxy. The
 proxy's build/profile record and shutdown receipt remain in its output directory.
 
 The focused HTTP check can run without MinIO:
@@ -168,46 +172,38 @@ The focused HTTP check can run without MinIO:
 GOTOOLCHAIN=go1.24.7 go test -race -v \
   benches/selective_read/network_proxy.go \
   benches/selective_read/network_proxy_test.go
-python3 -B benches/selective_read/test_network.py
+cargo +1.94.1 test --locked -p xtask --bin xtask selective_read::network::
 ```
 
 Both checks are manual. This transport adds no CI job or performance threshold.
 
 ## Validate, time and observe a remote case
 
-Use the oracle environment's Python for this example. All paths below are relative
-to the repository root. The output directories must be new:
+Build the controller and prepare an independent reference. All paths below are
+relative to the repository root. The output directories must be new:
 
-```python
-import json
-from pathlib import Path
-import sys
+```sh
+cargo +1.98.1 build --locked -p xtask
+cargo +1.98.1 run --locked -p xtask -- selective-read prepare-reference \
+  --python ../selective-read-oracle-venv/bin/python \
+  --fixtures ../selective-read-smoke --case li.clustered.eq2-in20 \
+  --output ../remote-reference
 
-sys.path.insert(0, "benches/selective_read")
-import observe
-import oracle
-import run
-
-state = Path("../selective-read-storage")
-fixtures = Path("../selective-read-smoke")
-binary = Path("../selective-read-dar-build/selective-read-dar")
-root = json.loads(Path("../selective-read-upload.json").read_text())["table_root"]
-case = "li.clustered.eq2-in20"
-reference = Path("../remote-reference")
-oracle.prepare(fixtures, case, reference)
-payload = run.request(fixtures, case, "open", "validation", "remote-validation",
-                      table_uri=root + "/li.clustered")
-validation = Path("../remote-validation")
-record = observe.invoke(state, binary, payload, validation, fixtures, reference)
-assert record["status"] == "success"
-
-timed = run.request(fixtures, case, "open", "timing", "remote-timing",
-                    table_uri=payload["table_uri"],
-                    correctness=validation / "correctness.json")
-assert observe.invoke(state, binary, timed, Path("../remote-timing"))["status"] == "success"
-io = dict(payload, purpose="io", run_id="remote-io")
-assert observe.invoke(state, binary, io, Path("../remote-io"))["status"] == "success"
+benchmark_reader() {
+  target/debug/xtask selective-read run-reader \
+    --state ../selective-read-storage --upload ../selective-read-upload.json \
+    --binary ../selective-read-dar-build/selective-read-dar \
+    --fixtures ../selective-read-smoke --case li.clustered.eq2-in20 "$@"
+}
+benchmark_reader --purpose validation --reference ../remote-reference \
+  --python ../selective-read-oracle-venv/bin/python --output ../remote-validation
+benchmark_reader --purpose timing --correctness ../remote-validation/correctness.json \
+  --output ../remote-timing
+benchmark_reader --purpose io --output ../remote-io
 ```
+
+The upload receipt binds the remote URI to the server, fixture manifest and
+selected objects. The controller verifies it before starting each invocation.
 
 Substitute any other prepared executable to use the same server and observer.
 The launcher removes inherited AWS profiles, endpoints and proxies, supplies the
@@ -218,13 +214,13 @@ invocations and uploads. Keep this server dedicated to the benchmark.
 For an existing saved request, the equivalent command is:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/observe.py run \
+target/debug/xtask selective-read run-reader \
   --state ../selective-read-storage \
   --binary ../selective-read-dar-build/selective-read-dar \
   --request ../remote-io/request.json --output ../remote-io-repeat
 ```
 
-Validation also requires `--fixtures` and `--reference`. Timing requires the
+Validation also requires `--fixtures`, `--reference` and the pinned `--python`. Timing requires the
 request's matching remote correctness certificate. A local-file certificate
 cannot authorize the same query against S3.
 
@@ -232,6 +228,10 @@ cannot authorize the same query against S3.
 limits, server identity, capture status, and I/O totals. A sibling directory with
 the suffix `-io` holds the capture proof and sanitized `requests.jsonl`. Failed
 captures retain their artifacts and invalidate the storage observation.
+The Rust controller launches the reader, drains its cgroup and pending requests,
+and reconciles the capture before the oracle checks validation exports.
+The capture process runs as `xtask selective-read capture`; its proof records
+the effective observer affinity.
 
 ## Observation boundary
 
@@ -292,22 +292,24 @@ the monotonic `diagnostic_session_ns` is used only for observer overhead.
 Use the smoke fixture to check the entire path without a report-scale campaign:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/check_storage.py \
+target/debug/xtask selective-read check-storage \
+  --python ../selective-read-oracle-venv/bin/python \
   --state ../selective-read-storage --fixtures ../selective-read-smoke \
   --binary ../selective-read-dar-build/selective-read-dar \
   --binary ../selective-read-delta-rs-build/selective-read-delta-rs \
   --binary ../selective-read-duckdb-build/selective-read-duckdb \
   --binary ../selective-read-polars-build/selective-read-polars \
-  --binary ../selective-read-daft-build/selective-read-daft \
   --output ../storage-check
 ```
 
 The check validates uploads, known request bytes, a canceled download, explicit
 retry metadata, trace completeness, and output from every remote reader against
-the independent oracle. It covers compound predicates in both layouts, an empty
-result, LIMIT, wide projection, and ten-query reuse. The pinned Spark DV fixture
-checks real sidecar traffic for the four supporting readers and Daft's explicit
-unsupported result. It does not change the later report-scale DV scenarios.
+the independent oracle. Rust controls the complete check, including reader
+invocations and the ABBA observer calibration. Python prepares references and
+checks each reader's exported values. It covers compound
+predicates in both layouts, an empty result, LIMIT, wide projection, and
+ten-query reuse. The pinned Spark DV fixture checks real sidecar traffic for
+the four readers above. It does not change the later report-scale DV scenarios.
 
 For each reader, one warm-up per trace mode precedes four fresh-process diagnostic
 runs in off/on/on/off order. `checks.json` preserves the separate durations,
@@ -324,5 +326,5 @@ outside the repository; publish only reviewed, sanitized records.
 Stop the owned service when finished:
 
 ```sh
-python3 -B benches/selective_read/storage.py stop --state ../selective-read-storage
+cargo xtask selective-read stop-storage --state ../selective-read-storage
 ```

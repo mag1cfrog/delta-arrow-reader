@@ -52,7 +52,7 @@ def interrupt_loading():
 
 def http_fixture():
     root = Path(__file__).resolve().parents[3]
-    spec = importlib.util.spec_from_file_location("reader_https", root / "crates/delta-arrow-reader-core/tests/reader/https.py")
+    spec = importlib.util.spec_from_file_location("reader_http", Path(__file__).with_name("_http.py"))
     http = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(http)
     directory = root / "crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/nested_mapping/table"

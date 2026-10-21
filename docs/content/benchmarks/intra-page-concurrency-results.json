@@ -8,7 +8,6 @@
   "build": {
     "reader_git_commit": "7015f46743688c952dd3a08c0a5d0fa9940ab100",
     "harness_git_commit": "7015f46743688c952dd3a08c0a5d0fa9940ab100",
-    "diagnostic_patch_sha256": "4c6869c4c0cea4a727851554a7f48d58ea0791f063aeb3c0bf9d8a9a27648ea4",
     "executable_sha256": "2f1f77541bf9a6fb2d9ff3c4aca7e45982a75d09f0b8b61c492d059252e4b8d0",
     "lockfile_sha256": "3e33227b8d98d1fbb4840f013ce48ceb9ad19fad8f460e4a0152c1737e514893",
     "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
@@ -17,13 +16,6 @@
     "target": "x86_64-unknown-linux-gnu"
   },
   "build_record_sha256": "69333e66fa18b37616841a8cd51cb246024ecd853db60500c0ffae04f9cdd7f8",
-  "harness_source_sha256": {
-    "benches/selective_read/runners/common.rs": "59964f02cb6cbb0982cc4cf7231e632a01a359daf52c5b8fd88494a78e27706d",
-    "benches/selective_read/runners/run.py": "b2dc649cc8c517c2fd879fbfa14d675789e383ced33123f57b7ca888b0b5c3c8",
-    "benches/selective_read/runners/supervise.py": "85663059110e1f69363690f465e58b31b26543b9b40b51ff9149b829f089fb02",
-    "benches/selective_read/intra_page.py": "a539ddddd569c593e60abee03bb4b45d41e927d17e4a5d7a1f83665cfa2c4ba8",
-    "benches/selective_read/test_intra_page.py": "260847b30ea3957ab52a16301605e250254f26679c6715e80cdc5148a514c5d9"
-  },
   "analysis_sha256": "6a2d3484dfd04889f7092633a4703a7d19a930abbf6b5bb93d90c83f1a8f5998",
   "method": {
     "purpose": "Shared-provider concurrent-query validation on the calibration fix; only the benchmark harness is changed.",
@@ -70,7 +62,7 @@
     },
     "cache": "Fresh reader process per sample; reused OS/MinIO caches; exact validation before timing.",
     "io": "All query-group Parquet response bytes after the first footer request. Automatic initialization separately completes 24 MiB / 3,084 requests. HTTP body bytes include incomplete responses and continuations, not headers or TLS overhead.",
-    "harness_patch": "The historical build-record field diagnostic_patch_sha256 identifies the benchmark-only concurrency patch. Production reader sources are unchanged from reader_git_commit.",
+    "harness_patch": "The build includes the benchmark-only concurrency patch. Production reader sources are unchanged from reader_git_commit.",
     "measurement_activity": "Lightweight public-S3 metadata discovery overlapped part of the matrix. Public-S3 query controls, compilation and full trace analysis ran after all concurrent timing sessions finished."
   },
   "networks": [
@@ -899,7 +891,6 @@
       "reader_commit": "7015f46743688c952dd3a08c0a5d0fa9940ab100",
       "reader_source_changes": "",
       "executable_sha256": "13d7925536cdc9d470eb978f9eeb570de1c334b063d529e9be901c81c87d3b55",
-      "driver_sha256": "c33ef63de1a88b9e6fa3ac5647c582b23f1941e93a30342a52940315d9a1c9d7",
       "validator_sha256": "1243c8212c56bcae3994558a4e2962b50de749487992c7eaa0762a837a7b6fc7",
       "lockfile_sha256": "22a8de62e958d6a64c1f6d6bf96789ca24081d1a8384817ccc99c3c23fb08166"
     },

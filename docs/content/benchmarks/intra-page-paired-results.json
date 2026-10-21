@@ -106,10 +106,6 @@
       "seed": "0"
     }
   ],
-  "network_proxy_source_sha256": {
-    "network.py": "9352d4685076568449bc37320a227278366c45acbb52a39ed972007db824544e",
-    "network_proxy.go": "5d0051d91e42000e341058e6ff11ba59c75731560524d5262ad0d84c46b36c79"
-  },
   "fixture_verification": {
     "fixtures": [
       {
@@ -142,7 +138,6 @@
       "reference_sha256": "ba79424617a56edfd8c11be56b5a63a388196953a9481d23653e90074b37a605",
       "snapshot_version": 1,
       "output_rows": 894,
-      "oracle_sha256": "1e97d04bc787b5f807e7ad817cd2e339579c261759d1779538e0ad53d9cbfddc",
       "workload_manifest_sha256": "d67e605e806e951219646c22bcc4ebe849b2dcdf16e1e737cff399bfc000f8e4",
       "projected_columns": 69
     },
@@ -154,7 +149,6 @@
       "reference_sha256": "77bd6c845561524405dd2187e189532157bbb8dc089461ce3b5b627b780ef6ea",
       "snapshot_version": 1,
       "output_rows": 894,
-      "oracle_sha256": "1e97d04bc787b5f807e7ad817cd2e339579c261759d1779538e0ad53d9cbfddc",
       "workload_manifest_sha256": "d67e605e806e951219646c22bcc4ebe849b2dcdf16e1e737cff399bfc000f8e4",
       "projected_columns": 71
     }

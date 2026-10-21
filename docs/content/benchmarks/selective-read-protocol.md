@@ -24,10 +24,9 @@ are part of the main evidence. Three metadata-reuse session profiles are
 reported separately. No minimum speedup is a completion criterion.
 
 Revision 2 expands comparison coverage without changing the original fixture
-generation rules or object identities. A saved generator manifest keeps its
-original protocol hash as provenance. New validation and measurement records
-also identify comparison revision 2 and this document's hash; an old fixture
-manifest alone cannot satisfy the new correctness gate.
+generation rules or object identities. Validation and measurement records
+declare comparison revision 2 and the query, reader settings and input
+identities. An old fixture manifest alone cannot satisfy the correctness gate.
 
 ## Questions and existing evidence
 
@@ -442,7 +441,7 @@ but cannot stand in for the 4,096-file geometry check.
 Use the same immutable objects and explicit snapshot version per case. No
 pre-filtered file list, per-case tuning, or unmeasured table open is allowed.
 Canonical SQL defines the semantics. Native Polars/Daft expressions may express
-that same projection, predicate, and limit; freeze the translation and its hash,
+that same projection, predicate, and limit; freeze the complete translation,
 and verify it with the independent oracle. Do not replace output with an
 aggregate, change literals, or move filtering into the harness.
 
@@ -562,10 +561,11 @@ missing/duplicated rows, and wrong snapshots. Full logical results must agree
 across layouts for unlimited queries.
 
 Validation and diagnostic plans are separate invocations. Save oracle status
-against the protocol, fixture, SQL, and executable hashes; a changed input or
-build invalidates the gate. Failed or unsupported cases remain visible and
+against the explicit execution contract, canonical SQL, native expressions,
+reader settings and artifact identities. Changed queries, settings or artifacts
+invalidate the gate. Failed or unsupported cases remain visible and
 cannot produce speedups. Record the canonical SQL and any native-expression
-translation hashes so an adapter change invalidates its previous validation.
+translation descriptions so a changed native expression invalidates its previous validation.
 
 ## Timing and observations
 
@@ -609,7 +609,7 @@ correctness checks. Keep excluded readers and their statuses in the inventory.
 Warm up each runnable reader once in that order and once in reverse order,
 using a fresh process for each invocation.
 
-Reuse `benches/run_order.py::balanced_orders` on the runnable subset. One cycle
+The native campaign scheduler balances the runnable subset. One cycle
 contains `2*N` rounds for `N` readers, with each reader appearing once per round
 and each position and ordered adjacency represented twice per cycle. Repeat
 complete cycles until each reader has at least ten measured process samples:
@@ -678,10 +678,10 @@ which layer pruned the data. Use plans, independent expected candidates, common
 I/O, and available internal counters together. Missing or unsupported metrics
 are null with a reason, never zero.
 
-Each raw JSONL observation must identify protocol revision/hash, campaign and
+Each raw JSONL observation must identify comparison revision, campaign and
 run ID, timing/diagnostic mode, case/profile/session and query index, repetition
 and order, reader/source/build/config identity, fixture manifest/hash, snapshot,
-expanded SQL/hash, native-expression hash when applicable, capability/probe
+expanded SQL, native expressions when applicable, capability/probe
 identity, execution mode, correctness prerequisite, status/error, output rows, timers,
 resource metrics, and linked diagnostic artifacts. Store nanoseconds and bytes
 as integers. Preserve raw logs and complete resolved settings without secrets.

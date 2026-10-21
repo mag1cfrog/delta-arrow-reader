@@ -373,7 +373,7 @@ pub fn generate(config: &Config, capacity: Option<Value>) -> Result<Value> {
         }
         parents.push(
             json!({"manifest_sha256": fixtures::hash_bytes(&bytes), "profile": parent["profile"],
-                "protocol_sha256": parent["protocol_sha256"], "generator": parent["generator"]}),
+                "generator": parent["generator"]}),
         );
     }
     if tables.len() != selected.len() {
@@ -521,7 +521,7 @@ pub fn generate(config: &Config, capacity: Option<Value>) -> Result<Value> {
         &config.output.join("generator-Cargo.lock"),
         LOCKFILE.as_bytes(),
     )?;
-    let mut manifest = json!({"protocol": "selective-read-v1", "protocol_sha256": fixtures::hash_bytes(PROTOCOL.as_bytes()),
+    let mut manifest = json!({"protocol": "selective-read-v1",
         "profile": config.profile.name(), "status": "complete", "generator": generator_identity()?,
         "dv_writer": "delta_kernel 0.25.0 StreamingDeletionVectorWriter portable Roaring", "parents": parents,
         "sources": sources.values().map(|(_, s)| s).collect::<Vec<_>>(), "tables": prepared,
