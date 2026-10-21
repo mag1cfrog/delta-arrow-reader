@@ -1,5 +1,4 @@
 use super::*;
-use sha2::{Digest, Sha256};
 
 fn inventory(revision: u64, mask: usize) -> Vec<(String, Value)> {
     let readers = roster(&json!({"comparison_revision": revision})).unwrap();
@@ -14,40 +13,166 @@ fn inventory(revision: u64, mask: usize) -> Vec<(String, Value)> {
 }
 
 #[test]
-fn all_reader_subsets_match_the_python_schedule() -> Result<()> {
-    // SHA-256 of canonical schedules from the Python controller at 73f455f.
-    for (revision, expected) in [
-        (
-            2,
-            "9cd84fa9c0336146c1573dc3cd6d7d26fb37a93beb52680698eda0213c5682c3",
-        ),
-        (
-            4,
-            "8ce9a9eccec8bc50cdbf1f60b7973b636c013a0622f950476072eb70d857d07a",
-        ),
-        (
-            6,
-            "39c82c4c99c1510cd4d1550ff455752e2764cb7a0e8507523e1cd3694547ae7b",
-        ),
-    ] {
-        let mut hash = Sha256::new();
+fn all_reader_subsets_keep_samples_balanced_and_diagnostics_after_timing() -> Result<()> {
+    for revision in [2, 4, 6] {
+        let readers = [
+            "delta-arrow-reader",
+            "delta-rs",
+            "duckdb",
+            "polars",
+            if revision == 6 { "spark" } else { "daft" },
+        ];
         for mask in 0..32 {
+            let enabled: Vec<_> = readers
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| mask & (1 << index) != 0)
+                .map(|(_, reader)| *reader)
+                .collect();
+            let jobs = inventory(revision, mask);
             let slots = schedule(
-                &inventory(revision, mask),
+                &jobs,
                 "reference",
                 &json!({"comparison_revision": revision}),
                 None,
                 None,
                 None,
             )?;
-            hash.update(serde_json::to_vec(&slots)?);
-            hash.update(b"\n");
+            let slots = array(&slots)?;
+            if enabled.is_empty() {
+                assert!(slots.is_empty());
+                continue;
+            }
+            let samples = if revision == 2 {
+                [0, 10, 12, 12, 16, 10][enabled.len()]
+            } else {
+                5
+            };
+            let phases = [
+                ("warmup", if revision == 2 { 2 } else { 1 }),
+                ("timing", samples),
+                ("plan", 1),
+                ("diagnostic_warmup", if revision == 2 { 2 } else { 0 }),
+                ("diagnostic", if revision == 2 { 2 } else { 1 }),
+                ("observer_baseline", if revision == 2 { 2 } else { 0 }),
+            ];
+            assert_eq!(
+                slots.len(),
+                jobs.len() * enabled.len() * phases.iter().map(|(_, n)| n).sum::<usize>()
+            );
+            for (index, slot) in slots.iter().enumerate() {
+                assert_eq!(slot["run_id"], format!("reference-{index:05}"));
+                assert_eq!(slot["comparison_revision"], revision);
+                assert!(jobs.iter().any(|(job, _)| slot["job_id"] == *job));
+                assert!(enabled.contains(&text(&slot["reader_id"])?));
+                assert_eq!(
+                    slot["traced"],
+                    matches!(text(&slot["stage"])?, "diagnostic" | "diagnostic_warmup")
+                );
+            }
+            assert!(
+                slots.iter().rposition(|s| s["stage"] == "timing")
+                    < slots.iter().position(|s| s["stage"] == "plan")
+            );
+            for (job, _) in &jobs {
+                let stage = |name: &str| {
+                    slots
+                        .iter()
+                        .filter(|s| s["job_id"] == *job && s["stage"] == name)
+                        .collect::<Vec<_>>()
+                };
+                for reader in &enabled {
+                    for (phase, count) in phases {
+                        assert_eq!(
+                            stage(phase)
+                                .iter()
+                                .filter(|s| s["reader_id"] == *reader)
+                                .count(),
+                            count,
+                            "revision {revision}, subset {mask}, {job}, {reader}, {phase}"
+                        );
+                    }
+                }
+                let warmups = stage("warmup");
+                let expected: Vec<_> = enabled
+                    .iter()
+                    .copied()
+                    .chain(enabled.iter().rev().copied().take(if revision == 2 {
+                        enabled.len()
+                    } else {
+                        0
+                    }))
+                    .collect();
+                assert_eq!(
+                    warmups
+                        .iter()
+                        .map(|s| text(&s["reader_id"]))
+                        .collect::<Result<Vec<_>>>()?,
+                    expected
+                );
+                let timing = stage("timing");
+                assert!(
+                    slots
+                        .iter()
+                        .rposition(|s| s["job_id"] == *job && s["stage"] == "warmup")
+                        < slots
+                            .iter()
+                            .position(|s| s["job_id"] == *job && s["stage"] == "timing")
+                );
+                let mut positions = BTreeMap::new();
+                for (repetition, round) in timing.chunks(enabled.len()).enumerate() {
+                    let actual: BTreeSet<_> = round
+                        .iter()
+                        .map(|s| text(&s["reader_id"]))
+                        .collect::<Result<_>>()?;
+                    assert_eq!(actual, enabled.iter().copied().collect());
+                    for (position, slot) in round.iter().enumerate() {
+                        assert_eq!(slot["repetition"], repetition);
+                        assert_eq!(slot["order"], position);
+                        *positions
+                            .entry((text(&slot["reader_id"])?, position))
+                            .or_insert(0) += 1;
+                    }
+                }
+                for reader in &enabled {
+                    let counts: Vec<_> = (0..enabled.len())
+                        .map(|position| *positions.get(&(*reader, position)).unwrap_or(&0))
+                        .collect();
+                    assert!(
+                        counts.iter().max().unwrap() - counts.iter().min().unwrap() <= 1,
+                        "unbalanced reader positions: {reader}: {counts:?}"
+                    );
+                }
+                if revision == 2 {
+                    let diagnostics: Vec<_> = slots
+                        .iter()
+                        .filter(|s| {
+                            s["job_id"] == *job
+                                && matches!(
+                                    s["stage"].as_str(),
+                                    Some("diagnostic" | "observer_baseline")
+                                )
+                        })
+                        .collect();
+                    for (index, pair) in diagnostics.chunks_exact(2).enumerate() {
+                        let repetition = index / enabled.len();
+                        let position = index % enabled.len();
+                        let reader = enabled[if repetition == 0 {
+                            position
+                        } else {
+                            enabled.len() - 1 - position
+                        }];
+                        for slot in pair {
+                            assert_eq!(slot["reader_id"], reader);
+                            assert_eq!(slot["repetition"], repetition);
+                            assert_eq!(slot["order"], position);
+                        }
+                        assert_eq!(pair[0]["traced"], repetition == 1);
+                        assert_eq!(pair[1]["traced"], repetition == 0);
+                    }
+                }
+            }
         }
-        assert_eq!(
-            format!("{:x}", hash.finalize()),
-            expected,
-            "revision {revision}"
-        );
     }
     Ok(())
 }

@@ -1,22 +1,96 @@
 use super::*;
 
 #[test]
-fn matrix_matches_the_retired_python_runner() {
+fn matrix_keeps_transport_controls_progress_probes_and_reproducible_ordering() {
     let cases = cases();
     assert_eq!(cases.len(), 92);
+    assert_eq!(
+        cases.iter().map(Case::name).collect::<BTreeSet<_>>().len(),
+        cases.len()
+    );
     assert_eq!(
         cases.iter().filter(|case| case.role == "progress").count(),
         16
     );
-    let matrix: String = cases
-        .iter()
-        .map(|case| format!("{}\t{}\n", case.name(), case.role))
-        .collect();
-    // Captured from the Python runner at fec8403, including the original case order.
-    assert_eq!(
-        format!("{:x}", Sha256::digest(matrix)),
-        "5ea34129d12e8f0f2b43c9d5a8e17fd307ba3c76025b6bc3c6f028dd9aadbe0b"
-    );
+    for (shape, count) in [
+        ("tiny", 4),
+        ("unequal-tiny", 4),
+        ("small", 30),
+        ("batches", 28),
+        ("unequal", 12),
+        ("large", 14),
+    ] {
+        let local: Vec<_> = cases
+            .iter()
+            .filter(|c| c.shape == shape && c.transport == "local")
+            .collect();
+        let remote: Vec<_> = cases
+            .iter()
+            .filter(|c| c.shape == shape && c.transport == "http")
+            .collect();
+        assert_eq!(local.len(), count / 2, "{shape}");
+        assert_eq!(remote.len(), local.len(), "{shape}");
+        for (local, remote) in local.iter().zip(remote) {
+            assert_eq!(
+                (
+                    local.role,
+                    local.partitions,
+                    local.cap,
+                    local.prefetch,
+                    local.delay_us,
+                    local.limit,
+                    local.backend
+                ),
+                (
+                    remote.role,
+                    remote.partitions,
+                    remote.cap,
+                    remote.prefetch,
+                    remote.delay_us,
+                    remote.limit,
+                    remote.backend
+                )
+            );
+            if local.role == "progress" {
+                assert!(matches!(shape, "small" | "batches"));
+                assert_eq!(local.partitions, 16);
+                assert!(local.cap.is_some_and(|cap| cap < local.partitions));
+                assert_eq!((local.delay_us, local.limit), (0, None));
+            }
+        }
+        if matches!(shape, "small" | "batches") {
+            assert!(
+                local
+                    .iter()
+                    .any(|c| c.role == "performance" && c.delay_us == 1000 && c.limit.is_none())
+            );
+            assert!(
+                local
+                    .iter()
+                    .any(|c| c.role == "performance" && c.delay_us == 0 && c.limit == Some(1))
+            );
+            assert_eq!(
+                local
+                    .iter()
+                    .filter(|c| c.role == "progress" && c.backend == "direct")
+                    .count(),
+                3
+            );
+            assert_eq!(
+                local
+                    .iter()
+                    .filter(|c| c.role == "progress" && c.backend == "kernel")
+                    .count(),
+                1
+            );
+            assert!(
+                local
+                    .iter()
+                    .filter(|c| c.role == "performance")
+                    .all(|c| c.cap.is_none_or(|cap| cap >= c.partitions))
+            );
+        }
+    }
     let order = ordered_cases(&cases, 0);
     assert_eq!(order, ordered_cases(&cases, 0));
     assert_ne!(order, ordered_cases(&cases, 1));
@@ -58,15 +132,24 @@ fn binary_orders_balance_positions_and_adjacencies() {
 }
 
 #[test]
-fn tree_hash_matches_python_file_identity() -> Result<()> {
+fn tree_identity_tracks_relative_paths_and_bytes_independently_of_creation_order() -> Result<()> {
     let root = tempfile::tempdir()?;
+    let copy = tempfile::tempdir()?;
     fs::create_dir(root.path().join("a"))?;
     fs::write(root.path().join("z"), b"world")?;
     fs::write(root.path().join("a/one"), b"hello")?;
-    assert_eq!(
-        tree_hash(root.path())?,
-        "e92898788e438c70f3849f9984ac75fc8802103ddbf93cbba690146a2b05a9fb"
-    );
+    let original = tree_hash(root.path())?;
+    fs::create_dir(copy.path().join("a"))?;
+    fs::write(copy.path().join("a/one"), b"hello")?;
+    fs::write(copy.path().join("z"), b"world")?;
+    assert_eq!(tree_hash(copy.path())?, original);
+    fs::write(copy.path().join("a/one"), b"HELLO")?;
+    assert_ne!(tree_hash(copy.path())?, original);
+    fs::write(copy.path().join("a/one"), b"hello")?;
+    fs::rename(copy.path().join("a/one"), copy.path().join("a/two"))?;
+    assert_ne!(tree_hash(copy.path())?, original);
+    fs::rename(copy.path().join("a/two"), copy.path().join("a/one"))?;
+    assert_eq!(tree_hash(copy.path())?, original);
     Ok(())
 }
 
