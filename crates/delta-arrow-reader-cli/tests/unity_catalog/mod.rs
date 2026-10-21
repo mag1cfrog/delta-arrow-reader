@@ -550,6 +550,16 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
 fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResult {
     let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
     for args in [
+        vec!["capabilities"],
+        vec!["capabilities", "--schema", "storage-options"],
+        vec!["capabilities", "--schema", "execution-options"],
+        vec!["capabilities", "--schema", "predicate"],
+    ] {
+        let output = run_with_timeout(&mut fixture.command(&args))?;
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+    }
+    for args in [
         vec!["--help"],
         vec!["--version"],
         vec!["inspect", "--help"],

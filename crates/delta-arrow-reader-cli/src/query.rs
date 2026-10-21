@@ -31,8 +31,8 @@ use crate::{
     InputIoSnafu, QuerySnafu, TableArgs, diagnostics::ErrorClassification, parse_unsigned_decimal,
 };
 
-const MAX_SQL_BYTES: u64 = 64 * 1024;
-const SQL_RECURSION_LIMIT: usize = 128;
+pub(crate) const MAX_SQL_BYTES: u64 = 64 * 1024;
+pub(crate) const SQL_RECURSION_LIMIT: usize = 128;
 
 /// Inputs and resource ceilings for a complete single-table query result.
 #[derive(Args)]

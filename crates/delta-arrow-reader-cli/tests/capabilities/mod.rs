@@ -109,7 +109,16 @@ fn discovery_is_deterministic_without_credentials_or_a_search_path()
     assert!(output.status.success());
     assert!(output.stderr.is_empty());
     assert_eq!(output.stdout, baseline.stdout);
-    assert!(!String::from_utf8_lossy(&output.stdout).contains("secret"));
+    let text = String::from_utf8_lossy(&output.stdout);
+    for private_value in [
+        "secret-access-key",
+        "secret-access-secret",
+        "secret-missing-credentials.json",
+        "secret-missing-profile",
+        directory.path().to_str().unwrap(),
+    ] {
+        assert!(!text.contains(private_value));
+    }
 
     let output = run_with_timeout(
         command

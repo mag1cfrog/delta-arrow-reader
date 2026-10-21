@@ -36,6 +36,19 @@ count, defaults, allowed choices, repeatability, and conflicts. For example,
 stderr formats. These describe the installed executable, including its version.
 `input_schemas` lists the available schema names and their file arguments.
 
+`authorization` describes local access, a direct-storage JSON file, and the
+Databricks profile reference, including the commands that accept each. The
+direct-storage section lists aliases for static credentials and GCS credential
+files. It also describes the backend's default credential lookup. Discovery
+does not inspect the caller's credentials or check provider availability.
+
+`read_support` describes each command's scope and limits. For example, `query`
+registers one Delta table as `t` and supports self-joins, but cannot open a
+second table or use a UC target. Its memory ceiling applies to DataFusion's
+execution pool, and disk spill is disabled. The SQL examples that use `id`
+assume the selected table has that column. A null limit or deadline means that
+the command has no ceiling for that resource; it does not mean zero.
+
 An empty `possible_values` list means the argument has no enumerated choices;
 it does not mean every value is valid. A null `max_values` means there is no
 fixed upper count for that argument. Descriptions contain additional input rules.
@@ -445,27 +458,33 @@ and leave stdout empty.
 
 `--storage-options-file` accepts a local UTF-8 JSON file containing an object
 of string keys and string values. For example, save this as `storage.json`
-to select an S3 region when your environment already provides credentials:
+to select an S3 region:
 
 ```json
 {"aws_region":"us-west-2"}
 ```
 
-Then pass the file when opening the table:
+Add credentials or provider settings to the file when needed, then pass its
+path when opening the table:
 
 ```sh
 dar inspect --storage-options-file storage.json s3://example-bucket/orders
 ```
 
-Use the same option with `dar scan`. The
+Use the same option with `dar scan` or `dar query`. The
 [storage guide](configuration.md#read-from-s3) explains table URLs and credentials,
 including [Azure](configuration.md#read-from-azure). Use its storage keys as JSON
 keys here. Keep files containing credentials out of source control.
 
 The CLI forwards keys and values unchanged, including case, spaces, and
 commas. The core reader interprets provider options. Omitting the file supplies
-an empty explicit map and keeps the core's environment and provider credential
-behavior. An empty object is also valid.
+an empty explicit map and keeps the backend's default credential lookup.
+An empty object is also valid. The CLI does not import cloud configuration
+variables into that map: setting `AWS_ACCESS_KEY_ID` and
+`AWS_SECRET_ACCESS_KEY` in the environment alone does not supply S3 credentials.
+Without explicit credential settings, S3 uses instance metadata, Azure uses
+managed identity, and GCS checks the well-known ADC file before using metadata
+credentials. The current CLI has no `--auth-source` or `--env-file` selector.
 
 For a local HTTP test endpoint, `{"allow_http":"true"}` enables plain HTTP.
 

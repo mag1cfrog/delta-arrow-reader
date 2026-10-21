@@ -4,6 +4,11 @@
 //! authorization. For example, a caller can find that `scan --column` is repeatable
 //! and that `--diagnostics` accepts `json` with an equals sign.
 //! `dar capabilities --schema predicate` returns the JSON row-filter schema.
+//! The authorization and read-support sections describe which inputs can be
+//! combined. For example, a Databricks profile can authorize `scan`, while
+//! `query` currently requires a direct table location.
+
+mod read_support;
 
 use std::{io, time::Duration};
 
@@ -29,6 +34,8 @@ fn build_capabilities() -> Value {
         "cli_version": env!("CARGO_PKG_VERSION"),
         "command": describe_command(&command),
         "input_schemas": input_schemas,
+        "authorization": read_support::authorization_sources(),
+        "read_support": read_support::command_read_support(),
         "stdout_formats": {
             "capabilities": {"format": "json", "format_version": 1},
             "inspect": {"format": "json", "format_version": 1},
