@@ -14,10 +14,10 @@ through DataFusion. Catalog integrations and writes are separate work.
 
 | Step | Target interface |
 | --- | --- |
-| Discover | `dar capabilities` returns a short directory; `--command NAME` returns command details, `--schema NAME` a named schema, and `--all` the full inventory. All are offline. |
+| Discover | `dar capabilities` returns a directory; `--command NAME` and `--schema NAME` return usage guides. `--detail NAME` selects a schema field or type, `--authorization NAME` selects a provider, `--full` expands a command or schema, and `--all` returns the inventory. All are offline. |
 | Inspect | `dar inspect TABLE --view summary`; `--column NAME` selects fields, `--include-metadata` opts into metadata. |
 | Preview | `dar preview TABLE`; reuse scan projection, predicate, version, and execution options. |
-| Query | `dar query TABLE --sql-file PATH`; single-table alias is `t`. `--format arrow` is the default; `--format json` returns typed rows. |
+| Query | `dar query TABLE --sql-file PATH`; single-table alias is `t`. `--format arrow` is the default; `--format json` returns a small complete result within its stdout budget. Save larger results to a file. |
 | Join | `dar query --tables-file PATH --sql-file PATH`; bind each table explicitly. |
 | Plan | `dar explain` with the same query inputs; report bounded structured plan information without executing rows. |
 | Save | `scan` or `query` with `--output PATH`; publish a result and completion manifest. |
@@ -28,10 +28,14 @@ formats, defaults, and limitations. Help/discovery requires neither credentials
 nor network access. JSON Schemas use draft 2020-12 and match the actual parsers.
 
 The default directory fits in 2 KiB and gives explicit invocations for loading
-command details and schemas. A caller can select a command without downloading
-the entire inventory or writing a filtering script. Command details include all
-of that command's argument rules and applicable authorization, format, and
-resource constraints. Full schemas and the full inventory are explicit requests.
+command and format guides. A caller can select a command and construct common
+inputs without downloading complete definitions or writing a filtering script.
+Command guides retain usage, argument conflicts, formats, and resource limits.
+Provider-specific authorization is requested separately. Schema guides give an
+example and shared constraints, then allow selection of one field, operator, or
+literal type. Every level gives the invocation needed for its next choice.
+Complete metadata and validation schemas require `--full`; the complete
+inventory requires `--all`. No guide silently expands every provider or type.
 Discovery is stateless, so an agent can retrieve the same details after context
 compaction. Byte limits count the complete UTF-8 response, including framing;
 oversized responses fail before stdout is written rather than being truncated.
@@ -40,6 +44,16 @@ Summary inspection reports the actual version and scoped checks: `passed`,
 `failed`, `unknown`, or `not_checked`. Metadata access does not establish data-file
 access. Inspection reads no Parquet/DV payloads and can describe a snapshot whose
 scan protocol is unsupported. Names and metadata are untrusted result data.
+Summary output defaults to 4 KiB. Wide tables provide bounded field-name
+discovery and selected type details at the reported snapshot, without requiring
+the full schema. Metadata is opt-in. Requested names and types remain exact;
+if a detail cannot fit, fail before writing summary stdout with guidance to
+narrow the request or explicitly increase its budget.
+
+Command guides, examples, and repair hints use these bounded inspection paths,
+including when a projection or predicate references the wrong column or type.
+Full legacy inspection and Arrow streams remain available for existing
+consumers; agent recipes direct those outputs to files or pipes.
 
 ```sh
 dar capabilities
@@ -58,6 +72,10 @@ and unsupported versions. Stdout contains only the result.
 
 Typed JSON uses the existing Arrow schema encoding and positional row arrays,
 so duplicate names and zero-column rows survive. Empty results retain schema.
+Preview and query JSON sent to stdout default to 8 KiB, including schema,
+framing, and the final newline. A larger response needs an explicit budget
+increase. Complete results that exceed the small stdout budget use file output;
+resource ceilings never turn a complete query into a successful sample.
 
 | Type | JSON representation |
 | --- | --- |
@@ -141,22 +159,28 @@ disables it.
 | JSON/env files | 1 MiB each; tables: 64 bindings/depth 32; env: 1,024 records | None |
 | SQL file | 64 KiB, one statement, nesting at most 128 | None |
 | Predicate structure | Existing 1,024 nodes/depth 32 | None |
-| Preview | 20 rows, 64 KiB total serialized response, 30 seconds | `--limit`, `--max-output-bytes`, `--deadline-ms` |
-| Summary/explain | 64 KiB, 30 seconds | `--max-output-bytes`, `--deadline-ms` |
-| Query/file-mode scan | 1,000,000 rows, 300 seconds; JSON 16 MiB, Arrow 1 GiB | `--max-rows`, `--deadline-ms`, `--max-output-bytes` |
+| Preview | 20 rows, 8 KiB total serialized stdout, 30 seconds | `--limit`, `--max-output-bytes`, `--deadline-ms` |
+| Summary/explain | 4 KiB total serialized stdout, 30 seconds | `--max-output-bytes`, `--deadline-ms` |
+| Query/file-mode scan | 1,000,000 rows, 300 seconds; query JSON on stdout 8 KiB, JSON in a file 16 MiB, Arrow 1 GiB | `--max-rows`, `--deadline-ms`, `--max-output-bytes` |
+| Artifact receipt | 8 KiB total serialized stdout | None |
 | Query memory/spill | 256 MiB pool, spill disabled | `--memory-limit-bytes`; positive `--spill-limit-bytes` requires `--spill-dir` |
-| Discovery | Directory: 2 KiB; command details, named schema, or full inventory: 1 MiB; 5 seconds | Select details with `--command`, `--schema`, or `--all` |
+| Discovery | Directory, schema guides/details, authorization guides: 2 KiB each; command guides: 4 KiB; explicit full definitions/inventory: 1 MiB; 5 seconds | Select a command, schema, field/type, or provider; expand with `--full` or `--all` |
 | Provider capture/manifest | 1 MiB per child stream or manifest | None |
 | Diagnostics | 8 KiB per record; 64 KiB optional records plus terminal reserve | None |
 
-Limits include schema/framing, not just row values. Stream full queries; buffer
-only bounded previews. Query-pool memory is not total process RSS. Spill uses
-private per-invocation files, a total disk budget, and cleanup on handled exits.
+Stdout limits include schema, framing, and the final newline, not just row
+values. Terminal records have their separate diagnostic budget; workflow tests
+count both streams. Stream full queries; buffer only bounded previews.
+Query-pool memory is not total process RSS. Spill uses private per-invocation
+files, a total disk budget, and cleanup on handled exits.
 
 Legacy full inspect/stdout scan keeps existing unbounded defaults; agent callers
-must opt into finite deadline/output limits, and a scan row ceiling. Existing
-auth selection also stays unchanged unless the caller opts into explicit sources.
-This avoids silently changing current consumers.
+use summary inspection, bounded preview/query JSON, or saved results with a
+receipt. Deliberate use of legacy full/Arrow output goes to a file or pipe and
+opts into finite deadline/output limits and a scan row ceiling. Recovery hints
+must not route callers back to unbounded inspection or silently increase limits.
+Existing auth selection also stays unchanged unless the caller opts into explicit
+sources. This avoids silently changing current consumers.
 
 Commands never prompt. Total deadlines cover input, auth, planning, execution,
 blocked output, and publication. Cancel work, terminate/reap controlled children,
@@ -215,6 +239,10 @@ writes, COPY, session changes, extension loading, EXPLAIN ANALYZE, and arbitrary
 file/URL sources. Explain exposes structured operators/types/estimates, with
 unknowns explicit, without raw SQL/literals or row execution. It may read needed
 metadata and must disclose that scope.
+The default plan summary fits in 4 KiB. Detailed plan/schema output requires
+selection or an explicit budget increase. If requested details cannot fit,
+fail before writing summary stdout with a bounded diagnostic; do not substitute
+a raw plan dump or truncate requested names and types.
 
 A tables file contains aliases, locations, optional requested versions, and
 optional authorization references:
@@ -250,6 +278,10 @@ SQL literals, tokens, provider responses, or credential contents/hashes. Stdout
 returns an artifact receipt bounded to 8 KiB. Verify manifest, hash, framing, and counts
 before acceptance. Replay uses the recorded inputs and explicit actual versions;
 input hashes must still match and snapshot/data/DV files must remain available.
+Result rows, full schemas, and complete manifests stay in artifacts. Ordinary
+verification reads the required values without printing entire artifacts into
+agent context. Long paths or many bindings must not make the receipt exceed its
+budget; receipt overflow is a bounded failure under the same publication policy.
 
 ## Acceptance evidence
 
@@ -259,12 +291,12 @@ storage/provider fixtures; a live cloud account is not required.
 
 | Criterion | Success | Boundary | Failure | Evidence |
 | --- | --- | --- | --- | --- |
-| Discovery | Construct requests from directory and selected details offline | Directory byte budget, complete scoped details, disabled features/platform limits | Unknown command/schema, conflicting selectors, oversized response | Follow advertised invocations; parser/schema checks; no network/child calls |
-| Inspection | Selected schema and actual version | Wide/nested schema, unsupported protocol | Metadata accessible/data denied | Exact fields/check scope; IO trace |
+| Discovery | Construct requests from guides and selected fields/types/providers offline | Every guide's byte budget, explicit full definitions, disabled features/platform limits | Unknown selector/detail, conflicting selectors, oversized response | Follow every advertised level; parser/schema checks; no network/child calls |
+| Inspection | Bounded field discovery, selected types, and actual version | 1,000 columns, nesting, long UTF-8 names, large metadata, exact 4 KiB boundary | Oversized requested detail; metadata accessible/data denied | Exact fields/check scope; IO trace; response sizes through recovery |
 | Read coverage | Scan, COUNT, GROUP BY, ORDER BY, CTE, join | Null/empty/zero-column/DV/pinned updates | Write/external-source attempts | Independent exact-result oracle; no write side effects |
-| Small results | Interpret typed JSON | Large ints, decimals, timezones, binary, nesting, duplicates, dictionary partitions | Oversized value/unsupported type | Exact values and total-byte bounds |
+| Small results | Interpret typed JSON | Large ints, decimals, timezones, binary, nesting, duplicates, dictionary partitions, exact 8 KiB boundary | Oversized schema/value; unsupported type | Exact values; byte bounds; explicit expansion; sample versus complete result |
 | Resources/completion | Complete query, labeled preview | Exact limit versus one extra row | Memory/disk/deadline/output exhaustion | Bounded resources; no false completion |
-| Recovery | Correct input and retry | Parse/planning distinction; unknown causes | Expiry/denial/transient failures | Stable exits/diagnostics and correct recovery branch |
+| Recovery | Correct input and retry within response budgets | Parse/planning distinction; wrong column/type in a wide table; unknown causes | Expiry/denial/transient failures | Follow emitted hints; stable exits/diagnostics; bounded stdout/stderr throughout |
 | Confidentiality | Reference reaches intended identity | Malicious data/provider errors | Credential loading/refresh failure | Secret canaries absent from calls, diagnostics, manifests, child args |
 | Auth predictability | Each advertised source authenticates | Aliases/partial families/two identities | Selected-source failure | Signed-request/provider assertions; zero fallback |
 | Automation | Non-TTY/piped/file use | Blocked output, PID 1, platform signals | Broken pipe/hung child/cancellation | Deadline-plus-grace, reaping, temp cleanup |
@@ -285,6 +317,16 @@ requires token accounting; exploratory runs without it cannot establish a pass.
 Record all outcomes, calls, bytes, tokens, CLI/provider/corrective retries,
 latency, and artifacts. Separate deterministic guarantees from the observed
 agent results; do not claim all models/deployments behave alike.
+The wide-data task includes at least 1,000 columns, deep nesting, large metadata,
+a long UTF-8 value, and repair of a wrong column or literal type. Record stdout
+and stderr bytes for every invocation through discovery, execution, recovery,
+artifact verification, and post-compaction continuation. Identify each response
+kind, its applicable limit, and any explicit full expansion or budget increase.
+Check both individual limits and the cumulative 256 KiB task budget, including
+failed attempts and retries. Count bytes before harness truncation; clipping a
+tool response cannot establish a pass. Ordinary tasks must be achievable without
+full-schema retrieval or printing complete results/manifests into context.
+Discovery-only traversal and small-table success do not satisfy these checks.
 
 For discovery, compare the short directory and selected details with the full
 inventory using the same task prompts, model, and fixtures. Record task success,
