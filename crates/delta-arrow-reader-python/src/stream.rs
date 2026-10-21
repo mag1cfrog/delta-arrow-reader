@@ -447,6 +447,158 @@ mod tests {
     use super::*;
     use delta_arrow_reader::{DeltaScanExecutionOptions, error_source_kind};
 
+    #[test]
+    fn rejected_schema_requests_leave_the_stream_available() -> PyResult<()> {
+        use pyo3::types::PyString;
+        use std::collections::HashMap;
+
+        Python::initialize();
+        Python::attach(|py| {
+            let table = crate::binding_tests::table(py)?;
+            let actual = table
+                .extract::<PyRef<'_, crate::DeltaTable>>()?
+                .table
+                .schema();
+            let metadata = HashMap::from([("secret".into(), "value".into())]);
+            let with_first_field = |field| {
+                let mut fields = actual.fields().to_vec();
+                fields[0] = Arc::new(field);
+                Schema::new_with_metadata(fields, actual.metadata().clone())
+            };
+            let first = actual.field(0);
+            let mut cases = vec![(
+                PyString::new(py, "secret-object").into_any(),
+                py.get_type::<PyTypeError>(),
+            )];
+            for schema in [
+                Schema::empty(),
+                with_first_field(first.clone().with_name("secret-field")),
+                with_first_field(first.clone().with_nullable(!first.is_nullable())),
+                actual.as_ref().clone().with_metadata(metadata.clone()),
+                with_first_field(first.clone().with_metadata(metadata)),
+            ] {
+                cases.push((
+                    PyCapsule::new_with_value(
+                        py,
+                        FFI_ArrowSchema::try_from(&schema).unwrap(),
+                        c"arrow_schema",
+                    )?
+                    .into_any(),
+                    py.get_type::<PyValueError>(),
+                ));
+            }
+            for (requested, expected_error) in cases {
+                let stream = table.call_method0("scan")?;
+                let error = stream
+                    .call_method1("__arrow_c_stream__", (requested,))
+                    .unwrap_err();
+                assert!(error.get_type(py).is(&expected_error), "{error}");
+                assert!(!error.to_string().contains("secret"), "{error}");
+                let capsule = stream.call_method1(
+                    "__arrow_c_stream__",
+                    (table.call_method0("__arrow_c_schema__")?,),
+                )?;
+                capsule
+                    .cast::<PyCapsule>()?
+                    .pointer_checked(Some(c"arrow_array_stream"))?;
+            }
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn requested_schema_types_distinguish_alternates_from_incompatible_changes() {
+        use DataType::*;
+        use arrow::datatypes::TimeUnit;
+
+        let field = |name, data_type| Arc::new(Field::new(name, data_type, true));
+        let list = List(field("element", Utf8));
+        let nested = Struct(vec![field("child", Int64)].into());
+        let map = |entries, key, key_type, sorted| {
+            Field::new_map(
+                "id",
+                entries,
+                Field::new(key, key_type, false),
+                Field::new("value", Int64, true),
+                sorted,
+                true,
+            )
+            .data_type()
+            .clone()
+        };
+        let mapping = map("key_value", "key", Utf8, false);
+        for (actual, requested, alternate) in [
+            (Int64, Int32, true),
+            (Int64, UInt64, true),
+            (Int64, Dictionary(Box::new(Int8), Box::new(Int64)), true),
+            (
+                Int64,
+                RunEndEncoded(
+                    Arc::new(Field::new("run_ends", Int16, false)),
+                    field("values", Int64),
+                ),
+                true,
+            ),
+            (Int64, Utf8, false),
+            (Utf8, LargeUtf8, true),
+            (Utf8, Utf8View, true),
+            (Binary, LargeBinary, true),
+            (Float32, Float64, true),
+            (Decimal128(10, 2), Decimal256(10, 2), true),
+            (Decimal128(10, 2), Decimal128(11, 2), false),
+            (
+                Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                Timestamp(TimeUnit::Nanosecond, Some("UTC".into())),
+                true,
+            ),
+            (
+                Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+                Timestamp(TimeUnit::Microsecond, None),
+                false,
+            ),
+            (Date32, Date64, true),
+            (list.clone(), LargeList(field("element", LargeUtf8)), true),
+            (list, List(field("secret-child", Utf8)), false),
+            (
+                nested.clone(),
+                Struct(vec![field("child", Int32)].into()),
+                true,
+            ),
+            (
+                nested,
+                Struct(vec![field("secret-child", Int64)].into()),
+                false,
+            ),
+            (
+                mapping.clone(),
+                map("entries", "key", LargeUtf8, false),
+                true,
+            ),
+            (
+                mapping.clone(),
+                map("entries", "secret-key", Utf8, false),
+                false,
+            ),
+            (mapping.clone(), map("entries", "key", Utf8, true), false),
+        ] {
+            assert!(matches_requested_type(&actual, &actual, false));
+            assert!(
+                !matches_requested_type(&actual, &requested, false),
+                "{actual:?} -> {requested:?}"
+            );
+            assert_eq!(
+                matches_requested_type(&actual, &requested, true),
+                alternate,
+                "{actual:?} -> {requested:?}"
+            );
+        }
+        assert!(matches_requested_type(
+            &mapping,
+            &map("entries", "key", Utf8, false),
+            false
+        ));
+    }
+
     fn failed_reader(error: BatchReadError, runtime: &Arc<Runtime>) -> BlockingBatchReader {
         BlockingBatchReader {
             schema: Arc::new(Schema::empty()),

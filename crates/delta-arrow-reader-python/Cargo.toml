@@ -15,6 +15,11 @@ workspace = true
 name = "delta_arrow_reader"
 crate-type = ["cdylib"]
 
+[[example]]
+name = "generate-api-docs"
+path = "tools/api_docs.rs"
+test = true
+
 [dependencies]
 arrow = { version = "58.3.0", features = ["ffi"] }
 datafusion = { version = "54.1.0", default-features = false, features = ["sql"] }
