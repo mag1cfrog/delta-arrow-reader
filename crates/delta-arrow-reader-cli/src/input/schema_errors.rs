@@ -1,6 +1,11 @@
-//! Add safe corrections to JSON inputs that normal deserialization has already rejected.
-//! serde_json's error text can include supplied values. Replaying the same Deserialize
-//! implementations gives typed errors and paths, so corrections can omit those values.
+//! Help people and agents fix rejected JSON settings without exposing private input.
+//!
+//! Corrections identify the CLI argument and, when possible, the field to change,
+//! then explain what is expected and how to fix it. Supplied values and unknown
+//! keys stay out of diagnostics, since they may contain credentials or private data.
+//!
+//! These corrections explain failures under the existing input rules. If a precise
+//! correction cannot be determined safely, the CLI uses general guidance for that input.
 
 use serde::de::DeserializeOwned;
 use serde_json::value::RawValue;

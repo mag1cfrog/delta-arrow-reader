@@ -1,3 +1,10 @@
+//! Let CLI callers supply reusable scan settings and credentials through JSON files.
+//!
+//! The inputs cover storage access, row filters, and execution settings. Files let
+//! callers keep credentials out of command arguments and reuse a configuration
+//! across invocations. This module loads those files and ties input failures to
+//! the CLI argument that needs attention.
+
 use std::{fmt, fs::File, io::Read, marker::PhantomData};
 
 use delta_arrow_reader::DeltaStorageOptions;

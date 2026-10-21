@@ -1,4 +1,9 @@
-//! Decode CLI predicate JSON and convert it to core predicates.
+//! Row filters that CLI callers can save in JSON and reuse across scans.
+//!
+//! The filter format combines conditions on columns with explicitly typed values,
+//! so callers can preserve values such as large integers exactly. This module owns
+//! the accepted filter format and its limits on size and nesting. The reader checks
+//! the filter against the selected table and evaluates it during the scan.
 
 use std::{fmt, marker::PhantomData, str::FromStr};
 

@@ -1,4 +1,9 @@
-//! Read Delta snapshots as JSON metadata or Arrow IPC streams.
+//! Inspect Delta tables or stream their rows for use in command-line pipelines.
+//!
+//! `inspect` describes a selected snapshot as JSON; `scan` exports its rows as Arrow IPC.
+//! Results go to stdout, while progress and failure diagnostics go to stderr. This
+//! separation lets people and agents compose the reader with other tools without
+//! mixing status messages into table data.
 
 #![cfg_attr(test, allow(clippy::panic))]
 

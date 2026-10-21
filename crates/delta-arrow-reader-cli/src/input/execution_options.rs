@@ -1,4 +1,9 @@
-//! Decode CLI execution options and apply their overrides to core defaults.
+//! Optional scan tuning for callers who need to adjust memory use and read concurrency.
+//!
+//! Callers can override individual settings while keeping the reader's defaults
+//! for the rest. Omission keeps a default; explicit null clears an optional value
+//! where supported. The reader enforces the allowed ranges, and this module helps
+//! callers correct settings that fall outside them.
 
 use delta_arrow_reader::{DeltaReaderError, DeltaScanExecutionOptions, ParquetReaderBackend};
 use serde::{Deserialize, Deserializer, de::value::StringDeserializer};

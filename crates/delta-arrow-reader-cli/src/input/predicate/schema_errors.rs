@@ -1,4 +1,8 @@
-//! Inspect predicate nodes separately so Serde's tagged enums do not erase nested error paths.
+//! Help callers find and repair the invalid part of a nested row filter.
+//!
+//! A filter may combine many conditions, so an error needs to identify which condition
+//! or typed value needs attention. This module adds that location and correction
+//! guidance for predicate JSON. The reader checks compatibility with the selected table.
 
 use serde::de::IgnoredAny;
 use serde_json::value::RawValue;
@@ -20,6 +24,7 @@ fn check_node_schema(
     location: &FieldLocation,
     depth: usize,
 ) -> Result<(), InputCorrection> {
+    // Check child nodes separately; tagged enums can erase their error paths.
     if depth > super::MAX_PREDICATE_DEPTH {
         return Err(location.invalid(
             format!(

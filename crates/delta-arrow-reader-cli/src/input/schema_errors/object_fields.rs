@@ -1,4 +1,8 @@
-//! Keep object entries in order, including duplicates that a JSON map would discard.
+//! Help input diagnostics explain what needs changing inside a JSON object.
+//!
+//! Callers need different advice for a missing field, a duplicate field, and an
+//! invalid value. This module supplies those distinctions to the schema diagnostics
+//! while using the input format's existing field requirements.
 
 use std::{fmt, marker::PhantomData};
 
@@ -17,6 +21,7 @@ use super::{FieldLocation, correction_from_serde_error};
 use crate::diagnostics::InputCorrection;
 
 pub(in crate::input) struct ObjectFields<T> {
+    // A map would discard duplicate fields before diagnostics could report them.
     entries: Vec<(String, T)>,
 }
 
@@ -110,6 +115,7 @@ impl ObjectFields<serde_value::Value> {
     pub(super) fn deserialize_as<T: DeserializeOwned>(
         self,
     ) -> Result<T, serde_path_to_error::Error<DeserializerError>> {
+        // Typed errors let callers describe a failure without formatting input values.
         let deserializer = MapDeserializer::<_, DeserializerError>::new(self.entries.into_iter());
         serde_path_to_error::deserialize(deserializer)
     }
