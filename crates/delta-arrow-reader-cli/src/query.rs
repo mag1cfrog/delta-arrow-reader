@@ -1,5 +1,7 @@
 //! Read-only SQL admission and planning over named, immutable Core snapshots.
 
+mod tables_manifest;
+
 use std::{fmt, fs::File, io::Read, num::NonZeroUsize, ops::ControlFlow, sync::Arc};
 
 use clap::Args;
@@ -25,21 +27,32 @@ use delta_arrow_reader::{
     datafusion::{ScanOptions, register_table},
     error_source_kind,
 };
+use futures_util::{FutureExt, TryStreamExt, future::LocalBoxFuture};
+use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu};
 
 use crate::{
-    InputIoSnafu, QuerySnafu, TableArgs, diagnostics::ErrorClassification, parse_unsigned_decimal,
+    Error, InputIoSnafu, QuerySnafu, ReaderSnafu, arrow_output, build_completion_record,
+    diagnostics::ErrorClassification, parse_unsigned_decimal, table_input::TableOptions,
 };
 
 const MAX_SQL_BYTES: u64 = 64 * 1024;
 const SQL_RECURSION_LIMIT: usize = 128;
 
-/// Inputs and resource ceilings for a complete single-table query result.
+/// Selects positional table t or a manifest of named tables, with result resource ceilings.
 #[derive(Args)]
 pub(crate) struct QueryArgs {
+    /// UTF-8 local path or storage URL, registered as t. Relative paths use the working directory.
+    /// Use '--' before a table path beginning with '-'.
+    #[arg(required_unless_present = "tables_file")]
+    table: Option<String>,
+    /// Local JSON manifest of 1-64 named tables; at most 1 MiB. Relative locations use its directory.
+    /// Conflicts with TABLE, --table-version, --storage-options-file, and --auth-source.
+    #[arg(long, value_name = "PATH", conflicts_with_all = ["table", "table_version", "storage_options_file", "auth_source"])]
+    tables_file: Option<String>,
     #[command(flatten)]
-    pub(crate) table: TableArgs,
-    /// UTF-8 file containing one read-only SQL query over table alias t; at most 64 KiB.
+    table_options: TableOptions,
+    /// UTF-8 file containing one read-only SQL query over the selected aliases; at most 64 KiB.
     #[arg(long, value_name = "PATH")]
     pub(crate) sql_file: String,
     /// Maximum result rows. Exceeding this ceiling fails; SQL LIMIT selects a smaller result.
@@ -53,10 +66,72 @@ pub(crate) struct QueryArgs {
     pub(crate) memory_limit_bytes: NonZeroUsize,
 }
 
+impl QueryArgs {
+    /// Admits all input before any table IO; execution loads each snapshot exactly once.
+    pub(crate) fn prepare_execution(
+        &self,
+    ) -> Result<LocalBoxFuture<'_, Result<Value, Error>>, Error> {
+        let builders = if let Some(path) = &self.tables_file {
+            tables_manifest::read_table_builders(path)?
+        } else {
+            let location = self.table.as_deref().ok_or(Error::Argument {
+                kind: clap::error::ErrorKind::MissingRequiredArgument,
+                correction: None,
+            })?;
+            reject_unity_catalog_query(location)?;
+            vec![(
+                "t".to_owned(),
+                self.table_options.direct_table_builder(location)?,
+            )]
+        };
+        let sql_query = ReadOnlySqlQuery::read_file(&self.sql_file)?;
+        Ok(async move {
+            let mut tables = Vec::with_capacity(builders.len());
+            let mut bindings = Vec::with_capacity(builders.len());
+            for (alias, builder) in builders {
+                let table = builder.load_table().await.context(ReaderSnafu)?;
+                bindings
+                    .push(json!({"alias": alias, "table_version": table.version().to_string()}));
+                tables.push((alias, table));
+            }
+            let stream = sql_query
+                .execute_stream(tables, self.memory_limit_bytes.get())
+                .await?;
+            let stdout_stats = arrow_output::write_arrow_stream_to_stdout(
+                stream.schema(),
+                stream.map_err(|source| Error::Query {
+                    source: QueryError::Execution { source },
+                }),
+                Some(arrow_output::ArrowOutputLimits {
+                    max_rows: self.max_rows as u64,
+                    max_bytes: self.max_output_bytes.get() as u64,
+                }),
+            )
+            .await?;
+            let mut completion = build_completion_record("query", None, stdout_stats, None);
+            completion["bindings"] = bindings.into();
+            Ok(completion)
+        }
+        .boxed_local())
+    }
+}
+
+fn reject_unity_catalog_query(location: &str) -> Result<(), Error> {
+    if location
+        .get(..5)
+        .is_some_and(|scheme| scheme.eq_ignore_ascii_case("uc://"))
+    {
+        return Err(QueryError::UnsupportedUnityCatalogQuery).context(QuerySnafu);
+    }
+    Ok(())
+}
+
 /// SQL failures retain typed sources without printing query text or dependency messages.
 #[derive(Snafu)]
 pub(crate) enum QueryError {
-    #[snafu(display("Invalid SQL input (reason={reason}). Use one read-only query over table t."))]
+    #[snafu(display(
+        "Invalid SQL input (reason={reason}). Use one read-only query over the selected tables."
+    ))]
     Input { reason: &'static str },
     #[snafu(display("Unity Catalog SQL queries are not supported yet."))]
     UnsupportedUnityCatalogQuery,

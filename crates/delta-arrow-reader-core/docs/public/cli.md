@@ -8,6 +8,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | See the table's columns and version | [`dar inspect`](#inspect-a-snapshot) |
 | Save selected rows as Arrow | [`dar scan`](#scan-rows) |
 | Aggregate, group, or sort rows with SQL | [`dar query`](#query-a-snapshot) |
+| Join named table snapshots | [Tables manifest](#join-table-snapshots) |
 | Select rows by a condition | [Filter rows](#filter-rows) |
 | Connect to remote storage | [Storage options file](#storage-options-file) |
 | Select S3 credentials from a file or environment | [S3 credential sources](#s3-credential-sources) |
@@ -221,8 +222,9 @@ partial files after failure; discard those files.
 ## Query a snapshot
 
 `query` runs SQL locally through the Core DataFusion table provider. It opens
-one Delta snapshot and registers it as `t`. Use a local path or direct storage
-URL for `TABLE`; Unity Catalog targets are not yet supported by this command.
+one Delta snapshot as `t` when given `TABLE`, or registers the aliases in a
+[tables manifest](#join-table-snapshots). Use local paths or direct storage
+URLs; Unity Catalog targets are not yet supported by this command.
 
 ```sh
 cat > query.sql <<'SQL'
@@ -247,15 +249,16 @@ The SQL file must contain one read-only query in UTF-8, at most 64 KiB, with
 a parser and expression-depth limit of 128, including chains of set operations
 such as `UNION`. Paths use the working directory; `-` names a
 literal file. SQL is not read from stdin. Malformed input is rejected before
-opening the table. Projections, predicates, aggregations, grouping, ordering,
+opening any table. Projections, predicates, joins, aggregations, grouping, ordering,
 subqueries, and nonrecursive CTEs are supported. DDL, DML, COPY, session changes,
 EXPLAIN, recursive CTEs, and table functions are rejected. SQL cannot discover
 additional tables from file paths or URLs.
 
 Results use Arrow IPC stream framing on stdout, which must be a file or pipe.
 The command streams the complete SQL result, including empty results and
-`COUNT(*)`. Use SQL `LIMIT` to select a smaller result. Queries use the same
-snapshot selection and storage options as `inspect`, and skip table warmup.
+`COUNT(*)`. Use SQL `LIMIT` to select a smaller result. Positional table queries
+use the same snapshot selection and storage options as `inspect`. All queries
+skip table warmup.
 
 | Option | Default | Behavior |
 | --- | --- | --- |
@@ -273,8 +276,68 @@ Exceeding a ceiling fails with status 1 and leaves incomplete output. The CLI
 does not turn a query into a successful sample or write an IPC end marker after
 failure. As with `scan`, require valid Arrow output and status 0, and discard
 partial files after failure. With `--diagnostics=json`, query completion has
-`scope: "query"`, the selected version, and row, batch, and output-byte counts.
+`scope: "query"`, each alias and its actual version in `bindings`, and row,
+batch, and output-byte counts.
 This option controls stderr diagnostics; query results remain Arrow.
+
+## Join table snapshots
+
+Declare the tables in a UTF-8 JSON file, then use their aliases in SQL. For a
+`tables.json` beside the `orders/` and `customers/` Delta directories:
+
+```json
+{"format_version":1,"tables":[
+  {"alias":"orders","location":"./orders","table_version":"42"},
+  {"alias":"customers","location":"./customers"}
+]}
+```
+
+```sql
+SELECT o.order_id, c.name
+FROM orders o LEFT JOIN customers c ON o.customer_id = c.customer_id
+ORDER BY o.order_id, c.customer_id
+```
+
+Save the query as `join.sql` and run:
+
+```sh
+dar query --tables-file tables.json --sql-file join.sql --diagnostics=json > joined.arrow
+```
+
+`--tables-file` conflicts with positional `TABLE`, `--table-version`,
+`--storage-options-file`, and `--auth-source`. Command-line file paths use the
+working directory. Locations inside the manifest use the manifest's directory.
+The complete manifest is validated before any table is opened.
+
+<details markdown="1">
+<summary>Tables manifest fields and limits</summary>
+
+| Field | Accepted value |
+| --- | --- |
+| `format_version` | Required JSON integer `1` |
+| `tables` | Required array of 1-64 table objects |
+| `tables[].alias` | Unique name matching `[a-z][a-z0-9_]{0,62}` |
+| `tables[].location` | Nonempty local path or direct storage URL, without control characters or embedded credentials |
+| `tables[].table_version` | Optional decimal string from `"0"` to `"18446744073709551615"`; omit to select latest |
+
+The file is limited to 1 MiB. Unknown and repeated fields are errors. Versions
+must use canonical digits without signs or leading zeros; JSON numbers and
+`null` are rejected. The Core version-loading limits described under
+[snapshot selection](#inspect-a-snapshot) still apply.
+
+Aliases cannot be `t`, `datafusion`, `public`, `information_schema`, `pg_catalog`,
+`system`, or a SQL keyword recognized by the parser. URLs cannot contain a
+password, query string, or fragment. Azure Blob's `container@account` URL form
+is accepted. Each table uses default storage authentication; manifest
+authorization references are not yet supported.
+
+</details>
+
+Each table loads once and retains that snapshot for the query. Completion
+reports the actual version even when latest was requested. These are independent
+snapshots and do not form a transaction across tables. For repeatable row
+ordering, use `ORDER BY` with columns that resolve ties. Volatile functions and
+floating-point aggregation can still produce different values between runs.
 
 ## Filter rows
 

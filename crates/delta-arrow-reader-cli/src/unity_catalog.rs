@@ -17,7 +17,7 @@ use std::fmt;
 use delta_arrow_reader::DeltaStorageOptions;
 use snafu::Snafu;
 
-use storage_access::AuthorizedTableAccess;
+pub(crate) use storage_access::AuthorizedTableAccess;
 use storage_location::{TableStorageLocation, validate_storage_options};
 use table_metadata::TableMetadataResponse;
 use temporary_credentials::parse_temporary_credentials;

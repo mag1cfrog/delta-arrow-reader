@@ -1,0 +1,277 @@
+//! Manifest admission, relative locations, and named snapshot provenance at the CLI boundary.
+
+use std::{fs, path::Path, process::Command};
+
+use arrow::array::Int32Array;
+use serde_json::{Value, json};
+
+use super::{
+    TestResult, assert_single_terminal_record, decode_query_result, fixture_path, run_with_timeout,
+};
+
+fn manifest_directory() -> TestResult<tempfile::TempDir> {
+    let directory = tempfile::Builder::new()
+        .prefix("secret-manifest-")
+        .tempdir()?;
+    fs::create_dir(directory.path().join("inputs"))?;
+    fs::write(directory.path().join("query.sql"), "SELECT 1")?;
+    Ok(directory)
+}
+
+fn manifest_command(directory: &Path) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
+    command.current_dir(directory).args([
+        "query",
+        "--tables-file",
+        "inputs/tables.json",
+        "--sql-file",
+        "query.sql",
+        "--diagnostics=json",
+    ]);
+    command
+}
+
+fn copy_directory(source: &Path, destination: &Path) -> TestResult {
+    fs::create_dir_all(destination)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let target = destination.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_directory(&entry.path(), &target)?;
+        } else {
+            fs::copy(entry.path(), target)?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn manifest_joins_use_relative_locations_and_independent_versions() -> TestResult {
+    let directory = manifest_directory()?;
+    for name in ["partitioned", "deletion_vectors"] {
+        copy_directory(
+            &fixture_path(name).join("table"),
+            &directory.path().join("data").join(name),
+        )?;
+    }
+    fs::write(
+        directory.path().join("query.sql"),
+        "SELECT o.id, c.id FROM orders o LEFT JOIN customers c ON o.id = c.id WHERE o.id <= 5 ORDER BY o.id",
+    )?;
+    let mut manifest = json!({"format_version":1,"tables":[
+        {"alias":"orders","location":"../data/partitioned","table_version":"0"},
+        {"alias":"customers","location":"../data/deletion_vectors"}
+    ]});
+    let path = directory.path().join("inputs/tables.json");
+    for (version, expected) in [
+        ("1", vec![Some(1), None, Some(3), Some(4), None]),
+        ("0", vec![Some(1), Some(2), Some(3), Some(4), Some(5)]),
+    ] {
+        if version == "0" {
+            manifest["tables"][1]["table_version"] = json!("0");
+        }
+        fs::write(&path, manifest.to_string())?;
+        let output = run_with_timeout(&mut manifest_command(directory.path()))?;
+        let actual = decode_query_result(&output)?;
+        assert_eq!(actual.num_columns(), 2);
+        assert_eq!(actual.schema().field(0).name(), "id");
+        assert_eq!(actual.schema().field(1).name(), "id");
+        assert_eq!(
+            actual.column(0).as_ref(),
+            &Int32Array::from_iter_values(1..=5)
+        );
+        assert_eq!(actual.column(1).as_ref(), &Int32Array::from(expected));
+        let record = assert_single_terminal_record(&output.stderr, "completion");
+        assert_eq!(
+            record["bindings"],
+            json!([
+                {"alias":"orders","table_version":"0"},
+                {"alias":"customers","table_version":version}
+            ])
+        );
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+    }
+    Ok(())
+}
+
+fn assert_manifest_rejected(directory: &Path, contents: impl AsRef<[u8]>) -> TestResult<Value> {
+    fs::write(directory.join("inputs/tables.json"), contents)?;
+    let output = run_with_timeout(&mut manifest_command(directory))?;
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert!(output.stdout.is_empty());
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+    let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+    assert_eq!(record["code"], "invalid_input_json");
+    assert_eq!(record["argument"], "--tables-file");
+    Ok(record)
+}
+
+#[test]
+fn invalid_later_bindings_fail_before_opening_the_first_table() -> TestResult {
+    let directory = manifest_directory()?;
+    for (alias, location, reason, field) in [
+        (
+            "orders",
+            "secret-missing-table",
+            "duplicate_table_alias",
+            "alias",
+        ),
+        ("t", "secret-missing-table", "reserved_table_alias", "alias"),
+        (
+            "select",
+            "secret-missing-table",
+            "reserved_table_alias",
+            "alias",
+        ),
+        (
+            "public",
+            "secret-missing-table",
+            "reserved_table_alias",
+            "alias",
+        ),
+        (
+            "secret.Alias",
+            "secret-missing-table",
+            "invalid_table_alias",
+            "alias",
+        ),
+        (
+            "customers",
+            "s3://bucket/table?secret-token",
+            "invalid_table_location",
+            "location",
+        ),
+        (
+            "customers",
+            "https://secret-user:secret-password@host/table",
+            "invalid_table_location",
+            "location",
+        ),
+        (
+            "customers",
+            "https://host/table#secret-token",
+            "invalid_table_location",
+            "location",
+        ),
+        (
+            "customers",
+            "secret\npath",
+            "invalid_table_location",
+            "location",
+        ),
+        ("customers", "", "invalid_table_location", "location"),
+    ] {
+        // The first missing table would fail with status 1 if loading began before validation finished.
+        let manifest = json!({"format_version":1,"tables":[
+            {"alias":"orders","location":"secret-missing-table"},
+            {"alias":alias,"location":location}
+        ]});
+        let record = assert_manifest_rejected(directory.path(), manifest.to_string())?;
+        assert_eq!(record["reason"], reason);
+        assert_eq!(record["field_path"], format!("/tables/1/{field}"));
+    }
+    Ok(())
+}
+
+#[test]
+fn manifest_schema_limits_and_duplicate_fields_are_enforced() -> TestResult {
+    let directory = manifest_directory()?;
+    for input in [
+        r#"[1,[]]"#,
+        r#"{"format_version":1,"tables":[]}"#,
+        r#"{"format_version":2,"tables":[]}"#,
+        r#"{"format_version":1.0,"tables":[]}"#,
+        r#"{"format_version":1,"format_version":1,"tables":[]}"#,
+        r#"{"format_version":1,"tables":[["orders","secret-table"]]}"#,
+        r#"{"format_version":1,"tables":[{"alias":"orders","alias":"customers","location":"secret-table"}]}"#,
+        r#"{"format_version":1,"tables":[{"alias":"orders","location":"secret-table","secret-field":"secret-value"}]}"#,
+        r#"{"format_version":1,"tables":[{"alias":"orders","location":"secret-table","authorization":{"source":"json","secret-value":"secret-token"}}]}"#,
+    ] {
+        assert_manifest_rejected(directory.path(), input)?;
+    }
+    for version in [
+        json!(null),
+        json!(0),
+        json!("+1"),
+        json!("01"),
+        json!("-0"),
+        json!("18446744073709551616"),
+    ] {
+        assert_manifest_rejected(
+            directory.path(),
+            json!({"format_version":1,"tables":[
+                {"alias":"orders","location":"secret-table","table_version":version}
+            ]})
+            .to_string(),
+        )?;
+    }
+    let record = assert_manifest_rejected(directory.path(), vec![b' '; 1024 * 1024 + 1])?;
+    assert_eq!(record["reason"], "input_file_too_large");
+    assert_manifest_rejected(
+        directory.path(),
+        format!(
+            "{{\"format_version\":1,\"tables\":[{{\"alias\":\"orders\",\"location\":{}0{}}}]}}",
+            "[".repeat(200),
+            "]".repeat(200)
+        ),
+    )?;
+    Ok(())
+}
+
+#[test]
+fn manifest_conflicts_are_rejected_before_reading_input_files() -> TestResult {
+    let directory = manifest_directory()?;
+    for arguments in [
+        vec!["secret-table"],
+        vec!["--table-version", "0"],
+        vec!["--storage-options-file", "secret-missing.json"],
+        vec!["--auth-source", "env"],
+    ] {
+        let output = run_with_timeout(manifest_command(directory.path()).args(arguments))?;
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert_eq!(record["code"], "invalid_cli_argument");
+        assert_eq!(record["argument_kind"], "ArgumentConflict");
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+    }
+    let output = run_with_timeout(manifest_command(directory.path()).arg("--help"))?;
+    assert!(output.status.success());
+    assert!(String::from_utf8(output.stdout)?.contains("--tables-file"));
+    Ok(())
+}
+
+#[test]
+fn manifest_table_count_keeps_completion_records_bounded() -> TestResult {
+    let directory = manifest_directory()?;
+    let tables: Vec<_> = (0..64)
+        .map(|index| {
+            json!({
+                "alias": format!("table_{index:057}"),
+                "location": fixture_path("partitioned").join("table"),
+            })
+        })
+        .collect();
+    let mut manifest = json!({"format_version":1,"tables":tables});
+    fs::write(
+        directory.path().join("inputs/tables.json"),
+        manifest.to_string(),
+    )?;
+    let output = run_with_timeout(&mut manifest_command(directory.path()))?;
+    decode_query_result(&output)?;
+    assert!(output.stderr.len() <= 8192);
+    assert_eq!(
+        assert_single_terminal_record(&output.stderr, "completion")["bindings"]
+            .as_array()
+            .unwrap()
+            .len(),
+        64
+    );
+
+    manifest["tables"].as_array_mut().unwrap().push(json!({
+        "alias":"customers","location":"secret-missing-table"
+    }));
+    let record = assert_manifest_rejected(directory.path(), manifest.to_string())?;
+    assert_eq!(record["reason"], "too_many_tables");
+    Ok(())
+}

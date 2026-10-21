@@ -1,5 +1,7 @@
 //! Exact SQL results, read-only admission, output ceilings, and safe failures.
 
+mod tables_manifest;
+
 use std::{
     fs,
     io::Cursor,

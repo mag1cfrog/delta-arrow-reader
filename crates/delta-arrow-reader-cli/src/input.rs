@@ -39,6 +39,7 @@ pub(crate) enum JsonInputKind {
     StorageOptions,
     Predicate,
     ExecutionOptions,
+    Tables,
 }
 
 impl JsonInputKind {
@@ -47,6 +48,7 @@ impl JsonInputKind {
             Self::StorageOptions => "--storage-options-file",
             Self::Predicate => "--predicate-file",
             Self::ExecutionOptions => "--execution-options-file",
+            Self::Tables => "--tables-file",
         }
     }
 
@@ -55,6 +57,7 @@ impl JsonInputKind {
             Self::StorageOptions => "a JSON object with unique keys and string values",
             Self::Predicate => "a predicate object with an 'op' tag and typed comparison values",
             Self::ExecutionOptions => "a JSON object containing supported execution options",
+            Self::Tables => "a versioned JSON object with a nonempty tables array",
         };
         InputCorrection {
             argument: self.argument().to_owned(),
@@ -74,6 +77,9 @@ impl JsonInputKind {
             }
             Self::ExecutionOptions => {
                 "Use only documented execution-option fields, once each, with their declared types."
+            }
+            Self::Tables => {
+                "Use format_version 1 and a tables array; each object has alias, location, and optionally a decimal-string table_version. Do not repeat fields."
             }
         }
     }

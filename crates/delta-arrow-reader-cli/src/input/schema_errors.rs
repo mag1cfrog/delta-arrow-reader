@@ -49,6 +49,8 @@ pub(super) fn diagnose_schema_error(
             diagnose_flat_input::<execution_options::ExecutionOptionsInput>(raw, &location)
         }
         JsonInputKind::Predicate => predicate::diagnose_schema_error(raw, &location),
+        // Manifest semantic errors carry field paths; malformed shapes use the static schema hint.
+        JsonInputKind::Tables => None,
     }
 }
 

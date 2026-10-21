@@ -55,18 +55,7 @@ impl CredentialSource {
                 reason: "auth_source_unsupported_storage"
             }
         );
-        // Azure Blob URLs may use container@account; passwords and embedded tokens remain invalid.
-        ensure!(
-            (url.username().is_empty()
-                || (scheme == ObjectStoreScheme::MicrosoftAzure
-                    && matches!(url.scheme(), "az" | "abfs" | "abfss")))
-                && url.password().is_none()
-                && url.query().is_none()
-                && url.fragment().is_none(),
-            StorageAuthorizationSnafu {
-                reason: "auth_source_invalid_table_url"
-            }
-        );
+        validate_table_url(&url, &scheme)?;
         match (scheme, self) {
             (
                 ObjectStoreScheme::AmazonS3,
@@ -82,6 +71,22 @@ impl CredentialSource {
             _ => Err(unsupported_storage()),
         }
     }
+}
+
+/// Azure Blob URLs may use container@account; passwords and embedded tokens remain invalid.
+pub(crate) fn validate_table_url(url: &Url, scheme: &ObjectStoreScheme) -> Result<(), Error> {
+    ensure!(
+        (url.username().is_empty()
+            || (*scheme == ObjectStoreScheme::MicrosoftAzure
+                && matches!(url.scheme(), "az" | "abfs" | "abfss")))
+            && url.password().is_none()
+            && url.query().is_none()
+            && url.fragment().is_none(),
+        StorageAuthorizationSnafu {
+            reason: "auth_source_invalid_table_url"
+        }
+    );
+    Ok(())
 }
 
 /// Uses native aliases and rejects duplicates after the provider validates each option.
