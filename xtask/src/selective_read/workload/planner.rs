@@ -260,6 +260,9 @@ pub(crate) fn run(args: Args) -> Result<()> {
 }
 
 #[cfg(test)]
+mod production_test;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
