@@ -18,16 +18,9 @@ from maturin import (
 
 def _xtask_command(task, *arguments):
     cargo = os.environ.get("CARGO", "cargo")
-    workspace = Path(
-        subprocess.check_output(
-            [cargo, "locate-project", "--workspace", "--message-format", "plain"],
-            encoding="utf-8",
-        ).strip()
-    ).parent
     cargo_arguments = [flag for flag in ("--offline", "--frozen") if flag in arguments]
     return [
-        cargo, "run", "--locked", *cargo_arguments, "--manifest-path",
-        str(workspace / "xtask" / "Cargo.toml"), "--", task, *arguments,
+        cargo, "run", "--locked", *cargo_arguments, "-p", "xtask", "--", task, *arguments,
     ]
 
 
