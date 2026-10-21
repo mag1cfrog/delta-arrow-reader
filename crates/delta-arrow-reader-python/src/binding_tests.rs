@@ -6,6 +6,8 @@ use pyo3::{
     types::{PyBytes, PyFloat, PyString},
 };
 
+mod diagnostics;
+
 fn assert_error<E: PyTypeInfo>(result: PyResult<Bound<'_, PyAny>>) -> PyErr {
     let error = result.unwrap_err();
     Python::attach(|py| assert!(error.get_type(py).is(py.get_type::<E>()), "{error}"));

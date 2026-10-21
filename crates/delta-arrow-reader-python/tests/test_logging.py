@@ -148,88 +148,20 @@ class LoggingTests(unittest.TestCase):
         with session.sql("SELECT id FROM private_events LIMIT 1") as reader:
             self.assertEqual(reader.read_all().num_rows, 1)
 
-    def test_return_only_core_validation_has_safe_reasons_and_original_exceptions(self):
-        table = DeltaTable(FIXTURE, warmup="none")
-        cases = [
-            (lambda: table.scan(filters=[("private_missing", "==", 1)]),
-             DeltaReaderError, "filters", "column_not_found"),
-            (lambda: table.scan(filters=[("private.nested", "==", 1)]),
-             DeltaReaderError, "filters", "invalid_column_reference"),
-        ]
-        for option in ["max_concurrent_file_reads_per_scan",
-                       "max_concurrent_file_reads_per_partition",
-                       "output_buffer_batches_per_partition"]:
-            cases.append((lambda option=option: ScanExecutionOptions(**{option: sys.maxsize}),
-                          ValueError, "execution_options", option + "_exceeds_tokio_max_permits"))
-        self.logger.setLevel(5)
-        for operation, exception, argument, reason in cases:
-            with self.subTest(reason=reason):
-                self.collect.records.clear()
-                with self.assertRaises(exception) as raised:
-                    operation()
-                self.assertEqual(self.events(), ["validation.failed"])
-                phase, code = (("scan_planning", "unsupported_predicate") if argument == "filters"
-                               else ("configuration", "invalid_configuration"))
-                record = self.assert_failure("validation.failed", target="delta_arrow_reader_python",
-                                             argument=argument, error_reason=reason,
-                                             error_phase=phase, error_code=code)
-                self.assert_logged_error(raised.exception, record)
-                self.assertEqual(str(raised.exception),
-                                 f"delta reader error: phase={phase} code={code} reason={reason}")
-        self.logger.disabled = True
-        self.collect.records.clear()
-        for operation, exception, _, _ in cases:
-            with self.assertRaises(exception):
-                operation()
-        self.assertEqual(self.collect.records, [])
-        with table.to_reader(limit=1) as reader:
-            self.assertEqual(reader.read_all().num_rows, 1)
-
-    def test_core_error_fields_do_not_depend_on_logging(self):
+    def test_failed_refresh_keeps_the_table_readable_with_logging_disabled(self):
         with tempfile.TemporaryDirectory(prefix="private-errors-") as temporary:
             location = Path(temporary) / "table"
             shutil.copytree(FIXTURE, location)
             table = DeltaTable(location, warmup="none")
-            session = Session()
             (location / "_delta_log" / "00000000000000000001.json").write_text("private-invalid-json\n")
-            cases = [
-                (lambda: DeltaTable("", warmup="none"), DeltaReaderError,
-                 "table_location", "invalid_table_location", "empty_table_location", None),
-                (lambda: DeltaTable("unknown://private-user:private-password@host/table?token=private-token"),
-                 DeltaReaderError, "storage", "storage_initialization", "storage_initialization_failed", "unknown"),
-                (lambda: DeltaTable(location, warmup="none"), DeltaReaderError,
-                 "snapshot", "snapshot_load", "snapshot_load_failed", "arrow_json"),
-                (table.refresh, DeltaReaderError,
-                 "snapshot", "snapshot_load", "snapshot_refresh_failed", "arrow_json"),
-                (lambda: table.scan(columns=["private_missing"]), DeltaReaderError,
-                 "scan_planning", "invalid_projection", "column_not_found", None),
-                (lambda: table.scan(filters=[("private_missing", "==", 1)]), DeltaReaderError,
-                 "scan_planning", "unsupported_predicate", "column_not_found", None),
-                (lambda: ScanExecutionOptions(max_concurrent_file_reads_per_scan=sys.maxsize),
-                 ValueError, "configuration", "invalid_configuration",
-                 "max_concurrent_file_reads_per_scan_exceeds_tokio_max_permits", None),
-                (lambda: session.register_table("private-invalid", table), DeltaReaderError,
-                 "datafusion", "datafusion_adapter", "table_registration_name_invalid", "datafusion_plan"),
-            ]
-            for disabled in [False, True]:
-                self.logger.disabled = disabled
-                self.logger.setLevel(logging.CRITICAL)
-                self.collect.records.clear()
-                for operation, exception, phase, code, reason, source_kind in cases:
-                    with self.subTest(disabled=disabled, code=code, reason=reason):
-                        with self.assertRaises(exception) as raised:
-                            operation()
-                        error = raised.exception
-                        self.assertEqual((error.phase, error.code, error.reason, error.source_kind),
-                                         (phase, code, reason, source_kind))
-                        for text in [str(error), repr(error), repr(error.args), repr(vars(error))]:
-                            self.assertNotIn("private", text)
-                        self.assertIsNone(error.__cause__)
-                        self.assertIsNone(error.__context__)
-                self.assertEqual(self.collect.records, [])
+            self.logger.disabled = True
+            self.collect.records.clear()
+            with self.assertRaises(DeltaReaderError):
+                table.refresh()
             self.assertEqual(table.version, 0)
             with table.to_reader(limit=1) as reader:
                 self.assertEqual(reader.read_all().num_rows, 1)
+            self.assertEqual(self.collect.records, [])
 
     def test_python_argument_and_consumer_errors_remain_exception_only(self):
         table = DeltaTable(FIXTURE, warmup="none")
@@ -960,8 +892,10 @@ def check_interrupt():
     assert DeltaTable(FIXTURE, warmup="none").version == 0
 
 
-def check_stream_interrupt():
+def check_stream_interrupt(*, sql=False):
     table = DeltaTable(FIXTURE, warmup="none")
+    session = Session()
+    session.register_table("events", table)
     logger = logging.getLogger("delta_arrow_reader")
     logger.setLevel(logging.INFO)
     logger.propagate = False
@@ -970,17 +904,21 @@ def check_stream_interrupt():
         pass
 
     for exception in [KeyboardInterrupt, SystemExit]:
-        for event in ["scan_execution.started", "scan_execution.completed"]:
-            reader = table.to_reader(target_partitions=1)
+        for event in (["datafusion_partition_execution.started"] if sql else
+                      ["scan_execution.started", "scan_execution.completed"]):
+            reader = (session.sql("SELECT * FROM events") if sql else
+                      table.to_reader(target_partitions=1))
             references = []
             events = []
+            called = []
             if event.endswith("completed"):
                 assert reader.read_next_batch().num_rows > 0
 
             class Interrupt(logging.Handler):
                 def emit(self, record):
                     events.append(record.msg)
-                    if record.msg == event:
+                    if record.msg == event and not called:
+                        called.append(threading.get_ident())
                         marker = Marker()
                         references.append(weakref.ref(marker))
                         # A retained traceback would keep both the marker and reader alive.
@@ -997,15 +935,23 @@ def check_stream_interrupt():
                         assert "private" not in str(error)
                     else:
                         raise AssertionError("stream swallowed a handler interruption")
-                assert events.count(event) == 1, events
-                assert not any(name.endswith("failed") for name in events), events
+                assert len(called) == 1
+                if sql:
+                    assert called[0] != threading.get_ident(), called
+                else:
+                    assert events.count(event) == 1, events
+                    assert not any(name.endswith("failed") for name in events), events
                 gc.collect()
                 assert len(references) == 1 and references[0]() is None
             finally:
                 logger.handlers = [logging.NullHandler()]
                 reader.close()
-    with table.to_reader() as reader:
-        assert reader.read_all().num_rows == 360
+    with (session.sql("SELECT 42 AS answer") if sql else table.to_reader()) as reader:
+        result = reader.read_all()
+        if sql:
+            assert result.to_pylist() == [{"answer": 42}]
+        else:
+            assert result.num_rows == 360
 
 
 def check_stream_close(*, sql=False):
@@ -1068,42 +1014,6 @@ def check_stream_close(*, sql=False):
     with table.to_reader() as reader:
         assert reader.read_all().num_rows == 360
 
-
-def check_sql_interrupt():
-    table = DeltaTable(FIXTURE, warmup="none")
-    session = Session()
-    session.register_table("events", table)
-    logger = logging.getLogger("delta_arrow_reader")
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-    for exception in [KeyboardInterrupt, SystemExit]:
-        reader = session.sql("SELECT * FROM events")
-        called = []
-
-        class Interrupt(logging.Handler):
-            def emit(self, record):
-                if record.msg == "datafusion_partition_execution.started" and not called:
-                    called.append(threading.get_ident())
-                    raise exception("private handler interruption")
-
-        logger.handlers = [Interrupt()]
-        try:
-            for _ in range(3):
-                try:
-                    reader.read_all()
-                except pa.ArrowInvalid as error:
-                    assert "phase=execution code=python_signal reason=reader_wait_interrupted" in str(error)
-                    assert "private" not in str(error)
-                else:
-                    raise AssertionError("SQL swallowed a worker handler interruption")
-            assert len(called) == 1 and called[0] != threading.get_ident(), called
-        finally:
-            logger.handlers = [logging.NullHandler()]
-            reader.close()
-    with session.sql("SELECT 42 AS answer") as reader:
-        assert reader.read_all().to_pylist() == [{"answer": 42}]
-
-
 if __name__ == "__main__":
     if sys.argv[1:] == ["reentry"]:
         check_reentry()
@@ -1118,6 +1028,6 @@ if __name__ == "__main__":
     elif sys.argv[1:] == ["sql-close"]:
         check_stream_close(sql=True)
     elif sys.argv[1:] == ["sql-interrupt"]:
-        check_sql_interrupt()
+        check_stream_interrupt(sql=True)
     else:
         unittest.main()
