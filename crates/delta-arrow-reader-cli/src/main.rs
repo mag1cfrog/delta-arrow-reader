@@ -5,6 +5,7 @@
 mod diagnostics;
 mod input;
 mod signals;
+mod stdout_monitor;
 mod unity_catalog;
 
 use std::{
@@ -73,7 +74,7 @@ enum Command {
 
 #[derive(Args)]
 struct TableArgs {
-    /// UTF-8 local path, storage URL, or uc://catalog.schema.table for inspection.
+    /// UTF-8 local path, storage URL, or uc://catalog.schema.table.
     /// Relative paths use the working directory.
     /// Use '--' before a table path beginning with '-'.
     table: String,
@@ -84,7 +85,7 @@ struct TableArgs {
     /// At most 1 MiB; '-' is a filename, not stdin.
     #[arg(long, value_name = "PATH")]
     storage_options_file: Option<String>,
-    /// Existing Databricks CLI profile; required for uc:// inspection.
+    /// Existing Databricks CLI profile; required for uc:// targets.
     #[arg(long, value_name = "PROFILE")]
     databricks_profile: Option<String>,
 }
@@ -264,7 +265,7 @@ impl Error {
             tracing::info!(target: "delta_arrow_reader_cli",
                 event = "cli.cancelled", operation = "cli_command", outcome = "cancelled",
                 error_phase = "execution", error_code = "uc_cancelled", exit_status = status,
-                "Unity Catalog inspection cancelled"
+                "Unity Catalog command cancelled"
             );
             return;
         }
@@ -518,7 +519,6 @@ fn run() -> Result<Value, Error> {
     let uc_target = unity_catalog::UnityCatalogTableTarget::parse(
         &table_args.table,
         table_args.databricks_profile.as_deref(),
-        matches!(command, Command::Scan { .. }),
     )
     .context(UnityCatalogSnafu)?;
     let storage_options = match &table_args.storage_options_file {
@@ -572,14 +572,16 @@ fn run() -> Result<Value, Error> {
             DeltaSnapshotSelection::Latest,
             DeltaSnapshotSelection::Version,
         );
+        let mut authorized_access = None;
         let table = match uc_target {
             Some(target) => {
-                target
+                let access = target
                     .request_read_access(storage_options)
                     .await
-                    .context(UnityCatalogSnafu)?
-                    .load_table_for_inspection(snapshot_selection)
-                    .await?
+                    .context(UnityCatalogSnafu)?;
+                let table = access.load_table(snapshot_selection).await?;
+                authorized_access = Some(access);
+                table
             }
             None => {
                 // Inspect needs only metadata. Scan planning happens explicitly below.
@@ -643,8 +645,17 @@ fn run() -> Result<Value, Error> {
                         .with_target_partitions(target_partitions.get())
                         .context(ConfigurationSnafu)?;
                 }
-                let stdout_stats =
-                    write_arrow_stream(builder.build().await.context(ReaderSnafu)?).await?;
+                let scan_result = async {
+                    let scan = builder.build().await.context(ReaderSnafu)?;
+                    write_arrow_stream(scan).await
+                }
+                .await;
+                let stdout_stats = match (scan_result, &authorized_access) {
+                    (Err(Error::Reader { source }), Some(access)) => {
+                        return Err(access.map_reader_error(source).await);
+                    }
+                    (result, _) => result?,
+                };
                 Ok(build_completion_record(
                     "scan",
                     Some(version),
@@ -662,6 +673,9 @@ fn run() -> Result<Value, Error> {
                 exit_status = signals::wait_for_cancellation() => Err(Error::UnityCatalog {
                     source: unity_catalog::Error::Cancelled { status: exit_status? },
                 }),
+                source = stdout_monitor::wait_for_disconnect(), if matches!(command, Command::Scan { .. }) => {
+                    Err(Error::Output { source })
+                },
                 result = work => result,
             }
         })
