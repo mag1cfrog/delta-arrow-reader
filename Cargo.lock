@@ -1336,6 +1336,7 @@ version = "0.7.0"
 dependencies = [
  "arrow",
  "arrow-schema",
+ "async-trait",
  "clap",
  "delta-arrow-reader",
  "libc",

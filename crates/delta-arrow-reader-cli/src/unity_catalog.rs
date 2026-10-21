@@ -1,22 +1,26 @@
-//! Databricks CLI authorization for local Delta metadata reads.
+//! Databricks CLI authorization for local Delta inspection and scans.
 //!
 //! The CLI supplies table metadata and temporary storage credentials. Core then reads
-//! the Delta log directly. Table identifiers, credentials, and raw command output
-//! must stay out of diagnostics; the types carrying them deliberately omit `Debug`.
+//! the Delta log and data files directly. Table identifiers, credentials, and raw command output
+//! must stay out of diagnostics. Raw responses and credential values omit `Debug`;
+//! credential caches and providers expose only redacted `Debug` output.
 
+mod credential_cache;
 mod databricks_cli;
 mod storage_access;
+mod storage_location;
 mod table_metadata;
+mod temporary_credentials;
 
 use std::fmt;
 
 use delta_arrow_reader::DeltaStorageOptions;
 use snafu::Snafu;
 
-use storage_access::{
-    AuthorizedTableAccess, TableStorageLocation, parse_authorized_access, validate_storage_options,
-};
+use storage_access::AuthorizedTableAccess;
+use storage_location::{TableStorageLocation, validate_storage_options};
 use table_metadata::TableMetadataResponse;
+use temporary_credentials::parse_temporary_credentials;
 
 /// Failures that the CLI can report without exposing Databricks responses or credentials.
 #[derive(Clone, Copy, PartialEq, Eq, Snafu)]
@@ -25,8 +29,6 @@ pub(crate) enum Error {
         "Use uc://catalog.schema.table with an explicit Databricks profile; profile flags are invalid for other targets."
     ))]
     InvalidTableTarget,
-    #[snafu(display("Unity Catalog targets currently support inspection only."))]
-    UnsupportedScan,
     #[snafu(display(
         "Unity Catalog storage options must contain only supported transport or region settings, without credential or namespace overrides."
     ))]
@@ -56,10 +58,10 @@ pub(crate) enum Error {
     ))]
     UnsupportedDirectRead,
     #[snafu(display(
-        "Unity Catalog credentials expired. Run inspection again to obtain fresh credentials."
+        "Unity Catalog returned expired credentials. Check the profile login and system clock, then retry."
     ))]
     CredentialsExpired,
-    #[snafu(display("Unity Catalog inspection was cancelled."))]
+    #[snafu(display("Unity Catalog command was cancelled."))]
     Cancelled { status: u8 },
 }
 
@@ -67,7 +69,6 @@ impl Error {
     pub(crate) fn code(&self) -> &'static str {
         match self {
             Self::InvalidTableTarget => "invalid_uc_reference",
-            Self::UnsupportedScan => "unsupported_uc_scan",
             Self::InvalidStorageOptions => "invalid_uc_storage_options",
             Self::MissingS3Region => "uc_s3_region_required",
             Self::DatabricksCliNotFound => "databricks_cli_missing",
@@ -85,7 +86,6 @@ impl Error {
     pub(crate) fn exit_status(&self) -> u8 {
         match self {
             Self::InvalidTableTarget
-            | Self::UnsupportedScan
             | Self::InvalidStorageOptions
             | Self::MissingS3Region
             | Self::DatabricksCliNotFound => 2,
@@ -122,11 +122,10 @@ impl<'a> UnityCatalogTableTarget<'a> {
     /// Checks the target and profile before any subprocess or storage access.
     ///
     /// Direct file/storage paths without a Databricks profile return `None`.
-    /// UC targets require a profile and currently support inspection only.
+    /// UC targets require an explicit profile.
     pub(crate) fn parse(
         target: &'a str,
         databricks_profile: Option<&'a str>,
-        is_scan: bool,
     ) -> Result<Option<Self>, Error> {
         let Some(full_table_name) = target.strip_prefix("uc://") else {
             return if databricks_profile.is_some() || target.to_ascii_lowercase().starts_with("uc:")
@@ -150,9 +149,6 @@ impl<'a> UnityCatalogTableTarget<'a> {
             })
         {
             return Err(Error::InvalidTableTarget);
-        }
-        if is_scan {
-            return Err(Error::UnsupportedScan);
         }
         Ok(Some(Self {
             full_table_name,
@@ -178,7 +174,14 @@ impl<'a> UnityCatalogTableTarget<'a> {
             &table_metadata.table_id,
         )
         .await?;
-        parse_authorized_access(&credentials_json, storage_location, storage_options)
+        let credentials = parse_temporary_credentials(&credentials_json, &storage_location)?;
+        AuthorizedTableAccess::new(
+            storage_location,
+            storage_options,
+            self.databricks_profile.to_owned(),
+            table_metadata.table_id,
+            credentials,
+        )
     }
 }
 
@@ -190,14 +193,10 @@ mod tests {
     fn table_target_requires_valid_name_and_explicit_profile() {
         for target in ["uc://main.sales.orders", "uc://catalog-1.schema_2.table3"] {
             assert!(
-                UnityCatalogTableTarget::parse(target, Some("work profile"), false)
+                UnityCatalogTableTarget::parse(target, Some("work profile"))
                     .unwrap()
                     .is_some()
             );
-            assert!(matches!(
-                UnityCatalogTableTarget::parse(target, Some("work profile"), true),
-                Err(Error::UnsupportedScan)
-            ));
         }
         for target in [
             "uc://",
@@ -214,7 +213,7 @@ mod tests {
         ] {
             assert!(
                 matches!(
-                    UnityCatalogTableTarget::parse(target, Some("work"), false),
+                    UnityCatalogTableTarget::parse(target, Some("work")),
                     Err(Error::InvalidTableTarget)
                 ),
                 "{target}"
@@ -222,17 +221,17 @@ mod tests {
         }
         for profile in [None, Some(""), Some("  "), Some("work\nprofile")] {
             assert!(matches!(
-                UnityCatalogTableTarget::parse("uc://a.b.c", profile, false),
+                UnityCatalogTableTarget::parse("uc://a.b.c", profile),
                 Err(Error::InvalidTableTarget)
             ));
         }
         assert!(
-            UnityCatalogTableTarget::parse("s3://bucket/table", None, true)
+            UnityCatalogTableTarget::parse("s3://bucket/table", None)
                 .unwrap()
                 .is_none()
         );
         assert!(matches!(
-            UnityCatalogTableTarget::parse("/local/table", Some("work"), false),
+            UnityCatalogTableTarget::parse("/local/table", Some("work")),
             Err(Error::InvalidTableTarget)
         ));
     }

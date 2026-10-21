@@ -1,5 +1,7 @@
+mod scans;
+
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     fs,
     io::{Read, Write},
     net::TcpListener,
@@ -32,6 +34,92 @@ enum StorageCredentialKind {
     R2,
     AzureSas,
     AzureBearer,
+    Gcs,
+}
+
+impl StorageCredentialKind {
+    fn rotate_credentials(self, response: &mut Value) {
+        match self {
+            Self::S3 | Self::R2 => {
+                let field = if self == Self::S3 {
+                    "aws_temp_credentials"
+                } else {
+                    "r2_temp_credentials"
+                };
+                response[field] = json!({
+                    "access_key_id": "renewed-key", "secret_access_key": "renewed-secret", "session_token": "renewed-session"
+                });
+            }
+            Self::AzureSas => {
+                response["azure_user_delegation_sas"] =
+                    json!({"sas_token":"sig=renewed%2Bsignature"})
+            }
+            Self::AzureBearer => response["azure_aad"] = json!({"aad_token":"renewed-azure-token"}),
+            Self::Gcs => response["gcp_oauth_token"] = json!({"oauth_token":"renewed-gcp-token"}),
+        }
+    }
+
+    /// Lowercase fragment matched against a captured request after credential rotation.
+    fn expected_renewed_auth_fragment(self) -> &'static str {
+        match self {
+            Self::S3 | Self::R2 => "credential=renewed-key/",
+            Self::AzureSas => "sig=renewed%2bsignature",
+            Self::AzureBearer => "authorization: bearer renewed-azure-token",
+            Self::Gcs => "authorization: bearer renewed-gcp-token",
+        }
+    }
+}
+
+/// Failures injected into a renewal command or its replacement credential response.
+#[derive(Clone, Copy, Debug)]
+enum CredentialRefreshFailure {
+    PermissionDenied,
+    MissingDatabricksCli,
+    ChangedStorageRoot,
+    ExpiredCredentials,
+    ChangedCredentialKind,
+    InvalidBearerToken,
+}
+
+impl CredentialRefreshFailure {
+    fn apply_to_response(self, response: &mut Value) {
+        match self {
+            Self::PermissionDenied | Self::MissingDatabricksCli => {}
+            Self::ChangedStorageRoot => response["url"] = json!("gs://other/secret-root"),
+            Self::ExpiredCredentials => response["expiration_time"] = json!(0),
+            Self::ChangedCredentialKind => {
+                response
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("azure_user_delegation_sas");
+                response["azure_aad"] = json!({"aad_token":"secret-new-kind"});
+            }
+            Self::InvalidBearerToken => {
+                response["gcp_oauth_token"] = json!({"oauth_token":"secret invalid token"});
+            }
+        }
+    }
+
+    fn cli_refresh_behavior(self) -> &'static str {
+        match self {
+            Self::PermissionDenied => "deny",
+            Self::MissingDatabricksCli => "missing",
+            Self::ChangedStorageRoot
+            | Self::ExpiredCredentials
+            | Self::ChangedCredentialKind
+            | Self::InvalidBearerToken => "rotate",
+        }
+    }
+
+    fn expected_error_code(self) -> &'static str {
+        match self {
+            Self::PermissionDenied => "uc_credential_request_failed",
+            Self::MissingDatabricksCli => "databricks_cli_missing",
+            Self::ChangedStorageRoot | Self::InvalidBearerToken => "invalid_databricks_response",
+            Self::ExpiredCredentials => "uc_credentials_expired",
+            Self::ChangedCredentialKind => "unsupported_uc_table",
+        }
+    }
 }
 
 /// A fake Databricks executable with controllable table metadata and credential responses.
@@ -48,6 +136,7 @@ impl DatabricksCliFixture {
             StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer => {
                 "abfss://container@account.dfs.core.windows.net/table/"
             }
+            StorageCredentialKind::Gcs => "gs://bucket/table/",
         };
         fs::write(
             directory.path().join("metadata.json"),
@@ -95,6 +184,9 @@ impl DatabricksCliFixture {
             StorageCredentialKind::AzureBearer => {
                 credentials["azure_aad"] = json!({"aad_token":"secret-bearer-token"});
             }
+            StorageCredentialKind::Gcs => {
+                credentials["gcp_oauth_token"] = json!({"oauth_token":"secret-gcp-token"});
+            }
         }
         fs::write(
             directory.path().join("credentials.json"),
@@ -105,7 +197,7 @@ impl DatabricksCliFixture {
             &executable,
             r#"#!/bin/sh
 set -eu
-printf '%s\000' "$@" >> "$DAR_TEST_DIR/calls"
+printf '%s\000' "$@" >> "$DAR_TEST_DIR/recorded_arguments"
 if IFS= read -r unused; then exit 98; fi
 if [ -n "${DAR_TEST_PID1_SIGNAL:-}" ]; then
   printf '%s' "$PPID" > "$DAR_TEST_DIR/parent_pid"
@@ -121,7 +213,21 @@ case "$1" in
   tables) /bin/cat "$DAR_TEST_DIR/metadata.json" ;;
   temporary-table-credentials)
     if [ "${DAR_TEST_DENIED:-}" = 1 ]; then printf 'secret-sentinel\n' >&2; exit 1; fi
+    if [ -n "${DAR_TEST_REFRESH:-}" ]; then
+      if [ -e "$DAR_TEST_DIR/initial_grant_issued" ]; then
+        case "$DAR_TEST_REFRESH" in
+          deny) printf 'secret-sentinel\n' >&2; exit 1 ;;
+          hang) printf '%s' "$$" > "$DAR_TEST_DIR/pid"; exec /bin/sleep 60 ;;
+          rotate) ;;
+          *) exit 97 ;;
+        esac
+        /bin/cat "$DAR_TEST_DIR/credentials.next.json"
+        exit 0
+      fi
+      : > "$DAR_TEST_DIR/initial_grant_issued"
+    fi
     /bin/cat "$DAR_TEST_DIR/credentials.json"
+    if [ "${DAR_TEST_REFRESH:-}" = missing ]; then /bin/mv "$0" "$0.unavailable"; fi
     ;;
   *) exit 97 ;;
 esac
@@ -151,8 +257,16 @@ esac
     }
 
     fn inspect(&self) -> Command {
+        self.table_command("inspect")
+    }
+
+    fn scan(&self) -> Command {
+        self.table_command("scan")
+    }
+
+    fn table_command(&self, operation: &str) -> Command {
         let mut command = self.command(&[
-            "inspect",
+            operation,
             "uc://main.sales.orders",
             "--databricks-profile",
             PROFILE,
@@ -163,8 +277,79 @@ esac
         command
     }
 
-    fn calls(&self) -> Vec<String> {
-        fs::read(self.directory.path().join("calls"))
+    fn use_storage_endpoint(&self, kind: StorageCredentialKind, endpoint: &str) -> TestResult {
+        let options = match kind {
+            StorageCredentialKind::S3 => json!({
+                "aws_endpoint": endpoint, "aws_allow_http": "true", "aws_region": "eu-west-1"
+            }),
+            StorageCredentialKind::R2 => json!({
+                "aws_endpoint_url_s3": endpoint, "aws_allow_http": "true"
+            }),
+            StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer => json!({
+                "azure_endpoint": endpoint, "azure_allow_http": "true"
+            }),
+            StorageCredentialKind::Gcs => json!({
+                "google_base_url": endpoint, "google_allow_http": "true"
+            }),
+        };
+        fs::write(
+            self.directory.path().join("options.json"),
+            serde_json::to_vec(&options)?,
+        )?;
+        Ok(())
+    }
+
+    fn prepare_credential_renewal(
+        &self,
+        update_replacement: impl FnOnce(&mut Value),
+    ) -> Result<SystemTime, Box<dyn std::error::Error>> {
+        let credentials_path = self.directory.path().join("credentials.json");
+        let mut initial: Value = serde_json::from_slice(&fs::read(&credentials_path)?)?;
+        let mut replacement = initial.clone();
+        update_replacement(&mut replacement);
+        fs::write(
+            self.directory.path().join("credentials.next.json"),
+            serde_json::to_vec(&replacement)?,
+        )?;
+        let expires_at = SystemTime::now() + Duration::from_secs(3);
+        initial["expiration_time"] =
+            json!(expires_at.duration_since(UNIX_EPOCH)?.as_millis() as u64);
+        fs::write(credentials_path, serde_json::to_vec(&initial)?)?;
+        Ok(expires_at)
+    }
+
+    /// Expires the initial grant during the first storage response and invalidates UC metadata
+    /// so an accidental table-name lookup during renewal fails.
+    fn storage_with_credential_expiry_and_invalid_metadata(
+        &self,
+        kind: StorageCredentialKind,
+        update_replacement: impl FnOnce(&mut Value),
+    ) -> Result<MockCloudStorageServer, Box<dyn std::error::Error>> {
+        let expires_at = self.prepare_credential_renewal(update_replacement)?;
+        let log = fs::read(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned/table/_delta_log/00000000000000000000.json",
+        ))?;
+        let mut first_request = true;
+        let metadata_path = self.directory.path().join("metadata.json");
+        let server = MockCloudStorageServer::with_request_hook(kind, log, move |_| {
+            if first_request {
+                first_request = false;
+                // Re-resolving the table name after authorization must not be part of renewal.
+                fs::write(&metadata_path, "secret-table-was-replaced").unwrap();
+                thread::sleep(
+                    expires_at
+                        .duration_since(SystemTime::now())
+                        .unwrap_or_default()
+                        + Duration::from_millis(20),
+                );
+            }
+        })?;
+        self.use_storage_endpoint(kind, &server.endpoint)?;
+        Ok(server)
+    }
+
+    fn recorded_arguments(&self) -> Vec<String> {
+        fs::read(self.directory.path().join("recorded_arguments"))
             .unwrap_or_default()
             .split(|b| *b == 0)
             .filter(|arg| !arg.is_empty())
@@ -186,34 +371,11 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
         StorageCredentialKind::R2,
         StorageCredentialKind::AzureSas,
         StorageCredentialKind::AzureBearer,
+        StorageCredentialKind::Gcs,
     ] {
         let fixture = DatabricksCliFixture::new(credential_kind)?;
         let server = MockCloudStorageServer::new(credential_kind, log.clone())?;
-        let options = match credential_kind {
-            StorageCredentialKind::S3 => {
-                json!({
-                    "aws_endpoint": server.endpoint,
-                    "aws_allow_http": "true",
-                    "aws_region": "eu-west-1"
-                })
-            }
-            StorageCredentialKind::R2 => {
-                json!({
-                    "aws_endpoint_url_s3": server.endpoint,
-                    "aws_allow_http": "true"
-                })
-            }
-            StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer => {
-                json!({
-                    "azure_endpoint": server.endpoint,
-                    "azure_allow_http": "true"
-                })
-            }
-        };
-        fs::write(
-            fixture.directory.path().join("options.json"),
-            serde_json::to_vec(&options)?,
-        )?;
+        fixture.use_storage_endpoint(credential_kind, &server.endpoint)?;
         for (historical, verbosity, machine) in [
             (false, "", false),
             (true, "", false),
@@ -221,12 +383,26 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
             (false, "off", true),
             (true, "trace", true),
         ] {
+            if credential_kind == StorageCredentialKind::AzureSas && historical {
+                // Raw '+' and percent-encoded '+' must produce the same SAS signature.
+                let path = fixture.directory.path().join("credentials.json");
+                let mut credentials: Value = serde_json::from_slice(&fs::read(&path)?)?;
+                credentials["azure_user_delegation_sas"] =
+                    json!({"sas_token":"?sv=test&sp=rl&sig=test+signature"});
+                fs::write(path, serde_json::to_vec(&credentials)?)?;
+            }
             let mut command = fixture.inspect();
             command
                 .env("AWS_ACCESS_KEY_ID", "ambient-key")
                 .env("AZURE_STORAGE_ACCOUNT_KEY", "invalid-ambient-secret")
                 .env("AZURE_STORAGE_TOKEN", "ambient-token")
-                .env("AZURE_STORAGE_SAS_KEY", "sig=ambient-signature");
+                .env("AZURE_STORAGE_SAS_KEY", "sig=ambient-signature")
+                .env("GOOGLE_APPLICATION_CREDENTIALS", "secret-missing-adc.json")
+                .env(
+                    "GOOGLE_SERVICE_ACCOUNT",
+                    "secret-missing-service-account.json",
+                )
+                .env("GOOGLE_SKIP_SIGNATURE", "true");
             if !verbosity.is_empty() {
                 command.env("RUST_LOG", verbosity);
             }
@@ -307,16 +483,34 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
             "--output",
             "json",
         ];
-        assert_eq!(fixture.calls(), expected.repeat(5));
+        assert_eq!(fixture.recorded_arguments(), expected.repeat(5));
         let requests = server.requests.lock().unwrap();
         assert!(!requests.is_empty());
         for request in requests.iter() {
             let first = request.lines().next().unwrap();
+            let request_url = Url::parse(&format!(
+                "http://localhost{}",
+                request
+                    .split_whitespace()
+                    .nth(1)
+                    .ok_or("missing request target")?
+            ))?;
+            let request_path = object_store::path::Path::from_url_path(request_url.path())?;
             assert!(
-                !first.contains(".parquet") && !first.contains(".bin"),
+                !request_path.as_ref().ends_with(".parquet")
+                    && !request_path.as_ref().ends_with(".bin"),
                 "{first}"
             );
             match credential_kind {
+                StorageCredentialKind::Gcs => {
+                    assert!(
+                        request
+                            .to_ascii_lowercase()
+                            .contains("authorization: bearer secret-gcp-token\r\n"),
+                        "missing UC GCS token"
+                    );
+                    assert!(!first.contains("sig="), "unexpected SAS credential");
+                }
                 StorageCredentialKind::AzureBearer => {
                     assert!(
                         request
@@ -361,7 +555,8 @@ fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResul
         vec!["inspect", "--help"],
         vec!["inspect", "uc://a.b.c"],
         vec!["inspect", "uc://a.b", "--databricks-profile", "work"],
-        vec!["scan", "uc://a.b.c", "--databricks-profile", "work"],
+        vec!["scan", "uc://a.b.c"],
+        vec!["scan", "uc://a.b", "--databricks-profile", "work"],
         vec!["inspect", "local", "--databricks-profile", "work"],
     ] {
         let output = run_with_timeout(&mut fixture.command(&args))?;
@@ -390,7 +585,7 @@ fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResul
             "invalid_uc_storage_options",
         );
     }
-    assert!(fixture.calls().is_empty());
+    assert!(fixture.recorded_arguments().is_empty());
     let local = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
         "../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned/table",
     );
@@ -407,6 +602,148 @@ fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResul
         diagnostic.contains("Install the Databricks CLI"),
         "{diagnostic}"
     );
+    Ok(())
+}
+
+#[test]
+fn inspection_renews_expired_grants_without_resolving_the_table_name_again() -> TestResult {
+    for kind in [
+        StorageCredentialKind::S3,
+        StorageCredentialKind::R2,
+        StorageCredentialKind::AzureSas,
+        StorageCredentialKind::AzureBearer,
+        StorageCredentialKind::Gcs,
+    ] {
+        let fixture = DatabricksCliFixture::new(kind)?;
+        let server =
+            fixture.storage_with_credential_expiry_and_invalid_metadata(kind, |replacement| {
+                kind.rotate_credentials(replacement);
+            })?;
+        let output = run_with_timeout(
+            fixture
+                .inspect()
+                .env("DAR_TEST_REFRESH", "rotate")
+                .env("RUST_LOG", "trace"),
+        )?;
+        assert!(
+            output.status.success(),
+            "{kind:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            serde_json::from_slice::<Value>(&output.stdout)?["table_version"],
+            "0"
+        );
+        let recorded_arguments = fixture.recorded_arguments();
+        assert_eq!(
+            recorded_arguments
+                .iter()
+                .filter(|arg| *arg == "tables")
+                .count(),
+            1
+        );
+        assert_eq!(
+            recorded_arguments
+                .iter()
+                .filter(|arg| *arg == "temporary-table-credentials")
+                .count(),
+            2
+        );
+        assert_eq!(
+            recorded_arguments
+                .iter()
+                .filter(|arg| *arg == "READ")
+                .count(),
+            2
+        );
+        for pair in recorded_arguments
+            .windows(2)
+            .filter(|pair| pair[0] == "--table-id")
+        {
+            assert_eq!(pair[1], TABLE_ID);
+        }
+        assert_eq!(
+            recorded_arguments
+                .iter()
+                .filter(|arg| **arg == format!("--profile={PROFILE}"))
+                .count(),
+            3
+        );
+        let requests = server.requests.lock().unwrap();
+        let expected_auth_fragment = kind.expected_renewed_auth_fragment();
+        assert!(
+            requests.iter().any(|request| request
+                .to_ascii_lowercase()
+                .contains(expected_auth_fragment)),
+            "{kind:?}: no request used renewed credentials"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        for sensitive in ["secret", "renewed-", TABLE_NAME, TABLE_ID, PROFILE] {
+            assert!(!stderr.contains(sensitive), "{stderr}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn refresh_failures_preserve_redacted_uc_categories_and_stop_inspection() -> TestResult {
+    for (kind, failure) in [
+        (
+            StorageCredentialKind::S3,
+            CredentialRefreshFailure::PermissionDenied,
+        ),
+        (
+            StorageCredentialKind::S3,
+            CredentialRefreshFailure::ExpiredCredentials,
+        ),
+        (
+            StorageCredentialKind::Gcs,
+            CredentialRefreshFailure::ChangedStorageRoot,
+        ),
+        (
+            StorageCredentialKind::Gcs,
+            CredentialRefreshFailure::InvalidBearerToken,
+        ),
+        (
+            StorageCredentialKind::AzureSas,
+            CredentialRefreshFailure::ChangedCredentialKind,
+        ),
+    ] {
+        let fixture = DatabricksCliFixture::new(kind)?;
+        let _server =
+            fixture.storage_with_credential_expiry_and_invalid_metadata(kind, |replacement| {
+                failure.apply_to_response(replacement);
+            })?;
+        let output = run_with_timeout(
+            fixture
+                .inspect()
+                .arg("--diagnostics=json")
+                .env("DAR_TEST_REFRESH", failure.cli_refresh_behavior())
+                .env("RUST_LOG", "trace"),
+        )?;
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "{failure:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stdout.is_empty());
+        let record =
+            super::diagnostics::assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert_eq!(record["code"], failure.expected_error_code());
+        assert_eq!(
+            fixture
+                .recorded_arguments()
+                .iter()
+                .filter(|arg| *arg == "temporary-table-credentials")
+                .count(),
+            2
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        for sensitive in ["secret", TABLE_NAME, TABLE_ID, PROFILE] {
+            assert!(!stderr.contains(sensitive), "{stderr}");
+        }
+    }
     Ok(())
 }
 
@@ -438,10 +775,13 @@ fn invalid_responses_and_denied_credentials_are_redacted() -> TestResult {
         let record =
             super::diagnostics::assert_single_terminal_record(&output.stderr, "diagnostic");
         assert_eq!(record["code"], expected);
-        assert_eq!(fixture.calls().first().map(String::as_str), Some("tables"));
+        assert_eq!(
+            fixture.recorded_arguments().first().map(String::as_str),
+            Some("tables")
+        );
         assert!(
             !fixture
-                .calls()
+                .recorded_arguments()
                 .iter()
                 .any(|a| a == "temporary-table-credentials")
         );
@@ -620,20 +960,31 @@ fn uc_cancellation_remains_responsive_with_blocked_stdout() -> TestResult {
 #[cfg(target_os = "linux")]
 #[test]
 fn cancellation_terminates_pending_databricks_process() -> TestResult {
-    for (signal, machine) in [
-        (libc::SIGINT, false),
-        (libc::SIGTERM, false),
-        (libc::SIGINT, true),
-        (libc::SIGTERM, true),
+    for (signal, machine, during_refresh) in [
+        (libc::SIGINT, false, false),
+        (libc::SIGTERM, false, false),
+        (libc::SIGINT, true, false),
+        (libc::SIGTERM, true, false),
+        (libc::SIGINT, false, true),
+        (libc::SIGTERM, true, true),
     ] {
         let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
+        let _server = if during_refresh {
+            Some(fixture.storage_with_credential_expiry_and_invalid_metadata(
+                StorageCredentialKind::S3,
+                |_| {},
+            )?)
+        } else {
+            None
+        };
         let mut command = fixture.inspect();
         if machine {
             command.arg("--diagnostics=json");
         }
         let mut child = command
             .env("RUST_LOG", if machine { "off" } else { "info" })
-            .env("DAR_TEST_HANG", "1")
+            .env("DAR_TEST_HANG", if during_refresh { "0" } else { "1" })
+            .env("DAR_TEST_REFRESH", if during_refresh { "hang" } else { "" })
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?;
@@ -729,9 +1080,7 @@ fn pid_one_cancellation_preserves_uc_diagnostic() -> TestResult {
     Ok(())
 }
 
-/// A local server that serves Delta logs as S3/Azure objects and records requests.
-///
-/// Only GET/HEAD and log listing are needed, following the core cloud-location fixture.
+/// A local S3/Azure/GCS server for log listings and ranged object reads.
 struct MockCloudStorageServer {
     endpoint: String,
     requests: Arc<Mutex<Vec<String>>>,
@@ -741,6 +1090,26 @@ struct MockCloudStorageServer {
 
 impl MockCloudStorageServer {
     fn new(credential_kind: StorageCredentialKind, log: Vec<u8>) -> std::io::Result<Self> {
+        Self::with_request_hook(credential_kind, log, |_| {})
+    }
+
+    fn with_request_hook(
+        credential_kind: StorageCredentialKind,
+        log: Vec<u8>,
+        mut on_request: impl FnMut(&str) + Send + 'static,
+    ) -> std::io::Result<Self> {
+        Self::with_objects(
+            credential_kind,
+            BTreeMap::from([("table/_delta_log/00000000000000000000.json".into(), log)]),
+            move |request, _| on_request(request),
+        )
+    }
+
+    fn with_objects(
+        credential_kind: StorageCredentialKind,
+        mut objects: BTreeMap<String, Vec<u8>>,
+        mut on_request: impl FnMut(&str, &mut BTreeMap<String, Vec<u8>>) + Send + 'static,
+    ) -> std::io::Result<Self> {
         let is_azure = matches!(
             credential_kind,
             StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer
@@ -771,53 +1140,89 @@ impl MockCloudStorageServer {
                 }
                 let request = String::from_utf8(request).unwrap();
                 recorded.lock().unwrap().push(request.clone());
+                on_request(&request, &mut objects);
                 let Some(target) = request.split_whitespace().nth(1) else {
                     continue;
                 };
                 let url = Url::parse(&format!("http://localhost{target}")).unwrap();
+                // GCS encodes slashes in object keys, unlike the S3 and Azure clients.
+                let request_path = object_store::path::Path::from_url_path(url.path()).unwrap();
                 let query = url.query_pairs().collect::<HashMap<_, _>>();
                 let listing = query.contains_key("list-type")
                     || query.get("comp").is_some_and(|v| v == "list");
-                let key = "table/_delta_log/00000000000000000000.json";
-                let (status, mut body) = if listing {
-                    let include = key.starts_with(query.get("prefix").map_or("", |v| v.as_ref()))
-                        && key > query.get("start-after").map_or("", |v| v.as_ref());
-                    let entry = if !include {
-                        String::new()
-                    } else if is_azure {
-                        format!(
-                            "<Blob><Name>{key}</Name><Properties><Last-Modified>Wed, 01 Jan 2020 00:00:00 GMT</Last-Modified><Etag>test</Etag><Content-Length>{}</Content-Length><Content-Type>application/octet-stream</Content-Type><BlobType>BlockBlob</BlobType></Properties></Blob>",
-                            log.len()
-                        )
-                    } else {
-                        format!(
-                            "<Contents><Key>{key}</Key><LastModified>2020-01-01T00:00:00Z</LastModified><Size>{}</Size></Contents>",
-                            log.len()
-                        )
-                    };
+                let (mut status, mut body) = if listing {
+                    let mut entries = String::new();
+                    for (key, bytes) in &objects {
+                        if !key.starts_with(query.get("prefix").map_or("", |v| v.as_ref()))
+                            || key.as_str() <= query.get("start-after").map_or("", |v| v.as_ref())
+                        {
+                            continue;
+                        }
+                        let entry = if is_azure {
+                            format!(
+                                "<Blob><Name>{key}</Name><Properties><Last-Modified>Wed, 01 Jan 2020 00:00:00 GMT</Last-Modified><Etag>test</Etag><Content-Length>{}</Content-Length><Content-Type>application/octet-stream</Content-Type><BlobType>BlockBlob</BlobType></Properties></Blob>",
+                                bytes.len()
+                            )
+                        } else {
+                            format!(
+                                "<Contents><Key>{key}</Key><LastModified>2020-01-01T00:00:00Z</LastModified><Size>{}</Size></Contents>",
+                                bytes.len()
+                            )
+                        };
+                        entries.push_str(&entry);
+                    }
                     let xml = if is_azure {
                         format!(
-                            "<EnumerationResults><Blobs>{entry}</Blobs><NextMarker /></EnumerationResults>"
+                            "<EnumerationResults><Blobs>{entries}</Blobs><NextMarker /></EnumerationResults>"
                         )
                     } else {
                         format!(
-                            "<ListBucketResult><IsTruncated>false</IsTruncated>{entry}</ListBucketResult>"
+                            "<ListBucketResult><IsTruncated>false</IsTruncated>{entries}</ListBucketResult>"
                         )
                     };
                     (200, xml.into_bytes())
-                } else if url.path()
-                    == format!("/{}/{key}", if is_azure { "container" } else { "bucket" })
+                } else if let Some(bytes) = request_path
+                    .as_ref()
+                    .strip_prefix(if is_azure { "container/" } else { "bucket/" })
+                    .and_then(|key| objects.get(key))
                 {
-                    (200, log.clone())
+                    (200, bytes.clone())
                 } else {
                     (404, Vec::new())
                 };
+                let mut content_range = String::new();
+                if status == 200 && !listing && !request.starts_with("HEAD ") {
+                    let range = request.lines().find_map(|line| {
+                        let (name, value) = line.split_once(':')?;
+                        (name.eq_ignore_ascii_case("range")
+                            || name.eq_ignore_ascii_case("x-ms-range"))
+                        .then(|| value.trim().strip_prefix("bytes="))
+                        .flatten()
+                    });
+                    if let Some(range) = range {
+                        let (start, end) = range.split_once('-').unwrap();
+                        let start: usize = start.parse().unwrap();
+                        let end = if end.is_empty() {
+                            body.len() - 1
+                        } else {
+                            end.parse().unwrap()
+                        };
+                        assert!(
+                            start <= end && end < body.len(),
+                            "invalid fixture range {range}"
+                        );
+                        content_range =
+                            format!("Content-Range: bytes {start}-{end}/{}\r\n", body.len());
+                        body = body[start..=end].to_vec();
+                        status = 206;
+                    }
+                }
                 let length = body.len();
                 if request.starts_with("HEAD ") {
                     body.clear();
                 }
                 let headers = format!(
-                    "HTTP/1.1 {status} OK\r\nContent-Length: {length}\r\nContent-Type: {}\r\nLast-Modified: Wed, 01 Jan 2020 00:00:00 GMT\r\nETag: test\r\nConnection: close\r\n\r\n",
+                    "HTTP/1.1 {status} OK\r\n{content_range}Content-Length: {length}\r\nContent-Type: {}\r\nLast-Modified: Wed, 01 Jan 2020 00:00:00 GMT\r\nETag: test\r\nConnection: close\r\n\r\n",
                     if listing {
                         "application/xml"
                     } else {
