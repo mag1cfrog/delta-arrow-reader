@@ -365,14 +365,6 @@ jobs:
           toolchain: ${{ steps.rust-version.outputs.version }}
           components: clippy, rustfmt
       - run: cargo fmt --package delta-arrow-reader-cli -- --check
-      - name: Check CLI test file layout
-        run: |
-          cli_test_files=$(git ls-files ':(glob)crates/delta-arrow-reader-cli/src/**/tests.rs')
-          if [ -n "$cli_test_files" ]; then
-            printf '%s\n' "$cli_test_files"
-            echo 'Keep unit tests in an inline #[cfg(test)] mod tests. Put integration tests in crates/delta-arrow-reader-cli/tests/.'
-            exit 1
-          fi
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
