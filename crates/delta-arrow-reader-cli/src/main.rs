@@ -730,7 +730,7 @@ fn run() -> Result<Value, Error> {
                 let (table, _) = load_table.await?;
                 let version = table.version();
                 let stream = sql_query
-                    .execute_stream(table, args.memory_limit_bytes.get())
+                    .execute_stream([("t".to_owned(), table)], args.memory_limit_bytes.get())
                     .await?;
                 let schema = stream.schema();
                 let stdout_stats = arrow_output::write_arrow_stream_to_stdout(

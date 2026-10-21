@@ -1,4 +1,4 @@
-//! Single-table SQL admission and planning over an immutable Core snapshot.
+//! Read-only SQL admission and planning over named, immutable Core snapshots.
 
 use std::{fmt, fs::File, io::Read, num::NonZeroUsize, ops::ControlFlow, sync::Arc};
 
@@ -181,10 +181,10 @@ impl ReadOnlySqlQuery {
         Ok(Self { statement })
     }
 
-    /// Registers only the supplied snapshot as t. URL-based table discovery is never enabled.
+    /// Registers only the supplied names and snapshots. URL-based table discovery stays disabled.
     pub(crate) async fn execute_stream(
         self,
-        table: DeltaTable,
+        tables: impl IntoIterator<Item = (String, DeltaTable)>,
         memory_limit_bytes: usize,
     ) -> Result<SendableRecordBatchStream, crate::Error> {
         let runtime = RuntimeEnvBuilder::new()
@@ -196,7 +196,10 @@ impl ReadOnlySqlQuery {
             .context(InitializationSnafu)
             .context(QuerySnafu)?;
         let context = SessionContext::new_with_config_rt(SessionConfig::new(), runtime);
-        register_table(&context, "t", table, ScanOptions::default()).context(crate::ReaderSnafu)?;
+        for (alias, table) in tables {
+            register_table(&context, alias, table, ScanOptions::default())
+                .context(crate::ReaderSnafu)?;
+        }
         let plan = context
             .state()
             .statement_to_plan(self.statement)
@@ -304,6 +307,62 @@ impl Visitor for ReadOnlySqlValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use arrow::{array::Int32Array, compute::concat_batches};
+    use delta_arrow_reader::{DeltaTableBuilder, WarmupMode};
+    use futures_util::TryStreamExt;
+
+    #[tokio::test]
+    async fn joins_use_distinct_snapshots_and_respect_deletion_vectors()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let corpus = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus"
+        );
+        let mut tables = Vec::new();
+        for name in ["partitioned", "deletion_vectors"] {
+            let table = DeltaTableBuilder::new(format!("{corpus}/{name}/table"))
+                .with_warmup(WarmupMode::None)
+                .load_table()
+                .await?;
+            tables.push((name.to_owned(), table));
+        }
+        let query = ReadOnlySqlQuery::parse(
+            "SELECT p.id AS partitioned_id, d.id AS retained_id
+             FROM partitioned AS p LEFT JOIN deletion_vectors AS d ON p.id = d.id
+             WHERE p.id <= 12 ORDER BY p.id",
+        )?;
+        let stream = query.execute_stream(tables, 16 * 1024 * 1024).await?;
+        let schema = stream.schema();
+        let batches = stream.try_collect::<Vec<_>>().await?;
+        let actual = concat_batches(&schema, &batches)?;
+        assert_eq!(schema.field(0).name(), "partitioned_id");
+        assert_eq!(schema.field(1).name(), "retained_id");
+        assert_eq!(actual.num_columns(), 2);
+        assert_eq!(
+            actual.column(0).as_ref(),
+            &Int32Array::from_iter_values(1..=12)
+        );
+        // The independent Spark fixture deleted IDs 2, 5, and 12 from the right table.
+        assert_eq!(
+            actual.column(1).as_ref(),
+            &Int32Array::from(vec![
+                Some(1),
+                None,
+                Some(3),
+                Some(4),
+                None,
+                Some(6),
+                Some(7),
+                Some(8),
+                Some(9),
+                Some(10),
+                Some(11),
+                None,
+            ])
+        );
+        Ok(())
+    }
 
     #[test]
     fn admission_checks_nested_queries_and_one_read_only_statement() {
