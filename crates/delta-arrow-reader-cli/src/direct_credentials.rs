@@ -21,6 +21,8 @@ pub(crate) enum CredentialSource {
     Json,
     /// Read the advertised credential variables from the inherited environment.
     Env,
+    /// Assume an AWS role using an explicitly configured web identity token file.
+    AwsWebIdentity,
     /// Use Azure workload identity with an explicitly configured token file.
     AzureWorkloadIdentity,
     /// Use Azure managed identity with one explicitly selected identity ID.
@@ -64,12 +66,13 @@ impl CredentialSource {
             }
         );
         match (scheme, self) {
-            (ObjectStoreScheme::AmazonS3, Self::Json | Self::Env) => {
-                s3::configure_table_credentials(builder, options, self)
+            (ObjectStoreScheme::AmazonS3, Self::Json | Self::Env | Self::AwsWebIdentity) => {
+                s3::configure_table_credentials(builder, location, options, self)
             }
-            (ObjectStoreScheme::MicrosoftAzure, _) => {
-                azure::configure_table_credentials(builder, location, options, self)
-            }
+            (
+                ObjectStoreScheme::MicrosoftAzure,
+                Self::Json | Self::Env | Self::AzureWorkloadIdentity | Self::AzureManagedIdentity,
+            ) => azure::configure_table_credentials(builder, location, options, self),
             (ObjectStoreScheme::GoogleCloudStorage, Self::Json | Self::Env) => {
                 gcs::configure_table_credentials(builder, location, options, self)
             }

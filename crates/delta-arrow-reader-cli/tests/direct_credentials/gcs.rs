@@ -1,7 +1,5 @@
 //! Explicit ADC files reach GCS reads and retain the selected identity during refresh.
 
-mod oauth_proxy;
-
 use std::{
     fs,
     path::PathBuf,
@@ -13,11 +11,11 @@ use serde_json::{Value, json};
 use super::{
     CloudStorageProtocol, DirectStorageFixture, MockCloudStorageServer, TestResult,
     assert_read_result, assert_single_terminal_record, partitioned_objects, run_with_timeout,
+    token_service_proxy::{TokenService, TokenServiceProxy},
 };
-use oauth_proxy::OAuthProxyFixture;
 
 // Public test material generated for these fixtures; it must never grant real cloud access.
-const TEST_KEY: &str = include_str!("gcs/test-key.pem");
+const TEST_KEY: &str = include_str!("test-key.pem");
 
 fn service_account_adc() -> Value {
     json!({
@@ -312,7 +310,7 @@ fn service_account_permission_denial_keeps_the_selected_identity() -> TestResult
 #[test]
 fn authorized_user_tokens_reach_all_reads_and_refresh_the_loaded_identity() -> TestResult {
     for source in ["json", "env"] {
-        let proxy = OAuthProxyFixture::new("refresh")?;
+        let proxy = TokenServiceProxy::new(TokenService::GoogleOAuth, "refresh")?;
         let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::Gcs)?;
         let adc_path = fixture.adc_path();
         fixture.server = MockCloudStorageServer::with_objects(
@@ -374,7 +372,7 @@ fn authorized_user_tokens_reach_all_reads_and_refresh_the_loaded_identity() -> T
 fn authorized_user_fetch_and_refresh_failures_do_not_select_another_source() -> TestResult {
     for source in ["json", "env"] {
         for mode in ["reject", "reject_refresh"] {
-            let proxy = OAuthProxyFixture::new(mode)?;
+            let proxy = TokenServiceProxy::new(TokenService::GoogleOAuth, mode)?;
             let fixture = DirectStorageFixture::new(CloudStorageProtocol::Gcs)?;
             fixture.write_adc(authorized_user_adc())?;
             fixture.configure_gcs_source(

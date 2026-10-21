@@ -3,6 +3,7 @@
 mod azure;
 mod gcs;
 mod s3;
+mod token_service_proxy;
 
 use std::{
     fs,

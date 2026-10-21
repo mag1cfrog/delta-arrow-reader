@@ -1,5 +1,7 @@
 //! S3 source selection reaches signed requests without credential fallback or leaks.
 
+mod web_identity;
+
 use serde_json::json;
 use std::process::Command;
 

@@ -472,10 +472,10 @@ JSON keys use the native S3 aliases and are case-insensitive. For example,
 aliases for the same setting is an error, even if their values match.
 Credentials must be nonempty and contain no control characters.
 
-Explicit source selection accepts region, endpoint, HTTP client, virtual-hosted
-request, unsigned-payload, checksum, and requester-pays settings. It rejects
+The `json` and `env` sources accept region, endpoint, HTTP client, virtual-hosted
+request, unsigned-payload, checksum, and requester-pays settings. They reject
 unknown keys, bucket overrides, unsigned requests, and provider-selection
-settings. It does not select AWS profiles, SSO, web identity, container
+settings. They do not select AWS profiles, SSO, web identity, container
 credentials, or instance metadata. Unity Catalog uses `--databricks-profile`
 and rejects `--auth-source`.
 
@@ -485,6 +485,48 @@ diagnostics. Credential values and file contents are omitted from both text
 and JSON diagnostics. Keep credential files out of source control and restrict
 access, for example with `chmod 600 storage.json` on Unix. A file reference does
 not isolate credentials from an agent or process that can read that file.
+
+### S3 web identity
+
+Use `--auth-source aws-web-identity` with `inspect`, `scan`, or `query` to assume
+an AWS role using a web identity token file. The role ARN and token file path
+are required. Each JSON field takes precedence over its environment variable;
+fields absent from JSON are read from the environment.
+
+| Setting | Canonical JSON key | Environment variable |
+| --- | --- | --- |
+| Role ARN | `aws_role_arn` | `AWS_ROLE_ARN` |
+| Token file path | `aws_web_identity_token_file` | `AWS_WEB_IDENTITY_TOKEN_FILE` |
+| Session name | `aws_role_session_name` | `AWS_ROLE_SESSION_NAME` |
+| STS endpoint | `aws_endpoint_url_sts` | `AWS_ENDPOINT_URL_STS` |
+
+For example, with `AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`, and `AWS_REGION`
+set by the workload environment:
+
+```sh
+dar query s3://example-bucket/orders --auth-source aws-web-identity \
+  --sql-file count.sql > count.arrow
+```
+
+An optional `--storage-options-file` can supply the fields above and the S3
+storage settings described earlier. The same region precedence applies: JSON
+over environment, then `aws_region` over `aws_default_region`. The default
+region is `us-east-1`, the default session name is `WebIdentitySession`, and
+the default STS endpoint is `https://sts.<region>.amazonaws.com`. STS requires
+HTTPS even when `allow_http` enables HTTP for storage requests.
+
+The command fixes the role, session name, token file path, and endpoint when
+it starts. The native provider obtains temporary credentials and rereads that
+token file when credentials need refreshing. Your workload must provision and
+rotate the token file. Changing the options file during a command does not
+change the selected identity.
+
+Missing references, duplicate aliases, empty values, and control characters
+are rejected. JSON access keys and alternative provider settings are also
+rejected. Ambient access keys, profiles, SSO, container credentials, and
+instance metadata are not selected. An unreadable token file, failed STS
+request, or storage permission denial fails the read without switching
+identities. This source supports S3 tables only.
 
 ## Azure credential sources
 

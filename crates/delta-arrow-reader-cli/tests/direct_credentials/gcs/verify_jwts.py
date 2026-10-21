@@ -16,7 +16,7 @@ def decode(part):
 def main():
     tokens = json.loads(Path(sys.argv[1]).read_text())
     assert tokens, "storage received no JWTs"
-    key = Path(__file__).with_name("test-key.pem")
+    key = Path(__file__).parents[1] / "test-key.pem"
     with tempfile.TemporaryDirectory(prefix="dar-jwt-") as temporary:
         public_key = Path(temporary) / "public.pem"
         signature = Path(temporary) / "signature.bin"

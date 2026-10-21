@@ -1,4 +1,4 @@
-//! Runs the local TLS endpoint used by native authorized-user ADC refreshes.
+//! Local TLS token services for native Google OAuth and AWS STS providers.
 
 use std::{
     fs,
@@ -10,22 +10,35 @@ use std::{
 
 use serde_json::Value;
 
-/// Owns the Python OAuth fixture, its request log, and process cleanup.
-pub(super) struct OAuthProxyFixture {
+/// Selects the request protocol and token response used by the local TLS service.
+pub(super) enum TokenService {
+    GoogleOAuth,
+    AwsSts,
+}
+
+/// Owns the local TLS token service, its request log, and process cleanup.
+pub(super) struct TokenServiceProxy {
     directory: tempfile::TempDir,
     child: Child,
     pub(super) endpoint: String,
 }
 
-impl OAuthProxyFixture {
-    pub(super) fn new(mode: &str) -> Result<Self, Box<dyn std::error::Error>> {
+impl TokenServiceProxy {
+    pub(super) fn new(
+        service: TokenService,
+        mode: &str,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
         let child = Command::new("python3")
             .arg(
                 PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .join("tests/direct_credentials/gcs/oauth_proxy.py"),
+                    .join("tests/direct_credentials/token_service_proxy.py"),
             )
             .arg(directory.path())
+            .arg(match service {
+                TokenService::GoogleOAuth => "gcs",
+                TokenService::AwsSts => "sts",
+            })
             .arg(mode)
             .spawn()?;
         let mut fixture = Self {
@@ -42,7 +55,7 @@ impl OAuthProxyFixture {
                 return Ok(fixture);
             }
             if fixture.child.try_wait()?.is_some() || started.elapsed() > Duration::from_secs(15) {
-                return Err("local OAuth fixture did not start".into());
+                return Err("local token service did not start".into());
             }
             thread::sleep(Duration::from_millis(10));
         }
@@ -58,7 +71,7 @@ impl OAuthProxyFixture {
     }
 }
 
-impl Drop for OAuthProxyFixture {
+impl Drop for TokenServiceProxy {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
