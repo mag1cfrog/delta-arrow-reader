@@ -102,6 +102,8 @@ jobs:
       source-commit: ${{ steps.prepare.outputs.source-commit }}
       version: ${{ steps.prepare.outputs.version }}
       rust-toolchain: ${{ steps.prepare.outputs.rust-toolchain }}
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
     steps:
       - name: Require explicit artifact and build identity
         run: |
@@ -159,6 +161,7 @@ jobs:
           - architecture: arm64
             runner: ubuntu-24.04-arm
     env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
       CLI_ARCHITECTURE: ${{ matrix.architecture }}
       CLI_IMAGE: localhost/dar-cli:candidate-${{ matrix.architecture }}
       GO_IMAGE: localhost/dar-go:candidate-${{ matrix.architecture }}
@@ -252,6 +255,7 @@ jobs:
       artifact-url: ${{ steps.upload.outputs.artifact-url }}
       manifest-sha256: ${{ steps.complete.outputs.manifest-sha256 }}
     env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
       PREPARE_RESULT: ${{ needs.prepare.result }}
       IMAGES_RESULT: ${{ needs.images.result }}
       CLI_ARTIFACT_NAME: dar-cli-images-${{ needs.prepare.outputs.source-commit }}-${{ github.run_id }}-${{ github.run_attempt }}
