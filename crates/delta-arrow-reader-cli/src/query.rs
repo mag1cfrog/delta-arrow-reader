@@ -129,11 +129,15 @@ pub(crate) struct ReadOnlySqlQuery {
 impl ReadOnlySqlQuery {
     /// Rejects malformed or disallowed SQL before opening the requested Delta table.
     pub(crate) fn read_file(path: &str) -> Result<Self, crate::Error> {
-        let file = File::open(path).context(InputIoSnafu)?;
+        let file = File::open(path).context(InputIoSnafu {
+            argument: "--sql-file",
+        })?;
         let mut bytes = Vec::new();
         file.take(MAX_SQL_BYTES + 1)
             .read_to_end(&mut bytes)
-            .context(InputIoSnafu)?;
+            .context(InputIoSnafu {
+                argument: "--sql-file",
+            })?;
         if bytes.len() as u64 > MAX_SQL_BYTES {
             return Err(QueryError::Input {
                 reason: "sql_file_too_large",
