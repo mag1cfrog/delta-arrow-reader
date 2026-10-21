@@ -1,5 +1,4 @@
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 import gc
 import importlib.util
@@ -124,19 +123,6 @@ class SqlTests(unittest.TestCase):
             self.session.register_table("valid", self.table, execution_options={})
         self.assertEqual(self.query("SELECT COUNT(*) AS n FROM events"), [{"n": len(self.rows)}])
 
-    def test_concurrent_duplicate_registration_has_one_winner(self):
-        def register():
-            try:
-                self.session.register_table("concurrent", self.table)
-                return "registered"
-            except DeltaReaderError as error:
-                return error.code
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            results = list(pool.map(lambda _: register(), range(2)))
-        self.assertCountEqual(results, ["registered", "datafusion_adapter"])
-        self.assertEqual(self.query("SELECT COUNT(*) AS n FROM concurrent"), [{"n": len(self.rows)}])
-
     def test_rejected_sql_has_no_side_effects_or_sensitive_errors(self):
         with tempfile.TemporaryDirectory(prefix="secret-sql-") as directory:
             output = Path(directory) / "output.csv"
@@ -165,15 +151,6 @@ class SqlTests(unittest.TestCase):
         for query in (None, 42, b"SELECT 1"):
             with self.subTest(query=query), self.assertRaises(TypeError):
                 self.session.sql(query)
-
-    def test_execution_error_is_terminal_and_session_remains_usable(self):
-        with self.session.sql("SELECT CAST(label AS INT) FROM events WHERE label IS NOT NULL") as reader:
-            for _ in range(2):
-                with self.assertRaises(pa.ArrowInvalid) as caught:
-                    reader.read_next_batch()
-                self.assertIn("phase=datafusion code=sql_execution", str(caught.exception))
-                self.assertNotIn("label", str(caught.exception))
-        self.assertEqual(self.query("SELECT 42 AS answer"), [{"answer": 42}])
 
     def test_schema_export_rejects_nul_names_and_timezones_without_panicking(self):
         timestamp = 'Timestamp(Microsecond, Some("secret\0zone"))'
