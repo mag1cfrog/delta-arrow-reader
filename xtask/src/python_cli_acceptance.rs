@@ -11,6 +11,7 @@ use std::{
 };
 
 use arrow_array::{RecordBatch, StringArray};
+use arrow_ipc::reader::FileReader;
 use clap::Args;
 use parquet::arrow::{ArrowWriter, arrow_reader::ParquetRecordBatchReaderBuilder};
 use serde_json::{Value, json};
@@ -34,6 +35,9 @@ pub(crate) struct Arguments {
     /// CPython's base install provides the supported Windows MSVC runtime.
     #[arg(long)]
     python_base_prefix: PathBuf,
+    /// New directory for the original CLI streams consumed by the PyArrow test.
+    #[arg(long)]
+    output_directory: PathBuf,
 }
 
 impl Arguments {
@@ -96,6 +100,7 @@ impl Arguments {
             assert!(!text.contains("secret"), "{text}");
         }
         let table = self.fixture.join("table");
+        self.check_reads(root, &table)?;
         let malformed = root.join("secret-options.json");
         fs::write(&malformed, b"{\"token\": \"secret-value\",")?;
         for action in ["inspect", "scan"] {
@@ -157,6 +162,59 @@ impl Arguments {
             self.check_termination(root, &large, signal)?;
         }
         println!("Installed Python CLI process acceptance passed");
+        Ok(())
+    }
+
+    fn check_reads(&self, directory: &Path, table: &Path) -> Result<()> {
+        let expected =
+            FileReader::try_new(fs::File::open(self.fixture.join("expected.arrow"))?, None)?;
+        let output =
+            output_with_timeout(self.command(directory)?.arg("inspect").arg(table), TIMEOUT)?;
+        assert!(
+            output.status.success() && output.stderr.is_empty(),
+            "{output:?}"
+        );
+        let inspection: Value = serde_json::from_slice(&output.stdout)?;
+        assert_eq!(inspection["format_version"], 1);
+        assert_eq!(inspection["table_version"], "0");
+        assert_eq!(
+            inspection["schema"]["fields"]
+                .as_array()
+                .ok_or("missing schema fields")?
+                .iter()
+                .map(|field| field["name"].clone())
+                .collect::<Vec<_>>(),
+            expected
+                .schema()
+                .fields()
+                .iter()
+                .map(|field| json!(field.name()))
+                .collect::<Vec<_>>()
+        );
+        let rows = expected
+            .map(|batch| batch.map(|batch| batch.num_rows()))
+            .sum::<std::result::Result<usize, _>>()?;
+        fs::create_dir(&self.output_directory)?;
+        for limit in [0, 5, rows + 1] {
+            let output = output_with_timeout(
+                self.command(directory)?
+                    .arg("scan")
+                    .arg(table)
+                    .args(["--column", "label", "--column", "id", "--limit"])
+                    .arg(limit.to_string()),
+                TIMEOUT,
+            )?;
+            assert!(
+                output.status.success() && output.stderr.is_empty(),
+                "{output:?}"
+            );
+            // Arrow readers also accept EOF without an end marker.
+            assert!(output.stdout.ends_with(b"\xff\xff\xff\xff\x00\x00\x00\x00"));
+            fs::write(
+                self.output_directory.join(format!("limit-{limit}.arrow")),
+                output.stdout,
+            )?;
+        }
         Ok(())
     }
 
