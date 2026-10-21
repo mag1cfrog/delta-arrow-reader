@@ -407,7 +407,7 @@ class TableTests(unittest.TestCase):
                 self.assertEqual(empty.schema, table.schema if columns is None else pa.schema([]))
                 self.assertEqual(empty.num_rows, 0)
 
-    def test_external_writer_fixtures_cross_the_arrow_boundary(self):
+    def test_installed_external_writer_fixtures_cross_the_arrow_boundary(self):
         corpus = (Path(__file__).resolve().parents[3]
                   / "crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus")
         for fixture in ("partitioned", "deletion_vectors", "nested_mapping"):

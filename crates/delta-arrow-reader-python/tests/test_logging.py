@@ -580,6 +580,8 @@ with session.sql('SELECT id FROM events LIMIT 1') as reader:
                 for record in partitions:
                     self.assertEqual(record.levelno, logging.INFO)
                     self.assertEqual(record.dar_fields["snapshot_version"], table.version)
+                    self.assertEqual(record.dar_fields["backend"],
+                                     {"direct": "Direct", "delta_kernel": "DeltaKernel"}[backend])
                     by_operation.setdefault(record.dar_fields["operation_id"], []).append(record)
                 for records in by_operation.values():
                     self.assertEqual([r.msg for r in records],
