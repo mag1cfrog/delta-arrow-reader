@@ -577,9 +577,30 @@ logger.propagate = False
                 None,
             )
             .unwrap();
+            let timestamp =
+                DataType::Timestamp(TimeUnit::Microsecond, Some("private\0zone".into()));
+            let time_field = Arc::new(Field::new("time", timestamp.clone(), true));
             for (data_type, reason, source) in [
+                (timestamp.clone(), "arrow_schema_contains_nul", None),
                 (
-                    DataType::Timestamp(TimeUnit::Microsecond, Some("private\0zone".into())),
+                    DataType::Struct(
+                        vec![Field::new("private\0child", DataType::Int32, true)].into(),
+                    ),
+                    "arrow_schema_contains_nul",
+                    None,
+                ),
+                (
+                    DataType::List(time_field.clone()),
+                    "arrow_schema_contains_nul",
+                    None,
+                ),
+                (
+                    DataType::Struct(vec![time_field].into()),
+                    "arrow_schema_contains_nul",
+                    None,
+                ),
+                (
+                    DataType::Dictionary(Box::new(DataType::Int32), Box::new(timestamp)),
                     "arrow_schema_contains_nul",
                     None,
                 ),

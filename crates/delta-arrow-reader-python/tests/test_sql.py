@@ -115,23 +115,7 @@ class SqlTests(unittest.TestCase):
             with self.subTest(query=query), self.assertRaises(TypeError):
                 self.session.sql(query)
 
-    def test_schema_export_rejects_nul_names_and_timezones_without_panicking(self):
-        timestamp = 'Timestamp(Microsecond, Some("secret\0zone"))'
-        value = f"arrow_cast(NULL, '{timestamp}')"
-        for query in (
-            'SELECT 1 AS "secret\0alias"',
-            "SELECT named_struct('secret\0child', 1) AS value",
-            f"SELECT {value} AS value",
-            f"SELECT array_agg({value}) AS value",
-            f"SELECT named_struct('time', {value}) AS value",
-            f"SELECT arrow_cast(NULL, 'Dictionary(Int32, {timestamp})') AS value",
-        ):
-            with self.subTest(query=query):
-                with self.assertRaises(DeltaReaderError) as caught:
-                    self.session.sql(query)
-                self.assertEqual((caught.exception.phase, caught.exception.code),
-                                 ("schema", "schema_conversion"))
-                self.assertNotIn("secret", str(caught.exception))
+    def test_sql_exports_timestamp_metadata_and_embedded_nul_values(self):
         with self.session.sql("""
             SELECT arrow_cast(NULL, 'Timestamp(Microsecond, Some("UTC"))') AS value
         """) as reader:
