@@ -11,6 +11,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | Select rows by a condition | [Filter rows](#filter-rows) |
 | Connect to remote storage | [Storage options file](#storage-options-file) |
 | Select S3 credentials from a file or environment | [S3 credential sources](#s3-credential-sources) |
+| Select Azure credentials from a file or environment | [Azure credential sources](#azure-credential-sources) |
 | Read a Unity Catalog table by name | [Databricks profile](#read-a-unity-catalog-table) |
 | Change parallel reads or buffering | [Execution options](#execution-options) |
 | Handle a command's result in a script | [Inspection JSON](#inspection-json) and [exit statuses](#exit-statuses-for-scripts) |
@@ -474,8 +475,8 @@ Explicit source selection accepts region, endpoint, HTTP client, virtual-hosted
 request, unsigned-payload, checksum, and requester-pays settings. It rejects
 unknown keys, bucket overrides, unsigned requests, and provider-selection
 settings. It does not select AWS profiles, SSO, web identity, container
-credentials, or instance metadata. The selector currently supports S3 only;
-Unity Catalog uses `--databricks-profile` and rejects `--auth-source`.
+credentials, or instance metadata. Unity Catalog uses `--databricks-profile`
+and rejects `--auth-source`.
 
 Invalid source configuration exits with status 2 and diagnostic code
 `invalid_storage_authorization`. Storage failures retain the reader's normal
@@ -483,6 +484,65 @@ diagnostics. Credential values and file contents are omitted from both text
 and JSON diagnostics. Keep credential files out of source control and restrict
 access, for example with `chmod 600 storage.json` on Unix. A file reference does
 not isolate credentials from an agent or process that can read that file.
+
+## Azure credential sources
+
+`inspect`, `scan`, and `query` accept `--auth-source json|env` for Azure account
+keys, SAS tokens, and bearer tokens. Select exactly one credential family.
+The credentials are loaded once per command; an expired or denied credential
+fails the read without switching to another identity.
+
+| Credential | Canonical JSON key | Environment variable |
+| --- | --- | --- |
+| Account key | `azure_storage_account_key` | `AZURE_STORAGE_ACCOUNT_KEY` |
+| SAS token | `azure_storage_sas_key` | `AZURE_STORAGE_SAS_KEY` |
+| Bearer token | `azure_storage_token` | `AZURE_STORAGE_TOKEN` |
+
+`--auth-source json` requires `--storage-options-file` and ignores environment
+credentials. For example, provision a protected `storage.json` file:
+
+```json
+{
+  "azure_storage_account_name": "exampleaccount",
+  "azure_storage_sas_key": "<sas-token>"
+}
+```
+
+```sh
+dar inspect az://orders/table --auth-source json --storage-options-file storage.json
+```
+
+`--auth-source env` reads only the three credential variables above and
+`AZURE_STORAGE_ACCOUNT_NAME`. A storage-options file may supply noncredential
+settings, but credential fields in that file are rejected.
+
+```sh
+dar query abfss://orders@exampleaccount.dfs.core.windows.net/table \
+  --auth-source env --sql-file count.sql > count.arrow
+```
+
+An account embedded in an `abfss://container@account...` or native HTTPS storage
+URL takes precedence, as in the native Azure builder. Otherwise, supply
+`azure_storage_account_name` in JSON or, with `--auth-source env`,
+`AZURE_STORAGE_ACCOUNT_NAME`. JSON takes precedence over the environment.
+
+JSON accepts the native Azure aliases, case-insensitively. Examples include
+`access_key`/`account_key`, `sas_key`/`sas_token`, and `bearer_token`/`token`.
+Duplicate aliases are rejected, even with identical values. Account keys must
+be base64-encoded. SAS tokens may start with `?` and must include a nonempty
+`sig`; literal and percent-encoded `+` characters are preserved. Bearer tokens
+must contain only visible ASCII characters.
+
+Explicit selection accepts account, endpoint, HTTP client, and Fabric endpoint
+settings. It rejects unknown keys, container overrides, emulator mode, unsigned
+requests, and provider-selection options. It does not select client-secret,
+Azure CLI, workload-identity, or managed-identity providers. Invalid source
+configuration exits with status 2 and code `invalid_storage_authorization`.
+
+Keep credential files out of source control and restrict access, for example
+with `chmod 600 storage.json` on Unix. File references do not isolate credentials
+from a process that can read the file. Credential values and file contents are
+omitted from text and JSON diagnostics.
 
 ## Execution options
 
