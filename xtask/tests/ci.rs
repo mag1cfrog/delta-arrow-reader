@@ -522,7 +522,6 @@ fn embedded_docs_trigger_their_rust_checks() -> Result<()> {
     for (source, filter) in [
         ("crates/delta-arrow-reader-core/src/guides.rs", "rust_docs"),
         ("benches/selective_read/src/main.rs", "selective_read"),
-        ("benches/selective_read/src/production.rs", "selective_read"),
         ("benches/selective_read/src/large.rs", "selective_read"),
     ] {
         assert!(filter_matches(&filters, "tooling", source)?, "{source}");
