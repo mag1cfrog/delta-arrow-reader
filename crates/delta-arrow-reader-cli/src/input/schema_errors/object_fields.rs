@@ -16,23 +16,31 @@ use strum::VariantNames;
 use super::{FieldLocation, correction_from_serde_error};
 use crate::diagnostics::InputCorrection;
 
-pub(in crate::input) struct ObjectFields<T>(Vec<(String, T)>);
+pub(in crate::input) struct ObjectFields<T> {
+    entries: Vec<(String, T)>,
+}
 
 impl<'de> ObjectFields<&'de RawValue> {
+    fn field_value(&self, name: &str) -> Option<&'de RawValue> {
+        for (field, value) in &self.entries {
+            if field == name {
+                return Some(*value);
+            }
+        }
+        None
+    }
+
     pub(in crate::input) fn required_field(
         &self,
         name: &'static str,
         location: &FieldLocation,
     ) -> Result<&'de RawValue, InputCorrection> {
-        self.0
-            .iter()
-            .find(|(field, _)| field == name)
-            .map(|(_, value)| *value)
-            .ok_or_else(|| {
-                location
-                    .field(name)
-                    .invalid("a required field", "Supply the missing field.")
-            })
+        match self.field_value(name) {
+            Some(value) => Ok(value),
+            None => Err(location
+                .field(name)
+                .invalid("a required field", "Supply the missing field.")),
+        }
     }
 
     pub(in crate::input) fn deserialize_tag<T: DeserializeOwned + VariantNames>(
@@ -41,25 +49,35 @@ impl<'de> ObjectFields<&'de RawValue> {
         location: &FieldLocation,
     ) -> Result<T, InputCorrection> {
         let expected = format!("one of: {}", T::VARIANTS.join(", "));
-        let value = self
-            .required_field(name, location)
-            .map_err(|mut correction| {
-                correction.expected.clone_from(&expected);
-                correction
-            })?;
-        if self.0.iter().filter(|(field, _)| field == name).count() > 1 {
+        let Some(value) = self.field_value(name) else {
+            return Err(location
+                .field(name)
+                .invalid(expected, "Supply the missing field."));
+        };
+        let occurrences = self
+            .entries
+            .iter()
+            .filter(|(field, _)| field == name)
+            .count();
+        if occurrences > 1 {
             return Err(location.field(name).invalid(
                 "one occurrence of this field",
                 "Remove the duplicate field.",
             ));
         }
-        let tag = serde_json::from_str::<String>(value.get()).ok();
-        tag.and_then(|tag| T::deserialize(StringDeserializer::<DeserializerError>::new(tag)).ok())
-            .ok_or_else(|| {
-                location
+        let tag_text = match serde_json::from_str::<String>(value.get()) {
+            Ok(text) => text,
+            Err(_) => {
+                return Err(location
                     .field(name)
-                    .invalid(expected, "Use one of the listed values.")
-            })
+                    .invalid(expected, "Use one of the listed values."));
+            }
+        };
+        T::deserialize(StringDeserializer::<DeserializerError>::new(tag_text)).map_err(|_| {
+            location
+                .field(name)
+                .invalid(expected, "Use one of the listed values.")
+        })
     }
 
     pub(in crate::input) fn check_variant_fields<T: DeserializeOwned>(
@@ -67,31 +85,33 @@ impl<'de> ObjectFields<&'de RawValue> {
         tag_field: &'static str,
         location: &FieldLocation,
     ) -> Result<(), InputCorrection> {
-        let fields = self
-            .0
-            .iter()
-            .filter(|(name, _)| name != tag_field)
-            .map(|(name, raw)| {
-                serde_json::from_str::<serde_value::Value>(raw.get())
-                    .map(|value| (name.clone(), value))
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| location.generic_correction())?;
-        ObjectFields(fields).check_schema::<T>(location, Some(tag_field))
+        let mut entries = Vec::new();
+        for (name, raw_value) in &self.entries {
+            if name == tag_field {
+                continue;
+            }
+            let value = serde_json::from_str::<serde_value::Value>(raw_value.get())
+                .map_err(|_| location.generic_correction())?;
+            entries.push((name.clone(), value));
+        }
+        let fields = ObjectFields { entries };
+        match fields.deserialize_as::<T>() {
+            Ok(_) => Ok(()),
+            Err(error) => Err(correction_from_serde_error(
+                error,
+                location,
+                Some(tag_field),
+            )),
+        }
     }
 }
 
 impl ObjectFields<serde_value::Value> {
-    pub(in crate::input) fn check_schema<T: DeserializeOwned>(
+    pub(super) fn deserialize_as<T: DeserializeOwned>(
         self,
-        location: &FieldLocation,
-        tag_field: Option<&'static str>,
-    ) -> Result<(), InputCorrection> {
-        serde_path_to_error::deserialize::<_, T>(MapDeserializer::<_, DeserializerError>::new(
-            self.0.into_iter(),
-        ))
-        .map(|_| ())
-        .map_err(|error| correction_from_serde_error(error, location, tag_field))
+    ) -> Result<T, serde_path_to_error::Error<DeserializerError>> {
+        let deserializer = MapDeserializer::<_, DeserializerError>::new(self.entries.into_iter());
+        serde_path_to_error::deserialize(deserializer)
     }
 }
 
@@ -106,11 +126,11 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for ObjectFields<T> {
             }
 
             fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<Self::Value, M::Error> {
-                let mut fields = Vec::new();
+                let mut entries = Vec::new();
                 while let Some(entry) = map.next_entry()? {
-                    fields.push(entry);
+                    entries.push(entry);
                 }
-                Ok(ObjectFields(fields))
+                Ok(ObjectFields { entries })
             }
         }
         deserializer.deserialize_map(ObjectVisitor(PhantomData))

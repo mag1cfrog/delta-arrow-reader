@@ -29,7 +29,7 @@ fn check_node_schema(
             "Reduce predicate nesting.",
         ));
     }
-    let fields: ObjectFields<&RawValue> = location.parse(raw, "a JSON predicate object")?;
+    let fields: ObjectFields<&RawValue> = parse_json_at(raw, location, "a JSON predicate object")?;
     use super::{
         ColumnReferenceFields, ComparisonFields, LogicalGroupFields, NegationFields,
         PredicateOperator, ValueFields,
@@ -42,8 +42,9 @@ fn check_node_schema(
         PredicateOperator::And | PredicateOperator::Or => {
             fields.check_variant_fields::<LogicalGroupFields<IgnoredAny>>("op", location)?;
             let args = location.field("args");
-            let children: Vec<&RawValue> = args.parse(
+            let children: Vec<&RawValue> = parse_json_at(
                 fields.required_field("args", location)?,
+                &args,
                 "an array of predicate objects",
             )?;
             for (index, child) in children.into_iter().enumerate() {
@@ -82,7 +83,8 @@ fn check_scalar_schema(raw: &RawValue, location: &FieldLocation) -> Result<(), I
         Decimal128Fields, FixedSizeBinaryFields, IntegerStringFields, ScalarType,
         TimestampMicrosecondFields, ValueFields,
     };
-    let fields: ObjectFields<&RawValue> = location.parse(raw, "a typed JSON scalar object")?;
+    let fields: ObjectFields<&RawValue> =
+        parse_json_at(raw, location, "a typed JSON scalar object")?;
     match fields.deserialize_tag::<ScalarType>("type", location)? {
         ScalarType::Boolean => fields.check_variant_fields::<ValueFields<bool>>("type", location),
         ScalarType::Int8 => {
@@ -114,4 +116,17 @@ fn check_scalar_schema(raw: &RawValue, location: &FieldLocation) -> Result<(), I
         }
         ScalarType::Decimal128 => fields.check_variant_fields::<Decimal128Fields>("type", location),
     }
+}
+
+fn parse_json_at<'de, T: serde::Deserialize<'de>>(
+    raw: &'de RawValue,
+    location: &FieldLocation,
+    expected: &str,
+) -> Result<T, InputCorrection> {
+    serde_json::from_str(raw.get()).map_err(|_| {
+        location.invalid(
+            expected,
+            "Supply a value matching this field's expected format.",
+        )
+    })
 }

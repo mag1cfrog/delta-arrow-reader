@@ -295,6 +295,18 @@ fn input_schema_corrections_omit_unknown_keys_and_values() -> Result<(), Box<dyn
                     "expected format",
                 ),
                 (
+                    r#"{"op":"eq","column":"secret-column","value":{"type":"decimal128","value":"1","precision":2,"scale":128}}"#,
+                    "/value/scale",
+                    "from -128 to 127",
+                    "expected format",
+                ),
+                (
+                    r#"{"op":"eq","column":"secret-column","value":{"type":"fixed_size_binary","value":[0],"size":2147483648}}"#,
+                    "/value/size",
+                    "fitting i32",
+                    "expected format",
+                ),
+                (
                     r#"{"op":"not","arg":{"op":"eq","column":"secret-column","value":{"type":"binary","value":[0,255,"secret-byte"]}}}"#,
                     "/arg/value/value/2",
                     "from 0 to 255",
