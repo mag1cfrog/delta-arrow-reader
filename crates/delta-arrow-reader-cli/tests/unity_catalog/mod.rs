@@ -551,6 +551,12 @@ fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResul
     let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
     for args in [
         vec!["capabilities"],
+        vec!["capabilities", "--all"],
+        vec!["capabilities", "--command", "inspect"],
+        vec!["capabilities", "--command", "scan"],
+        vec!["capabilities", "--command", "query"],
+        vec!["capabilities", "--command", "capabilities"],
+        vec!["capabilities", "--command", "help"],
         vec!["capabilities", "--schema", "storage-options"],
         vec!["capabilities", "--schema", "execution-options"],
         vec!["capabilities", "--schema", "predicate"],

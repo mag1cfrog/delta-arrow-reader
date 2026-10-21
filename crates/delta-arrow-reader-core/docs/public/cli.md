@@ -23,21 +23,47 @@ For packages and runtime requirements, see [Installation](installation.md).
 
 ```sh
 dar capabilities
-dar capabilities --diagnostics=json > capabilities.json
+dar capabilities --command query
 dar capabilities --schema predicate
 dar capabilities --schema completion
+dar capabilities --all --diagnostics=json > capabilities.json
 ```
 
-Without `--schema`, the result is one JSON object with `kind: "capabilities"`
-and `format_version: 1`.
-`command` contains the command tree and each argument's required status, value
+Start with `dar capabilities` to choose a command. It returns a JSON directory
+of at most 2 KiB, with command names, short descriptions, schema names, and
+shared limitations. Each command's `details` field gives the invocation for
+its full description. `schema_command` gives the invocation for a schema;
+replace its `NAME` argument with one of the listed names. `all_command` gives
+the invocation for the complete inventory. These invocations are arrays of
+command-line arguments, starting with the installed executable's name.
+
+| Invocation | JSON `kind` | Contents |
+| --- | --- | --- |
+| `dar capabilities` | `capability_index` | Short directory and commands for loading details. |
+| `dar capabilities --command query` | `command_capabilities` | Only query's arguments, formats, authorization sources, schemas, and limits. |
+| `dar capabilities --all` | `capabilities` | Complete command tree and support information. |
+| `dar capabilities --schema NAME` | `input_schema` or `output_schema` | One named JSON schema. |
+
+All responses have `format_version: 1` and `cli_version`. `--command`, `--schema`,
+and `--all` are mutually exclusive. Command names must match an installed
+top-level command. Unsupported names or conflicting selectors fail with status 2.
+For text help, use `dar query --help` or the corresponding command's help.
+
+For example, after finding `query` in the directory, run
+`dar capabilities --command query`. Its description identifies the table alias
+`t`, the `--sql-file` input, and the requirement to redirect Arrow output. Fetch
+`--schema storage-options` only if a storage-options file is needed. To recover
+these details later, repeat the same discovery commands; discovery does not
+depend on previous invocations.
+
+In command details and the full inventory, `command` contains the selected
+command or complete command tree, and each argument's required status, value
 count, defaults, allowed choices, repeatability, and conflicts. For example,
 `scan --column` is repeatable and conflicts with `--no-columns`.
-`stdout_formats` identifies each command's result format; `diagnostics` describes
-stderr formats. These describe the installed executable, including its version.
-`input_schemas` lists the available schema names and their file arguments.
-`output_schemas` lists result schema names and their streams. The `inspect`
-entry in `stdout_formats` and the JSON entry in `diagnostics` identify which
+`stdout_formats` identifies result formats; `diagnostics` describes stderr
+formats. `input_schemas` lists the applicable schema names and their file
+arguments. `output_schemas` lists result schema names and their streams. The
+`inspect` entry in `stdout_formats` and the JSON entry in `diagnostics` identify which
 output schemas apply.
 
 `authorization` describes local access, a direct-storage JSON file, and the
@@ -103,8 +129,12 @@ and decode stdout: a matching completion record alone does not establish that
 the result was received intact.
 
 Discovery needs no table, input file, credentials, Databricks executable, or
-network access. Its response is limited to 1 MiB. The command has a five-second
-deadline, including stdout, log setup, and completion reporting on stderr.
+network access. The default directory is limited to 2 KiB; command details,
+individual schemas, and the full inventory are limited to 1 MiB each. Limits
+count UTF-8 bytes, including JSON framing and the final newline. An oversized
+response fails before writing stdout; discovery never truncates JSON.
+The command has a five-second deadline, including stdout, log setup, and
+completion reporting on stderr.
 A closed stdout pipe fails with status 3; an expired deadline fails with
 status 1. Failure reporting has at most one additional second before exit,
 including when stderr is blocked. `limits.failure_diagnostic_timeout_ms`

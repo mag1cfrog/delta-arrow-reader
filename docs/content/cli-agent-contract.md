@@ -14,7 +14,7 @@ through DataFusion. Catalog integrations and writes are separate work.
 
 | Step | Target interface |
 | --- | --- |
-| Discover | `dar capabilities`; `--schema NAME` returns a named input/output schema. Both are offline. |
+| Discover | `dar capabilities` returns a short directory; `--command NAME` returns command details, `--schema NAME` a named schema, and `--all` the full inventory. All are offline. |
 | Inspect | `dar inspect TABLE --view summary`; `--column NAME` selects fields, `--include-metadata` opts into metadata. |
 | Preview | `dar preview TABLE`; reuse scan projection, predicate, version, and execution options. |
 | Query | `dar query TABLE --sql-file PATH`; single-table alias is `t`. `--format arrow` is the default; `--format json` returns typed rows. |
@@ -26,6 +26,15 @@ The wheel executable is `delta-arrow-reader`, with the same arguments.
 Capabilities reports only installed commands, options, schemas, auth mechanisms,
 formats, defaults, and limitations. Help/discovery requires neither credentials
 nor network access. JSON Schemas use draft 2020-12 and match the actual parsers.
+
+The default directory fits in 2 KiB and gives explicit invocations for loading
+command details and schemas. A caller can select a command without downloading
+the entire inventory or writing a filtering script. Command details include all
+of that command's argument rules and applicable authorization, format, and
+resource constraints. Full schemas and the full inventory are explicit requests.
+Discovery is stateless, so an agent can retrieve the same details after context
+compaction. Byte limits count the complete UTF-8 response, including framing;
+oversized responses fail before stdout is written rather than being truncated.
 
 Summary inspection reports the actual version and scoped checks: `passed`,
 `failed`, `unknown`, or `not_checked`. Metadata access does not establish data-file
@@ -136,7 +145,7 @@ disables it.
 | Summary/explain | 64 KiB, 30 seconds | `--max-output-bytes`, `--deadline-ms` |
 | Query/file-mode scan | 1,000,000 rows, 300 seconds; JSON 16 MiB, Arrow 1 GiB | `--max-rows`, `--deadline-ms`, `--max-output-bytes` |
 | Query memory/spill | 256 MiB pool, spill disabled | `--memory-limit-bytes`; positive `--spill-limit-bytes` requires `--spill-dir` |
-| Discovery | 1 MiB, 5 seconds | None |
+| Discovery | Directory: 2 KiB; command details, named schema, or full inventory: 1 MiB; 5 seconds | Select details with `--command`, `--schema`, or `--all` |
 | Provider capture/manifest | 1 MiB per child stream or manifest | None |
 | Diagnostics | 8 KiB per record; 64 KiB optional records plus terminal reserve | None |
 
@@ -250,7 +259,7 @@ storage/provider fixtures; a live cloud account is not required.
 
 | Criterion | Success | Boundary | Failure | Evidence |
 | --- | --- | --- | --- | --- |
-| Discovery | Construct requests offline | Disabled features/platform limits | Unknown command/schema | Parser/schema checks; no network/child calls |
+| Discovery | Construct requests from directory and selected details offline | Directory byte budget, complete scoped details, disabled features/platform limits | Unknown command/schema, conflicting selectors, oversized response | Follow advertised invocations; parser/schema checks; no network/child calls |
 | Inspection | Selected schema and actual version | Wide/nested schema, unsupported protocol | Metadata accessible/data denied | Exact fields/check scope; IO trace |
 | Read coverage | Scan, COUNT, GROUP BY, ORDER BY, CTE, join | Null/empty/zero-column/DV/pinned updates | Write/external-source attempts | Independent exact-result oracle; no write side effects |
 | Small results | Interpret typed JSON | Large ints, decimals, timezones, binary, nesting, duplicates, dictionary partitions | Oversized value/unsupported type | Exact values and total-byte bounds |
@@ -276,6 +285,13 @@ requires token accounting; exploratory runs without it cannot establish a pass.
 Record all outcomes, calls, bytes, tokens, CLI/provider/corrective retries,
 latency, and artifacts. Separate deterministic guarantees from the observed
 agent results; do not claim all models/deployments behave alike.
+
+For discovery, compare the short directory and selected details with the full
+inventory using the same task prompts, model, and fixtures. Record task success,
+shell calls, input tokens, and latency. Include a continuation after context
+compaction, with the table and task goal retained but command details omitted;
+the agent must rediscover the inputs it needs. Byte-budget and parser tests do
+not establish a pass for these agent trials.
 
 For this documentation change, check local links and examples, then run:
 

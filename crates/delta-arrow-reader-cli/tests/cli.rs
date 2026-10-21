@@ -85,6 +85,16 @@ fn executable_names_preserve_help_version_and_redacted_errors()
             assert!(help.contains(&format!("Usage: {command_name}{subcommand} ")));
             assert!(!help.contains("secret"), "{help}");
         }
+        let discovery = run_with_timeout(Command::new(&executable).arg("capabilities"))?;
+        assert!(discovery.status.success(), "{discovery:?}");
+        assert!(discovery.stdout.len() <= 2048);
+        let index: Value = serde_json::from_slice(&discovery.stdout)?;
+        for command in index["commands"].as_array().unwrap() {
+            assert_eq!(command["details"][0], command_name);
+        }
+        assert_eq!(index["schema_command"][0], command_name);
+        assert_eq!(index["all_command"][0], command_name);
+        assert!(!String::from_utf8_lossy(&discovery.stdout).contains("secret"));
         let output = run_with_timeout(
             Command::new(&executable)
                 .current_dir(directory.path())

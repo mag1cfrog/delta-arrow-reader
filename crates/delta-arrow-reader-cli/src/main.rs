@@ -58,14 +58,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Print installed command capabilities or a named JSON input/output schema.
+    /// List installed commands, with details and JSON schemas available on request.
     ///
     /// Offline; no table, input file, or authorization is loaded.
-    Capabilities {
-        /// Return the named JSON input/output schema instead of the command inventory.
-        #[arg(long, value_enum)]
-        schema: Option<capabilities::DiscoverySchema>,
-    },
+    Capabilities(capabilities::CapabilitiesArgs),
     /// Print one Delta snapshot's version and full Arrow schema as JSON.
     ///
     /// Only snapshot metadata is loaded; data files are not read.
@@ -568,7 +564,7 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
         ensure!(!io::stdout().is_terminal(), TerminalOutputSnafu);
     }
     let (table_args, databricks_profile) = match &command {
-        Command::Capabilities { .. } => {
+        Command::Capabilities(_) => {
             unreachable!("main handles discovery and its terminal reporting separately")
         }
         Command::Inspect {
@@ -663,7 +659,7 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
         Ok::<_, Error>((table, authorized_access))
     };
     let work: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
-        Command::Capabilities { .. } => unreachable!("capabilities returned before table loading"),
+        Command::Capabilities(_) => unreachable!("capabilities returned before table loading"),
         Command::Query(args) => {
             let sql_query = query::ReadOnlySqlQuery::read_file(&args.sql_file)?;
             async move {
@@ -857,10 +853,10 @@ fn main() -> ExitCode {
     }
     let result = match Cli::try_parse() {
         Ok(Cli {
-            command: Command::Capabilities { schema },
+            command: Command::Capabilities(options),
             ..
         }) => {
-            return capabilities::run_capabilities(schema, diagnostic_format);
+            return capabilities::run_capabilities(options, diagnostic_format);
         }
         Ok(cli) => {
             diagnostics::init_tracing(diagnostic_format);

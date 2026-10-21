@@ -1,12 +1,10 @@
-//! Commands, input/output schemas, and output formats available in this executable.
+//! Discover commands before loading their argument rules and schemas.
 //!
-//! `dar capabilities` returns this inventory without opening a table or resolving
-//! authorization. For example, a caller can find that `scan --column` is repeatable
-//! and that `--diagnostics` accepts `json` with an equals sign.
-//! `dar capabilities --schema predicate` returns the JSON row-filter schema.
-//! The authorization and read-support sections describe which inputs can be
-//! combined. For example, a Databricks profile can authorize `scan`, while
-//! `query` currently requires a direct table location.
+//! `dar capabilities` lists the installed commands and how to request details.
+//! For example, `--command scan` describes scan's arguments and authorization,
+//! and `--schema predicate` describes its row-filter file. `--all` returns the
+//! complete inventory for callers that need every command at once. All views
+//! work without opening a table or resolving authorization.
 
 mod output_schemas;
 mod read_support;
@@ -16,7 +14,7 @@ pub(crate) use schemas::DiscoverySchema;
 
 use std::{io, process::ExitCode, time::Duration};
 
-use clap::{Arg, ArgAction, Command, CommandFactory, ValueEnum};
+use clap::{Arg, ArgAction, Args, Command, CommandFactory, ValueEnum, error::ErrorKind};
 use serde_json::{Value, json};
 use snafu::ResultExt;
 
@@ -27,50 +25,150 @@ use crate::{
     signals, write_stdout,
 };
 
+const MAX_INDEX_BYTES: usize = 2 * 1024;
 const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 const DEADLINE: Duration = Duration::from_secs(5);
 
-fn build_capabilities() -> Value {
-    let mut command = Cli::command();
-    command.build();
-    let input_schemas: Vec<_> = JsonInputKind::value_variants()
-        .iter()
-        .map(|kind| json!({"name": kind, "argument": kind.argument()}))
+#[derive(Args)]
+pub(crate) struct CapabilitiesArgs {
+    /// Return only this command's argument rules, authorization, and limits.
+    #[arg(long, value_name = "NAME", value_parser = parse_command_name, conflicts_with_all = ["schema", "all"])]
+    command: Option<String>,
+    /// Return the named JSON input/output schema.
+    #[arg(long, value_enum, conflicts_with_all = ["command", "all"])]
+    schema: Option<DiscoverySchema>,
+    /// Return the complete inventory of commands, authorization, and limits.
+    #[arg(long, conflicts_with_all = ["command", "schema"])]
+    all: bool,
+}
+
+fn parse_command_name(name: &str) -> Result<String, &'static str> {
+    let mut cli = Cli::command();
+    cli.build();
+    cli.get_subcommands()
+        .any(|command| command.get_name() == name && !command.is_hide_set())
+        .then(|| name.to_owned())
+        .ok_or("unknown command; run capabilities to list installed commands")
+}
+
+fn build_capability_index() -> Value {
+    let mut cli = Cli::command();
+    cli.build();
+    let executable = cli.get_name();
+    let commands: Vec<_> = cli
+        .get_subcommands()
+        .filter(|command| !command.is_hide_set())
+        .map(|command| {
+            json!({
+                "name": command.get_name(),
+                "description": command.get_about().map(ToString::to_string),
+                "details": [executable, "capabilities", "--command", command.get_name()],
+            })
+        })
         .collect();
     json!({
         "format_version": 1,
-        "kind": "capabilities",
+        "kind": "capability_index",
         "cli_version": env!("CARGO_PKG_VERSION"),
-        "command": describe_command(&command),
-        "input_schemas": input_schemas,
-        "output_schemas": [
-            {"name": DiscoverySchema::Inspection, "stream": "stdout"},
-            {"name": DiscoverySchema::Diagnostic, "stream": "stderr"},
-            {"name": DiscoverySchema::Completion, "stream": "stderr"},
+        "commands": commands,
+        "schemas": DiscoverySchema::value_variants(),
+        "schema_command": [executable, "capabilities", "--schema", "NAME"],
+        "all_command": [executable, "capabilities", "--all"],
+        "notes": [
+            "scan and query return Arrow IPC; redirect stdout to a file or pipe.",
+            "query reads one direct table location as t; Unity Catalog requires inspect or scan.",
+            "Table commands have no total deadline; inspect and scan have no output byte limit.",
         ],
-        "authorization": read_support::authorization_sources(),
-        "read_support": read_support::command_read_support(),
-        "stdout_formats": {
-            "capabilities": {"format": "json", "format_version": 1},
-            "inspect": {"format": "json", "format_version": 1, "schema": DiscoverySchema::Inspection},
-            "scan": {"format": "arrow_ipc_stream"},
-            "query": {"format": "arrow_ipc_stream"},
-            "help": {"format": "text"},
-        },
+        "limits": discovery_limits(MAX_INDEX_BYTES),
+    })
+}
+
+fn discovery_limits(max_output_bytes: usize) -> Value {
+    json!({
+        "max_output_bytes": max_output_bytes,
+        "deadline_ms": DEADLINE.as_millis(),
+        "failure_diagnostic_timeout_ms": FAILURE_DIAGNOSTIC_TIMEOUT.as_millis(),
+    })
+}
+
+fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Error> {
+    let mut cli = Cli::command();
+    cli.build();
+    let command = match selected_command {
+        Some(name) => cli.find_subcommand(name).ok_or(Error::Argument {
+            kind: ErrorKind::InvalidValue,
+            correction: None,
+        })?,
+        None => &cli,
+    };
+    let input_schemas: Vec<_> = JsonInputKind::value_variants()
+        .iter()
+        .filter(|kind| {
+            selected_command.is_none()
+                || command
+                    .get_arguments()
+                    .any(|argument| argument_name(argument) == kind.argument())
+        })
+        .map(|kind| json!({"name": kind, "argument": kind.argument()}))
+        .collect();
+    let mut terminal_schemas = vec![DiscoverySchema::Diagnostic];
+    if selected_command != Some("help") {
+        terminal_schemas.push(DiscoverySchema::Completion);
+    }
+    let mut output_schemas: Vec<_> = terminal_schemas
+        .iter()
+        .map(|schema| json!({"name": schema, "stream": "stderr"}))
+        .collect();
+    if selected_command.is_none() || selected_command == Some("inspect") {
+        output_schemas.insert(
+            0,
+            json!({"name": DiscoverySchema::Inspection, "stream": "stdout"}),
+        );
+    }
+    let mut authorization = read_support::authorization_sources();
+    let mut read_support = read_support::command_read_support();
+    let mut stdout_formats = json!({
+        "capabilities": {"format": "json", "format_version": 1},
+        "inspect": {"format": "json", "format_version": 1, "schema": DiscoverySchema::Inspection},
+        "scan": {"format": "arrow_ipc_stream"},
+        "query": {"format": "arrow_ipc_stream"},
+        "help": {"format": "text"},
+    });
+    if let Some(name) = selected_command {
+        if let Some(sources) = authorization.as_object_mut() {
+            sources.retain(|_, source| {
+                source["commands"]
+                    .as_array()
+                    .is_some_and(|commands| commands.iter().any(|command| command == name))
+            });
+        }
+        for descriptions in [&mut read_support, &mut stdout_formats] {
+            if let Some(commands) = descriptions.as_object_mut() {
+                commands.retain(|command, _| command == name);
+            }
+        }
+    }
+    Ok(json!({
+        "format_version": 1,
+        "kind": if selected_command.is_some() { "command_capabilities" } else { "capabilities" },
+        "cli_version": env!("CARGO_PKG_VERSION"),
+        "command": describe_command(command),
+        "input_schemas": input_schemas,
+        "output_schemas": output_schemas,
+        "schema_command": [cli.get_name(), "capabilities", "--schema", "NAME"],
+        "authorization": authorization,
+        "read_support": read_support,
+        "stdout_formats": stdout_formats,
         "diagnostics": {
             "stream": "stderr",
             "default_format": "text",
             "json": {
                 "option": "--diagnostics=json", "format_version": 1,
-                "schemas": [DiscoverySchema::Diagnostic, DiscoverySchema::Completion],
+                "schemas": terminal_schemas,
             },
         },
-        "limits": {
-            "max_output_bytes": MAX_OUTPUT_BYTES,
-            "deadline_ms": DEADLINE.as_millis(),
-            "failure_diagnostic_timeout_ms": FAILURE_DIAGNOSTIC_TIMEOUT.as_millis(),
-        },
-    })
+        "limits": discovery_limits(MAX_OUTPUT_BYTES),
+    }))
 }
 
 fn describe_command(command: &Command) -> Value {
@@ -142,7 +240,7 @@ fn argument_name(argument: &Arg) -> String {
 
 /// Includes terminal reporting in discovery's deadline, even when stderr is blocked.
 pub(crate) fn run_capabilities(
-    schema: Option<DiscoverySchema>,
+    options: CapabilitiesArgs,
     diagnostic_format: DiagnosticFormat,
 ) -> ExitCode {
     let deadline = std::time::Instant::now() + DEADLINE;
@@ -166,7 +264,7 @@ pub(crate) fn run_capabilities(
             result = async {
                 let stats = tokio::task::spawn_blocking(move || {
                     diagnostics::init_tracing(diagnostic_format);
-                    write_discovery_response(schema)
+                    write_discovery_response(options)
                 }).await.map_err(io::Error::other).context(RuntimeSnafu {
                     reason: "discovery_output_task_failed",
                 })??;
@@ -185,20 +283,36 @@ pub(crate) fn run_capabilities(
     status
 }
 
-fn write_discovery_response(schema: Option<DiscoverySchema>) -> Result<StdoutStats, Error> {
-    let document = schema.map_or_else(build_capabilities, DiscoverySchema::schema_document);
-    let mut output = document.to_string().into_bytes();
-    output.push(b'\n');
-    if output.len() > MAX_OUTPUT_BYTES {
-        return Err(Error::OutputLimit {
-            reason: "discovery_output_too_large",
-        });
-    }
+fn write_discovery_response(options: CapabilitiesArgs) -> Result<StdoutStats, Error> {
+    let (document, max_output_bytes) = if let Some(schema) = options.schema {
+        (schema.schema_document(), MAX_OUTPUT_BYTES)
+    } else if let Some(name) = options.command {
+        (build_capability_details(Some(&name))?, MAX_OUTPUT_BYTES)
+    } else if options.all {
+        (build_capability_details(None)?, MAX_OUTPUT_BYTES)
+    } else {
+        (build_capability_index(), MAX_INDEX_BYTES)
+    };
+    let output = serialize_discovery_response(&document, max_output_bytes)?;
     write_stdout(&output)?;
     Ok(StdoutStats {
         bytes_written: output.len() as u64,
         ..Default::default()
     })
+}
+
+fn serialize_discovery_response(
+    document: &Value,
+    max_output_bytes: usize,
+) -> Result<Vec<u8>, Error> {
+    let mut output = document.to_string().into_bytes();
+    output.push(b'\n');
+    if output.len() > max_output_bytes {
+        return Err(Error::OutputLimit {
+            reason: "discovery_output_too_large",
+        });
+    }
+    Ok(output)
 }
 
 #[cfg(test)]
@@ -208,6 +322,71 @@ mod tests {
     use clap::Parser;
 
     use super::*;
+
+    #[test]
+    fn discovery_selectors_are_mutually_exclusive_and_describe_their_conflicts() {
+        let details = build_capability_details(Some("capabilities")).unwrap();
+        let arguments = details["command"]["arguments"].as_array().unwrap();
+        let selectors = [
+            vec!["--command", "query"],
+            vec!["--schema", "predicate"],
+            vec!["--all"],
+        ];
+        for (index, selector) in selectors.iter().enumerate() {
+            let argument = arguments
+                .iter()
+                .find(|argument| argument["name"] == selector[0])
+                .unwrap();
+            for (other_index, other) in selectors.iter().enumerate() {
+                if index == other_index {
+                    continue;
+                }
+                assert!(
+                    argument["conflicts_with"]
+                        .as_array()
+                        .unwrap()
+                        .contains(&json!(other[0]))
+                );
+                let args: Vec<_> = ["dar", "capabilities"]
+                    .iter()
+                    .chain(selector)
+                    .chain(other)
+                    .copied()
+                    .collect();
+                let error = Cli::try_parse_from(args).err().unwrap();
+                assert_eq!(error.kind(), ErrorKind::ArgumentConflict);
+            }
+        }
+        for name in ["preview", "explain", "query --help", "", "QUERY"] {
+            assert!(Cli::try_parse_from(["dar", "capabilities", "--command", name]).is_err());
+            assert!(build_capability_details(Some(name)).is_err());
+        }
+    }
+
+    #[test]
+    fn response_limits_include_json_framing_and_the_final_newline() {
+        for limit in [MAX_INDEX_BYTES, MAX_OUTPUT_BYTES] {
+            let exact = json!("a".repeat(limit - 3));
+            let encoded = serialize_discovery_response(&exact, limit).unwrap();
+            assert_eq!(encoded.len(), limit);
+            assert_eq!(encoded.last(), Some(&b'\n'));
+            assert_eq!(serde_json::from_slice::<Value>(&encoded).unwrap(), exact);
+            let oversized = json!("a".repeat(limit - 2));
+            assert!(matches!(
+                serialize_discovery_response(&oversized, limit),
+                Err(Error::OutputLimit {
+                    reason: "discovery_output_too_large"
+                })
+            ));
+        }
+        assert!(serialize_discovery_response(&json!("\u{e9}"), 4).is_err());
+        assert_eq!(
+            serialize_discovery_response(&json!("\u{e9}"), 5)
+                .unwrap()
+                .len(),
+            5
+        );
+    }
 
     #[test]
     fn completion_fits_the_minimum_atomic_pipe_write_size() {
@@ -225,7 +404,7 @@ mod tests {
 
     #[test]
     fn command_formats_cover_the_parser_without_advertising_future_commands() {
-        let inventory = build_capabilities();
+        let inventory = build_capability_details(None).unwrap();
         let mut advertised: Vec<_> = inventory["command"]["subcommands"]
             .as_array()
             .unwrap()
@@ -264,7 +443,7 @@ mod tests {
 
     #[test]
     fn advertised_argument_rules_match_accepted_invocations() {
-        let inventory = build_capabilities();
+        let inventory = build_capability_details(None).unwrap();
         let commands = inventory["command"]["subcommands"].as_array().unwrap();
         let scan = commands
             .iter()
@@ -346,7 +525,7 @@ mod tests {
 
     #[test]
     fn schema_catalog_matches_clap_choices_and_existing_file_arguments() {
-        let inventory = build_capabilities();
+        let inventory = build_capability_details(None).unwrap();
         let commands = inventory["command"]["subcommands"].as_array().unwrap();
         let discovery = commands
             .iter()
@@ -380,7 +559,10 @@ mod tests {
         for schema in input_catalog.iter().chain(output_catalog) {
             let name = schema["name"].as_str().unwrap();
             let cli = Cli::try_parse_from(["dar", "capabilities", "--schema", name]).unwrap();
-            let crate::Command::Capabilities { schema: Some(kind) } = cli.command else {
+            let crate::Command::Capabilities(CapabilitiesArgs {
+                schema: Some(kind), ..
+            }) = cli.command
+            else {
                 panic!("expected named schema")
             };
             let document = kind.schema_document();

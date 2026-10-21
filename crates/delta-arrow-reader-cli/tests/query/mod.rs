@@ -86,7 +86,11 @@ fn read_expected_rows(name: &str) -> TestResult<RecordBatch> {
 
 #[test]
 fn published_sql_examples_execute_with_the_advertised_table_binding() -> TestResult {
-    let output = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).arg("capabilities"))?;
+    let output = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).args([
+        "capabilities",
+        "--command",
+        "query",
+    ]))?;
     assert!(output.status.success());
     let inventory: serde_json::Value = serde_json::from_slice(&output.stdout)?;
     let support = &inventory["read_support"]["query"];
