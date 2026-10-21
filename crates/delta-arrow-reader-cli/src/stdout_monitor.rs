@@ -10,7 +10,7 @@ pub(super) async fn wait_for_disconnect() -> io::Error {
 
         let stdout = io::stdout();
         loop {
-            if let Err(error) = check_pipe(stdout.as_raw_fd()) {
+            if let Err(error) = check_for_disconnect(stdout.as_raw_fd()) {
                 return error;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -24,9 +24,10 @@ pub(super) async fn wait_for_disconnect() -> io::Error {
 }
 
 #[cfg(unix)]
-fn check_pipe(fd: std::os::fd::RawFd) -> io::Result<()> {
+fn check_for_disconnect(fd: std::os::fd::RawFd) -> io::Result<()> {
     let mut descriptor = libc::pollfd {
         fd,
+        // poll reports errors and hangups even without requesting readiness events.
         events: 0,
         revents: 0,
     };
@@ -59,17 +60,17 @@ mod tests {
     #[test]
     fn monitoring_preserves_pipe_contents_and_accepts_regular_files() {
         let (mut reader, mut writer) = io::pipe().unwrap();
-        check_pipe(writer.as_raw_fd()).unwrap();
+        check_for_disconnect(writer.as_raw_fd()).unwrap();
         writer.write_all(b"arrow").unwrap();
-        check_pipe(writer.as_raw_fd()).unwrap();
+        check_for_disconnect(writer.as_raw_fd()).unwrap();
         let mut bytes = [0; 5];
         reader.read_exact(&mut bytes).unwrap();
         assert_eq!(&bytes, b"arrow");
         drop(reader);
         assert_eq!(
-            check_pipe(writer.as_raw_fd()).unwrap_err().kind(),
+            check_for_disconnect(writer.as_raw_fd()).unwrap_err().kind(),
             io::ErrorKind::BrokenPipe
         );
-        check_pipe(tempfile::tempfile().unwrap().as_raw_fd()).unwrap();
+        check_for_disconnect(tempfile::tempfile().unwrap().as_raw_fd()).unwrap();
     }
 }

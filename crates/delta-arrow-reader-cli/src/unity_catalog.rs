@@ -2,23 +2,25 @@
 //!
 //! The CLI supplies table metadata and temporary storage credentials. Core then reads
 //! the Delta log and data files directly. Table identifiers, credentials, and raw command output
-//! must stay out of diagnostics; the types carrying them deliberately omit `Debug`.
+//! must stay out of diagnostics. Raw responses and credential values omit `Debug`;
+//! credential caches and providers expose only redacted `Debug` output.
 
 mod credential_cache;
 mod databricks_cli;
 mod storage_access;
+mod storage_location;
 mod table_metadata;
+mod temporary_credentials;
 
 use std::fmt;
 
 use delta_arrow_reader::DeltaStorageOptions;
 use snafu::Snafu;
 
-use storage_access::{
-    AuthorizedTableAccess, TableStorageLocation, parse_temporary_credentials,
-    validate_storage_options,
-};
+use storage_access::AuthorizedTableAccess;
+use storage_location::{TableStorageLocation, validate_storage_options};
 use table_metadata::TableMetadataResponse;
+use temporary_credentials::parse_temporary_credentials;
 
 /// Failures that the CLI can report without exposing Databricks responses or credentials.
 #[derive(Clone, Copy, PartialEq, Eq, Snafu)]

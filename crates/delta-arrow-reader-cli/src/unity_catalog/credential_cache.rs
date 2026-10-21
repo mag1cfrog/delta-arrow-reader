@@ -16,14 +16,14 @@ use tokio::{runtime::Handle, sync::Mutex, task::JoinSet, time::Instant};
 
 use super::{
     Error, databricks_cli,
-    storage_access::{
-        CloudCredentials, StorageBackend, TableStorageLocation, TemporaryTableCredentials,
-        parse_temporary_credentials,
+    storage_location::{StorageBackend, TableStorageLocation},
+    temporary_credentials::{
+        CloudCredentials, TemporaryTableCredentials, parse_temporary_credentials,
     },
 };
 
-/// Immutable authorization identity; renewal never resolves the table name again.
-struct TableCredentialRequest {
+/// Renews credentials on the command runtime using the original profile, table ID, and root.
+struct TableCredentialRefresher {
     profile: String,
     table_id: String,
     storage_location: TableStorageLocation,
@@ -31,17 +31,19 @@ struct TableCredentialRequest {
     command_runtime: Handle,
 }
 
-impl TableCredentialRequest {
+impl TableCredentialRefresher {
     async fn refresh(self: &Arc<Self>) -> Result<TemporaryTableCredentials, Error> {
-        let request = Arc::clone(self);
+        let refresher = Arc::clone(self);
         let mut task = JoinSet::new();
         // Runtime shutdown kills pending children; dropping the waiter also aborts this task.
         task.spawn_on(
             async move {
-                let bytes =
-                    databricks_cli::generate_read_credentials(&request.profile, &request.table_id)
-                        .await?;
-                parse_temporary_credentials(&bytes, &request.storage_location)
+                let bytes = databricks_cli::generate_read_credentials(
+                    &refresher.profile,
+                    &refresher.table_id,
+                )
+                .await?;
+                parse_temporary_credentials(&bytes, &refresher.storage_location)
             },
             &self.command_runtime,
         );
@@ -84,7 +86,7 @@ impl CachedTableCredentials {
 /// The mutex coalesces concurrent refreshes. A failure is retained so waiting reads do not
 /// launch more subprocesses or fall back to a grant whose authorization could have been revoked.
 pub(super) struct TableCredentialCache {
-    request: Arc<TableCredentialRequest>,
+    refresher: Arc<TableCredentialRefresher>,
     state: Mutex<Result<CachedTableCredentials, Error>>,
 }
 
@@ -96,7 +98,7 @@ impl TableCredentialCache {
         credentials: TemporaryTableCredentials,
     ) -> Result<Arc<Self>, Error> {
         Ok(Arc::new(Self {
-            request: Arc::new(TableCredentialRequest {
+            refresher: Arc::new(TableCredentialRefresher {
                 profile,
                 table_id,
                 storage_location,
@@ -107,17 +109,17 @@ impl TableCredentialCache {
     }
 
     /// Native clients share this cache without changing Core's credential-provider interface.
-    pub(super) fn provider(self: &Arc<Self>) -> DeltaStorageCredentialProvider {
-        match self.request.storage_location.backend {
-            StorageBackend::S3 | StorageBackend::R2 => {
-                DeltaStorageCredentialProvider::Aws(Arc::new(AwsTableCredentials(Arc::clone(self))))
-            }
+    pub(super) fn credential_provider(self: &Arc<Self>) -> DeltaStorageCredentialProvider {
+        match self.refresher.storage_location.backend {
+            StorageBackend::S3 | StorageBackend::R2 => DeltaStorageCredentialProvider::Aws(
+                Arc::new(AwsTableCredentialProvider(Arc::clone(self))),
+            ),
             StorageBackend::Azure => DeltaStorageCredentialProvider::Azure(Arc::new(
-                AzureTableCredentials(Arc::clone(self)),
+                AzureTableCredentialProvider(Arc::clone(self)),
             )),
-            StorageBackend::Gcs => {
-                DeltaStorageCredentialProvider::Gcp(Arc::new(GcsTableCredentials(Arc::clone(self))))
-            }
+            StorageBackend::Gcs => DeltaStorageCredentialProvider::Gcp(Arc::new(
+                GcsTableCredentialProvider(Arc::clone(self)),
+            )),
         }
     }
 
@@ -127,7 +129,7 @@ impl TableCredentialCache {
     }
 
     async fn get_credentials(&self) -> object_store::Result<CloudCredentials> {
-        self.get_or_refresh(|| self.request.refresh())
+        self.get_or_refresh(|| self.refresher.refresh())
             .await
             .map_err(storage_error)
     }
@@ -173,10 +175,10 @@ fn storage_error(source: Error) -> object_store::Error {
 
 /// S3 and R2 request signing through the shared UC cache.
 #[derive(Debug)]
-struct AwsTableCredentials(Arc<TableCredentialCache>);
+struct AwsTableCredentialProvider(Arc<TableCredentialCache>);
 
 #[async_trait]
-impl CredentialProvider for AwsTableCredentials {
+impl CredentialProvider for AwsTableCredentialProvider {
     type Credential = AwsCredential;
 
     async fn get_credential(&self) -> object_store::Result<Arc<AwsCredential>> {
@@ -189,10 +191,10 @@ impl CredentialProvider for AwsTableCredentials {
 
 /// Azure SAS or bearer authorization through the shared UC cache.
 #[derive(Debug)]
-struct AzureTableCredentials(Arc<TableCredentialCache>);
+struct AzureTableCredentialProvider(Arc<TableCredentialCache>);
 
 #[async_trait]
-impl CredentialProvider for AzureTableCredentials {
+impl CredentialProvider for AzureTableCredentialProvider {
     type Credential = AzureCredential;
 
     async fn get_credential(&self) -> object_store::Result<Arc<AzureCredential>> {
@@ -205,10 +207,10 @@ impl CredentialProvider for AzureTableCredentials {
 
 /// GCS bearer authorization through the shared UC cache.
 #[derive(Debug)]
-struct GcsTableCredentials(Arc<TableCredentialCache>);
+struct GcsTableCredentialProvider(Arc<TableCredentialCache>);
 
 #[async_trait]
-impl CredentialProvider for GcsTableCredentials {
+impl CredentialProvider for GcsTableCredentialProvider {
     type Credential = GcpCredential;
 
     async fn get_credential(&self) -> object_store::Result<Arc<GcpCredential>> {
@@ -278,7 +280,7 @@ mod tests {
             assert_eq!(aws_token(result.unwrap().unwrap()), "renewed");
         }
         assert_eq!(refreshes.load(Ordering::SeqCst), 1);
-        let DeltaStorageCredentialProvider::Aws(provider) = cache.provider() else {
+        let DeltaStorageCredentialProvider::Aws(provider) = cache.credential_provider() else {
             panic!("expected AWS provider");
         };
         assert_eq!(
@@ -339,7 +341,7 @@ mod tests {
             cache.refresh_failure().await,
             Some(Error::ReadCredentialsRequestFailed)
         );
-        let DeltaStorageCredentialProvider::Aws(provider) = cache.provider() else {
+        let DeltaStorageCredentialProvider::Aws(provider) = cache.credential_provider() else {
             panic!("expected AWS provider");
         };
         let error = provider.get_credential().await.unwrap_err();

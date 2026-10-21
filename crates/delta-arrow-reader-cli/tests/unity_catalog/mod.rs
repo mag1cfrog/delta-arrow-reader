@@ -59,12 +59,65 @@ impl StorageCredentialKind {
         }
     }
 
-    fn renewed_authorization(self) -> &'static str {
+    /// Lowercase fragment matched against a captured request after credential rotation.
+    fn expected_renewed_auth_fragment(self) -> &'static str {
         match self {
             Self::S3 | Self::R2 => "credential=renewed-key/",
             Self::AzureSas => "sig=renewed%2bsignature",
             Self::AzureBearer => "authorization: bearer renewed-azure-token",
             Self::Gcs => "authorization: bearer renewed-gcp-token",
+        }
+    }
+}
+
+/// Failures injected into a renewal command or its replacement credential response.
+#[derive(Clone, Copy, Debug)]
+enum CredentialRefreshFailure {
+    PermissionDenied,
+    MissingDatabricksCli,
+    ChangedStorageRoot,
+    ExpiredCredentials,
+    ChangedCredentialKind,
+    InvalidBearerToken,
+}
+
+impl CredentialRefreshFailure {
+    fn apply_to_response(self, response: &mut Value) {
+        match self {
+            Self::PermissionDenied | Self::MissingDatabricksCli => {}
+            Self::ChangedStorageRoot => response["url"] = json!("gs://other/secret-root"),
+            Self::ExpiredCredentials => response["expiration_time"] = json!(0),
+            Self::ChangedCredentialKind => {
+                response
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("azure_user_delegation_sas");
+                response["azure_aad"] = json!({"aad_token":"secret-new-kind"});
+            }
+            Self::InvalidBearerToken => {
+                response["gcp_oauth_token"] = json!({"oauth_token":"secret invalid token"});
+            }
+        }
+    }
+
+    fn cli_refresh_behavior(self) -> &'static str {
+        match self {
+            Self::PermissionDenied => "deny",
+            Self::MissingDatabricksCli => "missing",
+            Self::ChangedStorageRoot
+            | Self::ExpiredCredentials
+            | Self::ChangedCredentialKind
+            | Self::InvalidBearerToken => "rotate",
+        }
+    }
+
+    fn expected_error_code(self) -> &'static str {
+        match self {
+            Self::PermissionDenied => "uc_credential_request_failed",
+            Self::MissingDatabricksCli => "databricks_cli_missing",
+            Self::ChangedStorageRoot | Self::InvalidBearerToken => "invalid_databricks_response",
+            Self::ExpiredCredentials => "uc_credentials_expired",
+            Self::ChangedCredentialKind => "unsupported_uc_table",
         }
     }
 }
@@ -144,7 +197,7 @@ impl DatabricksCliFixture {
             &executable,
             r#"#!/bin/sh
 set -eu
-printf '%s\000' "$@" >> "$DAR_TEST_DIR/calls"
+printf '%s\000' "$@" >> "$DAR_TEST_DIR/recorded_arguments"
 if IFS= read -r unused; then exit 98; fi
 if [ -n "${DAR_TEST_PID1_SIGNAL:-}" ]; then
   printf '%s' "$PPID" > "$DAR_TEST_DIR/parent_pid"
@@ -165,6 +218,8 @@ case "$1" in
         case "$DAR_TEST_REFRESH" in
           deny) printf 'secret-sentinel\n' >&2; exit 1 ;;
           hang) printf '%s' "$$" > "$DAR_TEST_DIR/pid"; exec /bin/sleep 60 ;;
+          rotate) ;;
+          *) exit 97 ;;
         esac
         /bin/cat "$DAR_TEST_DIR/credentials.next.json"
         exit 0
@@ -263,8 +318,9 @@ esac
         Ok(expires_at)
     }
 
-    /// Let the initial grant expire while the first storage response is pending.
-    fn storage_with_expiring_credentials(
+    /// Expires the initial grant during the first storage response and invalidates UC metadata
+    /// so an accidental table-name lookup during renewal fails.
+    fn storage_with_credential_expiry_and_invalid_metadata(
         &self,
         kind: StorageCredentialKind,
         update_replacement: impl FnOnce(&mut Value),
@@ -292,8 +348,8 @@ esac
         Ok(server)
     }
 
-    fn calls(&self) -> Vec<String> {
-        fs::read(self.directory.path().join("calls"))
+    fn recorded_arguments(&self) -> Vec<String> {
+        fs::read(self.directory.path().join("recorded_arguments"))
             .unwrap_or_default()
             .split(|b| *b == 0)
             .filter(|arg| !arg.is_empty())
@@ -427,7 +483,7 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
             "--output",
             "json",
         ];
-        assert_eq!(fixture.calls(), expected.repeat(5));
+        assert_eq!(fixture.recorded_arguments(), expected.repeat(5));
         let requests = server.requests.lock().unwrap();
         assert!(!requests.is_empty());
         for request in requests.iter() {
@@ -529,7 +585,7 @@ fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResul
             "invalid_uc_storage_options",
         );
     }
-    assert!(fixture.calls().is_empty());
+    assert!(fixture.recorded_arguments().is_empty());
     let local = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
         "../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned/table",
     );
@@ -559,9 +615,10 @@ fn inspection_renews_expired_grants_without_resolving_the_table_name_again() -> 
         StorageCredentialKind::Gcs,
     ] {
         let fixture = DatabricksCliFixture::new(kind)?;
-        let server = fixture.storage_with_expiring_credentials(kind, |replacement| {
-            kind.rotate_credentials(replacement);
-        })?;
+        let server =
+            fixture.storage_with_credential_expiry_and_invalid_metadata(kind, |replacement| {
+                kind.rotate_credentials(replacement);
+            })?;
         let output = run_with_timeout(
             fixture
                 .inspect()
@@ -577,32 +634,47 @@ fn inspection_renews_expired_grants_without_resolving_the_table_name_again() -> 
             serde_json::from_slice::<Value>(&output.stdout)?["table_version"],
             "0"
         );
-        let calls = fixture.calls();
-        assert_eq!(calls.iter().filter(|arg| *arg == "tables").count(), 1);
+        let recorded_arguments = fixture.recorded_arguments();
         assert_eq!(
-            calls
+            recorded_arguments
+                .iter()
+                .filter(|arg| *arg == "tables")
+                .count(),
+            1
+        );
+        assert_eq!(
+            recorded_arguments
                 .iter()
                 .filter(|arg| *arg == "temporary-table-credentials")
                 .count(),
             2
         );
-        assert_eq!(calls.iter().filter(|arg| *arg == "READ").count(), 2);
-        for pair in calls.windows(2).filter(|pair| pair[0] == "--table-id") {
+        assert_eq!(
+            recorded_arguments
+                .iter()
+                .filter(|arg| *arg == "READ")
+                .count(),
+            2
+        );
+        for pair in recorded_arguments
+            .windows(2)
+            .filter(|pair| pair[0] == "--table-id")
+        {
             assert_eq!(pair[1], TABLE_ID);
         }
         assert_eq!(
-            calls
+            recorded_arguments
                 .iter()
                 .filter(|arg| **arg == format!("--profile={PROFILE}"))
                 .count(),
             3
         );
         let requests = server.requests.lock().unwrap();
-        let renewed_auth = kind.renewed_authorization();
+        let expected_auth_fragment = kind.expected_renewed_auth_fragment();
         assert!(
-            requests
-                .iter()
-                .any(|request| request.to_ascii_lowercase().contains(renewed_auth)),
+            requests.iter().any(|request| request
+                .to_ascii_lowercase()
+                .contains(expected_auth_fragment)),
             "{kind:?}: no request used renewed credentials"
         );
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -615,70 +687,53 @@ fn inspection_renews_expired_grants_without_resolving_the_table_name_again() -> 
 
 #[test]
 fn refresh_failures_preserve_redacted_uc_categories_and_stop_inspection() -> TestResult {
-    for (kind, failure, code) in [
+    for (kind, failure) in [
         (
             StorageCredentialKind::S3,
-            "deny",
-            "uc_credential_request_failed",
+            CredentialRefreshFailure::PermissionDenied,
         ),
         (
             StorageCredentialKind::S3,
-            "expired",
-            "uc_credentials_expired",
+            CredentialRefreshFailure::ExpiredCredentials,
         ),
         (
             StorageCredentialKind::Gcs,
-            "root",
-            "invalid_databricks_response",
+            CredentialRefreshFailure::ChangedStorageRoot,
         ),
         (
             StorageCredentialKind::Gcs,
-            "invalid",
-            "invalid_databricks_response",
+            CredentialRefreshFailure::InvalidBearerToken,
         ),
         (
             StorageCredentialKind::AzureSas,
-            "kind",
-            "unsupported_uc_table",
+            CredentialRefreshFailure::ChangedCredentialKind,
         ),
     ] {
         let fixture = DatabricksCliFixture::new(kind)?;
         let _server =
-            fixture.storage_with_expiring_credentials(kind, |replacement| match failure {
-                "expired" => replacement["expiration_time"] = json!(0),
-                "root" => replacement["url"] = json!("gs://other/secret-root"),
-                "invalid" => {
-                    replacement["gcp_oauth_token"] = json!({"oauth_token":"secret invalid token"})
-                }
-                "kind" => {
-                    replacement
-                        .as_object_mut()
-                        .unwrap()
-                        .remove("azure_user_delegation_sas");
-                    replacement["azure_aad"] = json!({"aad_token":"secret-new-kind"});
-                }
-                _ => {}
+            fixture.storage_with_credential_expiry_and_invalid_metadata(kind, |replacement| {
+                failure.apply_to_response(replacement);
             })?;
         let output = run_with_timeout(
             fixture
                 .inspect()
                 .arg("--diagnostics=json")
-                .env("DAR_TEST_REFRESH", failure)
+                .env("DAR_TEST_REFRESH", failure.cli_refresh_behavior())
                 .env("RUST_LOG", "trace"),
         )?;
         assert_eq!(
             output.status.code(),
             Some(1),
-            "{failure}: {}",
+            "{failure:?}: {}",
             String::from_utf8_lossy(&output.stderr)
         );
         assert!(output.stdout.is_empty());
         let record =
             super::diagnostics::assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["code"], code);
+        assert_eq!(record["code"], failure.expected_error_code());
         assert_eq!(
             fixture
-                .calls()
+                .recorded_arguments()
                 .iter()
                 .filter(|arg| *arg == "temporary-table-credentials")
                 .count(),
@@ -720,10 +775,13 @@ fn invalid_responses_and_denied_credentials_are_redacted() -> TestResult {
         let record =
             super::diagnostics::assert_single_terminal_record(&output.stderr, "diagnostic");
         assert_eq!(record["code"], expected);
-        assert_eq!(fixture.calls().first().map(String::as_str), Some("tables"));
+        assert_eq!(
+            fixture.recorded_arguments().first().map(String::as_str),
+            Some("tables")
+        );
         assert!(
             !fixture
-                .calls()
+                .recorded_arguments()
                 .iter()
                 .any(|a| a == "temporary-table-credentials")
         );
@@ -912,7 +970,10 @@ fn cancellation_terminates_pending_databricks_process() -> TestResult {
     ] {
         let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
         let _server = if during_refresh {
-            Some(fixture.storage_with_expiring_credentials(StorageCredentialKind::S3, |_| {})?)
+            Some(fixture.storage_with_credential_expiry_and_invalid_metadata(
+                StorageCredentialKind::S3,
+                |_| {},
+            )?)
         } else {
             None
         };

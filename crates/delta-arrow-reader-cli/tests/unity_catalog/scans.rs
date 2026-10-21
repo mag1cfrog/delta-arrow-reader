@@ -19,11 +19,20 @@ use arrow::{
 use serde_json::{Value, json};
 
 use super::{
-    DatabricksCliFixture, MockCloudStorageServer, StorageCredentialKind, TestResult,
-    run_with_timeout,
+    CredentialRefreshFailure, DatabricksCliFixture, MockCloudStorageServer, StorageCredentialKind,
+    TestResult, run_with_timeout,
 };
 
 const IPC_END: &[u8] = &[255, 255, 255, 255, 0, 0, 0, 0];
+
+/// Scan options exercised for each cloud, Parquet backend, and snapshot selection.
+#[derive(Debug)]
+enum ScanCase {
+    AllRows,
+    FilteredProjection,
+    NoColumns,
+    ZeroLimit,
+}
 
 fn requested_path(request: &str) -> String {
     let target = request.split_whitespace().nth(1).unwrap();
@@ -56,7 +65,7 @@ fn partitioned_objects() -> Result<BTreeMap<String, Vec<u8>>, Box<dyn std::error
 }
 
 /// A second snapshot drops one partition so a version-selection regression changes the rows.
-fn remove_west_partition(objects: &mut BTreeMap<String, Vec<u8>>) {
+fn append_west_partition_removal_commit(objects: &mut BTreeMap<String, Vec<u8>>) {
     let path = objects
         .keys()
         .find(|key| key.starts_with("table/region=west/"))
@@ -124,7 +133,7 @@ fn assert_scan_rows(actual: &RecordBatch, expected: &RecordBatch, limit: usize) 
 fn scans_preserve_values_options_and_snapshot_selection_for_every_cloud() -> TestResult {
     let all_rows = expected_partitioned_rows()?;
     let mut objects = partitioned_objects()?;
-    remove_west_partition(&mut objects);
+    append_west_partition_removal_commit(&mut objects);
     for kind in [
         StorageCredentialKind::S3,
         StorageCredentialKind::R2,
@@ -142,23 +151,24 @@ fn scans_preserve_values_options_and_snapshot_selection_for_every_cloud() -> Tes
                 "op": "lt", "column": "id", "value": {"type": "int32", "value": "20"}
             }))?,
         )?;
-        for backend in ["direct", "delta_kernel"] {
+        for parquet_backend in ["direct", "delta_kernel"] {
             let execution_file = fixture.directory.path().join("execution.json");
             fs::write(
                 &execution_file,
                 serde_json::to_vec(&json!({
-                    "parquet_backend": backend, "parquet_full_file_read_threshold_bytes": null,
+                    "parquet_backend": parquet_backend, "parquet_full_file_read_threshold_bytes": null,
                     "max_concurrent_file_reads_per_scan": 2, "prefetch_files_per_partition": 0
                 }))?,
             )?;
             for historical in [false, true] {
                 for case in [
-                    "full",
-                    "filtered_projection",
-                    "empty_projection",
-                    "zero_limit",
+                    ScanCase::AllRows,
+                    ScanCase::FilteredProjection,
+                    ScanCase::NoColumns,
+                    ScanCase::ZeroLimit,
                 ] {
-                    let context = format!("{kind:?} {backend} historical={historical} {case}");
+                    let context =
+                        format!("{kind:?} {parquet_backend} historical={historical} {case:?}");
                     let mut command = fixture.scan();
                     command
                         .arg("--execution-options-file")
@@ -186,7 +196,7 @@ fn scans_preserve_values_options_and_snapshot_selection_for_every_cloud() -> Tes
                         expected = filter_record_batch(&expected, &mask)?;
                     }
                     let limit = match case {
-                        "filtered_projection" => {
+                        ScanCase::FilteredProjection => {
                             command
                                 .args(["--column", "value", "--column", "id", "--limit", "7"])
                                 .arg("--predicate-file")
@@ -204,16 +214,16 @@ fn scans_preserve_values_options_and_snapshot_selection_for_every_cloud() -> Tes
                             .project(&[1, 0])?;
                             7
                         }
-                        "empty_projection" => {
+                        ScanCase::NoColumns => {
                             command.args(["--no-columns", "--limit", "3"]);
                             expected = expected.project(&[])?;
                             3
                         }
-                        "zero_limit" => {
+                        ScanCase::ZeroLimit => {
                             command.args(["--limit", "0"]);
                             0
                         }
-                        _ => usize::MAX,
+                        ScanCase::AllRows => usize::MAX,
                     };
                     let output = run_with_timeout(&mut command)?;
                     assert!(
@@ -248,7 +258,7 @@ fn scans_preserve_values_options_and_snapshot_selection_for_every_cloud() -> Tes
         );
         assert_eq!(
             fixture
-                .calls()
+                .recorded_arguments()
                 .iter()
                 .filter(|arg| *arg == "temporary-table-credentials")
                 .count(),
@@ -258,11 +268,13 @@ fn scans_preserve_values_options_and_snapshot_selection_for_every_cloud() -> Tes
     Ok(())
 }
 
-/// Expire credentials after one data file, with reads serialized so output has already started.
-fn scan_with_renewal(
+/// Forces renewal after output starts and makes table re-resolution observable.
+/// The second Parquet request publishes a newer Delta snapshot, invalidates UC metadata,
+/// and waits for expiry. Serialized reads keep the first file's rows ahead of renewal.
+fn scan_with_credential_expiry_and_table_changes(
     fixture: &DatabricksCliFixture,
     kind: StorageCredentialKind,
-    backend: &str,
+    parquet_backend: &str,
     update_replacement: impl FnOnce(&mut Value),
 ) -> Result<(MockCloudStorageServer, Command), Box<dyn std::error::Error>> {
     let expires_at = fixture.prepare_credential_renewal(update_replacement)?;
@@ -281,7 +293,7 @@ fn scan_with_renewal(
                 if path != *first_file && !delayed {
                     delayed = true;
                     fs::write(&metadata_path, "secret-table-was-replaced").unwrap();
-                    remove_west_partition(objects);
+                    append_west_partition_removal_commit(objects);
                     thread::sleep(
                         expires_at
                             .duration_since(SystemTime::now())
@@ -299,7 +311,7 @@ fn scan_with_renewal(
     fs::write(
         &options,
         serde_json::to_vec(&json!({
-            "parquet_backend": backend,
+            "parquet_backend": parquet_backend,
             "max_concurrent_file_reads_per_scan": 1,
             "max_concurrent_file_reads_per_partition": 1,
             "output_buffer_batches_per_partition": 1,
@@ -327,16 +339,18 @@ fn renewal_during_scans_keeps_the_original_snapshot_and_emits_each_row_once() ->
         StorageCredentialKind::AzureBearer,
         StorageCredentialKind::Gcs,
     ] {
-        for backend in ["direct", "delta_kernel"] {
+        for parquet_backend in ["direct", "delta_kernel"] {
             let fixture = DatabricksCliFixture::new(kind)?;
-            let (server, mut command) =
-                scan_with_renewal(&fixture, kind, backend, |replacement| {
-                    kind.rotate_credentials(replacement)
-                })?;
+            let (server, mut command) = scan_with_credential_expiry_and_table_changes(
+                &fixture,
+                kind,
+                parquet_backend,
+                |replacement| kind.rotate_credentials(replacement),
+            )?;
             let output = run_with_timeout(&mut command)?;
             assert!(
                 output.status.success(),
-                "{kind:?} {backend}: {}",
+                "{kind:?} {parquet_backend}: {}",
                 String::from_utf8_lossy(&output.stderr)
             );
             assert!(output.stdout.ends_with(IPC_END));
@@ -346,16 +360,25 @@ fn renewal_during_scans_keeps_the_original_snapshot_and_emits_each_row_once() ->
                 "completion",
             );
             assert_eq!(record["bindings"][0]["table_version"], "0");
-            let calls = fixture.calls();
-            assert_eq!(calls.iter().filter(|arg| *arg == "tables").count(), 1);
+            let recorded_arguments = fixture.recorded_arguments();
             assert_eq!(
-                calls
+                recorded_arguments
+                    .iter()
+                    .filter(|arg| *arg == "tables")
+                    .count(),
+                1
+            );
+            assert_eq!(
+                recorded_arguments
                     .iter()
                     .filter(|arg| *arg == "temporary-table-credentials")
                     .count(),
                 2
             );
-            for pair in calls.windows(2).filter(|pair| pair[0] == "--table-id") {
+            for pair in recorded_arguments
+                .windows(2)
+                .filter(|pair| pair[0] == "--table-id")
+            {
                 assert_eq!(pair[1], super::TABLE_ID);
             }
             let requests = server.requests.lock().unwrap();
@@ -365,7 +388,7 @@ fn renewal_during_scans_keeps_the_original_snapshot_and_emits_each_row_once() ->
                     .filter(|request| requested_path(request).ends_with(".parquet"))
                     .any(|request| request
                         .to_ascii_lowercase()
-                        .contains(kind.renewed_authorization()))
+                        .contains(kind.expected_renewed_auth_fragment()))
             );
             assert!(!output.stdout.windows(7).any(|bytes| bytes == b"secret-"));
         }
@@ -378,7 +401,10 @@ fn authorization_failures_before_streaming_leave_stdout_empty() -> TestResult {
     for during_refresh in [false, true] {
         let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
         let _server = if during_refresh {
-            Some(fixture.storage_with_expiring_credentials(StorageCredentialKind::S3, |_| {})?)
+            Some(fixture.storage_with_credential_expiry_and_invalid_metadata(
+                StorageCredentialKind::S3,
+                |_| {},
+            )?)
         } else {
             None
         };
@@ -401,84 +427,74 @@ fn authorization_failures_before_streaming_leave_stdout_empty() -> TestResult {
 #[test]
 fn failed_renewal_after_rows_never_finishes_the_arrow_stream() -> TestResult {
     let expected = expected_partitioned_rows()?;
-    for (kind, backend, failure, code) in [
+    for (kind, parquet_backend, failure) in [
         (
             StorageCredentialKind::S3,
             "direct",
-            "deny",
-            "uc_credential_request_failed",
+            CredentialRefreshFailure::PermissionDenied,
         ),
         (
             StorageCredentialKind::S3,
             "delta_kernel",
-            "deny",
-            "uc_credential_request_failed",
+            CredentialRefreshFailure::PermissionDenied,
         ),
         (
             StorageCredentialKind::S3,
             "direct",
-            "missing",
-            "databricks_cli_missing",
+            CredentialRefreshFailure::MissingDatabricksCli,
         ),
         (
             StorageCredentialKind::Gcs,
             "direct",
-            "root",
-            "invalid_databricks_response",
+            CredentialRefreshFailure::ChangedStorageRoot,
         ),
         (
             StorageCredentialKind::Gcs,
             "direct",
-            "expired",
-            "uc_credentials_expired",
+            CredentialRefreshFailure::ExpiredCredentials,
         ),
         (
             StorageCredentialKind::AzureSas,
             "direct",
-            "kind",
-            "unsupported_uc_table",
+            CredentialRefreshFailure::ChangedCredentialKind,
         ),
     ] {
         let fixture = DatabricksCliFixture::new(kind)?;
-        let (_server, mut command) =
-            scan_with_renewal(&fixture, kind, backend, |replacement| match failure {
-                "root" => replacement["url"] = json!("gs://other/secret-root"),
-                "expired" => replacement["expiration_time"] = json!(0),
-                "kind" => {
-                    replacement
-                        .as_object_mut()
-                        .unwrap()
-                        .remove("azure_user_delegation_sas");
-                    replacement["azure_aad"] = json!({"aad_token":"secret-token"});
-                }
-                _ => {}
-            })?;
+        let (_server, mut command) = scan_with_credential_expiry_and_table_changes(
+            &fixture,
+            kind,
+            parquet_backend,
+            |replacement| {
+                failure.apply_to_response(replacement);
+            },
+        )?;
         let output = run_with_timeout(
             command
-                .env("DAR_TEST_REFRESH", failure)
+                .env("DAR_TEST_REFRESH", failure.cli_refresh_behavior())
                 .env("RUST_LOG", "trace"),
         )?;
+        let cli_missing = matches!(failure, CredentialRefreshFailure::MissingDatabricksCli);
         assert_eq!(
             output.status.code(),
-            Some(if failure == "missing" { 2 } else { 1 }),
-            "{backend} {failure}: {}",
+            Some(if cli_missing { 2 } else { 1 }),
+            "{parquet_backend} {failure:?}: {}",
             String::from_utf8_lossy(&output.stderr)
         );
         let record =
             super::super::diagnostics::assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["code"], code);
+        assert_eq!(record["code"], failure.expected_error_code());
         assert!(!output.stdout.ends_with(IPC_END));
         let actual = decode_stream(&output.stdout)?;
         assert!(actual.num_rows() > 0 && actual.num_rows() < expected.num_rows());
         assert_scan_rows(&actual, &expected, actual.num_rows());
         assert_eq!(
             fixture
-                .calls()
+                .recorded_arguments()
                 .iter()
                 .filter(|arg| *arg == "temporary-table-credentials")
                 .count(),
             // An unavailable executable cannot record a second invocation.
-            if failure == "missing" { 1 } else { 2 }
+            if cli_missing { 1 } else { 2 }
         );
         assert!(!output.stdout.windows(7).any(|bytes| bytes == b"secret-"));
     }
@@ -492,8 +508,12 @@ fn cancelling_or_closing_stdout_terminates_a_pending_scan_refresh() -> TestResul
 
     for signal in [Some(libc::SIGINT), Some(libc::SIGTERM), None] {
         let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
-        let (_server, mut command) =
-            scan_with_renewal(&fixture, StorageCredentialKind::S3, "direct", |_| {})?;
+        let (_server, mut command) = scan_with_credential_expiry_and_table_changes(
+            &fixture,
+            StorageCredentialKind::S3,
+            "direct",
+            |_| {},
+        )?;
         let mut child = command
             .env("DAR_TEST_REFRESH", "hang")
             .stdout(Stdio::piped())
