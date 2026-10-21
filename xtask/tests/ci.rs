@@ -889,6 +889,7 @@ fn release_helpers_match_the_main_dependency_cache() -> Result<()> {
                     assert_eq!(step["with"][input], cache["with"][input], "{input}");
                 }
                 for variable in [
+                    "RUSTUP_HOME",
                     "CARGO_PROFILE_DEV_DEBUG",
                     "AWS_LC_SYS_USE_SYSTEM",
                     "CI_TARGET_CACHE_VERSION",
@@ -1137,7 +1138,7 @@ fn benchmark_cache_warming_matches_pr_builds() -> Result<()> {
 
     assert_eq!(warm["runs-on"], check["runs-on"]);
     assert_eq!(warm["defaults"], check["defaults"]);
-    for name in ["CARGO_TARGET_DIR", "RUSTFLAGS"] {
+    for name in ["RUSTUP_HOME", "CARGO_TARGET_DIR", "RUSTFLAGS"] {
         assert_eq!(warm["env"][name], check["env"][name], "{name}");
     }
     let check_steps = check["steps"].as_array().unwrap();
@@ -1389,6 +1390,8 @@ fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<(
     let warmer: Value =
         serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
     let steps = warmer["jobs"]["core"]["steps"].as_array().unwrap();
+    let rustup_home = &warmer["jobs"]["core"]["env"]["RUSTUP_HOME"];
+    assert_eq!(rustup_home, "${{ github.workspace }}/../rustup");
     let script = steps
         .iter()
         .find(|step| step["name"] == "Warm core caches")
@@ -1422,6 +1425,7 @@ fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<(
     for job in ci["jobs"].as_object().unwrap().values() {
         for step in job["steps"].as_array().into_iter().flatten() {
             if step["with"]["shared-key"] == "core-ci-targets" {
+                assert_eq!(&job["env"]["RUSTUP_HOME"], rustup_home);
                 for input in ["shared-key", "env-vars", "cache-targets", "cache-bin"] {
                     assert_eq!(step["with"][input], cache["with"][input], "{input}");
                 }
@@ -1492,6 +1496,25 @@ fn python_cache_warming_matches_the_editable_build() -> Result<()> {
         serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
     let check_steps = ci["jobs"]["python-package"]["steps"].as_array().unwrap();
     let warm_steps = warmer["jobs"]["core"]["steps"].as_array().unwrap();
+    let restored_reports = check_steps
+        .iter()
+        .find(|step| step["name"] == "Restore license scan reports")
+        .unwrap();
+    let saved_reports = warm_steps
+        .iter()
+        .find(|step| step["name"] == "Cache license scan reports")
+        .unwrap();
+    assert_eq!(restored_reports["uses"], "actions/cache/restore@v4");
+    assert_eq!(saved_reports["uses"], "actions/cache@v4");
+    assert_eq!(restored_reports["with"], saved_reports["with"]);
+    assert_eq!(
+        saved_reports["with"]["key"].as_str().unwrap(),
+        format!(
+            "{}${{{{ github.sha }}}}",
+            saved_reports["with"]["restore-keys"].as_str().unwrap()
+        ),
+        "each main commit can refresh reports while reusing matching dependency scans"
+    );
     for action in ["actions/setup-python@v6", "taiki-e/install-action@v2"] {
         let check = check_steps
             .iter()

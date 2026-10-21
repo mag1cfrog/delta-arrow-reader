@@ -75,6 +75,7 @@ jobs:
             test-args: '-k installed'
             artifact: delta-arrow-reader-macos-arm64-wheel
     env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
       SOURCE_REF: ${{ inputs.source-ref }}
       EXPECTED_VERSION: ${{ inputs.expected-version }}
       CACHE_ONLY: ${{ inputs.cache-only }}
@@ -354,6 +355,7 @@ jobs:
     outputs:
       validated: ${{ steps.complete.outputs.validated }}
     env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
       BUILD_RESULT: ${{ needs.build.result }}
       EXPECTED_VERSION: ${{ inputs.expected-version }}
     steps:
