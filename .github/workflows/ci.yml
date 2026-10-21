@@ -344,7 +344,8 @@ jobs:
           "$RUNNER_TEMP/python-tests/bin/python" -I -m unittest discover -s crates/delta-arrow-reader-python/tests
       - name: Check generated Python API documentation
         run: |
-          "$RUNNER_TEMP/python-tests/bin/python" -I crates/delta-arrow-reader-python/generate_api_docs.py --check
+          cargo run --locked -p delta-arrow-reader-python --example generate-api-docs -- \
+            --python "$RUNNER_TEMP/python-tests/bin/python" --check
 
   cli-checks:
     name: CLI Source
