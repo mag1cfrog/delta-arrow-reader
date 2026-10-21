@@ -2,6 +2,31 @@ use super::*;
 use std::fs;
 
 #[test]
+fn correctness_gate_failures_do_not_replace_cleanup_or_query_failures() -> Result<()> {
+    for (phase, status, expected_status) in [
+        ("correctness_gate", "unsupported", "validation_failed"),
+        (
+            "correctness_gate",
+            "operational_failure",
+            "validation_failed",
+        ),
+        ("correctness_gate", "validation_failed", "validation_failed"),
+        ("correctness_gate", "success", "success"),
+        ("query", "unsupported", "unsupported"),
+        ("query", "operational_failure", "operational_failure"),
+        ("cleanup", "operational_failure", "operational_failure"),
+    ] {
+        let mut record = json!({"phase":phase, "status":status, "failure_reason":"original failure",
+            "capability":{"status":"not_checked"}, "cleanup_ns":17});
+        let mut expected = record.clone();
+        expected["status"] = json!(expected_status);
+        finish(&mut record)?;
+        assert_eq!(record, expected);
+    }
+    Ok(())
+}
+
+#[test]
 fn runtime_checks_installed_contents_and_preserves_canonical_path_maps() -> Result<()> {
     let map = BTreeMap::from([("a".into(), "1".into()), ("\u{7f}é😀".into(), "2".into())]);
     assert_eq!(

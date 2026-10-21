@@ -26,7 +26,7 @@ import polars as pl
 import pyarrow as pa
 
 sys.path.insert(0, str(HERE))
-from python_common import (checked_build, checkpoint, correctness, event, export_result, observation,
+from python_common import (checked_build, checkpoint, cleanup, correctness, event, export_result, observation,
                            reader_identity, redact_credentials, require, runner_cli, runtime_metadata,
                            scan_sql, storage_options, write_observation)
 
@@ -173,16 +173,12 @@ def run(request_path, output):
     except Exception as error:
         unsupported = isinstance(error, DeltaProtocolError) or (
             isinstance(error, DeltaError) and str(error).startswith("Kernel error: Unsupported:"))
-        record["status"] = "validation_failed" if record["phase"] == "correctness_gate" else "unsupported" if unsupported else "operational_failure"
+        record["status"] = "unsupported" if unsupported else "operational_failure"
         record["failure_reason"] = redact_credentials(str(error))
         if record["phase"] != "correctness_gate":
             record["capability"]["status"] = "unsupported" if unsupported else "probe_failed"
     finally:
-        cleanup = record.pop("_cleanup_start", clock())
-        checkpoint(record, "cleanup")
-        if request["purpose"] == "timing":
-            record["cleanup_ns"] = clock() - cleanup
-        event(record, "cleanup_complete")
+        cleanup(record)
     return write_observation(output, record)
 
 

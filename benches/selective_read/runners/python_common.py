@@ -8,7 +8,7 @@ import platform
 import re
 import sys
 import sysconfig
-from time import time_ns
+from time import perf_counter_ns as clock, time_ns
 
 import native
 
@@ -66,6 +66,20 @@ def write_observation(output, record):
     record = native.call("reader-runtime", {"action": "finish", "output": str(output), "record": record})
     print(json.dumps(record))
     return 0 if record["status"] == "success" else 1
+
+
+def cleanup(record, close=None, failure_prefix="cleanup failed: "):
+    start = record.pop("_cleanup_start", clock())
+    checkpoint(record, "cleanup")
+    if close is not None:
+        try:
+            close()
+        except Exception as error:
+            record.update(status="operational_failure", phase="cleanup",
+                          failure_reason=failure_prefix + str(error))
+    if record["purpose"] == "timing":
+        record["cleanup_ns"] = clock() - start
+    event(record, "cleanup_complete")
 
 
 def runner_cli(run, describe_build):

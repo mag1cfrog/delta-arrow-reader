@@ -293,6 +293,9 @@ fn finish(record: &mut Value) -> Result<()> {
         .as_object_mut()
         .ok_or("invalid observation")?
         .remove("_query_count");
+    if record["phase"] == "correctness_gate" && record["status"] != "success" {
+        record["status"] = json!("validation_failed");
+    }
     let timed = record["purpose"] == "timing";
     let collected = record["settings"]["output_delivery"] == "collected";
     if let Some(queries) = record.get_mut("queries").and_then(Value::as_array_mut) {

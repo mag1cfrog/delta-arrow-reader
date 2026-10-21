@@ -16,7 +16,7 @@ import pyarrow as pa
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from run import digest
-from python_common import (checked_build, checkpoint, correctness, event, export_result, observation, reader_identity,
+from python_common import (checked_build, checkpoint, cleanup, correctness, event, export_result, observation, reader_identity,
                            require, runner_cli, runtime_metadata, storage_options, write_observation)
 
 CONFIG = {"threads": 8, "memory_limit": "4GiB", "enable_external_file_cache": False,
@@ -195,21 +195,12 @@ def run(request_path, output):
         record["correctness"] = correctness(request, identity)
         execute(connection, request, output, record)
     except Exception as error:
-        record["status"] = "validation_failed" if record["phase"] == "correctness_gate" else failure_status(error)
+        record["status"] = failure_status(error)
         record["failure_reason"] = str(error)
         if record["phase"] != "correctness_gate":
             record["capability"]["status"] = "unsupported" if record["status"] == "unsupported" else "probe_failed"
     finally:
-        cleanup = record.pop("_cleanup_start", clock())
-        checkpoint(record, "cleanup")
-        if connection is not None:
-            try:
-                connection.close()
-            except Exception as error:
-                record.update(status="operational_failure", failure_reason=f"cleanup failed: {error}", phase="cleanup")
-        if request["purpose"] == "timing":
-            record["cleanup_ns"] = clock() - cleanup
-        event(record, "cleanup_complete")
+        cleanup(record, connection.close if connection is not None else None)
     return write_observation(output, record)
 
 

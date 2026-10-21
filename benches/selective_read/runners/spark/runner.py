@@ -12,7 +12,7 @@ sys.path[:0] = [str(HERE), str(HERE / "spark")]
 import pyarrow as pa
 import pyspark
 from pyspark.sql import SparkSession
-from python_common import (checked_build, checkpoint, correctness, event, export_result, observation, reader_identity,
+from python_common import (checked_build, checkpoint, cleanup, correctness, event, export_result, observation, reader_identity,
                            redact_credentials, require, runner_cli, runtime_metadata, scan_sql,
                            storage_options, write_observation)
 
@@ -143,22 +143,12 @@ def run(request_path, output):
         record.update(phase="complete", capability={"status": "supported", "scope": "requested query and snapshot"})
     except Exception as error:
         reason = redact_credentials(str(error))
-        record.update(status="validation_failed" if record["phase"] == "correctness_gate" else failure_status(error),
-                      failure_reason=reason)
+        record.update(status=failure_status(error), failure_reason=reason)
         if record["phase"] == "query":
             record["partial_query"] = {"query_index": len(record["queries"]), "output_rows": 0, "output_batches": 0,
                                        "elapsed_ns": clock() - start if timed else None, "first_batch_ns": None}
     finally:
-        cleanup_start = record.pop("_cleanup_start", clock())
-        checkpoint(record, "cleanup")
-        if session is not None:
-            try:
-                session.stop()
-            except Exception as error:
-                record.update(status="operational_failure", phase="cleanup", failure_reason="Spark cleanup failed: " + str(error))
-        if timed:
-            record["cleanup_ns"] = clock() - cleanup_start
-        event(record, "cleanup_complete")
+        cleanup(record, session.stop if session is not None else None, "Spark cleanup failed: ")
     return write_observation(output, record)
 
 
