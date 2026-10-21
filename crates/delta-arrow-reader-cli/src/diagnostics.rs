@@ -32,6 +32,14 @@ use tracing_subscriber::{
     prelude::*,
 };
 
+/// Safe error fields shared by text tracing and JSON diagnostics.
+pub(crate) struct ErrorClassification {
+    pub(crate) phase: &'static str,
+    pub(crate) code: &'static str,
+    pub(crate) reason: &'static str,
+    pub(crate) source_kind: Option<&'static str>,
+}
+
 #[derive(Args)]
 pub(crate) struct DiagnosticOptions {
     /// JSON Lines on stderr, including argument errors.

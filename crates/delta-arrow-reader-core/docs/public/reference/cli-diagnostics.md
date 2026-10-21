@@ -103,18 +103,21 @@ sources, `request_access` for permission failures, `retry` for known transient
 I/O failures, or `change_request` for unsupported operations. Unclassified
 failures use `unknown` and `retryable: null`. A true `retryable` value means
 starting a new command, after discarding any output from the failed invocation.
+Query output and memory exhaustion use `adjust_budget` and `retryable: false`.
 
 A successful command emits `kind: "completion"`, `terminal: true`, and
 `completion: "complete"` after stdout has been flushed. It includes `command`,
-`scope`, `stop_reason`, `has_more`, and `output_bytes`. Inspect and scan include
+`scope`, `stop_reason`, `has_more`, and `output_bytes`. Inspect, scan, and query include
 the actual snapshot in `bindings`, for example
 `[{"alias":"t","table_version":"42"}]`; help and version use an empty array.
-Scan also reports `rows` and `batches`. Versions and counts are decimal strings.
+Scan and query also report `rows` and `batches`. Versions and counts are decimal strings.
 
-Scope is `inspect`, `scan`, `help`, or `version`, except that any scan with
+Scope is `inspect`, `scan`, `query`, `help`, or `version`, except that any scan with
 `--limit` uses `limited_scan`. Reaching the limit, including zero, reports
 `stop_reason: "row_limit"` and `has_more: null`: it does not prove that another
 row exists. Otherwise `stop_reason` is `end_of_input` and `has_more` is false.
+For queries, end of input means the complete SQL result, including any SQL
+`LIMIT`. Output ceilings cannot produce a successful partial query completion.
 
 Consumers must check exit status 0, valid stdout, and the completion record.
 Records are at most 8 KiB. Ignore additional fields and JSON key order; reject
@@ -163,6 +166,11 @@ interface; scripts should use machine diagnostics and the exit status.
 | `execution` | `runtime_initialization` | Runtime creation failed or reader execution panicked |
 | `execution` | `output_write` | stdout could not be written or flushed |
 | `execution` | `arrow_ipc` | Arrow IPC encoding failed |
+| `configuration` | `invalid_sql_input` | SQL file is malformed, oversized, or contains a disallowed statement |
+| `configuration` | `unsupported_uc_query` | Unity Catalog SQL queries are not yet supported |
+| `datafusion` | `sql_initialization`, `sql_planning`, `sql_execution` | SQL runtime, planning, or execution failed |
+| `execution` | `output_limit` | Complete query result exceeds its row or serialized-byte ceiling |
+| `execution` | `command_cancelled` | A local SQL query was interrupted |
 | `configuration` | `invalid_uc_reference` | Invalid UC name/profile, or a profile on a direct path |
 | `configuration` | `invalid_uc_storage_options` | Unsupported, conflicting, or duplicate region options |
 | `configuration` | `uc_s3_region_required` | S3 needs an explicit region |
@@ -197,7 +205,7 @@ failure. Status 3 is preserved even when stderr cannot be written.
 
 Direct-path commands run in one process. UC commands also start bounded
 Databricks CLI subprocesses. The CLI drives its asynchronous runtime on
-the main thread and ignores `TOKIO_WORKER_THREADS`. Scans use a separate output
+the main thread and ignores `TOKIO_WORKER_THREADS`. Scans and queries use a separate output
 thread so a blocked stdout pipe does not stall network reads. The output thread
 finishes writing and flushing each batch before requesting another. The core
 uses background threads for blocking work. Runtime shutdown does not wait for
@@ -216,12 +224,16 @@ visible with `RUST_LOG=info`. Machine mode emits a terminal diagnostic with
 that code, including with `RUST_LOG=off`. Cancellation remains responsive
 during stdout writes. On Windows, Ctrl+C exits 130.
 
-On Unix, UC scans also detect a closed stdout pipe while waiting for credentials
-or storage. They terminate pending Databricks work and exit 3 without finishing
+Local SQL queries use the same signal handling during table loading and
+execution, with code `command_cancelled`. SQL file reading and parsing happen
+before the asynchronous signal handler starts.
+
+On Unix, UC scans and local SQL queries also detect a closed stdout pipe while
+waiting for credentials or storage. They terminate pending work and exit 3 without finishing
 the Arrow stream. On other platforms, a closed pipe is detected at the next
 stdout write; a pending credential command still has its 30-second timeout.
 
-For direct-path commands outside PID 1, Linux signals keep their normal
+For direct-path inspect and scan commands outside PID 1, Linux signals keep their normal
 termination behavior: a killed process is unsuccessful and need not emit an
 error event. This applies while loading,
 waiting for a batch, or writing to a blocked pipe. A parent that cancels the

@@ -694,6 +694,12 @@ fn failures_stay_json_with_tracing_off_on_or_invalid() -> Result<(), Box<dyn std
             "input_file_io",
         ),
         (
+            vec!["query", "unused", "--sql-file", missing.to_str().unwrap()],
+            2,
+            "configuration",
+            "input_file_io",
+        ),
+        (
             vec![
                 "scan",
                 "unused",
@@ -748,7 +754,7 @@ fn failures_stay_json_with_tracing_off_on_or_invalid() -> Result<(), Box<dyn std
                 if let Some(argument) = args.iter().find(|argument| {
                     matches!(
                         **argument,
-                        "--storage-options-file" | "--execution-options-file"
+                        "--storage-options-file" | "--execution-options-file" | "--sql-file"
                     )
                 }) {
                     assert_eq!(record["argument"], *argument);

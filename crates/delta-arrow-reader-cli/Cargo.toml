@@ -20,7 +20,9 @@ arrow = "58.3.0"
 arrow-schema = { version = "58.3.0", features = ["serde"] }
 async-trait = "0.1"
 clap = { version = "4", default-features = false, features = ["derive", "std", "help", "usage", "error-context"] }
-delta-arrow-reader = { path = "../delta-arrow-reader-core" }
+datafusion = { version = "54.1.0", default-features = false, features = ["sql"] }
+delta-arrow-reader = { path = "../delta-arrow-reader-core", features = ["datafusion"] }
+futures-util = "0.3"
 num-traits = "0.2"
 object_store = { version = "0.13.2", features = ["aws", "azure", "gcp"] }
 serde = { version = "1", features = ["derive"] }

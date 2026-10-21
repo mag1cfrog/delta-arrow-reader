@@ -83,11 +83,15 @@ pub(crate) fn read_json_file<T: DeserializeOwned>(
     path: &str,
     input_kind: JsonInputKind,
 ) -> Result<T, Error> {
-    let file = File::open(path).context(InputIoSnafu { input_kind })?;
+    let file = File::open(path).context(InputIoSnafu {
+        argument: input_kind.argument(),
+    })?;
     let mut bytes = Vec::new();
     file.take(MAX_JSON_BYTES + 1)
         .read_to_end(&mut bytes)
-        .context(InputIoSnafu { input_kind })?;
+        .context(InputIoSnafu {
+            argument: input_kind.argument(),
+        })?;
     ensure!(
         bytes.len() as u64 <= MAX_JSON_BYTES,
         InputValidationSnafu {
