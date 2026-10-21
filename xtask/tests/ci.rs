@@ -1492,6 +1492,25 @@ fn python_cache_warming_matches_the_editable_build() -> Result<()> {
         serde_yaml_ng::from_str(include_str!("../../.github/workflows/cache-warm.yml"))?;
     let check_steps = ci["jobs"]["python-package"]["steps"].as_array().unwrap();
     let warm_steps = warmer["jobs"]["core"]["steps"].as_array().unwrap();
+    let restored_reports = check_steps
+        .iter()
+        .find(|step| step["name"] == "Restore license scan reports")
+        .unwrap();
+    let saved_reports = warm_steps
+        .iter()
+        .find(|step| step["name"] == "Cache license scan reports")
+        .unwrap();
+    assert_eq!(restored_reports["uses"], "actions/cache/restore@v4");
+    assert_eq!(saved_reports["uses"], "actions/cache@v4");
+    assert_eq!(restored_reports["with"], saved_reports["with"]);
+    assert_eq!(
+        saved_reports["with"]["key"].as_str().unwrap(),
+        format!(
+            "{}${{{{ github.sha }}}}",
+            saved_reports["with"]["restore-keys"].as_str().unwrap()
+        ),
+        "each main commit can refresh reports while reusing matching dependency scans"
+    );
     for action in ["actions/setup-python@v6", "taiki-e/install-action@v2"] {
         let check = check_steps
             .iter()

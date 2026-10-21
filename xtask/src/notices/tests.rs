@@ -312,3 +312,72 @@ fn does_not_overwrite_an_existing_output() -> TestResult {
     assert_eq!(fs::read_to_string(path)?, "Previously validated notices\n");
     Ok(())
 }
+
+#[test]
+fn scan_cache_tracks_resolution_configuration_and_explicit_license_inputs() -> TestResult {
+    let fixture = Fixture::new()?;
+    let root = fixture.root.path();
+    let release = root.join("crates/delta-arrow-reader-cli/release");
+    fs::create_dir_all(&release)?;
+    let config = "[dependency.clarify]\nlicense = 'MIT'\n[[dependency.clarify.files]]\npath = 'NOTICE'\nchecksum = 'reviewed'\n";
+    fs::write(release.join("about.toml"), config)?;
+    fs::write(root.join("Cargo.lock"), "locked dependency checksums")?;
+    let package = &fixture.report.crates[0].package;
+    let metadata = serde_json::json!({
+        "packages": [{
+            "id": "local", "name": "dependency", "version": "1.0.0",
+            "manifest_path": package.manifest_path, "source": null,
+        }, {
+            "id": "unrelated", "name": "xtask", "version": "0.0.0",
+            "manifest_path": root.join("xtask/Cargo.toml"), "source": null,
+        }],
+        "resolve": {"root": "local", "nodes": [
+            {"id": "local", "dependencies": []},
+            {"id": "unrelated", "dependencies": []},
+        ]},
+    });
+    let key = |metadata: &serde_json::Value, target: &str, version: &str| {
+        report_cache_path(
+            &root.join("cache"),
+            root,
+            &package.manifest_path,
+            target,
+            version,
+            &metadata.to_string(),
+        )
+    };
+    let original = key(&metadata, "linux", "0.9.2")?;
+    assert!(original.is_some());
+    fs::write(root.join("dependency/lib.rs"), "changed application code")?;
+    assert_eq!(key(&metadata, "linux", "0.9.2")?, original);
+    for (target, version) in [("windows", "0.9.2"), ("linux", "0.9.3")] {
+        assert_ne!(key(&metadata, target, version)?, original);
+    }
+    for path in [
+        root.join("Cargo.lock"),
+        release.join("about.toml"),
+        root.join("dependency/NOTICE"),
+    ] {
+        let previous = fs::read_to_string(&path)?;
+        fs::write(&path, format!("{previous}\n# changed\n"))?;
+        assert_ne!(
+            key(&metadata, "linux", "0.9.2")?,
+            original,
+            "{}",
+            path.display()
+        );
+        fs::write(&path, previous)?;
+    }
+    let mut changed = metadata.clone();
+    changed["packages"][0]["version"] = "2.0.0".into();
+    assert_ne!(key(&changed, "linux", "0.9.2")?, original);
+    changed = metadata.clone();
+    changed["resolve"]["nodes"][0]["features"] = serde_json::json!(["new-feature"]);
+    assert_ne!(key(&changed, "linux", "0.9.2")?, original);
+    changed = metadata.clone();
+    changed["resolve"]["nodes"][0]["dependencies"] = serde_json::json!(["unrelated"]);
+    assert_eq!(key(&changed, "linux", "0.9.2")?, None);
+    fs::write(release.join("about.toml"), "accepted = ['MIT']\n")?;
+    assert_eq!(key(&metadata, "linux", "0.9.2")?, None);
+    Ok(())
+}
