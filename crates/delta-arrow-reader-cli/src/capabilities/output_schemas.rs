@@ -99,7 +99,7 @@ pub(super) fn diagnostic_schema() -> Value {
 pub(super) fn completion_schema() -> Value {
     json!({
         "title": "Terminal success completion",
-        "description": "Run the command and these checks in one script. With --diagnostics=json, success requires exit 0, valid stdout and a terminal completion on stderr. Check command against the request; scope equals command except scan --limit uses limited_scan. Check bindings against the pinned table_version, output_bytes against saved stdout length, and scan/query rows/batches against decoded Arrow counts. Counts and table_version are canonical decimal strings from 0 to 18446744073709551615. end_of_input with has_more=false means exhaustion; row_limit with has_more=null does not. Completion covers the requested scan or SQL result, including limits.",
+        "description": "Run the command and these checks in one script. With --diagnostics=json, success requires exit 0, valid stdout and a terminal completion on stderr. Check command against the request; scope equals command except scan --limit uses limited_scan. Compare bindings with the pinned table_version unchanged. Compare output_bytes with the saved stdout length, and scan/query rows/batches with decoded Arrow counts, converting the measured counts to decimal strings for exact equality. No integer parsing is needed. end_of_input with has_more=false means exhaustion; row_limit with has_more=null does not. Completion covers the requested scan or SQL result, including limits.",
         "type": "object",
         "required": ["format_version", "kind", "terminal", "command", "completion", "scope", "stop_reason", "has_more", "bindings", "output_bytes"],
         "properties": {
