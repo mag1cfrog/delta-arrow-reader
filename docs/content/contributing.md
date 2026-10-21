@@ -33,6 +33,51 @@ RUSTDOCFLAGS="-D warnings" cargo doc --locked --all-features --no-deps
 cargo package --locked
 ```
 
+On Linux, run the core HTTPS tests with `openssl` available:
+
+```console
+cargo xtask test-https
+cargo xtask test-https --features datafusion
+```
+
+The harness creates temporary certificates and local servers. It checks trusted
+and rejected certificates, empty trust stores, presigned reads, range reads, and
+proxy routing. Trust and proxy settings affect only the test subprocesses.
+
+## Run scan scheduling benchmarks
+
+Build the harness, then pass the executable path printed by Cargo to the runner:
+
+```console
+cargo bench --locked --bench scan_scheduling --no-run
+cargo xtask scan-scheduling --binary baseline=/path/to/scan_scheduling \
+  --output-dir /tmp/scan-scheduling-results
+```
+
+The output directory must not exist. To compare versions, add
+`--binary candidate=/path/to/candidate --fixture-binary candidate`. The named
+fixture writer must support all selected shapes; every binary reads the same
+fixtures. Use `--suite performance` or `--suite progress` to select a suite, and
+`--case-filter` with a Rust regular expression to select case names.
+
+The runner saves executable copies and source snapshots. It records executable,
+dependency lock and fixture checksums in `metadata.json`, writes individual runs
+to `runs.jsonl`, and updates measured
+summaries in `summary.csv`. Each measurement starts a fresh process. Execution
+timers exclude startup, fixture generation, table loading and planning; CPU and
+peak RSS include setup and the
+controlled HTTP server. Performance cases get one warmup per binary. Progress
+timeouts are recorded; a failed performance control stops the run and retains
+the results collected so far. Any failure in a measured group suppresses its
+performance medians. Sampled task and batch counters are observations, not strict
+resource bounds.
+
+Metadata schema 2 identifies the Rust runner and its executable. It preserves
+counterbalanced binary orders but uses `sha256-seed-case-v1` for case ordering:
+sort case names by the SHA256 of `122 + zero_based_repetition`, a colon, and the
+case name. This differs from the retired Python shuffle. Compare binaries within
+the same campaign, and retain the ordering metadata when comparing campaigns.
+
 ## Test the CLI
 
 Run the CLI checks from the repository root on Linux, with a C compiler and

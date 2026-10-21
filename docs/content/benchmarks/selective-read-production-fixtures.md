@@ -12,22 +12,28 @@ data and check its physical layout. They do not run a reader benchmark.
 
 ## Build and plan
 
-Build the existing fixture binary with its locked dependencies:
+Build the native controller and fixture binary with their locked dependencies:
 
 ```sh
+cargo build --locked -p xtask
 CARGO_TARGET_DIR=target/selective-read cargo +1.98.1 build --release --locked \
   --manifest-path benches/selective_read/Cargo.toml
 
-../selective-read-oracle-venv/bin/python -B \
-  benches/selective_read/production_shapes.py \
+target/debug/xtask selective-read plan-production \
+  --python ../selective-read-oracle-venv/bin/python \
   --source ../selective-read-calibration-345/sf10 \
   --file-target-mib 512 --page-rows 20000 \
   --output ../production-plan
 ```
 
+The controller validates query definitions, layout settings and DV pair metadata.
+Workload manifests record the query, physical layout, source data identity and
+reader translations. Rebuild the controller before freezing a new workload; use
+the recorded harness when replaying an archived run.
+
 The planner checks the original source and computes file boundaries before any
 reader timing. Keep its output directory: the writer checks its hashes against
-the current workload definition, source and planner. The default 512 MiB target
+the current workload definition, source, planner and native controller. The default 512 MiB target
 uses 60 Q4 files or 130 Q2 files. `--file-target-mib 256` doubles those counts.
 These are approximate compressed-size targets; the probe records actual sizes.
 The main setting is now `--page-rows 20000`; keep `--page-rows 2048` in a
@@ -59,8 +65,8 @@ Start with Q4. The probe writes every candidate file, including false positives,
 and one ordinary interior file per stripe, in both localized and scattered form:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B \
-  benches/selective_read/production_fixtures.py probe \
+target/debug/xtask selective-read production-fixtures probe \
+  --python ../selective-read-oracle-venv/bin/python \
   --source ../selective-read-calibration-345/sf10 \
   --plan ../production-plan/plan.json --shape q4 \
   --writer target/selective-read/release/selective-read-fixtures \
@@ -84,8 +90,8 @@ directly with a complete table's timings.
 ## Generate one complete layout
 
 ```sh
-../selective-read-oracle-venv/bin/python -B \
-  benches/selective_read/production_fixtures.py generate \
+target/debug/xtask selective-read production-fixtures generate \
+  --python ../selective-read-oracle-venv/bin/python \
   --source ../selective-read-calibration-345/sf10 \
   --plan ../production-plan/plan.json --shape q4 \
   --writer target/selective-read/release/selective-read-fixtures \
@@ -101,7 +107,13 @@ the retained probe, geometry metadata, a bounded 16 GiB sort spill, and a later
 MinIO copy. Other retained layouts or DV copies need an additional budget;
 the estimate covers one layout. Builds have a separate allocation.
 
-The producer and writer each have an 8 GiB address-space limit and a hard elapsed
+The Rust controller owns the capacity checks, source copies and process cleanup.
+The pinned Python process sorts with DuckDB and sends an Arrow stream to the
+writer. Full generation checks the probe's source data, layout and capacity
+evidence.
+
+The producer and writer each have an 8 GiB address-space limit. Copying,
+streaming, writer finalization and checksum verification share one elapsed
 deadline. DuckDB uses up to 2 GiB of managed memory. Native file writes share a
 byte ceiling; exceeding it aborts the run. The writer prepares independent files
 in parallel, capped by Rust's available CPU count and an estimate of per-file
@@ -120,7 +132,8 @@ A successful run writes a native Delta version-zero log, object hashes, source
 identity, and per-file physical evidence. It preserves each source row once.
 Scattering changes order within each row group only. To prepare that variant,
 use `--layout scattered`; to prepare Q2, repeat the probe and generation with
-`--shape q2`. The probe and generation must use the same writer binary and plan.
+`--shape q2`. The probe and generation must use compatible source data and
+layout settings.
 A probe for a different file target or page setting is rejected.
 
 `matching_output_pages` counts stored projected pages that contain a matching
@@ -140,15 +153,16 @@ same engine locks. Older executables reject revision 5 requests.
 Pair the localized and scattered layouts of one shape at a time. For Q4:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B \
-  benches/selective_read/production_pairs.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read pair-production \
   --fixtures ../production-q4-localized --fixtures ../production-q4-scattered \
   --binary target/selective-read/release/selective-read-fixtures \
   --output ../production-q4-pairs --disk-limit-gib 192
 ```
 
 Each supplied shape must include both layouts, from the same source and plan
-settings. The helper preserves Parquet bytes and computes one shared logical
+settings. The Rust controller validates the fixture definitions, budgets disk
+space, stages immutable files and invokes the DV writer. It
+preserves Parquet bytes and computes one shared logical
 deletion union across the supplied base inventory, recorded in the manifest.
 Both layouts therefore delete the same logical rows. Q2 can be paired later;
 the complete publication inventory requires all eight cases. Formal batches can
@@ -157,8 +171,7 @@ use complete full no-DV/DV pairs before every layout is resident.
 For staged execution, supply one complete layout and select it explicitly:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B \
-  benches/selective_read/production_pairs.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read pair-production \
   --fixtures ../production-q2-localized --layout localized \
   --binary target/selective-read/release/selective-read-fixtures \
   --output ../production-q2-localized-pair --disk-limit-gib 192
@@ -210,18 +223,23 @@ Reduced probes cannot stand in for full SF10 tables.
 Freeze a pilot for a completed full Q4 table:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B \
-  benches/selective_read/production_workloads.py \
+cargo xtask selective-read freeze-workload \
   --fixtures ../production-q4-localized \
   --binary ../build-polars/selective-read-polars \
   --output ../production-q4-workload
 
-../selective-read-oracle-venv/bin/python -B benches/selective_read/oracle.py \
-  prepare --fixtures ../production-q4-localized \
+cargo +1.98.1 run --locked -p xtask -- selective-read prepare-reference \
+  --python ../selective-read-oracle-venv/bin/python --fixtures ../production-q4-localized \
   --case production.q4.localized \
   --workload ../production-q4-workload/workload.json \
   --output ../production-q4-reference
 ```
+
+New definitions use revision 6 and the Spark reader roster. Creating a revision 5
+definition requires Daft and the archived harness; the current generator accepts
+only revision 6.
+Rust freezes and validates the workload metadata. Polars expression translation
+still runs in the supplied adapter's pinned Python environment.
 
 The workload always lists all eight core cases and all five readers. Inputs not
 supplied to this freeze remain `not_prepared`. Use the paired probe directory
@@ -237,7 +255,9 @@ two queries. `--stage formal` accepts one or more complete full no-DV/DV pairs
 and selects five independent samples per runnable reader and execution mode.
 Keep all eight cases and native reuse profiles in the complete publication
 inventory. Inputs outside a batch remain `not_prepared`, and a batch report
-keeps `publication_ready: false`. The existing `large_workloads.py report`
-command audits both revisions. Follow the
+keeps `publication_ready: false`. Export with
+`cargo +1.98.1 run --locked -p xtask -- selective-read report-workload`.
+The Rust controller checks query bindings and audits both revisions.
+Follow the
 [execution contract](selective-read-production-workloads.md) for the final main
 geometry, emulated transport and formal deadlines.

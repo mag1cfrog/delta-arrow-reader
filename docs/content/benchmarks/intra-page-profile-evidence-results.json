@@ -35,7 +35,7 @@
       "process_memory_bytes": 8589934592
     },
     "cache": "fresh processes; reused OS and MinIO caches; validation before timing",
-    "build_overlay": "reader_git_commit is the base commit. The historical diagnostic_patch_sha256 field identifies the applied patch: benchmark-only no-warmup support before_fix; production missing-evidence guards and benchmark support in fixed.",
+    "build_overlay": "reader_git_commit is the base commit. The applied patch adds benchmark-only no-warmup support before_fix; production missing-evidence guards and benchmark support in fixed.",
     "preparation": "Reused retained fixtures and references. All object lengths and FULL_OBJECT SHA256 receipts verified before timing; no regeneration, upload, full-table rehash, compilation or trace analysis competed with timed queries."
   },
   "cause": "Small-request cost is absent but read_partial_pages uses overhead.unwrap_or(0). Diagnostic runs report request_overhead_bytes=0 while accepting many small reads on the second query.",
@@ -48,7 +48,6 @@
       "build": {
         "reader_git_commit": "24041afc94556003757b65d699a3409e3f0c0127",
         "harness_git_commit": "24041afc94556003757b65d699a3409e3f0c0127",
-        "diagnostic_patch_sha256": "68d6e689598d1cbc3fc999a99b717683a4a25b3f95b4dce4fc749130db65311a",
         "executable_sha256": "5ec2a3160ac32debd2341113ab2ecee93f8cf9f98ef917542cac93622422ba04",
         "lockfile_sha256": "3e33227b8d98d1fbb4840f013ce48ceb9ad19fad8f460e4a0152c1737e514893",
         "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
@@ -196,10 +195,6 @@
           }
         }
       },
-      "harness_source_sha256": {
-        "benches/selective_read/intra_page.py": "6e3290e22de81d8a690a5516109883dce85d8ed4f5631a9527e1508ed7b1a728",
-        "benches/selective_read/test_intra_page.py": "260847b30ea3957ab52a16301605e250254f26679c6715e80cdc5148a514c5d9"
-      },
       "limitations": [
         "One alternating off/auto pair per table/profile is a screening result, not final performance qualification.",
         "Any material regression requires a separate repeat or root-cause investigation; all original samples remain retained.",
@@ -215,7 +210,6 @@
       "build": {
         "reader_git_commit": "24041afc94556003757b65d699a3409e3f0c0127",
         "harness_git_commit": "24041afc94556003757b65d699a3409e3f0c0127",
-        "diagnostic_patch_sha256": "81b572d2b46236ea583c4523a3829a58761ed0415281b6702326f7922bcab03e",
         "executable_sha256": "34e37c46837b7cf5409e8762c769be2d97c0545d1f8f2905e5acf1b21fc62635",
         "lockfile_sha256": "3e33227b8d98d1fbb4840f013ce48ceb9ad19fad8f460e4a0152c1737e514893",
         "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
@@ -415,10 +409,6 @@
             }
           }
         }
-      },
-      "harness_source_sha256": {
-        "benches/selective_read/intra_page.py": "6e3290e22de81d8a690a5516109883dce85d8ed4f5631a9527e1508ed7b1a728",
-        "benches/selective_read/test_intra_page.py": "260847b30ea3957ab52a16301605e250254f26679c6715e80cdc5148a514c5d9"
       },
       "limitations": [
         "Low-latency regression controls have three alternating pairs per case; primary and explicitly profiled controls have one pair per case.",

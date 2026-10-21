@@ -24,8 +24,7 @@ and matching workload/reference provenance first. Older adapters do not support
 the diagnostic-validation request. Dependency versions, native query definitions,
 resource budgets and transport remain unchanged.
 
-The controller freezes `gate_diagnostics: true` and this document's SHA-256 as
-`gate_diagnostics_amendment_sha256` before the first gate. Every inventory entry
+The controller freezes `gate_diagnostics: true` before the first gate. Every inventory entry
 declares the method before timing. A successful gate must retain the full
 exact-value proof, reconciled request capture, stream boundaries, native plans
 where required, and completed process/server cleanup. Missing evidence makes the
@@ -41,7 +40,7 @@ and diagnostic clocks never enter timing distributions.
 ## Interpret the evidence
 
 The report identifies the exact gate as the source of diagnostic I/O and retains
-plan hashes and the amendment hash. I/O totals cover the full gate invocation,
+plan file checksums. I/O totals cover the full gate invocation,
 including native plan export. Local result-export work can affect the diagnostic
 duration; that duration is excluded from benchmark timing.
 

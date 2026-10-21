@@ -6,7 +6,6 @@
       "projection": "wide69",
       "snapshot_version": 0
     },
-    "base_protocol_sha256": "affe5fde898c1e39c03792fadbfd79d17b6af8a16dbdaa48988869a4567d5efe",
     "baseline_scale": 1,
     "budgets": {
       "build_storage_bytes_separate": 68719476736,
@@ -28,8 +27,7 @@
     "format": "selective-read-pilot-preflight-v1",
     "generator": {
       "path": "/home/hanbo/repo/delta-arrow-reader/target/selective-read/release/selective-read-fixtures",
-      "sha256": "57fab24825d2583bd7986eaefc3ab26962b905363910c62abf39584a3a1dfd63",
-      "source_sha256": "fc8e9fb001ca11ff751f9bd3c1b67994372c68594e2750f4f4db4ef3397f254c"
+      "sha256": "57fab24825d2583bd7986eaefc3ab26962b905363910c62abf39584a3a1dfd63"
     },
     "geometry_requirement": {
       "excludable_fraction_min": 0.99,
@@ -48,7 +46,6 @@
     },
     "issue": 345,
     "ordering": "at each feasible rung, two ten-query reuse sessions per passing reader in fixed then reverse order, plus two open/query trials in those orders",
-    "protocol_sha256": "7508a0c53113097aa153b3d22a1b0341efa85ad4483cd2a824bdd23d978d5dfa",
     "publication_ready": false,
     "reader_order": [
       "delta-arrow-reader",

@@ -1,22 +1,14 @@
 {
   "scope": "Public partial-read and warmup defaults under existing benchmark resource limits. Ordinary controls retain metadata warmup. Public S3 validates initialization, resources and fallback, not eligible partial-read speedups.",
   "base_commit": "515da2e46a83fdc00de262b3663e059c1732eb6b",
-  "runtime_patch_sha256": "0f57fc548eb6b496ee48205f1d481348e1c5f4f9af95ddf8e712170e241e1a30",
   "runner_executable_sha256": "1456dbbd2b43db75ca5f745fd0117a5b5d407f43d01cee915e927affc98498be",
   "runner_lockfile_sha256": "d53855cfdce00c9e8ecee9acec60daa8e4c4f745a6deadc7ff65e6e2aebca5c2",
   "build_record_sha256": "9ed581ba5230eb3904ac55b345c5d1423325a1aba9cfbf26e8f7a123dacf2376",
-  "changed_runtime_source_sha256": {
-    "src/reader.rs": "4f59940a0b25c5fc8d71b8cf7db5062d8d341b6f386a3ad295565a161d6c6823",
-    "src/reader/options.rs": "01b615a37e79734233508b0fd45f4ba181591af741f5a9e81fc4a2bd27acef6b",
-    "src/delta/kernel.rs": "94e2999492d8d330e3a5eb845fb64e1a61e1b46565847e289710b3fea486565d",
-    "benches/selective_read/runners/dar/src/main.rs": "c532a874e72c97531a8166bb469ea3cc0d1fd8ffb50ea983b3b4f5615aaf70e9"
-  },
   "toolchain": "rustc 1.98.1 (48a229cea 2026-09-01)",
   "rustflags": "-C target-cpu=x86-64",
   "samples_sha256": "03e43323af8789bc3288664e1de3819fc7ab836d02ca3fc9957b320cc0b161db",
   "raw_report_sha256": "f88b8d4c27f016a1b3b8e0b93480230fe31a8a1e4c800caf1dd65a8daaab93a2",
   "raw_artifacts": "/home/hanbo/repo/selective-read-intra-page-defaults-final-20261009",
-  "acceptance_driver_sha256": "370e05cfd68358c2bc5e25714b18ddb4d9b3f982817c192f025ca64a343e635f",
   "fixtures": [
     {
       "columns": 416,

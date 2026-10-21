@@ -3459,6 +3459,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha1_smol"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbfa15b3dddfee50a0fff136974b3e1bde555604ba463834a7eb7deb6417705d"
+
+[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4100,6 +4106,7 @@ dependencies = [
  "getrandom 0.4.3",
  "js-sys",
  "rand 0.10.2",
+ "sha1_smol",
  "wasm-bindgen",
 ]
 
@@ -4446,8 +4453,10 @@ name = "xtask"
 version = "0.0.0"
 dependencies = [
  "arrow-array",
+ "arrow-cast",
  "arrow-ipc",
  "arrow-schema",
+ "arrow-select",
  "base64 0.22.1",
  "clap",
  "csv",
@@ -4455,6 +4464,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "libc",
  "parquet",
  "rawzip",
  "regex",
@@ -4470,6 +4480,8 @@ dependencies = [
  "tokio-rustls",
  "toml",
  "url",
+ "uuid",
+ "z85",
 ]
 
 [[package]]

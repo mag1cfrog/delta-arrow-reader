@@ -95,11 +95,20 @@ fn directory_fixture_serves_encoded_files_and_lists_only_delta_metadata()
     fs::create_dir(&partition)?;
     fs::write(log.join("commit & extra.json"), "metadata")?;
     fs::write(partition.join("part.parquet"), "parquet bytes")?;
+    fs::create_dir_all(directory.path().join("other/_delta_log"))?;
+    fs::write(
+        directory.path().join("other/_delta_log/second.json"),
+        "other",
+    )?;
     let table = HttpTable::from_directory(directory.path())?;
-    let listing = String::from_utf8(table.listing.to_vec())?;
+    let listing = String::from_utf8(table.listing("/_delta_log/").to_vec())?;
     assert!(listing.contains("<href>/_delta_log/commit%20&amp;%20extra.json</href>"));
     assert!(listing.contains("<getcontentlength>8</getcontentlength>"));
     assert!(!listing.contains("parquet"));
+    assert!(!listing.contains("second.json"));
+    let nested = String::from_utf8(table.listing("/other/_delta_log/").to_vec())?;
+    assert!(nested.contains("<href>/other/_delta_log/second.json</href>"));
+    assert!(!nested.contains("commit"));
     let server = HttpTestServer::start(move |request| table.respond(request).map(Some))?;
     for (method, path, status, body) in [
         (
@@ -117,6 +126,7 @@ fn directory_fixture_serves_encoded_files_and_lists_only_delta_metadata()
         ),
         ("PROPFIND", "/_delta_log", 207, listing.as_str()),
         ("PROPFIND", "/_delta_log/", 207, listing.as_str()),
+        ("PROPFIND", "/other/_delta_log/", 207, nested.as_str()),
         ("GET", "/missing", 404, ""),
         ("POST", "/region=100%25%20west/part.parquet", 404, ""),
         ("PROPFIND", "/", 404, ""),
@@ -137,7 +147,7 @@ fn directory_fixture_serves_encoded_files_and_lists_only_delta_metadata()
         );
         assert_eq!(actual_body, body);
     }
-    assert_eq!(server.take_requests()?.len(), 8);
+    assert_eq!(server.take_requests()?.len(), 9);
     Ok(())
 }
 

@@ -5,7 +5,7 @@ description: Validate all five readers, freeze their schedule, and retain timing
 
 # Run a selective-read campaign
 
-The campaign script runs the prepared readers sequentially against one dedicated
+The Rust campaign controller runs the prepared readers sequentially against one dedicated
 MinIO server. It checks each case and execution mode against the independent
 oracle, saves the runnable subset and full schedule, then runs warmups, timing
 samples and separate diagnostics. All five readers remain in the inventory.
@@ -13,13 +13,14 @@ samples and separate diagnostics. All five readers remain in the inventory.
 New large workloads use [revision 4 sampling](selective-read-sampling.md):
 one validation, one warmup, five independent timed samples, one plan capture
 and one I/O diagnostic per runnable reader and job. Each reuse invocation
-contains two queries. The `sampling_sha256` identity binds these counts through
-the adapters, watchdog, certificates and report. This schedule does not run
+contains two queries. The comparison revision selects these counts in the
+adapters, watchdog, certificates and report. This schedule does not run
 paired tracing-overhead experiments; report that estimate as unavailable.
 The revision 2 examples and historical schedules below remain reproducible.
 
-For Q2/Q4 revision 5, `production_workloads.py --stage formal` accepts one or
-more complete no-DV/DV pairs of full fixtures. Each pair shares a query shape
+For Q2/Q4, `xtask selective-read freeze-workload --stage formal` accepts one or
+more complete no-DV/DV pairs of full fixtures. New definitions use revision 6;
+revision 5 creation uses the archived harness. Each pair shares a query shape
 and layout. Prepare pairs in batches to stay within the disk budget.
 Probe fixtures and missing pair members are rejected.
 Formal jobs use five independent samples and two queries per reuse invocation.
@@ -39,12 +40,26 @@ the [storage guide](selective-read-storage.md). Start MinIO once before uploadin
 the fixtures. Keep it running throughout the campaign. Compilation, fixture
 generation and reference preparation must finish before timing starts.
 
+Build the [native controller](../../../benches/selective_read/README.md#reproduce-a-run)
+before starting the campaign. Its executable and Rust sources are recorded with
+the campaign inputs; each watchdog result also identifies the controller binary.
+Run `xtask selective-read run-campaign` with `--python PATH` for the pinned
+oracle environment. Run it from the repository
+root, or pass `--harness PATH` to the `benches/selective_read` directory.
+
+Rust loads the frozen matrix or workload and binds each reader request to its
+fixture and query. Python runs in one persistent validation process outside
+the measured reader intervals. Its checksum and metadata caches survive across
+gates. The controller retains validation errors in the campaign artifacts and stops launching readers
+if an invocation cannot prove cleanup.
+
 For the default compound-query smoke cases, prepare these references from the
 repository root. Each output directory must be new:
 
 ```sh
 for case in li.clustered.eq2-in20 li.shuffled.eq2-in20 wide.clustered.eq2-in20; do
-  ../selective-read-oracle-venv/bin/python -B benches/selective_read/oracle.py prepare \
+  cargo +1.98.1 run --locked -p xtask -- selective-read prepare-reference \
+    --python ../selective-read-oracle-venv/bin/python \
     --fixtures ../selective-read-smoke --case "$case" \
     --output "../reference-$case"
 done
@@ -53,7 +68,7 @@ done
 References contain complete expected values and independently evaluated file
 sets. They must match the fixture manifest, snapshot, SQL and frozen protocol.
 The upload receipt must belong to the current server and those same fixtures.
-An upload made with `storage.py upload --table` covers only its declared native
+An upload made with `xtask selective-read upload-storage --table` covers only its declared native
 tables. Select the corresponding query with `--case`; its reuse session is
 included by default when using a production workload. Jobs whose tables are
 absent from the upload remain `preparation_failed` and launch no readers.
@@ -64,7 +79,7 @@ For a new campaign, add `--upload-table NATIVE_TABLE_ID` and point `--upload`
 to a new receipt path. Repeat `--upload-table` to stage multiple native tables.
 The controller uploads them with server SHA-256 verification before creating
 reader requests. Upload and campaign checks share the existing local checksum
-cache in that process, so an unchanged file is hashed once. The cache checks
+cache in the validation process, so an unchanged file is hashed once. The cache checks
 device/inode, size, mtime and ctime; changed files receive a fresh hash.
 An existing receipt is rejected in this mode. Omit `--upload-table` to consume
 an already verified receipt through the existing path.
@@ -77,7 +92,8 @@ method per campaign. Keep the receipt and complete run history with the results.
 ## Run the smoke campaign
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/campaign.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read run-campaign \
+  --python ../selective-read-oracle-venv/bin/python \
   --state ../selective-read-storage --fixtures ../selective-read-smoke \
   --upload ../selective-read-upload.json --output ../campaign-smoke-001 \
   --binary ../selective-read-dar-build/selective-read-dar \
@@ -113,7 +129,7 @@ helpers support them.
 
 | Artifact | Contents |
 | --- | --- |
-| `campaign.json` | Selected jobs, protocol and source hashes, reader build records, server identity, cache policy and timer resolution |
+| `campaign.json` | Selected jobs, comparison revision, input checksums, reader build records, server identity, cache policy and timer resolution |
 | `inventory.json` | Five entries per selected case/session, including gate evidence and exclusions |
 | `schedule.json`, `frozen.json` | Expanded run order saved before warmups/timing, plus hashes of the frozen inputs |
 | `observations.jsonl` | Every attempted or skipped scheduled slot, its request, validation prerequisite and complete observation |
@@ -170,7 +186,7 @@ stops further launches and records the remaining slots as `not_run`.
 The watchdog retains completed-query counters and clocks if a process crashes or
 times out. It cannot reconstruct rows consumed inside an interrupted query;
 native partial-query records are retained when the reader managed to write them.
-Oracle checking, source hashing, result serialization and reporting occur outside
+Oracle checking, input integrity checks, result serialization and reporting occur outside
 measured query intervals. Oracle comparison also occurs after process/I/O cleanup.
 
 Linux `wait4` supplies whole-process user/system CPU and peak RSS, including
@@ -183,15 +199,16 @@ accounting has microsecond precision, stored as bytes and nanoseconds.
 ## Check the scheduler without a campaign
 
 ```sh
-python3 -B benches/selective_read/check_campaign.py
+cargo test --locked -p xtask --bin xtask selective_read::
+cargo test --locked -p xtask --test selective_read
 ```
 
-This bounded check covers all reader subsets, historical counterbalancing,
+These checks cover all reader subsets, historical counterbalancing,
 five-sample ordering, two-query sessions, sampling identity rejection,
 ties/losses, timer resolution, failed/missing slots and real
-subprocess crashes, malformed output and phase timeouts. It requires no reader
-builds, MinIO or additional Python packages. Campaigns and this check are manual;
-this slice adds no CI job or step.
+subprocess crashes, malformed output and phase timeouts. They also check merged
+gate diagnostics and reject missing or changed native plans. They run in the
+tooling CI job and require no reader builds, MinIO or Python packages.
 
 A successful smoke campaign verifies the execution machinery. Revision 2
 publication still requires the protocol's full 46-case and three-session inventory

@@ -143,18 +143,21 @@ settings are not fixed per-fetch defaults in this implementation.
 
 ## Validate the original workloads
 
-`benches/selective_read/intra_page.py` compares the public option off and on in
+`xtask selective-read run-intra-page` compares the public option off and on in
 one DAR executable. Enabling the option uses the automatic cost decision; there
 is no separate forced mode. This manual experiment reuses a retained revision-6
 request and its independently generated reference output. It does not run in CI
 or update the published five-reader results.
+Rust runs the validation gates, alternating samples and statistics, and supervises
+each invocation. A persistent Python process compares the exported Arrow values
+with the independent reference. Pass its pinned interpreter with `--python`.
 
 Build the [DAR runner](selective-read-runners.md), then prepare the original
 table and [MinIO network proxy](selective-read-storage.md). Use the Python
 environment with the oracle's pinned PyArrow dependency:
 
 ```console
-python benches/selective_read/intra_page.py \
+cargo xtask selective-read run-intra-page --python /path/to/oracle-venv/bin/python \
   --binary /path/to/build/selective-read-dar \
   --request /path/to/retained/request.json \
   --reference /path/to/retained/reference-directory \
@@ -230,14 +233,15 @@ separate reads of the same range.
 The [numeric type comparison](intra-page-numeric-types.md) records the results
 against the pre-series reader, including all four retained README cases.
 
-`numeric_pages.py` generates a separate, deterministic fixture for INT32, INT64,
+The Rust fixture tool generates a separate, deterministic fixture for INT32, INT64,
 FLOAT and DOUBLE, with nullable and required columns. It does not change the
 published revision-6 tables or oracle. Its small `numeric-pages` driver is built
 alongside the DAR runner; build the same driver against both reader revisions.
 
 ```console
-python benches/selective_read/numeric_pages.py generate --output /path/to/numeric-fixture
-python benches/selective_read/numeric_pages.py run \
+cargo +1.98.1 run --release --locked --manifest-path benches/selective_read/Cargo.toml \
+  --bin selective-read-fixtures -- numeric-pages --output /path/to/numeric-fixture
+cargo xtask selective-read run-numeric-pages --python /path/to/oracle-venv/bin/python \
   --fixture /path/to/numeric-fixture --state /path/to/storage-state \
   --table s3://selective-read/verified-numeric-fixture \
   --baseline /path/to/base/numeric-pages --candidate /path/to/change/numeric-pages \
@@ -250,6 +254,13 @@ control, a file URI for the local control, and the proxy's low-latency profile f
 the fast-network control. Validation compares independent Arrow references,
 including floating-point bits, in separate processes. Timings use defaults and
 report initialization and two fully consumed queries separately.
+The Rust controller runs the complete numeric and Delta-length experiments,
+including validation gates, alternating samples, statistics, deadlines and
+process cleanup. Python retains independent Arrow comparisons; both experiment
+commands require the pinned `--python` path. The Rust generator uses SplitMix64
+and parquet-rs 58.4.0. It preserves the fixture's types, nullability, selection
+rules and writer settings, but generates different values and bytes from the
+retired Python writer. Compare readers against the same generated directory.
 
 ## Missing request-cost evidence
 

@@ -95,7 +95,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
       - run: cargo test --locked ${{ matrix.features }}
       - name: Verify HTTPS certificates and proxies
-        run: python3 crates/delta-arrow-reader-core/tests/reader/https.py ${{ matrix.features }}
+        run: cargo xtask test-https ${{ matrix.features }}
 
   platform-tests:
     name: Platform Tests / ${{ matrix.name }}
@@ -174,7 +174,9 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
       - if: matrix.task == 'Lints and Docs'
-        run: python3 -m unittest discover -s benches -p test_scan_scheduling.py
+        run: |
+          cargo test --locked --package xtask --bin xtask scan_scheduling::
+          cargo test --locked --package xtask --test scan_scheduling
       - if: matrix.task == 'Lints and Docs'
         run: cargo fmt --all -- --check
       - if: matrix.task == 'Lints and Docs'
@@ -271,11 +273,14 @@ jobs:
           cargo test --locked --package xtask --bin xtask binary::tests::
           cargo test --locked --package xtask --bin xtask python_sdist::
           cargo test --locked --package xtask --bin xtask python_wheel_build::
+          cargo test --locked --package xtask --bin xtask scan_scheduling::
+          cargo test --locked --package xtask --bin xtask selective_read_chart::
+          cargo test --locked --package xtask --bin xtask selective_read::
           cargo test --locked --package xtask --test cli_release_plan --test cli_release_assets --test cli_release_images \
             --test cli_release_request --test cli_release_notes --test cli_release_workflow
           cargo test --locked --package xtask \
             --test ci --test cli_workflow --test cli_images_workflow --test cli_validation_workflow --test cli_release_selection --test images --test python_release --test python_upload --test python_wheels \
-            --test python_wheel_reuse --test python_workflow --test python_build --test release_plz -- --include-ignored
+            --test python_wheel_reuse --test python_workflow --test python_build --test release_plz --test scan_scheduling --test selective_read_build --test selective_read -- --include-ignored
       - name: Report cache read failures
         continue-on-error: true
         run: cargo xtask report-cache-reads

@@ -9,9 +9,6 @@ use arrow::record_batch::RecordBatch;
 use sha2::{Digest, Sha256};
 use std::io;
 
-const CONTRACT: &str =
-    include_str!("../../../docs/content/benchmarks/selective-read-production-shapes.md");
-const DRIVER: &str = include_str!("../production_fixtures.py");
 const GROUP_ROWS: usize = fixtures::GROUP_ROWS;
 
 fn dimensions(name: &str, file_target_mib: u64) -> Result<(usize, i64, usize)> {
@@ -546,11 +543,9 @@ pub fn run(args: &[String]) -> Result<()> {
     let bytes = fs::read(&args[0])?;
     let request: Value = serde_json::from_slice(&bytes)?;
     if request["format"] != "selective-read-production-write-v1"
-        || request["contract_sha256"] != fixtures::hash_bytes(CONTRACT.as_bytes())
-        || request["driver_sha256"] != fixtures::hash_bytes(DRIVER.as_bytes())
         || !["probe", "generate"].iter().any(|s| request["mode"] == *s)
     {
-        return Err("unknown or stale production writer request".into());
+        return Err("unknown production writer request".into());
     }
     let (count, _, _) = dimensions(
         request["shape"].as_str().ok_or("shape")?,
@@ -634,9 +629,7 @@ pub fn pairs(args: &[String]) -> Result<()> {
     fixtures::limit_memory(8 * 1024 * MIB)?;
     let bytes = fs::read(&args[0])?;
     let request: Value = serde_json::from_slice(&bytes)?;
-    if request["format"] != "selective-read-production-pairs-request-v1"
-        || request["contract_sha256"] != fixtures::hash_bytes(CONTRACT.as_bytes())
-    {
+    if request["format"] != "selective-read-production-pairs-request-v1" {
         return Err("unknown production DV request".into());
     }
     let mut tables = pair_tables(&request)?;

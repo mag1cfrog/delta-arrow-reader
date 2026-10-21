@@ -15,14 +15,17 @@ const LAST_MODIFIED: &str = "Thu, 01 Jan 2026 00:00:00 GMT";
 
 pub(crate) struct HttpTable {
     files: BTreeMap<String, Bytes>,
-    listing: Bytes,
 }
 
 impl HttpTable {
     pub fn from_files(files: BTreeMap<String, Bytes>) -> Self {
+        Self { files }
+    }
+
+    fn listing(&self, prefix: &str) -> Bytes {
         let mut listing = String::from("<multistatus xmlns=\"DAV:\">");
-        for (path, data) in &files {
-            if path.starts_with("/_delta_log/") {
+        for (path, data) in &self.files {
+            if path.starts_with(prefix) {
                 let href = path
                     .replace('&', "&amp;")
                     .replace('<', "&lt;")
@@ -35,10 +38,7 @@ impl HttpTable {
             }
         }
         listing.push_str("</multistatus>");
-        Self {
-            files,
-            listing: Bytes::from(listing),
-        }
+        Bytes::from(listing)
     }
 
     pub fn from_directory(directory: &Path) -> Result<Self> {
@@ -89,8 +89,11 @@ impl HttpTable {
 
     pub fn respond(&self, request: &Request<Incoming>) -> Result<HttpResponse> {
         let path = request.uri().path();
-        if request.method() == "PROPFIND" && path.trim_end_matches('/') == "/_delta_log" {
-            Ok(xml_response(StatusCode::MULTI_STATUS, self.listing.clone()))
+        if request.method() == "PROPFIND" && path.trim_end_matches('/').ends_with("/_delta_log") {
+            Ok(xml_response(
+                StatusCode::MULTI_STATUS,
+                self.listing(&format!("{}/", path.trim_end_matches('/'))),
+            ))
         } else if matches!(*request.method(), Method::GET | Method::HEAD) {
             match self.files.get(path) {
                 Some(data) => file_response(request, data),

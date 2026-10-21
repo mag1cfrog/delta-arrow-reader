@@ -46,23 +46,25 @@ use 20. Smoke's one-file tables cannot demonstrate pruning across many files.
 
 [`query-matrix.json`](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/benches/selective_read/query-matrix.json)
 checks in every canonical SQL statement, the three scales' frozen membership
-values, generator provenance and Polars/Daft expression hashes.
-`benches/selective_read/native-expressions.jsonl` contains the full native
-expression identities, one JSON record per distinct reader/expression hash. The native
+values, generator provenance and native expression descriptions under each query.
+The native
 translations are constructed by the pinned adapters from these SQL statements
 as filter, projection, then optional limit. Each real validation run also
 preserves its native expressions. A campaign rejects a successful observation whose executed
-translation hash differs from the checked-in query.
+expression differs from the checked-in query. SQL and expressions are compared
+directly; catalog formatting and provenance changes do not invalidate prepared cases.
 
 ## Prepare and run all 150 entries
 
 Follow the [fixture](selective-read-fixtures.md),
 [reader](selective-read-runners.md) and [storage](selective-read-storage.md)
-guides first. Use the oracle environment and new output directories. Prepare
-all references before starting a timed campaign:
+guides first. Build the controller with `cargo build --locked -p xtask`.
+Use the oracle environment and new output directories. Prepare all references
+before starting a timed campaign:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/matrix.py prepare \
+target/debug/xtask selective-read prepare-matrix \
+  --python ../selective-read-oracle-venv/bin/python \
   --fixtures ../selective-read-smoke --output ../matrix-smoke
 ```
 
@@ -70,13 +72,14 @@ Preparation independently scans the source and fixture for every case. It saves
 the exact reference result, predicate-step counts, conservative candidate files
 and actual matching files. To reuse references produced by the current oracle,
 pass `--references PATH`, containing `CASE_ID/reference.json` directories.
-Changed SQL, literals, source counts, reference hashes or protocol identities
+Changed SQL, literals, source counts, reference contents or execution contracts
 fail preparation. A failed case remains in `matrix.json` with its reason.
 
 Start MinIO and upload these same fixtures using the storage guide, then run:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/campaign.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read run-campaign \
+  --python ../selective-read-oracle-venv/bin/python \
   --state ../selective-read-storage --fixtures ../selective-read-smoke \
   --upload ../selective-read-upload.json --matrix ../matrix-smoke/matrix.json \
   --binary ../selective-read-dar-build/selective-read-dar \
@@ -85,7 +88,7 @@ Start MinIO and upload these same fixtures using the storage guide, then run:
   --binary ../selective-read-polars-build/selective-read-polars \
   --binary ../selective-read-daft-build/selective-read-daft \
   --output ../campaign-matrix-smoke
-../selective-read-oracle-venv/bin/python -B benches/selective_read/matrix.py report \
+target/debug/xtask selective-read report-matrix \
   --campaign ../campaign-matrix-smoke --output ../matrix-smoke-report
 ```
 
@@ -102,6 +105,10 @@ fixture generation and reference preparation before timing. Stop the owned
 MinIO service when finished. All commands here are manual; they add no CI work.
 
 ## Read the report
+
+Build the controller with `cargo build --locked -p xtask` before exporting.
+The Rust controller checks the independent query references, then
+audits the campaign and writes the JSON and CSV reports.
 
 `matrix-report.json` and `matrix-report.csv` retain 150 entries, including
 preparation failures, unsupported readers, failed samples, ties and losses.
@@ -127,43 +134,39 @@ or counting a touched object as a full file read.
 This 30-case report is one part of the protocol's 46-case publication inventory.
 It does not reproduce private historical data or establish the old speedups.
 
-## Check or regenerate the catalog
+## Check the retained catalog
 
-Run the bounded matrix check against a prepared smoke matrix:
-
-```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/check_matrix.py \
-  --fixtures ../selective-read-smoke --matrix ../matrix-smoke/matrix.json
-```
-
-It checks all SQL/literal scales, paired projections, translation binding,
-changed metadata rejection and a synthetic 150-entry report containing failed
-and unsupported cases. Real engine correctness still requires the campaign.
-
-To regenerate the catalog deliberately, supply all three fixture profiles and
-the pinned Polars and Daft executables:
+Rust tests cover prepared metadata, paired projections and reports that retain
+failed and unsupported entries. Oracle tests compare every frozen SQL statement
+and literal set with the independent oracle definitions:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/matrix.py freeze \
-  --fixtures ../selective-read-smoke --fixtures ../selective-read-development \
-  --fixtures ../selective-read-report \
-  --binary ../selective-read-polars-build/selective-read-polars \
-  --binary ../selective-read-daft-build/selective-read-daft \
-  --output ../matrix-catalog
+cargo test --locked -p xtask selective_read::workload::matrix
+cargo test --locked -p xtask selective_read::report::batch
+cargo test --locked -p xtask \
+  selective_read::oracle::tests::retained_catalog_matches_independent_sql_projections_and_literals
 ```
 
-Review the generated `query-matrix.json` and `native-expressions.jsonl` before
-replacing the checked-in copies.
-The command checks generator SQL against the independent oracle and constructs
-expressions in each adapter's own pinned environment. Keep generated data,
-references and campaign outputs outside Git.
+Real engine correctness still requires the campaign.
+
+The checked-in `query-matrix.json` retains the revision 2 catalog, including
+the retired Daft expressions as readable descriptions. Catalog generation
+depended on the retired Daft adapter. Historical regeneration requires the
+original harness checkout and retained engine builds. The current harness
+reads and validates the retained catalog.
 
 ## Large-workload candidates
 
 The large workload adds the cases from the
 [large-workload amendment](selective-read-large-workloads.md). Its workload
-manifest is separate from the checked-in revision 2 catalog. New manifests use
-revision 4 and the [reduced sampling contract](selective-read-sampling.md).
+manifest is separate from the checked-in revision 2 catalog. These historical
+manifests use revision 4 and the
+[reduced sampling contract](selective-read-sampling.md).
+Creating them requires Daft and the
+[archived harness](https://github.com/mag1cfrog/delta-arrow-reader/blob/eb1f58b4be8dc0d8ec3bee1615f1777a4c41bd9f/docs/content/benchmarks/selective-read-matrix.md).
+The Rust controller retains workload validation and report export.
+Create new revision 6 workloads with the
+[production fixture workflow](selective-read-production-fixtures.md).
 
 The owner selected SF10 for the main large-data family after the SF1/SF10
 screen in [#345](https://github.com/mag1cfrog/delta-arrow-reader/issues/345).
@@ -207,26 +210,17 @@ DV directory contains the source, base snapshot, and paired DV snapshot; the
 input directory stays immutable. Do the same preparation at the preceding rung
 for the two controls, which do not need DVs.
 
-To calibrate scale first, bind only the shuffled `date30` anchor with
-`--family pilot`, one `--fixtures` directory and no `--control-fixtures`.
-This accepts the SF1 baseline and the declared larger rungs. For example:
-
-```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/large_workloads.py \
-  --family pilot --fixtures ../large-wide-shuffled-sf1 \
-  --binary ../selective-read-polars-build/selective-read-polars \
-  --binary ../selective-read-daft-build/selective-read-daft \
-  --disk-limit-mib 8192 --elapsed-limit-seconds 1800 \
-  --output ../pilot-workload-sf1
-```
-
-The resulting manifest has `scope: pilot` and `publication_ready: false`.
+The historical scale pilot binds only the shuffled `date30` anchor, with one
+fixture directory and no scale-control directory. It accepts the SF1 baseline
+and the declared larger rungs. Its manifest has `scope: pilot` and
+`publication_ready: false`.
 It preserves the same SQL, five readers, native expression identities and exact
 oracle checks. It needs no DV copy, other layout or 4,096-file pair to measure
 this one query. Choose oracle ceilings from the expected result and record them
-before each rung; the values above describe the SF1 preparation example.
+before each rung.
 
-For another declared no-DV data query, add `--case`, for example
+The archived generator also accepts another declared no-DV data query through
+`--case`, for example
 `--case large.wide.clustered.eq2-in20` or
 `--case large.wide.clustered.eq2-in20-keys`, with its matching fixture directory.
 Each pilot manifest binds one query and only its declared reuse profile, if any.
@@ -238,37 +232,27 @@ starts screening with two independent single queries per reader, with correctnes
 and I/O checks outside timing. Use the declared standalone invocations from the
 [storage guide](selective-read-storage.md) for screening. The revision 4
 campaign below uses five independent samples per case or session, and two
-queries per reuse session, bound by `sampling_sha256`. Screening observations
+queries per reuse session, selected by the comparison revision. Screening observations
 cannot fill formal measurement slots or freeze the full publication inventory.
 
-For the complete large-data family, bind all 18 cases before preparing its
-references or timing readers:
-
-```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/large_workloads.py \
-  --fixtures ../large-data-clustered-dv --fixtures ../large-data-shuffled-dv \
-  --control-fixtures ../large-control-clustered \
-  --control-fixtures ../large-control-shuffled \
-  --binary ../selective-read-polars-build/selective-read-polars \
-  --binary ../selective-read-daft-build/selective-read-daft \
-  --disk-limit-mib 196608 --elapsed-limit-seconds 1800 \
-  --output ../large-workload
-```
+The archived generator binds all 18 cases in the complete large-data family
+before preparing references or timing readers.
 
 `workload.json` freezes fixture hashes, scales, geometry, expanded SQL,
-projections, literals, native translations and oracle ceilings. It binds the
-amendment hash, sampling hash, base protocol hash and harness sources. Each reference, reader
-identity, correctness certificate, campaign, schedule slot and report carries
-that workload file's hash. Mismatches fail validation. Rebuild all five adapters
-after changing the harness or oracle.
+projections, literals, native translations and oracle ceilings. Each translation
+stores its case's canonical SQL and full native expression. Definitions using
+the old hash-only bindings need regeneration before current-harness validation.
+References, reader identities, correctness certificates, campaigns, schedule
+slots and reports carry the explicit workload contract. Changed queries, translations,
+fixture identities or execution settings fail validation.
 
-The command produces a **candidate**, with `publication_ready: false`. The full
+This definition records a **candidate**, with `publication_ready: false`. The full
 inventory including many-file cases, reader and environment bindings, and
 first-versus-reused execution measurements belong to the pilot in
-[#345](https://github.com/mag1cfrog/delta-arrow-reader/issues/345). This command
+[#345](https://github.com/mag1cfrog/delta-arrow-reader/issues/345). This definition
 cannot declare a formal publication workload.
 
-For a bounded implementation check, add `--smoke` and use SF0.01 fixtures for
+For a bounded check with the archived generator, add `--smoke` and use SF0.01 fixtures for
 both roles. Create the two small DV pairs with `--profile smoke --dv-from ...
 --dv-table wide.clustered` and its shuffled equivalent. Use smaller explicit
 oracle ceilings. The two smoke control IDs exercise binding only; identical
@@ -277,7 +261,8 @@ SF0.01 inputs cannot measure a scale effect.
 Prepare one case at a time:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/oracle.py prepare \
+cargo +1.98.1 run --locked -p xtask -- selective-read prepare-reference \
+  --python ../selective-read-oracle-venv/bin/python \
   --workload ../large-workload/workload.json \
   --fixtures ../large-data-shuffled-dv --case large.wide.shuffled.date30-wide \
   --output ../large-date30-reference
@@ -301,7 +286,7 @@ Keep five explicit reader statuses, including native DV rejections and failures.
 Export a checked report with:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/large_workloads.py report \
+cargo +1.98.1 run --locked -p xtask -- selective-read report-workload \
   --campaign ../large-date30-campaign --output ../large-date30-report
 ```
 

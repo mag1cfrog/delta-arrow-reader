@@ -33,6 +33,15 @@ mod release_request;
 mod release_selection;
 mod repository;
 mod scan;
+#[cfg(unix)]
+mod scan_scheduling;
+#[cfg(target_os = "linux")]
+mod selective_read;
+#[cfg(unix)]
+mod selective_read_build;
+mod selective_read_chart;
+#[cfg(target_os = "linux")]
+mod test_https;
 mod validation_record;
 
 use std::{
@@ -59,6 +68,27 @@ struct Arguments {
 
 #[derive(Subcommand)]
 enum Task {
+    /// Test core HTTPS certificate verification and proxy routing on Linux.
+    #[cfg(target_os = "linux")]
+    TestHttps(test_https::Arguments),
+    /// Native selective-read benchmark control tools.
+    #[cfg(target_os = "linux")]
+    SelectiveRead {
+        #[command(subcommand)]
+        command: selective_read::Task,
+    },
+    /// Build a pinned Linux x86-64 benchmark reader and record its provenance.
+    #[cfg(unix)]
+    BuildSelectiveRead(selective_read_build::Arguments),
+    /// Render the SF10 README charts from the published timing CSV.
+    RenderSelectiveReadChart {
+        /// Check the CSV and require byte-identical checked-in SVGs.
+        #[arg(long)]
+        check: bool,
+    },
+    /// Run process-isolated scan scheduling benchmarks.
+    #[cfg(unix)]
+    ScanScheduling(scan_scheduling::Arguments),
     /// Build and validate CLI distribution artifacts.
     Cli {
         #[command(subcommand)]
@@ -188,6 +218,15 @@ fn main() -> ExitCode {
 
 fn run_task(task: Task) -> Result<()> {
     match task {
+        #[cfg(target_os = "linux")]
+        Task::TestHttps(args) => args.run(),
+        #[cfg(target_os = "linux")]
+        Task::SelectiveRead { command } => command.run(),
+        #[cfg(unix)]
+        Task::BuildSelectiveRead(args) => args.run(),
+        Task::RenderSelectiveReadChart { check } => selective_read_chart::run(check),
+        #[cfg(unix)]
+        Task::ScanScheduling(args) => args.run(),
         Task::Cli { command } => command.run().map_err(Into::into),
         Task::CheckCacheWrites => check_cache_writes(),
         Task::ReportCacheReads => report_cache_reads(),

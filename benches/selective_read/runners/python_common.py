@@ -1,6 +1,5 @@
 """Shared Python reader identity, input, and correctness checks."""
 
-import hashlib
 import importlib.metadata
 import json
 import os
@@ -10,22 +9,10 @@ import re
 import sys
 import sysconfig
 from time import time_ns
-from urllib.parse import urlsplit
 
-from run import BUDGET, LARGE_IDENTITY_FIELDS, SAMPLING_IDENTITY_FIELDS, PRODUCTION_IDENTITY_FIELDS, comparison_identity, digest, query_count, save
+import native
 
 HERE = Path(__file__).resolve().parent
-REQUEST_FIELDS = set("table_uri snapshot_version case_id canonical_sql comparison_revision protocol_sha256 "
-                     "fixture_manifest_sha256 profile execution_mode purpose resource_budget correctness_file "
-                     "campaign_id run_id repetition order".split())
-
-
-def sha(value):
-    return hashlib.sha256(value).hexdigest()
-
-
-def json_hash(value):
-    return sha(json.dumps(value, sort_keys=True, separators=(",", ":")).encode())
 
 
 def require(condition, reason):
@@ -43,49 +30,29 @@ def scan_sql(sql):
 
 
 def runtime_metadata(engine):
-    """Hash installed files, not just the package's self-reported version or RECORD."""
-    packages = {}
-    for dist in importlib.metadata.distributions():
-        files = {str(p): digest(Path(dist.locate_file(p))) for p in dist.files
-                 if p.suffix != ".pyc" and Path(dist.locate_file(p)).is_file()}
-        packages[dist.metadata["Name"].lower()] = {
-            "version": dist.version, "installed_files_sha256": json_hash(files),
-            "wheel": dist.read_text("WHEEL"), "requires_dist": dist.requires or [],
-        }
-    lock = json.loads((HERE / "lock.json").read_text())
-    require({k: v["version"] for k, v in packages.items()} == {w["name"]: w["version"] for w in lock["wheels"]},
-            "installed packages differ from the lock")
-    return {**engine, "packages": packages, "python": sys.version, "python_executable_sha256": digest(Path("/proc/self/exe")),
-            "python_abi": sysconfig.get_config_var("SOABI"), "python_build": list(platform.python_build()),
-            "python_config_args": sysconfig.get_config_var("CONFIG_ARGS"), "libc": list(platform.libc_ver())}
+    packages = {dist.metadata["Name"].lower(): {
+        "version": dist.version, "files": {str(p): str(dist.locate_file(p)) for p in dist.files if p.suffix != ".pyc"},
+        "wheel": dist.read_text("WHEEL"), "requires_dist": dist.requires or [],
+    } for dist in importlib.metadata.distributions()}
+    metadata = {"python": sys.version, "python_abi": sysconfig.get_config_var("SOABI"),
+                "python_build": list(platform.python_build()), "python_config_args": sysconfig.get_config_var("CONFIG_ARGS"),
+                "libc": list(platform.libc_ver())}
+    return native.call("reader-runtime", {"action": "runtime", "directory": str(HERE), "engine": engine,
+        "packages": packages, "metadata": metadata, "executable": f"/proc/{os.getpid()}/exe"})
 
 
 def checked_build(executable, reader):
-    directory = executable.resolve().parent
-    path = directory / "build.json"
-    build = json.loads(path.read_text())
-    require(build["reader_id"] == reader and build["executable_sha256"] == digest(executable)
-            and build["lockfile_sha256"] == digest(directory / "lock.json")
-            and all(digest(directory / name) == value for name, value in build["bundled_sha256"].items()),
-            "stale runner build")
-    return path, build
+    path, build = native.call("reader-runtime", {"action": "checked-build", "executable": str(executable), "reader": reader})
+    return Path(path), build
 
 
-def reader_identity(request, reader, build_path, settings, expression_sha256=None):
-    return {"reader_id": reader, "reader_build_sha256": digest(build_path), "reader_config_sha256": json_hash(settings),
-            **comparison_identity(request),
-            **{name: request[name] for name in ("fixture_manifest_sha256", "case_id", "snapshot_version")},
-            "canonical_sql_sha256": sha(request["canonical_sql"].encode()), "native_expression_sha256": expression_sha256}
+def reader_identity(request, reader, build_path, settings, expression=None):
+    return native.call("reader-runtime", {"action": "identity", "request": request, "reader": reader,
+        "build_path": str(build_path), "settings": settings, "native_expression": expression})
 
 
-def timing_totals(record):
-    """Summarize captured query clocks without starting or ending any timer."""
-    durations = [query["completion_ns"] for query in record["queries"]]
-    if record["execution_mode"] == "reuse":
-        record["initialization_plus_query1_ns"] = record["initialization_ns"] + durations[0]
-        record["initialization_plus_all_queries_ns"] = record["initialization_ns"] + sum(durations)
-    else:
-        record["open_query_ns"] = durations[0]
+def export_result(output, index, identity):
+    return native.call("reader-runtime", {"action": "export", "output": str(output), "index": index, "identity": identity})
 
 
 def redact_credentials(message):
@@ -96,7 +63,7 @@ def redact_credentials(message):
 
 
 def write_observation(output, record):
-    save(output / "record.json", record)
+    record = native.call("reader-runtime", {"action": "finish", "output": str(output), "record": record})
     print(json.dumps(record))
     return 0 if record["status"] == "success" else 1
 
@@ -116,71 +83,19 @@ def runner_cli(run, describe_build):
 
 
 def validate(request):
-    require(isinstance(request, dict), "expected request object")
-    extra = set(LARGE_IDENTITY_FIELDS) if request.get("comparison_revision") in (3, 4, 5, 6) else set()
-    if request.get("comparison_revision") in (4, 5, 6):
-        extra.update(SAMPLING_IDENTITY_FIELDS)
-    if request.get("comparison_revision") in (5, 6):
-        extra.update(PRODUCTION_IDENTITY_FIELDS)
-    if "validation_diagnostics" in request:
-        extra.add("validation_diagnostics")
-        require(type(request["validation_diagnostics"]) is bool and (not request["validation_diagnostics"] or
-                request.get("comparison_revision") == 6 and request.get("purpose") == "validation"),
-                "diagnostic validation requires revision 6 and validation purpose")
-    require(set(request) == REQUEST_FIELDS | extra, "unknown or missing request fields")
-    comparison_identity(request)
-    uri = urlsplit(request["table_uri"])
-    require(uri.scheme in ("file", "s3") and not (uri.username or uri.password or uri.query or uri.fragment)
-            and (uri.scheme != "file" or (uri.netloc in ("", "localhost") and uri.path.startswith("/")))
-            and (uri.scheme != "s3" or bool(uri.netloc)), "expected a file/s3 URL without credentials, query or fragment")
-    require(type(request["snapshot_version"]) is int and 0 <= request["snapshot_version"] < 2**64,
-            "invalid snapshot version")
-    require(request["execution_mode"] in ("open", "reuse") and request["purpose"] in ("validation", "timing", "diagnostic", "io")
-            and re.fullmatch("[0-9a-f]{64}", request["fixture_manifest_sha256"])
-            and request["resource_budget"] == BUDGET, "request differs from the frozen protocol")
-    for field in ("case_id", "run_id", "canonical_sql", "profile"):
-        require(isinstance(request[field], str) and request[field].strip(), f"invalid {field}")
-    for field in ("campaign_id", "correctness_file"):
-        require(request[field] is None or isinstance(request[field], str), f"invalid {field}")
-    for field in ("repetition", "order"):
-        require(request[field] is None or (type(request[field]) is int and request[field] >= 0), f"invalid {field}")
+    native.call("reader-contract", {"action": "validate", "value": request})
+
+
+def storage_options(reader, uri):
+    return native.call("storage", {"action": "reader-options", "reader": reader, "uri": uri})
 
 
 def correctness(request, identity):
-    if request["purpose"] != "timing":
-        return {"status": "not_checked", "reason": "untimed invocation"}
-    require(request["correctness_file"], "timing requires a correctness certificate")
-    path = Path(request["correctness_file"])
-    proof = json.loads(path.read_text())
-    count = query_count(request)
-    require(proof["status"] == "passed" and len(proof["checks"]) == count, "failed or incomplete correctness certificate")
-    rows = []
-    for check in proof["checks"]:
-        require(check["status"] == "passed" and check["oracle_sha256"] == digest(HERE / "oracle.py"), "failed or stale oracle check")
-        for key, value in identity.items():
-            require(type(check.get(key)) is type(value) and check.get(key) == value, f"stale correctness field: {key}")
-        require(type(check["output_rows"]) is int and check["output_rows"] >= 0, "missing validated row count")
-        rows.append(check["output_rows"])
-    return {"status": "passed", "path": str(path), "artifact_sha256": digest(path), "expected_output_rows": rows}
+    return native.call("reader-runtime", {"action": "correctness", "request": request, "identity": identity})
 
 
 def observation(request):
-    return {"format": "selective-read-observation-v1", "status": "success", "failure_reason": None,
-            "native_phases": {"planning_ns": None, "scan_ns": None,
-                              "unavailable_reason": "native APIs do not expose comparable separate planning/scan clocks"},
-            "diagnostic_events": [], "diagnostic_session_ns": None,
-            **({"validation_diagnostics": True} if request.get("validation_diagnostics") else {}),
-            "phase": "setup", "queries": [], "partial_query": None, "provider_evidence": None,
-            "capability": {"status": "not_checked", "scope": "requested query and snapshot"}, "correctness": None,
-            **{name: None for name in ("open_query_ns", "initialization_ns", "session_elapsed_ns", "cleanup_ns",
-                                      "initialization_plus_query1_ns", "initialization_plus_all_queries_ns")},
-            **{name: request[name] for name in ("campaign_id", "run_id", "repetition", "order", "profile", "purpose",
-                                               "execution_mode", "table_uri", "canonical_sql")},
-            "external_metrics": {"requests": None, "response_bytes": None, "touched_parquet_objects": None,
-                                 "process_cpu_ns": None, "peak_rss_bytes": None,
-                                 "reason": "storage observer and process scheduler are separate roadmap slices"},
-            "external_resource_limits": {"cpu_affinity": None, "process_memory_bytes": None,
-                                         "reason": "launcher must enforce and record the CPU affinity and process memory limit"}}
+    return native.call("reader-runtime", {"action": "observation", "request": request})
 
 
 def event(record, name, query_index=None):

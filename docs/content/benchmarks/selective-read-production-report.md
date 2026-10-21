@@ -4,9 +4,8 @@ Generate one overview from formal campaigns that ran native snapshots separately
 The report keeps all eight Q2/Q4 cases, all five readers and both open/reuse
 profiles visible. A completed batch can leave most of the matrix pending.
 
-Use the pinned oracle Python environment from
-[Validate public results](selective-read-oracle.md). Keep the complete frozen
-formal definition, fixture manifests, references and raw campaign artifacts.
+Keep the complete frozen formal definition, fixture manifests, references and
+raw campaign artifacts. Report generation uses the Rust controller.
 Revision 6 uses the [Spark reader roster](selective-read-spark-matrix.md).
 Revision 5 retains Daft. Use each revision's frozen harness for historical inputs;
 the report rejects mixtures of comparison revisions.
@@ -18,9 +17,8 @@ just to generate the overview.
 Supply the complete eight-case definition and each campaign once:
 
 ```sh
-BENCH_PYTHON=/path/to/oracle-venv/bin/python
 BENCH_RESULTS=/path/to/benchmark-results
-"$BENCH_PYTHON" -B benches/selective_read/production_report.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read report-production \
   --definition "$BENCH_RESULTS/global-definition/workload.json" \
   --campaign "$BENCH_RESULTS/campaigns/q2-scattered-spark-v6" \
   --campaign "$BENCH_RESULTS/campaigns/q2-scattered-dv-spark-v6" \
@@ -63,7 +61,7 @@ summary cannot pass the existing campaign audit; keep its raw records separately
 The JSON also retains exact-gate oracle geometry and separate I/O diagnostics.
 New revision 6 campaigns can use the
 [combined diagnostic amendment](selective-read-combined-diagnostics.md).
-The overview records each campaign's mode and amendment hash. Those invocations
+The overview records each campaign's mode. Those invocations
 remain outside the timing distributions, and DuckDB EXPLAIN remains separate.
 Single-snapshot revision 6 campaigns can also declare
 [exact validation as storage warmup](selective-read-gate-warmup.md).
@@ -78,6 +76,8 @@ snapshots share their base snapshot's Parquet data.
 ## Input checks
 
 Each campaign passes the existing single-campaign audit before aggregation.
+The Rust controller loads the frozen definitions and oracle evidence, checks
+cross-campaign consistency and writes the overview.
 Its case must match the complete definition, including SQL, fixture identity,
 native expressions, writer settings and geometry. Each successful observation
 must retain the formal resource and watchdog limits.
@@ -88,11 +88,10 @@ cannot be mixed in one report. Duplicate case/profile coverage is rejected;
 retries and partial schedules cannot fill another campaign's samples. Pilot and
 historical observations cannot enter the formal report.
 
-Run the bounded aggregation check manually:
+Run the aggregation checks:
 
 ```sh
-"$BENCH_PYTHON" -B benches/selective_read/check_production_report.py
+cargo test --locked -p xtask --bin xtask selective_read::report::
 ```
 
-The check uses simulated records and produces no performance evidence. This
-reporting command adds no reader build, dependency, CI job or timing threshold.
+These checks use simulated records and produce no performance evidence.

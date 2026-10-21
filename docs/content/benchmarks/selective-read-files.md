@@ -41,7 +41,7 @@ It retains every column and the source's frozen SQL and IN list.
 Each file descriptor includes its ordinal range, byte size, SHA-256,
 Delta statistics, and actual group/page metadata. The generator rereads all
 written columns to verify their statistics. `repacked_from` records the parent
-manifest hash, while `generator` records the repacking executable and source.
+manifest hash, while `generator` records the repacking executable and dependency versions.
 The parent lockfile remains identified by the parent manifest; it need not be
 byte-identical to the repacker's lockfile.
 
@@ -53,11 +53,12 @@ use `--profile smoke` with an existing smoke parent. That still creates exactly
 
 ## Verify rows and pruning opportunity
 
-Use the [pinned oracle environment](selective-read-oracle.md):
+Build the controller with `cargo build --locked -p xtask` and use the
+[pinned oracle environment](selective-read-oracle.md):
 
 ```sh
-../selective-read-oracle-venv/bin/python -B \
-  benches/selective_read/file_organizations.py prepare \
+target/debug/xtask selective-read prepare-files \
+  --python ../selective-read-oracle-venv/bin/python \
   --parent ../selective-read-development --fixtures ../selective-read-files \
   --output ../selective-read-files-references
 ```
@@ -87,11 +88,12 @@ current checkout and start the [pinned MinIO server](selective-read-storage.md).
 Upload this fixture directory once:
 
 ```sh
-python3 -B benches/selective_read/storage.py upload \
+cargo +1.98.1 run --locked -p xtask -- selective-read upload-storage \
   --state ../selective-read-storage --fixtures ../selective-read-files \
   --output ../selective-read-files-upload.json
 
-../selective-read-oracle-venv/bin/python -B benches/selective_read/campaign.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read run-campaign \
+  --python ../selective-read-oracle-venv/bin/python \
   --state ../selective-read-storage --fixtures ../selective-read-files \
   --upload ../selective-read-files-upload.json \
   --output ../selective-read-files-campaign \
@@ -118,9 +120,12 @@ campaign, with two separate diagnostic observations per reader and job.
 
 ## Inspect the comparison
 
+Build the controller with `cargo build --locked -p xtask` before exporting.
+Python verifies the independent references and pruning geometry; Rust audits
+the campaign and writes the JSON and CSV reports.
+
 ```sh
-../selective-read-oracle-venv/bin/python -B \
-  benches/selective_read/file_organizations.py report \
+target/debug/xtask selective-read report-files \
   --campaign ../selective-read-files-campaign \
   --references ../selective-read-files-references \
   --output ../selective-read-files-report
@@ -161,7 +166,7 @@ shapes. This experiment adds no CI workflow or benchmark timing job.
 ## Wide tables with paired deletion vectors
 
 The wide comparison keeps all 80 stored columns and projects the 69-column
-compound query. Its legacy pair uses SF1 and revision 2. The new revision 3
+compound query. Its legacy pair uses SF1 and revision 2. The historical revision 3
 family adds normal file boundaries at the same source scale as the 4,096-file
 repack, with both DV states on each organization.
 
@@ -177,7 +182,8 @@ target/selective-read/release/selective-read-fixtures \
   --profile development --wide-files-from ../selective-read-development \
   --output ../wide-files-legacy
 
-../selective-read-oracle-venv/bin/python -B benches/selective_read/wide_files.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read prepare-wide-files \
+  --python ../selective-read-oracle-venv/bin/python \
   --fixtures ../wide-files-legacy --output ../wide-files-legacy-references
 ```
 
@@ -218,17 +224,15 @@ bounded while retaining all physical details and all 80 columns' Delta
 statistics. Geometry sidecars are oracle inputs; they are not uploaded as
 Delta data objects or supplied to readers as a selected file list.
 
-Freeze the four cases with the existing workload command:
+Creating the revision 4 definition requires Daft and the
+[archived workload generator](https://github.com/mag1cfrog/delta-arrow-reader/blob/eb1f58b4be8dc0d8ec3bee1615f1777a4c41bd9f/docs/content/benchmarks/selective-read-files.md).
+Its creation CLI has been removed from the current harness;
+validation and report export remain. With a matching frozen harness and
+definition, prepare the independent references:
 
 ```sh
-../selective-read-oracle-venv/bin/python -B benches/selective_read/large_workloads.py \
-  --family files --fixtures ../wide-files-large \
-  --binary ../selective-read-polars-build/selective-read-polars \
-  --binary ../selective-read-daft-build/selective-read-daft \
-  --disk-limit-mib 196608 --elapsed-limit-seconds 1800 \
-  --output ../wide-files-workload
-
-../selective-read-oracle-venv/bin/python -B benches/selective_read/wide_files.py \
+cargo +1.98.1 run --locked -p xtask -- selective-read prepare-wide-files \
+  --python ../selective-read-oracle-venv/bin/python \
   --workload ../wide-files-workload/workload.json \
   --fixtures ../wide-files-large --output ../wide-files-large-references
 ```
@@ -242,7 +246,7 @@ References include candidate/matching/excluded files and DV coverage for each
 category. The paired organizations must produce identical exact live results.
 
 For a bounded manual check, generate with `--profile smoke --wide-files-from
-../selective-read-smoke --large-file-pair` and freeze with `--family files
+../selective-read-smoke --large-file-pair` and use the archived generator with `--family files
 --smoke`. Use smaller explicit disk and time ceilings. It still uses 4,096 files,
 but its tiny files do not satisfy large-data geometry. SF1 cannot be relabeled
 as a large pair. The first qualifying SF10/SF30/SF100/SF300 rung, its resource
@@ -250,14 +254,15 @@ feasibility and the final publication manifest are selected in
 [#345](https://github.com/mag1cfrog/delta-arrow-reader/issues/345).
 
 Upload the prepared tables with the existing storage command. Supply all five
-binaries and all four references to `campaign.py`, together with
+binaries and all four references to `xtask selective-read run-campaign`, together with
 `--workload ../wide-files-workload/workload.json`. Without case overrides it
 selects all four cases and both new reuse profiles. Use `--no-sessions` and
 the two explicit legacy case/reference arguments for a revision 2 campaign.
 The five native capability and exact-correctness gates apply to every case;
 errors, timeouts and unsupported DVs remain explicit results.
 
-Use `large_workloads.py report` for the new family. The report includes exact
+Use `cargo +1.98.1 run --locked -p xtask -- selective-read report-workload`
+for the new family. The report includes exact
 reference counts and file/DV geometry alongside the existing initialization,
 query, session and separate I/O observations. Native planning/scan clocks remain
 null with reasons where unavailable. Compare file organizations only at their
@@ -267,6 +272,6 @@ ratio is not a pure bitmap cost. All these candidate reports retain
 
 The bounded Rust check uses eight rows with different file boundaries to prove
 that a normal-file minimum missing from the repacked minima joins the shared
-set. Python checks reject undersized files and mixed scales. Actual 4,096-file
+set. Rust checks reject undersized files and mixed scales. Actual 4,096-file
 generation, native reader checks and large geometry acceptance stay outside CI;
 this extension adds no CI job or step.

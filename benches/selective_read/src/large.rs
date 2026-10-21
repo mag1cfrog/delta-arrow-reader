@@ -8,9 +8,6 @@ use std::time::Duration;
 
 use datafusion::execution::runtime_env::RuntimeEnv;
 
-const AMENDMENT: &str =
-    include_str!("../../../docs/content/benchmarks/selective-read-large-workloads.md");
-
 #[derive(Clone)]
 pub struct Options {
     pub scale: u16,
@@ -328,8 +325,6 @@ pub fn finish_manifest(
     budget: &Budget,
 ) -> Result<()> {
     let options = config.large.as_ref().ok_or("large options")?;
-    manifest["protocol_sha256"] = json!(fixtures::hash_bytes(AMENDMENT.as_bytes()));
-    manifest["base_protocol_sha256"] = json!(fixtures::hash_bytes(PROTOCOL.as_bytes()));
     manifest["generator_contract"] = json!("selective-read-large-fixtures-v1");
     manifest["scale_factor"] = json!(options.scale);
     manifest["selected_fixture"] = json!(options.fixture);

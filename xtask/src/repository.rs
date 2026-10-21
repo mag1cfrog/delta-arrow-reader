@@ -14,6 +14,22 @@ pub(crate) fn repository_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
 }
 
+#[cfg(unix)]
+pub(crate) fn files(root: &Path) -> crate::Result<Vec<PathBuf>> {
+    let mut result = Vec::new();
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        let path = entry.path();
+        if entry.file_type()?.is_dir() {
+            result.extend(files(&path)?);
+        } else if path.is_file() {
+            result.push(path);
+        }
+    }
+    result.sort();
+    Ok(result)
+}
+
 pub(crate) fn cargo_workspace_root(directory: &Path) -> Result<PathBuf> {
     // Shared target caches can contain an xtask compiled in a different source directory.
     let manifest = command_output(
