@@ -1,11 +1,12 @@
-//! Help people and agents fix rejected JSON settings without exposing private input.
+//! Diagnostic details for JSON inputs that do not match the CLI's expected format.
 //!
-//! Corrections identify the CLI argument and, when possible, the field to change,
-//! then explain what is expected and how to fix it. Supplied values and unknown
-//! keys stay out of diagnostics, since they may contain credentials or private data.
+//! A schema error means that a JSON value does not satisfy the requirements of an
+//! input option. For example, `{"op":"and"}` is valid JSON, but the predicate format
+//! also requires an `args` field.
 //!
-//! These corrections explain failures under the existing input rules. If a precise
-//! correction cannot be determined safely, the CLI uses general guidance for that input.
+//! This module supplies the field location, expected format, and correction hint
+//! for those failures. The input parser reports JSON syntax errors; the reader
+//! checks filters against the selected table's columns and types.
 
 use serde::de::DeserializeOwned;
 use serde_json::value::RawValue;

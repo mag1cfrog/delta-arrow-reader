@@ -1,8 +1,9 @@
-//! Help callers find and repair the invalid part of a nested row filter.
+//! Error details for invalid conditions and typed literals in predicate JSON.
 //!
-//! A filter may combine many conditions, so an error needs to identify which condition
-//! or typed value needs attention. This module adds that location and correction
-//! guidance for predicate JSON. The reader checks compatibility with the selected table.
+//! A predicate's conditions form a tree. This module associates a schema error
+//! with the condition or literal that contains it, using the same input definitions
+//! as predicate parsing. Checks against the table, such as whether a referenced
+//! column exists, are part of reader validation.
 
 use serde::de::IgnoredAny;
 use serde_json::value::RawValue;

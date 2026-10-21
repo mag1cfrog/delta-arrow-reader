@@ -1,12 +1,9 @@
-//! Report command outcomes and recovery guidance for people and automation.
+//! Error and completion reporting on the CLI's stderr stream.
 //!
-//! Text diagnostics help people understand failures; JSON records let agents and
-//! scripts decide what to do next. Both use stderr so stdout stays available for
-//! command results. Error explanations identify what can be fixed without disclosing
-//! credentials or private input.
-//!
-//! This module controls how diagnostics are presented. The CLI and reader supply
-//! the error categories and command outcomes.
+//! The CLI reports command outcomes separately from the data it writes to stdout.
+//! This module provides the text and JSON diagnostic formats and the correction
+//! details attached to recognized input errors. Error categories and command
+//! outcomes originate in the CLI and the reader.
 
 use std::{
     io::{self, Write},

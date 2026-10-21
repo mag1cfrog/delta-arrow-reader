@@ -1,8 +1,8 @@
-//! Help input diagnostics explain what needs changing inside a JSON object.
+//! Shared object checks for JSON input diagnostics.
 //!
-//! Callers need different advice for a missing field, a duplicate field, and an
-//! invalid value. This module supplies those distinctions to the schema diagnostics
-//! while using the input format's existing field requirements.
+//! The caller selects the expected object schema. This module reports missing,
+//! repeated, or invalid fields within that object. Traversal through nested
+//! predicates is handled by the predicate schema diagnostics.
 
 use std::{fmt, marker::PhantomData};
 

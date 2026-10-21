@@ -1,9 +1,9 @@
-//! Optional scan tuning for callers who need to adjust memory use and read concurrency.
+//! CLI overrides for the reader's scan execution settings.
 //!
-//! Callers can override individual settings while keeping the reader's defaults
-//! for the rest. Omission keeps a default; explicit null clears an optional value
-//! where supported. The reader enforces the allowed ranges, and this module helps
-//! callers correct settings that fall outside them.
+//! Execution settings control how a scan reads and buffers data, independently
+//! of which rows and columns it selects. A file can specify a subset of settings:
+//! omitted fields retain the reader's defaults, and supported null values clear
+//! optional settings. Validation limits come from the reader's configuration API.
 
 use delta_arrow_reader::{DeltaReaderError, DeltaScanExecutionOptions, ParquetReaderBackend};
 use serde::{Deserialize, Deserializer, de::value::StringDeserializer};

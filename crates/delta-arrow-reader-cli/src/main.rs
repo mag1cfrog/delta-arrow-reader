@@ -1,9 +1,8 @@
-//! Inspect Delta tables or stream their rows for use in command-line pipelines.
+//! CLI commands for inspecting Delta snapshots and exporting their rows.
 //!
-//! `inspect` describes a selected snapshot as JSON; `scan` exports its rows as Arrow IPC.
-//! Results go to stdout, while progress and failure diagnostics go to stderr. This
-//! separation lets people and agents compose the reader with other tools without
-//! mixing status messages into table data.
+//! `inspect` returns a snapshot's version and Arrow schema as JSON. `scan` returns
+//! rows as an Arrow IPC stream. Command results use stdout; diagnostics and
+//! completion records use stderr.
 
 #![cfg_attr(test, allow(clippy::panic))]
 

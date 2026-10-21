@@ -1,9 +1,9 @@
-//! Let CLI callers supply reusable scan settings and credentials through JSON files.
+//! JSON file inputs for storage options, row filters, and scan execution settings.
 //!
-//! The inputs cover storage access, row filters, and execution settings. Files let
-//! callers keep credentials out of command arguments and reuse a configuration
-//! across invocations. This module loads those files and ties input failures to
-//! the CLI argument that needs attention.
+//! Each file is associated with a CLI option and has its own accepted structure
+//! and value types. This module loads the files and associates read and format
+//! errors with the corresponding option. The predicate and execution-options
+//! submodules define how their file contents become reader settings.
 
 use std::{fmt, fs::File, io::Read, marker::PhantomData};
 

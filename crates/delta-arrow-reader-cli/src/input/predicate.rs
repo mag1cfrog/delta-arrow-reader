@@ -1,9 +1,9 @@
-//! Row filters that CLI callers can save in JSON and reuse across scans.
+//! Row filters accepted by `--predicate-file`.
 //!
-//! The filter format combines conditions on columns with explicitly typed values,
-//! so callers can preserve values such as large integers exactly. This module owns
-//! the accepted filter format and its limits on size and nesting. The reader checks
-//! the filter against the selected table and evaluates it during the scan.
+//! Predicates combine column comparisons and null checks with boolean operations.
+//! Each literal includes its data type. This module defines the file format and
+//! limits the number and nesting depth of predicate nodes. The reader resolves
+//! referenced columns and checks the predicate against the selected table.
 
 use std::{fmt, marker::PhantomData, str::FromStr};
 
