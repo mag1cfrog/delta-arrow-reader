@@ -1,4 +1,102 @@
 use super::*;
+use std::os::unix::fs::PermissionsExt;
+
+#[test]
+fn translation_bridge_binds_sql_to_sdk_expressions_and_rejects_stale_results() -> Result<()> {
+    let temporary = tempfile::tempdir()?;
+    let root = temporary.path();
+    let binary = root.join("adapter");
+    fs::write(&binary, b"adapter")?;
+    let adapter_hash = digest(&binary)?;
+    save(
+        &root.join("build.json"),
+        &json!({"reader_id":"polars", "executable_sha256":adapter_hash,
+        "lockfile_sha256":"lock", "runtime":{"polars":"pinned"}}),
+    )?;
+    let python = root.join("venv/bin/python");
+    fs::create_dir_all(python.parent().unwrap())?;
+    fs::write(
+        &python,
+        r#"#!/bin/sh
+set -eu
+test "$#" = 4
+test "$1" = -I
+test "$2" = -B
+cat > "$(dirname "$0")/../../received.json"
+cat "$(dirname "$0")/../../probe.json"
+"#,
+    )?;
+    fs::set_permissions(&python, fs::Permissions::from_mode(0o700))?;
+    let sql = json!({"all":"SELECT id FROM bench", "filtered":"SELECT id FROM bench WHERE id = 1"});
+    let rows: Vec<_> = object(&sql)?
+        .iter()
+        .map(|(case, sql)| json!({"case_id":case,"canonical_sql":sql}))
+        .collect();
+    let probe = json!({"runtime":{"polars":"pinned"},"expressions":{
+        "all":{"projection":["id"],"predicate":null},
+        "filtered":{"projection":["id"],"predicate":"native id = 1"}}});
+    save(&root.join("probe.json"), &probe)?;
+    let invoke = |name: &str| {
+        let output = root.join(name);
+        fs::create_dir(&output)?;
+        translate(&rows, std::slice::from_ref(&binary), &output, root)
+    };
+    let result = invoke("success")?;
+    assert_eq!(read_json(&root.join("received.json"))?, sql);
+    let translation = &result["polars"];
+    assert_eq!(translation["reader"], "polars");
+    assert_eq!(translation["lock_sha256"], "lock");
+    assert_eq!(translation["adapter_sha256"], adapter_hash);
+    for (case, sql) in object(&sql)? {
+        assert_eq!(translation["expressions"][case]["canonical_sql"], *sql);
+        assert_eq!(
+            translation["expressions"][case]["native_expression"],
+            probe["expressions"][case]
+        );
+    }
+    assert_eq!(
+        read_json(&root.join("success/polars-translations.json"))?,
+        *translation
+    );
+    for (name, pointer, replacement, message) in [
+        (
+            "wrong-runtime",
+            "/runtime/polars",
+            json!("changed"),
+            "stale native runtime",
+        ),
+        (
+            "missing-case",
+            "/expressions",
+            json!({}),
+            "missing native translations",
+        ),
+        (
+            "empty-expression",
+            "/expressions/all",
+            json!({}),
+            "missing native translations",
+        ),
+    ] {
+        let mut changed = probe.clone();
+        *changed.pointer_mut(pointer).unwrap() = replacement;
+        fs::write(root.join("probe.json"), serde_json::to_vec(&changed)?)?;
+        assert!(invoke(name).unwrap_err().to_string().contains(message));
+        assert!(!root.join(name).join("polars-translations.json").exists());
+    }
+    fs::write(&binary, b"changed adapter")?;
+    assert!(
+        invoke("changed-adapter")
+            .unwrap_err()
+            .to_string()
+            .contains("stale adapter executable")
+    );
+    fs::write(&binary, b"adapter")?;
+    fs::write(root.join("probe.json"), b"not JSON")?;
+    assert!(invoke("failed-probe").is_err());
+    assert!(!root.join("failed-probe/polars-translations.json").exists());
+    Ok(())
+}
 
 #[test]
 fn frozen_workloads_check_queries_and_scope_independently_of_source_provenance() -> Result<()> {

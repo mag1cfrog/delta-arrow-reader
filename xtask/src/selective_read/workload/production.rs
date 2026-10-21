@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, fs, process::Command};
 
 use super::*;
 use crate::{
-    command::run_command,
+    command::command_output,
     repository::files,
     selective_read::{
         campaign,
@@ -105,6 +105,11 @@ fn translate(rows: &[Value], binaries: &[PathBuf], output: &Path, harness: &Path
         build["reader_id"] == "polars",
         "provide the pinned Polars translation binary",
     )?;
+    let adapter_hash = digest(&binary)?;
+    require(
+        build["executable_sha256"] == adapter_hash,
+        "stale adapter executable",
+    )?;
     let sql = rows
         .iter()
         .map(|row| {
@@ -114,21 +119,40 @@ fn translate(rows: &[Value], binaries: &[PathBuf], output: &Path, harness: &Path
             ))
         })
         .collect::<Result<Map<_, _>>>()?;
-    save(&output.join("sql.json"), &json!(sql))?;
-    let path = output.join("polars-translations.json");
-    run_command(
+    let request = output.join("sql.json");
+    save(&request, &json!(sql))?;
+    let probe: Value = serde_json::from_str(&command_output(
         Command::new(binary.with_file_name("venv").join("bin/python"))
             .args(["-I", "-B"])
             .arg(harness.join("matrix.py"))
-            .arg("translations")
-            .arg("--binary")
             .arg(&binary)
-            .arg("--request")
-            .arg(output.join("sql.json"))
-            .arg("--output")
-            .arg(&path),
+            .stdin(fs::File::open(&request)?),
+    )?)?;
+    require(probe["runtime"] == build["runtime"], "stale native runtime")?;
+    require(
+        digest(&binary)? == adapter_hash,
+        "adapter changed during translation",
     )?;
-    let translation = read_json(&path)?;
+    let expressions = object(&probe["expressions"])?;
+    require(
+        expressions.keys().eq(sql.keys())
+            && expressions
+                .values()
+                .all(|v| v.as_object().is_some_and(|o| !o.is_empty())),
+        "missing native translations",
+    )?;
+    let expressions: Map<_, _> = sql
+        .iter()
+        .map(|(case, sql)| {
+            (
+                case.clone(),
+                json!({"canonical_sql":sql,"native_expression":expressions[case]}),
+            )
+        })
+        .collect();
+    let translation = json!({"reader":build["reader_id"],"lock_sha256":build["lockfile_sha256"],
+        "adapter_sha256":adapter_hash,"expressions":expressions});
+    save(&output.join("polars-translations.json"), &translation)?;
     Ok(json!({"polars":translation}))
 }
 
