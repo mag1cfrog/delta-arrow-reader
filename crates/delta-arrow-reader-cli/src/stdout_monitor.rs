@@ -1,4 +1,4 @@
-//! Detect a closed stdout pipe while a UC scan is waiting for credentials or storage.
+//! Detect a closed stdout pipe while a command is waiting for credentials or storage.
 
 use std::io;
 

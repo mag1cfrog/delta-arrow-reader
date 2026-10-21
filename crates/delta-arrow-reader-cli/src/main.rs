@@ -2,10 +2,12 @@
 
 #![cfg_attr(test, allow(clippy::panic))]
 
+mod arrow_output;
 mod diagnostics;
 mod execution_options;
 mod input;
 mod predicate;
+mod query;
 mod signals;
 mod stdout_monitor;
 mod unity_catalog;
@@ -19,14 +21,13 @@ use std::{
     str::FromStr,
 };
 
-use arrow::ipc::writer::StreamWriter;
 use arrow_schema::{ArrowError, Schema};
 use clap::{Args, Parser, Subcommand, error::ErrorKind};
 use delta_arrow_reader::{
-    DeltaReaderError, DeltaScan, DeltaSnapshotSelection, DeltaTableBuilder, WarmupMode,
-    error_source_kind,
+    DeltaReaderError, DeltaSnapshotSelection, DeltaTableBuilder, WarmupMode, error_source_kind,
 };
 use diagnostics::DiagnosticFormat;
+use futures_util::TryStreamExt;
 use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu, ensure};
 
@@ -46,6 +47,10 @@ enum Command {
     ///
     /// Only snapshot metadata is loaded; data files are not read.
     Inspect(TableArgs),
+    /// Run one read-only SQL query over a Delta snapshot, registered as t.
+    ///
+    /// Results stream as Arrow IPC. Redirect stdout to a file or pipe.
+    Query(query::QueryArgs),
     /// Stream a Delta snapshot's rows as Arrow IPC to stdout.
     ///
     /// Redirect stdout to a file or pipe; terminal output is rejected.
@@ -86,7 +91,7 @@ struct TableArgs {
     /// At most 1 MiB; '-' is a filename, not stdin.
     #[arg(long, value_name = "PATH")]
     storage_options_file: Option<String>,
-    /// Existing Databricks CLI profile; required for uc:// targets.
+    /// Existing Databricks CLI profile; required for uc:// inspect/scan targets.
     #[arg(long, value_name = "PROFILE")]
     databricks_profile: Option<String>,
 }
@@ -121,11 +126,26 @@ enum Error {
     Configuration { source: DeltaReaderError },
     #[snafu(display("{source}"))]
     UnityCatalog { source: unity_catalog::Error },
+    #[snafu(display("{source}"))]
+    Query { source: query::QueryError },
+    #[snafu(display("Output exceeded its resource ceiling (reason={reason})."))]
+    OutputLimit { reason: &'static str },
+    #[snafu(display("Command was cancelled."))]
+    Cancelled { status: u8 },
 }
 
 impl From<ArrowError> for Error {
     fn from(source: ArrowError) -> Self {
         match source {
+            ArrowError::IoError(_, source)
+                if source
+                    .get_ref()
+                    .is_some_and(|error| error.is::<arrow_output::OutputBytesExceeded>()) =>
+            {
+                Self::OutputLimit {
+                    reason: "output_byte_limit_exceeded",
+                }
+            }
             ArrowError::IoError(_, source) => Self::Output { source },
             source => Self::ArrowIpc { source },
         }
@@ -200,10 +220,26 @@ impl Error {
                 Some(error_source_kind(source)),
             ),
             Self::UnityCatalog { source } => (source.phase(), source.code(), source.code(), None),
+            Self::Query { source } => source.classification(),
+            Self::OutputLimit { reason } => (
+                "execution",
+                "output_limit",
+                reason,
+                Some("resource_exhausted"),
+            ),
+            Self::Cancelled { .. } => ("execution", "command_cancelled", "command_cancelled", None),
         }
     }
 
     fn log_failure(&self) {
+        if let Self::Cancelled { status } = self {
+            tracing::info!(target: "delta_arrow_reader_cli",
+                event = "cli.cancelled", operation = "cli_command", outcome = "cancelled",
+                error_phase = "execution", error_code = "command_cancelled", exit_status = status,
+                "CLI command cancelled"
+            );
+            return;
+        }
         if let Self::UnityCatalog {
             source: unity_catalog::Error::Cancelled { status },
         } = self
@@ -254,6 +290,7 @@ impl Error {
     fn to_json_diagnostic(&self) -> Value {
         let (phase, code, reason, source_kind) = self.classification();
         let (recovery, retryable) = match source_kind {
+            Some("resource_exhausted") => ("adjust_budget", Some(false)),
             Some("unauthenticated") => ("authorize", Some(false)),
             Some("permission_denied") => ("request_access", Some(false)),
             Some("timeout" | "connection_reset" | "connection_aborted") => ("retry", Some(true)),
@@ -307,6 +344,9 @@ impl Error {
             Self::Runtime { .. } | Self::Reader { .. } | Self::ArrowIpc { .. } => 1,
             Self::Output { .. } => 3,
             Self::UnityCatalog { source } => source.exit_status(),
+            Self::Query { source } => source.exit_status(),
+            Self::OutputLimit { .. } => 1,
+            Self::Cancelled { status } => *status,
         })
     }
 }
@@ -376,7 +416,7 @@ fn build_completion_record(
         "bindings": table_version.map(|version| json!({"alias": "t", "table_version": version.to_string()})).into_iter().collect::<Vec<_>>(),
         "output_bytes": stdout_stats.bytes_written.to_string(),
     });
-    if command == "scan" {
+    if matches!(command, "scan" | "query") {
         record["rows"] = stdout_stats.rows_written.to_string().into();
         record["batches"] = stdout_stats.batches_written.to_string().into();
     }
@@ -417,17 +457,27 @@ fn run() -> Result<Value, Error> {
         Ok(cli) => cli.command,
     };
 
-    if matches!(command, Command::Scan { .. }) {
+    if matches!(command, Command::Scan { .. } | Command::Query(_)) {
         ensure!(!io::stdout().is_terminal(), TerminalOutputSnafu);
     }
     let table_args = match &command {
         Command::Inspect(table) | Command::Scan { table, .. } => table,
+        Command::Query(args) => &args.table,
     };
     let uc_target = unity_catalog::UnityCatalogTableTarget::parse(
         &table_args.table,
         table_args.databricks_profile.as_deref(),
     )
     .context(UnityCatalogSnafu)?;
+    let sql_query = match &command {
+        Command::Query(args) => {
+            if uc_target.is_some() {
+                return Err(query::QueryError::UnsupportedTarget).context(QuerySnafu);
+            }
+            Some(query::ReadOnlySqlQuery::read_file(&args.sql_file)?)
+        }
+        _ => None,
+    };
     let storage_options = match &table_args.storage_options_file {
         Some(path) => input::read_json_file::<input::StorageOptionsInput>(path)?.0,
         None => Default::default(),
@@ -493,6 +543,34 @@ fn run() -> Result<Value, Error> {
         };
         let version = table.version();
         match &command {
+            Command::Query(args) => {
+                let sql_query = sql_query.ok_or(Error::Query {
+                    source: query::QueryError::Input {
+                        reason: "sql_query_missing",
+                    },
+                })?;
+                let stream = sql_query
+                    .execute_stream(table, args.memory_limit_bytes.get())
+                    .await?;
+                let schema = stream.schema();
+                let stdout_stats = arrow_output::write_arrow_stream(
+                    schema,
+                    stream.map_err(|source| Error::Query {
+                        source: query::QueryError::Execution { source },
+                    }),
+                    Some(arrow_output::ArrowOutputLimits {
+                        max_rows: args.max_rows as u64,
+                        max_bytes: args.max_output_bytes.get() as u64,
+                    }),
+                )
+                .await?;
+                Ok(build_completion_record(
+                    "query",
+                    Some(version),
+                    stdout_stats,
+                    None,
+                ))
+            }
             Command::Inspect(_) => {
                 let output = encode_inspection_json(version, table.schema().as_ref());
                 let stdout_stats = StdoutStats {
@@ -544,7 +622,13 @@ fn run() -> Result<Value, Error> {
                 }
                 let scan_result = async {
                     let scan = builder.build().await.context(ReaderSnafu)?;
-                    write_arrow_stream(scan).await
+                    arrow_output::write_arrow_stream(
+                        scan.schema(),
+                        scan.into_stream()
+                            .map_err(|source| Error::Reader { source }),
+                        None,
+                    )
+                    .await
                 }
                 .await;
                 let stdout_stats = match (scan_result, &authorized_access) {
@@ -562,15 +646,20 @@ fn run() -> Result<Value, Error> {
             }
         }
     };
-    let result = if uc_target.is_some() {
+    let result = if uc_target.is_some() || matches!(command, Command::Query(_)) {
         runtime.block_on(async {
             tokio::select! {
                 // Install listeners before polling work; cancellation drops any pending child.
                 biased;
-                exit_status = signals::wait_for_cancellation() => Err(Error::UnityCatalog {
-                    source: unity_catalog::Error::Cancelled { status: exit_status? },
-                }),
-                source = stdout_monitor::wait_for_disconnect(), if matches!(command, Command::Scan { .. }) => {
+                exit_status = signals::wait_for_cancellation() => {
+                    let status = exit_status?;
+                    if uc_target.is_some() {
+                        Err(Error::UnityCatalog { source: unity_catalog::Error::Cancelled { status } })
+                    } else {
+                        Err(Error::Cancelled { status })
+                    }
+                },
+                source = stdout_monitor::wait_for_disconnect(), if matches!(command, Command::Scan { .. } | Command::Query(_)) => {
                     Err(Error::Output { source })
                 },
                 result = work => result,
@@ -590,66 +679,6 @@ fn write_stdout(output: &[u8]) -> Result<(), Error> {
         .write_all(output)
         .and_then(|()| stdout.flush())
         .context(OutputSnafu)
-}
-
-struct ByteCountingWriter<W> {
-    inner: W,
-    bytes_written: u64,
-}
-
-impl<W: Write> Write for ByteCountingWriter<W> {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        let count = self.inner.write(bytes)?;
-        self.bytes_written += count as u64;
-        Ok(count)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush()
-    }
-}
-
-async fn write_arrow_stream(scan: DeltaScan) -> Result<StdoutStats, Error> {
-    let (result_sender, result_receiver) = tokio::sync::oneshot::channel();
-    let runtime = tokio::runtime::Handle::current();
-    // A blocked stdout must leave the runtime and its blocking pool free to read files.
-    std::thread::Builder::new()
-        .name("dar-stdout".into())
-        .spawn(move || {
-            let result = runtime.block_on(async {
-                let mut writer = StreamWriter::try_new(
-                    ByteCountingWriter {
-                        inner: io::stdout().lock(),
-                        bytes_written: 0,
-                    },
-                    scan.schema().as_ref(),
-                )?;
-                // Flush before polling so output failures stop further reads.
-                writer.flush()?;
-                let mut stream = scan.into_stream();
-                let mut stdout_stats = StdoutStats::default();
-                while let Some(batch) = stream.next_batch().await.context(ReaderSnafu)? {
-                    writer.write(&batch)?;
-                    writer.flush()?;
-                    stdout_stats.rows_written += batch.num_rows() as u64;
-                    stdout_stats.batches_written += 1;
-                }
-                // finish writes the end marker and flushes; never call it after an error.
-                writer.finish()?;
-                stdout_stats.bytes_written = writer.get_ref().bytes_written;
-                Ok(stdout_stats)
-            });
-            let _ = result_sender.send(result);
-        })
-        .context(RuntimeSnafu {
-            reason: "output_thread_spawn_failed",
-        })?;
-    result_receiver
-        .await
-        .map_err(io::Error::other)
-        .context(RuntimeSnafu {
-            reason: "output_thread_result_lost",
-        })?
 }
 
 fn install_panic_hook(diagnostic_format: DiagnosticFormat) {

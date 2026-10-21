@@ -7,6 +7,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | --- | --- |
 | See the table's columns and version | [`dar inspect`](#inspect-a-snapshot) |
 | Save selected rows as Arrow | [`dar scan`](#scan-rows) |
+| Aggregate, group, or sort rows with SQL | [`dar query`](#query-a-snapshot) |
 | Select rows by a condition | [Filter rows](#filter-rows) |
 | Connect to remote storage | [Storage options file](#storage-options-file) |
 | Read a Unity Catalog table by name | [Databricks profile](#read-a-unity-catalog-table) |
@@ -213,6 +214,63 @@ be incomplete. Scan or encoding errors exit 1 without writing the IPC end
 marker. Stdout failures, including an early pipe close, exit 3. Status 0 means
 the end marker was written and stdout was flushed. Shell redirects can leave
 partial files after failure; discard those files.
+
+## Query a snapshot
+
+`query` runs SQL locally through the Core DataFusion table provider. It opens
+one Delta snapshot and registers it as `t`. Use a local path or direct storage
+URL for `TABLE`; Unity Catalog targets are not yet supported by this command.
+
+```sh
+cat > query.sql <<'SQL'
+SELECT customer_id, count(*) AS orders, sum(total) AS total
+FROM t
+GROUP BY customer_id
+ORDER BY total DESC
+LIMIT 100
+SQL
+dar query /data/orders --sql-file query.sql > totals.arrow
+dar query /data/orders --table-version 0 --sql-file query.sql > original.arrow
+```
+
+```text
+dar query [--table-version N] [--storage-options-file PATH]
+          --sql-file PATH [--max-rows N] [--max-output-bytes BYTES]
+          [--memory-limit-bytes BYTES] [--] TABLE
+```
+
+The SQL file must contain one read-only query in UTF-8, at most 64 KiB, with
+a parser and expression-depth limit of 128, including chains of set operations
+such as `UNION`. Paths use the working directory; `-` names a
+literal file. SQL is not read from stdin. Malformed input is rejected before
+opening the table. Projections, predicates, aggregations, grouping, ordering,
+subqueries, and nonrecursive CTEs are supported. DDL, DML, COPY, session changes,
+EXPLAIN, recursive CTEs, and table functions are rejected. SQL cannot discover
+additional tables from file paths or URLs.
+
+Results use Arrow IPC stream framing on stdout, which must be a file or pipe.
+The command streams the complete SQL result, including empty results and
+`COUNT(*)`. Use SQL `LIMIT` to select a smaller result. Queries use the same
+snapshot selection and storage options as `inspect`, and skip table warmup.
+
+| Option | Default | Behavior |
+| --- | --- | --- |
+| `--max-rows` | `1000000` | Fail if the SQL result exceeds this many rows; zero is valid |
+| `--max-output-bytes` | `1073741824` (1 GiB) | Fail if Arrow output, including schema and framing, exceeds this many bytes |
+| `--memory-limit-bytes` | `268435456` (256 MiB) | Limit DataFusion's tracked execution memory; disk spill is disabled |
+
+These options accept unsigned decimal digits in the platform's `usize` range.
+Byte and memory limits must be positive. The memory pool does not cap total
+process RSS: Core read buffers, SQL planning, and IPC encoding allocate outside
+it. Sorting and grouping can require memory before producing output. There is
+currently no total-command deadline.
+
+Exceeding a ceiling fails with status 1 and leaves incomplete output. The CLI
+does not turn a query into a successful sample or write an IPC end marker after
+failure. As with `scan`, require valid Arrow output and status 0, and discard
+partial files after failure. With `--diagnostics=json`, query completion has
+`scope: "query"`, the selected version, and row, batch, and output-byte counts.
+This option controls stderr diagnostics; query results remain Arrow.
 
 ## Filter rows
 
@@ -554,7 +612,7 @@ Use the exact status when a script needs to distinguish failures:
 | --- | --- |
 | 0 | Complete success, including help and version |
 | 2 | Invalid CLI arguments or local input configuration before loading |
-| 1 | Runtime, reader, or Arrow IPC encoding failure |
+| 1 | Runtime, reader, SQL, resource-limit, or Arrow IPC encoding failure |
 | 3 | stdout write or flush failure, including a broken pipe |
 
 For target-specific filters, diagnostic fields, or process lifecycle rules,
@@ -700,6 +758,7 @@ and exit statuses.
 
 `-h` is short for `--help`, and `-V` is short for `--version`. For inspection
 help, use `dar inspect --help` or `dar help inspect`. Scan help is available
-through `dar scan --help` or `dar help scan`.
+through `dar scan --help` or `dar help scan`. For SQL, use `dar query --help`
+or `dar help query`.
 
 </details>

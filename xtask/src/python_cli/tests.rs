@@ -302,12 +302,32 @@ fn native_cli_stages_and_reads_a_fixture_outside_the_checkout() -> TestResult {
     }
 
     let output = output_with_timeout(
-        Command::new(executable)
+        Command::new(&executable)
             .arg("scan")
             .arg(fixture.join("table"))
             .current_dir(temporary.path()),
         Duration::from_secs(30),
     )?;
     check_scan_output(&output)?.check_matches(&expected, None)?;
+
+    let sql_file = temporary.path().join("query.sql");
+    fs::write(&sql_file, "SELECT id, value FROM t")?;
+    let query_expected = expected.project(
+        &[
+            expected.schema.index_of("id")?,
+            expected.schema.index_of("value")?,
+        ],
+        &sql_file,
+    )?;
+    let output = output_with_timeout(
+        Command::new(&executable)
+            .arg("query")
+            .arg(fixture.join("table"))
+            .arg("--sql-file")
+            .arg(&sql_file)
+            .current_dir(temporary.path()),
+        Duration::from_secs(30),
+    )?;
+    check_scan_output(&output)?.check_matches(&query_expected, None)?;
     Ok(())
 }
