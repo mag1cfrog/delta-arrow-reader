@@ -107,3 +107,68 @@ fn assert_read_result(output: Output, operation: &str) -> TestResult {
     }
     Ok(())
 }
+
+#[test]
+fn help_lists_only_installed_sources_without_loading_inputs() -> TestResult {
+    for operation in ["inspect", "scan", "query"] {
+        let output = run_with_timeout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .env_clear()
+                .env("AWS_ACCESS_KEY_ID", "secret-unused-key")
+                .args([
+                    operation,
+                    "s3://secret-unavailable-bucket/table",
+                    "--auth-source",
+                    "env",
+                    "--storage-options-file",
+                    "secret-missing-options.json",
+                    "--help",
+                ]),
+        )?;
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        let help = String::from_utf8(output.stdout)?;
+        for source in [
+            "json",
+            "env",
+            "aws-web-identity",
+            "aws-container",
+            "azure-workload-identity",
+            "azure-managed-identity",
+        ] {
+            assert!(help.contains(&format!("- {source}:")), "{help}");
+        }
+        for unavailable in ["aws-imds", "azure-cli", "gcp-metadata", "gcp-adc", "secret"] {
+            assert!(!help.contains(unavailable), "{help}");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn unexposed_provider_names_fail_before_credentials_or_storage() -> TestResult {
+    let fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
+    fixture.write_options(json!({}))?;
+    for source in [
+        "aws-imds",
+        "azure-cli",
+        "gcp-metadata",
+        "gcp-adc",
+        "secret-source",
+    ] {
+        let output = run_with_timeout(
+            fixture
+                .command("inspect")
+                .args(["--auth-source", source, "--diagnostics=json"])
+                .env("AWS_ACCESS_KEY_ID", "secret-unused-key")
+                .env("AWS_SECRET_ACCESS_KEY", "secret-unused-password"),
+        )?;
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+        assert_eq!(record["code"], "invalid_cli_argument");
+    }
+    assert!(fixture.server.requests.lock().unwrap().is_empty());
+    Ok(())
+}

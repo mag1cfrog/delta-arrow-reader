@@ -428,6 +428,48 @@ read standard input.
 
 </details>
 
+## Explicit credential sources
+
+`--auth-source` selects authorization for direct cloud reads. The same sources
+are available to `inspect`, `scan`, and `query`. Help lists the installed
+selectors without reading input files or resolving credentials.
+
+| Backend | Source | Credentials | Renewal |
+| --- | --- | --- | --- |
+| S3 | [`json` or `env`](#s3-credential-sources) | Access-key pair, with an optional session token | Supply new credentials for another command |
+| S3 | [`aws-web-identity`](#s3-web-identity) | Role ARN and web identity token file | Refreshes temporary credentials; rereads the token file |
+| S3 | [`aws-container`](#s3-container-credentials) | ECS relative URI, or EKS full URI and token file | Refreshes at the selected endpoint; rereads the EKS token file |
+| Azure | [`json` or `env`](#azure-credential-sources) | Account key, SAS token, or bearer token | Supply new credentials for another command |
+| Azure | [`json` or `env`](#azure-credential-sources) | Client ID, client secret, and tenant ID | Refreshes access tokens for the loaded principal |
+| Azure | [`azure-workload-identity`](#azure-workload-identity) | Client ID, tenant ID, and federated token file | Refreshes access tokens; rereads the token file |
+| Azure | [`azure-managed-identity`](#azure-managed-identity) | One explicit client, object, or resource ID | Refreshes access tokens for that identity |
+| GCS | [`json` or `env`](#gcs-credential-sources) | Explicit service-account or authorized-user ADC file | Renews using the identity loaded from the file |
+
+Local paths do not accept `--auth-source`. Unity Catalog uses
+`--databricks-profile` and rejects it. Omitting `--auth-source` preserves the
+existing storage-options behavior, including any native provider defaults.
+The explicit sources above do not fall back to other credential sources after
+configuration, acquisition, renewal, or permission failures.
+
+### Provider limits
+
+The CLI exposes the mechanisms it can select through the installed
+`object_store` provider. It does not implement a full cloud SDK credential
+chain, AWS profiles or SSO, automatic home-directory ADC discovery, or an
+anonymous source selector.
+
+These candidate selectors are not accepted by `--auth-source`:
+
+| Candidate | Why it is not exposed |
+| --- | --- |
+| `aws-imds` | The native provider queries the instance's current role on every refresh, so it cannot retain an explicitly selected role. |
+| `azure-cli` | The native provider follows the current CLI account and invokes a blocking subprocess without a timeout or bounded output. |
+| `gcp-metadata` | Native construction checks home-directory ADC first. Its metadata provider selects the default service account and retries a second address after failure. |
+
+Explicit GCS ADC files already use `json` or `env`; there is no separate
+`gcp-adc` selector. The sections below list accepted keys, aliases, environment
+variables, precedence, and limits for each supported source.
+
 ## S3 credential sources
 
 `inspect`, `scan`, and `query` accept `--auth-source json|env` for explicit S3
