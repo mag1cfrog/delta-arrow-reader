@@ -353,6 +353,7 @@ fn external_writer_schemas_round_trip() -> Result<(), Box<dyn std::error::Error>
         );
         assert!(output.stderr.is_empty());
         let value: Value = serde_json::from_slice(&output.stdout)?;
+        capabilities::assert_output_matches_schema("inspection", &value);
         assert_eq!(value["table_version"], version);
         let schema: Schema = serde_json::from_value(value["schema"].clone())?;
         let expected =

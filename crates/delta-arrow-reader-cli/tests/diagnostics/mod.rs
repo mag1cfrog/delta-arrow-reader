@@ -31,6 +31,7 @@ pub(super) fn assert_single_terminal_record(stderr: &[u8], kind: &str) -> Value 
     assert_eq!(record["kind"], kind);
     assert_eq!(record["terminal"], true);
     assert!(stderr.len() <= 8192);
+    super::capabilities::assert_output_matches_schema(kind, &record);
     record
 }
 

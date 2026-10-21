@@ -58,13 +58,13 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Print installed command capabilities or a named JSON input schema.
+    /// Print installed command capabilities or a named JSON input/output schema.
     ///
     /// Offline; no table, input file, or authorization is loaded.
     Capabilities {
-        /// Return the named JSON input schema instead of the command inventory.
+        /// Return the named JSON input/output schema instead of the command inventory.
         #[arg(long, value_enum)]
-        schema: Option<input::JsonInputKind>,
+        schema: Option<capabilities::DiscoverySchema>,
     },
     /// Print one Delta snapshot's version and full Arrow schema as JSON.
     ///
@@ -947,6 +947,8 @@ mod tests {
         assert_eq!(encoded.last(), Some(&b'\n'));
         assert_eq!(encoded.iter().filter(|&&byte| byte == b'\n').count(), 1);
         let actual: Value = serde_json::from_slice(&encoded).unwrap();
+        let schema_document = capabilities::DiscoverySchema::Inspection.schema_document();
+        jsonschema::validate(&schema_document["schema"], &actual).unwrap();
         // This literal freezes the upstream Arrow encoding within format version 1.
         assert_eq!(
             actual,

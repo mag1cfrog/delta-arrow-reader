@@ -1,4 +1,4 @@
-//! Commands, input schemas, and output formats available in this executable.
+//! Commands, input/output schemas, and output formats available in this executable.
 //!
 //! `dar capabilities` returns this inventory without opening a table or resolving
 //! authorization. For example, a caller can find that `scan --column` is repeatable
@@ -8,7 +8,11 @@
 //! combined. For example, a Databricks profile can authorize `scan`, while
 //! `query` currently requires a direct table location.
 
+mod output_schemas;
 mod read_support;
+mod schemas;
+
+pub(crate) use schemas::DiscoverySchema;
 
 use std::{io, time::Duration};
 
@@ -34,11 +38,16 @@ fn build_capabilities() -> Value {
         "cli_version": env!("CARGO_PKG_VERSION"),
         "command": describe_command(&command),
         "input_schemas": input_schemas,
+        "output_schemas": [
+            {"name": DiscoverySchema::Inspection, "stream": "stdout"},
+            {"name": DiscoverySchema::Diagnostic, "stream": "stderr"},
+            {"name": DiscoverySchema::Completion, "stream": "stderr"},
+        ],
         "authorization": read_support::authorization_sources(),
         "read_support": read_support::command_read_support(),
         "stdout_formats": {
             "capabilities": {"format": "json", "format_version": 1},
-            "inspect": {"format": "json", "format_version": 1},
+            "inspect": {"format": "json", "format_version": 1, "schema": DiscoverySchema::Inspection},
             "scan": {"format": "arrow_ipc_stream"},
             "query": {"format": "arrow_ipc_stream"},
             "help": {"format": "text"},
@@ -46,7 +55,10 @@ fn build_capabilities() -> Value {
         "diagnostics": {
             "stream": "stderr",
             "default_format": "text",
-            "json": {"option": "--diagnostics=json", "format_version": 1},
+            "json": {
+                "option": "--diagnostics=json", "format_version": 1,
+                "schemas": [DiscoverySchema::Diagnostic, DiscoverySchema::Completion],
+            },
         },
         "limits": {"max_output_bytes": MAX_OUTPUT_BYTES, "deadline_ms": DEADLINE.as_millis()},
     })
@@ -119,9 +131,9 @@ fn argument_name(argument: &Arg) -> String {
         .map_or_else(|| argument.get_id().to_string(), |name| format!("--{name}"))
 }
 
-pub(crate) fn write_capabilities(schema: Option<JsonInputKind>) -> Result<StdoutStats, Error> {
+pub(crate) fn write_capabilities(schema: Option<DiscoverySchema>) -> Result<StdoutStats, Error> {
     let deadline = std::time::Instant::now() + DEADLINE;
-    let document = schema.map_or_else(build_capabilities, JsonInputKind::schema_document);
+    let document = schema.map_or_else(build_capabilities, DiscoverySchema::schema_document);
     let mut output = document.to_string().into_bytes();
     output.push(b'\n');
     if output.len() > MAX_OUTPUT_BYTES {
@@ -302,9 +314,11 @@ mod tests {
             .iter()
             .find(|argument| argument["name"] == "--schema")
             .unwrap();
-        let catalog = inventory["input_schemas"].as_array().unwrap();
-        let names: Vec<_> = catalog
+        let input_catalog = inventory["input_schemas"].as_array().unwrap();
+        let output_catalog = inventory["output_schemas"].as_array().unwrap();
+        let names: Vec<_> = input_catalog
             .iter()
+            .chain(output_catalog)
             .map(|schema| schema["name"].clone())
             .collect();
         assert_eq!(schema_argument["possible_values"], json!(names));
@@ -313,10 +327,13 @@ mod tests {
             [
                 json!("storage-options"),
                 json!("predicate"),
-                json!("execution-options")
+                json!("execution-options"),
+                json!("inspection"),
+                json!("diagnostic"),
+                json!("completion"),
             ]
         );
-        for schema in catalog {
+        for schema in input_catalog.iter().chain(output_catalog) {
             let name = schema["name"].as_str().unwrap();
             let cli = Cli::try_parse_from(["dar", "capabilities", "--schema", name]).unwrap();
             let crate::Command::Capabilities { schema: Some(kind) } = cli.command else {
@@ -324,14 +341,28 @@ mod tests {
             };
             let document = kind.schema_document();
             assert_eq!(document["name"], name);
-            assert_eq!(document["argument"], schema["argument"]);
-            assert!(commands.iter().any(|command| {
-                command["arguments"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .any(|argument| argument["name"] == schema["argument"])
-            }));
+            if let Some(argument) = schema.get("argument") {
+                assert_eq!(&document["argument"], argument);
+                assert_eq!(document["kind"], "input_schema");
+                assert!(commands.iter().any(|command| {
+                    command["arguments"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|candidate| &candidate["name"] == argument)
+                }));
+            } else {
+                assert_eq!(document["kind"], "output_schema");
+                assert_eq!(document["stream"], schema["stream"]);
+            }
         }
+        assert_eq!(
+            inventory["stdout_formats"]["inspect"]["schema"],
+            "inspection"
+        );
+        assert_eq!(
+            inventory["diagnostics"]["json"]["schemas"],
+            json!(["diagnostic", "completion"])
+        );
     }
 }

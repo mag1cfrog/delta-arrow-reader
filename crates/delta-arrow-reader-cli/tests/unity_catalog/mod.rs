@@ -554,6 +554,9 @@ fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResul
         vec!["capabilities", "--schema", "storage-options"],
         vec!["capabilities", "--schema", "execution-options"],
         vec!["capabilities", "--schema", "predicate"],
+        vec!["capabilities", "--schema", "inspection"],
+        vec!["capabilities", "--schema", "diagnostic"],
+        vec!["capabilities", "--schema", "completion"],
     ] {
         let output = run_with_timeout(&mut fixture.command(&args))?;
         assert!(output.status.success());

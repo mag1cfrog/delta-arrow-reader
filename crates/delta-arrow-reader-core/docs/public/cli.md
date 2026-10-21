@@ -25,6 +25,7 @@ For packages and runtime requirements, see [Installation](installation.md).
 dar capabilities
 dar capabilities --diagnostics=json > capabilities.json
 dar capabilities --schema predicate
+dar capabilities --schema completion
 ```
 
 Without `--schema`, the result is one JSON object with `kind: "capabilities"`
@@ -35,6 +36,9 @@ count, defaults, allowed choices, repeatability, and conflicts. For example,
 `stdout_formats` identifies each command's result format; `diagnostics` describes
 stderr formats. These describe the installed executable, including its version.
 `input_schemas` lists the available schema names and their file arguments.
+`output_schemas` lists result schema names and their streams. The `inspect`
+entry in `stdout_formats` and the JSON entry in `diagnostics` identify which
+output schemas apply.
 
 `authorization` describes local access, a direct-storage JSON file, and the
 Databricks profile reference, including the commands that accept each. The
@@ -53,12 +57,12 @@ An empty `possible_values` list means the argument has no enumerated choices;
 it does not mean every value is valid. A null `max_values` means there is no
 fixed upper count for that argument. Descriptions contain additional input rules.
 
-Pass a name to `--schema` to return an object with `kind: "input_schema"`,
-`format_version: 1`, `name`, `argument`, `schema`, and `parser_constraints`.
+Pass a name to `--schema` to return an object with `kind: "input_schema"` or
+`kind: "output_schema"`, `format_version: 1`, `cli_version`, `name`, and `schema`.
 The `schema` field contains a [JSON Schema draft 2020-12](https://json-schema.org/draft/2020-12/json-schema-validation)
 document with examples.
-Extract that field when passing it to a JSON Schema validator. The available
-names are:
+Extract that field when passing it to a JSON Schema validator.
+Input schema responses also include `argument` and `parser_constraints`:
 
 | Schema name | File argument | Contents |
 | --- | --- | --- |
@@ -77,6 +81,27 @@ conversion, and fixed-size binary lengths must match. Predicate column and type
 checks still require a table. These rules also apply to the published examples;
 for instance, the example using `id` as `int32` requires an `Int32` column.
 
+Output schema responses include `stream`, identifying where the described
+result appears. The schema response itself always goes to stdout.
+
+| Schema name | Result stream | Contents |
+| --- | --- | --- |
+| `inspection` | stdout | The full `inspect` JSON, including the snapshot version and Arrow schema. |
+| `diagnostic` | stderr | A terminal failure record with `--diagnostics=json`, including optional correction fields. |
+| `completion` | stderr | A terminal success record with `--diagnostics=json`, including snapshot bindings and output counts. |
+
+Output schemas allow additional object fields. Version and count strings use
+unsigned decimal notation; consumers must check the u64 range when converting
+them. The inspection schema checks the Arrow schema's outer fields, metadata,
+and type-description shapes. Use Arrow's Rust Serde decoder to validate the nested
+`data_type` encoding. `scan` and `query` return Arrow IPC streams, whose schema
+is carried in the stream itself.
+
+For example, save `dar capabilities --schema completion` and validate the
+command's stderr record against its `schema` field. Also check exit status 0
+and decode stdout: a matching completion record alone does not establish that
+the result was received intact.
+
 Discovery needs no table, input file, credentials, Databricks executable, or
 network access. Its response is limited to 1 MiB. The command has a five-second
 deadline, including blocked stdout. A closed output pipe fails with status 3;
@@ -85,7 +110,7 @@ produces a completion record on stderr, and failure produces a diagnostic.
 
 Consumers must check `format_version` and ignore additional object fields.
 Changes to existing field types or meanings require a new format version.
-Schema names describe inputs accepted by that installed CLI version. Unsupported
+Schema names describe inputs and results of that installed CLI version. Unsupported
 names are argument errors. Input files retain their existing formats: do not add
 the discovery envelope or `format_version` to them.
 

@@ -3,11 +3,51 @@
 use super::*;
 use crate::diagnostics::assert_single_terminal_record;
 
+pub(super) fn assert_output_matches_schema(name: &str, output: &Value) {
+    use std::sync::LazyLock;
+
+    static INSPECTION: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| output_schema_validator("inspection"));
+    static DIAGNOSTIC: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| output_schema_validator("diagnostic"));
+    static COMPLETION: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| output_schema_validator("completion"));
+    let validator = match name {
+        "inspection" => &*INSPECTION,
+        "diagnostic" => &*DIAGNOSTIC,
+        "completion" => &*COMPLETION,
+        _ => panic!("unknown output schema: {name}"),
+    };
+    validator.validate(output).unwrap();
+}
+
+fn output_schema_validator(name: &str) -> jsonschema::Validator {
+    let output = run_with_timeout(
+        Command::new(env!("CARGO_BIN_EXE_dar"))
+            .env_clear()
+            .env("PATH", "")
+            .args(["capabilities", "--schema", name]),
+    )
+    .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stderr.is_empty());
+    let document: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["kind"], "output_schema");
+    jsonschema::validator_for(&document["schema"]).unwrap()
+}
+
 #[test]
 fn named_schemas_are_offline_deterministic_and_use_the_same_diagnostics()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
-    for name in ["storage-options", "execution-options", "predicate"] {
+    for (name, kind) in [
+        ("storage-options", "input_schema"),
+        ("execution-options", "input_schema"),
+        ("predicate", "input_schema"),
+        ("inspection", "output_schema"),
+        ("diagnostic", "output_schema"),
+        ("completion", "output_schema"),
+    ] {
         let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
         command
             .env_clear()
@@ -19,7 +59,7 @@ fn named_schemas_are_offline_deterministic_and_use_the_same_diagnostics()
         assert!(baseline.stderr.is_empty());
         assert!(baseline.stdout.len() <= 1024 * 1024);
         let document: Value = serde_json::from_slice(&baseline.stdout)?;
-        assert_eq!(document["kind"], "input_schema");
+        assert_eq!(document["kind"], kind);
         assert_eq!(document["format_version"], 1);
         assert_eq!(document["cli_version"], env!("CARGO_PKG_VERSION"));
         assert_eq!(document["name"], name);
