@@ -80,9 +80,11 @@ the same campaign, and retain the ordering metadata when comparing campaigns.
 
 ## Test the CLI
 
-Run the CLI checks from the repository root on Linux, with a C compiler and
-the `openssl` command available for local HTTPS tests. Set `cli_version` to the
-workspace version in `Cargo.toml`:
+Run the CLI checks from the repository root on Linux, with a C compiler,
+`python3`, and `openssl` available. The GCS and S3 credential tests use Python's
+standard library and OpenSSL to serve local OAuth, STS, and container credential
+endpoints over HTTP or TLS. The GCS tests also verify JWT signatures.
+Set `cli_version` to the workspace version in `Cargo.toml`:
 
 ```console
 cli_version=X.Y.Z
