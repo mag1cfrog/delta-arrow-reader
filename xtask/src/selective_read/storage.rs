@@ -30,12 +30,17 @@ use crate::{
 
 pub(super) const BUCKET: &str = "selective-read";
 
+mod reader;
 pub(super) mod service;
 pub(super) mod upload;
 
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "kebab-case", deny_unknown_fields)]
 pub(super) enum Request {
+    ReaderOptions {
+        reader: String,
+        uri: String,
+    },
     Inventory {
         fixtures: PathBuf,
         table_ids: Option<Vec<String>>,
@@ -61,6 +66,9 @@ pub(super) enum Request {
 
 pub(super) fn run(operation: Request) -> Result<Value> {
     match operation {
+        Request::ReaderOptions { reader, uri } => {
+            reader::options(&reader, &uri, |key| std::env::var(key).ok())
+        }
         Request::Inventory {
             fixtures,
             table_ids,

@@ -115,6 +115,10 @@ def validate(request):
     native.call("reader-contract", {"action": "validate", "value": request})
 
 
+def storage_options(reader, uri):
+    return native.call("storage", {"action": "reader-options", "reader": reader, "uri": uri})
+
+
 def correctness(request, identity):
     if request["purpose"] != "timing":
         return {"status": "not_checked", "reason": "untimed invocation"}

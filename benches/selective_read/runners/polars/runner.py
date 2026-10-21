@@ -7,7 +7,6 @@ from pathlib import Path
 import platform
 import sys
 from time import perf_counter_ns as clock
-from urllib.parse import urlsplit
 
 HERE = Path(__file__).resolve().parent
 # Set these before importing native runtimes. Do not inherit experimental Polars
@@ -30,7 +29,7 @@ sys.path.insert(0, str(HERE))
 from run import digest, query_count, save
 from python_common import (checked_build, checkpoint, correctness, event, json_hash, observation,
                            reader_identity, redact_credentials, require, runner_cli, runtime_metadata,
-                           scan_sql, timing_totals, validate, write_observation)
+                           scan_sql, storage_options, timing_totals, validate, write_observation)
 
 DELTA_OPTIONS = {"without_files": False, "log_buffer_size": 8, "skip_stats": False}
 COLLECT_OPTIONS = {"chunk_size": 8192, "maintain_order": False, "lazy": False, "engine": "streaming"}
@@ -65,24 +64,6 @@ def query(source, sql):
         plan = plan.filter(predicate)
     plan = plan.select(projection)
     return plan.limit(limit) if limit is not None else plan
-
-
-def storage(uri):
-    if urlsplit(uri).scheme != "s3":
-        return {}, {"credentials": "none"}
-    options = {"AWS_REGION": os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))}
-    for name in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"):
-        if name in os.environ:
-            options[name] = os.environ[name]
-    endpoint = os.environ.get("AWS_ENDPOINT_URL")
-    if endpoint:
-        parsed = urlsplit(endpoint)
-        require(parsed.scheme in ("http", "https") and parsed.netloc and not (parsed.username or parsed.password
-                or parsed.query or parsed.fragment) and parsed.path in ("", "/"), "invalid AWS_ENDPOINT_URL")
-        options.update(AWS_ENDPOINT_URL=endpoint, AWS_ALLOW_HTTP=str(parsed.scheme == "http").lower(),
-                       AWS_VIRTUAL_HOSTED_STYLE_REQUEST="false")
-    return options, {"credentials": "AWS environment", "region": options["AWS_REGION"], "endpoint": endpoint,
-                     "url_style": "path" if endpoint else "native default"}
 
 
 def scan(request, options):
@@ -179,13 +160,13 @@ def run(request_path, output):
     try:
         build_path, build = checked_build(Path(__file__), "polars")
         require(runtime_metadata(engine()) == build["runtime"], "runtime differs from the prepared build")
-        options, storage_record = storage(request["table_uri"])
+        storage = storage_options("polars", request["table_uri"])
         settings = {"polars_environment": ENVIRONMENT, "polars_config": pl.Config.state(), "thread_pool_size": pl.thread_pool_size(),
                     "optimizations": str(pl.QueryOptFlags()), "collect_batches": COLLECT_OPTIONS,
                     "provider": {"api": "polars.scan_delta", "use_pyarrow": False, "credential_provider": None,
                                  "delta_table_options": DELTA_OPTIONS,
                                  "initialization": "scan_delta + collect_schema" if request["execution_mode"] == "reuse" else "scan_delta"},
-                    "storage": storage_record, "resource_budget": request["resource_budget"], "table_uri": request["table_uri"],
+                    "storage": storage["settings"], "resource_budget": request["resource_budget"], "table_uri": request["table_uri"],
                     "execution_mode": request["execution_mode"], "output_delivery": "streaming",
                     "native_memory_budget_bytes": 4_000_000_000,
                     "memory_limit_reason": "native spill threshold, not a process cap; launcher must enforce 8 GiB",
@@ -197,7 +178,7 @@ def run(request_path, output):
         identity = reader_identity(request, "polars", build_path, settings, expression)
         record.update(identity=identity, settings=settings, build_record=str(build_path), phase="correctness_gate")
         record["correctness"] = correctness(request, identity)
-        execute(request, options, output, record)
+        execute(request, storage["options"], output, record)
         if request["purpose"] == "timing" and [q["output_rows"] for q in record["queries"]] != record["correctness"]["expected_output_rows"]:
             record.update(status="validation_failed", failure_reason="timed output row count differs from the validated result")
     except Exception as error:

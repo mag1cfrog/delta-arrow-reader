@@ -6,7 +6,6 @@ from pathlib import Path
 import re
 import sys
 from time import perf_counter_ns as clock
-from urllib.parse import urlsplit
 
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE / "spark")]
@@ -16,7 +15,7 @@ from pyspark.sql import SparkSession
 from run import digest, query_count, save
 from python_common import (checkpoint, correctness, event, json_hash, observation, reader_identity,
                            redact_credentials, require, runner_cli, runtime_metadata, scan_sql,
-                           timing_totals, validate, write_observation)
+                           storage_options, timing_totals, validate, write_observation)
 
 CONFIG = {"spark.master": "local[8]", "spark.driver.memory": "4g", "spark.default.parallelism": "8",
           "spark.sql.shuffle.partitions": "8", "spark.databricks.delta.snapshotPartitions": "8",
@@ -67,28 +66,11 @@ def connect():
 
 
 def storage(session, uri):
-    if urlsplit(uri).scheme != "s3":
-        return {"credentials": "none"}, uri
-    endpoint = os.environ.get("AWS_ENDPOINT_URL")
-    region = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+    options = storage_options("spark", uri)
     config = session.sparkContext._jsc.hadoopConfiguration()
-    config.set("fs.s3a.endpoint.region", region)
-    if endpoint:
-        parsed = urlsplit(endpoint)
-        require(parsed.scheme in ("http", "https") and parsed.netloc and parsed.path in ("", "/")
-                and not (parsed.username or parsed.password or parsed.query or parsed.fragment), "invalid AWS_ENDPOINT_URL")
-        config.set("fs.s3a.endpoint", endpoint)
-        config.set("fs.s3a.connection.ssl.enabled", str(parsed.scheme == "https").lower())
-        config.set("fs.s3a.path.style.access", "true")
-    for key, env in (("access.key", "AWS_ACCESS_KEY_ID"), ("secret.key", "AWS_SECRET_ACCESS_KEY"),
-                     ("session.token", "AWS_SESSION_TOKEN")):
-        require(os.environ.get(env) or key == "session.token", "missing AWS credentials")
-        if os.environ.get(env):
-            config.set("fs.s3a." + key, os.environ[env])
-    provider = "TemporaryAWSCredentialsProvider" if os.environ.get("AWS_SESSION_TOKEN") else "SimpleAWSCredentialsProvider"
-    config.set("fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a." + provider)
-    return {"credentials": "AWS environment", "region": region, "endpoint": endpoint,
-            "url_style": "path" if endpoint else "vhost"}, "s3a:" + uri[3:]
+    for key, value in options["options"].items():
+        config.set(key, value)
+    return options["settings"], options["uri"]
 
 
 def failure_status(error):
