@@ -1,5 +1,9 @@
 //! Bounded table declarations. Validation and path resolution finish before snapshot loading.
 
+mod json_schema;
+
+pub(crate) use json_schema::tables_manifest_schema;
+
 use std::{collections::HashSet, path::Path};
 
 use clap::ValueEnum;
@@ -19,7 +23,7 @@ use crate::{
 };
 
 // Even with 63-byte aliases and full u64 versions, provenance fits one 8 KiB completion record.
-const MAX_TABLES: usize = 64;
+pub(crate) const MAX_TABLES: usize = 64;
 
 /// On-disk declarations, never credentials or already loaded snapshots.
 #[derive(Deserialize)]
@@ -52,7 +56,7 @@ struct ManifestAuthorization {
 }
 
 /// Prepares every binding without opening any table, including when a later entry is invalid.
-pub(super) fn read_table_builders(path: &str) -> Result<Vec<(String, DeltaTableBuilder)>, Error> {
+pub(crate) fn read_table_builders(path: &str) -> Result<Vec<(String, DeltaTableBuilder)>, Error> {
     let manifest =
         input::read_json_file::<JsonObject<TablesManifest>>(path, JsonInputKind::Tables)?.0;
     if manifest.format_version != 1 {

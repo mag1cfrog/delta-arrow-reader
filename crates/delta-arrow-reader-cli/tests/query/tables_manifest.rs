@@ -46,7 +46,7 @@ fn copy_directory(source: &Path, destination: &Path) -> TestResult {
 }
 
 #[test]
-fn manifest_joins_use_relative_locations_and_independent_versions() -> TestResult {
+fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -> TestResult {
     let directory = manifest_directory()?;
     for name in ["partitioned", "deletion_vectors"] {
         copy_directory(
@@ -58,10 +58,19 @@ fn manifest_joins_use_relative_locations_and_independent_versions() -> TestResul
         directory.path().join("query.sql"),
         "SELECT o.id, c.id FROM orders o LEFT JOIN customers c ON o.id = c.id WHERE o.id <= 5 ORDER BY o.id",
     )?;
-    let mut manifest = json!({"format_version":1,"tables":[
-        {"alias":"orders","location":"../data/partitioned","table_version":"0"},
-        {"alias":"customers","location":"../data/deletion_vectors"}
-    ]});
+    let discovery = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).env_clear().args([
+        "capabilities",
+        "--schema",
+        "tables",
+    ]))?;
+    assert!(discovery.status.success(), "{discovery:?}");
+    assert!(discovery.stdout.len() <= 2048);
+    let guide: Value = serde_json::from_slice(&discovery.stdout)?;
+    assert!(guide.get("schema").is_none());
+    let mut manifest = guide["example"].clone();
+    assert_eq!(manifest["tables"].as_array().unwrap().len(), 2);
+    manifest["tables"][0]["location"] = json!("../data/partitioned");
+    manifest["tables"][1]["location"] = json!("../data/deletion_vectors");
     let path = directory.path().join("inputs/tables.json");
     for (version, expected) in [
         ("1", vec![Some(1), None, Some(3), Some(4), None]),

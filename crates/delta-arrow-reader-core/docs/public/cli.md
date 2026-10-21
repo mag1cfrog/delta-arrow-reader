@@ -5,6 +5,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 
 | Task | Command or section |
 | --- | --- |
+| Discover commands and argument rules offline | [`dar capabilities`](#discover-installed-commands) |
 | See the table's columns and version | [`dar inspect`](#inspect-a-snapshot) |
 | Save selected rows as Arrow | [`dar scan`](#scan-rows) |
 | Aggregate, group, or sort rows with SQL | [`dar query`](#query-a-snapshot) |
@@ -21,6 +22,176 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 The standalone command is `dar`. A Python wheel installs `delta-arrow-reader`
 instead; substitute that name in the examples. Both accept the same arguments.
 For packages and runtime requirements, see [Installation](installation.md).
+
+## Discover installed commands
+
+```sh
+dar capabilities
+dar capabilities --command query
+dar capabilities --schema predicate
+dar capabilities --schema predicate --detail timestamp_us
+dar capabilities --authorization s3
+dar capabilities --schema completion --full > completion-schema.json
+dar capabilities --all --diagnostics=json > capabilities.json
+```
+
+Start with `dar capabilities` to choose a command. It returns a JSON directory
+of at most 2 KiB, with command names, short descriptions, schema names, and
+shared limitations. Each command's `details` field gives the invocation for
+its usage guide. `schema_command` gives the invocation for a format guide;
+replace its `NAME` argument with one of the listed names. `all_command` gives
+the invocation for the complete inventory. These invocations are arrays of
+command-line arguments, starting with the installed executable's name.
+
+| Invocation | JSON `kind` | Contents |
+| --- | --- | --- |
+| `dar capabilities` | `capability_index` | Short directory and commands for loading details. |
+| `dar capabilities --command query` | `command_guide` | Query's help, argument conflicts, formats, limits, and routes to related inputs and authorization. |
+| `dar capabilities --authorization s3` | `authorization_guide` | Canonical credential inputs and lookup rules for one provider. |
+| `dar capabilities --schema NAME` | `schema_guide` | One example, shared constraints, and available fields or types. |
+| `dar capabilities --schema NAME --detail FIELD_OR_TYPE` | `schema_detail` | One field, predicate operator, or scalar type from that guide. |
+| `dar capabilities --command query --full` | `command_capabilities` | Complete query argument metadata, authorization, formats, schemas, and limits. |
+| `dar capabilities --all` | `capabilities` | Complete command tree and support information. |
+| `dar capabilities --schema NAME --full` | `input_schema` or `output_schema` | One complete JSON Schema validation document. |
+
+All responses have `format_version: 1` and `cli_version`. `--command`, `--schema`,
+`--authorization`, and `--all` are mutually exclusive. `--full` requires either
+`--command` or `--schema`. `--detail` requires `--schema` and conflicts with
+`--full`. Command names must match an installed top-level command. Unsupported
+names or conflicting selectors fail with status 2.
+For text help, use `dar query --help` or the corresponding command's help.
+
+For example, after finding `query` in the directory, run
+`dar capabilities --command query`. Its description identifies positional alias
+`t`, named tables through `--tables-file`, the `--sql-file` input, and the
+requirement to redirect Arrow output. Fetch
+`--schema storage-options` if a storage-options file is needed, then follow
+`authorization_command` for the selected provider. Local paths need no
+credentials. To recover these details later, repeat the same discovery commands;
+discovery does not depend on previous invocations.
+
+An input schema guide's `example` can be used as the file contents, subject to the
+listed constraints. For predicates, the example's column and literal type must
+match the table. `fields`, `operators`, and `scalar_types` list names accepted by
+`detail_command`; replace its `NAME` argument with the item needed. For example,
+`--schema execution-options --detail prefetch_files_per_partition` gives one
+setting's default and bounds. `--schema predicate --detail timestamp_us` gives
+the timestamp unit, integer encoding, and required timezone field.
+For a join, `--schema tables` gives a two-table example.
+`--schema tables --detail 'tables[].authorization.source'` lists the installed
+credential sources, and `--detail 'tables[].table_version'` explains version
+selection. Nested field names use the spelling listed in `fields`.
+
+These guides describe how to use a format. Recursive predicate references lead
+to another operator or scalar choice through `detail_command`. Use a guide's
+`full_command` when a JSON Schema validator or a metadata consumer needs the
+complete definition.
+
+In full command metadata and the full inventory, `command` contains the selected
+command or complete command tree, and each argument's required status, value
+count, defaults, allowed choices, repeatability, and conflicts. For example,
+`scan --column` is repeatable and conflicts with `--no-columns`.
+`stdout_formats` identifies result formats; `diagnostics` describes stderr
+formats. `input_schemas` lists the applicable schema names and their file
+arguments. `output_schemas` lists result schema names and their streams. The
+`inspect` entry in `stdout_formats` and the JSON entry in `diagnostics` identify which
+output schemas apply.
+
+In full metadata, `authorization` describes local access, direct-storage sources
+and configuration files, and Databricks profiles, including the commands that
+accept each. Direct storage supports explicit source selection per command or
+manifest table. Its provider guide lists supported sources, credential inputs,
+and the backend lookup used when source selection is omitted. Discovery
+does not inspect the caller's credentials or check provider availability.
+The provider guide's `full_command` returns the full inventory, including
+credential option aliases.
+
+`read_support` describes each command's scope and limits. For example, `query`
+registers positional `TABLE` as `t`, or up to 64 named snapshots from a manifest.
+UC targets are not supported for SQL. Its memory ceiling applies to DataFusion's
+execution pool, and disk spill is disabled. The SQL examples that use `id`
+assume the selected table has that column. A null limit or deadline means that
+the command has no ceiling for that resource; it does not mean zero.
+
+An empty `possible_values` list means the argument has no enumerated choices;
+it does not mean every value is valid. A null `max_values` means there is no
+fixed upper count for that argument. Descriptions contain additional input rules.
+
+Pass a name to `--schema` with `--full` to return an object with
+`kind: "input_schema"` or `kind: "output_schema"`, `format_version: 1`,
+`cli_version`, `name`, and `schema`.
+The `schema` field contains a [JSON Schema draft 2020-12](https://json-schema.org/draft/2020-12/json-schema-validation)
+document with examples.
+Extract that field when passing it to a JSON Schema validator.
+Input schema responses also include `argument` and `parser_constraints`:
+
+| Schema name | File argument | Contents |
+| --- | --- | --- |
+| `storage-options` | `--storage-options-file` | A map of option names to string values. The selected backend checks their meanings. |
+| `execution-options` | `--execution-options-file` | Optional scan settings with their defaults, accepted nulls, and integer bounds for this build. |
+| `predicate` | `--predicate-file` | Row-filter operators and typed literals, including nested boolean groups. |
+| `tables` | `--tables-file` | Named snapshots, requested versions, and per-table authorization references. |
+
+Schema validation checks the JSON structure. `parser_constraints` records the
+additional file and value rules: files may contain at most 1 MiB, object keys
+must be unique, and integer fields reject fractions, exponents, and negative
+zero.
+Tables also require unique, non-reserved aliases, versions in the u64 range,
+valid locations, and compatible authorization references. Those checks run
+before table IO; JSON Schema validation alone does not replace them.
+
+Predicate trees allow 1,024 nodes and 32 levels, counting the root.
+Integer strings must fit their declared width, floats must remain finite after
+conversion, and fixed-size binary lengths must match. Predicate column and type
+checks still require a table. These rules also apply to the published examples;
+for instance, the example using `id` as `int32` requires an `Int32` column.
+
+Output schema responses include `stream`, identifying where the described
+result appears. The schema response itself always goes to stdout.
+
+| Schema name | Result stream | Contents |
+| --- | --- | --- |
+| `inspection` | stdout | The full `inspect` JSON, including the snapshot version and Arrow schema. |
+| `diagnostic` | stderr | A terminal failure record with `--diagnostics=json`, including optional correction fields. |
+| `completion` | stderr | A terminal success record with `--diagnostics=json`, including snapshot bindings and output counts. |
+
+Output schemas allow additional object fields. Version and count strings use
+unsigned decimal notation; consumers must check the u64 range when converting
+them. The inspection schema checks the Arrow schema's outer fields, metadata,
+and type-description shapes. Use Arrow's Rust Serde decoder to validate the nested
+`data_type` encoding. `scan` and `query` return Arrow IPC streams, whose schema
+is carried in the stream itself.
+
+For example, save `dar capabilities --schema completion --full` and validate the
+command's stderr record against its `schema` field. Also check exit status 0
+and decode stdout: a matching completion record alone does not establish that
+the result was received intact.
+
+Discovery needs no table, input file, credentials, Databricks executable, or
+network access. The directory, schema guides, schema details, and authorization
+guides are limited to 2 KiB each; command guides are limited to 4 KiB. Explicit
+full command metadata, full schemas, and the full inventory are limited to 1 MiB.
+Limits count UTF-8 bytes, including JSON framing and the final newline. An oversized
+response fails before writing stdout; discovery never truncates JSON.
+The command has a five-second deadline, including stdout, log setup, and
+completion reporting on stderr.
+A closed stdout pipe fails with status 3; an expired deadline fails with
+status 1. Failure reporting has at most one additional second before exit,
+including when stderr is blocked. `limits.failure_diagnostic_timeout_ms`
+reports that allowance. Runtime initialization and argument errors use the same
+reporting allowance. With `--diagnostics=json`, success produces a completion
+record on stderr, and failure produces a diagnostic when stderr can accept it.
+In this mode, a closed stderr pipe also fails with status 3.
+Use a separate stderr pipe for each command. If the pipe is full, discovery
+waits for capacity before publishing completion; cancellation or timeout during
+that wait produces a failure instead.
+Cancellation keeps status 130 for SIGINT and 143 for Unix SIGTERM.
+
+Consumers must check `format_version` and ignore additional object fields.
+Changes to existing field types or meanings require a new format version.
+Schema names describe inputs and results of that installed CLI version. Unsupported
+names are argument errors. Input files retain their existing formats: do not add
+the discovery envelope or `format_version` to them.
 
 ## Inspect a snapshot
 
@@ -494,13 +665,14 @@ to select an S3 region while using explicitly selected environment credentials:
 {"aws_region":"us-west-2"}
 ```
 
-Then pass the file when opening the table:
+Add credentials or provider settings to the file when needed, then pass its
+path when opening the table:
 
 ```sh
 dar inspect --auth-source env --storage-options-file storage.json s3://example-bucket/orders
 ```
 
-Use the same option with `dar scan`. The
+Use the same option with `dar scan` or `dar query`. The
 [storage guide](configuration.md#read-from-s3) explains table URLs and credentials,
 including [Azure Blob](configuration.md#read-from-azure). Use its storage keys as JSON
 keys here. Keep files containing credentials out of source control.

@@ -9,8 +9,8 @@ use tokio::{
 
 use super::Error;
 
-const MAX_COMMAND_OUTPUT_BYTES: u64 = 1024 * 1024;
-const DATABRICKS_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+pub(crate) const MAX_COMMAND_OUTPUT_BYTES: u64 = 1024 * 1024;
+pub(crate) const DATABRICKS_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Fetches metadata including the table-kind manifest used to check direct-read support.
 pub(super) async fn get_table_metadata(

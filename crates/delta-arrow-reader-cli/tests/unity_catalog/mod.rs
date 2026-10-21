@@ -558,6 +558,30 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
 fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResult {
     let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
     for args in [
+        vec!["capabilities"],
+        vec!["capabilities", "--all"],
+        vec!["capabilities", "--command", "inspect"],
+        vec!["capabilities", "--command", "scan"],
+        vec!["capabilities", "--command", "query"],
+        vec!["capabilities", "--command", "capabilities"],
+        vec!["capabilities", "--command", "help"],
+        vec!["capabilities", "--command", "scan", "--full"],
+        vec!["capabilities", "--authorization", "unity-catalog"],
+        vec!["capabilities", "--authorization", "s3"],
+        vec!["capabilities", "--schema", "storage-options"],
+        vec!["capabilities", "--schema", "execution-options"],
+        vec!["capabilities", "--schema", "predicate"],
+        vec!["capabilities", "--schema", "inspection"],
+        vec!["capabilities", "--schema", "diagnostic"],
+        vec!["capabilities", "--schema", "completion"],
+        vec!["capabilities", "--schema", "predicate", "--full"],
+        vec!["capabilities", "--schema", "predicate", "--detail", "int64"],
+    ] {
+        let output = run_with_timeout(&mut fixture.command(&args))?;
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+    }
+    for args in [
         vec!["--help"],
         vec!["--version"],
         vec!["inspect", "--help"],

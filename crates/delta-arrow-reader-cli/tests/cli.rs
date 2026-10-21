@@ -2,6 +2,7 @@
 
 #![allow(clippy::panic, clippy::unwrap_used)]
 
+mod capabilities;
 mod diagnostics;
 #[cfg(unix)]
 mod direct_credentials;
@@ -66,6 +67,7 @@ fn executable_names_preserve_help_version_and_redacted_errors()
         for (args, subcommand) in [
             (vec!["--help"], ""),
             (vec!["-h"], ""),
+            (vec!["capabilities", "--help"], " capabilities"),
             (vec!["inspect", "--help"], " inspect"),
             (vec!["help", "inspect"], " inspect"),
             (vec!["scan", "--help"], " scan"),
@@ -87,6 +89,16 @@ fn executable_names_preserve_help_version_and_redacted_errors()
             assert!(help.contains(&format!("Usage: {command_name}{subcommand} ")));
             assert!(!help.contains("secret"), "{help}");
         }
+        let discovery = run_with_timeout(Command::new(&executable).arg("capabilities"))?;
+        assert!(discovery.status.success(), "{discovery:?}");
+        assert!(discovery.stdout.len() <= 2048);
+        let index: Value = serde_json::from_slice(&discovery.stdout)?;
+        for command in index["commands"].as_array().unwrap() {
+            assert_eq!(command["details"][0], command_name);
+        }
+        assert_eq!(index["schema_command"][0], command_name);
+        assert_eq!(index["all_command"][0], command_name);
+        assert!(!String::from_utf8_lossy(&discovery.stdout).contains("secret"));
         let output = run_with_timeout(
             Command::new(&executable)
                 .current_dir(directory.path())
@@ -355,6 +367,7 @@ fn external_writer_schemas_round_trip() -> Result<(), Box<dyn std::error::Error>
         );
         assert!(output.stderr.is_empty());
         let value: Value = serde_json::from_slice(&output.stdout)?;
+        capabilities::assert_output_matches_schema("inspection", &value);
         assert_eq!(value["table_version"], version);
         let schema: Schema = serde_json::from_value(value["schema"].clone())?;
         let expected =

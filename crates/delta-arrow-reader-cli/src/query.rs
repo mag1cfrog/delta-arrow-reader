@@ -1,6 +1,6 @@
 //! Read-only SQL admission and planning over named, immutable Core snapshots.
 
-mod tables_manifest;
+pub(crate) mod tables_manifest;
 
 use std::{fmt, fs::File, io::Read, num::NonZeroUsize, ops::ControlFlow, sync::Arc};
 
@@ -36,8 +36,8 @@ use crate::{
     diagnostics::ErrorClassification, parse_unsigned_decimal, table_input::TableOptions,
 };
 
-const MAX_SQL_BYTES: u64 = 64 * 1024;
-const SQL_RECURSION_LIMIT: usize = 128;
+pub(crate) const MAX_SQL_BYTES: u64 = 64 * 1024;
+pub(crate) const SQL_RECURSION_LIMIT: usize = 128;
 
 /// Selects positional table t or a manifest of named tables, with result resource ceilings.
 #[derive(Args)]

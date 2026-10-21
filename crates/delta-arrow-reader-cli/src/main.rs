@@ -3,6 +3,7 @@
 //! `inspect` returns a snapshot's version and Arrow schema as JSON. `scan` and
 //! `query` return rows as Arrow IPC streams. Command results use stdout; diagnostics and
 //! completion records use stderr.
+//! `capabilities` describes the installed commands without opening a table.
 //!
 //! For a Delta table at `./table` with an `id` column:
 //!
@@ -18,6 +19,7 @@
 
 mod arrow_output;
 mod azure_sas;
+mod capabilities;
 mod diagnostics;
 mod direct_credentials;
 mod input;
@@ -58,6 +60,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// List installed commands, with details and JSON schemas available on request.
+    ///
+    /// Offline; no table, input file, or authorization is loaded.
+    Capabilities(capabilities::CapabilitiesArgs),
     /// Print one Delta snapshot's version and full Arrow schema as JSON.
     ///
     /// Only snapshot metadata is loaded; data files are not read.
@@ -549,50 +555,14 @@ fn build_completion_record(
     record
 }
 
-fn run() -> Result<Value, Error> {
-    #[cfg(target_os = "linux")]
-    signals::install_container_signal_handlers().context(RuntimeSnafu {
-        reason: "signal_handler_install_failed",
-    })?;
-
-    let command = match Cli::try_parse() {
-        Err(error)
-            if matches!(
-                error.kind(),
-                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
-            ) =>
-        {
-            let output = error.to_string();
-            write_stdout(output.as_bytes())?;
-            return Ok(build_completion_record(
-                if error.kind() == ErrorKind::DisplayHelp {
-                    "help"
-                } else {
-                    "version"
-                },
-                None,
-                StdoutStats {
-                    bytes_written: output.len() as u64,
-                    ..Default::default()
-                },
-                None,
-            ));
-        }
-        // Clap's other diagnostics may contain argument values. Emit our redacted error.
-        Err(error) => {
-            return ArgumentSnafu {
-                kind: error.kind(),
-                correction: InputCorrection::from_clap(&error),
-            }
-            .fail();
-        }
-        Ok(cli) => cli.command,
-    };
-
+fn run_table_command(command: Command) -> Result<Value, Error> {
     if matches!(command, Command::Scan { .. } | Command::Query(_)) {
         ensure!(!io::stdout().is_terminal(), TerminalOutputSnafu);
     }
     let uc_target = match &command {
+        Command::Capabilities(_) => {
+            unreachable!("main handles discovery and its terminal reporting separately")
+        }
         Command::Inspect {
             table,
             databricks_profile,
@@ -637,6 +607,7 @@ fn run() -> Result<Value, Error> {
         _ => None,
     };
     let work: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
+        Command::Capabilities(_) => unreachable!("capabilities returned before table loading"),
         Command::Query(args) => args.prepare_execution()?,
         Command::Inspect { table, .. } => async move {
             let (table, _authorized_access) = table.load_table(uc_target).await?;
@@ -762,6 +733,24 @@ fn write_stdout(output: &[u8]) -> Result<(), Error> {
         .context(OutputSnafu)
 }
 
+fn write_help_or_version(error: clap::Error) -> Result<Value, Error> {
+    let output = error.to_string();
+    write_stdout(output.as_bytes())?;
+    Ok(build_completion_record(
+        if error.kind() == ErrorKind::DisplayHelp {
+            "help"
+        } else {
+            "version"
+        },
+        None,
+        StdoutStats {
+            bytes_written: output.len() as u64,
+            ..Default::default()
+        },
+        None,
+    ))
+}
+
 fn install_panic_hook(diagnostic_format: DiagnosticFormat) {
     // Kernel workers can panic without waking their caller. Report synchronously
     // and exit without unwinding into a blocking join; never format the payload.
@@ -776,17 +765,47 @@ fn install_panic_hook(diagnostic_format: DiagnosticFormat) {
 
 fn main() -> ExitCode {
     let diagnostic_format = DiagnosticFormat::from_cli_args();
-    diagnostics::init_tracing(diagnostic_format);
     install_panic_hook(diagnostic_format);
-    match run() {
+    #[cfg(target_os = "linux")]
+    if let Err(error) = signals::install_container_signal_handlers().context(RuntimeSnafu {
+        reason: "signal_handler_install_failed",
+    }) {
+        return diagnostic_format.report_failure_with_timeout(error);
+    }
+    let result = match Cli::try_parse() {
+        Ok(Cli {
+            command: Command::Capabilities(options),
+            ..
+        }) => {
+            return capabilities::run_capabilities(options, diagnostic_format);
+        }
+        Ok(cli) => {
+            diagnostics::init_tracing(diagnostic_format);
+            run_table_command(cli.command)
+        }
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            diagnostics::init_tracing(diagnostic_format);
+            write_help_or_version(error)
+        }
+        Err(error) => {
+            // Clap's diagnostics may contain argument values; report only safe fields.
+            Err(Error::Argument {
+                kind: error.kind(),
+                correction: InputCorrection::from_clap(&error),
+            })
+        }
+    };
+    match result {
         Ok(completion_record) => {
             diagnostic_format.write_terminal_record(completion_record);
             ExitCode::SUCCESS
         }
-        Err(error) => {
-            diagnostic_format.report_failure(&error);
-            error.exit_code()
-        }
+        Err(error) => diagnostic_format.report_failure_with_timeout(error),
     }
 }
 
@@ -853,6 +872,8 @@ mod tests {
         assert_eq!(encoded.last(), Some(&b'\n'));
         assert_eq!(encoded.iter().filter(|&&byte| byte == b'\n').count(), 1);
         let actual: Value = serde_json::from_slice(&encoded).unwrap();
+        let schema_document = capabilities::DiscoverySchema::Inspection.schema_document();
+        jsonschema::validate(&schema_document["schema"], &actual).unwrap();
         // This literal freezes the upstream Arrow encoding within format version 1.
         assert_eq!(
             actual,
