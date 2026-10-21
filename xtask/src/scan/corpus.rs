@@ -7,7 +7,7 @@ use arrow_schema::{DataType, Field, Schema};
 use serde_json::json;
 use snafu::ResultExt;
 
-use super::ipc::{IpcTable, check_scan_output};
+use super::ipc::{IpcTable, check_arrow_output};
 use crate::{
     command::output_with_timeout,
     error::{ArrowSnafu, FileSnafu, Result},
@@ -36,7 +36,7 @@ struct CorpusFixture<'a> {
 
 impl CorpusFixture<'_> {
     fn scan(&self, command: &mut Command) -> Result<IpcTable> {
-        check_scan_output(&output_with_timeout(command, Duration::from_secs(30))?)
+        check_arrow_output(&output_with_timeout(command, Duration::from_secs(30))?)
     }
 
     fn check_spark_fixtures(&self) -> Result<()> {

@@ -14,18 +14,18 @@ pub(crate) struct IpcTable {
     pub batches: Vec<RecordBatch>,
 }
 
-pub(crate) fn check_scan_output(output: &Output) -> Result<IpcTable> {
+pub(crate) fn check_arrow_output(output: &Output) -> Result<IpcTable> {
     ensure!(
         output.status.success() && output.stderr.is_empty(),
         InvalidInputSnafu {
             message: format!(
-                "scan failed: {}; stderr={}",
+                "Arrow output command failed: {}; stderr={}",
                 output.status,
                 String::from_utf8_lossy(&output.stderr)
             )
         }
     );
-    IpcTable::read_stream(&output.stdout, Path::new("scan stdout"))
+    IpcTable::read_stream(&output.stdout, Path::new("Arrow stdout"))
 }
 
 impl IpcTable {
@@ -44,7 +44,7 @@ impl IpcTable {
         ensure!(
             payload.ends_with(&IPC_END_MARKER),
             InvalidInputSnafu {
-                message: "scan is missing its IPC end marker"
+                message: "Arrow stream is missing its IPC end marker"
             }
         );
         let mut cursor = Cursor::new(payload);
@@ -58,7 +58,7 @@ impl IpcTable {
         ensure!(
             cursor.position() == payload.len() as u64,
             InvalidInputSnafu {
-                message: "unexpected data after the scan IPC end marker"
+                message: "unexpected data after the Arrow IPC end marker"
             }
         );
         Ok(table)
@@ -84,7 +84,7 @@ impl IpcTable {
         ensure!(
             fields_match_without_metadata(self.schema.fields(), expected.schema.fields()),
             InvalidInputSnafu {
-                message: format!("scan schema differs from the fixture: {:?}", self.schema)
+                message: format!("Arrow schema differs from the fixture: {:?}", self.schema)
             }
         );
         let expected_rows = limit.map_or(expected.row_count(), |limit| {
@@ -93,10 +93,7 @@ impl IpcTable {
         ensure!(
             self.row_count() == expected_rows,
             InvalidInputSnafu {
-                message: format!(
-                    "expected {expected_rows} scan rows, got {}",
-                    self.row_count()
-                )
+                message: format!("expected {expected_rows} rows, got {}", self.row_count())
             }
         );
         if self.schema.fields().is_empty() {
@@ -122,7 +119,7 @@ impl IpcTable {
                     });
                 let Some(matched) = matched else {
                     return InvalidInputSnafu {
-                        message: "scan returned a row absent from the fixture or repeated it too often",
+                        message: "Arrow output contains a row absent from the fixture or repeated it too often",
                     }.fail();
                 };
                 unmatched.swap_remove(matched);
