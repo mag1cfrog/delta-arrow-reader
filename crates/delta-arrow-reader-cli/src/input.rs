@@ -79,7 +79,7 @@ impl JsonInputKind {
                 "Use only documented execution-option fields, once each, with their declared types."
             }
             Self::Tables => {
-                "Use format_version 1 and a tables array; each object has alias, location, and optionally a decimal-string table_version. Do not repeat fields."
+                "Use format_version 1 and a tables array; each object has alias, location, and optional table_version and authorization. Authorization requires a source name and may reference a storage_options_file; inline credentials are invalid. Do not repeat fields."
             }
         }
     }
@@ -124,6 +124,15 @@ pub(crate) fn parse_json<T: DeserializeOwned>(
             correction,
         }
     })
+}
+
+// The outer Option records presence, keeping omission separate from explicit null.
+pub(crate) fn deserialize_present_field<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
 }
 
 // Serde also accepts arrays for structs and tagged enums; require objects.

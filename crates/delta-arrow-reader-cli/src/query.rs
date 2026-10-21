@@ -81,7 +81,7 @@ impl QueryArgs {
             reject_unity_catalog_query(location)?;
             vec![(
                 "t".to_owned(),
-                self.table_options.direct_table_builder(location)?,
+                self.table_options.direct_table_builder(location, None)?,
             )]
         };
         let sql_query = ReadOnlySqlQuery::read_file(&self.sql_file)?;

@@ -2,6 +2,7 @@
 
 use std::{collections::HashSet, path::Path};
 
+use clap::ValueEnum;
 use datafusion::sql::sqlparser::keywords::ALL_KEYWORDS;
 use delta_arrow_reader::DeltaTableBuilder;
 use object_store::ObjectStoreScheme;
@@ -12,7 +13,7 @@ use url::Url;
 use crate::{
     Error, InputIoSnafu,
     diagnostics::InputCorrection,
-    direct_credentials::validate_table_url,
+    direct_credentials::{CredentialSource, validate_table_url},
     input::{self, JsonInputKind, JsonObject},
     table_input::TableOptions,
 };
@@ -36,6 +37,18 @@ struct ManifestTable {
     location: String,
     #[serde(default, deserialize_with = "deserialize_table_version")]
     table_version: Option<u64>,
+    #[serde(default, deserialize_with = "input::deserialize_present_field")]
+    authorization: Option<JsonObject<ManifestAuthorization>>,
+}
+
+/// Selects the existing credential provider using references, never credential values in the manifest.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ManifestAuthorization {
+    #[serde(deserialize_with = "deserialize_credential_source")]
+    source: CredentialSource,
+    #[serde(default, deserialize_with = "input::deserialize_present_field")]
+    storage_options_file: Option<String>,
 }
 
 /// Prepares every binding without opening any table, including when a later entry is invalid.
@@ -112,14 +125,58 @@ pub(super) fn read_table_builders(path: &str) -> Result<Vec<(String, DeltaTableB
                 ));
             }
             let location = resolve_location(&table.location, directory, index)?;
-            let builder = TableOptions {
+            let mut options = TableOptions {
                 table_version: table.table_version,
                 ..Default::default()
+            };
+            if let Some(JsonObject(authorization)) = table.authorization {
+                options.auth_source = Some(authorization.source);
+                options.storage_options_file = authorization
+                    .storage_options_file
+                    .map(|path| resolve_options_file(&path, directory, index))
+                    .transpose()?;
             }
-            .direct_table_builder(&location)?;
+            let credential_file_directory = options
+                .storage_options_file
+                .as_deref()
+                .and_then(|path| Path::new(path).parent());
+            let builder = options.direct_table_builder(&location, credential_file_directory)?;
             Ok((table.alias, builder))
         })
         .collect()
+}
+
+fn resolve_options_file(path: &str, directory: &Path, index: usize) -> Result<String, Error> {
+    let invalid_path = || {
+        manifest_error(
+            &format!("/tables/{index}/authorization/storage_options_file"),
+            "invalid_authorization_reference",
+            "a nonempty UTF-8 local file path without control characters",
+        )
+    };
+    if path.trim().is_empty()
+        || path.chars().any(char::is_control)
+        || (!Path::new(path).is_absolute()
+            && !matches!(
+                Url::parse(path),
+                Err(url::ParseError::RelativeUrlWithoutBase)
+            ))
+    {
+        return Err(invalid_path());
+    }
+    directory
+        .join(path)
+        .into_os_string()
+        .into_string()
+        .map_err(|_| invalid_path())
+}
+
+fn deserialize_credential_source<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<CredentialSource, D::Error> {
+    let source = String::deserialize(deserializer)?;
+    CredentialSource::from_str(&source, false)
+        .map_err(|_| de::Error::custom("an installed --auth-source name"))
 }
 
 fn resolve_location(location: &str, directory: &Path, index: usize) -> Result<String, Error> {

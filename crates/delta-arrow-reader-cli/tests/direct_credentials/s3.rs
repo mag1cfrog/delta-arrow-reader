@@ -13,7 +13,7 @@ use super::{
 };
 
 impl DirectStorageFixture {
-    fn assert_signed_s3_requests(
+    pub(super) fn assert_signed_s3_requests(
         &self,
         access_key_id: &str,
         secret_access_key: &str,

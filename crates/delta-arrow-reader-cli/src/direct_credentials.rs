@@ -1,10 +1,11 @@
 //! Explicit credential selection for direct cloud reads.
 
 mod azure_blob;
+mod credential_file_paths;
 mod gcs;
 mod s3;
 
-use std::{env, str::FromStr};
+use std::{env, path::Path, str::FromStr};
 
 use clap::ValueEnum;
 use delta_arrow_reader::{DeltaStorageOptions, DeltaTableBuilder};
@@ -37,7 +38,8 @@ impl CredentialSource {
         self,
         builder: DeltaTableBuilder,
         location: &str,
-        options: DeltaStorageOptions,
+        mut options: DeltaStorageOptions,
+        credential_file_directory: Option<&Path>,
     ) -> Result<DeltaTableBuilder, Error> {
         let unsupported_storage = || Error::StorageAuthorization {
             reason: "auth_source_unsupported_storage",
@@ -56,6 +58,9 @@ impl CredentialSource {
             }
         );
         validate_table_url(&url, &scheme)?;
+        if let Some(directory) = credential_file_directory {
+            credential_file_paths::resolve_relative_paths(&mut options, &scheme, directory)?;
+        }
         match (scheme, self) {
             (
                 ObjectStoreScheme::AmazonS3,

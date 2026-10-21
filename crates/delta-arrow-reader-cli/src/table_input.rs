@@ -1,5 +1,7 @@
 //! Shared snapshot selection and authorization for a single table location.
 
+use std::path::Path;
+
 use clap::Args;
 use delta_arrow_reader::{
     DeltaSnapshotSelection, DeltaStorageOptions, DeltaTable, DeltaTableBuilder, WarmupMode,
@@ -66,14 +68,24 @@ impl TableOptions {
     }
 
     /// Validates explicit credentials without loading the snapshot or reading data files.
-    pub(crate) fn direct_table_builder(&self, location: &str) -> Result<DeltaTableBuilder, Error> {
+    /// A supplied directory resolves credential paths in the options file; environment paths stay cwd-relative.
+    pub(crate) fn direct_table_builder(
+        &self,
+        location: &str,
+        credential_file_directory: Option<&Path>,
+    ) -> Result<DeltaTableBuilder, Error> {
         let options = self.read_storage_options()?;
         // Each command plans its own reads after the snapshot is loaded.
         let builder = DeltaTableBuilder::new(location)
             .with_warmup(WarmupMode::None)
             .with_snapshot_selection(self.snapshot_selection());
         match self.auth_source {
-            Some(source) => source.configure_table_credentials(builder, location, options),
+            Some(source) => source.configure_table_credentials(
+                builder,
+                location,
+                options,
+                credential_file_directory,
+            ),
             None => Ok(builder.with_storage_options(options)),
         }
     }
@@ -103,7 +115,7 @@ impl TableArgs {
             None => {
                 let table = self
                     .options
-                    .direct_table_builder(&self.table)?
+                    .direct_table_builder(&self.table, None)?
                     .load_table()
                     .await
                     .context(ReaderSnafu)?;

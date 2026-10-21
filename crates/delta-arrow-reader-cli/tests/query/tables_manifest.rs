@@ -242,6 +242,55 @@ fn manifest_conflicts_are_rejected_before_reading_input_files() -> TestResult {
 }
 
 #[test]
+fn authorization_requires_a_named_source_and_file_references() -> TestResult {
+    let directory = manifest_directory()?;
+    for authorization in [
+        json!(null),
+        json!([]),
+        json!({}),
+        json!({"source":null}),
+        json!({"source":{"json":null}}),
+        json!({"source":"secret-unknown-source"}),
+        json!({"source":"JSON"}),
+        json!({"source":"env","storage_options_file":null}),
+        json!({"source":"json","storage_options_file":{"secret-key":"secret-value"}}),
+        json!({"source":"json","aws_access_key_id":"secret-key"}),
+        json!({"source":"env","env_file":"secret-file.env"}),
+    ] {
+        assert_manifest_rejected(
+            directory.path(),
+            json!({"format_version":1,"tables":[
+                {"alias":"orders","location":"secret-missing-table"},
+                {"alias":"customers","location":"s3://bucket/table","authorization":authorization}
+            ]})
+            .to_string(),
+        )?;
+    }
+    assert_manifest_rejected(
+        directory.path(),
+        r#"{"format_version":1,"tables":[
+        {"alias":"orders","location":"s3://bucket/table","authorization":{"source":"json","source":"env"}}
+    ]}"#,
+    )?;
+    for path in [
+        "",
+        " ",
+        "secret\0file",
+        "https://secret.example/options.json",
+    ] {
+        let record = assert_manifest_rejected(directory.path(), json!({"format_version":1,"tables":[
+            {"alias":"orders","location":"s3://bucket/table","authorization":{"source":"json","storage_options_file":path}}
+        ]}).to_string())?;
+        assert_eq!(record["reason"], "invalid_authorization_reference");
+        assert_eq!(
+            record["field_path"],
+            "/tables/0/authorization/storage_options_file"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn manifest_table_count_keeps_completion_records_bounded() -> TestResult {
     let directory = manifest_directory()?;
     let tables: Vec<_> = (0..64)

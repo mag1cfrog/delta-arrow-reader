@@ -319,6 +319,9 @@ The complete manifest is validated before any table is opened.
 | `tables[].alias` | Unique name matching `[a-z][a-z0-9_]{0,62}` |
 | `tables[].location` | Nonempty local path or direct storage URL, without control characters or embedded credentials |
 | `tables[].table_version` | Optional decimal string from `"0"` to `"18446744073709551615"`; omit to select latest |
+| `tables[].authorization` | Optional object selecting one explicit credential source |
+| `tables[].authorization.source` | Required when `authorization` is present; an installed `--auth-source` name |
+| `tables[].authorization.storage_options_file` | Local JSON storage-options file reference; required for source `json`, optional for other sources |
 
 The file is limited to 1 MiB. Unknown and repeated fields are errors. Versions
 must use canonical digits without signs or leading zeros; JSON numbers and
@@ -328,8 +331,39 @@ must use canonical digits without signs or leading zeros; JSON numbers and
 Aliases cannot be `t`, `datafusion`, `public`, `information_schema`, `pg_catalog`,
 `system`, or a SQL keyword recognized by the parser. URLs cannot contain a
 password, query string, or fragment. Azure Blob's `container@account` URL form
-is accepted. Each table uses default storage authentication; manifest
-authorization references are not yet supported.
+is accepted. Omitting `authorization` uses default storage authentication.
+An explicit authorization must be an object; `null` is invalid.
+
+</details>
+
+<details markdown="1">
+<summary>Per-table authorization and credential file paths</summary>
+
+Each table can select a separate source and storage-options file. For example,
+this entry uses S3 credentials from a referenced JSON file:
+
+```json
+{"alias":"orders","location":"s3://example-bucket/orders",
+ "authorization":{"source":"json","storage_options_file":"./credentials/orders.json"}}
+```
+
+The available sources and their provider restrictions are the same as
+[`--auth-source`](#explicit-credential-sources): `json`, `env`, `aws-web-identity`,
+`aws-container`, `azure-workload-identity`, and `azure-managed-identity`.
+The manifest accepts references only; put credential values in the selected
+storage-options file or inherited environment. `env_file` references are not
+yet supported.
+
+`storage_options_file` is relative to the manifest directory. Credential file
+paths inside that JSON, such as `google_application_credentials` or
+`aws_web_identity_token_file`, are relative to the options file's directory.
+Absolute paths stay absolute. Paths inherited from environment variables use
+the process working directory, as they do for positional table commands.
+
+The CLI reads every referenced options file before loading any table. Each
+binding retains its selected provider; changing an options file during the
+query cannot switch its identity. Native providers can still renew credentials
+and reread rotating identity-token files under their existing rules.
 
 </details>
 
