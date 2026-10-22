@@ -333,9 +333,8 @@ fn tooling_changes_run_separate_required_checks() -> Result<()> {
         jobs["changes"]["outputs"]["tooling"],
         "${{ steps.filter.outputs.tooling }}"
     );
-    for job in ["tooling-checks", "uc-validation-tests"] {
+    for job in ["tooling-checks", "platform-tests"] {
         assert_eq!(jobs[job]["needs"], "changes");
-        assert_eq!(jobs[job]["if"], "needs.changes.outputs.tooling == 'true'");
         assert!(
             jobs["ci"]["needs"]
                 .as_array()
@@ -343,6 +342,44 @@ fn tooling_changes_run_separate_required_checks() -> Result<()> {
                 .contains(&json!(job))
         );
     }
+    assert_eq!(
+        jobs["tooling-checks"]["if"],
+        "needs.changes.outputs.tooling == 'true'"
+    );
+    let platform = &jobs["platform-tests"];
+    let condition = platform["if"]
+        .as_str()
+        .unwrap()
+        .replace("needs.changes.outputs.code", "\"$CODE\"")
+        .replace("needs.changes.outputs.tooling", "\"$TOOLING\"");
+    for code in ["true", "false"] {
+        for tooling in ["true", "false"] {
+            let output = Command::new("bash")
+                .args(["-ec", &format!("[[ {condition} ]]")])
+                .env("CODE", code)
+                .env("TOOLING", tooling)
+                .output()?;
+            assert_eq!(output.status.success(), code == "true" || tooling == "true");
+        }
+    }
+    let platform_steps = platform["steps"].as_array().unwrap();
+    let core_test = platform_steps
+        .iter()
+        .find(|step| step["name"] == "Test core")
+        .unwrap();
+    assert_eq!(core_test["if"], "needs.changes.outputs.code == 'true'");
+    let platform_uc = platform_steps
+        .iter()
+        .find(|step| step["name"] == "Test offline Unity Catalog validation")
+        .unwrap();
+    assert_eq!(platform_uc["if"], "needs.changes.outputs.tooling == 'true'");
+    let linux_uc = jobs["tooling-checks"]["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|step| step["name"] == "Test offline Unity Catalog validation")
+        .unwrap();
+    assert_eq!(platform_uc["run"], linux_uc["run"]);
     Ok(())
 }
 
@@ -707,10 +744,10 @@ fn summary_requires_benchmarks_independently_of_core_checks() -> Result<()> {
 }
 
 #[test]
-fn summary_requires_tooling_independently_of_core_checks() -> Result<()> {
+fn summary_requires_platform_and_tooling_checks_when_requested() -> Result<()> {
     for code in ["true", "false"] {
         for tooling in ["true", "false"] {
-            for job in ["tooling-checks.result", "uc-validation-tests.result"] {
+            for job in ["tooling-checks.result", "platform-tests.result"] {
                 for result in ["success", "failure", "skipped", "cancelled", ""] {
                     let output = check_ci_results(&[
                         ("changes.outputs.code", code),
@@ -720,9 +757,11 @@ fn summary_requires_tooling_independently_of_core_checks() -> Result<()> {
                         ("changes.outputs.release_pr", "false"),
                         (job, result),
                     ])?;
+                    let required =
+                        tooling == "true" || job == "platform-tests.result" && code == "true";
                     assert_eq!(
                         output.status.success(),
-                        tooling != "true" || result == "success",
+                        !required || result == "success",
                         "code={code}, tooling={tooling}, {job}={result}: {output:?}"
                     );
                 }
@@ -1455,12 +1494,12 @@ fn core_cache_warming_matches_platform_checks_and_stops_on_failure() -> Result<(
         let mut commands = vec![
             "test --locked --all-features --no-run",
             "test --locked --no-run",
+            "test --locked --package xtask --bin xtask --test unity_catalog_live --no-run",
         ];
         if runner == "Linux" {
             commands.extend([
                 "test --locked -p delta-arrow-reader-python --no-run",
                 "test --locked -p delta-arrow-reader-cli --no-run",
-                "test --locked --package xtask --bin xtask --no-run",
                 "clippy --locked --all-targets --all-features -- -D warnings",
                 "clippy --locked -p delta-arrow-reader-python --all-targets -- -D warnings",
                 "clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings",
