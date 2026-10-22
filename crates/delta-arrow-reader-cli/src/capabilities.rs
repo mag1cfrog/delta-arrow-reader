@@ -332,7 +332,7 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
             "format": "arrow_ipc_stream",
             "default": "arrow",
             "choices": {
-                "arrow": {"format": "arrow_ipc_stream"},
+                "arrow": {"format": "arrow_ipc_stream", "completion_format_version": 1},
                 "json": {"format": "json", "schema": DiscoverySchema::Rows, "default_max_output_bytes": crate::output::json::DEFAULT_MAX_BYTES, "completion_format_version": 2},
             },
         },
@@ -368,8 +368,15 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
             "default_format": "text",
             "json": {
                 "option": "--diagnostics=json",
-                "format_versions": {"diagnostic": crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION, "completion": 1},
-                "completion_format_versions": [1, 2],
+                "format_versions": {
+                    "diagnostic": crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION,
+                    "completion": if selected_command == Some("preview") { 2 } else { 1 },
+                },
+                "completion_format_versions": match selected_command {
+                    Some("preview") => vec![2],
+                    Some("query") | None => vec![1, 2],
+                    _ => vec![1],
+                },
                 "schemas": terminal_schemas,
             },
         },

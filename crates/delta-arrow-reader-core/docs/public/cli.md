@@ -133,6 +133,14 @@ arguments. `output_schemas` lists result schema names and their streams. The
 `inspect` entry in `stdout_formats` and the JSON entry in `diagnostics` identify which
 output schemas apply.
 
+`diagnostics.json.format_versions` gives the default record versions for the
+selected command. A `completion_format_version` in `stdout_formats` overrides
+that default for its command or format choice. For example, preview uses version
+2; query's Arrow choice uses version 1 and its JSON choice uses version 2.
+`completion_format_versions` lists all versions available in the selected scope.
+In the full inventory, the default is version 1; use each command's format entry
+to select its completion version.
+
 In full metadata, `authorization` describes local access, direct-storage sources
 and configuration files, and Databricks profiles, including the commands that
 accept each. Direct storage supports explicit source selection per command or

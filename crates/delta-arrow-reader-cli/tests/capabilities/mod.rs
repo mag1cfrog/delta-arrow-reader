@@ -46,6 +46,96 @@ fn output_schema_validator(name: &str) -> jsonschema::Validator {
 }
 
 #[test]
+fn discovered_completion_versions_match_each_command_and_query_format()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let sql = directory.path().join("count.sql");
+    fs::write(&sql, "SELECT count(*) AS n FROM t")?;
+    let table = Path::new(env!("CARGO_MANIFEST_DIR")).join(
+        "../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned/table",
+    );
+    let table = table.to_str().unwrap();
+    let sql = sql.to_str().unwrap();
+    let inventory = run_with_timeout(
+        Command::new(env!("CARGO_BIN_EXE_dar"))
+            .env_clear()
+            .args(["capabilities", "--all"]),
+    )?;
+    assert!(inventory.status.success(), "{inventory:?}");
+    let inventory: Value = serde_json::from_slice(&inventory.stdout)?;
+    for (name, arguments, format, expected_version) in [
+        ("capabilities", vec![], None, 1),
+        ("help", vec![], None, 1),
+        ("inspect", vec![table, "--view", "summary"], None, 1),
+        ("scan", vec![table, "--limit", "1"], None, 1),
+        (
+            "preview",
+            vec![table, "--column", "id", "--limit", "1"],
+            None,
+            2,
+        ),
+        ("query", vec![table, "--sql-file", sql], None, 1),
+        (
+            "query",
+            vec![table, "--sql-file", sql, "--format", "arrow"],
+            Some("arrow"),
+            1,
+        ),
+        (
+            "query",
+            vec![table, "--sql-file", sql, "--format", "json"],
+            Some("json"),
+            2,
+        ),
+    ] {
+        let metadata =
+            run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).env_clear().args([
+                "capabilities",
+                "--command",
+                name,
+                "--full",
+            ]))?;
+        assert!(metadata.status.success(), "{metadata:?}");
+        let metadata: Value = serde_json::from_slice(&metadata.stdout)?;
+        let output = run_with_timeout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .env_clear()
+                .args(["--diagnostics=json", name])
+                .args(arguments),
+        )?;
+        assert!(output.status.success(), "{output:?}");
+        let receipt = assert_single_terminal_record(&output.stderr, "completion");
+        assert_output_matches_schema("completion", &receipt);
+        assert_eq!(receipt["format_version"], expected_version);
+        if format.is_none() {
+            assert_eq!(
+                metadata["diagnostics"]["json"]["format_versions"]["completion"],
+                receipt["format_version"],
+                "{name} default completion"
+            );
+        }
+        for document in [&inventory, &metadata] {
+            let stdout = &document["stdout_formats"][name];
+            let selected_format = format.or_else(|| stdout["default"].as_str());
+            let advertised = selected_format
+                .map(|format| &stdout["choices"][format]["completion_format_version"])
+                .or_else(|| stdout.get("completion_format_version"))
+                .unwrap_or(&document["diagnostics"]["json"]["format_versions"]["completion"]);
+            assert_eq!(advertised, &receipt["format_version"], "{name} {format:?}");
+        }
+        assert_eq!(
+            metadata["diagnostics"]["json"]["completion_format_versions"],
+            match name {
+                "preview" => serde_json::json!([2]),
+                "query" => serde_json::json!([1, 2]),
+                _ => serde_json::json!([1]),
+            }
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn named_schemas_are_offline_deterministic_and_use_the_same_diagnostics()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;

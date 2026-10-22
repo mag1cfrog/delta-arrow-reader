@@ -107,13 +107,25 @@ impl DiscoverySchema {
                 .as_array()
                 .into_iter()
                 .flatten()
-                .filter(|condition| {
-                    ["then", "else"].iter().any(|branch| {
-                        condition[branch]["properties"].get(name).is_some()
-                            || condition[branch]["required"]
-                                .as_array()
-                                .is_some_and(|fields| fields.iter().any(|field| field == name))
-                    })
+                .filter_map(|condition| {
+                    let mut selected = json!({"if": condition["if"]});
+                    for branch in ["then", "else"] {
+                        let mut constraints = serde_json::Map::new();
+                        if let Some(definition) = condition[branch]["properties"].get(name) {
+                            constraints.insert("properties".into(), json!({name: definition}));
+                        }
+                        if condition[branch]["required"]
+                            .as_array()
+                            .is_some_and(|fields| fields.iter().any(|field| field == name))
+                        {
+                            constraints.insert("required".into(), json!([name]));
+                        }
+                        if !constraints.is_empty() {
+                            selected[branch] = constraints.into();
+                        }
+                    }
+                    (selected.get("then").is_some() || selected.get("else").is_some())
+                        .then_some(selected)
                 })
                 .collect();
             if !conditions.is_empty() {
@@ -338,6 +350,109 @@ mod tests {
                 .contains("padded base64")
         );
         assert!(!binary.to_string().contains("Decimal128"));
+    }
+
+    #[test]
+    fn selected_field_conditions_omit_unrelated_constraints() {
+        for (schema, field, cases) in [
+            (
+                DiscoverySchema::Rows,
+                "scope",
+                vec![
+                    (json!({"completion": "complete", "scope": "query"}), true),
+                    (json!({"completion": "complete"}), false),
+                    (json!({"completion": "sample"}), true),
+                ],
+            ),
+            (
+                DiscoverySchema::Rows,
+                "bindings",
+                vec![
+                    (
+                        json!({"completion": "sample", "bindings": [{"alias": "t"}]}),
+                        true,
+                    ),
+                    (
+                        json!({"completion": "sample", "bindings": [{"alias": "other"}]}),
+                        false,
+                    ),
+                    (
+                        json!({"completion": "sample", "bindings": [{"alias": "t"}, {"alias": "t"}]}),
+                        false,
+                    ),
+                    (
+                        json!({"completion": "complete", "bindings": [{"alias": "left"}, {"alias": "right"}]}),
+                        true,
+                    ),
+                ],
+            ),
+            (
+                DiscoverySchema::Rows,
+                "has_more",
+                vec![
+                    (
+                        json!({"completion": "sample", "stop_reason": "end_of_input", "has_more": false}),
+                        true,
+                    ),
+                    (
+                        json!({"completion": "sample", "stop_reason": "end_of_input", "has_more": true}),
+                        false,
+                    ),
+                    (
+                        json!({"completion": "sample", "stop_reason": "row_limit", "has_more": null}),
+                        true,
+                    ),
+                    (
+                        json!({"completion": "sample", "stop_reason": "byte_limit", "has_more": true}),
+                        true,
+                    ),
+                    (
+                        json!({"completion": "sample", "stop_reason": "row_limit"}),
+                        false,
+                    ),
+                    (json!({"completion": "complete"}), true),
+                ],
+            ),
+            (
+                DiscoverySchema::Completion,
+                "terminal",
+                vec![
+                    (json!({"format_version": 1, "terminal": true}), true),
+                    (json!({"format_version": 1}), false),
+                    (json!({"format_version": 2}), true),
+                ],
+            ),
+            (
+                DiscoverySchema::Completion,
+                "command",
+                vec![
+                    (json!({"format_version": 1, "command": "scan"}), true),
+                    (json!({"format_version": 1, "command": "preview"}), false),
+                    (json!({"format_version": 2, "command": "preview"}), true),
+                    (json!({"format_version": 2, "command": "scan"}), false),
+                ],
+            ),
+        ] {
+            let detail = schema.guide_document(Some(field)).unwrap();
+            let conditions = json!({"allOf": detail["conditions"]});
+            for (record, expected) in cases {
+                assert_eq!(
+                    jsonschema::is_valid(&conditions, &record),
+                    expected,
+                    "{schema:?} {field}: {record}"
+                );
+            }
+            for condition in detail["conditions"].as_array().unwrap() {
+                for branch in ["then", "else"] {
+                    if let Some(properties) = condition[branch]["properties"].as_object() {
+                        assert!(properties.keys().all(|name| name == field));
+                    }
+                    if let Some(required) = condition[branch]["required"].as_array() {
+                        assert_eq!(required, &[json!(field)]);
+                    }
+                }
+            }
+        }
     }
 
     #[test]
