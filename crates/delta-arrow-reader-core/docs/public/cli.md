@@ -92,7 +92,9 @@ The same guide explains relative-path rules. This takes
 three lookups from the directory to a runnable JOIN. The manifest guide's
 `detail_syntax` explains how to select nested fields; `other_fields` lists the
 optional authorization reference omitted from the example. Select
-`--detail 'tables[].authorization'` for credential references and service guides.
+`--detail 'tables[].authorization'` for a credential-file example and service
+guides. Select `tables[].authorization.source` for identity choices or
+`tables[].authorization.databricks_profile` for profile requirements.
 
 Authorization guide names are `s3`, `azure-blob`, `gcs`, and
 `unity-catalog`. The first three describe direct storage access; Unity Catalog

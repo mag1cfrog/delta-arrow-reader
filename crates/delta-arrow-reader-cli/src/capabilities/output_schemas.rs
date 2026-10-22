@@ -23,7 +23,7 @@ pub(super) fn rows_schema() -> Value {
             "format_version": {"const": 1},
             "kind": {"const": "rows"},
             "bindings": {"type": "array", "minItems": 1, "maxItems": crate::query::tables_manifest::MAX_TABLES,
-                "description": "Actual snapshots in input order. Preview has one binding named t; queries use t for a positional table or the declared manifest aliases.", "items": {
+                "description": "Actual snapshots in input order. Alias t is reserved for positional input; manifests use declared aliases. Preview always uses t.", "items": {
                 "type": "object", "required": ["alias", "table_version"],
                 "properties": {"alias": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,62}$", "not": {"pattern": "[^a-z0-9_]"}}, "table_version": unsigned_integer_string_schema()},
             }},
@@ -227,7 +227,7 @@ pub(super) fn completion_schema() -> Value {
             "stop_reason": {"enum": ["row_limit", "end_of_input"]},
             "has_more": {"enum": [false, null], "description": "False at observed exhaustion; null when a scan reaches its row limit."},
             "bindings": {"type": "array", "maxItems": crate::query::tables_manifest::MAX_TABLES,
-                "description": "Actual snapshot versions in declaration order; positional input uses t.", "items": {
+                "description": "Actual snapshot versions in declaration order. Alias t is reserved for positional input.", "items": {
                 "type": "object", "required": ["alias", "table_version"],
                 "properties": {"alias": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,62}$", "not": {"pattern": "[^a-z0-9_]"}}, "table_version": unsigned_integer_string_schema()},
             }},

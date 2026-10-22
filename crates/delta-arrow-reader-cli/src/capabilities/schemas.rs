@@ -109,7 +109,7 @@ impl DiscoverySchema {
                 });
                 if matches!(self, Self::Completion) {
                     guide["definition"]["description"] = json!(
-                        "Actual snapshots in declaration order. query has at least one binding: t for a positional table, or manifest aliases. inspect/scan/preview have one binding named t. Other commands have no bindings."
+                        "Actual snapshots in declaration order. query has at least one binding. Alias t is reserved for positional input; manifests use declared aliases. inspect/scan/preview have one binding named t. Other commands have no bindings."
                     );
                 }
             } else if matches!(self, Self::Inspection) && name == "schema" {
@@ -121,7 +121,17 @@ impl DiscoverySchema {
                         "description": "Only alias, location, table_version and authorization are accepted. Select tables[].FIELD with detail_command.",
                     });
                 } else if name == "tables[].authorization" {
-                    guide["definition"] = schema["$defs"]["authorization"].clone();
+                    guide["definition"] = json!({
+                        "type": "object", "required": ["source"],
+                        "description": "References only; no inline credentials or env_file. Omit for direct-storage defaults. UC requires source=databricks. No identity fallback. File paths are relative to the manifest.",
+                    });
+                    guide["example"] = json!({
+                        "source": "json", "storage_options_file": "credentials.json",
+                    });
+                    guide["other_fields"] = json!(["databricks_profile"]);
+                    guide["detail_syntax"] = json!(
+                        "Use tables[].authorization.FIELD for any example or other_fields key."
+                    );
                 }
             }
             let conditions: Vec<_> = schema["allOf"]
@@ -470,7 +480,7 @@ mod tests {
                 definition["description"]
                     .as_str()
                     .unwrap()
-                    .contains("Actual")
+                    .contains("Alias t is reserved for positional input")
             );
             assert_eq!(
                 definition["items"]["required"],
@@ -583,6 +593,61 @@ mod tests {
                     .collect::<Vec<_>>()
             );
             assert_eq!(validator.is_valid(&record), valid, "{command}: {aliases:?}");
+        }
+    }
+
+    #[test]
+    fn authorization_details_offer_a_reference_example_and_selected_field_rules() {
+        let guide = DiscoverySchema::Tables
+            .guide_document(Some("tables[].authorization"))
+            .unwrap();
+        for omitted in ["allOf", "properties"] {
+            assert!(guide["definition"].get(omitted).is_none());
+        }
+        let description = guide["definition"]["description"].as_str().unwrap();
+        assert!(description.contains("no inline credentials or env_file"));
+        assert!(description.contains("relative to the manifest"));
+
+        let document = DiscoverySchema::Tables.schema_document();
+        let schema = &document["schema"]["$defs"]["authorization"];
+        let validator = jsonschema::validator_for(schema).unwrap();
+        validator.validate(&guide["example"]).unwrap();
+        let mut fields = guide["example"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        fields.extend(
+            guide["other_fields"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|field| field.as_str().unwrap().to_owned()),
+        );
+        for field in fields {
+            let detail = DiscoverySchema::Tables
+                .guide_document(Some(&format!("tables[].authorization.{field}")))
+                .unwrap();
+            assert_eq!(detail["definition"], schema["properties"][&field]);
+        }
+        for (authorization, valid) in [
+            (json!({"source":"json"}), false),
+            (
+                json!({"source":"databricks", "databricks_profile":"analytics"}),
+                true,
+            ),
+            (json!({"source":"databricks"}), false),
+            (
+                json!({"source":"env", "databricks_profile":"analytics"}),
+                false,
+            ),
+            (
+                json!({"source":"env", "access_key_id":"inline-secret"}),
+                false,
+            ),
+        ] {
+            assert_eq!(validator.is_valid(&authorization), valid, "{authorization}");
         }
     }
 
