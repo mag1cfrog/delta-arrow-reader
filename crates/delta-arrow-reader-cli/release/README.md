@@ -784,8 +784,9 @@ It does not require a fourth Databricks deployment cloud.
 Offline tests exercise inspection, scans, and SQL with a fake Databricks CLI and
 local storage services for every form below. They also force expiry, concurrent
 renewal, rejected credentials, and interrupted output. These tests cannot confirm
-workspace permissions, real cloud signing, or network access. Live evidence is
-still pending.
+workspace permissions, real cloud signing, or network access. The
+[2026-10-22 Azure validation record](uc-azure-validation-2026-10-22.md) preserves
+the operator's live results, artifact hashes, and unverified combinations.
 
 Current live acceptance is scoped to Azure Databricks with Azure Blob / ADLS.
 Validate the credential form the fixture actually returns, including account and
@@ -796,15 +797,17 @@ remain `not_run` until suitable fixtures are available.
 | Storage backend | Credential form | Live acceptance scope | Live result |
 | --- | --- | --- | --- |
 | S3 | `s3_session` | Deferred; use a region outside `us-east-1` when available | `not_run` |
-| Azure Blob / ADLS | `azure_blob_sas` | Azure acceptance, when returned by the fixture | `not_run` |
+| Azure Blob / ADLS | `azure_blob_sas` | Managed Delta, user OAuth, macOS/Linux ARM64; see the validation record | `passed` |
 | Azure Blob / ADLS | `azure_blob_bearer` | Azure acceptance, when returned by the fixture | `not_run` |
 | GCS | `gcs_oauth` | When an eligible fixture is available | `not_run` |
 | Cloudflare R2 | `r2_session` | When an eligible fixture is available | `not_run` |
 
 For each tested row, keep separate reports for each operating system and
-executable. On Linux, validate the archive's `dar` and the wheel's installed
-`delta-arrow-reader`. On macOS, use a native source build and the installed wheel
-where its architecture is supported; standalone release archives are Linux-only.
+executable. On Linux, validate the archive's `dar` and, on supported wheel
+architectures, the installed `delta-arrow-reader`. On macOS, use a native source
+build and the installed wheel where its architecture is supported; standalone
+release archives are Linux-only. The recorded macOS wheel used the dev profile;
+its release profile and the Linux x86_64 wheel remain unverified online.
 Build all executables from the source revision under review. Record user OAuth
 results first, and service-principal OAuth results when that identity is available.
 Record PAT and other missing authentication combinations as `not_run`. Use one

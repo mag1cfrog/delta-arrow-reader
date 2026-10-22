@@ -313,8 +313,9 @@ dar scan uc://main.sales.orders --databricks-profile work \
 
 Install the Databricks CLI in the same environment as DAR and make it available
 on `PATH`. DAR binaries, wheels, and images do not bundle it. The required
-commands and flags were checked with Databricks CLI 1.6.0; earlier versions and
-live workspace compatibility have not been validated. The CLI must support
+commands and flags were checked with Databricks CLI 1.6.0; live Azure validation
+used 1.15.0. These checks do not establish a minimum supported version. The CLI
+must support
 `tables get --include-manifest-capabilities` and
 `temporary-table-credentials generate-temporary-table-credentials --operation READ`.
 It handles the selected profile's PAT, user OAuth, or service-principal OAuth
@@ -336,11 +337,15 @@ requesting principal needs `USE CATALOG`, `USE SCHEMA`, `SELECT`, and explicit
 See [Databricks external access setup](https://docs.databricks.com/aws/en/external-access/admin).
 Selecting a profile does not grant additional permissions.
 
-The storage paths and credential forms below have offline test coverage. Real
-Databricks workspace validation is still pending; a successful read on one backend
-does not establish compatibility with the others. A public bucket or a table
-shared through Delta Sharing/OpenSharing does not exercise this authorization
-flow. Tables in [Databricks default storage](https://docs.databricks.com/aws/en/storage/default-storage)
+The storage paths and credential forms below have offline test coverage. Live
+inspection, scans, and local SQL passed with Azure Databricks, user OAuth, Azure
+SAS, and a managed Delta table on macOS and Linux ARM64. The macOS source build
+and installed dev-profile wheel, Linux source build, and extracted release archive
+passed; this does not establish the full release matrix. Other storage backends,
+Azure bearer credentials, and other authentication modes remain unverified online.
+A public bucket or a table shared through Delta Sharing/OpenSharing does not
+exercise this authorization flow. Tables in
+[Databricks default storage](https://docs.databricks.com/aws/en/storage/default-storage)
 also cannot vend the credentials needed for direct reads.
 
 For S3, supply the bucket's region through the existing storage options file.
