@@ -199,7 +199,7 @@ impl InputCorrection {
             if argument.to_string() == reported {
                 let expected = match argument.get_id().as_str() {
                     "limit" => format!("unsigned decimal integer from 0 to {}", usize::MAX),
-                    "target_partitions" => {
+                    "target_partitions" | "max_output_bytes" => {
                         format!("unsigned decimal integer from 1 to {}", usize::MAX)
                     }
                     "table_version" => format!("unsigned decimal integer from 0 to {}", u64::MAX),
@@ -238,7 +238,7 @@ impl InputCorrection {
             ("invalid_projection", "column_not_found") => (
                 "--column",
                 "a logical column name in the selected snapshot",
-                "Run inspect for the same table and snapshot, then select a name from schema.fields.",
+                "Use inspect TABLE --view summary --column-prefix PREFIX with the same authorization and --table-version N to find column names.",
             ),
             ("invalid_projection", "duplicate_column") => (
                 "--column",
@@ -248,17 +248,17 @@ impl InputCorrection {
             ("unsupported_predicate", "column_not_found" | "ambiguous_column") => (
                 "--predicate-file",
                 "an unambiguous top-level logical column in the selected snapshot",
-                "Run inspect for the same table and snapshot, then use an unambiguous name from schema.fields in the predicate's column field.",
+                "Use inspect TABLE --view summary --column-prefix PREFIX with the same authorization and --table-version N; choose an unambiguous name for the predicate's column field.",
             ),
             ("unsupported_predicate", "invalid_column_reference") => (
                 "--predicate-file",
                 "a nonempty top-level logical column name without dots",
-                "Use a top-level column from inspect; qualified names and nested field paths are not supported in predicates.",
+                "Use inspect TABLE --view summary --column-prefix PREFIX with the same authorization and --table-version N. Predicates accept top-level names without dots.",
             ),
             ("unsupported_predicate", "invalid_decimal") => (
                 "--predicate-file",
                 "a decimal128 value within its declared precision and valid scale",
-                "Check decimal precision and scale against the inspected schema and ensure the unscaled value fits the precision.",
+                "Use inspect TABLE --view summary --column NAME with the same authorization and --table-version N for precision/scale; ensure the unscaled value fits.",
             ),
             _ => return None,
         };

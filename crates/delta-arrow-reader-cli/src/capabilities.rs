@@ -114,11 +114,12 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
     })?;
     let mut guide = match name {
         "inspect" => json!({
-            "example": [executable, "--diagnostics=json", "inspect", "./table"],
+            "example": [executable, "--diagnostics=json", "inspect", "./table", "--view", "summary"],
             "stdout": "json",
             "notes": [
-                "Reports the version and full Arrow schema from metadata only; this does not verify data-file access.",
-                "No output byte limit or total deadline; redirect large schemas to a file.",
+                "Pin lookups with --table-version N: --column-prefix PREFIX finds names; --column NAME returns only selected types.",
+                "Summary checks scan protocol support, not Parquet or deletion-vector access. Names/types lookups omit checks; metadata is opt-in with --include-metadata.",
+                "Summary stdout defaults to 4096 bytes; narrow selection or increase --max-output-bytes if needed. No total deadline. Omitting --view retains the unbounded full schema; redirect it to a file.",
             ],
         }),
         "scan" => json!({
@@ -221,7 +222,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
         output_schemas.push(DiscoverySchema::Completion);
     }
     if name == "inspect" {
-        output_schemas.push(DiscoverySchema::Inspection);
+        output_schemas.push(DiscoverySchema::InspectionSummary);
     }
     guide["output_schemas"] = json!(output_schemas);
     guide["schema_command"] = json!([executable, "capabilities", "--schema", "NAME"]);
@@ -266,16 +267,24 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
         .map(|schema| json!({"name": schema, "stream": "stderr"}))
         .collect();
     if selected_command.is_none() || selected_command == Some("inspect") {
-        output_schemas.insert(
-            0,
-            json!({"name": DiscoverySchema::Inspection, "stream": "stdout"}),
+        output_schemas.splice(
+            0..0,
+            [
+                json!({"name": DiscoverySchema::Inspection, "stream": "stdout"}),
+                json!({"name": DiscoverySchema::InspectionSummary, "stream": "stdout"}),
+            ],
         );
     }
     let mut authorization = read_support::authorization_sources();
     let mut read_support = read_support::command_read_support();
     let mut stdout_formats = json!({
         "capabilities": {"format": "json", "format_version": 1},
-        "inspect": {"format": "json", "format_version": 1, "schema": DiscoverySchema::Inspection},
+        "inspect": {
+            "format": "json", "format_version": 1,
+            "schema": DiscoverySchema::Inspection,
+            "views": {"full": DiscoverySchema::Inspection, "summary": DiscoverySchema::InspectionSummary},
+            "default_view": "full",
+        },
         "scan": {"format": "arrow_ipc_stream"},
         "query": {"format": "arrow_ipc_stream"},
         "help": {"format": "text"},
@@ -817,6 +826,7 @@ mod tests {
                 json!("predicate"),
                 json!("execution-options"),
                 json!("inspection"),
+                json!("inspection-summary"),
                 json!("diagnostic"),
                 json!("completion"),
             ]

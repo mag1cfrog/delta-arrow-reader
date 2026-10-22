@@ -44,7 +44,7 @@ pub(super) fn assert_single_terminal_record(stderr: &[u8], kind: &str) -> Value 
 #[test]
 fn argument_errors_include_safe_corrections() -> Result<(), Box<dyn std::error::Error>> {
     let limit_range = format!("unsigned decimal integer from 0 to {}", usize::MAX);
-    let partition_range = format!("unsigned decimal integer from 1 to {}", usize::MAX);
+    let positive_integer_range = format!("unsigned decimal integer from 1 to {}", usize::MAX);
     let version_range = format!("unsigned decimal integer from 0 to {}", u64::MAX);
     for (args, kind, argument, expected, hint) in [
         (
@@ -58,7 +58,35 @@ fn argument_errors_include_safe_corrections() -> Result<(), Box<dyn std::error::
             vec!["scan", "secret-table", "--target-partitions", "0"],
             "ValueValidation",
             "--target-partitions",
-            partition_range.as_str(),
+            positive_integer_range.as_str(),
+            "Supply a value",
+        ),
+        (
+            vec![
+                "inspect",
+                "secret-table",
+                "--view",
+                "summary",
+                "--max-output-bytes",
+                "0",
+            ],
+            "ValueValidation",
+            "--max-output-bytes",
+            positive_integer_range.as_str(),
+            "Supply a value",
+        ),
+        (
+            vec![
+                "query",
+                "secret-table",
+                "--sql-file",
+                "secret.sql",
+                "--max-output-bytes",
+                "0",
+            ],
+            "ValueValidation",
+            "--max-output-bytes",
+            positive_integer_range.as_str(),
             "Supply a value",
         ),
         (
@@ -507,7 +535,7 @@ fn reader_input_errors_include_safe_corrections() -> Result<(), Box<dyn std::err
             "column_not_found",
             "--column",
             "logical column",
-            "schema.fields",
+            "--view summary --column-prefix PREFIX",
         ),
         (
             vec!["--column", "id", "--column", "id"],
@@ -525,7 +553,7 @@ fn reader_input_errors_include_safe_corrections() -> Result<(), Box<dyn std::err
             "column_not_found",
             "--predicate-file",
             "unambiguous",
-            "schema.fields",
+            "--view summary --column-prefix PREFIX",
         ),
         (
             vec!["--predicate-file", path.to_str().unwrap()],
@@ -534,7 +562,7 @@ fn reader_input_errors_include_safe_corrections() -> Result<(), Box<dyn std::err
             "invalid_column_reference",
             "--predicate-file",
             "without dots",
-            "top-level column",
+            "top-level names without dots",
         ),
         (
             vec!["--predicate-file", path.to_str().unwrap()],

@@ -9,7 +9,7 @@ specific log targets. For ordinary troubleshooting, see
 Use the global option `--diagnostics=json` before or after the command:
 
 ```sh
-dar --diagnostics=json inspect /path/to/table > snapshot.json 2> diagnostics.jsonl
+dar --diagnostics=json inspect /path/to/table --view summary > snapshot.json 2> diagnostics.jsonl
 dar scan /path/to/table --limit 10 --diagnostics=json > rows.arrow 2> diagnostics.jsonl
 ```
 
@@ -91,9 +91,10 @@ as `/args/1/arg/value/value`. `expected` and `hint` describe the requirement at
 that location. Paths contain only known schema field names and indexes.
 
 Unknown or repeated projection columns and supported predicate planning errors
-also include correction fields. For unknown columns, run `inspect` with the same
-table and snapshot selection, then use its `schema.fields` to correct `--column`
-or the predicate file.
+also include correction fields. For unknown columns, run
+`inspect TABLE --view summary --column-prefix PREFIX` with the same authorization
+and `--table-version N`. Use the returned names to correct `--column` or the
+predicate file. Query a type with `--column NAME` instead of `--column-prefix`.
 
 Scalar type mismatches include `expected`, `supplied`, and the failing scalar's
 `field_path`. For example, an `int64` literal compared with an `Int32` column

@@ -1,6 +1,6 @@
 //! CLI commands for inspecting Delta snapshots and exporting their rows.
 //!
-//! `inspect` returns a snapshot's version and Arrow schema as JSON. `scan` and
+//! `inspect` returns a snapshot's version, read checks, or column types as JSON. `scan` and
 //! `query` return rows as Arrow IPC streams. Command results use stdout; diagnostics and
 //! completion records use stderr.
 //! `capabilities` describes the installed commands without opening a table.
@@ -8,11 +8,11 @@
 //! For a Delta table at `./table` with an `id` column:
 //!
 //! ```sh
-//! dar inspect ./table > snapshot.json
+//! dar inspect ./table --view summary --column id
 //! dar scan ./table --column id --limit 10 > rows.arrow
 //! ```
 //!
-//! The first command saves the snapshot metadata. The second saves an Arrow IPC
+//! The first command reports the version and `id` type. The second saves an Arrow IPC
 //! stream containing the `id` column from at most ten rows.
 
 #![cfg_attr(test, allow(clippy::panic))]
@@ -23,6 +23,7 @@ mod capabilities;
 mod diagnostics;
 mod direct_credentials;
 mod input;
+mod inspection;
 mod query;
 mod signals;
 mod stdout_monitor;
@@ -52,7 +53,7 @@ use snafu::{ResultExt, Snafu, ensure};
 #[derive(Parser)]
 #[command(
     name = command_name(), bin_name = command_name(), version,
-    after_help = "When version or column types are unknown, use inspect TABLE; pin reads with --table-version N.\nGuides: capabilities --command NAME; capabilities --schema NAME [--detail FIELD_OR_TYPE].\nInput formats: predicate, storage-options, execution-options. Output formats: inspection, diagnostic, completion."
+    after_help = "When version or column types are unknown, use inspect TABLE --view summary [--column NAME]; pin reads with --table-version N.\nGuides: capabilities --command NAME; capabilities --schema NAME [--detail FIELD_OR_TYPE].\nInput formats: predicate, storage-options, execution-options. Output formats: inspection-summary, inspection, diagnostic, completion."
 )]
 struct Cli {
     #[command(flatten)]
@@ -67,7 +68,7 @@ enum Command {
     ///
     /// Offline; no table, input file, or authorization is loaded.
     Capabilities(capabilities::CapabilitiesArgs),
-    /// Print one Delta snapshot's version and full Arrow schema as JSON.
+    /// Inspect a snapshot's version, read checks, or selected column types as JSON.
     ///
     /// Only snapshot metadata is loaded; data files are not read.
     Inspect {
@@ -76,6 +77,8 @@ enum Command {
         /// Existing Databricks CLI profile; required for uc://catalog.schema.table targets.
         #[arg(long, value_name = "PROFILE")]
         databricks_profile: Option<String>,
+        #[command(flatten)]
+        inspection: inspection::InspectionArgs,
     },
     /// Run one read-only SQL query over a Delta snapshot, registered as t.
     ///
@@ -338,6 +341,18 @@ impl Error {
                 return input::execution_options_correction(source.reason());
             }
             Self::Reader { source } => return InputCorrection::from_reader(source),
+            Self::OutputLimit {
+                reason: "inspection_output_limit_exceeded",
+            } => {
+                return Some(InputCorrection {
+                    argument: "--max-output-bytes".to_owned(),
+                    expected: "a budget large enough for the complete selected inspection"
+                        .to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Narrow the selection or increase --max-output-bytes; keep the same authorization and --table-version N.",
+                });
+            }
             _ => return None,
         };
         Some(input_kind.correction(hint))
@@ -602,6 +617,7 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
         Command::Inspect {
             table,
             databricks_profile,
+            ..
         }
         | Command::Scan {
             table,
@@ -620,6 +636,9 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
             (&args.table, None)
         }
     };
+    if let Command::Inspect { inspection, .. } = &command {
+        inspection.validate()?;
+    }
     let uc_target =
         unity_catalog::UnityCatalogTableTarget::parse(&table_args.table, databricks_profile)
             .context(UnityCatalogSnafu)?;
@@ -741,10 +760,10 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
             }
             .boxed_local()
         }
-        Command::Inspect { .. } => async move {
+        Command::Inspect { inspection, .. } => async move {
             let (table, _authorized_access) = load_table.await?;
             let version = table.version();
-            let output = encode_inspection_json(version, table.schema().as_ref());
+            let output = inspection.encode(&table)?;
             let stdout_stats = StdoutStats {
                 bytes_written: output.len() as u64,
                 ..Default::default()
