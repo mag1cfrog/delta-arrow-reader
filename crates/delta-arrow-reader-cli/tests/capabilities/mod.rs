@@ -17,11 +17,14 @@ pub(super) fn assert_output_matches_schema(name: &str, output: &Value) {
         LazyLock::new(|| output_schema_validator("diagnostic"));
     static COMPLETION: LazyLock<jsonschema::Validator> =
         LazyLock::new(|| output_schema_validator("completion"));
+    static ROWS: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| output_schema_validator("rows"));
     let validator = match name {
         "inspection" => &*INSPECTION,
         "inspection-summary" => &*INSPECTION_SUMMARY,
         "diagnostic" => &*DIAGNOSTIC,
         "completion" => &*COMPLETION,
+        "rows" => &*ROWS,
         _ => panic!("unknown output schema: {name}"),
     };
     validator.validate(output).unwrap();
@@ -54,6 +57,7 @@ fn named_schemas_are_offline_deterministic_and_use_the_same_diagnostics()
         ("inspection-summary", "output_schema"),
         ("diagnostic", "output_schema"),
         ("completion", "output_schema"),
+        ("rows", "output_schema"),
     ] {
         let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
         command
@@ -405,6 +409,7 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                     "completion",
                 ],
                 "help" => vec!["diagnostic"],
+                "query" => vec!["diagnostic", "completion", "rows"],
                 _ => vec!["diagnostic", "completion"],
             };
             assert_eq!(output_names, expected_outputs);
@@ -473,7 +478,7 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
 fn discovered_guides_support_pinned_reads_and_predicate_repair()
 -> Result<(), Box<dyn std::error::Error>> {
     use arrow::{
-        array::{BooleanArray, Int32Array, Int64Array},
+        array::{BooleanArray, Int32Array},
         compute::filter_record_batch,
     };
     use serde_json::json;
@@ -587,7 +592,11 @@ fn discovered_guides_support_pinned_reads_and_predicate_repair()
             &has_more["definition"],
             &sample_completion["has_more"]
         ));
-        assert!(has_more.get("conditions").is_none());
+        let conditions = json!({"allOf": has_more["conditions"]});
+        assert!(jsonschema::is_valid(&conditions, &sample_completion));
+        let mut missing = sample_completion.clone();
+        missing.as_object_mut().unwrap().remove("has_more");
+        assert!(!jsonschema::is_valid(&conditions, &missing));
         assert!(
             has_more["definition"]["description"]
                 .as_str()
@@ -680,19 +689,22 @@ fn discovered_guides_support_pinned_reads_and_predicate_repair()
                 .args(["--table-version", version]),
         )?;
         assert!(output.status.success(), "{output:?}");
-        let reader = StreamReader::try_new(Cursor::new(&output.stdout), None)?;
-        let rows = concat_batches(&reader.schema(), &reader.collect::<Result<Vec<_>, _>>()?)?;
-        assert_eq!(rows.num_rows(), 1);
-        let count = rows
-            .column(0)
-            .as_any()
-            .downcast_ref::<Int64Array>()
-            .unwrap()
-            .value(0);
-        assert_eq!(count as usize, selected_rows.num_rows());
-        let completion: Value = serde_json::from_slice(&output.stderr)?;
-        assert_eq!(completion["kind"], "completion");
-        assert_eq!(completion["scope"], "query");
+        let result: Value = serde_json::from_slice(&output.stdout)?;
+        assert_output_matches_schema("rows", &result);
+        assert_eq!(
+            result["rows"],
+            json!([[selected_rows.num_rows().to_string()]])
+        );
+        assert_eq!(result["schema"]["fields"].as_array().unwrap().len(), 1);
+        assert_eq!(result["bindings"][0]["table_version"], version);
+        assert_eq!(result["scope"], "query");
+        assert_eq!(result["completion"], "complete");
+        let completion = assert_single_terminal_record(&output.stderr, "completion");
+        assert_eq!(
+            completion["format_version"],
+            query_guide["completion_format_version"]
+        );
+        assert_eq!(completion["command"], "query");
         assert_eq!(completion["bindings"][0]["table_version"], version);
         assert_eq!(completion["rows"], "1");
         assert_eq!(completion["output_bytes"], output.stdout.len().to_string());

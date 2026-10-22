@@ -1,8 +1,8 @@
 //! CLI commands for inspecting Delta snapshots and exporting their rows.
 //!
-//! `inspect` returns a snapshot's version, read checks, or column types as JSON. `scan` and
-//! `query` return rows as Arrow IPC streams. Command results use stdout; diagnostics and
-//! completion records use stderr.
+//! `inspect` returns a snapshot's version, read checks, or column types as JSON.
+//! `scan` and `query` return rows as Arrow IPC streams; `query` also supports typed
+//! JSON. Results use stdout; diagnostics and completion records use stderr.
 //! `capabilities` describes the installed commands without opening a table.
 //!
 //! For a Delta table at `./table` with an `id` column:
@@ -17,13 +17,13 @@
 
 #![cfg_attr(test, allow(clippy::panic))]
 
-mod arrow_output;
 mod azure_sas;
 mod capabilities;
 mod diagnostics;
 mod direct_credentials;
 mod input;
 mod inspection;
+mod output;
 mod query;
 mod signals;
 mod stdout_monitor;
@@ -49,11 +49,11 @@ use input::JsonInputKind;
 use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu, ensure};
 
-/// Read Delta Lake snapshots as JSON metadata or Arrow IPC streams.
+/// Read Delta Lake snapshots as JSON or Arrow IPC streams.
 #[derive(Parser)]
 #[command(
     name = command_name(), bin_name = command_name(), version,
-    after_help = "When version or column types are unknown, use inspect TABLE --view summary [--column NAME]; pin reads with --table-version N.\nGuides: capabilities --command NAME; capabilities --schema NAME [--detail FIELD_OR_TYPE].\nInput formats: predicate, storage-options, execution-options. Output formats: inspection-summary, inspection, diagnostic, completion."
+    after_help = "When version or column types are unknown, use inspect TABLE --view summary [--column NAME]; pin reads with --table-version N.\nGuides: capabilities --command NAME; capabilities --schema NAME [--detail FIELD_OR_TYPE].\nInput formats: predicate, storage-options, execution-options. Output formats: rows, inspection-summary, inspection, diagnostic, completion."
 )]
 struct Cli {
     #[command(flatten)]
@@ -82,7 +82,7 @@ enum Command {
     },
     /// Run one read-only SQL query over a Delta snapshot, registered as t.
     ///
-    /// Results stream as Arrow IPC. Redirect stdout to a file or pipe.
+    /// Arrow IPC requires redirected stdout. Use --format json for a small typed result.
     Query(query::QueryArgs),
     /// Stream a Delta snapshot's rows as Arrow IPC to stdout.
     ///
@@ -175,6 +175,10 @@ enum Error {
     Output { source: io::Error },
     #[snafu(display("Could not encode the Arrow IPC stream."))]
     ArrowIpc { source: ArrowError },
+    #[snafu(display("Could not encode the JSON result."))]
+    JsonOutput { source: serde_json::Error },
+    #[snafu(display("The result contains a type unsupported by typed JSON. Use --format arrow."))]
+    UnsupportedJsonType,
     #[snafu(display("{source}"))]
     Reader { source: DeltaReaderError },
     #[snafu(display("{source}"))]
@@ -195,7 +199,7 @@ impl From<ArrowError> for Error {
             ArrowError::IoError(_, source)
                 if source
                     .get_ref()
-                    .is_some_and(|error| error.is::<arrow_output::OutputBytesExceeded>()) =>
+                    .is_some_and(|error| error.is::<output::arrow::OutputBytesExceeded>()) =>
             {
                 Self::OutputLimit {
                     reason: "output_byte_limit_exceeded",
@@ -276,6 +280,18 @@ impl Error {
                 reason: "arrow_ipc_encode_failed",
                 source_kind: Some(error_source_kind(source)),
             },
+            Self::JsonOutput { .. } => ErrorClassification {
+                phase: "execution",
+                code: "json_output",
+                reason: "json_encode_failed",
+                source_kind: None,
+            },
+            Self::UnsupportedJsonType => ErrorClassification {
+                phase: "execution",
+                code: "unsupported_json_type",
+                reason: "unsupported_json_type",
+                source_kind: Some("unsupported"),
+            },
             Self::UnityCatalog { source } => ErrorClassification {
                 phase: source.phase(),
                 code: source.code(),
@@ -351,6 +367,26 @@ impl Error {
                     field_path: None,
                     supplied: None,
                     hint: "Narrow the selection or increase --max-output-bytes; keep the same authorization and --table-version N.",
+                });
+            }
+            Self::OutputLimit {
+                reason: "json_output_limit_exceeded",
+            } => {
+                return Some(InputCorrection {
+                    argument: "--format".to_owned(),
+                    expected: "arrow for this result size".to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Use --format arrow with redirected stdout; keep the same SQL, authorization, and --table-version N.",
+                });
+            }
+            Self::UnsupportedJsonType => {
+                return Some(InputCorrection {
+                    argument: "--format".to_owned(),
+                    expected: "arrow for this result type".to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Use --format arrow with redirected stdout; keep the same SQL, authorization, and --table-version N.",
                 });
             }
             _ => return None,
@@ -452,6 +488,16 @@ impl Error {
             source_kind,
         } = self.classification();
         let (recovery, retryable) = match source_kind {
+            Some("resource_exhausted")
+                if matches!(
+                    self,
+                    Self::OutputLimit {
+                        reason: "json_output_limit_exceeded"
+                    }
+                ) =>
+            {
+                ("change_request", Some(false))
+            }
             Some("resource_exhausted") => ("adjust_budget", Some(false)),
             Some("unauthenticated") => ("authorize", Some(false)),
             Some("permission_denied") => ("request_access", Some(false)),
@@ -522,7 +568,11 @@ impl Error {
             | Self::InputIo { .. }
             | Self::StorageAuthorization { .. }
             | Self::Configuration { .. } => 2,
-            Self::Runtime { .. } | Self::Reader { .. } | Self::ArrowIpc { .. } => 1,
+            Self::Runtime { .. }
+            | Self::Reader { .. }
+            | Self::ArrowIpc { .. }
+            | Self::JsonOutput { .. }
+            | Self::UnsupportedJsonType => 1,
             Self::Output { .. } => 3,
             Self::UnityCatalog { source } => source.exit_status(),
             Self::Query { source } => source.exit_status(),
@@ -607,7 +657,12 @@ fn build_completion_record(
 }
 
 fn run_table_command(command: Command) -> Result<Value, Error> {
-    if matches!(command, Command::Scan { .. } | Command::Query(_)) {
+    let arrow_stdout = match &command {
+        Command::Scan { .. } => true,
+        Command::Query(args) => args.output_format == query::QueryOutputFormat::Arrow,
+        _ => false,
+    };
+    if arrow_stdout {
         ensure!(!io::stdout().is_terminal(), TerminalOutputSnafu);
     }
     let (table_args, databricks_profile) = match &command {
@@ -740,23 +795,40 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
                     .execute_stream(table, args.memory_limit_bytes.get())
                     .await?;
                 let schema = stream.schema();
-                let stdout_stats = arrow_output::write_arrow_stream_to_stdout(
-                    schema,
-                    stream.map_err(|source| Error::Query {
-                        source: query::QueryError::Execution { source },
-                    }),
-                    Some(arrow_output::ArrowOutputLimits {
-                        max_rows: args.max_rows as u64,
-                        max_bytes: args.max_output_bytes.get() as u64,
-                    }),
-                )
-                .await?;
-                Ok(build_completion_record(
-                    "query",
-                    Some(version),
-                    stdout_stats,
-                    None,
-                ))
+                let stream = stream.map_err(|source| Error::Query {
+                    source: query::QueryError::Execution { source },
+                });
+                let limits = output::OutputLimits {
+                    max_rows: args.max_rows as u64,
+                    max_bytes: args.max_output_bytes.get() as u64,
+                };
+                let stdout_stats = match args.output_format {
+                    query::QueryOutputFormat::Arrow => {
+                        output::arrow::write_arrow_stream_to_stdout(schema, stream, Some(limits))
+                            .await?
+                    }
+                    query::QueryOutputFormat::Json => {
+                        output::json::write_query_to_stdout(schema, stream, version, limits).await?
+                    }
+                };
+                let mut completion =
+                    build_completion_record("query", Some(version), stdout_stats, None);
+                if args.output_format == query::QueryOutputFormat::Json {
+                    completion["format_version"] = json!(2);
+                    if let Some(fields) = completion.as_object_mut() {
+                        for name in [
+                            "batches",
+                            "stop_reason",
+                            "has_more",
+                            "scope",
+                            "completion",
+                            "terminal",
+                        ] {
+                            fields.remove(name);
+                        }
+                    }
+                }
+                Ok(completion)
             }
             .boxed_local()
         }
@@ -816,7 +888,7 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
             }
             let scan_result = async {
                 let scan = builder.build().await.context(ReaderSnafu)?;
-                arrow_output::write_arrow_stream_to_stdout(
+                output::arrow::write_arrow_stream_to_stdout(
                     scan.schema(),
                     scan.into_stream()
                         .map_err(|source| Error::Reader { source }),

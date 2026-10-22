@@ -277,6 +277,7 @@ pub(super) fn command_read_support() -> Value {
             "memory_limit_scope": "datafusion_execution_pool",
             "disk_spill": false,
             "requires_redirected_stdout": true,
+            "json_requires_redirected_stdout": false,
             "deadline_ms": null,
         },
     })
@@ -523,6 +524,9 @@ mod tests {
                 ("--deadline-ms", "1000"),
                 ("--tables-file", "tables.json"),
             ] {
+                if name == "query" && option == "--format" {
+                    continue;
+                }
                 let mut args = vec!["dar", name, "table"];
                 if name == "query" {
                     args.extend(["--sql-file", "query.sql"]);

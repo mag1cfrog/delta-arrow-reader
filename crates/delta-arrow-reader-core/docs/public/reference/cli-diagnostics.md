@@ -121,21 +121,32 @@ sources, `request_access` for permission failures, `retry` for known transient
 I/O failures, or `change_request` for unsupported operations. Unclassified
 failures use `unknown` and `retryable: null`. A true `retryable` value means
 starting a new command, after discarding any output from the failed invocation.
-Query output and memory exhaustion use `adjust_budget` and `retryable: false`.
+JSON query byte exhaustion uses `change_request`: save the complete result as
+Arrow with the same SQL, authorization, and snapshot. Other query output and memory
+exhaustion use `adjust_budget`. These resource failures set `retryable: false`.
 
-A successful command emits `format_version: 1`, `kind: "completion"`, `terminal: true`, and
-`completion: "complete"` after stdout has been flushed. It includes `command`,
-`scope`, `stop_reason`, `has_more`, and `output_bytes`. Inspect, scan, and query include
-the actual snapshot in `bindings`, for example
-`[{"alias":"t","table_version":"42"}]`; help and version use an empty array.
-Scan and query also report `rows` and `batches`. Versions and counts are decimal strings.
+A successful command emits `kind: "completion"` after stdout has been flushed.
+It includes `command` and `output_bytes`. Inspect, scan, and query include the actual snapshot
+in `bindings`, for example
+`[{"alias":"t","table_version":"42"}]`; other commands use an empty array.
+Scan and query also report `rows`. Versions and counts are decimal strings.
 
-Scope is `inspect`, `scan`, `query`, `help`, or `version`, except that any scan with
-`--limit` uses `limited_scan`. Reaching the limit, including zero, reports
+`query --format json` uses completion `format_version: 2`, containing only the
+version, kind, command, bindings, rows, and output bytes. The completion kind
+marks terminal success for the requested query. Check `completion: "complete"`
+and `scope: "query"` in stdout, along with its bindings and row count.
+
+Other commands and Arrow queries use version 1, which also includes
+`terminal: true`, `completion: "complete"`, `scope`, `stop_reason`, and `has_more`,
+plus `batches` for scan and query.
+
+In version 1, scope equals the command, except that any scan with `--limit`
+uses `limited_scan`. Reaching the limit, including zero, reports
 `stop_reason: "row_limit"` and `has_more: null`: it does not prove that another
-row exists. Otherwise `stop_reason` is `end_of_input` and `has_more` is false.
-For queries, end of input means the complete SQL result, including any SQL
-`LIMIT`. Output ceilings cannot produce a successful partial query completion.
+row exists. Other version 1 completions use `stop_reason: "end_of_input"` and
+`has_more: false`. In both versions, a query completes only after the full SQL
+result, including any SQL `LIMIT`. Output ceilings cannot produce a successful
+partial query completion.
 
 Consumers must check exit status 0, valid stdout, and the completion record.
 `dar capabilities --schema diagnostic --full` and

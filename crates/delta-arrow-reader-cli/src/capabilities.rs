@@ -131,8 +131,10 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             ],
         }),
         "query" => json!({
-            "example": [executable, "--diagnostics=json", "query", "./table", "--sql-file", "query.sql"],
-            "stdout": "arrow_ipc_stream",
+            "example": [executable, "--diagnostics=json", "query", "./table", "--sql-file", "query.sql", "--format", "json"],
+            "stdout": "json",
+            "completion_format_version": 2,
+            "resource_defaults_format": "json",
             "sql": {
                 "argument": "--sql-file", "table": "t",
                 "example": "SELECT count(*) AS row_count FROM t",
@@ -140,7 +142,8 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             },
             "notes": [
                 "One read-only SQL statement in a UTF-8 file, over one direct table as t. Unity Catalog targets are unsupported.",
-                "Redirect stdout to a file or pipe. Resource ceilings fail the query; SQL LIMIT selects a smaller result.",
+                "The example returns complete typed JSON. Select only needed columns or aggregate; ceilings fail without JSON output. SQL LIMIT changes the result.",
+                "Omit --format for Arrow IPC, which requires redirected stdout and defaults to a 1 GiB byte ceiling.",
                 "No total deadline. Memory is limited to the DataFusion pool, not process RSS; disk spill is disabled.",
             ],
         }),
@@ -184,6 +187,8 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             })
             .collect();
         guide["resource_defaults"] = json!(ceilings);
+        guide["resource_defaults"]["--max-output-bytes"] =
+            json!(crate::output::json::DEFAULT_MAX_BYTES.to_string());
     }
     let input_schemas: Vec<_> = JsonInputKind::value_variants()
         .iter()
@@ -223,6 +228,8 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
     }
     if name == "inspect" {
         output_schemas.push(DiscoverySchema::InspectionSummary);
+    } else if name == "query" {
+        output_schemas.push(DiscoverySchema::Rows);
     }
     guide["output_schemas"] = json!(output_schemas);
     guide["schema_command"] = json!([executable, "capabilities", "--schema", "NAME"]);
@@ -275,6 +282,9 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
             ],
         );
     }
+    if selected_command.is_none() || selected_command == Some("query") {
+        output_schemas.push(json!({"name": DiscoverySchema::Rows, "stream": "stdout"}));
+    }
     let mut authorization = read_support::authorization_sources();
     let mut read_support = read_support::command_read_support();
     let mut stdout_formats = json!({
@@ -286,7 +296,14 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
             "default_view": "full",
         },
         "scan": {"format": "arrow_ipc_stream"},
-        "query": {"format": "arrow_ipc_stream"},
+        "query": {
+            "format": "arrow_ipc_stream",
+            "default": "arrow",
+            "choices": {
+                "arrow": {"format": "arrow_ipc_stream"},
+                "json": {"format": "json", "schema": DiscoverySchema::Rows, "default_max_output_bytes": crate::output::json::DEFAULT_MAX_BYTES, "completion_format_version": 2},
+            },
+        },
         "help": {"format": "text"},
     });
     if let Some(name) = selected_command {
@@ -320,6 +337,7 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
             "json": {
                 "option": "--diagnostics=json",
                 "format_versions": {"diagnostic": crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION, "completion": 1},
+                "completion_format_versions": [1, 2],
                 "schemas": terminal_schemas,
             },
         },
@@ -538,11 +556,21 @@ mod tests {
             }
         }
         let guide = build_command_guide("query").unwrap();
+        assert_eq!(guide["resource_defaults_format"], "json");
+        assert_eq!(guide["completion_format_version"], 2);
         let file = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(file.path(), guide["sql"]["example"].as_str().unwrap()).unwrap();
         crate::query::ReadOnlySqlQuery::read_file(file.path().to_str().unwrap()).unwrap();
-        let parsed =
-            Cli::try_parse_from(["dar", "query", "table", "--sql-file", "query.sql"]).unwrap();
+        let parsed = Cli::try_parse_from([
+            "dar",
+            "query",
+            "table",
+            "--sql-file",
+            "query.sql",
+            "--format",
+            "json",
+        ])
+        .unwrap();
         let crate::Command::Query(args) = parsed.command else {
             panic!("query expected")
         };
@@ -829,6 +857,7 @@ mod tests {
                 json!("inspection-summary"),
                 json!("diagnostic"),
                 json!("completion"),
+                json!("rows"),
             ]
         );
         for schema in input_catalog.iter().chain(output_catalog) {

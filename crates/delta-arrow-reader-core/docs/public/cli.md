@@ -71,10 +71,10 @@ fields absent from the example; it is omitted when the example shows them all.
 For example, after finding `query` in the directory, run
 `dar capabilities --command query`. Its `example` is an argument array with
 placeholder paths. The `sql` field gives the table alias `t`, the `--sql-file`
-argument, and a count query to put in that file. `stdout` identifies Arrow IPC;
-redirect it to a file or pipe. Redirection is a shell operation, not part of the
-argument array. `options` describes commonly needed parameters, and
-`resource_defaults` gives the query's resource ceilings. Use `help_command`
+argument, and a count query to put in that file. The example uses `--format json`
+for a small complete result. `options` describes commonly needed parameters,
+and `resource_defaults` gives the ceilings for the format named by
+`resource_defaults_format`. Use `help_command`
 for all options or `full_command` for their machine-readable definitions. Fetch
 `--schema storage-options` if a storage-options file is needed, then follow
 `authorization_command` for the selected service. Local paths need no
@@ -172,6 +172,7 @@ result appears. The schema response itself always goes to stdout.
 | --- | --- | --- |
 | `inspection` | stdout | The full `inspect` JSON, including the snapshot version and Arrow schema. |
 | `inspection-summary` | stdout | Read checks, matching column names, or selected column types. |
+| `rows` | stdout | Complete typed query JSON with ordered fields and positional rows. |
 | `diagnostic` | stderr | A terminal failure record with `--diagnostics=json`, including optional correction fields. |
 | `completion` | stderr | A terminal success record with `--diagnostics=json`, including snapshot bindings and output counts. |
 
@@ -179,8 +180,9 @@ Output schemas allow additional object fields. Version and count strings use
 unsigned decimal notation; consumers must check the u64 range when converting
 them. The inspection schema checks the Arrow schema's outer fields, metadata,
 and type-description shapes. Use Arrow's Rust Serde decoder to validate the nested
-`data_type` encoding. `scan` and `query` return Arrow IPC streams, whose schema
-is carried in the stream itself.
+`data_type` encoding. Arrow IPC from `scan` or `query --format arrow` carries its
+schema in the stream itself. The `rows` schema validates the JSON envelope;
+interpret row values using the returned field types and the selected encoding guide.
 
 For example, save `dar capabilities --schema completion --full` and validate the
 command's stderr record against its `schema` field. Also check exit status 0
@@ -451,7 +453,7 @@ dar query /data/orders --table-version 0 --sql-file query.sql > original.arrow
 
 ```text
 dar query [--table-version N] [--storage-options-file PATH]
-          [--auth-source SOURCE]
+          [--auth-source SOURCE] [--format arrow|json]
           --sql-file PATH [--max-rows N] [--max-output-bytes BYTES]
           [--memory-limit-bytes BYTES] [--] TABLE
 ```
@@ -465,29 +467,69 @@ subqueries, and nonrecursive CTEs are supported. DDL, DML, COPY, session changes
 EXPLAIN, recursive CTEs, and table functions are rejected. SQL cannot discover
 additional tables from file paths or URLs.
 
-Results use Arrow IPC stream framing on stdout, which must be a file or pipe.
-The command streams the complete SQL result, including empty results and
+By default, results use Arrow IPC stream framing on stdout, which must be a
+file or pipe. `--format json` returns bounded typed JSON and permits terminal
+output. Both formats return the complete SQL result, including empty results and
 `COUNT(*)`. Use SQL `LIMIT` to select a smaller result. Queries use the same
 snapshot selection and storage options as `inspect`, and skip table warmup.
 
 | Option | Default | Behavior |
 | --- | --- | --- |
 | `--max-rows` | `1000000` | Fail if the SQL result exceeds this many rows; zero is valid |
-| `--max-output-bytes` | `1073741824` (1 GiB) | Fail if Arrow output, including schema and framing, exceeds this many bytes |
+| `--max-output-bytes` | Arrow: `1073741824` (1 GiB); JSON: `8192` (8 KiB) | Fail if the whole response, including schema, framing, and final newline for JSON, exceeds this many bytes |
 | `--memory-limit-bytes` | `268435456` (256 MiB) | Limit DataFusion's tracked execution memory; disk spill is disabled |
 
 These options accept unsigned decimal digits in the platform's `usize` range.
 Byte and memory limits must be positive. The memory pool does not cap total
-process RSS: Core read buffers, SQL planning, and IPC encoding allocate outside
+process RSS: Core read buffers, SQL planning, and output encoding allocate outside
 it. Sorting and grouping can require memory before producing output. There is
 currently no total-command deadline.
 
-Exceeding a ceiling fails with status 1 and leaves incomplete output. The CLI
-does not turn a query into a successful sample or write an IPC end marker after
-failure. As with `scan`, require valid Arrow output and status 0, and discard
-partial files after failure. With `--diagnostics=json`, query completion has
-`scope: "query"`, the selected version, and row, batch, and output-byte counts.
-This option controls stderr diagnostics; query results remain Arrow.
+Exceeding a ceiling fails with status 1. JSON stays buffered until the full result
+fits; resource and execution failures leave stdout empty. Arrow may leave partial
+output without an IPC end marker. Require status 0 and valid output, and discard
+partial files after failure. With `--diagnostics=json`, query completion identifies
+the command, selected snapshot, and row and output-byte counts.
+This option controls stderr diagnostics independently of the result format.
+Arrow keeps completion v1. JSON uses v2, whose completion kind marks terminal
+success for the requested query. Check `completion: "complete"` and `scope: "query"`
+in stdout. Verify the completion's rows against both `row_count` and the length
+of the `rows` array, and its bytes against saved stdout.
+
+### Read a small result as typed JSON
+
+Choose columns or aggregates that answer the task. For example, to count the rows
+in a pinned snapshot:
+
+```sh
+printf 'SELECT count(*) AS n FROM t\n' > count.sql
+dar query /data/orders --table-version 42 --sql-file count.sql --format json
+```
+
+The response contains `kind: "rows"`, `format_version: 1`, the actual table
+version in `bindings`, a `schema`, positional `rows`, and `row_count` as a decimal
+string. Success reports `completion: "complete"` and `scope: "query"`. An empty result retains its
+schema. Fields retain names, nullability, and Arrow type parameters; optional
+metadata and physical dictionary IDs are omitted.
+
+Rows and nested structs use arrays in field order, preserving duplicate names.
+Integer and decimal values are strings; decimals store the unscaled integer.
+Dates, times, timestamps, and durations are integer strings in their Arrow unit.
+Binary values use padded base64. Lists are arrays, maps are ordered key/value
+pairs, and dictionaries contain decoded values. Booleans, strings, and nulls
+use native JSON. Finite floats round-trip at their Arrow precision; `-0`, `NaN`,
+`Infinity`, and `-Infinity` are strings. Unions, intervals, and run-end encoded
+types fail with `unsupported_json_type`; use Arrow for these or for NaN payloads.
+
+Look up the envelope with `dar capabilities --schema rows`. For a particular
+encoding, use `--detail rows` to list choices, then `--detail decimal`, for
+example. These lookups do not read the table.
+
+The default 8 KiB budget covers the entire response. If it cannot fit, select
+fewer columns or aggregate in SQL. For a complete larger result, redirect Arrow
+to a file. An explicit `--max-output-bytes` can raise the JSON budget when a
+larger JSON response is needed. `--max-rows` never truncates a successful result;
+SQL `LIMIT` deliberately changes the requested result.
 
 ## Filter rows
 

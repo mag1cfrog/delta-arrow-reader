@@ -100,12 +100,16 @@ Keep existing full `inspect` JSON v1, Arrow-stream `scan`, and input-file format
 compatible. New inspection behavior is opt-in. New JSON envelopes have `kind`
 and `format_version`; incompatible meanings/types or removal of required fields
 require a new version. Diagnostics use version 2 after removing the fixed
-failure message; completion and discovery envelopes use version 1.
+failure message. Query JSON completion uses version 2, retaining command,
+bindings, rows, and output bytes alongside kind and version. Other completions and
+discovery envelopes retain version 1.
 Consumers ignore additional output fields; parsers reject unknown input fields
 and unsupported versions. Stdout contains only the result.
 
-Typed JSON uses the existing Arrow schema encoding and positional row arrays,
-so duplicate names and zero-column rows survive. Empty results retain schema.
+Typed JSON uses Arrow type encodings and positional row arrays, so duplicate
+names and zero-column rows survive. Fields retain name, data_type, nullability,
+and dictionary ordering where applicable. Optional metadata and physical
+dictionary IDs are omitted, including in nested fields. Empty results retain schema.
 Preview and query JSON sent to stdout default to 8 KiB, including schema,
 framing, and the final newline. A larger response needs an explicit budget
 increase. Complete results that exceed the small stdout budget use file output;
@@ -137,9 +141,8 @@ A one-row preview response:
   "format_version": 1, "kind": "rows",
   "bindings": [{"alias": "t", "table_version": "42"}],
   "schema": {"fields": [
-    {"name": "id", "data_type": "Int64", "nullable": false,
-     "dict_id": 0, "dict_is_ordered": false, "metadata": {}}
-  ], "metadata": {}},
+    {"name": "id", "data_type": "Int64", "nullable": false}
+  ]},
   "rows": [["9007199254740993"]], "row_count": "1",
   "completion": "sample", "stop_reason": "row_limit", "has_more": null
 }
@@ -185,8 +188,12 @@ default diagnostics. A repair hint leads directly to the needed detail and
 preserves the chosen authorization, snapshot, and output semantics.
 
 Machine mode attempts one terminal failure or completion record, independent of
-`RUST_LOG`. Completion includes scope, stop reason, actual bindings, and row,
-batch, and result-byte counts. Data-sized quantities are decimal strings.
+`RUST_LOG`. The completion kind marks terminal success for the requested command.
+Completion includes actual bindings and result-byte counts; scan and query add
+row counts. Version 1 also reports scope, exhaustion, and Arrow batch counts.
+Data-sized quantities are decimal strings. For query JSON, verify the stdout
+envelope's complete status and query scope, then compare its bindings and row
+count with the terminal record.
 Consumers require exit 0, valid framing, and the terminal record in machine
 mode. IPC decoding or a JSON prefix alone cannot prove success. Failed streams
 must not write a success marker. Results themselves are not secret-filtered.
@@ -218,7 +225,7 @@ context-efficiency acceptance also compares complete task outcomes and cost.
 
 Stdout limits include schema, framing, and the final newline, not just row
 values. Terminal records have their separate diagnostic budget; workflow tests
-count both streams. Stream full queries; buffer only bounded previews.
+count both streams. Stream Arrow queries; buffer only bounded JSON results.
 Query-pool memory is not total process RSS. Spill uses private per-invocation
 files, a total disk budget, and cleanup on handled exits.
 

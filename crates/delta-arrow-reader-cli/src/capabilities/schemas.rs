@@ -21,6 +21,7 @@ pub(crate) enum DiscoverySchema {
     InspectionSummary,
     Diagnostic,
     Completion,
+    Rows,
 }
 
 impl DiscoverySchema {
@@ -38,8 +39,13 @@ impl DiscoverySchema {
         let scalar_types = variant_names(schema, "scalar", "type");
         let properties = schema.get("properties").and_then(Value::as_object);
         if let Some(name) = detail {
-            let definition =
-                find_field_or_variant(schema, name).ok_or_else(|| Error::Argument {
+            let definition = find_field_or_variant(schema, name)
+                .or_else(|| {
+                    matches!(self, Self::Rows)
+                        .then(|| schema["$defs"].get(name))
+                        .flatten()
+                })
+                .ok_or_else(|| Error::Argument {
                     kind: clap::error::ErrorKind::InvalidValue,
                     correction: Some(InputCorrection {
                         argument: "--detail".to_owned(),
@@ -52,6 +58,21 @@ impl DiscoverySchema {
                 })?;
             guide["detail"] = json!(name);
             guide["definition"] = definition.clone();
+            if matches!(self, Self::Rows) && name == "rows" {
+                guide["encodings"] = json!(
+                    schema["$defs"]
+                        .as_object()
+                        .map(|definitions| definitions.keys().collect::<Vec<_>>())
+                );
+                guide["detail_command"] = json!([
+                    executable,
+                    "capabilities",
+                    "--schema",
+                    self,
+                    "--detail",
+                    "NAME"
+                ]);
+            }
             if matches!(self, Self::Predicate) {
                 for tag in ["op", "type"] {
                     if let Some(choices) = guide["definition"]["properties"]
@@ -170,6 +191,7 @@ impl DiscoverySchema {
             Self::ExecutionOptions => return JsonInputKind::ExecutionOptions.schema_document(),
             Self::Inspection => (output_schemas::inspection_schema(), "stdout"),
             Self::InspectionSummary => (output_schemas::inspection_summary_schema(), "stdout"),
+            Self::Rows => (output_schemas::rows_schema(), "stdout"),
             Self::Diagnostic => (output_schemas::diagnostic_schema(), "stderr"),
             Self::Completion => (output_schemas::completion_schema(), "stderr"),
         };
@@ -264,11 +286,41 @@ mod tests {
     use crate::input::{PredicateInput, parse_json};
 
     #[test]
+    fn row_value_encodings_are_disclosed_only_when_selected() {
+        let guide = DiscoverySchema::Rows.guide_document(None).unwrap();
+        assert!(guide.get("encodings").is_none());
+        assert!(!guide.to_string().contains("base64"));
+        let rows = DiscoverySchema::Rows.guide_document(Some("rows")).unwrap();
+        for name in rows["encodings"].as_array().unwrap() {
+            let detail = DiscoverySchema::Rows.guide_document(name.as_str()).unwrap();
+            assert!(detail["definition"]["description"].is_string());
+            assert!(detail.get("encodings").is_none());
+            assert!(detail.get("detail_command").is_none());
+        }
+        let binary = DiscoverySchema::Rows
+            .guide_document(Some("binary"))
+            .unwrap();
+        assert!(
+            binary["definition"]["description"]
+                .as_str()
+                .unwrap()
+                .contains("padded base64")
+        );
+        assert!(!binary.to_string().contains("Decimal128"));
+    }
+
+    #[test]
     fn field_details_keep_only_applicable_conditions_and_integer_rules() {
         let version = DiscoverySchema::Completion
             .guide_document(Some("format_version"))
             .unwrap();
-        assert_eq!(version["definition"], json!({"const": 1}));
+        assert_eq!(version["definition"]["enum"], json!([1, 2]));
+        assert!(
+            version["definition"]["description"]
+                .as_str()
+                .unwrap()
+                .contains("query --format json")
+        );
         for omitted in [
             "conditions",
             "description",
@@ -333,6 +385,34 @@ mod tests {
                     .is_none()
             );
         }
+    }
+
+    #[test]
+    fn batch_count_detail_requires_it_only_for_arrow_completions() {
+        let guide = DiscoverySchema::Completion
+            .guide_document(Some("batches"))
+            .unwrap();
+        let conditions = json!({"allOf": guide["conditions"]});
+        assert_eq!(guide["conditions"].as_array().unwrap().len(), 1);
+        for command in ["scan", "query"] {
+            assert!(!jsonschema::is_valid(
+                &conditions,
+                &json!({"format_version": 1, "command": command})
+            ));
+            assert!(jsonschema::is_valid(
+                &conditions,
+                &json!({"format_version": 1, "command": command, "batches": "1"})
+            ));
+        }
+        assert!(jsonschema::is_valid(
+            &conditions,
+            &json!({"format_version": 2, "command": "query"})
+        ));
+        assert!(jsonschema::is_valid(
+            &conditions,
+            &json!({"format_version": 1, "command": "inspect"})
+        ));
+        assert!(!guide["conditions"].to_string().contains("has_more"));
     }
 
     #[test]

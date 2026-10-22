@@ -2,7 +2,7 @@
 
 use std::{fmt, fs::File, io::Read, num::NonZeroUsize, ops::ControlFlow, sync::Arc};
 
-use clap::Args;
+use clap::{Args, ValueEnum};
 use datafusion::{
     common::DataFusionError,
     execution::{
@@ -34,6 +34,12 @@ use crate::{
 pub(crate) const MAX_SQL_BYTES: u64 = 64 * 1024;
 pub(crate) const SQL_RECURSION_LIMIT: usize = 128;
 
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub(crate) enum QueryOutputFormat {
+    Arrow,
+    Json,
+}
+
 /// Inputs and resource ceilings for a complete single-table query result.
 #[derive(Args)]
 pub(crate) struct QueryArgs {
@@ -42,11 +48,14 @@ pub(crate) struct QueryArgs {
     /// UTF-8 file containing one read-only SQL query over table alias t; at most 64 KiB.
     #[arg(long, value_name = "PATH")]
     pub(crate) sql_file: String,
+    /// Arrow IPC stream (requires redirected stdout), or bounded typed JSON.
+    #[arg(long = "format", value_enum, default_value = "arrow")]
+    pub(crate) output_format: QueryOutputFormat,
     /// Maximum result rows. Exceeding this ceiling fails; SQL LIMIT selects a smaller result.
     #[arg(long, default_value = "1000000", value_name = "N", value_parser = parse_unsigned_decimal::<usize>)]
     pub(crate) max_rows: usize,
-    /// Maximum Arrow IPC bytes, including schema and framing. Exceeding this ceiling fails.
-    #[arg(long, default_value = "1073741824", value_name = "BYTES", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
+    /// Whole-response byte ceiling, including schema and framing. JSON defaults to 8192; excess fails.
+    #[arg(long, default_value = "1073741824", default_value_if("output_format", "json", "8192"), value_name = "BYTES", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
     pub(crate) max_output_bytes: NonZeroUsize,
     /// DataFusion memory-pool ceiling in bytes; not a process RSS limit. Disk spill is disabled.
     #[arg(long, default_value = "268435456", value_name = "BYTES", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
