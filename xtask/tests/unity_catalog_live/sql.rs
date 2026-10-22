@@ -113,7 +113,7 @@ fn queries_capture_sql_and_bind_each_table_to_its_own_snapshot() -> TestResult {
         if operation == "sql_join" {
             assert_eq!(
                 tables[1],
-                json!({"alias": "local_rows", "location": root.join("local-table"), "table_version": "3"})
+                json!({"alias": "local_rows", "location": root.join("local-table").canonicalize()?, "table_version": "3"})
             );
         }
     }

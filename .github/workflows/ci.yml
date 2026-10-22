@@ -144,6 +144,11 @@ jobs:
         run: |
           rustc -vV | grep -F "host: ${{ matrix.target }}"
       - run: cargo test --locked --all-features
+      - name: Test Unity Catalog validation on macOS
+        if: runner.os == 'macOS'
+        run: |
+          cargo test --locked -p xtask --bin xtask scan::ipc::
+          cargo test --locked -p xtask --test unity_catalog_live
 
   checks:
     name: ${{ matrix.task }}

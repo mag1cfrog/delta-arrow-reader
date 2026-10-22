@@ -1,6 +1,6 @@
 //! Offline checks for the opt-in UC harness, including its report redaction boundary.
 
-#![cfg(target_os = "linux")]
+#![cfg(unix)]
 #![allow(clippy::panic, clippy::unwrap_used)]
 
 use std::{

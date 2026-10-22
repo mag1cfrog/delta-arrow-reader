@@ -18,6 +18,7 @@ pub(crate) struct IpcTable {
     pub batches: Vec<RecordBatch>,
 }
 
+#[cfg(target_os = "linux")]
 pub(crate) fn check_arrow_output(output: &Output) -> Result<IpcTable> {
     ensure!(
         output.status.success() && output.stderr.is_empty(),

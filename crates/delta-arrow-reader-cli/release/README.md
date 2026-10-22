@@ -642,10 +642,10 @@ replace platform compatibility checks.
 
 ### Validate a prepared Unity Catalog fixture
 
-On Linux, the opt-in harness checks inspection, a filtered projection, a local
-SQL aggregate, and a join between UC and local Delta tables against independent
-Arrow reference files. Run its offline tests without a Databricks installation
-or account:
+On Linux and macOS, the opt-in harness checks inspection, a filtered projection,
+a local SQL aggregate, and a join between UC and local Delta tables against
+independent Arrow reference files. Run its offline tests without a Databricks
+installation or account:
 
 ```sh
 cargo test --locked -p xtask --test unity_catalog_live
@@ -801,14 +801,17 @@ remain `not_run` until suitable fixtures are available.
 | GCS | `gcs_oauth` | When an eligible fixture is available | `not_run` |
 | Cloudflare R2 | `r2_session` | When an eligible fixture is available | `not_run` |
 
-For each tested row, keep the harness report for both the archive's `dar` and the
-wheel's installed `delta-arrow-reader`. Record user OAuth results first, and
-service-principal OAuth results when that identity is available. Record PAT and
-other missing authentication combinations as `not_run`. Use one configuration
-per fixture and authentication mode. A single passing report covers only its
-declared combination; the reported `cloud` describes storage, not workspace
-deployment. Keep unavailable combinations as `not_run` with a reason in the
-release evidence. Completing the offline checks alone does not complete live
+For each tested row, keep separate reports for each operating system and
+executable. On Linux, validate the archive's `dar` and the wheel's installed
+`delta-arrow-reader`. On macOS, use a native source build and the installed wheel
+where its architecture is supported; standalone release archives are Linux-only.
+Build all executables from the source revision under review. Record user OAuth
+results first, and service-principal OAuth results when that identity is available.
+Record PAT and other missing authentication combinations as `not_run`. Use one
+configuration per fixture and authentication mode. A single passing report covers
+only its declared combination; the reported `cloud` describes storage, not
+workspace deployment. Keep unavailable combinations as `not_run` with a reason in
+the release evidence. Completing the offline checks alone does not complete live
 acceptance.
 
 Public object-store buckets can test direct storage reads, but cannot establish
@@ -821,24 +824,34 @@ do not support credential vending either.
 
 ### Run live validation on another computer
 
-1. Use Linux and check out the source revision under review. Install the DAR
-   archive or wheel being validated and the Databricks CLI in that same
-   environment. If using a Linux container or WSL, configure its Databricks
-   profile there; a login on the host alone may not be available inside it.
+1. Check out the source revision under review. On a Mac, run native macOS checks
+   first, then repeat in a Linux container using the same revision, UC snapshot,
+   local Delta snapshot, SQL, and independent Arrow reference files. Use binaries
+   built for each environment; a macOS executable cannot run in a Linux container.
+   Prefer the host's CPU architecture for the container, and record any CPU
+   emulation used.
 2. Keep the prepared configuration, SQL, independent Arrow reference files, and
    local Delta table together in a private directory. Paths within the fixture
-   configuration are relative to that file. Update `databricks_profile` to the
-   existing profile on that computer, or use the
+   configuration are relative to that file, so the same inputs can be mounted
+   read-only in the Linux container. Install the Databricks CLI and configure its
+   profile in each environment; a host login alone may not be available inside a
+   container. Set `databricks_profile` to that environment's profile, or use the
    [OAuth login instructions](../../delta-arrow-reader-core/docs/public/cli.md#read-a-unity-catalog-table)
    in the CLI guide. Authentication stays on the computer running the checks.
 3. Run `cargo xtask cli test-unity-catalog` with the three options shown above.
    Use the binary's build commit for `--dar-revision`, not an unrelated local
    checkout revision. Repeat with `--binary` pointing to the installed wheel
-   executable, saving a separate report for each run.
-4. Return the reports and exit statuses. Record any unavailable fixture or auth
-   mode as `not_run` with a short reason. Keep the private inputs and login files
-   on that computer. If a run fails, diagnose it there using the reported step
-   and the [CLI error guidance](../../delta-arrow-reader-core/docs/public/cli.md#read-a-unity-catalog-table).
+   executable where supported, saving a separate report for each run. Use names
+   such as `macos-arm64-source.json`, `macos-arm64-wheel.json`,
+   `linux-arm64-archive.json`, and `linux-arm64-wheel.json`, adjusted to the actual
+   architecture and artifact tested.
+4. Return the reports and exit statuses, with the OS version, CPU architecture,
+   artifact type, and Linux container image identity alongside each report. A
+   macOS pass does not establish a Linux pass. Record any unavailable platform,
+   artifact, fixture, or auth mode as `not_run` with a short reason. Keep the
+   private inputs and login files on that computer. If a run fails, diagnose it
+   there using the reported step and the
+   [CLI error guidance](../../delta-arrow-reader-core/docs/public/cli.md#read-a-unity-catalog-table).
 
 ## Build and test a complete platform archive locally
 
