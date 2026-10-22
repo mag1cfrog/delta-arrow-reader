@@ -1,6 +1,6 @@
 //! Exact SQL results, read-only admission, output ceilings, and safe failures.
 
-mod json;
+pub(super) mod json;
 mod tables_manifest;
 
 use std::{
@@ -23,7 +23,7 @@ use super::{diagnostics::assert_single_terminal_record, run_with_timeout};
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 const IPC_END: &[u8] = &[255, 255, 255, 255, 0, 0, 0, 0];
 
-fn fixture_path(name: &str) -> PathBuf {
+pub(super) fn fixture_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus")
         .join(name)
@@ -374,49 +374,42 @@ fn sql_cannot_discover_unregistered_files() -> TestResult {
 }
 
 #[test]
-fn query_arguments_only_offer_direct_storage() -> TestResult {
+fn query_requires_an_explicit_profile_only_for_a_valid_uc_target() -> TestResult {
     let output =
         run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).args(["query", "--help"]))?;
     assert!(output.status.success());
     let help = String::from_utf8(output.stdout)?;
-    assert!(!help.contains("--databricks-profile"));
-    assert!(!help.contains("uc://"));
+    assert!(help.contains("--databricks-profile"));
+    assert!(help.contains("uc://"));
 
-    for table in ["uc://main.sales.orders", "UC://main.sales.orders"] {
-        // Reject the unsupported target before attempting SQL file I/O or authorization.
+    for (table, profile) in [
+        ("uc://main.sales.orders", None),
+        ("UC://main.sales.orders", Some("secret-profile")),
+        ("secret-local-table", Some("secret-profile")),
+        ("uc://main.sales.orders", Some(" ")),
+        ("uc://secret-invalid-name", Some("secret-profile")),
+    ] {
         let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
         command
-            .args(["query", table, "--sql-file", "secret-missing.sql"])
+            .args([
+                "query",
+                table,
+                "--sql-file",
+                "secret-missing.sql",
+                "--diagnostics=json",
+            ])
             .env("PATH", "");
+        if let Some(profile) = profile {
+            command.args(["--databricks-profile", profile]);
+        }
         let output = run_with_timeout(&mut command)?;
         assert_eq!(output.status.code(), Some(2));
         assert!(output.stdout.is_empty());
-        let diagnostic = String::from_utf8(output.stderr)?;
-        assert!(diagnostic.contains("Unity Catalog SQL queries are not supported yet."));
-        assert!(!diagnostic.contains("Databricks profile"));
-
-        let output = run_with_timeout(command.arg("--diagnostics=json"))?;
-        assert_eq!(output.status.code(), Some(2));
         let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["code"], "unsupported_uc_query");
+        assert_eq!(record["code"], "invalid_uc_reference");
         assert_eq!(record["phase"], "configuration");
         assert_eq!(record["recovery"], "fix_input");
-    }
-    for table in ["secret-table", "uc://main.sales.orders"] {
-        let output = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).args([
-            "query",
-            table,
-            "--sql-file",
-            "secret-missing.sql",
-            "--databricks-profile",
-            "secret-profile",
-            "--diagnostics=json",
-        ]))?;
-        assert_eq!(output.status.code(), Some(2));
-        assert!(output.stdout.is_empty());
-        let record = assert_single_terminal_record(&output.stderr, "diagnostic");
-        assert_eq!(record["code"], "invalid_cli_argument");
-        assert_eq!(record["argument_kind"], "UnknownArgument");
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
     }
     Ok(())
 }

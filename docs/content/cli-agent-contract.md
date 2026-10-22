@@ -319,7 +319,8 @@ optional authorization references:
 Reject unknown fields, duplicate/reserved aliases, and mixed single/multi-table
 forms before storage IO. Aliases match `[a-z][a-z0-9_]{0,62}`; reserve `t`, system
 catalog names, and SQL keywords. Authorization contains `source` and
-`storage_options_file`/`env_file` references, never values. Command-line paths
+`storage_options_file`/`env_file` references, or source `databricks` with a
+`databricks_profile` for UC tables, never credential values. Command-line paths
 are cwd-relative; manifest references are relative to its directory, and nested
 credential-file references to their containing file. Reject credential-bearing
 URLs. Each binding resolves once; report the actual version even when latest

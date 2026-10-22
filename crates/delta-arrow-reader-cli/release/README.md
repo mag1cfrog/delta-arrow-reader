@@ -616,6 +616,30 @@ In a runtime container without Cargo, use `/tools/xtask cli test-process` and
 `/tools/xtask cli test-scan` with `--repository /checks`. The source checkout
 supplies fixtures and the C fault library source.
 
+### Check Unity Catalog SQL in a packaged executable
+
+On Unix, run the UC query fixtures against an extracted archive or installed
+wheel. From the source checkout that matches the package, set an absolute path
+to the executable:
+
+```sh
+DAR_TEST_UC_BINARY=/absolute/path/to/dar \
+  cargo test --locked -p delta-arrow-reader-cli --test cli -- \
+  unity_catalog::queries unity_catalog::table_manifests
+```
+
+Repeat with `DAR_TEST_UC_BINARY` pointing to the wheel's installed
+`delta-arrow-reader` executable. These tests use temporary Databricks CLI and
+storage fixtures; they need no login or cloud account. They check exact SQL
+results, mixed joins, profile isolation, renewal, and redacted authorization
+failures for S3, R2, GCS, Azure SAS, and Azure bearer credentials. Linux also
+checks the production 30-second child timeout and process cleanup.
+
+`DAR_TEST_UC_BINARY` affects only the UC test fixtures. Omitting it tests the
+Cargo-built executable. These checks supplement the archive and wheel runtime
+acceptance tests above; they do not establish access to a real UC table or
+replace platform compatibility checks.
+
 ## Build and test a complete platform archive locally
 
 After installing the build prerequisites and cargo-about described here, run

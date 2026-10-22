@@ -1,4 +1,4 @@
-//! Databricks CLI authorization for local Delta inspection and scans.
+//! Databricks CLI authorization for local Delta reads and SQL queries.
 //!
 //! The CLI supplies table metadata and temporary storage credentials. Core then reads
 //! the Delta log and data files directly. Table identifiers, credentials, and raw command output
@@ -22,7 +22,7 @@ use delta_arrow_reader::DeltaStorageOptions;
 use snafu::Snafu;
 
 pub(crate) use storage_access::AuthorizedTableAccess;
-use storage_location::{TableStorageLocation, validate_storage_options};
+use storage_location::TableStorageLocation;
 use table_metadata::TableMetadataResponse;
 use temporary_credentials::parse_temporary_credentials;
 
@@ -30,7 +30,7 @@ use temporary_credentials::parse_temporary_credentials;
 #[derive(Clone, Copy, PartialEq, Eq, Snafu)]
 pub(crate) enum Error {
     #[snafu(display(
-        "Use uc://catalog.schema.table with an explicit Databricks profile; profile flags are invalid for other targets."
+        "Use uc://catalog.schema.table with an explicit Databricks profile; profiles are invalid for other targets."
     ))]
     InvalidTableTarget,
     #[snafu(display(
@@ -42,7 +42,7 @@ pub(crate) enum Error {
     ))]
     MissingS3Region,
     #[snafu(display(
-        "Install the Databricks CLI and make the databricks executable available on PATH, then retry with the same --databricks-profile."
+        "Install the Databricks CLI and make the databricks executable available on PATH, then retry with the same --databricks-profile or manifest databricks_profile."
     ))]
     DatabricksCliNotFound,
     #[snafu(display("Could not run the Databricks CLI."))]
@@ -116,22 +116,26 @@ impl fmt::Debug for Error {
 }
 
 /// A validated `uc://catalog.schema.table` target and the profile used to request access.
-#[derive(Clone, Copy)]
-pub(crate) struct UnityCatalogTableTarget<'a> {
+pub(crate) struct UnityCatalogTableTarget {
     /// The `catalog.schema.table` name without the `uc://` prefix.
-    full_table_name: &'a str,
+    full_table_name: String,
     /// Name of the Databricks CLI profile to use for authorization.
-    databricks_profile: &'a str,
+    databricks_profile: String,
 }
 
-impl<'a> UnityCatalogTableTarget<'a> {
+/// Rejects identity overrides before any table's metadata or credentials are requested.
+pub(crate) fn validate_storage_options(options: &DeltaStorageOptions) -> Result<(), Error> {
+    storage_location::validate_storage_options(options, None)
+}
+
+impl UnityCatalogTableTarget {
     /// Checks the target and profile before any subprocess or storage access.
     ///
     /// Direct file/storage paths without a Databricks profile return `None`.
     /// UC targets require an explicit profile.
     pub(crate) fn parse(
-        target: &'a str,
-        databricks_profile: Option<&'a str>,
+        target: &str,
+        databricks_profile: Option<&str>,
     ) -> Result<Option<Self>, Error> {
         let Some(full_table_name) = target.strip_prefix("uc://") else {
             return if databricks_profile.is_some() || target.to_ascii_lowercase().starts_with("uc:")
@@ -157,8 +161,8 @@ impl<'a> UnityCatalogTableTarget<'a> {
             return Err(Error::InvalidTableTarget);
         }
         Ok(Some(Self {
-            full_table_name,
-            databricks_profile,
+            full_table_name: full_table_name.to_owned(),
+            databricks_profile: databricks_profile.to_owned(),
         }))
     }
 
@@ -168,15 +172,18 @@ impl<'a> UnityCatalogTableTarget<'a> {
         storage_options: DeltaStorageOptions,
     ) -> Result<AuthorizedTableAccess, Error> {
         // Reject identity overrides before starting a subprocess, even before the backend is known.
-        validate_storage_options(&storage_options, None)?;
+        validate_storage_options(&storage_options)?;
         let metadata_json =
-            databricks_cli::get_table_metadata(self.databricks_profile, self.full_table_name)
+            databricks_cli::get_table_metadata(&self.databricks_profile, &self.full_table_name)
                 .await?;
-        let table_metadata = TableMetadataResponse::parse(&metadata_json, self.full_table_name)?;
+        let table_metadata = TableMetadataResponse::parse(&metadata_json, &self.full_table_name)?;
         let storage_location = TableStorageLocation::parse(&table_metadata.storage_location)?;
-        validate_storage_options(&storage_options, Some(storage_location.backend))?;
+        storage_location::validate_storage_options(
+            &storage_options,
+            Some(storage_location.backend),
+        )?;
         let credentials_json = databricks_cli::generate_read_credentials(
-            self.databricks_profile,
+            &self.databricks_profile,
             &table_metadata.table_id,
         )
         .await?;
@@ -184,7 +191,7 @@ impl<'a> UnityCatalogTableTarget<'a> {
         AuthorizedTableAccess::new(
             storage_location,
             storage_options,
-            self.databricks_profile.to_owned(),
+            self.databricks_profile,
             table_metadata.table_id,
             credentials,
         )

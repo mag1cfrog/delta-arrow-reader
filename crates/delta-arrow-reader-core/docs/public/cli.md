@@ -155,8 +155,10 @@ selected service, including credential option aliases.
 
 `read_support` describes each command's scope and limits. For example, `query`
 registers positional `TABLE` as `t`, or up to 64 named snapshots from a manifest.
-UC targets are not supported for SQL. Its memory ceiling applies to DataFusion's
-execution pool, and disk spill is disabled. The SQL examples that use `id`
+UC SQL accepts a positional table with an explicit Databricks profile, or
+manifest entries with per-table profile references. A manifest can mix local,
+direct-storage, and UC tables. The memory ceiling
+applies to DataFusion's execution pool, and disk spill is disabled. The SQL examples that use `id`
 assume the selected table has that column. A null limit or deadline means that
 the command has no ceiling for that resource; it does not mean zero.
 
@@ -312,9 +314,9 @@ Discovery does not search numeric version gaps.
 Use an existing Databricks CLI workspace profile to resolve a table name and
 obtain temporary cloud credentials. DAR reads the Delta log and data files from
 S3, Azure Blob, GCS, or R2 using local compute. `inspect` reports snapshot metadata
-and version; `scan` streams its rows as Arrow IPC. Unity Catalog column metadata
-does not determine the output schema. Neither command submits SQL or starts a
-cluster or SQL warehouse.
+and version; `scan` streams its rows as Arrow IPC, and `query` runs local SQL.
+Unity Catalog column metadata does not determine the output schema. These commands
+do not submit SQL to Databricks or start a cluster or SQL warehouse.
 
 ```sh
 dar inspect uc://main.sales.orders --view summary --databricks-profile work
@@ -505,8 +507,11 @@ a matching completion record. A deadline exits 1; closed output exits 3.
 
 `query` runs SQL locally through the Core DataFusion table provider. It opens
 one Delta snapshot as `t` when given `TABLE`, or registers the aliases in a
-[tables manifest](#join-table-snapshots). Use local paths or direct storage
-URLs; Unity Catalog targets are not yet supported by this command.
+[tables manifest](#join-table-snapshots). Positional `TABLE` accepts a local path,
+direct storage URL, or `uc://catalog.schema.table` with `--databricks-profile`.
+UC queries use the same [authorization prerequisites](#read-a-unity-catalog-table)
+and credential renewal as scans. Databricks supplies metadata and READ credentials;
+SQL executes locally without a Databricks cluster or warehouse.
 
 ```sh
 cat > query.sql <<'SQL'
@@ -518,11 +523,13 @@ LIMIT 100
 SQL
 dar query /data/orders --sql-file query.sql > totals.arrow
 dar query /data/orders --table-version 0 --sql-file query.sql > original.arrow
+dar query uc://main.sales.orders --databricks-profile work \
+  --storage-options-file storage.json --sql-file query.sql > totals.arrow
 ```
 
 ```text
 dar query [--table-version N] [--storage-options-file PATH]
-          [--auth-source SOURCE] [--format arrow|json]
+          [--auth-source SOURCE] [--databricks-profile PROFILE] [--format arrow|json]
           --sql-file PATH [--max-rows N] [--max-output-bytes BYTES]
           [--memory-limit-bytes BYTES] [--] TABLE
 ```
@@ -626,8 +633,10 @@ dar query --tables-file tables.json --sql-file join.sql --diagnostics=json > joi
 ```
 
 `--tables-file` conflicts with positional `TABLE`, `--table-version`,
-`--storage-options-file`, and `--auth-source`. Command-line file paths use the
-working directory. Locations inside the manifest use the manifest's directory.
+`--storage-options-file`, `--auth-source`, and `--databricks-profile`.
+Manifests accept local paths, direct storage URLs, and Unity Catalog table names.
+Command-line file paths use the working directory. Locations inside the manifest
+use the manifest's directory.
 The complete manifest is validated before any table is opened.
 
 <details markdown="1">
@@ -638,11 +647,12 @@ The complete manifest is validated before any table is opened.
 | `format_version` | Required JSON integer `1` |
 | `tables` | Required array of 1-64 table objects |
 | `tables[].alias` | Unique name matching `[a-z][a-z0-9_]{0,62}` |
-| `tables[].location` | Nonempty local path or direct storage URL, without control characters or embedded credentials |
+| `tables[].location` | Nonempty local path, direct storage URL, or `uc://catalog.schema.table`, without control characters or embedded credentials |
 | `tables[].table_version` | Optional decimal string from `"0"` to `"18446744073709551615"`; omit to select latest |
 | `tables[].authorization` | Optional object selecting one explicit credential source |
-| `tables[].authorization.source` | Required when `authorization` is present; an installed `--auth-source` name |
+| `tables[].authorization.source` | Required when `authorization` is present; an installed `--auth-source` name for direct storage, or `databricks` for UC |
 | `tables[].authorization.storage_options_file` | Local JSON storage-options file reference; required for source `json`, optional for other sources |
+| `tables[].authorization.databricks_profile` | Existing Databricks CLI profile name; required for source `databricks`, invalid for other sources |
 
 The file is limited to 1 MiB. Unknown and repeated fields are errors. Versions
 must use canonical digits without signs or leading zeros; JSON numbers and
@@ -652,8 +662,9 @@ must use canonical digits without signs or leading zeros; JSON numbers and
 Aliases cannot be `t`, `datafusion`, `public`, `information_schema`, `pg_catalog`,
 `system`, or a SQL keyword recognized by the parser. URLs cannot contain a
 password, query string, or fragment. Azure Blob's `container@account` URL form
-is accepted. Omitting `authorization` uses default storage authentication.
-An explicit authorization must be an object; `null` is invalid.
+is accepted. Omitting `authorization` uses default authentication for direct
+storage; UC entries require source `databricks` and a profile. An explicit
+authorization must be an object; `null` is invalid.
 
 </details>
 
@@ -668,7 +679,7 @@ this entry uses S3 credentials from a referenced JSON file:
  "authorization":{"source":"json","storage_options_file":"./credentials/orders.json"}}
 ```
 
-The available sources and their provider restrictions are the same as
+The direct-storage sources and their provider restrictions are the same as
 [`--auth-source`](#explicit-credential-sources): `json`, `env`, `aws-web-identity`,
 `aws-container`, `azure-workload-identity`, and `azure-managed-identity`.
 The manifest accepts references only; put credential values in the selected
@@ -685,6 +696,34 @@ The CLI reads every referenced options file before loading any table. Each
 binding retains its selected provider; changing an options file during the
 query cannot switch its identity. Native providers can still renew credentials
 and reread rotating identity-token files under their existing rules.
+
+</details>
+
+<details markdown="1">
+<summary>Join Unity Catalog, local, and direct-storage tables</summary>
+
+Each UC entry uses an existing Databricks CLI profile. The same
+[Unity Catalog permissions and storage options](#read-a-unity-catalog-table)
+apply as for positional UC reads. For example:
+
+```json
+{"format_version":1,"tables":[
+  {"alias":"orders","location":"uc://main.sales.orders",
+   "authorization":{"source":"databricks","databricks_profile":"work",
+                    "storage_options_file":"./uc-region.json"}},
+  {"alias":"customers","location":"./customers"},
+  {"alias":"returned_orders","location":"s3://example-bucket/returns",
+   "authorization":{"source":"env"}}
+]}
+```
+
+Save this as `tables.json` and query the declared aliases with `--tables-file`.
+UC storage options may contain transport and region settings, such as
+`{"aws_region":"eu-west-1"}` for S3. They cannot override the vended credentials.
+Profile names must be nonblank and contain no control characters. Different UC
+entries may select different profiles, including for the same table name in
+different workspaces. Each retains its own table ID, storage root, and provider
+during credential renewal. SQL runs locally; it is not sent to Databricks compute.
 
 </details>
 

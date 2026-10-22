@@ -151,7 +151,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
                 "max_file_bytes": crate::query::MAX_SQL_BYTES,
             },
             "notes": [
-                "One read-only SQL statement in a UTF-8 file. Choose TABLE as t or named tables from --tables-file. Unity Catalog targets are unsupported.",
+                "One read-only SQL statement in a UTF-8 file. Choose TABLE as t or named tables from --tables-file.",
                 "The example returns complete typed JSON. Select only needed columns or aggregate; ceilings fail without JSON output. SQL LIMIT changes the result.",
                 "Omit --format for Arrow IPC, which requires redirected stdout and defaults to a 1 GiB byte ceiling.",
                 "No total deadline. Memory is limited to the DataFusion pool, not process RSS; disk spill is disabled.",
@@ -853,7 +853,7 @@ mod tests {
             assert_eq!(argument["default_values"], json!([value.to_string()]));
         }
         assert!(
-            !arguments
+            arguments
                 .iter()
                 .any(|argument| argument["name"] == "--databricks-profile")
         );

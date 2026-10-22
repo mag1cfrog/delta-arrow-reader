@@ -234,7 +234,11 @@ impl DiscoverySchema {
         {
             guide["authorization_command"] =
                 json!([executable, "capabilities", "--authorization", "NAME"]);
-            guide["authorization_guides"] = json!(["s3", "azure-blob", "gcs"]);
+            guide["authorization_guides"] = if matches!(self, Self::Tables) {
+                json!(["s3", "azure-blob", "gcs", "unity-catalog"])
+            } else {
+                json!(["s3", "azure-blob", "gcs"])
+            };
         }
         Ok(guide)
     }

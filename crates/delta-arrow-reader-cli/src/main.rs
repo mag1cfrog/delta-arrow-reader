@@ -757,6 +757,7 @@ async fn execute_table_command(command: Command) -> Result<Value, Error> {
         }
         Command::Query(_) => None,
     };
+    let mut uses_unity_catalog = uc_target.is_some();
     let row_read = match &command {
         Command::Scan { read, .. } | Command::Preview(preview::PreviewArgs { read, .. }) => {
             Some(read)
@@ -787,7 +788,11 @@ async fn execute_table_command(command: Command) -> Result<Value, Error> {
     };
     let work: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
         Command::Capabilities(_) => unreachable!("capabilities returned before table loading"),
-        Command::Query(args) => args.prepare_execution()?,
+        Command::Query(args) => {
+            let (query_uses_unity_catalog, execution) = args.prepare_execution()?;
+            uses_unity_catalog = query_uses_unity_catalog;
+            execution
+        }
         Command::Inspect {
             table, inspection, ..
         } => async move {
@@ -798,7 +803,7 @@ async fn execute_table_command(command: Command) -> Result<Value, Error> {
                 bytes_written: output.len() as u64,
                 ..Default::default()
             };
-            if uc_target.is_some() {
+            if uses_unity_catalog {
                 // Keep the UC cancellation handler responsive when stdout is blocked.
                 tokio::task::spawn_blocking(move || write_stdout(&output))
                     .await
@@ -873,15 +878,15 @@ async fn execute_table_command(command: Command) -> Result<Value, Error> {
             }
             .await;
             match (scan_result, &authorized_access) {
-                (Err(Error::Reader { source }), Some(access)) => {
-                    return Err(access.map_reader_error(source).await);
+                (Err(error @ Error::Reader { .. }), Some(access)) => {
+                    return Err(access.map_read_error(error).await);
                 }
                 (result, _) => result,
             }
         }
         .boxed_local(),
     };
-    if (uc_target.is_some() && !matches!(command, Command::Preview(_)))
+    if (uses_unity_catalog && !matches!(command, Command::Preview(_)))
         || matches!(command, Command::Query(_))
     {
         tokio::select! {
@@ -889,7 +894,7 @@ async fn execute_table_command(command: Command) -> Result<Value, Error> {
             biased;
             exit_status = signals::wait_for_cancellation() => {
                 let status = exit_status?;
-                if uc_target.is_some() {
+                if uses_unity_catalog {
                     Err(Error::UnityCatalog { source: unity_catalog::Error::Cancelled { status } })
                 } else {
                     Err(Error::Cancelled { status })

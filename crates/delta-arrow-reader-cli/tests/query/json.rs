@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use super::*;
 use crate::capabilities::assert_output_matches_schema;
 
-pub(super) fn decode_json(output: &Output) -> TestResult<Value> {
+pub(crate) fn decode_json(output: &Output) -> TestResult<Value> {
     assert!(
         output.status.success(),
         "{}",

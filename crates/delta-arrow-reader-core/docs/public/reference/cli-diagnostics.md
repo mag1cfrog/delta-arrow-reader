@@ -211,7 +211,6 @@ interface; scripts should use machine diagnostics and the exit status.
 | `execution` | `unsupported_json_type` | The selected schema contains a type unsupported by typed JSON, even if the result is empty |
 | `execution` | `deadline_exceeded` | Preview exceeded its whole-command deadline |
 | `configuration` | `invalid_sql_input` | SQL file is malformed, oversized, or contains a disallowed statement |
-| `configuration` | `unsupported_uc_query` | Unity Catalog SQL queries are not yet supported |
 | `datafusion` | `sql_initialization`, `sql_planning`, `sql_execution` | SQL runtime, planning, or execution failed |
 | `execution` | `output_limit` | A configured output ceiling was exceeded; includes a preview schema or first row that cannot fit |
 | `execution` | `command_cancelled` | A preview, SQL query, or capabilities command was interrupted |

@@ -16,6 +16,40 @@ use crate::{
     unity_catalog::{AuthorizedTableAccess, UnityCatalogTableTarget},
 };
 
+/// Captured input for one table load, validated before any query binding starts table IO.
+pub(crate) enum TableLoadRequest {
+    DirectStorage(DeltaTableBuilder),
+    UnityCatalog {
+        target: UnityCatalogTableTarget,
+        storage_options: DeltaStorageOptions,
+        snapshot_selection: DeltaSnapshotSelection,
+    },
+}
+
+impl TableLoadRequest {
+    pub(crate) async fn load_table(
+        self,
+    ) -> Result<(DeltaTable, Option<AuthorizedTableAccess>), Error> {
+        match self {
+            Self::DirectStorage(builder) => {
+                Ok((builder.load_table().await.context(ReaderSnafu)?, None))
+            }
+            Self::UnityCatalog {
+                target,
+                storage_options,
+                snapshot_selection,
+            } => {
+                let access = target
+                    .request_read_access(storage_options)
+                    .await
+                    .context(UnityCatalogSnafu)?;
+                let table = access.load_table(snapshot_selection).await?;
+                Ok((table, Some(access)))
+            }
+        }
+    }
+}
+
 /// Required location and settings for inspect, scan, and preview.
 #[derive(Args)]
 pub(crate) struct TableArgs {
@@ -69,7 +103,7 @@ impl TableOptions {
 
     /// Validates explicit credentials without loading the snapshot or reading data files.
     /// A supplied directory resolves credential paths in the options file; environment paths stay cwd-relative.
-    pub(crate) fn direct_table_builder(
+    fn direct_table_builder(
         &self,
         location: &str,
         credential_file_directory: Option<&Path>,
@@ -89,38 +123,47 @@ impl TableOptions {
             None => Ok(builder.with_storage_options(options)),
         }
     }
+
+    /// Captures options and rejects credential overrides before starting any table IO.
+    pub(crate) fn prepare_load(
+        &self,
+        location: &str,
+        uc_target: Option<UnityCatalogTableTarget>,
+        credential_file_directory: Option<&Path>,
+    ) -> Result<TableLoadRequest, Error> {
+        match uc_target {
+            Some(target) => {
+                ensure!(
+                    self.auth_source.is_none(),
+                    StorageAuthorizationSnafu {
+                        reason: "auth_source_conflicts_with_unity_catalog"
+                    }
+                );
+                let storage_options = self.read_storage_options()?;
+                crate::unity_catalog::validate_storage_options(&storage_options)
+                    .context(UnityCatalogSnafu)?;
+                Ok(TableLoadRequest::UnityCatalog {
+                    target,
+                    storage_options,
+                    snapshot_selection: self.snapshot_selection(),
+                })
+            }
+            None => Ok(TableLoadRequest::DirectStorage(
+                self.direct_table_builder(location, credential_file_directory)?,
+            )),
+        }
+    }
 }
 
 impl TableArgs {
     /// Keeps UC authorization alive alongside the pinned snapshot, including during scans.
     pub(crate) async fn load_table(
         &self,
-        uc_target: Option<UnityCatalogTableTarget<'_>>,
+        uc_target: Option<UnityCatalogTableTarget>,
     ) -> Result<(DeltaTable, Option<AuthorizedTableAccess>), Error> {
-        match uc_target {
-            Some(target) => {
-                ensure!(
-                    self.options.auth_source.is_none(),
-                    StorageAuthorizationSnafu {
-                        reason: "auth_source_conflicts_with_unity_catalog"
-                    }
-                );
-                let access = target
-                    .request_read_access(self.options.read_storage_options()?)
-                    .await
-                    .context(UnityCatalogSnafu)?;
-                let table = access.load_table(self.options.snapshot_selection()).await?;
-                Ok((table, Some(access)))
-            }
-            None => {
-                let table = self
-                    .options
-                    .direct_table_builder(&self.table, None)?
-                    .load_table()
-                    .await
-                    .context(ReaderSnafu)?;
-                Ok((table, None))
-            }
-        }
+        self.options
+            .prepare_load(&self.table, uc_target, None)?
+            .load_table()
+            .await
     }
 }
