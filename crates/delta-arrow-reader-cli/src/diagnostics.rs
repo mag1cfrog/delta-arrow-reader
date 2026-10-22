@@ -37,6 +37,7 @@ use tracing_subscriber::{
 mod stderr_capacity;
 
 pub(crate) const FAILURE_DIAGNOSTIC_TIMEOUT: Duration = Duration::from_secs(1);
+pub(crate) const DIAGNOSTIC_FORMAT_VERSION: u8 = 2;
 
 /// Safe error fields shared by text tracing and JSON diagnostics.
 pub(crate) struct ErrorClassification {
@@ -491,7 +492,8 @@ mod tests {
                 assert!(text.ends_with('\n') && text.len() <= 8192, "{text}");
                 assert!(!text.contains("secret") && !text.contains('\x1b'), "{text}");
                 let record: Value = serde_json::from_str(&text).unwrap();
-                assert_eq!(record["format_version"], 1);
+                assert_eq!(record["format_version"], super::DIAGNOSTIC_FORMAT_VERSION);
+                assert!(record.get("message").is_none());
                 assert_eq!(record["kind"], "diagnostic");
                 assert_eq!(record["terminal"], true);
                 assert_eq!(record["phase"], "execution");

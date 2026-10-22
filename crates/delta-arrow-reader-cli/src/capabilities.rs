@@ -309,7 +309,8 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
             "stream": "stderr",
             "default_format": "text",
             "json": {
-                "option": "--diagnostics=json", "format_version": 1,
+                "option": "--diagnostics=json",
+                "format_versions": {"diagnostic": crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION, "completion": 1},
                 "schemas": terminal_schemas,
             },
         },

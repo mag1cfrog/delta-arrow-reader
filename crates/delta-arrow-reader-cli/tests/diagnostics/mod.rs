@@ -27,7 +27,13 @@ pub(super) fn assert_single_terminal_record(stderr: &[u8], kind: &str) -> Value 
         .collect();
     assert_eq!(records.len(), 1, "{text}");
     let record = records.into_iter().next().unwrap();
-    assert_eq!(record["format_version"], 1);
+    assert_eq!(
+        record["format_version"],
+        if kind == "diagnostic" { 2 } else { 1 }
+    );
+    if kind == "diagnostic" {
+        assert!(record.get("message").is_none());
+    }
     assert_eq!(record["kind"], kind);
     assert_eq!(record["terminal"], true);
     assert!(stderr.len() <= 8192);

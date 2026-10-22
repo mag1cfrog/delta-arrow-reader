@@ -11,6 +11,8 @@
 
 use serde_json::{Value, json};
 
+use crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION;
+
 pub(super) fn inspection_schema() -> Value {
     json!({
         "title": "Snapshot inspection result",
@@ -58,18 +60,17 @@ pub(super) fn inspection_schema() -> Value {
 pub(super) fn diagnostic_schema() -> Value {
     json!({
         "title": "Terminal failure diagnostic",
-        "description": "One JSON line on stderr with --diagnostics=json. Optional fields depend on the error. Phase, code, reason, and source categories are extensible strings; message and correction text are guidance, not identifiers.",
+        "description": "One JSON line on stderr with --diagnostics=json. Optional fields depend on the error. Phase, code, reason, and source categories are extensible strings; correction text is guidance, not an identifier.",
         "type": "object",
-        "required": ["format_version", "kind", "terminal", "phase", "code", "reason", "source_kind", "message", "retryable", "recovery"],
+        "required": ["format_version", "kind", "terminal", "phase", "code", "reason", "source_kind", "retryable", "recovery"],
         "properties": {
-            "format_version": {"const": 1},
+            "format_version": {"const": DIAGNOSTIC_FORMAT_VERSION},
             "kind": {"const": "diagnostic"},
             "terminal": {"const": true},
             "phase": {"type": "string"},
             "code": {"type": "string"},
             "reason": {"type": "string"},
             "source_kind": {"type": ["string", "null"]},
-            "message": {"type": "string"},
             "retryable": {
                 "type": ["boolean", "null"],
                 "description": "True means retry as a new command after discarding failed output. False requires the indicated recovery action first; null means retryability is unknown.",
@@ -88,9 +89,9 @@ pub(super) fn diagnostic_schema() -> Value {
             "os_error": {"type": ["integer", "null"]},
         },
         "examples": [{
-            "format_version": 1, "kind": "diagnostic", "terminal": true,
+            "format_version": DIAGNOSTIC_FORMAT_VERSION, "kind": "diagnostic", "terminal": true,
             "phase": "configuration", "code": "invalid_cli_argument", "reason": "argument_parse_failed",
-            "source_kind": null, "message": "CLI command failed.", "retryable": false, "recovery": "fix_input",
+            "source_kind": null, "retryable": false, "recovery": "fix_input",
             "argument_kind": "UnknownArgument", "hint": "Use --help to choose a supported command or option.",
         }],
     })
@@ -194,7 +195,8 @@ mod tests {
                     assert!(!validator.is_valid(&invalid), "{name:?}: {invalid}");
                 }
                 let mut incompatible = example.clone();
-                incompatible["format_version"] = json!(2);
+                incompatible["format_version"] =
+                    json!(example["format_version"].as_u64().unwrap() + 1);
                 assert!(!validator.is_valid(&incompatible));
             }
         }

@@ -437,14 +437,13 @@ impl Error {
             _ => ("unknown", None),
         };
         let mut record = json!({
-            "format_version": 1,
+            "format_version": diagnostics::DIAGNOSTIC_FORMAT_VERSION,
             "kind": "diagnostic",
             "terminal": true,
             "phase": phase,
             "code": code,
             "reason": reason,
             "source_kind": source_kind,
-            "message": "CLI command failed.",
             "retryable": retryable,
             "recovery": recovery,
         });

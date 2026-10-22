@@ -25,10 +25,10 @@ same option. A handled failure produces:
 
 ```json
 {
-  "format_version": 1, "kind": "diagnostic", "terminal": true,
+  "format_version": 2, "kind": "diagnostic", "terminal": true,
   "phase": "configuration", "code": "invalid_cli_argument",
   "reason": "argument_parse_failed", "source_kind": null,
-  "message": "CLI command failed.", "argument_kind": "UnknownArgument",
+  "argument_kind": "UnknownArgument",
   "retryable": false, "recovery": "fix_input"
 }
 ```
@@ -37,7 +37,8 @@ Core failures retain their typed phase, code, reason, and source category.
 `source_kind` is null when absent. Safe optional fields include `argument_kind`,
 `json_kind`, JSON `line` and `column`, `io_kind`, and `os_error`. No raw dependency
 errors, input values, paths, credentials, or captured child output are included.
-`message` is fixed text; use the classification fields for decisions.
+Diagnostic version 2 removes the fixed `message` from version 1. Use the
+classification fields for decisions.
 
 Argument failures include a `hint` describing how to correct the invocation.
 When Clap identifies a declared argument, `argument` gives its name and
@@ -121,7 +122,7 @@ failures use `unknown` and `retryable: null`. A true `retryable` value means
 starting a new command, after discarding any output from the failed invocation.
 Query output and memory exhaustion use `adjust_budget` and `retryable: false`.
 
-A successful command emits `kind: "completion"`, `terminal: true`, and
+A successful command emits `format_version: 1`, `kind: "completion"`, `terminal: true`, and
 `completion: "complete"` after stdout has been flushed. It includes `command`,
 `scope`, `stop_reason`, `has_more`, and `output_bytes`. Inspect, scan, and query include
 the actual snapshot in `bindings`, for example
@@ -141,7 +142,7 @@ Consumers must check exit status 0, valid stdout, and the completion record.
 stderr records; extract each response's `schema` field
 for validation. Both commands work offline.
 Records are at most 8 KiB. Ignore additional fields and JSON key order; reject
-unsupported `format_version` values. Incompatible field meanings or types
+unsupported `format_version` values for each record kind. Incompatible field meanings or types
 require a new version. This opt-in format replaces the former unversioned
 JSON stderr object; plain text remains the default.
 

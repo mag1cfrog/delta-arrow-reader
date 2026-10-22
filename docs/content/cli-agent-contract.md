@@ -98,7 +98,9 @@ dar --diagnostics=json query /data/orders --table-version 42 --sql-file count.sq
 
 Keep existing full `inspect` JSON v1, Arrow-stream `scan`, and input-file formats
 compatible. New inspection behavior is opt-in. New JSON envelopes have `kind`
-and `format_version: 1`; incompatible meanings/types require a new version.
+and `format_version`; incompatible meanings/types or removal of required fields
+require a new version. Diagnostics use version 2 after removing the fixed
+failure message; completion and discovery envelopes use version 1.
 Consumers ignore additional output fields; parsers reject unknown input fields
 and unsupported versions. Stdout contains only the result.
 
@@ -163,7 +165,7 @@ Known argument/field names and line/column locations provide safe error context:
 
 ```json
 {
-  "format_version": 1, "kind": "diagnostic", "terminal": true,
+  "format_version": 2, "kind": "diagnostic", "terminal": true,
   "phase": "configuration", "code": "invalid_input_json",
   "reason": "input_json_decode_failed", "argument": "--predicate-file",
   "line": 3, "column": 12, "retryable": false, "recovery": "fix_input"
