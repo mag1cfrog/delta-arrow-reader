@@ -774,6 +774,72 @@ its expected row count and 16 MiB of IPC output; excess output fails the check.
 The first failure stops the run and leaves later checks as `not_run`. A passing
 report covers only that fixture and executable, not other clouds or auth modes.
 
+### Record Unity Catalog live coverage
+
+The integration supports four storage backends and five credential forms. Azure
+Blob has both SAS and bearer forms. R2 is a storage backend that Unity Catalog can
+govern through an [external location](https://docs.databricks.com/aws/en/connect/unity-catalog/cloud-storage/external-locations-r2).
+It does not require a fourth Databricks deployment cloud.
+
+Offline tests exercise inspection, scans, and SQL with a fake Databricks CLI and
+local storage services for every form below. They also force expiry, concurrent
+renewal, rejected credentials, and interrupted output. These tests cannot confirm
+workspace permissions, real cloud signing, or network access. Live evidence is
+still pending.
+
+Current live acceptance is scoped to Azure Databricks with Azure Blob / ADLS.
+Validate the credential form the fixture actually returns, including account and
+container resolution. Exercise encoded paths when the available fixture permits
+them, and record any missing coverage. Other credential forms and storage backends
+remain `not_run` until suitable fixtures are available.
+
+| Storage backend | Credential form | Live acceptance scope | Live result |
+| --- | --- | --- | --- |
+| S3 | `s3_session` | Deferred; use a region outside `us-east-1` when available | `not_run` |
+| Azure Blob / ADLS | `azure_blob_sas` | Azure acceptance, when returned by the fixture | `not_run` |
+| Azure Blob / ADLS | `azure_blob_bearer` | Azure acceptance, when returned by the fixture | `not_run` |
+| GCS | `gcs_oauth` | When an eligible fixture is available | `not_run` |
+| Cloudflare R2 | `r2_session` | When an eligible fixture is available | `not_run` |
+
+For each tested row, keep the harness report for both the archive's `dar` and the
+wheel's installed `delta-arrow-reader`. Record user OAuth results first, and
+service-principal OAuth results when that identity is available. Record PAT and
+other missing authentication combinations as `not_run`. Use one configuration
+per fixture and authentication mode. A single passing report covers only its
+declared combination; the reported `cloud` describes storage, not workspace
+deployment. Keep unavailable combinations as `not_run` with a reason in the
+release evidence. Completing the offline checks alone does not complete live
+acceptance.
+
+Public object-store buckets can test direct storage reads, but cannot establish
+that a Databricks principal can obtain a UC table grant. Delta Sharing/OpenSharing
+tables are [excluded from table credential vending](https://docs.databricks.com/aws/en/external-access/credential-vending#limitations).
+Use a small synthetic Delta table in a workspace whose administrator can enable
+external access and grant the required permissions. Tables in
+[Databricks default storage](https://docs.databricks.com/aws/en/storage/default-storage)
+do not support credential vending either.
+
+### Run live validation on another computer
+
+1. Use Linux and check out the source revision under review. Install the DAR
+   archive or wheel being validated and the Databricks CLI in that same
+   environment. If using a Linux container or WSL, configure its Databricks
+   profile there; a login on the host alone may not be available inside it.
+2. Keep the prepared configuration, SQL, independent Arrow reference files, and
+   local Delta table together in a private directory. Paths within the fixture
+   configuration are relative to that file. Update `databricks_profile` to the
+   existing profile on that computer, or use the
+   [OAuth login instructions](../../delta-arrow-reader-core/docs/public/cli.md#read-a-unity-catalog-table)
+   in the CLI guide. Authentication stays on the computer running the checks.
+3. Run `cargo xtask cli test-unity-catalog` with the three options shown above.
+   Use the binary's build commit for `--dar-revision`, not an unrelated local
+   checkout revision. Repeat with `--binary` pointing to the installed wheel
+   executable, saving a separate report for each run.
+4. Return the reports and exit statuses. Record any unavailable fixture or auth
+   mode as `not_run` with a short reason. Keep the private inputs and login files
+   on that computer. If a run fails, diagnose it there using the reported step
+   and the [CLI error guidance](../../delta-arrow-reader-core/docs/public/cli.md#read-a-unity-catalog-table).
+
 ## Build and test a complete platform archive locally
 
 After installing the build prerequisites and cargo-about described here, run

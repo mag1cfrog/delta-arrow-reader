@@ -320,11 +320,28 @@ live workspace compatibility have not been validated. The CLI must support
 It handles the selected profile's PAT, user OAuth, or service-principal OAuth
 authentication. DAR does not start a login flow or read the CLI's token cache.
 
+For a user OAuth profile, log in once from the environment where DAR will run:
+
+```sh
+databricks auth login --host https://YOUR_WORKSPACE_HOST --profile work
+```
+
+Use your workspace URL, not the account console URL. An existing working profile
+needs no new login. For service-principal OAuth or PAT profiles, follow
+[Databricks CLI authentication](https://docs.databricks.com/aws/en/dev-tools/cli/authentication).
+
 An administrator must enable external data access on the metastore. The
 requesting principal needs `USE CATALOG`, `USE SCHEMA`, `SELECT`, and explicit
 `EXTERNAL USE SCHEMA`. Both the workspace and storage endpoint must be reachable.
 See [Databricks external access setup](https://docs.databricks.com/aws/en/external-access/admin).
 Selecting a profile does not grant additional permissions.
+
+The storage paths and credential forms below have offline test coverage. Real
+Databricks workspace validation is still pending; a successful read on one backend
+does not establish compatibility with the others. A public bucket or a table
+shared through Delta Sharing/OpenSharing does not exercise this authorization
+flow. Tables in [Databricks default storage](https://docs.databricks.com/aws/en/storage/default-storage)
+also cannot vend the credentials needed for direct reads.
 
 For S3, supply the bucket's region through the existing storage options file.
 The credential response does not include it, and DAR does not assume a default:
@@ -384,6 +401,14 @@ messages that omit profile names, table names, storage URLs, and credentials.
 See [Errors and process status](#errors-and-process-status) for output and
 filtering rules. Check the selected profile's login and permissions separately
 when a metadata or credential request fails.
+
+If user OAuth login has expired or been revoked, repeat `databricks auth login`
+with the same workspace and profile, then rerun the command. A permissions error
+requires the administrator to check the grants and external-access setting above;
+logging in again cannot grant access. If a scan or query fails after writing rows,
+discard its partial output and rerun the whole command at the same snapshot.
+See [Scan rows](#scan-rows) and [Errors and process status](#errors-and-process-status)
+for the checks needed before accepting IPC output.
 
 ## Scan rows
 
