@@ -32,9 +32,11 @@ use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu};
 
 use crate::{
-    Error, InputIoSnafu, QuerySnafu, ReaderSnafu, UnityCatalogSnafu, arrow_output,
-    build_completion_record, diagnostics::ErrorClassification, parse_unsigned_decimal,
-    table_input::TableOptions, unity_catalog::UnityCatalogTableTarget,
+    Error, InputIoSnafu, QuerySnafu, UnityCatalogSnafu, arrow_output, build_completion_record,
+    diagnostics::ErrorClassification,
+    parse_unsigned_decimal,
+    table_input::{TableLoadRequest, TableOptions},
+    unity_catalog::UnityCatalogTableTarget,
 };
 
 pub(crate) const MAX_SQL_BYTES: u64 = 64 * 1024;
@@ -72,46 +74,36 @@ pub(crate) struct QueryArgs {
 }
 
 impl QueryArgs {
-    pub(crate) fn unity_catalog_target(
-        &self,
-    ) -> Result<Option<UnityCatalogTableTarget<'_>>, Error> {
-        let Some(location) = &self.table else {
-            return Ok(None);
-        };
-        UnityCatalogTableTarget::parse(location, self.databricks_profile.as_deref())
-            .context(UnityCatalogSnafu)
-    }
-
     /// Admits all input before any table IO; execution loads each snapshot exactly once.
-    pub(crate) fn prepare_execution<'a>(
-        &'a self,
-        uc_target: Option<UnityCatalogTableTarget<'a>>,
-    ) -> Result<LocalBoxFuture<'a, Result<Value, Error>>, Error> {
-        let direct_table_builders = if let Some(path) = &self.tables_file {
-            tables_manifest::read_table_builders(path)?
-        } else if uc_target.is_some() {
-            Vec::new()
+    /// Returns whether UC cancellation reporting applies, followed by the pending execution.
+    pub(crate) fn prepare_execution(
+        &self,
+    ) -> Result<(bool, LocalBoxFuture<'_, Result<Value, Error>>), Error> {
+        let requests = if let Some(path) = &self.tables_file {
+            tables_manifest::read_table_requests(path)?
         } else {
             let location = self.table.as_deref().ok_or(Error::Argument {
                 kind: clap::error::ErrorKind::MissingRequiredArgument,
                 correction: None,
             })?;
+            let uc_target =
+                UnityCatalogTableTarget::parse(location, self.databricks_profile.as_deref())
+                    .context(UnityCatalogSnafu)?;
             vec![(
                 "t".to_owned(),
-                self.table_options.direct_table_builder(location, None)?,
+                self.table_options.prepare_load(location, uc_target, None)?,
             )]
         };
         let sql_query = ReadOnlySqlQuery::read_file(&self.sql_file)?;
-        Ok(async move {
-            let mut tables = Vec::with_capacity(direct_table_builders.len());
-            let mut authorized_access = None;
-            if let Some(target) = uc_target {
-                let (table, access) = self.table_options.load_unity_catalog_table(target).await?;
-                authorized_access = Some(access);
-                tables.push(("t".to_owned(), table));
-            }
-            for (alias, builder) in direct_table_builders {
-                let table = builder.load_table().await.context(ReaderSnafu)?;
+        let uses_unity_catalog = requests
+            .iter()
+            .any(|(_, request)| matches!(request, TableLoadRequest::UnityCatalog { .. }));
+        let execution = async move {
+            let mut tables = Vec::with_capacity(requests.len());
+            let mut authorized_access = Vec::new();
+            for (alias, request) in requests {
+                let (table, access) = request.load_table().await?;
+                authorized_access.extend(access);
                 tables.push((alias, table));
             }
             let bindings: Vec<_> = tables
@@ -135,17 +127,23 @@ impl QueryArgs {
                 .await
             }
             .await;
-            let stdout_stats = match (query_result, &authorized_access) {
-                (Err(error @ (Error::Reader { .. } | Error::Query { .. })), Some(access)) => {
-                    return Err(access.map_read_error(error).await);
+            let stdout_stats = match query_result {
+                Err(mut error @ (Error::Reader { .. } | Error::Query { .. })) => {
+                    for access in &authorized_access {
+                        error = access.map_read_error(error).await;
+                        if matches!(error, Error::UnityCatalog { .. }) {
+                            break;
+                        }
+                    }
+                    return Err(error);
                 }
-                (result, _) => result?,
+                result => result?,
             };
             let mut completion = build_completion_record("query", None, stdout_stats, None);
             completion["bindings"] = bindings.into();
             Ok(completion)
-        }
-        .boxed_local())
+        }.boxed_local();
+        Ok((uses_unity_catalog, execution))
     }
 }
 

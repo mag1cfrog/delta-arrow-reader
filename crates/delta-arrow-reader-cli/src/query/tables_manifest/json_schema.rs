@@ -6,11 +6,12 @@ use serde_json::{Value, json};
 use crate::direct_credentials::CredentialSource;
 
 pub(crate) fn tables_manifest_schema() -> Value {
-    let sources: Vec<_> = CredentialSource::value_variants()
+    let mut sources: Vec<_> = CredentialSource::value_variants()
         .iter()
         .filter_map(|source| source.to_possible_value())
         .map(|value| value.get_name().to_owned())
         .collect();
+    sources.push("databricks".to_owned());
     json!({
         "title": "Named table snapshots",
         "description": "Relative locations use the manifest directory. Omit table_version for latest at load time; updates and credential refresh never retarget a loaded snapshot. Snapshots do not form a cross-table transaction.",
@@ -39,7 +40,7 @@ pub(crate) fn tables_manifest_schema() -> Value {
                     },
                     "location": {
                         "type": "string", "minLength": 1,
-                        "description": "Local path or direct storage URL. Relative paths use the manifest directory. No blank values, control characters, embedded credentials, URL queries or fragments. UC targets are not supported.",
+                        "description": "Local path, direct storage URL, or uc://catalog.schema.table. Relative paths use the manifest directory. No blank values, control characters, embedded credentials, URL queries or fragments.",
                     },
                     "table_version": {
                         "type": "string", "pattern": "^(0|[1-9][0-9]*)$",
@@ -51,20 +52,28 @@ pub(crate) fn tables_manifest_schema() -> Value {
             },
             "authorization": {
                 "type": "object", "additionalProperties": false, "required": ["source"],
-                "description": "References only; no inline credentials or env_file. Omit for backend defaults; null is invalid.",
+                "description": "References only; no inline credentials or env_file. Omit for direct-storage defaults. UC requires databricks. Null is invalid.",
                 "properties": {
                     "source": {
                         "type": "string", "enum": sources,
-                        "description": "Same restrictions as --auth-source. Credentials never fall back to another identity.",
+                        "description": "An --auth-source name for direct storage, or databricks for UC. No identity fallback.",
                     },
                     "storage_options_file": {
                         "type": "string", "minLength": 1,
-                        "description": "Local JSON path relative to the manifest, required for json. Nested credential paths use this file's directory; environment paths use the working directory. No blank values, control characters or URLs.",
+                        "description": "Local JSON path relative to the manifest; required for json. UC allows transport/region only. Nested credential paths use this file's directory; environment paths use cwd. No blanks, control characters or URLs.",
+                    },
+                    "databricks_profile": {
+                        "type": "string", "minLength": 1,
+                        "description": "Existing Databricks CLI profile. Required only for databricks; invalid for other sources. No blank names or control characters.",
                     },
                 },
                 "allOf": [{
                     "if": {"properties": {"source": {"const": "json"}}},
                     "then": {"required": ["storage_options_file"]},
+                }, {
+                    "if": {"properties": {"source": {"const": "databricks"}}},
+                    "then": {"required": ["databricks_profile"]},
+                    "else": {"not": {"required": ["databricks_profile"]}},
                 }],
             },
         },
@@ -89,6 +98,11 @@ mod tests {
         let baseline =
             json!({"format_version": 1, "tables": [{"alias": "orders", "location": "./orders"}]});
         let mut cases = vec![(baseline.clone(), true)];
+        let mut uc_manifest = baseline.clone();
+        uc_manifest["tables"][0]["location"] = json!("uc://main.sales.orders");
+        uc_manifest["tables"][0]["authorization"] =
+            json!({"source":"databricks", "databricks_profile":"work"});
+        cases.push((uc_manifest, true));
         for version in ["0", "18446744073709551615"] {
             let mut manifest = baseline.clone();
             manifest["tables"][0]["table_version"] = json!(version);
@@ -106,6 +120,19 @@ mod tests {
             ("authorization", json!([])),
             ("authorization", json!({"source":"unknown"})),
             ("authorization", json!({"source":"json"})),
+            ("authorization", json!({"source":"databricks"})),
+            (
+                "authorization",
+                json!({"source":"databricks", "databricks_profile":null}),
+            ),
+            (
+                "authorization",
+                json!({"source":"databricks", "databricks_profile":""}),
+            ),
+            (
+                "authorization",
+                json!({"source":"env", "databricks_profile":"work"}),
+            ),
             (
                 "authorization",
                 json!({"source":"env", "access_key_id":"secret"}),
@@ -132,7 +159,7 @@ mod tests {
             assert_eq!(validator.is_valid(&manifest), accepted, "{manifest}");
             std::fs::write(&path, manifest.to_string())?;
             assert_eq!(
-                super::super::read_table_builders(path.to_str().unwrap()).is_ok(),
+                super::super::read_table_requests(path.to_str().unwrap()).is_ok(),
                 accepted,
                 "{manifest}",
             );

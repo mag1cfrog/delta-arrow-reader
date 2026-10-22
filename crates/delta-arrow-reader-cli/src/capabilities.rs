@@ -143,7 +143,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
                 "sql": "SELECT o.id, c.id FROM orders o LEFT JOIN customers c ON o.id = c.id WHERE o.id <= 5 ORDER BY o.id, c.id",
             },
             "notes": [
-                "One read-only SQL statement in a UTF-8 file. Choose TABLE as t or named tables from --tables-file. A positional UC target requires --databricks-profile; manifests accept only local/direct storage.",
+                "One read-only SQL statement in a UTF-8 file. Choose TABLE as t or named tables from --tables-file. A positional UC target requires --databricks-profile; each UC manifest entry references its own profile.",
                 "Redirect stdout to a file or pipe. Resource ceilings fail the query; SQL LIMIT selects a smaller result.",
                 "No total deadline. Memory is limited to the DataFusion pool, not process RSS; disk spill is disabled.",
                 read_support::QUERY_SNAPSHOT_SELECTION,

@@ -240,7 +240,7 @@ fn invalid_later_bindings_fail_before_opening_the_first_table() -> TestResult {
         ("customers", "", "invalid_table_location", "location"),
         (
             "customers",
-            "uc://main.sales.orders",
+            "uc://main.sales.orders\n",
             "invalid_table_location",
             "location",
         ),

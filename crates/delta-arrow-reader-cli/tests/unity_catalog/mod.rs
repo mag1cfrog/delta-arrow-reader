@@ -1,5 +1,6 @@
 mod queries;
 mod scans;
+mod table_manifests;
 
 use std::{
     collections::BTreeMap,
@@ -42,6 +43,16 @@ impl StorageCredentialKind {
             Self::AzureBlobSas | Self::AzureBlobBearer => CloudStorageProtocol::AzureBlob,
             Self::S3 | Self::R2 => CloudStorageProtocol::S3,
             Self::Gcs => CloudStorageProtocol::Gcs,
+        }
+    }
+
+    /// Lowercase fragment matched against requests using the initial fixture credentials.
+    fn expected_initial_auth_fragment(self) -> &'static str {
+        match self {
+            Self::S3 | Self::R2 => "credential=test-key/",
+            Self::AzureBlobSas => "sig=test%2bsignature",
+            Self::AzureBlobBearer => "authorization: bearer secret-bearer-token",
+            Self::Gcs => "authorization: bearer secret-gcp-token",
         }
     }
 
@@ -206,36 +217,44 @@ impl DatabricksCliFixture {
             &executable,
             r#"#!/bin/sh
 set -eu
-printf '%s\000' "$@" >> "$DAR_TEST_DIR/recorded_arguments"
+response_directory=$DAR_TEST_DIR
+if [ -n "${DAR_TEST_SECOND_PROFILE:-}" ]; then
+  for argument in "$@"; do
+    if [ "$argument" = "--profile=$DAR_TEST_SECOND_PROFILE" ]; then
+      response_directory=$DAR_TEST_SECOND_PROFILE_DIR
+    fi
+  done
+fi
+printf '%s\000' "$@" >> "$response_directory/recorded_arguments"
 if IFS= read -r unused; then exit 98; fi
 if [ -n "${DAR_TEST_PID1_SIGNAL:-}" ]; then
-  printf '%s' "$PPID" > "$DAR_TEST_DIR/parent_pid"
+  printf '%s' "$PPID" > "$response_directory/parent_pid"
   [ "$PPID" = 1 ] || exit 96
   kill -"$DAR_TEST_PID1_SIGNAL" "$PPID"
   exec /bin/sleep 60
 fi
 if [ "${DAR_TEST_HANG:-}" = 1 ]; then
-  printf '%s' "$$" > "$DAR_TEST_DIR/pid"
+  printf '%s' "$$" > "$response_directory/pid"
   exec /bin/sleep 60
 fi
 case "$1" in
-  tables) /bin/cat "$DAR_TEST_DIR/metadata.json" ;;
+  tables) /bin/cat "$response_directory/metadata.json" ;;
   temporary-table-credentials)
     if [ "${DAR_TEST_DENIED:-}" = 1 ]; then printf 'secret-sentinel\n' >&2; exit 1; fi
     if [ -n "${DAR_TEST_REFRESH:-}" ]; then
-      if [ -e "$DAR_TEST_DIR/initial_grant_issued" ]; then
+      if [ -e "$response_directory/initial_grant_issued" ]; then
         case "$DAR_TEST_REFRESH" in
           deny) printf 'secret-sentinel\n' >&2; exit 1 ;;
-          hang) printf '%s' "$$" > "$DAR_TEST_DIR/pid"; exec /bin/sleep 60 ;;
+          hang) printf '%s' "$$" > "$response_directory/pid"; exec /bin/sleep 60 ;;
           rotate) ;;
           *) exit 97 ;;
         esac
-        /bin/cat "$DAR_TEST_DIR/credentials.next.json"
+        /bin/cat "$response_directory/credentials.next.json"
         exit 0
       fi
-      : > "$DAR_TEST_DIR/initial_grant_issued"
+      : > "$response_directory/initial_grant_issued"
     fi
-    /bin/cat "$DAR_TEST_DIR/credentials.json"
+    /bin/cat "$response_directory/credentials.json"
     if [ "${DAR_TEST_REFRESH:-}" = missing ]; then /bin/mv "$0" "$0.unavailable"; fi
     ;;
   *) exit 97 ;;
@@ -278,6 +297,28 @@ esac
         fs::write(&path, sql)?;
         let mut command = self.table_command("query");
         command.arg("--sql-file").arg(path);
+        Ok(command)
+    }
+
+    fn manifest_query(
+        &self,
+        tables: Value,
+        sql: &str,
+    ) -> Result<Command, Box<dyn std::error::Error>> {
+        fs::create_dir_all(self.directory.path().join("manifests"))?;
+        fs::write(
+            self.directory.path().join("manifests/tables.json"),
+            json!({"format_version":1,"tables":tables}).to_string(),
+        )?;
+        fs::write(self.directory.path().join("query.sql"), sql)?;
+        let mut command = self.command(&[
+            "query",
+            "--tables-file",
+            "manifests/tables.json",
+            "--sql-file",
+            "query.sql",
+        ]);
+        command.current_dir(self.directory.path());
         Ok(command)
     }
 
@@ -1136,6 +1177,8 @@ fn cancellation_terminates_pending_databricks_process() -> TestResult {
         ("inspect", libc::SIGTERM, true, true),
         ("query", libc::SIGTERM, true, false),
         ("query", libc::SIGINT, true, true),
+        ("manifest", libc::SIGTERM, true, false),
+        ("manifest", libc::SIGINT, true, true),
     ] {
         let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
         let _server = if during_refresh {
@@ -1146,10 +1189,17 @@ fn cancellation_terminates_pending_databricks_process() -> TestResult {
         } else {
             None
         };
-        let mut command = if operation == "query" {
-            fixture.query("SELECT * FROM t")?
-        } else {
-            fixture.inspect()
+        let mut command = match operation {
+            "query" => fixture.query("SELECT * FROM t")?,
+            "manifest" => fixture.manifest_query(
+                json!([
+                    {"alias":"orders", "location":"uc://main.sales.orders",
+                     "authorization":{"source":"databricks", "databricks_profile":PROFILE,
+                                      "storage_options_file":"../options.json"}}
+                ]),
+                "SELECT * FROM orders",
+            )?,
+            _ => fixture.inspect(),
         };
         if machine {
             command.arg("--diagnostics=json");

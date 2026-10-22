@@ -12,7 +12,7 @@ use super::{
     temporary_credentials::TemporaryTableCredentials,
 };
 
-/// Validated storage access for one UC invocation, including its renewable credentials.
+/// Validated storage access for one UC table binding, including its renewable credentials.
 ///
 /// The location and credentials must never be logged.
 pub(crate) struct AuthorizedTableAccess {

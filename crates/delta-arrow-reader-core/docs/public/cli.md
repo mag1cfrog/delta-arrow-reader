@@ -143,8 +143,9 @@ selected service, including credential option aliases.
 
 `read_support` describes each command's scope and limits. For example, `query`
 registers positional `TABLE` as `t`, or up to 64 named snapshots from a manifest.
-UC SQL accepts a positional table and an explicit Databricks profile; manifests
-currently accept only local paths and direct storage URLs. The memory ceiling
+UC SQL accepts a positional table with an explicit Databricks profile, or
+manifest entries with per-table profile references. A manifest can mix local,
+direct-storage, and UC tables. The memory ceiling
 applies to DataFusion's execution pool, and disk spill is disabled. The SQL examples that use `id`
 assume the selected table has that column. A null limit or deadline means that
 the command has no ceiling for that resource; it does not mean zero.
@@ -540,7 +541,7 @@ dar query --tables-file tables.json --sql-file join.sql --diagnostics=json > joi
 
 `--tables-file` conflicts with positional `TABLE`, `--table-version`,
 `--storage-options-file`, `--auth-source`, and `--databricks-profile`.
-Manifests currently accept only local paths and direct storage URLs.
+Manifests accept local paths, direct storage URLs, and Unity Catalog table names.
 Command-line file paths use the working directory. Locations inside the manifest
 use the manifest's directory.
 The complete manifest is validated before any table is opened.
@@ -553,11 +554,12 @@ The complete manifest is validated before any table is opened.
 | `format_version` | Required JSON integer `1` |
 | `tables` | Required array of 1-64 table objects |
 | `tables[].alias` | Unique name matching `[a-z][a-z0-9_]{0,62}` |
-| `tables[].location` | Nonempty local path or direct storage URL, without control characters or embedded credentials |
+| `tables[].location` | Nonempty local path, direct storage URL, or `uc://catalog.schema.table`, without control characters or embedded credentials |
 | `tables[].table_version` | Optional decimal string from `"0"` to `"18446744073709551615"`; omit to select latest |
 | `tables[].authorization` | Optional object selecting one explicit credential source |
-| `tables[].authorization.source` | Required when `authorization` is present; an installed `--auth-source` name |
+| `tables[].authorization.source` | Required when `authorization` is present; an installed `--auth-source` name for direct storage, or `databricks` for UC |
 | `tables[].authorization.storage_options_file` | Local JSON storage-options file reference; required for source `json`, optional for other sources |
+| `tables[].authorization.databricks_profile` | Existing Databricks CLI profile name; required for source `databricks`, invalid for other sources |
 
 The file is limited to 1 MiB. Unknown and repeated fields are errors. Versions
 must use canonical digits without signs or leading zeros; JSON numbers and
@@ -567,8 +569,9 @@ must use canonical digits without signs or leading zeros; JSON numbers and
 Aliases cannot be `t`, `datafusion`, `public`, `information_schema`, `pg_catalog`,
 `system`, or a SQL keyword recognized by the parser. URLs cannot contain a
 password, query string, or fragment. Azure Blob's `container@account` URL form
-is accepted. Omitting `authorization` uses default storage authentication.
-An explicit authorization must be an object; `null` is invalid.
+is accepted. Omitting `authorization` uses default authentication for direct
+storage; UC entries require source `databricks` and a profile. An explicit
+authorization must be an object; `null` is invalid.
 
 </details>
 
@@ -583,7 +586,7 @@ this entry uses S3 credentials from a referenced JSON file:
  "authorization":{"source":"json","storage_options_file":"./credentials/orders.json"}}
 ```
 
-The available sources and their provider restrictions are the same as
+The direct-storage sources and their provider restrictions are the same as
 [`--auth-source`](#explicit-credential-sources): `json`, `env`, `aws-web-identity`,
 `aws-container`, `azure-workload-identity`, and `azure-managed-identity`.
 The manifest accepts references only; put credential values in the selected
@@ -600,6 +603,34 @@ The CLI reads every referenced options file before loading any table. Each
 binding retains its selected provider; changing an options file during the
 query cannot switch its identity. Native providers can still renew credentials
 and reread rotating identity-token files under their existing rules.
+
+</details>
+
+<details markdown="1">
+<summary>Join Unity Catalog, local, and direct-storage tables</summary>
+
+Each UC entry uses an existing Databricks CLI profile. The same
+[Unity Catalog permissions and storage options](#read-a-unity-catalog-table)
+apply as for positional UC reads. For example:
+
+```json
+{"format_version":1,"tables":[
+  {"alias":"orders","location":"uc://main.sales.orders",
+   "authorization":{"source":"databricks","databricks_profile":"work",
+                    "storage_options_file":"./uc-region.json"}},
+  {"alias":"customers","location":"./customers"},
+  {"alias":"returned_orders","location":"s3://example-bucket/returns",
+   "authorization":{"source":"env"}}
+]}
+```
+
+Save this as `tables.json` and query the declared aliases with `--tables-file`.
+UC storage options may contain transport and region settings, such as
+`{"aws_region":"eu-west-1"}` for S3. They cannot override the vended credentials.
+Profile names must be nonblank and contain no control characters. Different UC
+entries may select different profiles, including for the same table name in
+different workspaces. Each retains its own table ID, storage root, and provider
+during credential renewal. SQL runs locally; it is not sent to Databricks compute.
 
 </details>
 

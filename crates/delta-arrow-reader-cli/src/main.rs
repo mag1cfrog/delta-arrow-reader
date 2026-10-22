@@ -612,8 +612,9 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
             databricks_profile.as_deref(),
         )
         .context(UnityCatalogSnafu)?,
-        Command::Query(args) => args.unity_catalog_target()?,
+        Command::Query(_) => None,
     };
+    let mut uses_unity_catalog = uc_target.is_some();
     let predicate = match &command {
         Command::Scan {
             predicate_file: Some(path),
@@ -644,7 +645,11 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
     };
     let work: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
         Command::Capabilities(_) => unreachable!("capabilities returned before table loading"),
-        Command::Query(args) => args.prepare_execution(uc_target)?,
+        Command::Query(args) => {
+            let (query_uses_unity_catalog, execution) = args.prepare_execution()?;
+            uses_unity_catalog = query_uses_unity_catalog;
+            execution
+        }
         Command::Inspect {
             table, inspection, ..
         } => async move {
@@ -655,7 +660,7 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
                 bytes_written: output.len() as u64,
                 ..Default::default()
             };
-            if uc_target.is_some() {
+            if uses_unity_catalog {
                 // Keep the UC cancellation handler responsive when stdout is blocked.
                 tokio::task::spawn_blocking(move || write_stdout(&output))
                     .await
@@ -736,14 +741,14 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
         .context(RuntimeSnafu {
             reason: "runtime_build_failed",
         })?;
-    let result = if uc_target.is_some() || matches!(command, Command::Query(_)) {
+    let result = if uses_unity_catalog || matches!(command, Command::Query(_)) {
         runtime.block_on(async {
             tokio::select! {
                 // Install listeners before polling work; cancellation drops any pending child.
                 biased;
                 exit_status = signals::wait_for_cancellation() => {
                     let status = exit_status?;
-                    if uc_target.is_some() {
+                    if uses_unity_catalog {
                         Err(Error::UnityCatalog { source: unity_catalog::Error::Cancelled { status } })
                     } else {
                         Err(Error::Cancelled { status })
