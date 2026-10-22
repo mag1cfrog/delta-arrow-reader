@@ -307,6 +307,7 @@ fn parse_linux_kib(value: &str) -> Option<u64> {
     (fields.next()? == "kB").then(|| kib.checked_mul(1024))?
 }
 
+#[cfg(any(target_os = "linux", windows))]
 fn memory_hint(total_bytes: Option<u64>, available_bytes: Option<u64>) -> Option<MemoryHint> {
     (total_bytes.is_some() || available_bytes.is_some()).then_some(MemoryHint {
         total_bytes,

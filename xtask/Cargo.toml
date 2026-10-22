@@ -13,7 +13,7 @@ workspace = true
 arrow-array = "58.3.0"
 arrow-cast = "58.3.0"
 arrow-ipc = { version = "58.3.0", features = ["lz4", "zstd"] }
-arrow-schema = "58.3.0"
+arrow-schema = { version = "58.3.0", features = ["serde"] }
 arrow-select = "58.3.0"
 base64 = "0.22"
 clap = { version = "4", default-features = false, features = ["derive", "std", "help", "usage"] }

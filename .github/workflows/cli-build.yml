@@ -163,7 +163,7 @@ jobs:
       - name: Test CLI release tools
         run: |
           cargo test --locked --package xtask --bin xtask \
-            --test artifacts --test notices --test cli_workflow --test cli_images_workflow --test images
+            --test artifacts --test notices --test cli_workflow --test cli_images_workflow --test images --test unity_catalog_live
 
   build:
     name: Build Linux ${{ matrix.architecture }}

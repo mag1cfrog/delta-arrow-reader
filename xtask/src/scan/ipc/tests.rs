@@ -6,6 +6,8 @@ use arrow_schema::{Field, Schema};
 
 use super::*;
 
+mod completion;
+
 type TestResult<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 fn table(batches: &[&[Option<i32>]]) -> TestResult<IpcTable> {

@@ -101,6 +101,10 @@ impl MockCloudStorageServer {
                     }
                     request.push(byte[0]);
                 }
+                // A client can close an unused connection without sending an HTTP request.
+                if request.is_empty() {
+                    continue;
+                }
                 let request = String::from_utf8(request).unwrap();
                 recorded.lock().unwrap().push(request.clone());
                 on_request(&request, &mut objects);
@@ -218,6 +222,25 @@ impl Drop for MockCloudStorageServer {
         self.stop.store(true, Ordering::Relaxed);
         self.thread.take().unwrap().join().unwrap();
     }
+}
+
+#[test]
+fn closed_unused_connections_are_not_recorded_as_requests() -> std::io::Result<()> {
+    use std::net::TcpStream;
+
+    let server = MockCloudStorageServer::new(CloudStorageProtocol::S3, b"fixture".to_vec())?;
+    let address = server.endpoint.strip_prefix("http://").unwrap();
+    drop(TcpStream::connect(address)?);
+    let mut socket = TcpStream::connect(address)?;
+    socket.set_read_timeout(Some(Duration::from_secs(2)))?;
+    let request = "GET /bucket/table/_delta_log/00000000000000000000.json HTTP/1.1\r\nHost: localhost\r\n\r\n";
+    socket.write_all(request.as_bytes())?;
+    let mut response = String::new();
+    socket.read_to_string(&mut response)?;
+    assert!(response.starts_with("HTTP/1.1 200 "));
+    assert!(response.ends_with("fixture"));
+    assert_eq!(*server.requests.lock().unwrap(), [request]);
+    Ok(())
 }
 
 fn partitioned_corpus() -> PathBuf {

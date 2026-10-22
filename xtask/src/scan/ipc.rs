@@ -2,10 +2,14 @@ use std::{fs::File, io::Cursor, path::Path, process::Output, sync::Arc};
 
 use arrow_array::{Array, ArrayRef, RecordBatch, StructArray};
 use arrow_ipc::reader::{FileReader, StreamReader};
-use arrow_schema::{DataType, Fields, SchemaRef};
+use arrow_schema::{DataType, Fields, Schema, SchemaRef};
+use serde_json::{Value, json};
 use snafu::{ResultExt, ensure};
 
-use crate::error::{ArrowSnafu, FileSnafu, InvalidInputSnafu, Result};
+use crate::{
+    cli_completion::read_completion,
+    error::{ArrowSnafu, FileSnafu, InvalidInputSnafu, Result},
+};
 
 pub(super) const IPC_END_MARKER: [u8; 8] = [255, 255, 255, 255, 0, 0, 0, 0];
 
@@ -14,6 +18,7 @@ pub(crate) struct IpcTable {
     pub batches: Vec<RecordBatch>,
 }
 
+#[cfg(target_os = "linux")]
 pub(crate) fn check_arrow_output(output: &Output) -> Result<IpcTable> {
     ensure!(
         output.status.success() && output.stderr.is_empty(),
@@ -26,6 +31,101 @@ pub(crate) fn check_arrow_output(output: &Output) -> Result<IpcTable> {
         }
     );
     IpcTable::read_stream(&output.stdout, Path::new("Arrow stdout"))
+}
+
+/// Validate a JSON-mode scan against the requested snapshot, limit, and decoded output.
+pub(crate) fn check_completed_scan(
+    output: &Output,
+    table_version: u64,
+    limit: Option<usize>,
+) -> Result<IpcTable> {
+    let completion = read_completion(output, "scan", &[("t", table_version)])?;
+    let table = read_completed_arrow_stream(output, &completion)?;
+    let rows = table.row_count();
+    ensure!(
+        limit.is_none_or(|limit| rows <= limit),
+        InvalidInputSnafu {
+            message: "Scan returned more rows than requested"
+        }
+    );
+    let limit_reached = limit == Some(rows);
+    for (field, expected) in [
+        (
+            "scope",
+            json!(if limit.is_some() {
+                "limited_scan"
+            } else {
+                "scan"
+            }),
+        ),
+        (
+            "stop_reason",
+            json!(if limit_reached {
+                "row_limit"
+            } else {
+                "end_of_input"
+            }),
+        ),
+        (
+            "has_more",
+            if limit_reached {
+                Value::Null
+            } else {
+                json!(false)
+            },
+        ),
+    ] {
+        ensure!(
+            completion.get(field) == Some(&expected),
+            InvalidInputSnafu {
+                message: format!("Scan completion has an unexpected {field}")
+            }
+        );
+    }
+    Ok(table)
+}
+
+/// A query completes its SQL result, including any SQL LIMIT, for every declared snapshot.
+pub(crate) fn check_completed_query(
+    output: &Output,
+    expected_bindings: &[(&str, u64)],
+) -> Result<IpcTable> {
+    let completion = read_completion(output, "query", expected_bindings)?;
+    let table = read_completed_arrow_stream(output, &completion)?;
+    for (field, expected) in [
+        ("scope", json!("query")),
+        ("stop_reason", json!("end_of_input")),
+        ("has_more", json!(false)),
+    ] {
+        ensure!(
+            completion.get(field) == Some(&expected),
+            InvalidInputSnafu {
+                message: format!("Query completion has an unexpected {field}")
+            }
+        );
+    }
+    Ok(table)
+}
+
+fn read_completed_arrow_stream(output: &Output, completion: &Value) -> Result<IpcTable> {
+    let table = IpcTable::read_stream(&output.stdout, Path::new("Arrow stdout")).map_err(|_| {
+        InvalidInputSnafu {
+            message: "Stdout is not a complete Arrow IPC stream",
+        }
+        .build()
+    })?;
+    for (field, expected) in [
+        ("rows", table.row_count()),
+        ("batches", table.batches.len()),
+    ] {
+        ensure!(
+            completion.get(field) == Some(&json!(expected.to_string())),
+            InvalidInputSnafu {
+                message: format!("Completion has an unexpected {field}")
+            }
+        );
+    }
+    Ok(table)
 }
 
 impl IpcTable {
@@ -81,12 +181,7 @@ impl IpcTable {
     }
 
     pub fn check_matches(&self, expected: &Self, limit: Option<usize>) -> Result<()> {
-        ensure!(
-            fields_match_without_metadata(self.schema.fields(), expected.schema.fields()),
-            InvalidInputSnafu {
-                message: format!("Arrow schema differs from the fixture: {:?}", self.schema)
-            }
-        );
+        self.check_schema_matches(&expected.schema)?;
         let expected_rows = limit.map_or(expected.row_count(), |limit| {
             limit.min(expected.row_count())
         });
@@ -125,6 +220,16 @@ impl IpcTable {
                 unmatched.swap_remove(matched);
             }
         }
+        Ok(())
+    }
+
+    pub fn check_schema_matches(&self, expected: &Schema) -> Result<()> {
+        ensure!(
+            fields_match_without_metadata(self.schema.fields(), expected.fields()),
+            InvalidInputSnafu {
+                message: "Arrow schema differs from the fixture"
+            }
+        );
         Ok(())
     }
 }

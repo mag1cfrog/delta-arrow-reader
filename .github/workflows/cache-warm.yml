@@ -144,10 +144,10 @@ jobs:
         run: &warm-core-caches |
           cargo test --locked --all-features --no-run
           cargo test --locked --no-run
+          cargo test --locked --package xtask --bin xtask --test unity_catalog_live --no-run
           if [ "$RUNNER_OS" = "Linux" ]; then
             cargo test --locked -p delta-arrow-reader-python --no-run
             cargo test --locked -p delta-arrow-reader-cli --no-run
-            cargo test --locked --package xtask --bin xtask --no-run
             cargo clippy --locked --all-targets --all-features -- -D warnings
             cargo clippy --locked -p delta-arrow-reader-python --all-targets -- -D warnings
             cargo clippy --locked -p delta-arrow-reader-cli --all-targets -- -D warnings

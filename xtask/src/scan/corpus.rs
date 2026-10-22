@@ -7,7 +7,7 @@ use arrow_schema::{DataType, Field, Schema};
 use serde_json::json;
 use snafu::ResultExt;
 
-use super::ipc::{IpcTable, check_arrow_output};
+use super::ipc::{IpcTable, check_completed_scan};
 use crate::{
     command::output_with_timeout,
     error::{ArrowSnafu, FileSnafu, Result},
@@ -35,12 +35,30 @@ struct CorpusFixture<'a> {
 }
 
 impl CorpusFixture<'_> {
-    fn scan(&self, command: &mut Command) -> Result<IpcTable> {
-        check_arrow_output(&output_with_timeout(command, Duration::from_secs(30))?)
+    fn scan(
+        &self,
+        command: &mut Command,
+        table_version: u64,
+        limit: Option<usize>,
+    ) -> Result<IpcTable> {
+        command.args([
+            "--diagnostics=json",
+            "--table-version",
+            &table_version.to_string(),
+        ]);
+        if let Some(limit) = limit {
+            command.args(["--limit", &limit.to_string()]);
+        }
+        let output = output_with_timeout(command, Duration::from_secs(30))?;
+        check_completed_scan(&output, table_version, limit)
     }
 
     fn check_spark_fixtures(&self) -> Result<()> {
-        for name in ["partitioned", "nested_mapping", "deletion_vectors"] {
+        for (name, table_version) in [
+            ("partitioned", 0),
+            ("nested_mapping", 1),
+            ("deletion_vectors", 1),
+        ] {
             let fixture = self.corpus.join(name);
             let expected_path = fixture.join("expected.arrow");
             let expected = IpcTable::read_file(&expected_path)?;
@@ -67,10 +85,8 @@ impl CorpusFixture<'_> {
                             command.args(["--column", column]);
                         }
                     }
-                    if let Some(limit) = limit {
-                        command.args(["--limit", &limit.to_string()]);
-                    }
-                    let actual = self.scan(command.arg(fixture.join("table")))?;
+                    let actual =
+                        self.scan(command.arg(fixture.join("table")), table_version, limit)?;
                     actual.check_matches(&projected, limit)?;
                 }
             }
@@ -94,7 +110,7 @@ impl CorpusFixture<'_> {
     }
 
     fn check_filter_column_omitted_from_output(&self) -> Result<()> {
-        let actual = self.scan(&mut self.filtered_scan_command()?)?;
+        let actual = self.scan(&mut self.filtered_scan_command()?, 0, None)?;
         check_filtered_value(&actual)
     }
 
@@ -118,7 +134,7 @@ impl CorpusFixture<'_> {
                     .arg(path)
                     .args(["--target-partitions", "2"]);
             }
-            let actual = self.scan(command.args(["--limit", "1"]))?;
+            let actual = self.scan(&mut command, 0, Some(1))?;
             check_filtered_value(&actual)?;
         }
         Ok(())
