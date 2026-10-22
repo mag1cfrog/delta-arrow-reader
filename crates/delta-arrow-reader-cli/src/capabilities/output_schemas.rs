@@ -15,10 +15,10 @@ use crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION;
 
 pub(super) fn rows_schema() -> Value {
     json!({
-        "title": "Complete typed JSON query result",
+        "title": "Typed JSON rows",
         "description": "Rows follow schema field order, including duplicate names. Metadata is omitted. For value encodings, use --detail rows.",
         "type": "object",
-        "required": ["format_version", "kind", "bindings", "schema", "rows", "row_count", "completion", "scope"],
+        "required": ["format_version", "kind", "bindings", "schema", "rows", "row_count", "completion"],
         "properties": {
             "format_version": {"const": 1},
             "kind": {"const": "rows"},
@@ -39,9 +39,25 @@ pub(super) fn rows_schema() -> Value {
                 "description": "Each row has one value per schema field. Decode values using their data_type; select an encodings entry with --detail NAME. This schema validates the envelope, not value/type correspondence.",
             },
             "row_count": unsigned_integer_string_schema(),
-            "completion": {"const": "complete"},
+            "completion": {"enum": ["complete", "sample"], "description": "complete covers the SQL result; sample is a preview, even when input was exhausted."},
             "scope": {"const": "query"},
+            "stop_reason": {"enum": ["end_of_input", "row_limit", "byte_limit"]},
+            "has_more": {"type": ["boolean", "null"], "description": "false at observed exhaustion; null at a row limit without lookahead; true when an observed row was omitted for the byte budget."},
         },
+        "allOf": [{
+            "if": {"properties": {"completion": {"const": "complete"}}},
+            "then": {"required": ["scope"]},
+            "else": {"required": ["stop_reason", "has_more"]},
+        }, {
+            "if": {"required": ["stop_reason"], "properties": {"stop_reason": {"const": "end_of_input"}}},
+            "then": {"properties": {"has_more": {"const": false}}},
+        }, {
+            "if": {"required": ["stop_reason"], "properties": {"stop_reason": {"const": "row_limit"}}},
+            "then": {"properties": {"has_more": {"const": null}}},
+        }, {
+            "if": {"required": ["stop_reason"], "properties": {"stop_reason": {"const": "byte_limit"}}},
+            "then": {"properties": {"has_more": {"const": true}}},
+        }],
         "$defs": {
             "integer": {"type": "string", "description": "Signed and unsigned Arrow integers are exact base-10 strings.", "examples": ["9007199254740993"]},
             "decimal": {"type": "string", "description": "Unscaled base-10 integer string. Read precision and scale from data_type; Decimal128(10,2) value 1234 means 12.34.", "examples": ["1234"]},
@@ -194,14 +210,14 @@ pub(super) fn inspection_summary_schema() -> Value {
 pub(super) fn completion_schema() -> Value {
     json!({
         "title": "Terminal success completion",
-        "description": "With --diagnostics=json, check in one script: exit 0, valid stdout and one completion on stderr. Match command and bindings to the request. Compare output_bytes with saved stdout length, rows with decoded result rows, and batches with Arrow batches when present. For JSON also check row_count, completion=complete and scope=query in stdout. Compare counts as decimal strings. Completion covers the requested result, including limits. Version 1 also reports scope and exhaustion: limited_scan covers only the sample; end_of_input/has_more=false proves exhaustion, row_limit/has_more=null does not.",
+        "description": "With --diagnostics=json, check in one script: exit 0, valid stdout and one completion on stderr. Match command and bindings to the request. Compare output_bytes with saved stdout length, rows with decoded result rows, and batches with Arrow batches when present. For JSON check row_count and stdout state: complete/query for SQL, sample plus stop_reason/has_more for preview. Compare counts as decimal strings. Completion covers the requested result, including limits. Version 1 also reports scope and exhaustion: limited_scan covers only the sample; end_of_input/has_more=false proves exhaustion, row_limit/has_more=null does not.",
         "type": "object",
         "required": ["format_version", "kind", "command", "bindings", "output_bytes"],
         "properties": {
-            "format_version": {"enum": [1, 2], "description": "Version 2 for query --format json reports command, bindings, rows and output_bytes. Other commands/formats retain version 1."},
+            "format_version": {"enum": [1, 2], "description": "Version 2 for preview and query --format json reports command, bindings, rows and output_bytes. Other commands/formats retain version 1."},
             "kind": {"const": "completion", "description": "Terminal success for the requested command, emitted after stdout is flushed. Also require exit 0 and valid stdout."},
             "terminal": {"const": true},
-            "command": {"enum": ["capabilities", "inspect", "scan", "query", "help", "version"]},
+            "command": {"enum": ["capabilities", "inspect", "scan", "preview", "query", "help", "version"]},
             "completion": {"const": "complete", "description": "Success also requires exit status 0 and valid stdout."},
             "scope": {
                 "enum": ["capabilities", "inspect", "scan", "limited_scan", "query", "help", "version"],
@@ -218,17 +234,17 @@ pub(super) fn completion_schema() -> Value {
             "batches": unsigned_integer_string_schema(),
         },
         "allOf": [{
-            "if": {"properties": {"command": {"enum": ["scan", "query"]}}},
+            "if": {"properties": {"command": {"enum": ["scan", "preview", "query"]}}},
             "then": {"required": ["rows"]},
         }, {
             "if": {"properties": {"format_version": {"const": 1}}},
-            "then": {"required": ["terminal", "completion", "scope", "stop_reason", "has_more"]},
-            "else": {"properties": {"command": {"const": "query"}, "scope": {"const": "query"}}},
+            "then": {"required": ["terminal", "completion", "scope", "stop_reason", "has_more"], "properties": {"command": {"not": {"const": "preview"}}}},
+            "else": {"properties": {"command": {"enum": ["query", "preview"]}}},
         }, {
             "if": {"properties": {"format_version": {"const": 1}, "command": {"enum": ["scan", "query"]}}},
             "then": {"required": ["batches"]},
         }, {
-            "if": {"properties": {"command": {"enum": ["inspect", "scan", "query"]}}},
+            "if": {"properties": {"command": {"enum": ["inspect", "scan", "preview", "query"]}}},
             "then": {"properties": {"bindings": {"minItems": 1}}},
             "else": {"properties": {"bindings": {"maxItems": 0}}},
         }],

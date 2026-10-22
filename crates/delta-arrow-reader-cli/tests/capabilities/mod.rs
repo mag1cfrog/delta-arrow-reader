@@ -364,7 +364,7 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                     .all(|key| key == name)
             );
             let expected_sources = match name {
-                "inspect" | "scan" => vec!["direct_storage", "local", "unity_catalog"],
+                "inspect" | "scan" | "preview" => vec!["direct_storage", "local", "unity_catalog"],
                 "query" => vec!["direct_storage", "local"],
                 _ => vec![],
             };
@@ -390,7 +390,7 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                 .map(|schema| schema["name"].as_str().unwrap())
                 .collect();
             let expected_inputs = match name {
-                "scan" => vec!["storage-options", "predicate", "execution-options"],
+                "scan" | "preview" => vec!["storage-options", "predicate", "execution-options"],
                 "inspect" | "query" => vec!["storage-options"],
                 _ => vec![],
             };
@@ -409,7 +409,7 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                     "completion",
                 ],
                 "help" => vec!["diagnostic"],
-                "query" => vec!["diagnostic", "completion", "rows"],
+                "query" | "preview" => vec!["diagnostic", "completion", "rows"],
                 _ => vec!["diagnostic", "completion"],
             };
             assert_eq!(output_names, expected_outputs);

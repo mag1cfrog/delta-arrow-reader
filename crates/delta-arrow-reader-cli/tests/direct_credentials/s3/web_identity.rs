@@ -77,7 +77,7 @@ fn assert_sts_requests(requests: &[Value], host: &str, session_name: &str) -> Ve
 #[test]
 fn all_reads_refresh_the_fixed_role_with_rotated_assertions() -> TestResult {
     for references in ["json", "env", "mixed"] {
-        for operation in ["inspect", "scan", "query"] {
+        for operation in ["inspect", "scan", "preview", "query"] {
             let proxy = MockCredentialProxy::new(CredentialService::AwsSts, "refresh")?;
             let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
             let assertion_path = fixture.directory.path().join("assertion.jwt");

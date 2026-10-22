@@ -1,4 +1,4 @@
-//! Row output formats and their complete-result resource ceilings.
+//! Row output formats and their resource ceilings.
 //!
 //! Arrow streams can be consumed incrementally. JSON stays buffered until the
 //! whole result fits, so a failed query cannot be mistaken for a complete result.
@@ -13,7 +13,7 @@ use snafu::ResultExt;
 
 use crate::{Error, RuntimeSnafu, StdoutStats};
 
-/// Resource ceilings fail the query instead of silently truncating its result.
+/// Queries fail at these ceilings; previews return an explicitly labeled sample.
 pub(crate) struct OutputLimits {
     pub(crate) max_rows: u64,
     pub(crate) max_bytes: u64,

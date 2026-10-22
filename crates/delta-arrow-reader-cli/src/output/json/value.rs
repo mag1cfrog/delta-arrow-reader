@@ -15,21 +15,21 @@ use serde::{Serialize, Serializer, ser::SerializeSeq};
 
 use crate::Error;
 
-pub(super) fn validate_type(data_type: &DataType) -> Result<(), Error> {
+pub(super) fn validate_type(data_type: &DataType, command: &'static str) -> Result<(), Error> {
     match data_type {
         DataType::Union(..) | DataType::Interval(..) | DataType::RunEndEncoded(..) => {
-            Err(Error::UnsupportedJsonType)
+            Err(Error::UnsupportedJsonType { command })
         }
         DataType::List(field)
         | DataType::LargeList(field)
         | DataType::ListView(field)
         | DataType::LargeListView(field)
         | DataType::FixedSizeList(field, _)
-        | DataType::Map(field, _) => validate_type(field.data_type()),
+        | DataType::Map(field, _) => validate_type(field.data_type(), command),
         DataType::Struct(fields) => fields
             .iter()
-            .try_for_each(|field| validate_type(field.data_type())),
-        DataType::Dictionary(_, values) => validate_type(values),
+            .try_for_each(|field| validate_type(field.data_type(), command)),
+        DataType::Dictionary(_, values) => validate_type(values, command),
         DataType::Null
         | DataType::Boolean
         | DataType::Int8
@@ -60,7 +60,7 @@ pub(super) fn validate_type(data_type: &DataType) -> Result<(), Error> {
         | DataType::LargeBinary
         | DataType::BinaryView
         | DataType::FixedSizeBinary(_) => Ok(()),
-        DataType::Time32(_) | DataType::Time64(_) => Err(Error::UnsupportedJsonType),
+        DataType::Time32(_) | DataType::Time64(_) => Err(Error::UnsupportedJsonType { command }),
     }
 }
 
@@ -292,7 +292,7 @@ mod tests {
             ),
         ];
         for (array, expected) in cases {
-            validate_type(array.data_type()).unwrap();
+            validate_type(array.data_type(), "query").unwrap();
             assert_eq!(values(array.as_ref()), expected, "{:?}", array.data_type());
         }
         let half =

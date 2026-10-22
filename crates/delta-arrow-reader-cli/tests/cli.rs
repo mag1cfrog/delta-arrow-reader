@@ -10,6 +10,7 @@ mod inspection;
 #[cfg(unix)]
 mod mock_cloud_storage;
 mod predicates;
+mod preview;
 mod query;
 #[cfg(unix)]
 mod unity_catalog;
@@ -72,6 +73,7 @@ fn executable_names_preserve_help_version_and_redacted_errors()
             (vec!["inspect", "--help"], " inspect"),
             (vec!["help", "inspect"], " inspect"),
             (vec!["scan", "--help"], " scan"),
+            (vec!["preview", "--help"], " preview"),
             (vec!["query", "--help"], " query"),
             (vec!["help", "query"], " query"),
             (

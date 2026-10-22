@@ -122,19 +122,21 @@ I/O failures, or `change_request` for unsupported operations. Unclassified
 failures use `unknown` and `retryable: null`. A true `retryable` value means
 starting a new command, after discarding any output from the failed invocation.
 JSON query byte exhaustion uses `change_request`: save the complete result as
-Arrow with the same SQL, authorization, and snapshot. Other query output and memory
-exhaustion use `adjust_budget`. These resource failures set `retryable: false`.
+Arrow with the same SQL, authorization, and snapshot. Preview schema/first-row byte exhaustion also uses `change_request`.
+Preview deadlines and other query output or memory exhaustion use `adjust_budget`. These resource failures set `retryable: false`.
 
 A successful command emits `kind: "completion"` after stdout has been flushed.
-It includes `command` and `output_bytes`. Inspect, scan, and query include the actual snapshot
+It includes `command` and `output_bytes`. Inspect, scan, preview, and query include the actual snapshot
 in `bindings`, for example
 `[{"alias":"t","table_version":"42"}]`; other commands use an empty array.
-Scan and query also report `rows`. Versions and counts are decimal strings.
+Scan, preview, and query also report `rows`. Versions and counts are decimal strings.
 
-`query --format json` uses completion `format_version: 2`, containing only the
+`preview` and `query --format json` use completion `format_version: 2`, containing only the
 version, kind, command, bindings, rows, and output bytes. The completion kind
-marks terminal success for the requested query. Check `completion: "complete"`
-and `scope: "query"` in stdout, along with its bindings and row count.
+marks terminal success for the requested command. For a query, check
+`completion: "complete"` and `scope: "query"` in stdout. A preview instead
+reports `completion: "sample"`, `stop_reason`, and `has_more` there. Check
+stdout bindings and row count in both cases.
 
 Other commands and Arrow queries use version 1, which also includes
 `terminal: true`, `completion: "complete"`, `scope`, `stop_reason`, and `has_more`,

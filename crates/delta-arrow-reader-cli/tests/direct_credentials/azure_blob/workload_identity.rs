@@ -95,7 +95,7 @@ fn assert_workload_requests(requests: &[String]) -> Vec<String> {
 #[test]
 fn all_reads_use_the_selected_principal_and_rotate_the_assertion() -> TestResult {
     for references in ["json", "env", "mixed"] {
-        for operation in ["inspect", "scan", "query"] {
+        for operation in ["inspect", "scan", "preview", "query"] {
             let authority = MockAzureTokenServer::new(usize::MAX)?;
             let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
             let assertion_path = fixture.directory.path().join("assertion.jwt");

@@ -130,6 +130,16 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
                 "--limit selects a sample. No output byte limit or total deadline.",
             ],
         }),
+        "preview" => json!({
+            "example": [executable, "--diagnostics=json", "preview", "./table", "--column", "id", "--limit", "3"],
+            "stdout": "json",
+            "completion_format_version": 2,
+            "notes": [
+                "Choose only needed columns and rows. Find names with inspect --view summary --column-prefix PREFIX; pin --table-version N.",
+                "Always a sample: end_of_input/has_more=false proves exhaustion; row_limit/null does not; byte_limit/true means an observed row was omitted.",
+                "Schema or first row too large fails with empty stdout. The deadline includes authorization and output, plus at most 1s cleanup and 1s failure reporting.",
+            ],
+        }),
         "query" => json!({
             "example": [executable, "--diagnostics=json", "query", "./table", "--sql-file", "query.sql", "--format", "json"],
             "stdout": "json",
@@ -170,13 +180,17 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
     if !options.is_empty() {
         guide["options"] = json!(options);
     }
-    if name == "query" {
+    if matches!(name, "query" | "preview") {
         let ceilings: serde_json::Map<_, _> = command
             .get_arguments()
             .filter(|argument| {
                 matches!(
                     argument.get_id().as_str(),
-                    "max_rows" | "max_output_bytes" | "memory_limit_bytes"
+                    "max_rows"
+                        | "max_output_bytes"
+                        | "memory_limit_bytes"
+                        | "deadline_ms"
+                        | "limit"
                 )
             })
             .filter_map(|argument| {
@@ -228,7 +242,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
     }
     if name == "inspect" {
         output_schemas.push(DiscoverySchema::InspectionSummary);
-    } else if name == "query" {
+    } else if matches!(name, "query" | "preview") {
         output_schemas.push(DiscoverySchema::Rows);
     }
     guide["output_schemas"] = json!(output_schemas);
@@ -282,7 +296,7 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
             ],
         );
     }
-    if selected_command.is_none() || selected_command == Some("query") {
+    if selected_command.is_none() || matches!(selected_command, Some("query" | "preview")) {
         output_schemas.push(json!({"name": DiscoverySchema::Rows, "stream": "stdout"}));
     }
     let mut authorization = read_support::authorization_sources();
@@ -296,6 +310,7 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
             "default_view": "full",
         },
         "scan": {"format": "arrow_ipc_stream"},
+        "preview": {"format": "json", "schema": DiscoverySchema::Rows, "completion_format_version": 2},
         "query": {
             "format": "arrow_ipc_stream",
             "default": "arrow",
@@ -628,7 +643,7 @@ mod tests {
                 assert_eq!(error.kind(), ErrorKind::ArgumentConflict);
             }
         }
-        for name in ["preview", "explain", "query --help", "", "QUERY"] {
+        for name in ["unknown", "explain", "query --help", "", "QUERY"] {
             assert!(Cli::try_parse_from(["dar", "capabilities", "--command", name]).is_err());
             assert!(build_capability_details(Some(name)).is_err());
         }
@@ -716,7 +731,14 @@ mod tests {
         advertised.sort_unstable();
         assert_eq!(
             advertised,
-            ["capabilities", "help", "inspect", "query", "scan"]
+            [
+                "capabilities",
+                "help",
+                "inspect",
+                "preview",
+                "query",
+                "scan"
+            ]
         );
         assert_eq!(
             advertised,
@@ -736,7 +758,7 @@ mod tests {
             let error = Cli::try_parse_from(args).err().unwrap();
             assert_eq!(error.kind(), clap::error::ErrorKind::DisplayHelp);
         }
-        for name in ["preview", "explain"] {
+        for name in ["unknown", "explain"] {
             let error = Cli::try_parse_from(["dar", name]).err().unwrap();
             assert_eq!(error.kind(), clap::error::ErrorKind::InvalidSubcommand);
         }
@@ -784,7 +806,11 @@ mod tests {
             "--diagnostics=json",
         ])
         .unwrap();
-        let crate::Command::Scan { columns, .. } = cli.command else {
+        let crate::Command::Scan {
+            read: crate::RowReadArgs { columns, .. },
+            ..
+        } = cli.command
+        else {
             panic!("expected scan")
         };
         assert_eq!(columns, ["id", "value"]);

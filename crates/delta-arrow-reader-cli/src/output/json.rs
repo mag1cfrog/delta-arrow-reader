@@ -1,11 +1,14 @@
-//! Complete query results as typed JSON, within a whole-response byte budget.
+//! Typed JSON rows for complete queries and small preview samples.
 //!
-//! A result is emitted only after exhaustion. If its schema, rows, or envelope
+//! A query result is emitted only after exhaustion. If its schema, rows, or envelope
 //! exceed the budget, stdout stays empty. Values are encoded directly into the
 //! bounded buffer; a large string or binary value cannot allocate an unbounded
 //! intermediate JSON row.
 
+mod preview;
 mod value;
+
+pub(crate) use preview::write_preview_to_stdout;
 
 use std::io::{self, Write};
 
@@ -41,6 +44,32 @@ impl Write for BoundedJsonBuffer {
 }
 
 impl BoundedJsonBuffer {
+    fn start(
+        schema: &SchemaRef,
+        table_version: u64,
+        max_bytes: u64,
+        command: &'static str,
+    ) -> Result<Self, Error> {
+        for field in schema.fields() {
+            validate_type(field.data_type(), command)?;
+        }
+        let mut output = BoundedJsonBuffer {
+            bytes: Vec::new(),
+            max_bytes,
+        };
+        output.push(b"{\"format_version\":1,\"kind\":\"rows\",\"bindings\":")?;
+        output.encode(&json!([{"alias": "t", "table_version": table_version.to_string()}]))?;
+        output.push(b",\"schema\":{\"fields\":[")?;
+        for (index, field) in schema.fields().iter().enumerate() {
+            if index > 0 {
+                output.push(b",")?;
+            }
+            output.encode(&field_details(field, false))?;
+        }
+        output.push(b"]},\"rows\":[")?;
+        Ok(output)
+    }
+
     fn push(&mut self, bytes: &[u8]) -> Result<(), Error> {
         self.write_all(bytes).map_err(|_| Error::OutputLimit {
             reason: "json_output_limit_exceeded",
@@ -82,23 +111,7 @@ async fn encode_query(
     table_version: u64,
     limits: OutputLimits,
 ) -> Result<(Vec<u8>, StdoutStats), Error> {
-    for field in schema.fields() {
-        validate_type(field.data_type())?;
-    }
-    let mut output = BoundedJsonBuffer {
-        bytes: Vec::new(),
-        max_bytes: limits.max_bytes,
-    };
-    output.push(b"{\"format_version\":1,\"kind\":\"rows\",\"bindings\":")?;
-    output.encode(&json!([{"alias": "t", "table_version": table_version.to_string()}]))?;
-    output.push(b",\"schema\":{\"fields\":[")?;
-    for (index, field) in schema.fields().iter().enumerate() {
-        if index > 0 {
-            output.push(b",")?;
-        }
-        output.encode(&field_details(field, false))?;
-    }
-    output.push(b"]},\"rows\":[")?;
+    let mut output = BoundedJsonBuffer::start(&schema, table_version, limits.max_bytes, "query")?;
     let mut stream = Box::pin(stream);
     let mut stats = StdoutStats::default();
     while let Some(batch) = stream.next().await {
@@ -316,7 +329,7 @@ mod tests {
                     }
                 )
                 .await,
-                Err(Error::UnsupportedJsonType)
+                Err(Error::UnsupportedJsonType { command: "query" })
             ));
         }
     }

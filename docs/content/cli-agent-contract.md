@@ -100,7 +100,7 @@ Keep existing full `inspect` JSON v1, Arrow-stream `scan`, and input-file format
 compatible. New inspection behavior is opt-in. New JSON envelopes have `kind`
 and `format_version`; incompatible meanings/types or removal of required fields
 require a new version. Diagnostics use version 2 after removing the fixed
-failure message. Query JSON completion uses version 2, retaining command,
+failure message. Preview and query JSON completions use version 2, retaining command,
 bindings, rows, and output bytes alongside kind and version. Other completions and
 discovery envelopes retain version 1.
 Consumers ignore additional output fields; parsers reject unknown input fields
@@ -189,11 +189,12 @@ preserves the chosen authorization, snapshot, and output semantics.
 
 Machine mode attempts one terminal failure or completion record, independent of
 `RUST_LOG`. The completion kind marks terminal success for the requested command.
-Completion includes actual bindings and result-byte counts; scan and query add
-row counts. Version 1 also reports scope, exhaustion, and Arrow batch counts.
+Completion includes actual bindings and result-byte counts; scan, preview, and
+query add row counts. Version 1 also reports scope, exhaustion, and Arrow batch counts.
 Data-sized quantities are decimal strings. For query JSON, verify the stdout
 envelope's complete status and query scope, then compare its bindings and row
-count with the terminal record.
+count with the terminal record. For preview, check sample status and its
+stop_reason/has_more pair in stdout, then compare bindings and row count.
 Consumers require exit 0, valid framing, and the terminal record in machine
 mode. IPC decoding or a JSON prefix alone cannot prove success. Failed streams
 must not write a success marker. Results themselves are not secret-filtered.

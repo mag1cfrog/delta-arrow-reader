@@ -7,6 +7,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | --- | --- |
 | Discover commands and argument rules offline | [`dar capabilities`](#discover-installed-commands) |
 | See the table's columns and version | [`dar inspect`](#inspect-a-snapshot) |
+| See a small typed JSON sample | [`dar preview`](#preview-rows) |
 | Save selected rows as Arrow | [`dar scan`](#scan-rows) |
 | Aggregate, group, or sort rows with SQL | [`dar query`](#query-a-snapshot) |
 | Select rows by a condition | [Filter rows](#filter-rows) |
@@ -172,7 +173,7 @@ result appears. The schema response itself always goes to stdout.
 | --- | --- | --- |
 | `inspection` | stdout | The full `inspect` JSON, including the snapshot version and Arrow schema. |
 | `inspection-summary` | stdout | Read checks, matching column names, or selected column types. |
-| `rows` | stdout | Complete typed query JSON with ordered fields and positional rows. |
+| `rows` | stdout | Typed preview or query JSON with ordered fields and positional rows. |
 | `diagnostic` | stderr | A terminal failure record with `--diagnostics=json`, including optional correction fields. |
 | `completion` | stderr | A terminal success record with `--diagnostics=json`, including snapshot bindings and output counts. |
 
@@ -357,9 +358,9 @@ These rules apply to Unity Catalog targets:
   back to another identity. Renewal keeps the selected Delta snapshot and does
   not restart a scan or repeat rows already written.
 
-UC scans accept the same projection, predicate, limit, snapshot-version, and
-execution options as direct-path scans. If renewal fails after output starts,
-the process exits unsuccessfully and leaves an incomplete Arrow stream.
+UC scans and previews accept the same projection, predicate, limit,
+snapshot-version, and execution options as direct-path reads. If renewal fails, a scan may leave an incomplete Arrow stream; a preview
+fails with empty stdout.
 
 Each Databricks subprocess has a 30-second timeout, no interactive stdin, and
 a 1 MiB limit on each output stream. DAR captures and discards child diagnostics
@@ -432,6 +433,46 @@ be incomplete. Scan or encoding errors exit 1 without writing the IPC end
 marker. Stdout failures, including an early pipe close, exit 3. Status 0 means
 the end marker was written and stdout was flushed. Shell redirects can leave
 partial files after failure; discard those files.
+
+## Preview rows
+
+Choose the columns and sample size needed for the task:
+
+```sh
+dar --diagnostics=json preview /data/orders --table-version 42 --column id --limit 3
+```
+
+Replace the version and column with values from `inspect --view summary`.
+Preview uses scan's projection, predicate, snapshot, execution options, and
+storage authorization, including Databricks profiles. Row order is unspecified.
+It returns [typed JSON](#read-a-small-result-as-typed-json) and can write to a terminal.
+
+| Limit | Default | Override |
+| --- | --- | --- |
+| Rows | 20 | `--limit N`; zero returns only the selected schema. |
+| Whole response | 8 KiB | `--max-output-bytes N`; includes schema, JSON framing, and newline. |
+| Command time | 30 seconds | `--deadline-ms N`; includes inputs, authorization, reads, stdout, and completion. |
+
+The byte and time overrides require positive unsigned decimal integers.
+Select fewer columns or rows before increasing a budget. A preview always
+reports `completion: "sample"`, including an empty or exhausted result:
+
+| `stop_reason` | `has_more` | Meaning |
+| --- | --- | --- |
+| `row_limit` | null | Reached the requested row count without looking ahead. |
+| `byte_limit` | true | An observed row was omitted to fit the response budget. |
+| `end_of_input` | false | Observed exhaustion before reaching either limit. |
+
+The schema or first row must fit; otherwise stdout stays empty and the command
+fails with `preview_schema_limit_exceeded` or `preview_row_too_large`. A later
+byte overflow returns only whole rows. For a needed value too large for a small
+JSON response, use `scan` with redirected stdout and the same projection,
+predicate, row limit, authorization, and snapshot.
+
+After a deadline or cancellation, cleanup has at most one additional second,
+and failure reporting has at most one more. A blocked consumer can leave partial
+stdout; use the result only after exit status 0 and, with `--diagnostics=json`,
+a matching completion record. A deadline exits 1; closed output exits 3.
 
 ## Query a snapshot
 
@@ -533,7 +574,7 @@ SQL `LIMIT` deliberately changes the requested result.
 
 ## Filter rows
 
-`dar scan --predicate-file PATH` reads a typed JSON predicate from a local
+`dar scan --predicate-file PATH` and `dar preview --predicate-file PATH` read a typed JSON predicate from a local
 UTF-8 file. The option may appear once; omitting it applies no predicate.
 Paths resolve against the working directory, and `-` names a literal file.
 The CLI never reads a predicate from stdin.
@@ -658,7 +699,7 @@ Then pass the file when opening the table:
 dar inspect --view summary --auth-source env --storage-options-file storage.json s3://example-bucket/orders
 ```
 
-Use the same option with `dar scan` or `dar query`. The
+Use the same option with `dar scan`, `dar preview`, or `dar query`. The
 [storage guide](configuration.md#read-from-s3) explains table URLs and credentials,
 including [Azure Blob](configuration.md#read-from-azure). Use its storage keys as JSON
 keys here. Keep files containing credentials out of source control.
@@ -686,7 +727,7 @@ read standard input.
 ## Explicit credential sources
 
 `--auth-source` selects authorization for direct cloud reads. The same sources
-are available to `inspect`, `scan`, and `query`. Help lists the installed
+are available to `inspect`, `scan`, `preview`, and `query`. Help lists the installed
 selectors without reading input files or resolving credentials.
 
 | Backend | Source | Credentials | Renewal |
@@ -727,7 +768,7 @@ variables, precedence, and limits for each supported source.
 
 ## S3 credential sources
 
-`inspect`, `scan`, and `query` accept `--auth-source json|env` for explicit S3
+`inspect`, `scan`, `preview`, and `query` accept `--auth-source json|env` for explicit S3
 access-key credentials. The key ID and secret key must both be present; a
 session token is optional. The source is loaded once per command. Expired or
 denied credentials fail the read without selecting another identity. Supply
@@ -785,7 +826,7 @@ not isolate credentials from an agent or process that can read that file.
 
 ### S3 web identity
 
-Use `--auth-source aws-web-identity` with `inspect`, `scan`, or `query` to assume
+Use `--auth-source aws-web-identity` with `inspect`, `scan`, `preview`, or `query` to assume
 an AWS role using a web identity token file. The role ARN and token file path
 are required. Each JSON field takes precedence over its environment variable;
 fields absent from JSON are read from the environment.
@@ -827,7 +868,7 @@ identities. This source supports S3 tables only.
 
 ### S3 container credentials
 
-Use `--auth-source aws-container` with `inspect`, `scan`, or `query` for
+Use `--auth-source aws-container` with `inspect`, `scan`, `preview`, or `query` for
 [ECS task roles or EKS Pod Identity](https://docs.aws.amazon.com/sdkref/latest/guide/feature-container-credentials.html).
 Configure exactly one of these references:
 
@@ -873,7 +914,7 @@ selecting those other sources are rejected. This source supports S3 only.
 
 ## Azure credential sources
 
-`inspect`, `scan`, and `query` accept `--auth-source json|env` for Azure account
+`inspect`, `scan`, `preview`, and `query` accept `--auth-source json|env` for Azure account
 keys, SAS tokens, bearer tokens, and service principals using a client secret.
 Select exactly one credential family. A service principal requires all three
 fields: client ID, client secret, and tenant ID. Partial or mixed families are
@@ -962,7 +1003,7 @@ omitted from text and JSON diagnostics.
 
 Use `--auth-source azure-workload-identity` with an Azure service principal
 configured to trust the issuer of a federated token file. It is available for
-tables in Azure Blob Storage with `inspect`, `scan`, and `query`.
+tables in Azure Blob Storage with `inspect`, `scan`, `preview`, and `query`.
 
 ```sh
 dar query abfss://orders@exampleaccount.dfs.core.windows.net/table \
@@ -1031,7 +1072,7 @@ dar inspect abfss://orders@exampleaccount.dfs.core.windows.net/table --view summ
   --auth-source azure-managed-identity --storage-options-file storage.json
 ```
 
-The source also works with `scan` and `query`. Account names follow the same
+The source also works with `scan`, `preview`, and `query`. Account names follow the same
 URL, JSON, and environment precedence as the other Azure sources.
 
 The token endpoint comes from `azure_msi_endpoint` in JSON, then
@@ -1049,7 +1090,7 @@ client secrets, workload tokens, and Azure CLI sessions are ignored.
 
 ## GCS credential sources
 
-`inspect`, `scan`, and `query` accept `--auth-source json|env` to select an
+`inspect`, `scan`, `preview`, and `query` accept `--auth-source json|env` to select an
 explicit Application Default Credentials (ADC) file for GCS. The installed
 native provider supports these file types:
 

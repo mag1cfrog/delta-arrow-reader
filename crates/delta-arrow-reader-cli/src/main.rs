@@ -24,6 +24,7 @@ mod direct_credentials;
 mod input;
 mod inspection;
 mod output;
+mod preview;
 mod query;
 mod signals;
 mod stdout_monitor;
@@ -80,6 +81,8 @@ enum Command {
         #[command(flatten)]
         inspection: inspection::InspectionArgs,
     },
+    /// Read a small typed JSON sample with row, byte, and time limits.
+    Preview(preview::PreviewArgs),
     /// Run one read-only SQL query over a Delta snapshot, registered as t.
     ///
     /// Arrow IPC requires redirected stdout. Use --format json for a small typed result.
@@ -89,32 +92,38 @@ enum Command {
     /// Redirect stdout to a file or pipe; terminal output is rejected.
     Scan {
         #[command(flatten)]
-        table: TableArgs,
-        /// Existing Databricks CLI profile; required for uc://catalog.schema.table targets.
-        #[arg(long, value_name = "PROFILE")]
-        databricks_profile: Option<String>,
-        /// Logical column name; repeat to select columns in argument order.
-        /// Default: all columns.
-        #[arg(long = "column", value_name = "NAME")]
-        columns: Vec<String>,
-        /// Read zero columns while preserving row counts.
-        #[arg(long, conflicts_with = "columns")]
-        no_columns: bool,
+        read: RowReadArgs,
         /// Maximum output rows as unsigned decimal digits; zero is valid.
         #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<usize>)]
         limit: Option<usize>,
-        /// Positive execution partition target; default: native automatic selection.
-        #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
-        target_partitions: Option<NonZeroUsize>,
-        /// Local typed JSON predicate; at most 1 MiB. '-' is a filename, not stdin.
-        /// Match literal types to inspected column types; integer values are strings.
-        /// Format: capabilities --schema predicate.
-        #[arg(long, value_name = "PATH")]
-        predicate_file: Option<String>,
-        /// Local JSON execution options; at most 1 MiB. '-' is a filename, not stdin.
-        #[arg(long, value_name = "PATH")]
-        execution_options_file: Option<String>,
     },
+}
+
+/// Snapshot, projection, predicate, and execution choices shared by scan and preview.
+#[derive(Args)]
+struct RowReadArgs {
+    #[command(flatten)]
+    table: TableArgs,
+    /// Existing Databricks CLI profile; required for uc://catalog.schema.table targets.
+    #[arg(long, value_name = "PROFILE")]
+    databricks_profile: Option<String>,
+    /// Logical column name; repeat to select columns in argument order. Default: all columns.
+    #[arg(long = "column", value_name = "NAME")]
+    columns: Vec<String>,
+    /// Read zero columns while preserving row counts.
+    #[arg(long, conflicts_with = "columns")]
+    no_columns: bool,
+    /// Positive execution partition target; default: native automatic selection.
+    #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
+    target_partitions: Option<NonZeroUsize>,
+    /// Local typed JSON predicate; at most 1 MiB. '-' is a filename, not stdin.
+    /// Match literal types to inspected column types; integer values are strings.
+    /// Format: capabilities --schema predicate.
+    #[arg(long, value_name = "PATH")]
+    predicate_file: Option<String>,
+    /// Local JSON execution options; at most 1 MiB. '-' is a filename, not stdin.
+    #[arg(long, value_name = "PATH")]
+    execution_options_file: Option<String>,
 }
 
 /// Table location, snapshot selection, and storage configuration shared by all commands.
@@ -177,8 +186,8 @@ enum Error {
     ArrowIpc { source: ArrowError },
     #[snafu(display("Could not encode the JSON result."))]
     JsonOutput { source: serde_json::Error },
-    #[snafu(display("The result contains a type unsupported by typed JSON. Use --format arrow."))]
-    UnsupportedJsonType,
+    #[snafu(display("The result contains a type unsupported by typed JSON."))]
+    UnsupportedJsonType { command: &'static str },
     #[snafu(display("{source}"))]
     Reader { source: DeltaReaderError },
     #[snafu(display("{source}"))]
@@ -189,6 +198,8 @@ enum Error {
     Query { source: query::QueryError },
     #[snafu(display("Output exceeded its resource ceiling (reason={reason})."))]
     OutputLimit { reason: &'static str },
+    #[snafu(display("Command exceeded its time budget."))]
+    DeadlineExceeded,
     #[snafu(display("Command was cancelled."))]
     Cancelled { status: u8 },
 }
@@ -286,7 +297,7 @@ impl Error {
                 reason: "json_encode_failed",
                 source_kind: None,
             },
-            Self::UnsupportedJsonType => ErrorClassification {
+            Self::UnsupportedJsonType { .. } => ErrorClassification {
                 phase: "execution",
                 code: "unsupported_json_type",
                 reason: "unsupported_json_type",
@@ -303,6 +314,12 @@ impl Error {
                 phase: "execution",
                 code: "output_limit",
                 reason,
+                source_kind: Some("resource_exhausted"),
+            },
+            Self::DeadlineExceeded => ErrorClassification {
+                phase: "execution",
+                code: "deadline_exceeded",
+                reason: "command_deadline_exceeded",
                 source_kind: Some("resource_exhausted"),
             },
             Self::Cancelled { .. } => ErrorClassification {
@@ -380,7 +397,39 @@ impl Error {
                     hint: "Use --format arrow with redirected stdout; keep the same SQL, authorization, and --table-version N.",
                 });
             }
-            Self::UnsupportedJsonType => {
+            Self::OutputLimit {
+                reason: "preview_schema_limit_exceeded",
+            } => {
+                return Some(InputCorrection {
+                    argument: "--column".to_owned(),
+                    expected: "a selected schema within the preview byte budget".to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Select fewer --column values, or explicitly increase --max-output-bytes for the required schema; preserve authorization and --table-version N.",
+                });
+            }
+            Self::OutputLimit {
+                reason: "preview_row_too_large",
+            }
+            | Self::UnsupportedJsonType { command: "preview" } => {
+                return Some(InputCorrection {
+                    argument: "--column".to_owned(),
+                    expected: "selected values that fit typed JSON".to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Use scan with redirected stdout and the same projection, predicate, row limit, authorization, and --table-version N.",
+                });
+            }
+            Self::DeadlineExceeded => {
+                return Some(InputCorrection {
+                    argument: "--deadline-ms".to_owned(),
+                    expected: "enough time to finish the preview".to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Check source responsiveness, then retry with an explicitly chosen --deadline-ms budget.",
+                });
+            }
+            Self::UnsupportedJsonType { .. } => {
                 return Some(InputCorrection {
                     argument: "--format".to_owned(),
                     expected: "arrow for this result type".to_owned(),
@@ -493,6 +542,8 @@ impl Error {
                     self,
                     Self::OutputLimit {
                         reason: "json_output_limit_exceeded"
+                            | "preview_schema_limit_exceeded"
+                            | "preview_row_too_large"
                     }
                 ) =>
             {
@@ -572,11 +623,11 @@ impl Error {
             | Self::Reader { .. }
             | Self::ArrowIpc { .. }
             | Self::JsonOutput { .. }
-            | Self::UnsupportedJsonType => 1,
+            | Self::UnsupportedJsonType { .. } => 1,
             Self::Output { .. } => 3,
             Self::UnityCatalog { source } => source.exit_status(),
             Self::Query { source } => source.exit_status(),
-            Self::OutputLimit { .. } => 1,
+            Self::OutputLimit { .. } | Self::DeadlineExceeded => 1,
             Self::Cancelled { status } => *status,
         })
     }
@@ -657,6 +708,33 @@ fn build_completion_record(
 }
 
 fn run_table_command(command: Command) -> Result<Value, Error> {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context(RuntimeSnafu {
+            reason: "runtime_build_failed",
+        })?;
+    let result = runtime.block_on(execute_table_command(command));
+    runtime.shutdown_background();
+    result
+}
+
+fn build_json_read_completion(
+    command: &'static str,
+    table_version: u64,
+    stdout_stats: StdoutStats,
+) -> Value {
+    json!({
+        "format_version": 2,
+        "kind": "completion",
+        "command": command,
+        "bindings": [{"alias": "t", "table_version": table_version.to_string()}],
+        "rows": stdout_stats.rows_written.to_string(),
+        "output_bytes": stdout_stats.bytes_written.to_string(),
+    })
+}
+
+async fn execute_table_command(command: Command) -> Result<Value, Error> {
     let arrow_stdout = match &command {
         Command::Scan { .. } => true,
         Command::Query(args) => args.output_format == query::QueryOutputFormat::Arrow,
@@ -673,12 +751,10 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
             table,
             databricks_profile,
             ..
-        }
-        | Command::Scan {
-            table,
-            databricks_profile,
-            ..
         } => (table, databricks_profile.as_deref()),
+        Command::Scan { read, .. } | Command::Preview(preview::PreviewArgs { read, .. }) => {
+            (&read.table, read.databricks_profile.as_deref())
+        }
         Command::Query(args) => {
             if args
                 .table
@@ -722,21 +798,21 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
         }
         None => Default::default(),
     };
-    let predicate = match &command {
-        Command::Scan {
-            predicate_file: Some(path),
-            ..
-        } => Some(
+    let row_read = match &command {
+        Command::Scan { read, .. } | Command::Preview(preview::PreviewArgs { read, .. }) => {
+            Some(read)
+        }
+        _ => None,
+    };
+    let predicate = match row_read.and_then(|read| read.predicate_file.as_deref()) {
+        Some(path) => Some(
             input::read_json_file::<input::PredicateInput>(path, JsonInputKind::Predicate)?
                 .into_predicate()?,
         ),
         _ => None,
     };
-    let execution_options = match &command {
-        Command::Scan {
-            execution_options_file: Some(path),
-            ..
-        } => {
+    let execution_options = match row_read.and_then(|read| read.execution_options_file.as_deref()) {
+        Some(path) => {
             let options = input::read_json_file::<input::JsonObject<input::ExecutionOptionsInput>>(
                 path,
                 JsonInputKind::ExecutionOptions,
@@ -811,24 +887,14 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
                         output::json::write_query_to_stdout(schema, stream, version, limits).await?
                     }
                 };
-                let mut completion =
-                    build_completion_record("query", Some(version), stdout_stats, None);
-                if args.output_format == query::QueryOutputFormat::Json {
-                    completion["format_version"] = json!(2);
-                    if let Some(fields) = completion.as_object_mut() {
-                        for name in [
-                            "batches",
-                            "stop_reason",
-                            "has_more",
-                            "scope",
-                            "completion",
-                            "terminal",
-                        ] {
-                            fields.remove(name);
-                        }
+                Ok(match args.output_format {
+                    query::QueryOutputFormat::Json => {
+                        build_json_read_completion("query", version, stdout_stats)
                     }
-                }
-                Ok(completion)
+                    query::QueryOutputFormat::Arrow => {
+                        build_completion_record("query", Some(version), stdout_stats, None)
+                    }
+                })
             }
             .boxed_local()
         }
@@ -859,21 +925,20 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
             ))
         }
         .boxed_local(),
-        Command::Scan {
-            columns,
-            no_columns,
-            limit,
-            target_partitions,
-            ..
-        } => async move {
+        Command::Scan { read, .. } | Command::Preview(preview::PreviewArgs { read, .. }) => async {
             let (table, authorized_access) = load_table.await?;
             let version = table.version();
+            let limit = match &command {
+                Command::Scan { limit, .. } => *limit,
+                Command::Preview(args) => Some(args.limit),
+                _ => unreachable!("row reader command"),
+            };
             let mut builder = table.scan();
-            if *no_columns || !columns.is_empty() {
-                builder = builder.with_projection(columns.iter().cloned());
+            if read.no_columns || !read.columns.is_empty() {
+                builder = builder.with_projection(read.columns.iter().cloned());
             }
             if let Some(limit) = limit {
-                builder = builder.with_limit(*limit);
+                builder = builder.with_limit(limit);
             }
             if let Some(predicate) = predicate {
                 builder = builder.with_predicate(predicate);
@@ -881,70 +946,67 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
             if let Some(execution_options) = execution_options {
                 builder = builder.with_execution_options(execution_options);
             }
-            if let Some(target_partitions) = target_partitions {
+            if let Some(target_partitions) = read.target_partitions {
                 builder = builder
                     .with_target_partitions(target_partitions.get())
                     .context(ConfigurationSnafu)?;
             }
             let scan_result = async {
                 let scan = builder.build().await.context(ReaderSnafu)?;
-                output::arrow::write_arrow_stream_to_stdout(
-                    scan.schema(),
-                    scan.into_stream()
-                        .map_err(|source| Error::Reader { source }),
-                    None,
-                )
-                .await
+                let schema = scan.schema();
+                let stream = scan
+                    .into_stream()
+                    .map_err(|source| Error::Reader { source });
+                if let Command::Preview(args) = &command {
+                    let stats = output::json::write_preview_to_stdout(
+                        schema,
+                        stream,
+                        version,
+                        output::OutputLimits {
+                            max_rows: args.limit as u64,
+                            max_bytes: args.max_output_bytes.get() as u64,
+                        },
+                    )
+                    .await?;
+                    Ok(build_json_read_completion("preview", version, stats))
+                } else {
+                    let stats =
+                        output::arrow::write_arrow_stream_to_stdout(schema, stream, None).await?;
+                    Ok(build_completion_record("scan", Some(version), stats, limit))
+                }
             }
             .await;
-            let stdout_stats = match (scan_result, &authorized_access) {
+            match (scan_result, &authorized_access) {
                 (Err(Error::Reader { source }), Some(access)) => {
                     return Err(access.map_reader_error(source).await);
                 }
-                (result, _) => result?,
-            };
-            Ok(build_completion_record(
-                "scan",
-                Some(version),
-                stdout_stats,
-                *limit,
-            ))
+                (result, _) => result,
+            }
         }
         .boxed_local(),
     };
-    // Drive async work on the calling thread. A dedicated Tokio worker can
-    // occupy the last OS thread and leave blocking loads queued forever.
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .context(RuntimeSnafu {
-            reason: "runtime_build_failed",
-        })?;
-    let result = if uc_target.is_some() || matches!(command, Command::Query(_)) {
-        runtime.block_on(async {
-            tokio::select! {
-                // Install listeners before polling work; cancellation drops any pending child.
-                biased;
-                exit_status = signals::wait_for_cancellation() => {
-                    let status = exit_status?;
-                    if uc_target.is_some() {
-                        Err(Error::UnityCatalog { source: unity_catalog::Error::Cancelled { status } })
-                    } else {
-                        Err(Error::Cancelled { status })
-                    }
-                },
-                source = stdout_monitor::wait_for_disconnect(), if matches!(command, Command::Scan { .. } | Command::Query(_)) => {
-                    Err(Error::Output { source })
-                },
-                result = work => result,
-            }
-        })
+    if (uc_target.is_some() && !matches!(command, Command::Preview(_)))
+        || matches!(command, Command::Query(_))
+    {
+        tokio::select! {
+            // Install listeners before polling work; cancellation drops any pending child.
+            biased;
+            exit_status = signals::wait_for_cancellation() => {
+                let status = exit_status?;
+                if uc_target.is_some() {
+                    Err(Error::UnityCatalog { source: unity_catalog::Error::Cancelled { status } })
+                } else {
+                    Err(Error::Cancelled { status })
+                }
+            },
+            source = stdout_monitor::wait_for_disconnect(), if matches!(command, Command::Scan { .. } | Command::Query(_) | Command::Preview(_)) => {
+                Err(Error::Output { source })
+            },
+            result = work => result,
+        }
     } else {
-        runtime.block_on(work)
-    };
-    // Blocking core work must not delay process shutdown after this command finishes.
-    runtime.shutdown_background();
-    result
+        work.await
+    }
 }
 
 fn write_stdout(output: &[u8]) -> Result<(), Error> {
@@ -1000,6 +1062,12 @@ fn main() -> ExitCode {
             ..
         }) => {
             return capabilities::run_capabilities(options, diagnostic_format);
+        }
+        Ok(Cli {
+            command: Command::Preview(args),
+            ..
+        }) => {
+            return preview::run(args, diagnostic_format);
         }
         Ok(cli) => {
             diagnostics::init_tracing(diagnostic_format);
@@ -1139,8 +1207,12 @@ mod tests {
             ])
             .unwrap();
             let Command::Scan {
-                columns,
-                no_columns,
+                read:
+                    RowReadArgs {
+                        columns,
+                        no_columns,
+                        ..
+                    },
                 limit: parsed_limit,
                 ..
             } = cli.command
@@ -1166,7 +1238,10 @@ mod tests {
                 args.extend(["--target-partitions", text]);
             }
             let Command::Scan {
-                target_partitions, ..
+                read: RowReadArgs {
+                    target_partitions, ..
+                },
+                ..
             } = Cli::try_parse_from(args).unwrap().command
             else {
                 panic!("expected scan command");

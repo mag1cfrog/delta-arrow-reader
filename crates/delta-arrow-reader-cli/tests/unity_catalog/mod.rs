@@ -1,3 +1,4 @@
+mod preview;
 mod scans;
 
 use std::{
