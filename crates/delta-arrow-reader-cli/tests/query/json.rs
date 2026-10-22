@@ -142,16 +142,16 @@ fn json_limits_accept_exact_results_and_never_return_successful_prefixes() -> Te
         let diagnostic = assert_single_terminal_record(&output.stderr, "diagnostic");
         assert_eq!(diagnostic["reason"], reason);
         if reason == "json_output_limit_exceeded" {
-            assert_eq!(diagnostic["recovery"], "change_request");
-            assert_eq!(diagnostic["argument"], "--format");
+            assert_eq!(diagnostic["recovery"], "adjust_budget");
+            assert_eq!(diagnostic["argument"], "--max-output-bytes");
             let hint = diagnostic["hint"].as_str().unwrap();
             assert!(hint.contains("--format arrow"));
-            assert!(hint.contains("explicitly adjust any existing --max-output-bytes for Arrow"));
+            assert!(hint.contains("Explicitly increase --max-output-bytes for the complete JSON"));
+            assert!(hint.contains("redirected stdout and an explicit byte budget"));
             assert!(
                 hint.contains("same SQL, authorization, table bindings, and snapshot versions")
             );
             assert!(!hint.contains("aggregate"));
-            assert!(!hint.contains("increase"));
         }
     }
     let empty = SqlCommandFixture::new(

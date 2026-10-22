@@ -16,13 +16,14 @@ use crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION;
 pub(super) fn rows_schema() -> Value {
     json!({
         "title": "Typed JSON rows",
-        "description": "Rows follow schema field order, including duplicate names. Metadata is omitted. For value encodings, use --detail rows.",
+        "description": "Rows follow schema field order, including duplicate names. Arrow integers use exact decimal strings. Metadata is omitted. Other value encodings: --detail rows.",
         "type": "object",
         "required": ["format_version", "kind", "bindings", "schema", "rows", "row_count", "completion"],
         "properties": {
             "format_version": {"const": 1},
             "kind": {"const": "rows"},
-            "bindings": {"type": "array", "minItems": 1, "maxItems": crate::query::tables_manifest::MAX_TABLES, "items": {
+            "bindings": {"type": "array", "minItems": 1, "maxItems": crate::query::tables_manifest::MAX_TABLES,
+                "description": "Actual snapshots in input order. Preview has one binding named t; queries use t for a positional table or the declared manifest aliases.", "items": {
                 "type": "object", "required": ["alias", "table_version"],
                 "properties": {"alias": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,62}$", "not": {"pattern": "[^a-z0-9_]"}}, "table_version": unsigned_integer_string_schema()},
             }},
@@ -40,9 +41,9 @@ pub(super) fn rows_schema() -> Value {
             },
             "row_count": unsigned_integer_string_schema(),
             "completion": {"enum": ["complete", "sample"], "description": "complete covers the SQL result; sample is a preview, even when input was exhausted."},
-            "scope": {"const": "query"},
-            "stop_reason": {"enum": ["end_of_input", "row_limit", "byte_limit"]},
-            "has_more": {"type": ["boolean", "null"], "description": "false at observed exhaustion; null at a row limit without lookahead; true when an observed row was omitted for the byte budget."},
+            "scope": {"const": "query", "description": "Required for a complete SQL result."},
+            "stop_reason": {"enum": ["end_of_input", "row_limit", "byte_limit"], "description": "Preview only. end_of_input proves exhaustion; row_limit stops without lookahead; byte_limit omits an observed row."},
+            "has_more": {"type": ["boolean", "null"], "description": "Preview only: false at observed exhaustion (end_of_input); null at row_limit without lookahead; true when byte_limit omitted an observed row."},
         },
         "allOf": [{
             "if": {"properties": {"completion": {"const": "complete"}}},
@@ -210,7 +211,7 @@ pub(super) fn inspection_summary_schema() -> Value {
 pub(super) fn completion_schema() -> Value {
     json!({
         "title": "Terminal success completion",
-        "description": "With --diagnostics=json, check in one script: exit 0, valid stdout and one completion on stderr. Match command and bindings to the request. Compare output_bytes with saved stdout length, rows with decoded result rows, and batches with Arrow batches when present. For JSON check row_count and stdout state: complete/query for SQL, sample plus stop_reason/has_more for preview. Compare counts as decimal strings. Completion covers the requested result, including limits. Version 1 also reports scope and exhaustion: limited_scan covers only the sample; end_of_input/has_more=false proves exhaustion, row_limit/has_more=null does not.",
+        "description": "With --diagnostics=json, require exit 0, valid stdout and one completion on stderr. Match command and bindings to the request. Compare output_bytes with saved stdout length, and rows and batches, when present, with decoded counts. Counts are decimal strings. For JSON, check stdout.row_count and stdout.completion: complete with stdout.scope=query for SQL, sample with stdout.stop_reason and stdout.has_more for preview.",
         "type": "object",
         "required": ["format_version", "kind", "command", "bindings", "output_bytes"],
         "properties": {

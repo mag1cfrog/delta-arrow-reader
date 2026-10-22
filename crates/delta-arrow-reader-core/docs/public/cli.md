@@ -83,9 +83,10 @@ for all options or `full_command` for their machine-readable definitions. Fetch
 credentials. To recover these details later, repeat the same discovery commands;
 discovery does not depend on previous invocations.
 
-For a local JOIN, the query guide's `join.example` uses `--tables-file` instead
-of a positional table, and `join.sql` names the aliases to declare. Fetch
-`--schema tables` for the manifest example and relative-path rules. This takes
+For a local JOIN, follow the query guide's `tables` input schema to
+`--schema tables`. Its `query_example` uses `--tables-file` instead of a
+positional table, and `sql_example` uses the aliases in the manifest `example`.
+The same guide explains relative-path rules. This takes
 three lookups from the directory to a runnable JOIN. The manifest guide's
 `detail_syntax` explains how to select nested fields; `other_fields` lists the
 optional authorization reference omitted from the example. Select
@@ -110,18 +111,20 @@ scalar type needed. For example,
 `--schema execution-options --detail prefetch_files_per_partition` gives one
 setting's default and bounds. `--schema predicate --detail timestamp_us` gives
 the timestamp unit, integer encoding, and required timezone field. Selected
-details include only applicable conditional rules and integer-notation rules.
+details retain the units and constraints needed for that field or type.
 
 These guides describe how to use a format. Recursive predicate references lead
 to another operator or scalar choice through `detail_command`. Use a guide's
 `full_command` when a JSON Schema validator or a metadata consumer needs the
 complete definition.
 
-For result verification, `--schema completion` shows an exhausted scan and
-explains which counts, snapshot binding, and completion fields to check against
-the request and saved output. It also distinguishes a row-limited scan and a SQL
-result from a complete table read. Use `--detail FIELD` for a field's exact
-type or bounds; `--full` exports the schema for a JSON Schema validator.
+`--schema completion` shows a v2 JSON query receipt and explains how to compare
+its command, snapshots, counts, and bytes with the request and saved output.
+For preview and JSON queries, sample/completion state comes from stdout.
+Use `--detail FIELD` for a field's type and meaning, including fields used in
+v1 scan and Arrow receipts. `--schema rows --detail has_more` explains the three
+preview stopping states without repeating conditional validation blocks;
+`--full` retains those rules for JSON Schema validators.
 
 In full command metadata and the full inventory, `command` contains the selected
 command or complete command tree, and each argument's required status, value
@@ -591,11 +594,12 @@ Look up the envelope with `dar capabilities --schema rows`. For a particular
 encoding, use `--detail rows` to list choices, then `--detail decimal`, for
 example. These lookups do not read the table.
 
-The default 8 KiB budget covers the entire response. If it cannot fit, select
-fewer columns or aggregate in SQL. For a complete larger result, redirect Arrow
-to a file. An explicit `--max-output-bytes` can raise the JSON budget when a
-larger JSON response is needed. `--max-rows` never truncates a successful result;
-SQL `LIMIT` deliberately changes the requested result.
+The default 8 KiB budget covers the entire response. If the complete JSON cannot
+fit, explicitly increase `--max-output-bytes`, or redirect Arrow to a file with
+a sufficient byte budget. Keep the same SQL, authorization, table bindings, and
+snapshot versions when recovering the same result. Selecting fewer columns,
+aggregating, or adding SQL `LIMIT` changes the requested result. `--max-rows`
+never truncates a successful result.
 
 ## Join table snapshots
 

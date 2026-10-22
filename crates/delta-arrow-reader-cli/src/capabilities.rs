@@ -150,10 +150,6 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
                 "example": "SELECT count(*) AS row_count FROM t",
                 "max_file_bytes": crate::query::MAX_SQL_BYTES,
             },
-            "join": {
-                "example": [executable, "--diagnostics=json", "query", "--tables-file", "tables.json", "--sql-file", "query.sql", "--format", "json"],
-                "sql": "SELECT o.id, c.id FROM orders o LEFT JOIN customers c ON o.id = c.id WHERE o.id <= 5 ORDER BY o.id, c.id",
-            },
             "notes": [
                 "One read-only SQL statement in a UTF-8 file. Choose TABLE as t or named tables from --tables-file. Unity Catalog targets are unsupported.",
                 "The example returns complete typed JSON. Select only needed columns or aggregate; ceilings fail without JSON output. SQL LIMIT changes the result.",
@@ -185,17 +181,6 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
         .collect();
     if !options.is_empty() {
         guide["options"] = json!(options);
-    }
-    if name == "query"
-        && let Some(argument) = command
-            .get_arguments()
-            .find(|argument| argument.get_id() == "tables_file")
-    {
-        guide["join"]["conflicts_with"] = command
-            .get_arg_conflicts_with(argument)
-            .into_iter()
-            .map(|argument| json!(argument_name(argument)))
-            .collect();
     }
     if matches!(name, "query" | "preview") {
         let ceilings: serde_json::Map<_, _> = command

@@ -86,14 +86,15 @@ fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -
         .find(|command| command["name"] == "query")
         .unwrap();
     let query_guide = discover(&query["details"])?;
-    let conflicts = query_guide["join"]["conflicts_with"].as_array().unwrap();
+    assert!(query_guide.get("join").is_none());
+    let options = query_guide["options"]["--tables-file"].as_str().unwrap();
     for argument in [
-        "table",
+        "TABLE",
         "--table-version",
         "--storage-options-file",
         "--auth-source",
     ] {
-        assert!(conflicts.contains(&json!(argument)));
+        assert!(options.contains(argument));
     }
     let input = query_guide["input_schemas"]
         .as_array()
@@ -115,11 +116,11 @@ fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -
     );
     fs::write(
         directory.path().join("query.sql"),
-        query_guide["join"]["sql"].as_str().unwrap(),
+        guide["sql_example"].as_str().unwrap(),
     )?;
     let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
     command.env_clear().current_dir(directory.path()).args(
-        query_guide["join"]["example"]
+        guide["query_example"]
             .as_array()
             .unwrap()
             .iter()
@@ -165,6 +166,7 @@ fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -
         );
         assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
     }
+    assert_eq!(discovery_bytes.len(), 3);
     eprintln!(
         "JOIN discovery: {} lookups, {} bytes, no full definitions or authorization lookups",
         discovery_bytes.len(),
@@ -215,13 +217,6 @@ fn json_joins_preserve_all_bindings_duplicate_columns_and_nulls() -> TestResult 
             {"alias": "customers", "table_version": "1"}
         ])
     );
-    let exact = run_with_timeout(manifest_command(directory.path()).args([
-        "--format",
-        "json",
-        "--max-output-bytes",
-        &output.stdout.len().to_string(),
-    ]))?;
-    assert_eq!(super::json::decode_json(&exact)?, result);
     let overflow = run_with_timeout(manifest_command(directory.path()).args([
         "--format",
         "json",
@@ -232,12 +227,21 @@ fn json_joins_preserve_all_bindings_duplicate_columns_and_nulls() -> TestResult 
     assert!(overflow.stdout.is_empty());
     let diagnostic = assert_single_terminal_record(&overflow.stderr, "diagnostic");
     assert_eq!(diagnostic["reason"], "json_output_limit_exceeded");
+    assert_eq!(diagnostic["recovery"], "adjust_budget");
+    assert_eq!(diagnostic["argument"], "--max-output-bytes");
     assert!(
         diagnostic["hint"]
             .as_str()
             .unwrap()
-            .contains("--max-output-bytes for Arrow")
+            .contains("Explicitly increase --max-output-bytes for the complete JSON")
     );
+    let exact = run_with_timeout(manifest_command(directory.path()).args([
+        "--format",
+        "json",
+        diagnostic["argument"].as_str().unwrap(),
+        &output.stdout.len().to_string(),
+    ]))?;
+    assert_eq!(super::json::decode_json(&exact)?, result);
     // An explicit byte budget survives a format change and can still reject Arrow.
     let arrow_overflow = run_with_timeout(manifest_command(directory.path()).args([
         "--format",

@@ -85,8 +85,6 @@ enum Command {
     /// Read a small typed JSON sample with row, byte, and time limits.
     Preview(preview::PreviewArgs),
     /// Run one read-only SQL query over explicitly selected Delta snapshots.
-    ///
-    /// Arrow IPC requires redirected stdout. Use --format json for a small typed result.
     Query(query::QueryArgs),
     /// Stream a Delta snapshot's rows as Arrow IPC to stdout.
     ///
@@ -372,11 +370,11 @@ impl Error {
                 reason: "json_output_limit_exceeded",
             } => {
                 return Some(InputCorrection {
-                    argument: "--format".to_owned(),
-                    expected: "arrow for this result size".to_owned(),
+                    argument: "--max-output-bytes".to_owned(),
+                    expected: "enough bytes for the complete JSON result".to_owned(),
                     field_path: None,
                     supplied: None,
-                    hint: "Use --format arrow with redirected stdout; explicitly adjust any existing --max-output-bytes for Arrow. Keep the same SQL, authorization, table bindings, and snapshot versions.",
+                    hint: "Explicitly increase --max-output-bytes for the complete JSON, or use --format arrow with redirected stdout and an explicit byte budget. Keep the same SQL, authorization, table bindings, and snapshot versions.",
                 });
             }
             Self::OutputLimit {
@@ -534,9 +532,7 @@ impl Error {
                 if matches!(
                     self,
                     Self::OutputLimit {
-                        reason: "json_output_limit_exceeded"
-                            | "preview_schema_limit_exceeded"
-                            | "preview_row_too_large"
+                        reason: "preview_schema_limit_exceeded" | "preview_row_too_large"
                     }
                 ) =>
             {

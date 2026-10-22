@@ -401,6 +401,24 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
             assert!(guide.get("help").is_none());
             assert!(guide.get("argument_conflicts").is_none());
             assert!(guide.get("read_support").is_none());
+            if matches!(name, "preview" | "query") {
+                assert_eq!(
+                    guide["output_schemas"],
+                    serde_json::json!(["diagnostic", "completion", "rows"])
+                );
+                assert!(guide.get("join").is_none());
+                let mut invocation = guide["schema_command"].clone();
+                *invocation.as_array_mut().unwrap().last_mut().unwrap() =
+                    serde_json::json!("completion");
+                let completion = run_advertised(&invocation)?;
+                assert_eq!(
+                    completion["example"]["format_version"],
+                    guide["completion_format_version"]
+                );
+                for omitted in ["batches", "terminal", "scope", "stop_reason", "has_more"] {
+                    assert!(completion["example"].get(omitted).is_none(), "{omitted}");
+                }
+            }
             let help: Vec<_> = guide["help_command"]
                 .as_array()
                 .unwrap()
