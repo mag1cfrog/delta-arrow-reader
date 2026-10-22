@@ -63,9 +63,17 @@ snapshot metadata; it does not prove that every data file is readable. Set
 version=42
 ```
 
-Replace `42` with your result. To find or inspect individual columns, use the
-[column lookup examples](cli-quickstart.md#inspect-the-snapshot), retaining
-`--databricks-profile "$profile"` and `--table-version "$version"`.
+Replace `42` with your result. List column names at that version with an empty
+prefix:
+
+```sh
+dar inspect "$table" --view summary --databricks-profile "$profile" \
+  --table-version "$version" --column-prefix ''
+```
+
+If the list exceeds the response budget, narrow the prefix or increase
+`--max-output-bytes` for this lookup. To inspect a column's type, replace
+`--column-prefix ''` with `--column COLUMN_NAME`, using a returned name.
 
 ## Read a small sample
 

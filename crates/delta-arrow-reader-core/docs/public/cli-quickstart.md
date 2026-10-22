@@ -29,13 +29,13 @@ replacing `0` below, and use it for column lookups and later reads:
 
 ```sh
 version=0
-dar inspect /path/to/table --view summary --table-version "$version" --column-prefix id
+dar inspect /path/to/table --view summary --table-version "$version" --column-prefix ''
 dar inspect /path/to/table --view summary --table-version "$version" --column id
 ```
 
-Replace `id` with a prefix or name from your table. The first lookup returns
-matching names; the second returns the selected column's type. If the response
-is too large, narrow the prefix or select fewer columns.
+The empty prefix lists column names. Replace `id` with a returned name to look
+up its type. If the list exceeds the response budget, narrow the prefix or
+increase `--max-output-bytes` for that lookup.
 
 ## Preview selected rows
 

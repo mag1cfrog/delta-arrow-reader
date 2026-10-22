@@ -261,6 +261,7 @@ protocol.
 
 ```sh
 dar inspect /data/orders --view summary
+dar inspect /data/orders --view summary --table-version 0 --column-prefix ''
 dar inspect /data/orders --view summary --table-version 0 --column-prefix ord
 dar inspect /data/orders --view summary --table-version 0 --column order_id
 dar inspect --view summary --auth-source json --storage-options-file ./storage.json s3://example-bucket/orders
@@ -395,7 +396,8 @@ Choose the columns and sample size needed for the task:
 dar --diagnostics=json preview /data/orders --table-version 42 --column id --limit 3
 ```
 
-Replace the version and column with values from `inspect --view summary`.
+Use the version from the inspection summary and a name from a
+[column lookup](#inspect-a-snapshot).
 Preview uses scan's projection, predicate, snapshot, execution options, and
 storage authorization, including Databricks profiles. Row order is unspecified.
 It returns [typed JSON](#read-a-small-result-as-typed-json) and can write to a terminal.
@@ -1217,8 +1219,8 @@ accepted fields and validation rules are listed below.
 <details markdown="1">
 <summary>Execution flags, complete JSON example, and accepted fields</summary>
 
-`--target-partitions N` sets the execution partition target for one scan. It
-may appear once and accepts positive unsigned decimal digits fitting the
+`--target-partitions N` on `scan` or `preview` sets the execution partition
+target. It may appear once and accepts positive unsigned decimal digits fitting the
 executable's `usize` range. Zero, signs, whitespace, fractions, exponents, and
 overflow are rejected before table loading with status 2 and
 `configuration/invalid_cli_argument`. Leading zeros are accepted.
@@ -1229,8 +1231,8 @@ The built scan may have fewer partitions than requested, for example when
 there are fewer files. This flag does not change the table's partition columns.
 `inspect` rejects it.
 
-`dar scan --execution-options-file PATH` reads execution settings from a local
-UTF-8 JSON object. The option may appear once and is accepted only by `scan`.
+`--execution-options-file PATH` on `scan` or `preview` reads execution settings
+from a local UTF-8 JSON object. The option may appear once.
 Omitting the file or supplying `{}` uses the native reader's defaults. Each
 invocation starts with fresh settings.
 
