@@ -91,6 +91,27 @@ impl DiscoverySchema {
                         "includes_root": true,
                     });
                 }
+            } else if matches!(self, Self::Rows | Self::Completion) && name == "bindings" {
+                // Snapshot interpretation needs the shape; validators can follow full_command.
+                guide["definition"] = json!({
+                    "type": "array",
+                    "description": definition["description"],
+                    "items": {
+                        "type": "object", "required": ["alias", "table_version"],
+                        "properties": {
+                            "alias": {"type": "string"},
+                            "table_version": {
+                                "type": "string",
+                                "description": "Exact uint64 decimal string; check range 0..18446744073709551615 on conversion.",
+                            },
+                        },
+                    },
+                });
+                if matches!(self, Self::Completion) {
+                    guide["definition"]["description"] = json!(
+                        "Actual snapshots in declaration order. query has at least one binding: t for a positional table, or manifest aliases. inspect/scan/preview have one binding named t. Other commands have no bindings."
+                    );
+                }
             } else if matches!(self, Self::Inspection) && name == "schema" {
                 guide["definition"]["$defs"] = schema["$defs"].clone();
             } else if matches!(self, Self::Tables) {
@@ -107,7 +128,12 @@ impl DiscoverySchema {
                 .as_array()
                 .into_iter()
                 .flatten()
-                .filter(|_| !matches!(self, Self::Rows))
+                .filter(|_| {
+                    !matches!(
+                        (self, name),
+                        (Self::Rows, _) | (Self::Completion, "bindings")
+                    )
+                })
                 .filter_map(|condition| {
                     let mut selected = json!({"if": condition["if"]});
                     for branch in ["then", "else"] {
@@ -434,6 +460,62 @@ mod tests {
     }
 
     #[test]
+    fn binding_details_defer_validation_rules_to_the_full_schema() {
+        for format in [DiscoverySchema::Rows, DiscoverySchema::Completion] {
+            let detail = format.guide_document(Some("bindings")).unwrap();
+            assert_eq!(detail["full_command"][4], "--full");
+            let definition = &detail["definition"];
+            assert!(detail.get("conditions").is_none());
+            assert!(
+                definition["description"]
+                    .as_str()
+                    .unwrap()
+                    .contains("Actual")
+            );
+            assert_eq!(
+                definition["items"]["required"],
+                json!(["alias", "table_version"])
+            );
+            let fields = &definition["items"]["properties"];
+            assert_eq!(fields["alias"], json!({"type": "string"}));
+            assert_eq!(fields["table_version"]["type"], "string");
+            assert!(
+                fields["table_version"]["description"]
+                    .as_str()
+                    .unwrap()
+                    .contains("check range 0..18446744073709551615 on conversion")
+            );
+            for rule in ["pattern", "maxLength", "minItems", "maxItems"] {
+                assert!(!definition.to_string().contains(rule), "{format:?}: {rule}");
+            }
+
+            let document = format.schema_document();
+            let schema = &document["schema"];
+            let validator = jsonschema::validator_for(schema).unwrap();
+            let valid = schema["examples"][0].clone();
+            validator.validate(&valid).unwrap();
+            for (field, value) in [
+                ("alias", "bad-alias"),
+                ("alias", "t\n"),
+                ("table_version", "-1"),
+                ("table_version", "01"),
+                ("table_version", "184467440737095516150"),
+            ] {
+                let mut invalid = valid.clone();
+                invalid["bindings"][0][field] = json!(value);
+                assert!(
+                    !validator.is_valid(&invalid),
+                    "{format:?}: {field}={value:?}"
+                );
+            }
+            let binding_validator =
+                jsonschema::validator_for(&schema["properties"]["bindings"]).unwrap();
+            assert!(binding_validator.is_valid(&json!(vec![valid["bindings"][0].clone(); 64])));
+            assert!(!binding_validator.is_valid(&json!(vec![valid["bindings"][0].clone(); 65])));
+        }
+    }
+
+    #[test]
     fn selected_completion_conditions_omit_unrelated_constraints() {
         for (schema, field, cases) in [
             (
@@ -479,6 +561,32 @@ mod tests {
     }
 
     #[test]
+    fn full_completion_schema_enforces_command_binding_rules() {
+        let schema = output_schemas::completion_schema();
+        let validator = jsonschema::validator_for(&schema).unwrap();
+        for (command, aliases, valid) in [
+            ("capabilities", vec![], true),
+            ("capabilities", vec!["t"], false),
+            ("query", vec![], false),
+            ("query", vec!["orders", "customers"], true),
+            ("scan", vec![], false),
+            ("scan", vec!["t"], true),
+            ("inspect", vec!["orders"], false),
+            ("scan", vec!["orders", "customers"], false),
+        ] {
+            let mut record = schema["examples"][0].clone();
+            record["command"] = json!(command);
+            record["bindings"] = json!(
+                aliases
+                    .iter()
+                    .map(|alias| json!({"alias": alias, "table_version": "1"}))
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(validator.is_valid(&record), valid, "{command}: {aliases:?}");
+        }
+    }
+
+    #[test]
     fn field_details_keep_only_applicable_conditions_and_integer_rules() {
         let version = DiscoverySchema::Completion
             .guide_document(Some("format_version"))
@@ -508,32 +616,10 @@ mod tests {
         let bindings = DiscoverySchema::Completion
             .guide_document(Some("bindings"))
             .unwrap();
-        assert_eq!(bindings["conditions"].as_array().unwrap().len(), 2);
-        let schema = json!({"allOf": bindings["conditions"]});
-        assert!(jsonschema::is_valid(
-            &schema,
-            &json!({"command":"capabilities", "bindings":[]})
-        ));
-        assert!(!jsonschema::is_valid(
-            &schema,
-            &json!({"command":"scan", "bindings":[]})
-        ));
-        assert!(jsonschema::is_valid(
-            &schema,
-            &json!({"command":"scan", "bindings":[{"alias":"t", "table_version":"1"}]})
-        ));
-        let mut completion = json!({
-            "command": "query",
-            "bindings": [
-                {"alias": "orders", "table_version": "1"},
-                {"alias": "customers", "table_version": "2"}
-            ]
-        });
-        assert!(jsonschema::is_valid(&schema, &completion));
-        for command in ["scan", "inspect"] {
-            completion["command"] = json!(command);
-            assert!(!jsonschema::is_valid(&schema, &completion));
-        }
+        let description = bindings["definition"]["description"].as_str().unwrap();
+        assert!(description.contains("query has at least one binding"));
+        assert!(description.contains("inspect/scan/preview have one binding named t"));
+        assert!(description.contains("Other commands have no bindings"));
         for field in [
             "prefetch_files_per_partition",
             "parquet_metadata_size_hint_bytes",
