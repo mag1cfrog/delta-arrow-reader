@@ -412,20 +412,99 @@ calls without supplied finished commands or manual repair. Include continuation
 after compaction, retaining task, snapshot, and artifact references while
 omitting command details.
 
-For each default view, record the action or interpretation its fields support.
-Test representative removals or deferrals. Prefer less context when correctness,
-confidentiality, and completion semantics are preserved without avoidable extra
-lookups or retries. Retain useful examples and constraints when shorter variants
-cause mistakes or more calls, and report the measured tradeoff. Do not assume a
-universal minimum or require an arbitrary percentage reduction.
-
-Record complete model input/output tokens, tool-result bytes/tokens, calls,
-retries, compaction overhead, and latency across repeated runs, including
-failures. Report distributions and unsupported comparisons. A failed or
-incomplete task cannot qualify as efficient. This follows Anthropic's
+This follows Anthropic's
 [task-level tool evaluation guidance](https://www.anthropic.com/research/writing-tools-for-agents).
 Byte-ceiling, parser, and scripted workflow tests alone cannot establish a pass
 for these agent trials.
+
+## Agent trajectory review protocol
+
+Apply this protocol to the feature's affected success, interpretation, and
+recovery paths. Broader workflow and actual-compaction acceptance still require
+their own runs. An earlier issue's closure or a passing code review does not
+establish these results for a new artifact.
+
+1. **Freeze the comparison before running.** Save a run manifest with baseline
+   and candidate executable hashes, source revisions, fixture hashes, exact
+   prompts, model/settings, harness version, allowed tools, safeguards, task
+   checks, run order, and stopping rule. Keep the original baseline when repairing
+   a regression; beating only the regressed version is insufficient. Use five
+   attempts per variant and scenario for acceptance. Keep all attempts; a changed
+   prompt or executable starts a new comparison, preserving the old records.
+2. **Cover isolated and continued work.** For a disclosure change, define a
+   focused task A and a task B that needs the deferred information. Run A alone,
+   B with fresh context, and A followed by B with context retained. Report each
+   scenario separately; do not count A and its continuation as independent runs.
+   These are complete tasks, not prescribed command sequences. Add applicable
+   failure repair and boundary cases. Use independent expected-result checks,
+   including exact values, authorization, and completion state. Apply the
+   [contract's task safeguards](https://github.com/mag1cfrog/delta-arrow-reader/blob/6c0a399c7e8d68cc09a6a8cdb9a50f1a24420960/docs/content/cli-agent-contract.md#acceptance-evidence)
+   to each scenario. A+B is one budgeted run: cumulative counters do not reset
+   at B, and the two-repair limit remains per failed request.
+3. **Let fresh consumers choose the route.** Give each variant the same task,
+   executable and fixture references, tools, and safeguards. Exclude source,
+   implementation discussion, other trials, expected answers, and suggested
+   repairs. For a recipe evaluation, include only the published recipe and record
+   it. Balance variant order and keep evaluative labels out of consumer prompts.
+   Human rescue is a recorded failure of unaided completion, not a successful
+   retry. A continuation keeps its own context; a new B trial does not.
+4. **Capture what was returned and what was seen.** Save chronological requests,
+   arguments or scripts, exits, raw stdout/stderr, tool errors, artifact reads,
+   projections, generated code, retries, and the exact content delivered to the
+   model. Reference immutable raw records from the review ledger below. Record
+   truncation and filtering; they cannot establish that the CLI response itself
+   is concise. Do not ask consumers to duplicate logs already captured by the
+   harness. Their statements about delivery supplement, but do not replace, a
+   harness transcript. Protect credential contents; use controlled canaries and
+   references rather than recording real secrets.
+5. **Review decisions, then test removals.** A separate reviewer follows every
+   step through to the checked result. For each field or coherent explanation,
+   identify the decision or verification it supports now and any later reuse.
+   Mark unused, repeated, or unclear content as a candidate, not a proven deletion.
+   Compare one coherent omission, deferral, or grouping change on the same A, B,
+   and A+B tasks with the same safeguards. Include new discovery, request syntax,
+   repeated framing, repair, and artifact work in its cost. Keep short related
+   rules together when that reduces total task cost without losing meaning.
+   A hypothetical future use or a byte-ceiling pass is not evidence of necessity.
+6. **Make separate judgments.** Mark each verdict below `pass`, `fail`, or
+   `insufficient evidence`, naming the artifacts and scenarios. Include raw-record
+   references, per-run results, median and range, and unresolved cases. Do not
+   hide a mixed-task regression in an average of cheaper focused tasks. A measured
+   tradeoff is not an unqualified efficiency pass. Fix the regression or state
+   which task costs more and why the chosen default is justified. Five runs
+   describe these trials; they do not prove a universal minimum.
+
+Use one ledger row per invocation, with linked notes for individual explanations:
+
+| Step | Request, exit, raw and delivered records | Information used now or reused at a later step | Unused, repeated, or unclear information | Incremental and cumulative cost |
+| --- | --- | --- | --- | --- |
+| Run/step ID | Exact arguments or script; record references | Field/clause, decision or check, consuming step ID | Candidate and counter-task that could need it | Requests, delivered text, retries; model usage when available |
+
+For example, a date rule unused in A but used in B is later-used information in
+A+B. Removing it from A is a deferral whose added lookup must be measured. If the
+agent still solves B, that proves recoverability, not that the deferral is cheaper.
+
+Keep three cost measurements separate: raw CLI stdout/stderr; all model-visible
+tool request/result text, including scripts and artifact reads; and provider
+model input/output usage across the entire task. Record the tokenizer for text
+estimates. Count cached input within input usage without adding it twice; report
+reasoning/cache details separately when the provider exposes them. Include
+failed attempts, repeated context, final answers, and compaction calls in model
+usage. Report peak context separately from cumulative tokens. Record latency and
+CLI/provider retries. Never label output-token estimates as total model usage.
+Missing telemetry is unknown, not zero; missing delivery records prevent a full
+context review. A simulated handoff is not an actual compaction trial.
+
+| Verdict | Required evidence |
+| --- | --- |
+| Task correctness | All five attempts satisfy independent checks with no credential leak, instruction execution from data, broader-identity fallback, or false completion. |
+| Information sufficiency and necessity | Decisions and later reuse are traceable; tested omissions/groupings retain required semantics and do not force avoidable guesses, repair, or fragmented retrieval. Untested candidates remain unresolved. |
+| Whole-task efficiency | Comparable complete runs include all work and provider token usage. Report each scenario's cost and spread; fewer tokens in one response cannot pass this verdict when the full task regresses. Missing telemetry leaves this verdict unestablished, while narrower CLI-text measurements remain reportable. |
+
+Publish the run manifest, raw-record references, ledger, counterfactual results,
+and verdict table in the evaluation comment or linked artifacts. Keep the PR
+description focused on behavior and examples. Historical runs retain their
+original conditions; replay or a newly completed ledger is not a fresh trial.
 
 For this documentation change, check local links and examples, then run:
 
