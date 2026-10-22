@@ -3,6 +3,7 @@ use std::{fs::File, io::Cursor, path::Path, process::Output, sync::Arc};
 use arrow_array::{Array, ArrayRef, RecordBatch, StructArray};
 use arrow_ipc::reader::{FileReader, StreamReader};
 use arrow_schema::{DataType, Fields, SchemaRef};
+use serde_json::{Value, json};
 use snafu::{ResultExt, ensure};
 
 use crate::error::{ArrowSnafu, FileSnafu, InvalidInputSnafu, Result};
@@ -26,6 +27,101 @@ pub(crate) fn check_arrow_output(output: &Output) -> Result<IpcTable> {
         }
     );
     IpcTable::read_stream(&output.stdout, Path::new("Arrow stdout"))
+}
+
+/// Validate a JSON-mode scan against the requested snapshot, limit, and decoded output.
+pub(crate) fn check_completed_scan(
+    output: &Output,
+    table_version: u64,
+    limit: Option<usize>,
+) -> Result<IpcTable> {
+    ensure!(
+        output.status.success(),
+        InvalidInputSnafu {
+            message: format!("Scan command failed: {}", output.status)
+        }
+    );
+    ensure!(
+        output.stderr.ends_with(b"\n")
+            && output.stderr.iter().filter(|&&byte| byte == b'\n').count() == 1,
+        InvalidInputSnafu {
+            message: "Scan must emit exactly one newline-terminated completion record"
+        }
+    );
+    // CLI output can contain private table data; do not include it in validation errors.
+    let completion: Value = serde_json::from_slice(&output.stderr).map_err(|_| {
+        InvalidInputSnafu {
+            message: "Scan completion is not valid JSON",
+        }
+        .build()
+    })?;
+    let table = IpcTable::read_stream(&output.stdout, Path::new("Arrow stdout")).map_err(|_| {
+        InvalidInputSnafu {
+            message: "Scan stdout is not a complete Arrow IPC stream",
+        }
+        .build()
+    })?;
+    let rows = table.row_count();
+    ensure!(
+        limit.is_none_or(|limit| rows <= limit),
+        InvalidInputSnafu {
+            message: "Scan returned more rows than requested"
+        }
+    );
+    let limit_reached = limit == Some(rows);
+    for (field, expected) in [
+        ("format_version", json!(1)),
+        ("kind", json!("completion")),
+        ("terminal", json!(true)),
+        ("command", json!("scan")),
+        ("completion", json!("complete")),
+        (
+            "scope",
+            json!(if limit.is_some() {
+                "limited_scan"
+            } else {
+                "scan"
+            }),
+        ),
+        (
+            "stop_reason",
+            json!(if limit_reached {
+                "row_limit"
+            } else {
+                "end_of_input"
+            }),
+        ),
+        (
+            "has_more",
+            if limit_reached {
+                Value::Null
+            } else {
+                json!(false)
+            },
+        ),
+        ("output_bytes", json!(output.stdout.len().to_string())),
+        ("rows", json!(rows.to_string())),
+        ("batches", json!(table.batches.len().to_string())),
+    ] {
+        ensure!(
+            completion.get(field) == Some(&expected),
+            InvalidInputSnafu {
+                message: format!("Scan completion has an unexpected {field}")
+            }
+        );
+    }
+    let expected_version = table_version.to_string();
+    ensure!(
+        completion["bindings"].as_array().is_some_and(|bindings| {
+            bindings.len() == 1
+                && bindings[0]["alias"] == "t"
+                && bindings[0]["table_version"].as_str() == Some(expected_version.as_str())
+        }),
+        InvalidInputSnafu {
+            message: "Scan completion does not match the requested snapshot binding"
+        }
+    );
+    Ok(table)
 }
 
 impl IpcTable {
