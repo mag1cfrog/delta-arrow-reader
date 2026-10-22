@@ -17,7 +17,9 @@
 
 use std::{
     io::{self, Write},
-    sync::Mutex,
+    process::ExitCode,
+    sync::{Mutex, TryLockError, mpsc},
+    time::Duration,
 };
 
 use clap::{
@@ -32,6 +34,11 @@ use tracing_subscriber::{
     prelude::*,
 };
 
+mod stderr_capacity;
+
+pub(crate) const FAILURE_DIAGNOSTIC_TIMEOUT: Duration = Duration::from_secs(1);
+pub(crate) const DIAGNOSTIC_FORMAT_VERSION: u8 = 2;
+
 /// Safe error fields shared by text tracing and JSON diagnostics.
 pub(crate) struct ErrorClassification {
     pub(crate) phase: &'static str,
@@ -42,7 +49,8 @@ pub(crate) struct ErrorClassification {
 
 #[derive(Args)]
 pub(crate) struct DiagnosticOptions {
-    /// JSON Lines on stderr, including argument errors.
+    /// JSON errors and completion on stderr, including argument errors.
+    /// Verification: capabilities --schema completion.
     #[arg(
         long = "diagnostics",
         value_name = "FORMAT",
@@ -89,6 +97,57 @@ impl DiagnosticFormat {
         }
     }
 
+    pub(crate) fn report_failure_with_timeout(self, error: crate::Error) -> ExitCode {
+        let status = error.exit_code();
+        let (finished, receiver) = mpsc::channel();
+        // This path must work even when constructing a Tokio runtime failed.
+        if std::thread::Builder::new()
+            .name("dar-diagnostic".into())
+            .spawn(move || {
+                init_tracing(self);
+                self.report_failure(&error);
+                let _ = finished.send(());
+            })
+            .is_ok()
+        {
+            let _ = receiver.recv_timeout(FAILURE_DIAGNOSTIC_TIMEOUT);
+        }
+        status
+    }
+
+    /// Waits for space before publishing a terminal record of at most 512 bytes.
+    pub(crate) async fn write_terminal_record_when_writable(self, record: Value) -> io::Result<()> {
+        if let Self::Json = self {
+            let line = format!("{record}\n");
+            // POSIX guarantees at least 512 bytes for an atomic pipe write.
+            // Discovery's completion is smaller; keep future additions within that bound.
+            if line.len() > 512 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "terminal record too large",
+                ));
+            }
+            loop {
+                let written = match TERMINAL_RECORD_WRITTEN.try_lock() {
+                    Ok(guard) => Some(guard),
+                    Err(TryLockError::Poisoned(error)) => Some(error.into_inner()),
+                    Err(TryLockError::WouldBlock) => None,
+                };
+                if let Some(mut written) = written {
+                    if *written {
+                        return Ok(());
+                    }
+                    if stderr_capacity::can_write(line.len())? {
+                        *written = true;
+                        return io::stderr().lock().write_all(line.as_bytes());
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn write_terminal_record(self, record: Value) {
         if let Self::Json = self {
             let mut written = TERMINAL_RECORD_WRITTEN
@@ -109,6 +168,7 @@ pub(crate) struct InputCorrection {
     pub(crate) argument: String,
     pub(crate) field_path: Option<String>,
     pub(crate) expected: String,
+    pub(crate) supplied: Option<Box<str>>,
     pub(crate) hint: &'static str,
 }
 
@@ -152,6 +212,7 @@ impl InputCorrection {
                         .map_or_else(|| argument.get_id().to_string(), |name| format!("--{name}")),
                     field_path: None,
                     expected,
+                    supplied: None,
                     hint: argument_error_hint(kind),
                 });
             }
@@ -162,6 +223,17 @@ impl InputCorrection {
     }
 
     pub(crate) fn from_reader(error: &delta_arrow_reader::DeltaReaderError) -> Option<Self> {
+        if let delta_arrow_reader::DeltaReaderError::PredicateTypeMismatch {
+            expected,
+            supplied,
+            path,
+            ..
+        } = error
+        {
+            return Some(crate::input::predicate_type_mismatch_correction(
+                expected, supplied, path,
+            ));
+        }
         let (argument, expected, hint) = match (error.code(), error.reason()) {
             ("invalid_projection", "column_not_found") => (
                 "--column",
@@ -183,11 +255,6 @@ impl InputCorrection {
                 "a nonempty top-level logical column name without dots",
                 "Use a top-level column from inspect; qualified names and nested field paths are not supported in predicates.",
             ),
-            ("unsupported_predicate", "scalar_type_mismatch") => (
-                "--predicate-file",
-                "a scalar type matching the column's Arrow type",
-                "Run inspect for the same table and snapshot, then match the scalar type, including decimal precision/scale or timestamp timezone, to the column.",
-            ),
             ("unsupported_predicate", "invalid_decimal") => (
                 "--predicate-file",
                 "a decimal128 value within its declared precision and valid scale",
@@ -199,6 +266,7 @@ impl InputCorrection {
             argument: argument.to_owned(),
             field_path: None,
             expected: expected.to_owned(),
+            supplied: None,
             hint,
         })
     }
@@ -237,8 +305,8 @@ pub(crate) fn init_tracing(diagnostic_format: DiagnosticFormat) {
         Err(std::env::VarError::NotUnicode(_)) => (Targets::new(), true),
         _ => (Targets::new(), false),
     };
-    subscriber(targets, io::stderr).init();
-    if invalid {
+    // Failure reporting can reach this after command setup already installed tracing.
+    if subscriber(targets, io::stderr).try_init().is_ok() && invalid {
         tracing::warn!(target: "delta_arrow_reader_cli",
             event = "cli.log_filter.invalid",
             reason = "invalid_rust_log",
@@ -312,6 +380,15 @@ mod tests {
     use crate::Error;
 
     struct PanicOnFormatError;
+
+    #[tokio::test]
+    async fn oversized_completion_is_rejected_before_writing() {
+        let error = DiagnosticFormat::Json
+            .write_terminal_record_when_writable(serde_json::json!({"padding": "x".repeat(512)}))
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    }
 
     impl fmt::Debug for PanicOnFormatError {
         fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -415,7 +492,8 @@ mod tests {
                 assert!(text.ends_with('\n') && text.len() <= 8192, "{text}");
                 assert!(!text.contains("secret") && !text.contains('\x1b'), "{text}");
                 let record: Value = serde_json::from_str(&text).unwrap();
-                assert_eq!(record["format_version"], 1);
+                assert_eq!(record["format_version"], super::DIAGNOSTIC_FORMAT_VERSION);
+                assert!(record.get("message").is_none());
                 assert_eq!(record["kind"], "diagnostic");
                 assert_eq!(record["terminal"], true);
                 assert_eq!(record["phase"], "execution");

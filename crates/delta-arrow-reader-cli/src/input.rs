@@ -28,13 +28,15 @@ use crate::{Error, InputIoSnafu, InputValidationSnafu, diagnostics::InputCorrect
 mod execution_options;
 mod predicate;
 mod schema_errors;
+mod schemas;
 
 pub(crate) use execution_options::{ExecutionOptionsInput, execution_options_correction};
-pub(crate) use predicate::PredicateInput;
+pub(crate) use predicate::{PredicateInput, predicate_type_mismatch_correction};
 
 const MAX_JSON_BYTES: u64 = 1024 * 1024;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, clap::ValueEnum, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum JsonInputKind {
     StorageOptions,
     Predicate,
@@ -60,6 +62,7 @@ impl JsonInputKind {
             argument: self.argument().to_owned(),
             field_path: None,
             expected: expected.to_owned(),
+            supplied: None,
             hint,
         }
     }

@@ -3,6 +3,7 @@
 //! `inspect` returns a snapshot's version and Arrow schema as JSON. `scan` and
 //! `query` return rows as Arrow IPC streams. Command results use stdout; diagnostics and
 //! completion records use stderr.
+//! `capabilities` describes the installed commands without opening a table.
 //!
 //! For a Delta table at `./table` with an `id` column:
 //!
@@ -18,6 +19,7 @@
 
 mod arrow_output;
 mod azure_sas;
+mod capabilities;
 mod diagnostics;
 mod direct_credentials;
 mod input;
@@ -48,7 +50,10 @@ use snafu::{ResultExt, Snafu, ensure};
 
 /// Read Delta Lake snapshots as JSON metadata or Arrow IPC streams.
 #[derive(Parser)]
-#[command(name = command_name(), bin_name = command_name(), version)]
+#[command(
+    name = command_name(), bin_name = command_name(), version,
+    after_help = "When version or column types are unknown, use inspect TABLE; pin reads with --table-version N.\nGuides: capabilities --command NAME; capabilities --schema NAME [--detail FIELD_OR_TYPE].\nInput formats: predicate, storage-options, execution-options. Output formats: inspection, diagnostic, completion."
+)]
 struct Cli {
     #[command(flatten)]
     diagnostics: diagnostics::DiagnosticOptions,
@@ -58,6 +63,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// List installed commands, with details and JSON schemas available on request.
+    ///
+    /// Offline; no table, input file, or authorization is loaded.
+    Capabilities(capabilities::CapabilitiesArgs),
     /// Print one Delta snapshot's version and full Arrow schema as JSON.
     ///
     /// Only snapshot metadata is loaded; data files are not read.
@@ -82,6 +91,7 @@ enum Command {
         #[arg(long, value_name = "PROFILE")]
         databricks_profile: Option<String>,
         /// Logical column name; repeat to select columns in argument order.
+        /// Default: all columns.
         #[arg(long = "column", value_name = "NAME")]
         columns: Vec<String>,
         /// Read zero columns while preserving row counts.
@@ -94,6 +104,8 @@ enum Command {
         #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
         target_partitions: Option<NonZeroUsize>,
         /// Local typed JSON predicate; at most 1 MiB. '-' is a filename, not stdin.
+        /// Match literal types to inspected column types; integer values are strings.
+        /// Format: capabilities --schema predicate.
         #[arg(long, value_name = "PATH")]
         predicate_file: Option<String>,
         /// Local JSON execution options; at most 1 MiB. '-' is a filename, not stdin.
@@ -318,6 +330,7 @@ impl Error {
                     argument: (*argument).to_owned(),
                     field_path: None,
                     expected: "a readable local file".to_owned(),
+                    supplied: None,
                     hint,
                 });
             }
@@ -353,6 +366,9 @@ impl Error {
         let correction = self.input_correction();
         let argument = correction.as_ref().map(|value| value.argument.as_str());
         let expected = correction.as_ref().map(|value| value.expected.as_str());
+        let supplied = correction
+            .as_ref()
+            .and_then(|value| value.supplied.as_deref());
         let field_path = correction
             .as_ref()
             .and_then(|value| value.field_path.as_deref());
@@ -371,7 +387,7 @@ impl Error {
             if correction.is_some() {
                 tracing::error!(target: "delta_arrow_reader_cli",
                     event = "cli.input_correction", error_phase = phase, error_code = code,
-                    error_reason = reason, argument, expected, hint, field_path,
+                    error_reason = reason, argument, expected, supplied, hint, field_path,
                     "Correct the command input"
                 );
             }
@@ -407,7 +423,7 @@ impl Error {
         tracing::error!(target: "delta_arrow_reader_cli",
             event = "cli.failed", operation = "cli_command", outcome = "failed",
             error_phase = phase, error_code = code, error_reason = reason,
-            error_source_kind = source_kind, argument_kind, argument, expected, hint, field_path,
+            error_source_kind = source_kind, argument_kind, argument, expected, supplied, hint, field_path,
             json_kind, json_line, json_column, io_kind, os_error,
             "{message}"
         );
@@ -435,18 +451,22 @@ impl Error {
             _ => ("unknown", None),
         };
         let mut record = json!({
-            "format_version": 1,
+            "format_version": diagnostics::DIAGNOSTIC_FORMAT_VERSION,
             "kind": "diagnostic",
             "terminal": true,
             "phase": phase,
             "code": code,
             "reason": reason,
             "source_kind": source_kind,
-            "message": "CLI command failed.",
             "retryable": retryable,
             "recovery": recovery,
         });
         match self {
+            Self::UnityCatalog {
+                source: source @ unity_catalog::Error::DatabricksCliNotFound,
+            } => {
+                record["hint"] = source.to_string().into();
+            }
             Self::Argument { kind, .. } => {
                 record["argument_kind"] = format!("{kind:?}").into();
                 record["hint"] = diagnostics::argument_error_hint(*kind).into();
@@ -468,6 +488,9 @@ impl Error {
             record["argument"] = correction.argument.into();
             record["expected"] = correction.expected.into();
             record["hint"] = correction.hint.into();
+            if let Some(supplied) = correction.supplied {
+                record["supplied"] = supplied.into_string().into();
+            }
             if let Some(path) = correction.field_path {
                 record["field_path"] = path.into();
             }
@@ -568,50 +591,14 @@ fn build_completion_record(
     record
 }
 
-fn run() -> Result<Value, Error> {
-    #[cfg(target_os = "linux")]
-    signals::install_container_signal_handlers().context(RuntimeSnafu {
-        reason: "signal_handler_install_failed",
-    })?;
-
-    let command = match Cli::try_parse() {
-        Err(error)
-            if matches!(
-                error.kind(),
-                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
-            ) =>
-        {
-            let output = error.to_string();
-            write_stdout(output.as_bytes())?;
-            return Ok(build_completion_record(
-                if error.kind() == ErrorKind::DisplayHelp {
-                    "help"
-                } else {
-                    "version"
-                },
-                None,
-                StdoutStats {
-                    bytes_written: output.len() as u64,
-                    ..Default::default()
-                },
-                None,
-            ));
-        }
-        // Clap's other diagnostics may contain argument values. Emit our redacted error.
-        Err(error) => {
-            return ArgumentSnafu {
-                kind: error.kind(),
-                correction: InputCorrection::from_clap(&error),
-            }
-            .fail();
-        }
-        Ok(cli) => cli.command,
-    };
-
+fn run_table_command(command: Command) -> Result<Value, Error> {
     if matches!(command, Command::Scan { .. } | Command::Query(_)) {
         ensure!(!io::stdout().is_terminal(), TerminalOutputSnafu);
     }
     let (table_args, databricks_profile) = match &command {
+        Command::Capabilities(_) => {
+            unreachable!("main handles discovery and its terminal reporting separately")
+        }
         Command::Inspect {
             table,
             databricks_profile,
@@ -724,6 +711,7 @@ fn run() -> Result<Value, Error> {
         Ok::<_, Error>((table, authorized_access))
     };
     let work: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
+        Command::Capabilities(_) => unreachable!("capabilities returned before table loading"),
         Command::Query(args) => {
             let sql_query = query::ReadOnlySqlQuery::read_file(&args.sql_file)?;
             async move {
@@ -876,6 +864,24 @@ fn write_stdout(output: &[u8]) -> Result<(), Error> {
         .context(OutputSnafu)
 }
 
+fn write_help_or_version(error: clap::Error) -> Result<Value, Error> {
+    let output = error.to_string();
+    write_stdout(output.as_bytes())?;
+    Ok(build_completion_record(
+        if error.kind() == ErrorKind::DisplayHelp {
+            "help"
+        } else {
+            "version"
+        },
+        None,
+        StdoutStats {
+            bytes_written: output.len() as u64,
+            ..Default::default()
+        },
+        None,
+    ))
+}
+
 fn install_panic_hook(diagnostic_format: DiagnosticFormat) {
     // Kernel workers can panic without waking their caller. Report synchronously
     // and exit without unwinding into a blocking join; never format the payload.
@@ -890,17 +896,47 @@ fn install_panic_hook(diagnostic_format: DiagnosticFormat) {
 
 fn main() -> ExitCode {
     let diagnostic_format = DiagnosticFormat::from_cli_args();
-    diagnostics::init_tracing(diagnostic_format);
     install_panic_hook(diagnostic_format);
-    match run() {
+    #[cfg(target_os = "linux")]
+    if let Err(error) = signals::install_container_signal_handlers().context(RuntimeSnafu {
+        reason: "signal_handler_install_failed",
+    }) {
+        return diagnostic_format.report_failure_with_timeout(error);
+    }
+    let result = match Cli::try_parse() {
+        Ok(Cli {
+            command: Command::Capabilities(options),
+            ..
+        }) => {
+            return capabilities::run_capabilities(options, diagnostic_format);
+        }
+        Ok(cli) => {
+            diagnostics::init_tracing(diagnostic_format);
+            run_table_command(cli.command)
+        }
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            diagnostics::init_tracing(diagnostic_format);
+            write_help_or_version(error)
+        }
+        Err(error) => {
+            // Clap's diagnostics may contain argument values; report only safe fields.
+            Err(Error::Argument {
+                kind: error.kind(),
+                correction: InputCorrection::from_clap(&error),
+            })
+        }
+    };
+    match result {
         Ok(completion_record) => {
             diagnostic_format.write_terminal_record(completion_record);
             ExitCode::SUCCESS
         }
-        Err(error) => {
-            diagnostic_format.report_failure(&error);
-            error.exit_code()
-        }
+        Err(error) => diagnostic_format.report_failure_with_timeout(error),
     }
 }
 
@@ -967,6 +1003,8 @@ mod tests {
         assert_eq!(encoded.last(), Some(&b'\n'));
         assert_eq!(encoded.iter().filter(|&&byte| byte == b'\n').count(), 1);
         let actual: Value = serde_json::from_slice(&encoded).unwrap();
+        let schema_document = capabilities::DiscoverySchema::Inspection.schema_document();
+        jsonschema::validate(&schema_document["schema"], &actual).unwrap();
         // This literal freezes the upstream Arrow encoding within format version 1.
         assert_eq!(
             actual,

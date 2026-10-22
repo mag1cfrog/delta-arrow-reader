@@ -159,7 +159,7 @@ fn invalid_value_correction(serde_expected: &str, location: &FieldLocation) -> I
         .to_owned()
     };
     let hint = if serde_expected.starts_with(predicate::CANONICAL_INTEGER_EXPECTATION_PREFIX) {
-        "Use a decimal string within the allowed range, with no '+', leading zeros, or negative zero."
+        "Match the literal type to the inspected column (e.g. Int32 uses int32); encode the value as a decimal string within that type's range, with no '+', leading zeros, or negative zero."
     } else if serde_expected == predicate::TIMEZONE_EXPECTATION {
         "Supply null or a nonempty timezone string matching the column's timezone."
     } else {
@@ -214,6 +214,7 @@ impl FieldLocation {
             argument: self.input_kind.argument().to_owned(),
             field_path: Some(self.path.clone()),
             expected: expected.into(),
+            supplied: None,
             hint,
         }
     }

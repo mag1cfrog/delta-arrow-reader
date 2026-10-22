@@ -85,6 +85,31 @@ fn read_expected_rows(name: &str) -> TestResult<RecordBatch> {
 }
 
 #[test]
+fn published_sql_examples_execute_with_the_advertised_table_binding() -> TestResult {
+    let output = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).args([
+        "capabilities",
+        "--command",
+        "query",
+        "--full",
+    ]))?;
+    assert!(output.status.success());
+    let inventory: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    let support = &inventory["read_support"]["query"];
+    assert_eq!(support["registered_tables"], serde_json::json!(["t"]));
+    assert_eq!(support["max_table_bindings"], 1);
+    assert_eq!(support["self_joins"], true);
+    for example in support["sql_input"]["examples"].as_array().unwrap() {
+        let fixture = SqlCommandFixture::new(
+            fixture_path("partitioned").join("table"),
+            example.as_str().unwrap(),
+        )?;
+        let result = decode_query_result(&run_with_timeout(&mut fixture.command())?)?;
+        assert!(result.num_rows() > 0, "{example}");
+    }
+    Ok(())
+}
+
+#[test]
 fn sql_preserves_values_nulls_deletion_vectors_ordering_and_empty_results() -> TestResult {
     for name in ["partitioned", "deletion_vectors", "nested_mapping"] {
         let expected = read_expected_rows(name)?;
