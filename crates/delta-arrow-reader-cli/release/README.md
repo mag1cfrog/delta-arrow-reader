@@ -640,6 +640,101 @@ Cargo-built executable. These checks supplement the archive and wheel runtime
 acceptance tests above; they do not establish access to a real UC table or
 replace platform compatibility checks.
 
+### Validate a prepared Unity Catalog fixture
+
+On Linux, the opt-in harness checks inspection and a filtered, projected scan
+against independent Arrow reference files. Run its offline tests without a
+Databricks installation or account:
+
+```sh
+cargo test --locked -p xtask --test unity_catalog_live
+```
+
+To check the same validators against a built CLI and the local Spark corpus:
+
+```sh
+DAR_LOCAL_BINARY=/absolute/path/to/dar \
+  cargo test --locked -p xtask --test unity_catalog_live \
+  harness_checks_a_real_cli_against_a_local_delta_fixture -- --ignored
+```
+
+This self-check redirects table reads to a local Delta fixture and uses a fake
+Databricks version command. It does not validate cloud authorization. Repeat
+with `DAR_LOCAL_BINARY` pointing to the wheel's installed `delta-arrow-reader`.
+
+For an authorized live run, have the fixture administrator prepare a synthetic
+UC table, a fixed snapshot, and two Arrow IPC **files** (not streams): the full
+table and the expected filtered projection. Produce the references independently
+of DAR, for example with Spark. Keep the table at 1,000 rows or fewer. The scan
+must return at least one row, fewer rows than the full table, and fewer columns
+than the full schema. Each input file must be at most 16 MiB.
+
+Save a private configuration alongside those files:
+
+```json
+{
+  "databricks_profile": "uc-fixture",
+  "table": "uc://test_catalog.test_schema.reader_fixture",
+  "table_version": 0,
+  "expected_table": "table.arrow",
+  "scan": {
+    "columns": ["value"],
+    "predicate_file": "predicate.json",
+    "expected_result": "filtered.arrow"
+  },
+  "storage_options_file": "storage.json",
+  "context": {
+    "credential_form": "s3_session",
+    "auth_mode": "user_oauth",
+    "table_kind": "external",
+    "protocol": {
+      "min_reader_version": 1,
+      "min_writer_version": 2,
+      "reader_features": []
+    }
+  }
+}
+```
+
+Paths inside the configuration are relative to that file. `predicate_file` and
+`storage_options_file` use the ordinary CLI JSON formats. For an S3 fixture,
+`storage.json` might contain `{"aws_region":"us-west-2"}`. Omit
+`storage_options_file` when no overrides are needed. Use the
+[UC prerequisites and read options](../../delta-arrow-reader-core/docs/public/cli.md#read-a-unity-catalog-table)
+to prepare the profile and permissions. The harness does not provision data,
+change grants, or log in. Databricks CLI must already be available on `PATH` in
+the same environment as the executable being tested.
+
+The credential labels are `s3_session`, `azure_blob_sas`, `azure_blob_bearer`,
+`gcs_oauth`, and `r2_session`. Authentication labels are `user_oauth`,
+`service_principal_oauth`, and `pat`; table kinds are `managed` and `external`.
+Copy the protocol version numbers and reader features from the prepared snapshot.
+The report labels these properties as `declared_fixture_context`: the harness
+does not independently identify the credential form or authentication mode.
+
+Run one prepared fixture with the commit recorded in the binary's build provenance:
+
+```sh
+cargo xtask cli test-unity-catalog \
+  --fixture /private/fixtures/uc-fixture.json \
+  --binary /absolute/path/to/dar \
+  --dar-revision FULL_40_CHARACTER_BUILD_COMMIT > uc-validation.json
+```
+
+Omitting all options emits a `skipped` report without invoking either CLI.
+Configured runs record the declared build commit, executable SHA256, Databricks
+CLI version, fixture context, snapshot, and check results. Failure returns a
+nonzero exit status and identifies the failed step. Reports omit profile names,
+table identifiers, schemas, row values, tokens, and subprocess output. Keep the
+private configuration and reference files out of published evidence.
+
+The current scope is `inspect_and_scan`. A passing report requires the expected
+schema and exact scan values, exit success, one matching completion record, and
+a complete Arrow stream. The scan stops at one more row than expected, so an
+overly broad predicate fails without returning the entire table. Passing requires
+exhaustion before that limit. SQL aggregate and join checks remain `not_run`; this
+report alone does not establish full UC acceptance or validate other fixtures.
+
 ## Build and test a complete platform archive locally
 
 After installing the build prerequisites and cargo-about described here, run

@@ -6,6 +6,8 @@ mod acceptance;
 mod artifacts;
 mod binary;
 mod build;
+#[cfg(target_os = "linux")]
+mod cli_completion;
 mod command;
 mod error;
 mod external_fixtures;
@@ -44,6 +46,8 @@ mod selective_read_build;
 mod selective_read_chart;
 #[cfg(target_os = "linux")]
 mod test_https;
+#[cfg(target_os = "linux")]
+mod unity_catalog_live;
 mod validation_record;
 
 use std::{
@@ -201,6 +205,9 @@ enum CliTask {
     TestProcess(process::TestProcessArgs),
     /// Check Arrow IPC output and scan process lifecycle on Linux.
     TestScan(scan::TestScanArgs),
+    /// Check a prepared Unity Catalog fixture on Linux; skip unless explicitly configured.
+    #[cfg(target_os = "linux")]
+    TestUnityCatalog(unity_catalog_live::TestUnityCatalogArgs),
     /// Collect dependency redistribution text for one CLI target.
     Notices(notices::NoticeArgs),
     /// Package, extract, assemble, or verify CLI binary archives.
@@ -304,6 +311,8 @@ impl CliTask {
             Self::UpdateReleaseNotes(args) => args.run(),
             Self::TestProcess(args) => args.run(),
             Self::TestScan(args) => args.run(),
+            #[cfg(target_os = "linux")]
+            Self::TestUnityCatalog(args) => args.run(),
             Self::Notices(args) => notices::run(args),
             Self::Artifacts { command } => command.run(),
             Self::Images { command } => command.run(),
