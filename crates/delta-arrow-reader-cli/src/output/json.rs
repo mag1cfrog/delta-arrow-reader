@@ -16,7 +16,7 @@ use arrow::array::RecordBatch;
 use arrow_schema::SchemaRef;
 use futures_util::{Stream, StreamExt};
 use serde::Serialize;
-use serde_json::json;
+use serde_json::Value;
 
 use super::{OutputLimits, field_descriptions::field_details, on_stdout_thread};
 use crate::{Error, StdoutStats, write_stdout};
@@ -46,7 +46,7 @@ impl Write for BoundedJsonBuffer {
 impl BoundedJsonBuffer {
     fn start(
         schema: &SchemaRef,
-        table_version: u64,
+        bindings: &[Value],
         max_bytes: u64,
         command: &'static str,
     ) -> Result<Self, Error> {
@@ -58,7 +58,7 @@ impl BoundedJsonBuffer {
             max_bytes,
         };
         output.push(b"{\"format_version\":1,\"kind\":\"rows\",\"bindings\":")?;
-        output.encode(&json!([{"alias": "t", "table_version": table_version.to_string()}]))?;
+        output.encode(&bindings)?;
         output.push(b",\"schema\":{\"fields\":[")?;
         for (index, field) in schema.fields().iter().enumerate() {
             if index > 0 {
@@ -92,13 +92,12 @@ impl BoundedJsonBuffer {
 pub(crate) async fn write_query_to_stdout(
     schema: SchemaRef,
     stream: impl Stream<Item = Result<RecordBatch, Error>> + Send + 'static,
-    table_version: u64,
+    bindings: Vec<Value>,
     limits: OutputLimits,
 ) -> Result<StdoutStats, Error> {
     let runtime = tokio::runtime::Handle::current();
     on_stdout_thread(move || {
-        let (bytes, stats) =
-            runtime.block_on(encode_query(schema, stream, table_version, limits))?;
+        let (bytes, stats) = runtime.block_on(encode_query(schema, stream, &bindings, limits))?;
         write_stdout(&bytes)?;
         Ok(stats)
     })
@@ -108,10 +107,10 @@ pub(crate) async fn write_query_to_stdout(
 async fn encode_query(
     schema: SchemaRef,
     stream: impl Stream<Item = Result<RecordBatch, Error>>,
-    table_version: u64,
+    bindings: &[Value],
     limits: OutputLimits,
 ) -> Result<(Vec<u8>, StdoutStats), Error> {
-    let mut output = BoundedJsonBuffer::start(&schema, table_version, limits.max_bytes, "query")?;
+    let mut output = BoundedJsonBuffer::start(&schema, bindings, limits.max_bytes, "query")?;
     let mut stream = Box::pin(stream);
     let mut stats = StdoutStats::default();
     while let Some(batch) = stream.next().await {
@@ -152,7 +151,7 @@ mod tests {
     use arrow::array::{ArrayRef, Int64Array, RecordBatchOptions, StringArray, StructArray};
     use arrow_schema::{DataType, Field, IntervalUnit, Schema, TimeUnit, UnionFields, UnionMode};
     use futures_util::stream;
-    use serde_json::Value;
+    use serde_json::json;
 
     use super::*;
 
@@ -160,7 +159,7 @@ mod tests {
         encode_query(
             batch.schema(),
             stream::iter([Ok(batch)]),
-            42,
+            &[json!({"alias": "t", "table_version": "42"})],
             OutputLimits {
                 max_rows,
                 max_bytes,
@@ -266,7 +265,7 @@ mod tests {
             encode_query(
                 schema,
                 stream,
-                0,
+                &[json!({"alias": "t", "table_version": "0"})],
                 OutputLimits {
                     max_rows: 100,
                     max_bytes: 8192
@@ -284,7 +283,7 @@ mod tests {
             encode_query(
                 batch.schema(),
                 stream,
-                0,
+                &[json!({"alias": "t", "table_version": "0"})],
                 OutputLimits {
                     max_rows: 1,
                     max_bytes: 8192
@@ -322,7 +321,7 @@ mod tests {
                 encode_query(
                     schema,
                     stream::empty(),
-                    0,
+                    &[json!({"alias": "t", "table_version": "0"})],
                     OutputLimits {
                         max_rows: 0,
                         max_bytes: 8192

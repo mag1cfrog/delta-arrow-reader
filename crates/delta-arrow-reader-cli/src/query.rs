@@ -1,4 +1,6 @@
-//! Single-table SQL admission and planning over an immutable Core snapshot.
+//! Read-only SQL admission and planning over named, immutable Core snapshots.
+
+pub(crate) mod tables_manifest;
 
 use std::{fmt, fs::File, io::Read, num::NonZeroUsize, ops::ControlFlow, sync::Arc};
 
@@ -25,10 +27,14 @@ use delta_arrow_reader::{
     datafusion::{ScanOptions, register_table},
     error_source_kind,
 };
+use futures_util::{FutureExt, TryStreamExt, future::LocalBoxFuture};
+use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu};
 
 use crate::{
-    InputIoSnafu, QuerySnafu, TableArgs, diagnostics::ErrorClassification, parse_unsigned_decimal,
+    Error, InputIoSnafu, QuerySnafu, ReaderSnafu, build_completion_record,
+    build_json_read_completion, diagnostics::ErrorClassification, output, parse_unsigned_decimal,
+    table_input::TableOptions,
 };
 
 pub(crate) const MAX_SQL_BYTES: u64 = 64 * 1024;
@@ -40,12 +46,20 @@ pub(crate) enum QueryOutputFormat {
     Json,
 }
 
-/// Inputs and resource ceilings for a complete single-table query result.
+/// Selects positional table t or a manifest of named tables, with result resource ceilings.
 #[derive(Args)]
 pub(crate) struct QueryArgs {
+    /// UTF-8 local path or storage URL, registered as t. Relative paths use the working directory.
+    /// Use '--' before a table path beginning with '-'.
+    #[arg(required_unless_present = "tables_file")]
+    table: Option<String>,
+    /// Local JSON manifest of 1-64 named tables; at most 1 MiB. Relative locations use its directory.
+    /// Conflicts with TABLE, --table-version, --storage-options-file, and --auth-source.
+    #[arg(long, value_name = "PATH", conflicts_with_all = ["table", "table_version", "storage_options_file", "auth_source"])]
+    tables_file: Option<String>,
     #[command(flatten)]
-    pub(crate) table: TableArgs,
-    /// UTF-8 file containing one read-only SQL query over table alias t; at most 64 KiB.
+    table_options: TableOptions,
+    /// UTF-8 file containing one read-only SQL query over the selected aliases; at most 64 KiB.
     #[arg(long, value_name = "PATH")]
     pub(crate) sql_file: String,
     /// Arrow IPC stream (requires redirected stdout), or bounded typed JSON.
@@ -62,10 +76,87 @@ pub(crate) struct QueryArgs {
     pub(crate) memory_limit_bytes: NonZeroUsize,
 }
 
+impl QueryArgs {
+    /// Admits all input before any table IO; execution loads each snapshot exactly once.
+    pub(crate) fn prepare_execution(
+        &self,
+    ) -> Result<LocalBoxFuture<'_, Result<Value, Error>>, Error> {
+        let builders = if let Some(path) = &self.tables_file {
+            tables_manifest::read_table_builders(path)?
+        } else {
+            let location = self.table.as_deref().ok_or(Error::Argument {
+                kind: clap::error::ErrorKind::MissingRequiredArgument,
+                correction: None,
+            })?;
+            reject_unity_catalog_query(location)?;
+            vec![(
+                "t".to_owned(),
+                self.table_options.direct_table_builder(location, None)?,
+            )]
+        };
+        let sql_query = ReadOnlySqlQuery::read_file(&self.sql_file)?;
+        Ok(async move {
+            let mut tables = Vec::with_capacity(builders.len());
+            let mut bindings = Vec::with_capacity(builders.len());
+            for (alias, builder) in builders {
+                let table = builder.load_table().await.context(ReaderSnafu)?;
+                bindings
+                    .push(json!({"alias": alias, "table_version": table.version().to_string()}));
+                tables.push((alias, table));
+            }
+            let stream = sql_query
+                .execute_stream(tables, self.memory_limit_bytes.get())
+                .await?;
+            let schema = stream.schema();
+            let stream = stream.map_err(|source| Error::Query {
+                source: QueryError::Execution { source },
+            });
+            let limits = output::OutputLimits {
+                max_rows: self.max_rows as u64,
+                max_bytes: self.max_output_bytes.get() as u64,
+            };
+            let completion = match self.output_format {
+                QueryOutputFormat::Arrow => {
+                    let stats =
+                        output::arrow::write_arrow_stream_to_stdout(schema, stream, Some(limits))
+                            .await?;
+                    let mut completion = build_completion_record("query", None, stats, None);
+                    completion["bindings"] = bindings.into();
+                    completion
+                }
+                QueryOutputFormat::Json => {
+                    let stats = output::json::write_query_to_stdout(
+                        schema,
+                        stream,
+                        bindings.clone(),
+                        limits,
+                    )
+                    .await?;
+                    build_json_read_completion("query", bindings, stats)
+                }
+            };
+            Ok(completion)
+        }
+        .boxed_local())
+    }
+}
+
+fn reject_unity_catalog_query(location: &str) -> Result<(), Error> {
+    if location
+        .get(..5)
+        .is_some_and(|scheme| scheme.eq_ignore_ascii_case("uc://"))
+    {
+        return Err(QueryError::UnsupportedUnityCatalogQuery).context(QuerySnafu);
+    }
+    Ok(())
+}
+
 /// SQL failures retain typed sources without printing query text or dependency messages.
 #[derive(Snafu)]
 pub(crate) enum QueryError {
-    #[snafu(display("Invalid SQL input (reason={reason}). Use one read-only query over table t."))]
+    #[snafu(display(
+        "Invalid SQL input (reason={reason}). Use one read-only query over the selected tables."
+    ))]
     Input { reason: &'static str },
     #[snafu(display("Unity Catalog SQL queries are not supported yet."))]
     UnsupportedUnityCatalogQuery,
@@ -190,10 +281,10 @@ impl ReadOnlySqlQuery {
         Ok(Self { statement })
     }
 
-    /// Registers only the supplied snapshot as t. URL-based table discovery is never enabled.
+    /// Registers only the supplied names and snapshots. URL-based table discovery stays disabled.
     pub(crate) async fn execute_stream(
         self,
-        table: DeltaTable,
+        tables: impl IntoIterator<Item = (String, DeltaTable)>,
         memory_limit_bytes: usize,
     ) -> Result<SendableRecordBatchStream, crate::Error> {
         let runtime = RuntimeEnvBuilder::new()
@@ -205,7 +296,10 @@ impl ReadOnlySqlQuery {
             .context(InitializationSnafu)
             .context(QuerySnafu)?;
         let context = SessionContext::new_with_config_rt(SessionConfig::new(), runtime);
-        register_table(&context, "t", table, ScanOptions::default()).context(crate::ReaderSnafu)?;
+        for (alias, table) in tables {
+            register_table(&context, alias, table, ScanOptions::default())
+                .context(crate::ReaderSnafu)?;
+        }
         let plan = context
             .state()
             .statement_to_plan(self.statement)
@@ -313,6 +407,62 @@ impl Visitor for ReadOnlySqlValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use arrow::{array::Int32Array, compute::concat_batches};
+    use delta_arrow_reader::{DeltaTableBuilder, WarmupMode};
+    use futures_util::TryStreamExt;
+
+    #[tokio::test]
+    async fn joins_use_distinct_snapshots_and_respect_deletion_vectors()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let corpus = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus"
+        );
+        let mut tables = Vec::new();
+        for name in ["partitioned", "deletion_vectors"] {
+            let table = DeltaTableBuilder::new(format!("{corpus}/{name}/table"))
+                .with_warmup(WarmupMode::None)
+                .load_table()
+                .await?;
+            tables.push((name.to_owned(), table));
+        }
+        let query = ReadOnlySqlQuery::parse(
+            "SELECT p.id AS partitioned_id, d.id AS retained_id
+             FROM partitioned AS p LEFT JOIN deletion_vectors AS d ON p.id = d.id
+             WHERE p.id <= 12 ORDER BY p.id",
+        )?;
+        let stream = query.execute_stream(tables, 16 * 1024 * 1024).await?;
+        let schema = stream.schema();
+        let batches = stream.try_collect::<Vec<_>>().await?;
+        let actual = concat_batches(&schema, &batches)?;
+        assert_eq!(schema.field(0).name(), "partitioned_id");
+        assert_eq!(schema.field(1).name(), "retained_id");
+        assert_eq!(actual.num_columns(), 2);
+        assert_eq!(
+            actual.column(0).as_ref(),
+            &Int32Array::from_iter_values(1..=12)
+        );
+        // The independent Spark fixture deleted IDs 2, 5, and 12 from the right table.
+        assert_eq!(
+            actual.column(1).as_ref(),
+            &Int32Array::from(vec![
+                Some(1),
+                None,
+                Some(3),
+                Some(4),
+                None,
+                Some(6),
+                Some(7),
+                Some(8),
+                Some(9),
+                Some(10),
+                Some(11),
+                None,
+            ])
+        );
+        Ok(())
+    }
 
     #[test]
     fn admission_checks_nested_queries_and_one_read_only_statement() {

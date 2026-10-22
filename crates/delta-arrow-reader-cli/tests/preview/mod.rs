@@ -2,6 +2,7 @@
 
 #[cfg(target_os = "linux")]
 mod deadlines;
+mod wide_tables;
 
 use std::{
     fs,

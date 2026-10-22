@@ -22,9 +22,9 @@ pub(super) fn rows_schema() -> Value {
         "properties": {
             "format_version": {"const": 1},
             "kind": {"const": "rows"},
-            "bindings": {"type": "array", "minItems": 1, "maxItems": 1, "items": {
+            "bindings": {"type": "array", "minItems": 1, "maxItems": crate::query::tables_manifest::MAX_TABLES, "items": {
                 "type": "object", "required": ["alias", "table_version"],
-                "properties": {"alias": {"const": "t"}, "table_version": unsigned_integer_string_schema()},
+                "properties": {"alias": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,62}$", "not": {"pattern": "[^a-z0-9_]"}}, "table_version": unsigned_integer_string_schema()},
             }},
             "schema": {
                 "type": "object", "required": ["fields"],
@@ -47,7 +47,7 @@ pub(super) fn rows_schema() -> Value {
         "allOf": [{
             "if": {"properties": {"completion": {"const": "complete"}}},
             "then": {"required": ["scope"]},
-            "else": {"required": ["stop_reason", "has_more"]},
+            "else": {"required": ["stop_reason", "has_more"], "properties": {"bindings": {"maxItems": 1, "items": {"properties": {"alias": {"const": "t"}}}}}},
         }, {
             "if": {"required": ["stop_reason"], "properties": {"stop_reason": {"const": "end_of_input"}}},
             "then": {"properties": {"has_more": {"const": false}}},
@@ -225,9 +225,10 @@ pub(super) fn completion_schema() -> Value {
             },
             "stop_reason": {"enum": ["row_limit", "end_of_input"]},
             "has_more": {"enum": [false, null], "description": "False at observed exhaustion; null when a scan reaches its row limit."},
-            "bindings": {"type": "array", "maxItems": 1, "items": {
+            "bindings": {"type": "array", "maxItems": crate::query::tables_manifest::MAX_TABLES,
+                "description": "Actual snapshot versions in declaration order; positional input uses t.", "items": {
                 "type": "object", "required": ["alias", "table_version"],
-                "properties": {"alias": {"const": "t"}, "table_version": unsigned_integer_string_schema()},
+                "properties": {"alias": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,62}$", "not": {"pattern": "[^a-z0-9_]"}}, "table_version": unsigned_integer_string_schema()},
             }},
             "output_bytes": unsigned_integer_string_schema(),
             "rows": unsigned_integer_string_schema(),
@@ -247,6 +248,9 @@ pub(super) fn completion_schema() -> Value {
             "if": {"properties": {"command": {"enum": ["inspect", "scan", "preview", "query"]}}},
             "then": {"properties": {"bindings": {"minItems": 1}}},
             "else": {"properties": {"bindings": {"maxItems": 0}}},
+        }, {
+            "if": {"properties": {"command": {"enum": ["inspect", "scan", "preview"]}}},
+            "then": {"properties": {"bindings": {"maxItems": 1, "items": {"properties": {"alias": {"const": "t"}}}}}},
         }],
         "examples": [{
             "format_version": 1, "kind": "completion", "terminal": true,

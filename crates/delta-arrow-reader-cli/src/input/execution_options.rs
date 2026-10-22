@@ -20,7 +20,10 @@
 use delta_arrow_reader::{DeltaReaderError, DeltaScanExecutionOptions, ParquetReaderBackend};
 use serde::{Deserialize, Deserializer, de::value::StringDeserializer};
 
-use crate::{diagnostics::InputCorrection, input::JsonInputKind};
+use crate::{
+    diagnostics::InputCorrection,
+    input::{JsonInputKind, deserialize_present_field},
+};
 
 #[derive(Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -116,15 +119,6 @@ pub(super) fn describe_integer_requirement(field: &str) -> Option<String> {
         "JSON integer from {minimum} to {maximum}{}",
         if nullable { ", or null" } else { "" },
     ))
-}
-
-// The outer Option records presence, keeping omission separate from explicit null.
-fn deserialize_present_field<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    T::deserialize(deserializer).map(Some)
 }
 
 fn deserialize_backend<'de, D: Deserializer<'de>>(

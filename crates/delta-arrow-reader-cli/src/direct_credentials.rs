@@ -1,10 +1,11 @@
 //! Explicit credential selection for direct cloud reads.
 
 mod azure_blob;
+mod credential_file_paths;
 mod gcs;
 mod s3;
 
-use std::{env, str::FromStr};
+use std::{env, path::Path, str::FromStr};
 
 use clap::ValueEnum;
 use delta_arrow_reader::{DeltaStorageOptions, DeltaTableBuilder};
@@ -37,7 +38,8 @@ impl CredentialSource {
         self,
         builder: DeltaTableBuilder,
         location: &str,
-        options: DeltaStorageOptions,
+        mut options: DeltaStorageOptions,
+        credential_file_directory: Option<&Path>,
     ) -> Result<DeltaTableBuilder, Error> {
         let unsupported_storage = || Error::StorageAuthorization {
             reason: "auth_source_unsupported_storage",
@@ -55,18 +57,10 @@ impl CredentialSource {
                 reason: "auth_source_unsupported_storage"
             }
         );
-        // Azure Blob URLs may use container@account; passwords and embedded tokens remain invalid.
-        ensure!(
-            (url.username().is_empty()
-                || (scheme == ObjectStoreScheme::MicrosoftAzure
-                    && matches!(url.scheme(), "az" | "abfs" | "abfss")))
-                && url.password().is_none()
-                && url.query().is_none()
-                && url.fragment().is_none(),
-            StorageAuthorizationSnafu {
-                reason: "auth_source_invalid_table_url"
-            }
-        );
+        validate_table_url(&url, &scheme)?;
+        if let Some(directory) = credential_file_directory {
+            credential_file_paths::resolve_relative_paths(&mut options, &scheme, directory)?;
+        }
         match (scheme, self) {
             (
                 ObjectStoreScheme::AmazonS3,
@@ -82,6 +76,22 @@ impl CredentialSource {
             _ => Err(unsupported_storage()),
         }
     }
+}
+
+/// Azure Blob URLs may use container@account; passwords and embedded tokens remain invalid.
+pub(crate) fn validate_table_url(url: &Url, scheme: &ObjectStoreScheme) -> Result<(), Error> {
+    ensure!(
+        (url.username().is_empty()
+            || (*scheme == ObjectStoreScheme::MicrosoftAzure
+                && matches!(url.scheme(), "az" | "abfs" | "abfss")))
+            && url.password().is_none()
+            && url.query().is_none()
+            && url.fragment().is_none(),
+        StorageAuthorizationSnafu {
+            reason: "auth_source_invalid_table_url"
+        }
+    );
+    Ok(())
 }
 
 /// Uses native aliases and rejects duplicates after the provider validates each option.

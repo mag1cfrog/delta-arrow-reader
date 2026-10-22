@@ -53,6 +53,7 @@ fn named_schemas_are_offline_deterministic_and_use_the_same_diagnostics()
         ("storage-options", "input_schema"),
         ("execution-options", "input_schema"),
         ("predicate", "input_schema"),
+        ("tables", "input_schema"),
         ("inspection", "output_schema"),
         ("inspection-summary", "output_schema"),
         ("diagnostic", "output_schema"),
@@ -159,6 +160,11 @@ fn discovery_is_deterministic_without_credentials_or_a_search_path()
         (vec!["--command", "help"], "command_guide"),
         (vec!["--command", "query", "--full"], "command_capabilities"),
         (vec!["--schema", "predicate"], "schema_guide"),
+        (vec!["--schema", "tables"], "schema_guide"),
+        (
+            vec!["--schema", "tables", "--detail", "tables[].authorization"],
+            "schema_detail",
+        ),
         (
             vec!["--schema", "predicate", "--detail", "timestamp_us"],
             "schema_detail",
@@ -391,7 +397,8 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                 .collect();
             let expected_inputs = match name {
                 "scan" | "preview" => vec!["storage-options", "predicate", "execution-options"],
-                "inspect" | "query" => vec!["storage-options"],
+                "inspect" => vec!["storage-options"],
+                "query" => vec!["storage-options", "tables"],
                 _ => vec![],
             };
             assert_eq!(input_names, expected_inputs);
@@ -455,9 +462,29 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                 for name in guide["example"].as_object().unwrap().keys() {
                     assert!(detail_names.insert(name.clone()), "repeated field: {name}");
                 }
-                assert_eq!(detail_names, properties.keys().cloned().collect());
+                let root_fields = detail_names
+                    .iter()
+                    .filter(|name| !name.starts_with("tables[]."))
+                    .cloned()
+                    .collect::<std::collections::BTreeSet<_>>();
+                assert_eq!(root_fields, properties.keys().cloned().collect());
                 if let Some(other_fields) = guide.get("other_fields") {
                     assert!(!other_fields.as_array().unwrap().is_empty());
+                }
+            }
+            if name == "tables" {
+                assert!(
+                    guide["detail_syntax"]
+                        .as_str()
+                        .unwrap()
+                        .contains("tables[].FIELD")
+                );
+                for field in ["alias", "location", "table_version"] {
+                    assert!(guide["example"]["tables"][0].get(field).is_some());
+                    detail_names.insert(format!("tables[].{field}"));
+                }
+                for field in ["source", "storage_options_file"] {
+                    detail_names.insert(format!("tables[].authorization.{field}"));
                 }
             }
             for name in detail_names {
@@ -468,6 +495,19 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                 assert_eq!(detail["detail"], name);
                 assert!(detail.get("schema").is_none());
                 assert!(detail["definition"].is_object());
+                if name == "tables[].authorization" {
+                    for guide_name in detail["authorization_guides"].as_array().unwrap() {
+                        let mut invocation = detail["authorization_command"].clone();
+                        *invocation.as_array_mut().unwrap().last_mut().unwrap() =
+                            guide_name.clone();
+                        let authorization = run_advertised(&invocation)?;
+                        assert_eq!(authorization["kind"], "authorization_guide");
+                        assert_eq!(&authorization["name"], guide_name);
+                        let expanded = run_advertised(&authorization["full_command"])?;
+                        assert_eq!(expanded["kind"], "authorization_capabilities");
+                        assert_eq!(&expanded["name"], guide_name);
+                    }
+                }
             }
         }
     }

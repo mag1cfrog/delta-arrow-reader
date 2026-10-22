@@ -1,6 +1,7 @@
 //! Exact SQL results, read-only admission, output ceilings, and safe failures.
 
 mod json;
+mod tables_manifest;
 
 use std::{
     fs,
@@ -56,7 +57,7 @@ impl SqlCommandFixture {
     }
 }
 
-fn decode_query_result(output: &Output) -> TestResult<RecordBatch> {
+pub(super) fn decode_query_result(output: &Output) -> TestResult<RecordBatch> {
     assert!(
         output.status.success(),
         "{}",
@@ -98,8 +99,8 @@ fn published_sql_examples_execute_with_the_advertised_table_binding() -> TestRes
     assert!(output.status.success());
     let inventory: serde_json::Value = serde_json::from_slice(&output.stdout)?;
     let support = &inventory["read_support"]["query"];
-    assert_eq!(support["registered_tables"], serde_json::json!(["t"]));
-    assert_eq!(support["max_table_bindings"], 1);
+    assert_eq!(support["positional_alias"], "t");
+    assert_eq!(support["max_table_bindings"], 64);
     assert_eq!(support["self_joins"], true);
     for example in support["sql_input"]["examples"].as_array().unwrap() {
         let fixture = SqlCommandFixture::new(

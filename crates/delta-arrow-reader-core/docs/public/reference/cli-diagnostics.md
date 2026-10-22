@@ -122,13 +122,18 @@ I/O failures, or `change_request` for unsupported operations. Unclassified
 failures use `unknown` and `retryable: null`. A true `retryable` value means
 starting a new command, after discarding any output from the failed invocation.
 JSON query byte exhaustion uses `change_request`: save the complete result as
-Arrow with the same SQL, authorization, and snapshot. Preview schema/first-row byte exhaustion also uses `change_request`.
+Arrow with the same SQL, authorization, table bindings, and snapshot versions.
+An explicit `--max-output-bytes` survives a format change; choose an appropriate
+budget for the saved Arrow stream. Arrow byte exhaustion identifies that budget
+argument for an explicit adjustment. Preview schema/first-row byte exhaustion also uses `change_request`.
 Preview deadlines and other query output or memory exhaustion use `adjust_budget`. These resource failures set `retryable: false`.
 
 A successful command emits `kind: "completion"` after stdout has been flushed.
 It includes `command` and `output_bytes`. Inspect, scan, preview, and query include the actual snapshot
 in `bindings`, for example
-`[{"alias":"t","table_version":"42"}]`; other commands use an empty array.
+`[{"alias":"t","table_version":"42"}]`. Queries using `--tables-file` include
+each manifest alias and its resolved version in declaration order. Other commands
+use an empty array.
 Scan, preview, and query also report `rows`. Versions and counts are decimal strings.
 
 `preview` and `query --format json` use completion `format_version: 2`, containing only the

@@ -8,6 +8,7 @@ use arrow::array::RecordBatch;
 use arrow_schema::SchemaRef;
 use futures_util::{Stream, StreamExt};
 use serde::Serialize;
+use serde_json::json;
 
 use super::{BoundedJsonBuffer, JsonRow, OutputLimits, on_stdout_thread};
 use crate::{Error, StdoutStats, write_stdout};
@@ -66,13 +67,18 @@ async fn encode_preview(
     table_version: u64,
     limits: OutputLimits,
 ) -> Result<(Vec<u8>, StdoutStats), Error> {
-    let mut output = BoundedJsonBuffer::start(&schema, table_version, limits.max_bytes, "preview")
-        .map_err(|error| match error {
-            Error::OutputLimit { .. } => Error::OutputLimit {
-                reason: "preview_schema_limit_exceeded",
-            },
-            error => error,
-        })?;
+    let mut output = BoundedJsonBuffer::start(
+        &schema,
+        &[json!({"alias": "t", "table_version": table_version.to_string()})],
+        limits.max_bytes,
+        "preview",
+    )
+    .map_err(|error| match error {
+        Error::OutputLimit { .. } => Error::OutputLimit {
+            reason: "preview_schema_limit_exceeded",
+        },
+        error => error,
+    })?;
     let mut row_offsets = Vec::new();
     let mut stream = Box::pin(stream);
     let mut stop_reason = SampleStopReason::RowLimit;

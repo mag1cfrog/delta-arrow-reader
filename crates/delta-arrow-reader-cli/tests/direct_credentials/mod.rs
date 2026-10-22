@@ -4,6 +4,7 @@ mod azure_blob;
 mod gcs;
 mod mock_credential_proxy;
 mod s3;
+mod table_manifests;
 
 use std::{
     fs,

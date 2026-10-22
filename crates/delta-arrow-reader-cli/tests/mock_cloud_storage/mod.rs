@@ -15,7 +15,7 @@ use std::{
 };
 
 use arrow::{compute::concat_batches, ipc::reader::FileReader, record_batch::RecordBatch};
-use serde_json::Value;
+use serde_json::{Value, json};
 use url::Url;
 
 /// Selects the listing XML and object URL layout used by the mock storage service.
@@ -228,6 +228,21 @@ pub(super) fn partitioned_objects() -> Result<BTreeMap<String, Vec<u8>>, Box<dyn
     }
     objects.insert("table/_delta_log/00000000000000000000.json".into(), log);
     Ok(objects)
+}
+
+/// A second snapshot drops one partition so a version-selection regression changes the rows.
+pub(super) fn append_west_partition_removal_commit(objects: &mut BTreeMap<String, Vec<u8>>) {
+    let path = objects
+        .keys()
+        .find(|key| key.starts_with("table/region=west/"))
+        .unwrap();
+    let action = json!({"remove": {
+        "path": path.strip_prefix("table/").unwrap(), "deletionTimestamp": 1, "dataChange": true
+    }});
+    objects.insert(
+        "table/_delta_log/00000000000000000001.json".into(),
+        format!("{action}\n").into_bytes(),
+    );
 }
 
 pub(super) fn expected_partitioned_rows() -> Result<RecordBatch, Box<dyn std::error::Error>> {

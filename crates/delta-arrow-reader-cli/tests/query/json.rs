@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use super::*;
 use crate::capabilities::assert_output_matches_schema;
 
-fn decode_json(output: &Output) -> TestResult<Value> {
+pub(super) fn decode_json(output: &Output) -> TestResult<Value> {
     assert!(
         output.status.success(),
         "{}",
@@ -14,6 +14,7 @@ fn decode_json(output: &Output) -> TestResult<Value> {
     let result: Value = serde_json::from_slice(&output.stdout)?;
     assert_output_matches_schema("rows", &result);
     let completion = assert_single_terminal_record(&output.stderr, "completion");
+    assert_output_matches_schema("completion", &completion);
     assert_eq!(completion["format_version"], 2);
     for field in [
         "batches",
@@ -145,7 +146,10 @@ fn json_limits_accept_exact_results_and_never_return_successful_prefixes() -> Te
             assert_eq!(diagnostic["argument"], "--format");
             let hint = diagnostic["hint"].as_str().unwrap();
             assert!(hint.contains("--format arrow"));
-            assert!(hint.contains("same SQL, authorization, and --table-version N"));
+            assert!(hint.contains("explicitly adjust any existing --max-output-bytes for Arrow"));
+            assert!(
+                hint.contains("same SQL, authorization, table bindings, and snapshot versions")
+            );
             assert!(!hint.contains("aggregate"));
             assert!(!hint.contains("increase"));
         }

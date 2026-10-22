@@ -2,7 +2,7 @@
 //!
 //! These constraints apply across arguments and are not expressed by Clap's
 //! argument rules. For example, `--databricks-profile` requires a UC table name;
-//! a SQL query can join aliases of `t`, but cannot open a second Delta table.
+//! a SQL query can join declared snapshots but cannot discover tables from SQL text.
 //! Discovery describes these rules without checking the caller's credentials,
 //! installed provider tools, or access to any particular table.
 
@@ -14,6 +14,9 @@ use crate::{query, unity_catalog};
 
 const UNITY_CATALOG_PROFILE_USAGE: &str = "Use three unquoted name components and an explicit, nonempty profile. A profile is invalid for direct table locations.";
 const UNITY_CATALOG_ACCESS_REQUIREMENTS: &str = "Requires an existing Databricks login and external read permissions. Discovery does not test the executable, profile, or grants.";
+pub(super) const QUERY_SNAPSHOT_SELECTION: &str = "Each alias loads once. With --diagnostics=json, stderr completion.bindings reports each alias and its actual table_version (a decimal string) in declaration order. Snapshots do not form a cross-table transaction.";
+pub(super) const QUERY_ROW_ORDERING: &str =
+    "Use ORDER BY with tie-breaking columns for repeatable row order.";
 
 #[derive(Clone, Copy, Debug, ValueEnum, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -150,6 +153,7 @@ pub(super) fn authorization_sources() -> Value {
             "credential_selection": "explicit_source_or_storage_backend_default",
             "explicit_source_selection": true,
             "source_argument": "--auth-source",
+            "manifest_source_field": "tables[].authorization.source",
             "sources": {
                 "s3": ["json", "env", "aws-web-identity", "aws-container"],
                 "azure-blob": ["json", "env", "azure-workload-identity", "azure-managed-identity"],
@@ -263,8 +267,12 @@ pub(super) fn command_read_support() -> Value {
         "query": {
             "authorization": ["local", "direct_storage"],
             "scope": "complete_sql_result",
-            "registered_tables": ["t"],
-            "max_table_bindings": 1,
+            "positional_alias": "t",
+            "required_table_input": {"one_of": ["TABLE", "--tables-file"]},
+            "tables_file_argument": "--tables-file",
+            "max_table_bindings": query::tables_manifest::MAX_TABLES,
+            "snapshot_selection": QUERY_SNAPSHOT_SELECTION,
+            "ordering": QUERY_ROW_ORDERING,
             "self_joins": true,
             "external_table_discovery": false,
             "sql_input": {
@@ -539,7 +547,6 @@ mod tests {
                 ("--output", "result.arrow"),
                 ("--format", "json"),
                 ("--deadline-ms", "1000"),
-                ("--tables-file", "tables.json"),
             ] {
                 if (name == "query" && option == "--format")
                     || (name == "preview" && option == "--deadline-ms")

@@ -121,6 +121,69 @@ fn service_account_files_sign_inspection_scan_and_sql_requests() -> TestResult {
 }
 
 #[test]
+fn manifest_adc_references_use_the_options_directory_and_environment_keeps_the_working_directory()
+-> TestResult {
+    for source in ["json", "env"] {
+        let fixture = DirectStorageFixture::new(CloudStorageProtocol::Gcs)?;
+        let directory = fixture.directory.path();
+        fs::create_dir_all(directory.join("config/identities"))?;
+        fs::create_dir(directory.join("manifests"))?;
+        fixture.write_adc(service_account_adc())?;
+        fs::rename(
+            fixture.adc_path(),
+            directory.join("config/identities/secret-adc.json"),
+        )?;
+        fixture.write_options(if source == "json" {
+            json!({"APPLICATION_CREDENTIALS":"identities/secret-adc.json"})
+        } else {
+            json!({})
+        })?;
+        fs::rename(
+            directory.join("options.json"),
+            directory.join("config/storage.json"),
+        )?;
+        fs::write(
+            directory.join("manifests/tables.json"),
+            json!({"format_version":1,"tables":[{
+                "alias":"orders", "location":"gs://bucket/table",
+                "authorization":{"source":source,"storage_options_file":"../config/storage.json"}
+            }]})
+            .to_string(),
+        )?;
+        fs::write(
+            directory.join("query.sql"),
+            "SELECT id FROM orders ORDER BY id",
+        )?;
+        let output = run_with_timeout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .env_clear()
+                .env("RUST_LOG", "trace")
+                .current_dir(directory)
+                .env(
+                    "GOOGLE_APPLICATION_CREDENTIALS",
+                    if source == "env" {
+                        "config/identities/secret-adc.json"
+                    } else {
+                        "secret-unused-file"
+                    },
+                )
+                .args([
+                    "query",
+                    "--tables-file",
+                    "manifests/tables.json",
+                    "--sql-file",
+                    "query.sql",
+                    "--diagnostics=json",
+                ]),
+        )?;
+        fixture.assert_no_gcs_credential_leaks(&output);
+        assert_read_result(output, "query")?;
+        fixture.verify_service_account_jwts()?;
+    }
+    Ok(())
+}
+
+#[test]
 fn jwt_verifier_rejects_a_valid_signature_from_the_wrong_principal() -> TestResult {
     let fixture = DirectStorageFixture::new(CloudStorageProtocol::Gcs)?;
     let mut credentials = service_account_adc();
