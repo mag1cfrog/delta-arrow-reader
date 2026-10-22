@@ -12,7 +12,9 @@ mod storage_location;
 mod table_metadata;
 mod temporary_credentials;
 
-pub(crate) use databricks_cli::{DATABRICKS_COMMAND_TIMEOUT, MAX_COMMAND_OUTPUT_BYTES};
+pub(crate) use databricks_cli::{
+    DATABRICKS_COMMAND_TIMEOUT, MAX_COMMAND_OUTPUT_BYTES, cancel_pending_requests,
+};
 
 use std::fmt;
 

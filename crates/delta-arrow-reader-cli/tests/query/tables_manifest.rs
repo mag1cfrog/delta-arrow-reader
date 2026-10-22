@@ -2,7 +2,6 @@
 
 use std::{fs, path::Path, process::Command};
 
-use arrow::array::Int32Array;
 use serde_json::{Value, json};
 
 use super::{
@@ -87,15 +86,16 @@ fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -
         .find(|command| command["name"] == "query")
         .unwrap();
     let query_guide = discover(&query["details"])?;
-    let conflicts = query_guide["join"]["conflicts_with"].as_array().unwrap();
+    assert!(query_guide.get("join").is_none());
+    let options = query_guide["options"]["--tables-file"].as_str().unwrap();
     for argument in [
-        "table",
+        "TABLE",
         "--table-version",
         "--storage-options-file",
         "--auth-source",
         "--databricks-profile",
     ] {
-        assert!(conflicts.contains(&json!(argument)));
+        assert!(options.contains(argument));
     }
     let input = query_guide["input_schemas"]
         .as_array()
@@ -117,11 +117,11 @@ fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -
     );
     fs::write(
         directory.path().join("query.sql"),
-        query_guide["join"]["sql"].as_str().unwrap(),
+        guide["sql_example"].as_str().unwrap(),
     )?;
     let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
     command.env_clear().current_dir(directory.path()).args(
-        query_guide["join"]["example"]
+        guide["query_example"]
             .as_array()
             .unwrap()
             .iter()
@@ -145,15 +145,18 @@ fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -
         }
         fs::write(&path, manifest.to_string())?;
         let output = run_with_timeout(&mut command)?;
-        let actual = decode_query_result(&output)?;
-        assert_eq!(actual.num_columns(), 2);
-        assert_eq!(actual.schema().field(0).name(), "id");
-        assert_eq!(actual.schema().field(1).name(), "id");
-        assert_eq!(
-            actual.column(0).as_ref(),
-            &Int32Array::from_iter_values(1..=5)
-        );
-        assert_eq!(actual.column(1).as_ref(), &Int32Array::from(expected));
+        let actual = super::json::decode_json(&output)?;
+        let fields = actual["schema"]["fields"].as_array().unwrap();
+        assert_eq!(fields.len(), 2);
+        assert_eq!(fields[0]["name"], "id");
+        assert_eq!(fields[1]["name"], "id");
+        let expected_rows: Vec<_> = (1..=5)
+            .zip(expected)
+            .map(|(id, joined_id)| {
+                json!([id.to_string(), joined_id.map(|value| value.to_string())])
+            })
+            .collect();
+        assert_eq!(actual["rows"], json!(expected_rows));
         let record = assert_single_terminal_record(&output.stderr, "completion");
         assert_eq!(
             record["bindings"],
@@ -164,6 +167,7 @@ fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -
         );
         assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
     }
+    assert_eq!(discovery_bytes.len(), 3);
     eprintln!(
         "JOIN discovery: {} lookups, {} bytes, no full definitions or authorization lookups",
         discovery_bytes.len(),
@@ -182,6 +186,91 @@ fn assert_manifest_rejected(directory: &Path, contents: impl AsRef<[u8]>) -> Tes
     assert_eq!(record["code"], "invalid_input_json");
     assert_eq!(record["argument"], "--tables-file");
     Ok(record)
+}
+
+#[test]
+fn json_joins_preserve_all_bindings_duplicate_columns_and_nulls() -> TestResult {
+    let directory = manifest_directory()?;
+    fs::write(
+        directory.path().join("query.sql"),
+        "SELECT o.id, c.id FROM orders o LEFT JOIN customers c ON o.id = c.id WHERE o.id <= 5 ORDER BY o.id, c.id",
+    )?;
+    fs::write(
+        directory.path().join("inputs/tables.json"),
+        serde_json::to_vec(&json!({"format_version": 1, "tables": [
+            {"alias": "orders", "location": fixture_path("partitioned").join("table"), "table_version": "0"},
+            {"alias": "customers", "location": fixture_path("deletion_vectors").join("table"), "table_version": "1"}
+        ]}))?,
+    )?;
+    let output = run_with_timeout(manifest_command(directory.path()).args(["--format", "json"]))?;
+    let result = super::json::decode_json(&output)?;
+    assert_eq!(
+        result["rows"],
+        json!([["1", "1"], ["2", null], ["3", "3"], ["4", "4"], ["5", null]])
+    );
+    assert_eq!(result["schema"]["fields"].as_array().unwrap().len(), 2);
+    assert_eq!(result["schema"]["fields"][0]["name"], "id");
+    assert_eq!(result["schema"]["fields"][1]["name"], "id");
+    assert_eq!(
+        result["bindings"],
+        json!([
+            {"alias": "orders", "table_version": "0"},
+            {"alias": "customers", "table_version": "1"}
+        ])
+    );
+    let overflow = run_with_timeout(manifest_command(directory.path()).args([
+        "--format",
+        "json",
+        "--max-output-bytes",
+        &(output.stdout.len() - 1).to_string(),
+    ]))?;
+    assert_eq!(overflow.status.code(), Some(1));
+    assert!(overflow.stdout.is_empty());
+    let diagnostic = assert_single_terminal_record(&overflow.stderr, "diagnostic");
+    assert_eq!(diagnostic["reason"], "json_output_limit_exceeded");
+    assert_eq!(diagnostic["recovery"], "adjust_budget");
+    assert_eq!(diagnostic["argument"], "--max-output-bytes");
+    assert!(
+        diagnostic["hint"]
+            .as_str()
+            .unwrap()
+            .contains("Explicitly increase --max-output-bytes for the complete JSON")
+    );
+    let exact = run_with_timeout(manifest_command(directory.path()).args([
+        "--format",
+        "json",
+        diagnostic["argument"].as_str().unwrap(),
+        &output.stdout.len().to_string(),
+    ]))?;
+    assert_eq!(super::json::decode_json(&exact)?, result);
+    // An explicit byte budget survives a format change and can still reject Arrow.
+    let arrow_overflow = run_with_timeout(manifest_command(directory.path()).args([
+        "--format",
+        "arrow",
+        "--max-output-bytes",
+        &(output.stdout.len() - 1).to_string(),
+    ]))?;
+    assert_eq!(arrow_overflow.status.code(), Some(1));
+    let diagnostic = assert_single_terminal_record(&arrow_overflow.stderr, "diagnostic");
+    assert_eq!(diagnostic["reason"], "output_byte_limit_exceeded");
+    assert_eq!(diagnostic["recovery"], "adjust_budget");
+    assert_eq!(diagnostic["argument"], "--max-output-bytes");
+    assert!(
+        diagnostic["hint"]
+            .as_str()
+            .unwrap()
+            .contains("snapshot versions")
+    );
+    let saved = run_with_timeout(manifest_command(directory.path()).args([
+        "--format",
+        "arrow",
+        "--max-output-bytes",
+        "8192",
+    ]))?;
+    assert_eq!(decode_query_result(&saved)?.num_rows(), 5);
+    let receipt = assert_single_terminal_record(&saved.stderr, "completion");
+    assert_eq!(receipt["bindings"], result["bindings"]);
+    Ok(())
 }
 
 #[test]

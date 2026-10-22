@@ -121,23 +121,47 @@ sources, `request_access` for permission failures, `retry` for known transient
 I/O failures, or `change_request` for unsupported operations. Unclassified
 failures use `unknown` and `retryable: null`. A true `retryable` value means
 starting a new command, after discarding any output from the failed invocation.
-Query output and memory exhaustion use `adjust_budget` and `retryable: false`.
 
-A successful command emits `format_version: 1`, `kind: "completion"`, `terminal: true`, and
-`completion: "complete"` after stdout has been flushed. It includes `command`,
-`scope`, `stop_reason`, `has_more`, and `output_bytes`. Inspect, scan, and query include
-the actual snapshots in `bindings`, for example
+Query byte and row exhaustion use `adjust_budget`, identifying
+`--max-output-bytes` or `--max-rows`. Explicitly increase the applicable budget
+and keep the same SQL, authorization, table bindings, and snapshot versions.
+For JSON byte exhaustion, another option is Arrow with redirected stdout and an
+explicit byte budget. Adding SQL `LIMIT` changes the result and is not a repair
+for the same request.
+
+Preview schema exhaustion uses `change_request`: narrow the selected columns
+or explicitly increase the byte budget. First-row exhaustion uses
+`adjust_budget` and identifies `--max-output-bytes`; keep the projection,
+predicate, row limit, authorization, snapshot, and deadline when retrying.
+Preview deadlines and query memory exhaustion also use `adjust_budget`.
+These resource failures set `retryable: false`.
+
+A successful command emits `kind: "completion"` after stdout has been flushed.
+It includes `command` and `output_bytes`. Inspect, scan, preview, and query include the actual snapshot
+in `bindings`, for example
 `[{"alias":"t","table_version":"42"}]`. Queries using `--tables-file` include
-each manifest alias and its resolved version in declaration order. Help and
-version use an empty array.
-Scan and query also report `rows` and `batches`. Versions and counts are decimal strings.
+each manifest alias and its resolved version in declaration order. Other commands
+use an empty array.
+Scan, preview, and query also report `rows`. Versions and counts are decimal strings.
 
-Scope is `inspect`, `scan`, `query`, `help`, or `version`, except that any scan with
-`--limit` uses `limited_scan`. Reaching the limit, including zero, reports
+`preview` and `query --format json` use completion `format_version: 2`, containing only the
+version, kind, command, bindings, rows, and output bytes. The completion kind
+marks terminal success for the requested command. For a query, check
+`completion: "complete"` and `scope: "query"` in stdout. A preview instead
+reports `completion: "sample"`, `stop_reason`, and `has_more` there. Check
+stdout bindings and row count in both cases.
+
+Other commands and Arrow queries use version 1, which also includes
+`terminal: true`, `completion: "complete"`, `scope`, `stop_reason`, and `has_more`,
+plus `batches` for scan and query.
+
+In version 1, scope equals the command, except that any scan with `--limit`
+uses `limited_scan`. Reaching the limit, including zero, reports
 `stop_reason: "row_limit"` and `has_more: null`: it does not prove that another
-row exists. Otherwise `stop_reason` is `end_of_input` and `has_more` is false.
-For queries, end of input means the complete SQL result, including any SQL
-`LIMIT`. Output ceilings cannot produce a successful partial query completion.
+row exists. Other version 1 completions use `stop_reason: "end_of_input"` and
+`has_more: false`. In both versions, a query completes only after the full SQL
+result, including any SQL `LIMIT`. Output ceilings cannot produce a successful
+partial query completion.
 
 Consumers must check exit status 0, valid stdout, and the completion record.
 `dar capabilities --schema diagnostic --full` and
@@ -188,13 +212,16 @@ interface; scripts should use machine diagnostics and the exit status.
 | `configuration` | `input_file_io` | Input file could not be opened or read |
 | `configuration` | `invalid_storage_authorization` | Explicit credential source is incomplete, conflicting, or unsupported |
 | `configuration` | `invalid_configuration` | A native execution setting is outside its allowed range |
-| `execution` | `runtime_initialization` | Runtime creation failed or reader execution panicked |
-| `execution` | `output_write` | stdout could not be written or flushed |
+| `execution` | `runtime_initialization` | Runtime or worker setup failed, a worker panicked, or discovery exceeded its deadline |
+| `execution` | `output_write` | Result or completion output could not be written or flushed |
 | `execution` | `arrow_ipc` | Arrow IPC encoding failed |
+| `execution` | `json_output` | Typed JSON encoding failed |
+| `execution` | `unsupported_json_type` | The selected schema contains a type unsupported by typed JSON, even if the result is empty |
+| `execution` | `deadline_exceeded` | Preview exceeded its whole-command deadline |
 | `configuration` | `invalid_sql_input` | SQL file is malformed, oversized, or contains a disallowed statement |
 | `datafusion` | `sql_initialization`, `sql_planning`, `sql_execution` | SQL runtime, planning, or execution failed |
-| `execution` | `output_limit` | Complete query result exceeds its row or serialized-byte ceiling |
-| `execution` | `command_cancelled` | A local SQL query was interrupted |
+| `execution` | `output_limit` | A configured output ceiling was exceeded; includes a preview schema or first row that cannot fit |
+| `execution` | `command_cancelled` | A preview, SQL query, or capabilities command was interrupted |
 | `configuration` | `invalid_uc_reference` | Invalid UC name/profile, or a profile on a direct path |
 | `configuration` | `invalid_uc_storage_options` | Unsupported, conflicting, or duplicate region options |
 | `configuration` | `uc_s3_region_required` | S3 needs an explicit region |
@@ -203,7 +230,7 @@ interface; scripts should use machine diagnostics and the exit status.
 | `execution` | `uc_table_request_failed`, `uc_credential_request_failed` | Metadata or credential request failed; check login and permissions |
 | `execution` | `invalid_databricks_response`, `unsupported_uc_table` | Response is malformed, oversized, or unsupported |
 | `execution` | `uc_credentials_expired` | An initial or renewed grant is already expired |
-| `execution` | `uc_cancelled` | A UC command was interrupted |
+| `execution` | `uc_cancelled` | A UC inspect or scan command was interrupted |
 
 Diagnostics omit argument values, file paths, URLs, input contents, credential
 names and values, and dependency messages. Argument failures include the
@@ -220,20 +247,27 @@ number when available. Arrow failures use the core's safe source classifier.
 Provider configuration rejected during table loading is a reader failure
 (status 1), even if the option came from a valid local JSON file.
 
-The complete inspection JSON is built before writing. Failures before output
-leave stdout empty. Consumers must check the process status and discard output
+Inspection and typed JSON results are built before writing. Failures before output
+leave stdout empty. A later preview row exceeding the byte budget returns the
+preceding sample with `stop_reason: "byte_limit"` and `has_more: true`. Query
+overflow fails; it cannot return a successful prefix.
+Consumers must check the process status and discard output
 from any unsuccessful invocation, including partial output after a write
 failure. Status 3 is preserved even when stderr cannot be written.
 
 ## Threads, cancellation, and signals
 
 Direct-path commands run in one process. UC commands also start bounded
-Databricks CLI subprocesses. The CLI drives its asynchronous runtime on
-the main thread and ignores `TOKIO_WORKER_THREADS`. Scans and queries use a separate output
-thread so a blocked stdout pipe does not stall network reads. The output thread
-finishes writing and flushing each batch before requesting another. The core
-uses background threads for blocking work. Runtime shutdown does not wait for
-unfinished blocking work, including core engine cleanup.
+Databricks CLI subprocesses. The CLI ignores `TOKIO_WORKER_THREADS`. Inspect,
+scan, and query drive their asynchronous runtime on the main thread. Preview
+uses a separate worker so synchronous credential reads cannot block its deadline
+or signal handling.
+
+Scan, preview, and query write results on a separate output thread. Arrow output
+flushes each batch before requesting another; typed JSON buffers the result
+within its byte budget before writing. The core uses background threads for
+blocking work. Runtime shutdown does not wait for unfinished blocking work,
+including core engine cleanup.
 
 An unrecoverable panic, including failure to start a reader worker, terminates
 the process with status 1 and a synchronous diagnostic with code
@@ -241,8 +275,8 @@ the process with status 1 and a synchronous diagnostic with code
 backtraces are omitted. Runtime setup failures have their own reason and safe
 I/O category.
 
-UC commands handle SIGINT/SIGTERM during authorization, metadata loading, and
-scanning, terminate any pending Databricks child, and exit 130/143. In text mode,
+UC inspect and scan handle SIGINT/SIGTERM during authorization, metadata loading,
+and scanning, terminate any pending Databricks child, and exit 130/143. In text mode,
 cancellation emits an INFO `cli.cancelled` event with code `uc_cancelled`,
 visible with `RUST_LOG=info`. Machine mode emits a terminal diagnostic with
 that code, including with `RUST_LOG=off`. Cancellation remains responsive
@@ -252,10 +286,18 @@ Local SQL queries use the same signal handling during table loading and
 execution, with code `command_cancelled`. SQL file reading and parsing happen
 before the asynchronous signal handler starts.
 
-On Unix, UC scans and local SQL queries also detect a closed stdout pipe while
-waiting for credentials or storage. They terminate pending work and exit 3 without finishing
-the Arrow stream. On other platforms, a closed pipe is detected at the next
-stdout write; a pending credential command still has its 30-second timeout.
+Preview handles cancellation from input loading through completion reporting,
+including direct-storage and UC authorization, with code `command_cancelled`
+and status 130/143. Its deadline covers the same phases and returns status 1
+with code `deadline_exceeded`. Cleanup and failure reporting each have at most
+one additional second. Pending initial or renewal Databricks children are
+terminated and reaped during cleanup.
+
+On Unix, preview, UC scans, and SQL queries also detect a closed stdout pipe
+while waiting for credentials or storage. They terminate pending work and exit
+3 without a success completion. On other platforms, a closed pipe is detected
+at the next stdout write; preview's whole-command deadline still applies, and a
+pending credential command has its own 30-second timeout.
 
 For direct-path inspect and scan commands outside PID 1, Linux signals keep their normal
 termination behavior: a killed process is unsuccessful and need not emit an

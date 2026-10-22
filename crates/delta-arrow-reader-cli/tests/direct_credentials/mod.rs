@@ -80,7 +80,7 @@ impl DirectStorageFixture {
         Ok(())
     }
 
-    /// Scan and query use the fixture's ID projection and SQL.
+    /// Row reads use the fixture's ID projection and SQL.
     fn command(&self, operation: &str) -> Command {
         let table = match self.protocol {
             CloudStorageProtocol::S3 => "s3://bucket/table",
@@ -93,8 +93,11 @@ impl DirectStorageFixture {
             .env("RUST_LOG", "trace")
             .args([operation, table, "--storage-options-file"])
             .arg(self.directory.path().join("options.json"));
-        if operation == "scan" {
+        if matches!(operation, "scan" | "preview") {
             command.args(["--column", "id"]);
+            if operation == "preview" {
+                command.args(["--limit", "10000", "--max-output-bytes", "100000"]);
+            }
         } else if operation == "query" {
             command
                 .arg("--sql-file")
@@ -199,6 +202,22 @@ fn assert_read_result(output: Output, operation: &str) -> TestResult {
             result["schema"]["fields"].as_array().unwrap().len(),
             expected.num_columns()
         );
+    } else if operation == "preview" {
+        let sample: Value = serde_json::from_slice(&output.stdout)?;
+        assert_eq!(sample["completion"], "sample");
+        assert_eq!(sample["stop_reason"], "end_of_input");
+        let mut ids = sample["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row[0].as_str().unwrap().parse::<i32>().unwrap())
+            .collect::<Vec<_>>();
+        ids.sort_unstable();
+        let expected = expected_ids
+            .as_any()
+            .downcast_ref::<arrow::array::Int32Array>()
+            .unwrap();
+        assert_eq!(ids.as_slice(), expected.values().as_ref());
     } else {
         assert!(output.stdout.ends_with(&[255, 255, 255, 255, 0, 0, 0, 0]));
         let reader = StreamReader::try_new(Cursor::new(output.stdout), None)?;
@@ -211,7 +230,7 @@ fn assert_read_result(output: Output, operation: &str) -> TestResult {
 
 #[test]
 fn help_lists_only_installed_sources_without_loading_inputs() -> TestResult {
-    for operation in ["inspect", "scan", "query"] {
+    for operation in ["inspect", "scan", "preview", "query"] {
         let output = run_with_timeout(
             Command::new(env!("CARGO_BIN_EXE_dar"))
                 .env_clear()

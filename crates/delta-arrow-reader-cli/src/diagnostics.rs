@@ -125,7 +125,7 @@ impl DiagnosticFormat {
         if let Self::Json = self {
             let line = format!("{record}\n");
             // POSIX guarantees at least 512 bytes for an atomic pipe write.
-            // Discovery's completion is smaller; keep future additions within that bound.
+            // Keep terminal records within the atomic write bound.
             if line.len() > 512 {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -204,7 +204,7 @@ impl InputCorrection {
             if argument.to_string() == reported {
                 let expected = match argument.get_id().as_str() {
                     "limit" => format!("unsigned decimal integer from 0 to {}", usize::MAX),
-                    "target_partitions" | "max_output_bytes" => {
+                    "target_partitions" | "max_output_bytes" | "deadline_ms" => {
                         format!("unsigned decimal integer from 1 to {}", usize::MAX)
                     }
                     "table_version" => format!("unsigned decimal integer from 0 to {}", u64::MAX),

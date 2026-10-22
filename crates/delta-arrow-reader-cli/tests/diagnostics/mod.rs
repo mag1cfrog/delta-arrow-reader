@@ -27,15 +27,18 @@ pub(super) fn assert_single_terminal_record(stderr: &[u8], kind: &str) -> Value 
         .collect();
     assert_eq!(records.len(), 1, "{text}");
     let record = records.into_iter().next().unwrap();
-    assert_eq!(
-        record["format_version"],
-        if kind == "diagnostic" { 2 } else { 1 }
-    );
     if kind == "diagnostic" {
+        assert_eq!(record["format_version"], 2);
         assert!(record.get("message").is_none());
+    } else {
+        assert!(matches!(record["format_version"].as_u64(), Some(1 | 2)));
     }
     assert_eq!(record["kind"], kind);
-    assert_eq!(record["terminal"], true);
+    if kind == "completion" && record["format_version"] == 2 {
+        assert!(record.get("terminal").is_none());
+    } else {
+        assert_eq!(record["terminal"], true);
+    }
     assert!(stderr.len() <= 8192);
     super::capabilities::assert_output_matches_schema(kind, &record);
     record

@@ -144,11 +144,11 @@ impl AuthorizationGuide {
 pub(super) fn authorization_sources() -> Value {
     json!({
         "local": {
-            "commands": ["inspect", "scan", "query"],
+            "commands": ["inspect", "scan", "preview", "query"],
             "credentials_required": false,
         },
         "direct_storage": {
-            "commands": ["inspect", "scan", "query"],
+            "commands": ["inspect", "scan", "preview", "query"],
             "storage_options_argument": "--storage-options-file",
             "storage_options_schema": "storage-options",
             "credential_selection": "explicit_source_or_storage_backend_default",
@@ -204,7 +204,7 @@ pub(super) fn authorization_sources() -> Value {
             },
         },
         "unity_catalog": {
-            "commands": ["inspect", "scan", "query"],
+            "commands": ["inspect", "scan", "preview", "query"],
             "target": "uc://catalog.schema.table",
             "profile_argument": "--databricks-profile",
             "profile_required": true,
@@ -253,6 +253,19 @@ pub(super) fn command_read_support() -> Value {
             "max_output_bytes": null,
             "deadline_ms": null,
         },
+        "preview": {
+            "authorization": ["local", "direct_storage", "unity_catalog"],
+            "scope": "sample",
+            "row_limit_argument": "--limit",
+            "default_row_limit": 20,
+            "max_output_bytes": crate::output::json::DEFAULT_MAX_BYTES,
+            "byte_limit_argument": "--max-output-bytes",
+            "deadline_ms": 30000,
+            "deadline_argument": "--deadline-ms",
+            "cleanup_grace_ms": 1000,
+            "failure_reporting_grace_ms": crate::diagnostics::FAILURE_DIAGNOSTIC_TIMEOUT.as_millis(),
+            "requires_redirected_stdout": false,
+        },
         "query": {
             "authorization": ["local", "direct_storage", "unity_catalog"],
             "unity_catalog_input": "positional_table_or_tables_file",
@@ -288,6 +301,7 @@ pub(super) fn command_read_support() -> Value {
             "memory_limit_scope": "datafusion_execution_pool",
             "disk_spill": false,
             "requires_redirected_stdout": true,
+            "json_requires_redirected_stdout": false,
             "deadline_ms": null,
         },
     })
@@ -434,7 +448,7 @@ mod tests {
                 .keys()
                 .map(String::as_str)
                 .collect::<Vec<_>>(),
-            ["inspect", "query", "scan"]
+            ["inspect", "preview", "query", "scan"]
         );
         for (name, command) in support.as_object().unwrap() {
             let mut args = vec!["dar", name, "local-table"];
@@ -518,8 +532,12 @@ mod tests {
             installed_sources.iter().map(String::as_str).collect()
         );
         let support = command_read_support();
-        for name in ["inspect", "scan", "query"] {
-            assert!(support[name]["deadline_ms"].is_null());
+        for name in ["inspect", "scan", "preview", "query"] {
+            if name == "preview" {
+                assert_eq!(support[name]["deadline_ms"], 30000);
+            } else {
+                assert!(support[name]["deadline_ms"].is_null());
+            }
             for source in &advertised_sources {
                 let mut args = vec!["dar", name, "s3://bucket/table", "--auth-source", source];
                 if name == "query" {
@@ -533,6 +551,11 @@ mod tests {
                 ("--format", "json"),
                 ("--deadline-ms", "1000"),
             ] {
+                if (name == "query" && option == "--format")
+                    || (name == "preview" && option == "--deadline-ms")
+                {
+                    continue;
+                }
                 let mut args = vec!["dar", name, "table"];
                 if name == "query" {
                     args.extend(["--sql-file", "query.sql"]);

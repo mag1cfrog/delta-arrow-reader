@@ -22,6 +22,7 @@ pub(crate) enum DiscoverySchema {
     InspectionSummary,
     Diagnostic,
     Completion,
+    Rows,
 }
 
 impl DiscoverySchema {
@@ -39,8 +40,13 @@ impl DiscoverySchema {
         let scalar_types = variant_names(schema, "scalar", "type");
         let properties = schema.get("properties").and_then(Value::as_object);
         if let Some(name) = detail {
-            let definition =
-                find_field_or_variant(schema, name).ok_or_else(|| Error::Argument {
+            let definition = find_field_or_variant(schema, name)
+                .or_else(|| {
+                    matches!(self, Self::Rows)
+                        .then(|| schema["$defs"].get(name))
+                        .flatten()
+                })
+                .ok_or_else(|| Error::Argument {
                     kind: clap::error::ErrorKind::InvalidValue,
                     correction: Some(InputCorrection {
                         argument: "--detail".to_owned(),
@@ -53,6 +59,21 @@ impl DiscoverySchema {
                 })?;
             guide["detail"] = json!(name);
             guide["definition"] = definition.clone();
+            if matches!(self, Self::Rows) && name == "rows" {
+                guide["encodings"] = json!(
+                    schema["$defs"]
+                        .as_object()
+                        .map(|definitions| definitions.keys().collect::<Vec<_>>())
+                );
+                guide["detail_command"] = json!([
+                    executable,
+                    "capabilities",
+                    "--schema",
+                    self,
+                    "--detail",
+                    "NAME"
+                ]);
+            }
             if matches!(self, Self::Predicate) {
                 for tag in ["op", "type"] {
                     if let Some(choices) = guide["definition"]["properties"]
@@ -70,6 +91,27 @@ impl DiscoverySchema {
                         "includes_root": true,
                     });
                 }
+            } else if matches!(self, Self::Rows | Self::Completion) && name == "bindings" {
+                // Snapshot interpretation needs the shape; validators can follow full_command.
+                guide["definition"] = json!({
+                    "type": "array",
+                    "description": definition["description"],
+                    "items": {
+                        "type": "object", "required": ["alias", "table_version"],
+                        "properties": {
+                            "alias": {"type": "string"},
+                            "table_version": {
+                                "type": "string",
+                                "description": "Exact uint64 decimal string; check range 0..18446744073709551615 on conversion.",
+                            },
+                        },
+                    },
+                });
+                if matches!(self, Self::Completion) {
+                    guide["definition"]["description"] = json!(
+                        "Actual snapshots in declaration order. query has at least one binding. Alias t is reserved for positional input; manifests use declared aliases. inspect/scan/preview have one binding named t. Other commands have no bindings."
+                    );
+                }
             } else if matches!(self, Self::Inspection) && name == "schema" {
                 guide["definition"]["$defs"] = schema["$defs"].clone();
             } else if matches!(self, Self::Tables) {
@@ -79,20 +121,48 @@ impl DiscoverySchema {
                         "description": "Only alias, location, table_version and authorization are accepted. Select tables[].FIELD with detail_command.",
                     });
                 } else if name == "tables[].authorization" {
-                    guide["definition"] = schema["$defs"]["authorization"].clone();
+                    guide["definition"] = json!({
+                        "type": "object", "required": ["source"],
+                        "description": "References only; no inline credentials or env_file. Omit for direct-storage defaults. UC requires source=databricks. No identity fallback. File paths are relative to the manifest.",
+                    });
+                    guide["example"] = json!({
+                        "source": "json", "storage_options_file": "credentials.json",
+                    });
+                    guide["other_fields"] = json!(["databricks_profile"]);
+                    guide["detail_syntax"] = json!(
+                        "Use tables[].authorization.FIELD for any example or other_fields key."
+                    );
                 }
             }
             let conditions: Vec<_> = schema["allOf"]
                 .as_array()
                 .into_iter()
                 .flatten()
-                .filter(|condition| {
-                    ["then", "else"].iter().any(|branch| {
-                        condition[branch]["properties"].get(name).is_some()
-                            || condition[branch]["required"]
-                                .as_array()
-                                .is_some_and(|fields| fields.iter().any(|field| field == name))
-                    })
+                .filter(|_| {
+                    !matches!(
+                        (self, name),
+                        (Self::Rows, _) | (Self::Completion, "bindings")
+                    )
+                })
+                .filter_map(|condition| {
+                    let mut selected = json!({"if": condition["if"]});
+                    for branch in ["then", "else"] {
+                        let mut constraints = serde_json::Map::new();
+                        if let Some(definition) = condition[branch]["properties"].get(name) {
+                            constraints.insert("properties".into(), json!({name: definition}));
+                        }
+                        if condition[branch]["required"]
+                            .as_array()
+                            .is_some_and(|fields| fields.iter().any(|field| field == name))
+                        {
+                            constraints.insert("required".into(), json!([name]));
+                        }
+                        if !constraints.is_empty() {
+                            selected[branch] = constraints.into();
+                        }
+                    }
+                    (selected.get("then").is_some() || selected.get("else").is_some())
+                        .then_some(selected)
                 })
                 .collect();
             if !conditions.is_empty() {
@@ -137,7 +207,13 @@ impl DiscoverySchema {
             if let Some(examples) = schema["examples"].as_array() {
                 guide["example"] = examples
                     .iter()
-                    .find(|example| example.as_object().is_some_and(|object| !object.is_empty()))
+                    .find(|example| {
+                        if matches!(self, Self::Completion) {
+                            example["format_version"] == 2
+                        } else {
+                            example.as_object().is_some_and(|object| !object.is_empty())
+                        }
+                    })
                     .or_else(|| examples.first())
                     .cloned()
                     .unwrap_or(Value::Null);
@@ -148,10 +224,29 @@ impl DiscoverySchema {
                     .filter(|name| guide["example"].get(name.as_str()).is_none())
                     .collect();
                 if !other_fields.is_empty() {
-                    guide["other_fields"] = json!(other_fields);
+                    let field_list = if matches!(self, Self::Completion) {
+                        "version_1_fields"
+                    } else {
+                        "other_fields"
+                    };
+                    guide[field_list] = json!(other_fields);
                 }
             }
             if matches!(self, Self::Tables) {
+                guide["query_example"] = json!([
+                    executable,
+                    "--diagnostics=json",
+                    "query",
+                    "--tables-file",
+                    "tables.json",
+                    "--sql-file",
+                    "query.sql",
+                    "--format",
+                    "json"
+                ]);
+                guide["sql_example"] = json!(
+                    "SELECT o.id, c.id FROM orders o LEFT JOIN customers c ON o.id = c.id WHERE o.id <= 5 ORDER BY o.id, c.id"
+                );
                 guide["max_tables"] = schema["properties"]["tables"]["maxItems"].clone();
                 guide["other_fields"] = json!(["tables[].authorization"]);
                 guide["detail_syntax"] = json!(
@@ -197,6 +292,7 @@ impl DiscoverySchema {
             Self::Tables => return JsonInputKind::Tables.schema_document(),
             Self::Inspection => (output_schemas::inspection_schema(), "stdout"),
             Self::InspectionSummary => (output_schemas::inspection_summary_schema(), "stdout"),
+            Self::Rows => (output_schemas::rows_schema(), "stdout"),
             Self::Diagnostic => (output_schemas::diagnostic_schema(), "stderr"),
             Self::Completion => (output_schemas::completion_schema(), "stderr"),
         };
@@ -299,11 +395,274 @@ mod tests {
     use crate::input::{PredicateInput, parse_json};
 
     #[test]
+    fn row_value_encodings_are_disclosed_only_when_selected() {
+        let guide = DiscoverySchema::Rows.guide_document(None).unwrap();
+        assert!(guide.get("encodings").is_none());
+        assert!(!guide.to_string().contains("base64"));
+        assert!(
+            guide["description"]
+                .as_str()
+                .unwrap()
+                .contains("integers use exact decimal strings")
+        );
+        let rows = DiscoverySchema::Rows.guide_document(Some("rows")).unwrap();
+        for name in rows["encodings"].as_array().unwrap() {
+            let detail = DiscoverySchema::Rows.guide_document(name.as_str()).unwrap();
+            assert!(detail["definition"]["description"].is_string());
+            assert!(detail.get("encodings").is_none());
+            assert!(detail.get("detail_command").is_none());
+        }
+        let binary = DiscoverySchema::Rows
+            .guide_document(Some("binary"))
+            .unwrap();
+        assert!(
+            binary["definition"]["description"]
+                .as_str()
+                .unwrap()
+                .contains("padded base64")
+        );
+        assert!(!binary.to_string().contains("Decimal128"));
+    }
+
+    #[test]
+    fn row_field_guides_explain_states_without_validation_branches() {
+        let full = DiscoverySchema::Rows.schema_document();
+        for field in full["schema"]["properties"].as_object().unwrap().keys() {
+            let detail = DiscoverySchema::Rows.guide_document(Some(field)).unwrap();
+            assert!(detail.get("conditions").is_none(), "{field}");
+        }
+        let detail = DiscoverySchema::Rows
+            .guide_document(Some("has_more"))
+            .unwrap();
+        let description = detail["definition"]["description"].as_str().unwrap();
+        assert!(description.contains("Preview only"));
+        for state in ["end_of_input", "row_limit", "byte_limit"] {
+            assert!(description.contains(state));
+        }
+        let schema = output_schemas::rows_schema();
+        let validator = jsonschema::validator_for(&schema).unwrap();
+        let mut sample = json!({
+            "format_version": 1, "kind": "rows",
+            "bindings": [{"alias": "t", "table_version": "42"}],
+            "schema": {"fields": [{"name": "id", "data_type": "Int64", "nullable": false}]},
+            "rows": [["1"]], "row_count": "1", "completion": "sample",
+            "stop_reason": "row_limit", "has_more": null,
+        });
+        for (reason, has_more, invalid) in [
+            ("end_of_input", json!(false), json!(true)),
+            ("row_limit", Value::Null, json!(false)),
+            ("byte_limit", json!(true), Value::Null),
+        ] {
+            sample["stop_reason"] = json!(reason);
+            sample["has_more"] = has_more;
+            validator.validate(&sample).unwrap();
+            sample["has_more"] = invalid;
+            assert!(!validator.is_valid(&sample), "{reason}");
+        }
+        sample["has_more"] = json!(true);
+        for missing in ["has_more", "stop_reason"] {
+            let mut invalid = sample.clone();
+            invalid.as_object_mut().unwrap().remove(missing);
+            assert!(!validator.is_valid(&invalid), "missing {missing}");
+        }
+        sample["bindings"][0]["alias"] = json!("other");
+        assert!(!validator.is_valid(&sample));
+    }
+
+    #[test]
+    fn binding_details_defer_validation_rules_to_the_full_schema() {
+        for format in [DiscoverySchema::Rows, DiscoverySchema::Completion] {
+            let detail = format.guide_document(Some("bindings")).unwrap();
+            assert_eq!(detail["full_command"][4], "--full");
+            let definition = &detail["definition"];
+            assert!(detail.get("conditions").is_none());
+            assert!(
+                definition["description"]
+                    .as_str()
+                    .unwrap()
+                    .contains("Alias t is reserved for positional input")
+            );
+            assert_eq!(
+                definition["items"]["required"],
+                json!(["alias", "table_version"])
+            );
+            let fields = &definition["items"]["properties"];
+            assert_eq!(fields["alias"], json!({"type": "string"}));
+            assert_eq!(fields["table_version"]["type"], "string");
+            assert!(
+                fields["table_version"]["description"]
+                    .as_str()
+                    .unwrap()
+                    .contains("check range 0..18446744073709551615 on conversion")
+            );
+            for rule in ["pattern", "maxLength", "minItems", "maxItems"] {
+                assert!(!definition.to_string().contains(rule), "{format:?}: {rule}");
+            }
+
+            let document = format.schema_document();
+            let schema = &document["schema"];
+            let validator = jsonschema::validator_for(schema).unwrap();
+            let valid = schema["examples"][0].clone();
+            validator.validate(&valid).unwrap();
+            for (field, value) in [
+                ("alias", "bad-alias"),
+                ("alias", "t\n"),
+                ("table_version", "-1"),
+                ("table_version", "01"),
+                ("table_version", "184467440737095516150"),
+            ] {
+                let mut invalid = valid.clone();
+                invalid["bindings"][0][field] = json!(value);
+                assert!(
+                    !validator.is_valid(&invalid),
+                    "{format:?}: {field}={value:?}"
+                );
+            }
+            let binding_validator =
+                jsonschema::validator_for(&schema["properties"]["bindings"]).unwrap();
+            assert!(binding_validator.is_valid(&json!(vec![valid["bindings"][0].clone(); 64])));
+            assert!(!binding_validator.is_valid(&json!(vec![valid["bindings"][0].clone(); 65])));
+        }
+    }
+
+    #[test]
+    fn selected_completion_conditions_omit_unrelated_constraints() {
+        for (schema, field, cases) in [
+            (
+                DiscoverySchema::Completion,
+                "terminal",
+                vec![
+                    (json!({"format_version": 1, "terminal": true}), true),
+                    (json!({"format_version": 1}), false),
+                    (json!({"format_version": 2}), true),
+                ],
+            ),
+            (
+                DiscoverySchema::Completion,
+                "command",
+                vec![
+                    (json!({"format_version": 1, "command": "scan"}), true),
+                    (json!({"format_version": 1, "command": "preview"}), false),
+                    (json!({"format_version": 2, "command": "preview"}), true),
+                    (json!({"format_version": 2, "command": "scan"}), false),
+                ],
+            ),
+        ] {
+            let detail = schema.guide_document(Some(field)).unwrap();
+            let conditions = json!({"allOf": detail["conditions"]});
+            for (record, expected) in cases {
+                assert_eq!(
+                    jsonschema::is_valid(&conditions, &record),
+                    expected,
+                    "{schema:?} {field}: {record}"
+                );
+            }
+            for condition in detail["conditions"].as_array().unwrap() {
+                for branch in ["then", "else"] {
+                    if let Some(properties) = condition[branch]["properties"].as_object() {
+                        assert!(properties.keys().all(|name| name == field));
+                    }
+                    if let Some(required) = condition[branch]["required"].as_array() {
+                        assert_eq!(required, &[json!(field)]);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn full_completion_schema_enforces_command_binding_rules() {
+        let schema = output_schemas::completion_schema();
+        let validator = jsonschema::validator_for(&schema).unwrap();
+        for (command, aliases, valid) in [
+            ("capabilities", vec![], true),
+            ("capabilities", vec!["t"], false),
+            ("query", vec![], false),
+            ("query", vec!["orders", "customers"], true),
+            ("scan", vec![], false),
+            ("scan", vec!["t"], true),
+            ("inspect", vec!["orders"], false),
+            ("scan", vec!["orders", "customers"], false),
+        ] {
+            let mut record = schema["examples"][0].clone();
+            record["command"] = json!(command);
+            record["bindings"] = json!(
+                aliases
+                    .iter()
+                    .map(|alias| json!({"alias": alias, "table_version": "1"}))
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(validator.is_valid(&record), valid, "{command}: {aliases:?}");
+        }
+    }
+
+    #[test]
+    fn authorization_details_offer_a_reference_example_and_selected_field_rules() {
+        let guide = DiscoverySchema::Tables
+            .guide_document(Some("tables[].authorization"))
+            .unwrap();
+        for omitted in ["allOf", "properties"] {
+            assert!(guide["definition"].get(omitted).is_none());
+        }
+        let description = guide["definition"]["description"].as_str().unwrap();
+        assert!(description.contains("no inline credentials or env_file"));
+        assert!(description.contains("relative to the manifest"));
+
+        let document = DiscoverySchema::Tables.schema_document();
+        let schema = &document["schema"]["$defs"]["authorization"];
+        let validator = jsonschema::validator_for(schema).unwrap();
+        validator.validate(&guide["example"]).unwrap();
+        let mut fields = guide["example"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        fields.extend(
+            guide["other_fields"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|field| field.as_str().unwrap().to_owned()),
+        );
+        for field in fields {
+            let detail = DiscoverySchema::Tables
+                .guide_document(Some(&format!("tables[].authorization.{field}")))
+                .unwrap();
+            assert_eq!(detail["definition"], schema["properties"][&field]);
+        }
+        for (authorization, valid) in [
+            (json!({"source":"json"}), false),
+            (
+                json!({"source":"databricks", "databricks_profile":"analytics"}),
+                true,
+            ),
+            (json!({"source":"databricks"}), false),
+            (
+                json!({"source":"env", "databricks_profile":"analytics"}),
+                false,
+            ),
+            (
+                json!({"source":"env", "access_key_id":"inline-secret"}),
+                false,
+            ),
+        ] {
+            assert_eq!(validator.is_valid(&authorization), valid, "{authorization}");
+        }
+    }
+
+    #[test]
     fn field_details_keep_only_applicable_conditions_and_integer_rules() {
         let version = DiscoverySchema::Completion
             .guide_document(Some("format_version"))
             .unwrap();
-        assert_eq!(version["definition"], json!({"const": 1}));
+        assert_eq!(version["definition"]["enum"], json!([1, 2]));
+        assert!(
+            version["definition"]["description"]
+                .as_str()
+                .unwrap()
+                .contains("query --format json")
+        );
         for omitted in [
             "conditions",
             "description",
@@ -322,32 +681,10 @@ mod tests {
         let bindings = DiscoverySchema::Completion
             .guide_document(Some("bindings"))
             .unwrap();
-        assert_eq!(bindings["conditions"].as_array().unwrap().len(), 2);
-        let schema = json!({"allOf": bindings["conditions"]});
-        assert!(jsonschema::is_valid(
-            &schema,
-            &json!({"command":"capabilities", "bindings":[]})
-        ));
-        assert!(!jsonschema::is_valid(
-            &schema,
-            &json!({"command":"scan", "bindings":[]})
-        ));
-        assert!(jsonschema::is_valid(
-            &schema,
-            &json!({"command":"scan", "bindings":[{"alias":"t", "table_version":"1"}]})
-        ));
-        let mut completion = json!({
-            "command": "query",
-            "bindings": [
-                {"alias": "orders", "table_version": "1"},
-                {"alias": "customers", "table_version": "2"}
-            ]
-        });
-        assert!(jsonschema::is_valid(&schema, &completion));
-        for command in ["scan", "inspect"] {
-            completion["command"] = json!(command);
-            assert!(!jsonschema::is_valid(&schema, &completion));
-        }
+        let description = bindings["definition"]["description"].as_str().unwrap();
+        assert!(description.contains("query has at least one binding"));
+        assert!(description.contains("inspect/scan/preview have one binding named t"));
+        assert!(description.contains("Other commands have no bindings"));
         for field in [
             "prefetch_files_per_partition",
             "parquet_metadata_size_hint_bytes",
@@ -380,6 +717,34 @@ mod tests {
                     .is_none()
             );
         }
+    }
+
+    #[test]
+    fn batch_count_detail_requires_it_only_for_arrow_completions() {
+        let guide = DiscoverySchema::Completion
+            .guide_document(Some("batches"))
+            .unwrap();
+        let conditions = json!({"allOf": guide["conditions"]});
+        assert_eq!(guide["conditions"].as_array().unwrap().len(), 1);
+        for command in ["scan", "query"] {
+            assert!(!jsonschema::is_valid(
+                &conditions,
+                &json!({"format_version": 1, "command": command})
+            ));
+            assert!(jsonschema::is_valid(
+                &conditions,
+                &json!({"format_version": 1, "command": command, "batches": "1"})
+            ));
+        }
+        assert!(jsonschema::is_valid(
+            &conditions,
+            &json!({"format_version": 2, "command": "query"})
+        ));
+        assert!(jsonschema::is_valid(
+            &conditions,
+            &json!({"format_version": 1, "command": "inspect"})
+        ));
+        assert!(!guide["conditions"].to_string().contains("has_more"));
     }
 
     #[test]

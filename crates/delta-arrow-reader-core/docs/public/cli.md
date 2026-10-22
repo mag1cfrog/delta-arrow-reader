@@ -7,6 +7,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | --- | --- |
 | Discover commands and argument rules offline | [`dar capabilities`](#discover-installed-commands) |
 | See the table's columns and version | [`dar inspect`](#inspect-a-snapshot) |
+| See a small typed JSON sample | [`dar preview`](#preview-rows) |
 | Save selected rows as Arrow | [`dar scan`](#scan-rows) |
 | Aggregate, group, or sort rows with SQL | [`dar query`](#query-a-snapshot) |
 | Join named table snapshots | [Tables manifest](#join-table-snapshots) |
@@ -68,27 +69,32 @@ For text help, use `dar query --help` or the corresponding command's help.
 For output and execution-option schemas, `--detail` accepts the example's
 top-level field names and any names in `other_fields`. The latter lists only
 fields absent from the example; it is omitted when the example shows them all.
+The completion guide instead uses `version_1_fields` for the v1 fields absent
+from its v2 example.
 
 For example, after finding `query` in the directory, run
 `dar capabilities --command query`. Its `example` is an argument array with
 placeholder paths. The `sql` field gives the table alias `t`, the `--sql-file`
-argument, and a count query to put in that file. `stdout` identifies Arrow IPC;
-redirect it to a file or pipe. Redirection is a shell operation, not part of the
-argument array. `options` describes commonly needed parameters, and
-`resource_defaults` gives the query's resource ceilings. Use `help_command`
+argument, and a count query to put in that file. The example uses `--format json`
+for a small complete result. `options` describes commonly needed parameters,
+and `resource_defaults` gives the ceilings for the format named by
+`resource_defaults_format`. Use `help_command`
 for all options or `full_command` for their machine-readable definitions. Fetch
 `--schema storage-options` if a storage-options file is needed, then follow
 `authorization_command` for the selected service. Local paths need no
 credentials. To recover these details later, repeat the same discovery commands;
 discovery does not depend on previous invocations.
 
-For a local JOIN, the query guide's `join.example` uses `--tables-file` instead
-of a positional table, and `join.sql` names the aliases to declare. Fetch
-`--schema tables` for the manifest example and relative-path rules. This takes
+For a local JOIN, follow the query guide's `tables` input schema to
+`--schema tables`. Its `query_example` uses `--tables-file` instead of a
+positional table, and `sql_example` uses the aliases in the manifest `example`.
+The same guide explains relative-path rules. This takes
 three lookups from the directory to a runnable JOIN. The manifest guide's
 `detail_syntax` explains how to select nested fields; `other_fields` lists the
 optional authorization reference omitted from the example. Select
-`--detail 'tables[].authorization'` for credential references and service guides.
+`--detail 'tables[].authorization'` for a credential-file example and service
+guides. Select `tables[].authorization.source` for identity choices or
+`tables[].authorization.databricks_profile` for profile requirements.
 
 Authorization guide names are `s3`, `azure-blob`, `gcs`, and
 `unity-catalog`. The first three describe direct storage access; Unity Catalog
@@ -109,18 +115,20 @@ scalar type needed. For example,
 `--schema execution-options --detail prefetch_files_per_partition` gives one
 setting's default and bounds. `--schema predicate --detail timestamp_us` gives
 the timestamp unit, integer encoding, and required timezone field. Selected
-details include only applicable conditional rules and integer-notation rules.
+details retain the units and constraints needed for that field or type.
 
 These guides describe how to use a format. Recursive predicate references lead
 to another operator or scalar choice through `detail_command`. Use a guide's
 `full_command` when a JSON Schema validator or a metadata consumer needs the
 complete definition.
 
-For result verification, `--schema completion` shows an exhausted scan and
-explains which counts, snapshot binding, and completion fields to check against
-the request and saved output. It also distinguishes a row-limited scan and a SQL
-result from a complete table read. Use `--detail FIELD` for a field's exact
-type or bounds; `--full` exports the schema for a JSON Schema validator.
+`--schema completion` shows a v2 JSON query receipt and explains how to compare
+its command, snapshots, counts, and bytes with the request and saved output.
+For preview and JSON queries, sample/completion state comes from stdout.
+Use `--detail FIELD` for a field's type and meaning, including fields used in
+v1 scan and Arrow receipts. `--schema rows --detail has_more` explains the three
+preview stopping states without repeating conditional validation blocks;
+`--full` retains those rules for JSON Schema validators.
 
 In full command metadata and the full inventory, `command` contains the selected
 command or complete command tree, and each argument's required status, value
@@ -131,6 +139,14 @@ formats. `input_schemas` lists the applicable schema names and their file
 arguments. `output_schemas` lists result schema names and their streams. The
 `inspect` entry in `stdout_formats` and the JSON entry in `diagnostics` identify which
 output schemas apply.
+
+`diagnostics.json.format_versions` gives the default record versions for the
+selected command. A `completion_format_version` in `stdout_formats` overrides
+that default for its command or format choice. For example, preview uses version
+2; query's Arrow choice uses version 1 and its JSON choice uses version 2.
+`completion_format_versions` lists all versions available in the selected scope.
+In the full inventory, the default is version 1; use each command's format entry
+to select its completion version.
 
 In full metadata, `authorization` describes local access, direct-storage sources
 and configuration files, and Databricks profiles, including the commands that
@@ -190,6 +206,7 @@ result appears. The schema response itself always goes to stdout.
 | --- | --- | --- |
 | `inspection` | stdout | The full `inspect` JSON, including the snapshot version and Arrow schema. |
 | `inspection-summary` | stdout | Read checks, matching column names, or selected column types. |
+| `rows` | stdout | Typed preview or query JSON with ordered fields and positional rows. |
 | `diagnostic` | stderr | A terminal failure record with `--diagnostics=json`, including optional correction fields. |
 | `completion` | stderr | A terminal success record with `--diagnostics=json`, including snapshot bindings and output counts. |
 
@@ -197,8 +214,9 @@ Output schemas allow additional object fields. Version and count strings use
 unsigned decimal notation; consumers must check the u64 range when converting
 them. The inspection schema checks the Arrow schema's outer fields, metadata,
 and type-description shapes. Use Arrow's Rust Serde decoder to validate the nested
-`data_type` encoding. `scan` and `query` return Arrow IPC streams, whose schema
-is carried in the stream itself.
+`data_type` encoding. Arrow IPC from `scan` or `query --format arrow` carries its
+schema in the stream itself. The `rows` schema validates the JSON envelope;
+interpret row values using the returned field types and the selected encoding guide.
 
 For example, save `dar capabilities --schema completion --full` and validate the
 command's stderr record against its `schema` field. Also check exit status 0
@@ -395,9 +413,9 @@ These rules apply to Unity Catalog targets:
   back to another identity. Renewal keeps the selected Delta snapshot and does
   not restart a scan or repeat rows already written.
 
-UC scans accept the same projection, predicate, limit, snapshot-version, and
-execution options as direct-path scans. If renewal fails after output starts,
-the process exits unsuccessfully and leaves an incomplete Arrow stream.
+UC scans and previews accept the same projection, predicate, limit,
+snapshot-version, and execution options as direct-path reads. If renewal fails, a scan may leave an incomplete Arrow stream; a preview
+fails with empty stdout.
 
 Each Databricks subprocess has a 30-second timeout, no interactive stdin, and
 a 1 MiB limit on each output stream. DAR captures and discards child diagnostics
@@ -479,6 +497,48 @@ marker. Stdout failures, including an early pipe close, exit 3. Status 0 means
 the end marker was written and stdout was flushed. Shell redirects can leave
 partial files after failure; discard those files.
 
+## Preview rows
+
+Choose the columns and sample size needed for the task:
+
+```sh
+dar --diagnostics=json preview /data/orders --table-version 42 --column id --limit 3
+```
+
+Replace the version and column with values from `inspect --view summary`.
+Preview uses scan's projection, predicate, snapshot, execution options, and
+storage authorization, including Databricks profiles. Row order is unspecified.
+It returns [typed JSON](#read-a-small-result-as-typed-json) and can write to a terminal.
+
+| Limit | Default | Override |
+| --- | --- | --- |
+| Rows | 20 | `--limit N`; zero returns only the selected schema. |
+| Whole response | 8 KiB | `--max-output-bytes N`; includes schema, JSON framing, and newline. |
+| Command time | 30 seconds | `--deadline-ms N`; includes inputs, authorization, reads, stdout, and completion. |
+
+The byte and time overrides require positive unsigned decimal integers.
+Select fewer columns or rows before increasing a budget. A preview always
+reports `completion: "sample"`, including an empty or exhausted result:
+
+| `stop_reason` | `has_more` | Meaning |
+| --- | --- | --- |
+| `row_limit` | null | Reached the requested row count without looking ahead. |
+| `byte_limit` | true | An observed row was omitted to fit the response budget. |
+| `end_of_input` | false | Observed exhaustion before reaching either limit. |
+
+The schema or first row must fit; otherwise stdout stays empty and the command
+fails with `preview_schema_limit_exceeded` or `preview_row_too_large`. A later
+byte overflow returns only whole rows. If the required first row cannot fit,
+explicitly increase `--max-output-bytes` while keeping the projection, predicate,
+row limit, authorization, snapshot, and deadline. To save an Arrow sample
+instead, use `scan` with redirected stdout and the same read inputs; scan has
+no byte ceiling or total deadline.
+
+After a deadline or cancellation, cleanup has at most one additional second,
+and failure reporting has at most one more. A blocked consumer can leave partial
+stdout; use the result only after exit status 0 and, with `--diagnostics=json`,
+a matching completion record. A deadline exits 1; closed output exits 3.
+
 ## Query a snapshot
 
 `query` runs SQL locally through the Core DataFusion table provider. It opens
@@ -505,7 +565,7 @@ dar query uc://main.sales.orders --databricks-profile work \
 
 ```text
 dar query [--table-version N] [--storage-options-file PATH]
-          [--auth-source SOURCE] [--databricks-profile PROFILE]
+          [--auth-source SOURCE] [--databricks-profile PROFILE] [--format arrow|json]
           --sql-file PATH [--max-rows N] [--max-output-bytes BYTES]
           [--memory-limit-bytes BYTES] [--] TABLE
 ```
@@ -519,31 +579,71 @@ subqueries, and nonrecursive CTEs are supported. DDL, DML, COPY, session changes
 EXPLAIN, recursive CTEs, and table functions are rejected. SQL cannot discover
 additional tables from file paths or URLs.
 
-Results use Arrow IPC stream framing on stdout, which must be a file or pipe.
-The command streams the complete SQL result, including empty results and
-`COUNT(*)`. Use SQL `LIMIT` to select a smaller result. Positional table queries
-use the same snapshot selection and storage options as `inspect`. All queries
-skip table warmup.
+By default, results use Arrow IPC stream framing on stdout, which must be a
+file or pipe. `--format json` returns bounded typed JSON and permits terminal
+output. Both formats return the complete SQL result, including empty results and
+`COUNT(*)`. Use SQL `LIMIT` to select a smaller result. Positional table queries use the same
+snapshot selection and storage options as `inspect`. All queries skip table warmup.
 
 | Option | Default | Behavior |
 | --- | --- | --- |
 | `--max-rows` | `1000000` | Fail if the SQL result exceeds this many rows; zero is valid |
-| `--max-output-bytes` | `1073741824` (1 GiB) | Fail if Arrow output, including schema and framing, exceeds this many bytes |
+| `--max-output-bytes` | Arrow: `1073741824` (1 GiB); JSON: `8192` (8 KiB) | Fail if the whole response, including schema, framing, and final newline for JSON, exceeds this many bytes |
 | `--memory-limit-bytes` | `268435456` (256 MiB) | Limit DataFusion's tracked execution memory; disk spill is disabled |
 
 These options accept unsigned decimal digits in the platform's `usize` range.
 Byte and memory limits must be positive. The memory pool does not cap total
-process RSS: Core read buffers, SQL planning, and IPC encoding allocate outside
+process RSS: Core read buffers, SQL planning, and output encoding allocate outside
 it. Sorting and grouping can require memory before producing output. There is
 currently no total-command deadline.
 
-Exceeding a ceiling fails with status 1 and leaves incomplete output. The CLI
-does not turn a query into a successful sample or write an IPC end marker after
-failure. As with `scan`, require valid Arrow output and status 0, and discard
-partial files after failure. With `--diagnostics=json`, query completion has
-`scope: "query"`, each alias and its actual version in `bindings`, and row,
-batch, and output-byte counts.
-This option controls stderr diagnostics; query results remain Arrow.
+Exceeding a ceiling fails with status 1. JSON stays buffered until the full result
+fits; resource and execution failures leave stdout empty. Arrow may leave partial
+output without an IPC end marker. Require status 0 and valid output, and discard
+partial files after failure. With `--diagnostics=json`, query completion identifies
+the command, each alias and its actual snapshot version, and row and output-byte counts.
+This option controls stderr diagnostics independently of the result format.
+Arrow keeps completion v1. JSON uses v2, whose completion kind marks terminal
+success for the requested query. Check `completion: "complete"` and `scope: "query"`
+in stdout. Verify the completion's rows against both `row_count` and the length
+of the `rows` array, and its bytes against saved stdout.
+
+### Read a small result as typed JSON
+
+Choose columns or aggregates that answer the task. For example, to count the rows
+in a pinned snapshot:
+
+```sh
+printf 'SELECT count(*) AS n FROM t\n' > count.sql
+dar query /data/orders --table-version 42 --sql-file count.sql --format json
+```
+
+The response contains `kind: "rows"`, `format_version: 1`, each alias and its actual table
+version in `bindings`, a `schema`, positional `rows`, and `row_count` as a decimal
+string. Success reports `completion: "complete"` and `scope: "query"`. An empty result retains its
+schema. Fields retain names, nullability, and Arrow type parameters; optional
+metadata and physical dictionary IDs are omitted.
+
+Rows and nested structs use arrays in field order, preserving duplicate names.
+Integer and decimal values are strings; decimals store the unscaled integer.
+Dates, times, timestamps, and durations are integer strings in their Arrow unit.
+Binary values use padded base64. Lists are arrays, maps are ordered key/value
+pairs, and dictionaries contain decoded values. Booleans, strings, and nulls
+use native JSON. Finite floats round-trip at their Arrow precision; `-0`, `NaN`,
+`Infinity`, and `-Infinity` are strings. Unions, intervals, and run-end encoded
+types fail with `unsupported_json_type`; use Arrow for these or for NaN payloads.
+
+Look up the envelope with `dar capabilities --schema rows`. `--detail rows`
+gives the date/time units, timestamp epoch and timezone rules, and native JSON
+and null encodings together. It lists further encodings to request individually,
+such as `--detail decimal` or `--detail binary`. These lookups do not read the table.
+
+The default 8 KiB budget covers the entire response. If the complete JSON cannot
+fit, explicitly increase `--max-output-bytes`, or redirect Arrow to a file with
+a sufficient byte budget. Keep the same SQL, authorization, table bindings, and
+snapshot versions when recovering the same result. Selecting fewer columns,
+aggregating, or adding SQL `LIMIT` changes the requested result. `--max-rows`
+never truncates a successful result.
 
 ## Join table snapshots
 
@@ -672,7 +772,7 @@ floating-point aggregation can still produce different values between runs.
 
 ## Filter rows
 
-`dar scan --predicate-file PATH` reads a typed JSON predicate from a local
+`dar scan --predicate-file PATH` and `dar preview --predicate-file PATH` read a typed JSON predicate from a local
 UTF-8 file. The option may appear once; omitting it applies no predicate.
 Paths resolve against the working directory, and `-` names a literal file.
 The CLI never reads a predicate from stdin.
@@ -797,7 +897,7 @@ Then pass the file when opening the table:
 dar inspect --view summary --auth-source env --storage-options-file storage.json s3://example-bucket/orders
 ```
 
-Use the same option with `dar scan` or `dar query`. The
+Use the same option with `dar scan`, `dar preview`, or `dar query`. The
 [storage guide](configuration.md#read-from-s3) explains table URLs and credentials,
 including [Azure Blob](configuration.md#read-from-azure). Use its storage keys as JSON
 keys here. Keep files containing credentials out of source control.
@@ -825,7 +925,7 @@ read standard input.
 ## Explicit credential sources
 
 `--auth-source` selects authorization for direct cloud reads. The same sources
-are available to `inspect`, `scan`, and `query`. Help lists the installed
+are available to `inspect`, `scan`, `preview`, and `query`. Help lists the installed
 selectors without reading input files or resolving credentials.
 
 | Backend | Source | Credentials | Renewal |
@@ -866,7 +966,7 @@ variables, precedence, and limits for each supported source.
 
 ## S3 credential sources
 
-`inspect`, `scan`, and `query` accept `--auth-source json|env` for explicit S3
+`inspect`, `scan`, `preview`, and `query` accept `--auth-source json|env` for explicit S3
 access-key credentials. The key ID and secret key must both be present; a
 session token is optional. The source is loaded once per command. Expired or
 denied credentials fail the read without selecting another identity. Supply
@@ -924,7 +1024,7 @@ not isolate credentials from an agent or process that can read that file.
 
 ### S3 web identity
 
-Use `--auth-source aws-web-identity` with `inspect`, `scan`, or `query` to assume
+Use `--auth-source aws-web-identity` with `inspect`, `scan`, `preview`, or `query` to assume
 an AWS role using a web identity token file. The role ARN and token file path
 are required. Each JSON field takes precedence over its environment variable;
 fields absent from JSON are read from the environment.
@@ -966,7 +1066,7 @@ identities. This source supports S3 tables only.
 
 ### S3 container credentials
 
-Use `--auth-source aws-container` with `inspect`, `scan`, or `query` for
+Use `--auth-source aws-container` with `inspect`, `scan`, `preview`, or `query` for
 [ECS task roles or EKS Pod Identity](https://docs.aws.amazon.com/sdkref/latest/guide/feature-container-credentials.html).
 Configure exactly one of these references:
 
@@ -1012,7 +1112,7 @@ selecting those other sources are rejected. This source supports S3 only.
 
 ## Azure credential sources
 
-`inspect`, `scan`, and `query` accept `--auth-source json|env` for Azure account
+`inspect`, `scan`, `preview`, and `query` accept `--auth-source json|env` for Azure account
 keys, SAS tokens, bearer tokens, and service principals using a client secret.
 Select exactly one credential family. A service principal requires all three
 fields: client ID, client secret, and tenant ID. Partial or mixed families are
@@ -1101,7 +1201,7 @@ omitted from text and JSON diagnostics.
 
 Use `--auth-source azure-workload-identity` with an Azure service principal
 configured to trust the issuer of a federated token file. It is available for
-tables in Azure Blob Storage with `inspect`, `scan`, and `query`.
+tables in Azure Blob Storage with `inspect`, `scan`, `preview`, and `query`.
 
 ```sh
 dar query abfss://orders@exampleaccount.dfs.core.windows.net/table \
@@ -1170,7 +1270,7 @@ dar inspect abfss://orders@exampleaccount.dfs.core.windows.net/table --view summ
   --auth-source azure-managed-identity --storage-options-file storage.json
 ```
 
-The source also works with `scan` and `query`. Account names follow the same
+The source also works with `scan`, `preview`, and `query`. Account names follow the same
 URL, JSON, and environment precedence as the other Azure sources.
 
 The token endpoint comes from `azure_msi_endpoint` in JSON, then
@@ -1188,7 +1288,7 @@ client secrets, workload tokens, and Azure CLI sessions are ignored.
 
 ## GCS credential sources
 
-`inspect`, `scan`, and `query` accept `--auth-source json|env` to select an
+`inspect`, `scan`, `preview`, and `query` accept `--auth-source json|env` to select an
 explicit Application Default Credentials (ADC) file for GCS. The installed
 native provider supports these file types:
 

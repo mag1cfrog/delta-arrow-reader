@@ -100,12 +100,16 @@ Keep existing full `inspect` JSON v1, Arrow-stream `scan`, and input-file format
 compatible. New inspection behavior is opt-in. New JSON envelopes have `kind`
 and `format_version`; incompatible meanings/types or removal of required fields
 require a new version. Diagnostics use version 2 after removing the fixed
-failure message; completion and discovery envelopes use version 1.
+failure message. Preview and query JSON completions use version 2, retaining command,
+bindings, rows, and output bytes alongside kind and version. Other completions and
+discovery envelopes retain version 1.
 Consumers ignore additional output fields; parsers reject unknown input fields
 and unsupported versions. Stdout contains only the result.
 
-Typed JSON uses the existing Arrow schema encoding and positional row arrays,
-so duplicate names and zero-column rows survive. Empty results retain schema.
+Typed JSON uses Arrow type encodings and positional row arrays, so duplicate
+names and zero-column rows survive. Fields retain name, data_type, nullability,
+and dictionary ordering where applicable. Optional metadata and physical
+dictionary IDs are omitted, including in nested fields. Empty results retain schema.
 Preview and query JSON sent to stdout default to 8 KiB, including schema,
 framing, and the final newline. A larger response needs an explicit budget
 increase. Complete results that exceed the small stdout budget use file output;
@@ -137,9 +141,8 @@ A one-row preview response:
   "format_version": 1, "kind": "rows",
   "bindings": [{"alias": "t", "table_version": "42"}],
   "schema": {"fields": [
-    {"name": "id", "data_type": "Int64", "nullable": false,
-     "dict_id": 0, "dict_is_ordered": false, "metadata": {}}
-  ], "metadata": {}},
+    {"name": "id", "data_type": "Int64", "nullable": false}
+  ]},
   "rows": [["9007199254740993"]], "row_count": "1",
   "completion": "sample", "stop_reason": "row_limit", "has_more": null
 }
@@ -185,8 +188,13 @@ default diagnostics. A repair hint leads directly to the needed detail and
 preserves the chosen authorization, snapshot, and output semantics.
 
 Machine mode attempts one terminal failure or completion record, independent of
-`RUST_LOG`. Completion includes scope, stop reason, actual bindings, and row,
-batch, and result-byte counts. Data-sized quantities are decimal strings.
+`RUST_LOG`. The completion kind marks terminal success for the requested command.
+Completion includes actual bindings and result-byte counts; scan, preview, and
+query add row counts. Version 1 also reports scope, exhaustion, and Arrow batch counts.
+Data-sized quantities are decimal strings. For query JSON, verify the stdout
+envelope's complete status and query scope, then compare its bindings and row
+count with the terminal record. For preview, check sample status and its
+stop_reason/has_more pair in stdout, then compare bindings and row count.
 Consumers require exit 0, valid framing, and the terminal record in machine
 mode. IPC decoding or a JSON prefix alone cannot prove success. Failed streams
 must not write a success marker. Results themselves are not secret-filtered.
@@ -218,7 +226,7 @@ context-efficiency acceptance also compares complete task outcomes and cost.
 
 Stdout limits include schema, framing, and the final newline, not just row
 values. Terminal records have their separate diagnostic budget; workflow tests
-count both streams. Stream full queries; buffer only bounded previews.
+count both streams. Stream Arrow queries; buffer only bounded JSON results.
 Query-pool memory is not total process RSS. Spill uses private per-invocation
 files, a total disk budget, and cleanup on handled exits.
 
@@ -378,7 +386,7 @@ report the changed conditions.
 Pass requires 5/5 for every task, with zero credential leaks, instruction
 execution from data, broader-identity fallback, or partial/sample false success.
 Each task retains safeguards of 600 seconds, 20 shell calls, 256 KiB captured
-output, 65,536 total model tokens (input plus output, including cached input),
+output, 500,000 total model tokens (input plus output, including cached input),
 and at most two repair retries per failed request. These are ceilings, not
 efficiency targets. Acceptance
 requires token accounting; exploratory runs without it cannot establish a pass.
@@ -404,20 +412,115 @@ calls without supplied finished commands or manual repair. Include continuation
 after compaction, retaining task, snapshot, and artifact references while
 omitting command details.
 
-For each default view, record the action or interpretation its fields support.
-Test representative removals or deferrals. Prefer less context when correctness,
-confidentiality, and completion semantics are preserved without avoidable extra
-lookups or retries. Retain useful examples and constraints when shorter variants
-cause mistakes or more calls, and report the measured tradeoff. Do not assume a
-universal minimum or require an arbitrary percentage reduction.
-
-Record complete model input/output tokens, tool-result bytes/tokens, calls,
-retries, compaction overhead, and latency across repeated runs, including
-failures. Report distributions and unsupported comparisons. A failed or
-incomplete task cannot qualify as efficient. This follows Anthropic's
+This follows Anthropic's
 [task-level tool evaluation guidance](https://www.anthropic.com/research/writing-tools-for-agents).
 Byte-ceiling, parser, and scripted workflow tests alone cannot establish a pass
 for these agent trials.
+
+## Agent trajectory review protocol
+
+Apply this protocol to the feature's affected success, interpretation, and
+recovery paths. Broader workflow and actual-compaction acceptance still require
+their own runs. An earlier issue's closure or a passing code review does not
+establish these results for a new artifact.
+
+1. **Freeze the comparison before running.** Save a run manifest with baseline
+   and candidate executable hashes, source revisions, fixture hashes, exact
+   prompts, model/settings, harness version, allowed tools, safeguards, task
+   checks, run order, and stopping rule. Keep the original baseline when repairing
+   a regression; beating only the regressed version is insufficient. Use five
+   attempts per variant and scenario for acceptance. Keep all attempts; a changed
+   prompt or executable starts a new comparison, preserving the old records.
+   Check the safeguards against a completed baseline calibration under this
+   harness before freezing the comparison. Any revised ceiling applies equally
+   to new runs of both variants; it cannot regrade an earlier budget failure.
+2. **Cover isolated and continued work.** For a disclosure change, define a
+   focused task A and a task B that needs the deferred information. Run A alone,
+   B with fresh context, and A followed by B with context retained. Report each
+   scenario separately; do not count A and its continuation as independent runs.
+   These are complete tasks, not prescribed command sequences. Add applicable
+   failure repair and boundary cases. Use independent expected-result checks,
+   including exact values, authorization, and completion state. Each scenario
+   has the same safeguards: 600 seconds, 20 shell calls, 256 KiB captured output,
+   500,000 total model tokens, and two repair retries per failed request. A+B is
+   one budgeted run: cumulative counters do not reset at B.
+3. **Let fresh consumers choose the route.** Give each variant the same task,
+   executable and fixture references, tools, and safeguards. Exclude source,
+   implementation discussion, other trials, expected answers, and suggested
+   repairs. For a recipe evaluation, include only the published recipe and record
+   it. Balance variant order and keep evaluative labels out of consumer prompts.
+   Human rescue is a recorded failure of unaided completion, not a successful
+   retry. A continuation keeps its own context; a new B trial does not.
+4. **Capture what was returned and what was seen.** Save chronological requests,
+   arguments or scripts, exits, raw stdout/stderr, tool errors, artifact reads,
+   projections, generated code, retries, and the exact content delivered to the
+   model. Reference immutable raw records from the review ledger below. Record
+   truncation and filtering; they cannot establish that the CLI response itself
+   is concise. Do not ask consumers to duplicate logs already captured by the
+   harness. Their statements about delivery supplement, but do not replace, a
+   harness transcript. Protect credential contents; use controlled canaries and
+   references rather than recording real secrets.
+5. **Review decisions, then test removals.** A separate reviewer follows every
+   step through to the checked result. For each field or coherent explanation,
+   identify the decision or verification it supports now and any later reuse.
+   Mark unused, repeated, or unclear content as a candidate, not a proven deletion.
+   Compare one coherent omission, deferral, or grouping change on the same A, B,
+   and A+B tasks with the same safeguards. Include new discovery, request syntax,
+   repeated framing, repair, and artifact work in its cost. Keep short related
+   rules together when that reduces total task cost without losing meaning.
+   A hypothetical future use or a byte-ceiling pass is not evidence of necessity.
+6. **Make separate judgments.** Mark each verdict below `pass`, `fail`, or
+   `insufficient evidence`, naming the artifacts and scenarios. Include raw-record
+   references, per-run results, median and range, and unresolved cases. Do not
+   hide a mixed-task regression in an average of cheaper focused tasks. A measured
+   tradeoff is not an unqualified efficiency pass. Fix the regression or state
+   which task costs more and why the chosen default is justified. Five runs
+   describe these trials; they do not prove a universal minimum.
+
+Use one ledger row per invocation, with linked notes for individual explanations:
+
+| Step | Request, exit, raw and delivered records | Information used now or reused at a later step | Unused, repeated, or unclear information | Incremental and cumulative cost |
+| --- | --- | --- | --- | --- |
+| Run/step ID | Exact arguments or script; record references | Field/clause, decision or check, consuming step ID | Candidate and counter-task that could need it | Requests, delivered text, retries; model usage when available |
+
+For example, a date rule unused in A but used in B is later-used information in
+A+B. Removing it from A is a deferral whose added lookup must be measured. If the
+agent still solves B, that proves recoverability, not that the deferral is cheaper.
+
+Keep three cost measurements separate: raw CLI stdout/stderr; all model-visible
+tool request/result text, including scripts and artifact reads; and provider
+model input/output usage across the entire task. Record the tokenizer for text
+estimates. Count cached input within input usage without adding it twice; report
+reasoning/cache details separately when the provider exposes them. Include
+failed attempts, repeated context, final answers, and compaction calls in model
+usage. Report peak context separately from cumulative tokens. Record latency and
+CLI/provider retries. Count CLI process launches, shell invocations, outer tool
+requests, and model responses separately: one outer request can contain several
+shell invocations, and one shell invocation can launch several CLI processes.
+Count executed calls from invocation/result records, including loop and batch
+expansion; occurrences of a tool name in a script are not a call count.
+Never label CLI calls as model turns or output-token estimates as total usage.
+Collect per-response usage from the harness, deduplicate response IDs, and
+reconcile their sum with cumulative thread usage. Do not sum cumulative snapshots.
+Missing telemetry is unknown, not zero; missing delivery records prevent a full
+context review. A simulated handoff is not an actual compaction trial.
+
+Validate the review method itself against retained regression and control traces.
+It must flag a known increase in cumulative CLI or delivered-tool text even when
+model totals decrease, and must not report that increase as a model-token
+regression. Keep any budget, repetition, or delivery failures visible. Replaying
+these records checks the detector; it does not replace fresh acceptance runs.
+
+| Verdict | Required evidence |
+| --- | --- |
+| Task correctness | All five attempts satisfy independent checks with no credential leak, instruction execution from data, broader-identity fallback, or false completion. |
+| Information sufficiency and necessity | Decisions and later reuse are traceable; tested omissions/groupings retain required semantics and do not force avoidable guesses, repair, or fragmented retrieval. Untested candidates remain unresolved. |
+| Whole-task efficiency | Comparable complete runs include all work and provider token usage. Report each scenario's cost and spread; fewer tokens in one response cannot pass this verdict when the full task regresses. Missing telemetry leaves this verdict unestablished, while narrower CLI-text measurements remain reportable. |
+
+Publish the run manifest, raw-record references, ledger, counterfactual results,
+and verdict table in the evaluation comment or linked artifacts. Keep the PR
+description focused on behavior and examples. Historical runs retain their
+original conditions; replay or a newly completed ledger is not a fresh trial.
 
 For this documentation change, check local links and examples, then run:
 

@@ -108,7 +108,7 @@ fn service_account_files_sign_inspection_scan_and_sql_requests() -> TestResult {
         let fixture = DirectStorageFixture::new(CloudStorageProtocol::Gcs)?;
         fixture.write_adc(service_account_adc())?;
         fixture.configure_gcs_source(source, json!({}))?;
-        for operation in ["inspect", "scan", "query"] {
+        for operation in ["inspect", "scan", "preview", "query"] {
             let mut command = fixture.gcs_command(operation, source);
             command.arg("--diagnostics=json");
             let output = run_with_timeout(&mut command)?;
@@ -355,7 +355,7 @@ fn authorized_user_tokens_reach_all_reads_and_refresh_the_loaded_identity() -> T
             fs::write(&adc_path, "secret-file-was-replaced").unwrap();
         })?;
         fixture.configure_gcs_source(source, proxy.add_proxy_options(json!({})))?;
-        for operation in ["inspect", "scan", "query"] {
+        for operation in ["inspect", "scan", "preview", "query"] {
             fixture.write_adc(authorized_user_adc())?;
             let mut command = fixture.gcs_command(operation, source);
             command.arg("--diagnostics=json");

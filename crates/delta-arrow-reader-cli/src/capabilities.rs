@@ -130,21 +130,30 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
                 "--limit selects a sample. No output byte limit or total deadline.",
             ],
         }),
+        "preview" => json!({
+            "example": [executable, "--diagnostics=json", "preview", "./table", "--column", "id", "--limit", "3"],
+            "stdout": "json",
+            "completion_format_version": 2,
+            "notes": [
+                "Choose only needed columns and rows. Find names with inspect --view summary --column-prefix PREFIX; pin --table-version N.",
+                "Always a sample: end_of_input/has_more=false proves exhaustion; row_limit/null does not; byte_limit/true means an observed row was omitted.",
+                "Schema or first row too large fails with empty stdout. The deadline includes authorization and output, plus at most 1s cleanup and 1s failure reporting.",
+            ],
+        }),
         "query" => json!({
-            "example": [executable, "--diagnostics=json", "query", "./table", "--sql-file", "query.sql"],
-            "stdout": "arrow_ipc_stream",
+            "example": [executable, "--diagnostics=json", "query", "./table", "--sql-file", "query.sql", "--format", "json"],
+            "stdout": "json",
+            "completion_format_version": 2,
+            "resource_defaults_format": "json",
             "sql": {
                 "argument": "--sql-file", "table": "t",
                 "example": "SELECT count(*) AS row_count FROM t",
                 "max_file_bytes": crate::query::MAX_SQL_BYTES,
             },
-            "join": {
-                "example": [executable, "--diagnostics=json", "query", "--tables-file", "tables.json", "--sql-file", "query.sql"],
-                "sql": "SELECT o.id, c.id FROM orders o LEFT JOIN customers c ON o.id = c.id WHERE o.id <= 5 ORDER BY o.id, c.id",
-            },
             "notes": [
-                "One read-only SQL statement in a UTF-8 file. Choose TABLE as t or named tables from --tables-file. A positional UC target requires --databricks-profile; each UC manifest entry references its own profile.",
-                "Redirect stdout to a file or pipe. Resource ceilings fail the query; SQL LIMIT selects a smaller result.",
+                "One read-only SQL statement in a UTF-8 file. Choose TABLE as t or named tables from --tables-file.",
+                "The example returns complete typed JSON. Select only needed columns or aggregate; ceilings fail without JSON output. SQL LIMIT changes the result.",
+                "Omit --format for Arrow IPC, which requires redirected stdout and defaults to a 1 GiB byte ceiling.",
                 "No total deadline. Memory is limited to the DataFusion pool, not process RSS; disk spill is disabled.",
                 read_support::QUERY_SNAPSHOT_SELECTION,
                 read_support::QUERY_ROW_ORDERING,
@@ -173,23 +182,17 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
     if !options.is_empty() {
         guide["options"] = json!(options);
     }
-    if name == "query" {
-        if let Some(argument) = command
-            .get_arguments()
-            .find(|argument| argument.get_id() == "tables_file")
-        {
-            guide["join"]["conflicts_with"] = command
-                .get_arg_conflicts_with(argument)
-                .into_iter()
-                .map(|argument| json!(argument_name(argument)))
-                .collect();
-        }
+    if matches!(name, "query" | "preview") {
         let ceilings: serde_json::Map<_, _> = command
             .get_arguments()
             .filter(|argument| {
                 matches!(
                     argument.get_id().as_str(),
-                    "max_rows" | "max_output_bytes" | "memory_limit_bytes"
+                    "max_rows"
+                        | "max_output_bytes"
+                        | "memory_limit_bytes"
+                        | "deadline_ms"
+                        | "limit"
                 )
             })
             .filter_map(|argument| {
@@ -200,6 +203,8 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             })
             .collect();
         guide["resource_defaults"] = json!(ceilings);
+        guide["resource_defaults"]["--max-output-bytes"] =
+            json!(crate::output::json::DEFAULT_MAX_BYTES.to_string());
     }
     let input_schemas: Vec<_> = JsonInputKind::value_variants()
         .iter()
@@ -239,6 +244,8 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
     }
     if name == "inspect" {
         output_schemas.push(DiscoverySchema::InspectionSummary);
+    } else if matches!(name, "query" | "preview") {
+        output_schemas.push(DiscoverySchema::Rows);
     }
     guide["output_schemas"] = json!(output_schemas);
     guide["schema_command"] = json!([executable, "capabilities", "--schema", "NAME"]);
@@ -291,6 +298,9 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
             ],
         );
     }
+    if selected_command.is_none() || matches!(selected_command, Some("query" | "preview")) {
+        output_schemas.push(json!({"name": DiscoverySchema::Rows, "stream": "stdout"}));
+    }
     let mut authorization = read_support::authorization_sources();
     let mut read_support = read_support::command_read_support();
     let mut stdout_formats = json!({
@@ -302,7 +312,15 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
             "default_view": "full",
         },
         "scan": {"format": "arrow_ipc_stream"},
-        "query": {"format": "arrow_ipc_stream"},
+        "preview": {"format": "json", "schema": DiscoverySchema::Rows, "completion_format_version": 2},
+        "query": {
+            "format": "arrow_ipc_stream",
+            "default": "arrow",
+            "choices": {
+                "arrow": {"format": "arrow_ipc_stream", "completion_format_version": 1},
+                "json": {"format": "json", "schema": DiscoverySchema::Rows, "default_max_output_bytes": crate::output::json::DEFAULT_MAX_BYTES, "completion_format_version": 2},
+            },
+        },
         "help": {"format": "text"},
     });
     if let Some(name) = selected_command {
@@ -335,7 +353,15 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
             "default_format": "text",
             "json": {
                 "option": "--diagnostics=json",
-                "format_versions": {"diagnostic": crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION, "completion": 1},
+                "format_versions": {
+                    "diagnostic": crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION,
+                    "completion": if selected_command == Some("preview") { 2 } else { 1 },
+                },
+                "completion_format_versions": match selected_command {
+                    Some("preview") => vec![2],
+                    Some("query") | None => vec![1, 2],
+                    _ => vec![1],
+                },
                 "schemas": terminal_schemas,
             },
         },
@@ -554,11 +580,21 @@ mod tests {
             }
         }
         let guide = build_command_guide("query").unwrap();
+        assert_eq!(guide["resource_defaults_format"], "json");
+        assert_eq!(guide["completion_format_version"], 2);
         let file = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(file.path(), guide["sql"]["example"].as_str().unwrap()).unwrap();
         crate::query::ReadOnlySqlQuery::read_file(file.path().to_str().unwrap()).unwrap();
-        let parsed =
-            Cli::try_parse_from(["dar", "query", "table", "--sql-file", "query.sql"]).unwrap();
+        let parsed = Cli::try_parse_from([
+            "dar",
+            "query",
+            "table",
+            "--sql-file",
+            "query.sql",
+            "--format",
+            "json",
+        ])
+        .unwrap();
         let crate::Command::Query(args) = parsed.command else {
             panic!("query expected")
         };
@@ -616,7 +652,7 @@ mod tests {
                 assert_eq!(error.kind(), ErrorKind::ArgumentConflict);
             }
         }
-        for name in ["preview", "explain", "query --help", "", "QUERY"] {
+        for name in ["unknown", "explain", "query --help", "", "QUERY"] {
             assert!(Cli::try_parse_from(["dar", "capabilities", "--command", name]).is_err());
             assert!(build_capability_details(Some(name)).is_err());
         }
@@ -704,7 +740,14 @@ mod tests {
         advertised.sort_unstable();
         assert_eq!(
             advertised,
-            ["capabilities", "help", "inspect", "query", "scan"]
+            [
+                "capabilities",
+                "help",
+                "inspect",
+                "preview",
+                "query",
+                "scan"
+            ]
         );
         assert_eq!(
             advertised,
@@ -724,7 +767,7 @@ mod tests {
             let error = Cli::try_parse_from(args).err().unwrap();
             assert_eq!(error.kind(), clap::error::ErrorKind::DisplayHelp);
         }
-        for name in ["preview", "explain"] {
+        for name in ["unknown", "explain"] {
             let error = Cli::try_parse_from(["dar", name]).err().unwrap();
             assert_eq!(error.kind(), clap::error::ErrorKind::InvalidSubcommand);
         }
@@ -771,7 +814,11 @@ mod tests {
             "--diagnostics=json",
         ])
         .unwrap();
-        let crate::Command::Scan { columns, .. } = cli.command else {
+        let crate::Command::Scan {
+            read: crate::RowReadArgs { columns, .. },
+            ..
+        } = cli.command
+        else {
             panic!("expected scan")
         };
         assert_eq!(columns, ["id", "value"]);
@@ -845,6 +892,7 @@ mod tests {
                 json!("inspection-summary"),
                 json!("diagnostic"),
                 json!("completion"),
+                json!("rows"),
             ]
         );
         for schema in input_catalog.iter().chain(output_catalog) {

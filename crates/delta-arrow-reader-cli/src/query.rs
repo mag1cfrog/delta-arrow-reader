@@ -4,7 +4,7 @@ pub(crate) mod tables_manifest;
 
 use std::{fmt, fs::File, io::Read, num::NonZeroUsize, ops::ControlFlow, sync::Arc};
 
-use clap::Args;
+use clap::{Args, ValueEnum};
 use datafusion::{
     common::DataFusionError,
     execution::{
@@ -32,15 +32,22 @@ use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu};
 
 use crate::{
-    Error, InputIoSnafu, QuerySnafu, UnityCatalogSnafu, arrow_output, build_completion_record,
+    Error, InputIoSnafu, QuerySnafu, UnityCatalogSnafu, build_completion_record,
+    build_json_read_completion,
     diagnostics::ErrorClassification,
-    parse_unsigned_decimal,
+    output, parse_unsigned_decimal,
     table_input::{TableLoadRequest, TableOptions},
     unity_catalog::UnityCatalogTableTarget,
 };
 
 pub(crate) const MAX_SQL_BYTES: u64 = 64 * 1024;
 pub(crate) const SQL_RECURSION_LIMIT: usize = 128;
+
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub(crate) enum QueryOutputFormat {
+    Arrow,
+    Json,
+}
 
 /// Selects positional table t or a manifest of named tables, with result resource ceilings.
 #[derive(Args)]
@@ -62,11 +69,14 @@ pub(crate) struct QueryArgs {
     /// UTF-8 file containing one read-only SQL query over the selected aliases; at most 64 KiB.
     #[arg(long, value_name = "PATH")]
     pub(crate) sql_file: String,
+    /// Arrow IPC stream (requires redirected stdout), or bounded typed JSON.
+    #[arg(long = "format", value_enum, default_value = "arrow")]
+    pub(crate) output_format: QueryOutputFormat,
     /// Maximum result rows. Exceeding this ceiling fails; SQL LIMIT selects a smaller result.
     #[arg(long, default_value = "1000000", value_name = "N", value_parser = parse_unsigned_decimal::<usize>)]
     pub(crate) max_rows: usize,
-    /// Maximum Arrow IPC bytes, including schema and framing. Exceeding this ceiling fails.
-    #[arg(long, default_value = "1073741824", value_name = "BYTES", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
+    /// Whole-response byte ceiling, including schema and framing. JSON defaults to 8192; excess fails.
+    #[arg(long, default_value = "1073741824", default_value_if("output_format", "json", "8192"), value_name = "BYTES", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
     pub(crate) max_output_bytes: NonZeroUsize,
     /// DataFusion memory-pool ceiling in bytes; not a process RSS limit. Disk spill is disabled.
     #[arg(long, default_value = "268435456", value_name = "BYTES", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
@@ -114,17 +124,24 @@ impl QueryArgs {
                 let stream = sql_query
                     .execute_stream(tables, self.memory_limit_bytes.get())
                     .await?;
-                arrow_output::write_arrow_stream_to_stdout(
-                    stream.schema(),
-                    stream.map_err(|source| Error::Query {
-                        source: QueryError::Execution { source },
-                    }),
-                    Some(arrow_output::ArrowOutputLimits {
-                        max_rows: self.max_rows as u64,
-                        max_bytes: self.max_output_bytes.get() as u64,
-                    }),
-                )
-                .await
+                let schema = stream.schema();
+                let stream = stream.map_err(|source| Error::Query {
+                    source: QueryError::Execution { source },
+                });
+                let limits = output::OutputLimits {
+                    max_rows: self.max_rows as u64,
+                    max_bytes: self.max_output_bytes.get() as u64,
+                };
+                match self.output_format {
+                    QueryOutputFormat::Arrow => {
+                        output::arrow::write_arrow_stream_to_stdout(schema, stream, Some(limits))
+                            .await
+                    }
+                    QueryOutputFormat::Json => {
+                        output::json::write_query_to_stdout(schema, stream, bindings.clone(), limits)
+                            .await
+                    }
+                }
             }
             .await;
             let stdout_stats = match query_result {
@@ -139,8 +156,16 @@ impl QueryArgs {
                 }
                 result => result?,
             };
-            let mut completion = build_completion_record("query", None, stdout_stats, None);
-            completion["bindings"] = bindings.into();
+            let completion = match self.output_format {
+                QueryOutputFormat::Arrow => {
+                    let mut completion = build_completion_record("query", None, stdout_stats, None);
+                    completion["bindings"] = bindings.into();
+                    completion
+                }
+                QueryOutputFormat::Json => {
+                    build_json_read_completion("query", bindings, stdout_stats)
+                }
+            };
             Ok(completion)
         }.boxed_local();
         Ok((uses_unity_catalog, execution))

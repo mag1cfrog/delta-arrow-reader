@@ -1,16 +1,27 @@
 //! Databricks CLI requests with bounded output, deadlines, and child cleanup.
 
-use std::{io, process::Stdio, time::Duration};
+use std::{io, process::Stdio, sync::LazyLock, time::Duration};
 
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
     process::Command,
+    sync::watch,
 };
 
 use super::Error;
 
 pub(crate) const MAX_COMMAND_OUTPUT_BYTES: u64 = 1024 * 1024;
 pub(crate) const DATABRICKS_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+
+// One CLI command owns every initial and renewed grant request in this process.
+static CANCEL_REQUESTS: LazyLock<watch::Sender<bool>> = LazyLock::new(|| watch::channel(false).0);
+
+/// Requests cooperative cancellation of initial and renewed grants before the runtime exits.
+/// Returns whether a runner still owns a child or is about to spawn one.
+pub(crate) fn cancel_pending_requests() -> bool {
+    CANCEL_REQUESTS.send_replace(true);
+    CANCEL_REQUESTS.receiver_count() > 0
+}
 
 /// Fetches metadata including the table-kind manifest used to check direct-read support.
 pub(super) async fn get_table_metadata(
@@ -88,11 +99,15 @@ async fn run_command_with_timeout(
     command: &mut Command,
     timeout: Duration,
 ) -> Result<Vec<u8>, Error> {
+    let mut cancellation = CANCEL_REQUESTS.subscribe();
+    if *cancellation.borrow() {
+        return Err(Error::Cancelled { status: 1 });
+    }
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        // Signal cancellation drops this future before the explicit cleanup below.
+        // Fallback when a caller drops the runner before cooperative cleanup.
         .kill_on_drop(true)
         .spawn()
         .map_err(|error| {
@@ -104,7 +119,7 @@ async fn run_command_with_timeout(
         })?;
     let stdout = child.stdout.take().ok_or(Error::DatabricksCommandFailed)?;
     let stderr = child.stderr.take().ok_or(Error::DatabricksCommandFailed)?;
-    let result = tokio::time::timeout(timeout, async {
+    let read_response = tokio::time::timeout(timeout, async {
         // Drain both pipes while waiting so a full stderr pipe cannot block the child.
         let (stdout, _, status) = tokio::try_join!(
             read_bounded_output(stdout),
@@ -120,9 +135,12 @@ async fn run_command_with_timeout(
             return Err(Error::DatabricksCommandFailed);
         }
         Ok(stdout)
-    })
-    .await
-    .unwrap_or(Err(Error::DatabricksCommandTimedOut));
+    });
+    let result = tokio::select! {
+        biased;
+        _ = cancellation.wait_for(|cancelled| *cancelled) => Err(Error::Cancelled { status: 1 }),
+        result = read_response => result.unwrap_or(Err(Error::DatabricksCommandTimedOut)),
+    };
     if result.is_err() {
         let _ = child.kill().await;
     }

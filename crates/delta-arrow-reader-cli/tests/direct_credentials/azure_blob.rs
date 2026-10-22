@@ -83,7 +83,7 @@ fn selected_credentials_authorize_inspection_scan_and_sql() -> TestResult {
                 options[option] = json!(value);
             }
             fixture.write_options(options)?;
-            for operation in ["inspect", "scan", "query"] {
+            for operation in ["inspect", "scan", "preview", "query"] {
                 let mut command = fixture.command(operation);
                 command
                     .args(["--auth-source", source, "--diagnostics=json"])

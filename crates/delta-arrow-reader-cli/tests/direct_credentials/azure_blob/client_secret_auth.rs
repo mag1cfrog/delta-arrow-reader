@@ -97,7 +97,7 @@ fn assert_client_secret_requests(requests: &[String]) {
 #[test]
 fn tokens_authorize_all_reads_and_refresh_the_loaded_identity() -> TestResult {
     for source in ["json", "env"] {
-        for operation in ["inspect", "scan", "query"] {
+        for operation in ["inspect", "scan", "preview", "query"] {
             let authority = MockAzureTokenServer::new(usize::MAX)?;
             let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
             let options_path = fixture.directory.path().join("options.json");

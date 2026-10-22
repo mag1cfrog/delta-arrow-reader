@@ -17,11 +17,14 @@ pub(super) fn assert_output_matches_schema(name: &str, output: &Value) {
         LazyLock::new(|| output_schema_validator("diagnostic"));
     static COMPLETION: LazyLock<jsonschema::Validator> =
         LazyLock::new(|| output_schema_validator("completion"));
+    static ROWS: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| output_schema_validator("rows"));
     let validator = match name {
         "inspection" => &*INSPECTION,
         "inspection-summary" => &*INSPECTION_SUMMARY,
         "diagnostic" => &*DIAGNOSTIC,
         "completion" => &*COMPLETION,
+        "rows" => &*ROWS,
         _ => panic!("unknown output schema: {name}"),
     };
     validator.validate(output).unwrap();
@@ -43,6 +46,96 @@ fn output_schema_validator(name: &str) -> jsonschema::Validator {
 }
 
 #[test]
+fn discovered_completion_versions_match_each_command_and_query_format()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let sql = directory.path().join("count.sql");
+    fs::write(&sql, "SELECT count(*) AS n FROM t")?;
+    let table = Path::new(env!("CARGO_MANIFEST_DIR")).join(
+        "../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned/table",
+    );
+    let table = table.to_str().unwrap();
+    let sql = sql.to_str().unwrap();
+    let inventory = run_with_timeout(
+        Command::new(env!("CARGO_BIN_EXE_dar"))
+            .env_clear()
+            .args(["capabilities", "--all"]),
+    )?;
+    assert!(inventory.status.success(), "{inventory:?}");
+    let inventory: Value = serde_json::from_slice(&inventory.stdout)?;
+    for (name, arguments, format, expected_version) in [
+        ("capabilities", vec![], None, 1),
+        ("help", vec![], None, 1),
+        ("inspect", vec![table, "--view", "summary"], None, 1),
+        ("scan", vec![table, "--limit", "1"], None, 1),
+        (
+            "preview",
+            vec![table, "--column", "id", "--limit", "1"],
+            None,
+            2,
+        ),
+        ("query", vec![table, "--sql-file", sql], None, 1),
+        (
+            "query",
+            vec![table, "--sql-file", sql, "--format", "arrow"],
+            Some("arrow"),
+            1,
+        ),
+        (
+            "query",
+            vec![table, "--sql-file", sql, "--format", "json"],
+            Some("json"),
+            2,
+        ),
+    ] {
+        let metadata =
+            run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).env_clear().args([
+                "capabilities",
+                "--command",
+                name,
+                "--full",
+            ]))?;
+        assert!(metadata.status.success(), "{metadata:?}");
+        let metadata: Value = serde_json::from_slice(&metadata.stdout)?;
+        let output = run_with_timeout(
+            Command::new(env!("CARGO_BIN_EXE_dar"))
+                .env_clear()
+                .args(["--diagnostics=json", name])
+                .args(arguments),
+        )?;
+        assert!(output.status.success(), "{output:?}");
+        let receipt = assert_single_terminal_record(&output.stderr, "completion");
+        assert_output_matches_schema("completion", &receipt);
+        assert_eq!(receipt["format_version"], expected_version);
+        if format.is_none() {
+            assert_eq!(
+                metadata["diagnostics"]["json"]["format_versions"]["completion"],
+                receipt["format_version"],
+                "{name} default completion"
+            );
+        }
+        for document in [&inventory, &metadata] {
+            let stdout = &document["stdout_formats"][name];
+            let selected_format = format.or_else(|| stdout["default"].as_str());
+            let advertised = selected_format
+                .map(|format| &stdout["choices"][format]["completion_format_version"])
+                .or_else(|| stdout.get("completion_format_version"))
+                .unwrap_or(&document["diagnostics"]["json"]["format_versions"]["completion"]);
+            assert_eq!(advertised, &receipt["format_version"], "{name} {format:?}");
+        }
+        assert_eq!(
+            metadata["diagnostics"]["json"]["completion_format_versions"],
+            match name {
+                "preview" => serde_json::json!([2]),
+                "query" => serde_json::json!([1, 2]),
+                _ => serde_json::json!([1]),
+            }
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn named_schemas_are_offline_deterministic_and_use_the_same_diagnostics()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
@@ -55,6 +148,7 @@ fn named_schemas_are_offline_deterministic_and_use_the_same_diagnostics()
         ("inspection-summary", "output_schema"),
         ("diagnostic", "output_schema"),
         ("completion", "output_schema"),
+        ("rows", "output_schema"),
     ] {
         let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
         command
@@ -307,6 +401,24 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
             assert!(guide.get("help").is_none());
             assert!(guide.get("argument_conflicts").is_none());
             assert!(guide.get("read_support").is_none());
+            if matches!(name, "preview" | "query") {
+                assert_eq!(
+                    guide["output_schemas"],
+                    serde_json::json!(["diagnostic", "completion", "rows"])
+                );
+                assert!(guide.get("join").is_none());
+                let mut invocation = guide["schema_command"].clone();
+                *invocation.as_array_mut().unwrap().last_mut().unwrap() =
+                    serde_json::json!("completion");
+                let completion = run_advertised(&invocation)?;
+                assert_eq!(
+                    completion["example"]["format_version"],
+                    guide["completion_format_version"]
+                );
+                for omitted in ["batches", "terminal", "scope", "stop_reason", "has_more"] {
+                    assert!(completion["example"].get(omitted).is_none(), "{omitted}");
+                }
+            }
             let help: Vec<_> = guide["help_command"]
                 .as_array()
                 .unwrap()
@@ -366,7 +478,9 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                     .all(|key| key == name)
             );
             let expected_sources = match name {
-                "inspect" | "scan" | "query" => vec!["direct_storage", "local", "unity_catalog"],
+                "inspect" | "scan" | "preview" | "query" => {
+                    vec!["direct_storage", "local", "unity_catalog"]
+                }
                 _ => vec![],
             };
             assert_eq!(
@@ -391,7 +505,7 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                 .map(|schema| schema["name"].as_str().unwrap())
                 .collect();
             let expected_inputs = match name {
-                "scan" => vec!["storage-options", "predicate", "execution-options"],
+                "scan" | "preview" => vec!["storage-options", "predicate", "execution-options"],
                 "inspect" => vec!["storage-options"],
                 "query" => vec!["storage-options", "tables"],
                 _ => vec![],
@@ -411,6 +525,7 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                     "completion",
                 ],
                 "help" => vec!["diagnostic"],
+                "query" | "preview" => vec!["diagnostic", "completion", "rows"],
                 _ => vec!["diagnostic", "completion"],
             };
             assert_eq!(output_names, expected_outputs);
@@ -446,9 +561,31 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
             jsonschema::validate(&full["schema"], &guide["example"])
                 .map_err(|error| io::Error::other(error.to_string()))?;
             let mut detail_names = std::collections::BTreeSet::new();
-            for field in ["other_fields", "operators", "scalar_types"] {
+            for field in [
+                "other_fields",
+                "version_1_fields",
+                "operators",
+                "scalar_types",
+            ] {
                 for name in guide[field].as_array().into_iter().flatten() {
                     assert!(detail_names.insert(name.as_str().unwrap().to_owned()));
+                }
+            }
+            if name == "completion" {
+                assert_eq!(guide["example"]["format_version"], 2);
+                assert!(guide.get("other_fields").is_none());
+                let legacy_fields = guide["version_1_fields"].as_array().unwrap();
+                assert_eq!(legacy_fields.len(), 6);
+                for field in [
+                    "terminal",
+                    "batches",
+                    "scope",
+                    "completion",
+                    "stop_reason",
+                    "has_more",
+                ] {
+                    assert!(legacy_fields.iter().any(|name| name == field));
+                    assert!(guide["example"].get(field).is_none());
                 }
             }
             if let Some(properties) = full["schema"]["properties"].as_object() {
@@ -512,7 +649,7 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
 fn discovered_guides_support_pinned_reads_and_predicate_repair()
 -> Result<(), Box<dyn std::error::Error>> {
     use arrow::{
-        array::{BooleanArray, Int32Array, Int64Array},
+        array::{BooleanArray, Int32Array},
         compute::filter_record_batch,
     };
     use serde_json::json;
@@ -626,7 +763,11 @@ fn discovered_guides_support_pinned_reads_and_predicate_repair()
             &has_more["definition"],
             &sample_completion["has_more"]
         ));
-        assert!(has_more.get("conditions").is_none());
+        let conditions = json!({"allOf": has_more["conditions"]});
+        assert!(jsonschema::is_valid(&conditions, &sample_completion));
+        let mut missing = sample_completion.clone();
+        missing.as_object_mut().unwrap().remove("has_more");
+        assert!(!jsonschema::is_valid(&conditions, &missing));
         assert!(
             has_more["definition"]["description"]
                 .as_str()
@@ -719,19 +860,22 @@ fn discovered_guides_support_pinned_reads_and_predicate_repair()
                 .args(["--table-version", version]),
         )?;
         assert!(output.status.success(), "{output:?}");
-        let reader = StreamReader::try_new(Cursor::new(&output.stdout), None)?;
-        let rows = concat_batches(&reader.schema(), &reader.collect::<Result<Vec<_>, _>>()?)?;
-        assert_eq!(rows.num_rows(), 1);
-        let count = rows
-            .column(0)
-            .as_any()
-            .downcast_ref::<Int64Array>()
-            .unwrap()
-            .value(0);
-        assert_eq!(count as usize, selected_rows.num_rows());
-        let completion: Value = serde_json::from_slice(&output.stderr)?;
-        assert_eq!(completion["kind"], "completion");
-        assert_eq!(completion["scope"], "query");
+        let result: Value = serde_json::from_slice(&output.stdout)?;
+        assert_output_matches_schema("rows", &result);
+        assert_eq!(
+            result["rows"],
+            json!([[selected_rows.num_rows().to_string()]])
+        );
+        assert_eq!(result["schema"]["fields"].as_array().unwrap().len(), 1);
+        assert_eq!(result["bindings"][0]["table_version"], version);
+        assert_eq!(result["scope"], "query");
+        assert_eq!(result["completion"], "complete");
+        let completion = assert_single_terminal_record(&output.stderr, "completion");
+        assert_eq!(
+            completion["format_version"],
+            query_guide["completion_format_version"]
+        );
+        assert_eq!(completion["command"], "query");
         assert_eq!(completion["bindings"][0]["table_version"], version);
         assert_eq!(completion["rows"], "1");
         assert_eq!(completion["output_bytes"], output.stdout.len().to_string());

@@ -1,3 +1,4 @@
+mod preview;
 mod queries;
 mod scans;
 mod table_manifests;

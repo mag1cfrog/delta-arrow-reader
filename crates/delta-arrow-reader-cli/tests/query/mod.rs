@@ -1,5 +1,6 @@
 //! Exact SQL results, read-only admission, output ceilings, and safe failures.
 
+pub(super) mod json;
 mod tables_manifest;
 
 use std::{
@@ -22,7 +23,7 @@ use super::{diagnostics::assert_single_terminal_record, run_with_timeout};
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 const IPC_END: &[u8] = &[255, 255, 255, 255, 0, 0, 0, 0];
 
-fn fixture_path(name: &str) -> PathBuf {
+pub(super) fn fixture_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus")
         .join(name)
@@ -68,6 +69,7 @@ pub(super) fn decode_query_result(output: &Output) -> TestResult<RecordBatch> {
     let batches = reader.collect::<Result<Vec<_>, _>>()?;
     let result = concat_batches(&schema, &batches)?;
     let record = assert_single_terminal_record(&output.stderr, "completion");
+    assert_eq!(record["format_version"], 1);
     assert_eq!(record["scope"], "query");
     assert_eq!(record["completion"], "complete");
     assert_eq!(record["stop_reason"], "end_of_input");
@@ -318,6 +320,7 @@ fn query_ceilings_fail_instead_of_returning_a_successful_sample() -> TestResult 
         assert_eq!(record["code"], "output_limit");
         assert_eq!(record["reason"], reason);
         assert_eq!(record["recovery"], "adjust_budget");
+        assert_eq!(record["argument"], flag);
     }
     let fixture = SqlCommandFixture::new(
         fixture_path("partitioned").join("table"),
@@ -422,13 +425,16 @@ fn cancelling_or_closing_a_blocked_query_pipe_exits_without_completion() -> Test
         time::{Duration, Instant},
     };
 
-    for signal in [Some(libc::SIGINT), Some(libc::SIGTERM), None] {
+    for (format, signal) in ["arrow", "json"].into_iter().flat_map(|format| {
+        [Some(libc::SIGINT), Some(libc::SIGTERM), None].map(|signal| (format, signal))
+    }) {
         let fixture = SqlCommandFixture::new(
             fixture_path("partitioned").join("table"),
             "SELECT repeat('x', 1048576) AS text FROM t LIMIT 1",
         )?;
         let mut child = fixture
             .command()
+            .args(["--format", format, "--max-output-bytes", "2097152"])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?;

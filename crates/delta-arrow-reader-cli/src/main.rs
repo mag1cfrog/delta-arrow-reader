@@ -1,8 +1,9 @@
 //! CLI commands for inspecting Delta snapshots and exporting their rows.
 //!
-//! `inspect` returns a snapshot's version, read checks, or column types as JSON. `scan` and
-//! `query` return rows as Arrow IPC streams. Command results use stdout; diagnostics and
-//! completion records use stderr.
+//! `inspect` returns a snapshot's version, read checks, or column types as JSON.
+//! `scan` and `query` return rows as Arrow IPC streams; `query` also supports typed
+//! JSON, and `preview` returns a bounded JSON sample. Results use stdout;
+//! diagnostics and completion records use stderr.
 //! `capabilities` describes the installed commands without opening a table.
 //!
 //! For a Delta table at `./table` with an `id` column:
@@ -17,13 +18,14 @@
 
 #![cfg_attr(test, allow(clippy::panic))]
 
-mod arrow_output;
 mod azure_sas;
 mod capabilities;
 mod diagnostics;
 mod direct_credentials;
 mod input;
 mod inspection;
+mod output;
+mod preview;
 mod query;
 mod signals;
 mod stdout_monitor;
@@ -40,7 +42,7 @@ use std::{
 };
 
 use arrow_schema::{ArrowError, Schema};
-use clap::{Parser, Subcommand, error::ErrorKind};
+use clap::{Args, Parser, Subcommand, error::ErrorKind};
 use delta_arrow_reader::{DeltaReaderError, error_source_kind};
 use diagnostics::{DiagnosticFormat, ErrorClassification, InputCorrection};
 use futures_util::{FutureExt, TryStreamExt, future::LocalBoxFuture};
@@ -49,11 +51,11 @@ use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu, ensure};
 use table_input::TableArgs;
 
-/// Read Delta Lake snapshots as JSON metadata or Arrow IPC streams.
+/// Read Delta Lake snapshots as JSON or Arrow IPC streams.
 #[derive(Parser)]
 #[command(
     name = command_name(), bin_name = command_name(), version,
-    after_help = "When version or column types are unknown, use inspect TABLE --view summary [--column NAME]; pin reads with --table-version N.\nGuides: capabilities --command NAME; capabilities --schema NAME [--detail FIELD_OR_TYPE].\nInput formats: predicate, storage-options, execution-options. Output formats: inspection-summary, inspection, diagnostic, completion."
+    after_help = "When version or column types are unknown, use inspect TABLE --view summary [--column NAME]; pin reads with --table-version N.\nGuides: capabilities --command NAME; capabilities --schema NAME [--detail FIELD_OR_TYPE].\nInput formats: predicate, storage-options, execution-options, tables. Output formats: rows, inspection-summary, inspection, diagnostic, completion."
 )]
 struct Cli {
     #[command(flatten)]
@@ -80,41 +82,47 @@ enum Command {
         #[command(flatten)]
         inspection: inspection::InspectionArgs,
     },
+    /// Read a small typed JSON sample with row, byte, and time limits.
+    Preview(preview::PreviewArgs),
     /// Run one read-only SQL query over explicitly selected Delta snapshots.
-    ///
-    /// Results stream as Arrow IPC. Redirect stdout to a file or pipe.
     Query(query::QueryArgs),
     /// Stream a Delta snapshot's rows as Arrow IPC to stdout.
     ///
     /// Redirect stdout to a file or pipe; terminal output is rejected.
     Scan {
         #[command(flatten)]
-        table: TableArgs,
-        /// Existing Databricks CLI profile; required for uc://catalog.schema.table targets.
-        #[arg(long, value_name = "PROFILE")]
-        databricks_profile: Option<String>,
-        /// Logical column name; repeat to select columns in argument order.
-        /// Default: all columns.
-        #[arg(long = "column", value_name = "NAME")]
-        columns: Vec<String>,
-        /// Read zero columns while preserving row counts.
-        #[arg(long, conflicts_with = "columns")]
-        no_columns: bool,
+        read: RowReadArgs,
         /// Maximum output rows as unsigned decimal digits; zero is valid.
         #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<usize>)]
         limit: Option<usize>,
-        /// Positive execution partition target; default: native automatic selection.
-        #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
-        target_partitions: Option<NonZeroUsize>,
-        /// Local typed JSON predicate; at most 1 MiB. '-' is a filename, not stdin.
-        /// Match literal types to inspected column types; integer values are strings.
-        /// Format: capabilities --schema predicate.
-        #[arg(long, value_name = "PATH")]
-        predicate_file: Option<String>,
-        /// Local JSON execution options; at most 1 MiB. '-' is a filename, not stdin.
-        #[arg(long, value_name = "PATH")]
-        execution_options_file: Option<String>,
     },
+}
+
+/// Snapshot, projection, predicate, and execution choices shared by scan and preview.
+#[derive(Args)]
+struct RowReadArgs {
+    #[command(flatten)]
+    table: TableArgs,
+    /// Existing Databricks CLI profile; required for uc://catalog.schema.table targets.
+    #[arg(long, value_name = "PROFILE")]
+    databricks_profile: Option<String>,
+    /// Logical column name; repeat to select columns in argument order. Default: all columns.
+    #[arg(long = "column", value_name = "NAME")]
+    columns: Vec<String>,
+    /// Read zero columns while preserving row counts.
+    #[arg(long, conflicts_with = "columns")]
+    no_columns: bool,
+    /// Positive execution partition target; default: native automatic selection.
+    #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
+    target_partitions: Option<NonZeroUsize>,
+    /// Local typed JSON predicate; at most 1 MiB. '-' is a filename, not stdin.
+    /// Match literal types to inspected column types; integer values are strings.
+    /// Format: capabilities --schema predicate.
+    #[arg(long, value_name = "PATH")]
+    predicate_file: Option<String>,
+    /// Local JSON execution options; at most 1 MiB. '-' is a filename, not stdin.
+    #[arg(long, value_name = "PATH")]
+    execution_options_file: Option<String>,
 }
 
 #[derive(Snafu)]
@@ -156,6 +164,10 @@ enum Error {
     Output { source: io::Error },
     #[snafu(display("Could not encode the Arrow IPC stream."))]
     ArrowIpc { source: ArrowError },
+    #[snafu(display("Could not encode the JSON result."))]
+    JsonOutput { source: serde_json::Error },
+    #[snafu(display("The result contains a type unsupported by typed JSON."))]
+    UnsupportedJsonType { command: &'static str },
     #[snafu(display("{source}"))]
     Reader { source: DeltaReaderError },
     #[snafu(display("{source}"))]
@@ -166,6 +178,8 @@ enum Error {
     Query { source: query::QueryError },
     #[snafu(display("Output exceeded its resource ceiling (reason={reason})."))]
     OutputLimit { reason: &'static str },
+    #[snafu(display("Command exceeded its time budget."))]
+    DeadlineExceeded,
     #[snafu(display("Command was cancelled."))]
     Cancelled { status: u8 },
 }
@@ -176,7 +190,7 @@ impl From<ArrowError> for Error {
             ArrowError::IoError(_, source)
                 if source
                     .get_ref()
-                    .is_some_and(|error| error.is::<arrow_output::OutputBytesExceeded>()) =>
+                    .is_some_and(|error| error.is::<output::arrow::OutputBytesExceeded>()) =>
             {
                 Self::OutputLimit {
                     reason: "output_byte_limit_exceeded",
@@ -257,6 +271,18 @@ impl Error {
                 reason: "arrow_ipc_encode_failed",
                 source_kind: Some(error_source_kind(source)),
             },
+            Self::JsonOutput { .. } => ErrorClassification {
+                phase: "execution",
+                code: "json_output",
+                reason: "json_encode_failed",
+                source_kind: None,
+            },
+            Self::UnsupportedJsonType { .. } => ErrorClassification {
+                phase: "execution",
+                code: "unsupported_json_type",
+                reason: "unsupported_json_type",
+                source_kind: Some("unsupported"),
+            },
             Self::UnityCatalog { source } => ErrorClassification {
                 phase: source.phase(),
                 code: source.code(),
@@ -268,6 +294,12 @@ impl Error {
                 phase: "execution",
                 code: "output_limit",
                 reason,
+                source_kind: Some("resource_exhausted"),
+            },
+            Self::DeadlineExceeded => ErrorClassification {
+                phase: "execution",
+                code: "deadline_exceeded",
+                reason: "command_deadline_exceeded",
                 source_kind: Some("resource_exhausted"),
             },
             Self::Cancelled { .. } => ErrorClassification {
@@ -332,6 +364,88 @@ impl Error {
                     field_path: None,
                     supplied: None,
                     hint: "Narrow the selection or increase --max-output-bytes; keep the same authorization and --table-version N.",
+                });
+            }
+            Self::OutputLimit {
+                reason: "json_output_limit_exceeded",
+            } => {
+                return Some(InputCorrection {
+                    argument: "--max-output-bytes".to_owned(),
+                    expected: "enough bytes for the complete JSON result".to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Explicitly increase --max-output-bytes for the complete JSON, or use --format arrow with redirected stdout and an explicit byte budget. Keep the same SQL, authorization, table bindings, and snapshot versions.",
+                });
+            }
+            Self::OutputLimit {
+                reason: "output_byte_limit_exceeded",
+            } => {
+                return Some(InputCorrection {
+                    argument: "--max-output-bytes".to_owned(),
+                    expected: "enough bytes for the complete Arrow stream".to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Increase --max-output-bytes explicitly; keep the same SQL, authorization, table bindings, and snapshot versions.",
+                });
+            }
+            Self::OutputLimit {
+                reason: "preview_schema_limit_exceeded",
+            } => {
+                return Some(InputCorrection {
+                    argument: "--column".to_owned(),
+                    expected: "a selected schema within the preview byte budget".to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Select fewer --column values, or explicitly increase --max-output-bytes for the required schema; preserve authorization and --table-version N.",
+                });
+            }
+            Self::OutputLimit {
+                reason: "output_row_limit_exceeded",
+            } => {
+                return Some(InputCorrection {
+                    argument: "--max-rows".to_owned(),
+                    expected: "enough rows for the complete SQL result".to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Explicitly increase --max-rows; keep the same SQL, authorization, table bindings, and snapshot versions.",
+                });
+            }
+            Self::OutputLimit {
+                reason: "preview_row_too_large",
+            } => {
+                return Some(InputCorrection {
+                    argument: "--max-output-bytes".to_owned(),
+                    expected: "enough bytes for the selected schema and first row".to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Explicitly increase --max-output-bytes; keep the same projection, predicate, row limit, authorization, --table-version N, and --deadline-ms.",
+                });
+            }
+            Self::UnsupportedJsonType { command: "preview" } => {
+                return Some(InputCorrection {
+                    argument: "--column".to_owned(),
+                    expected: "selected values that fit typed JSON".to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Use scan with redirected stdout and the same projection, predicate, row limit, authorization, and --table-version N.",
+                });
+            }
+            Self::DeadlineExceeded => {
+                return Some(InputCorrection {
+                    argument: "--deadline-ms".to_owned(),
+                    expected: "enough time to finish the preview".to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Check source responsiveness, then retry with an explicitly chosen --deadline-ms budget.",
+                });
+            }
+            Self::UnsupportedJsonType { .. } => {
+                return Some(InputCorrection {
+                    argument: "--format".to_owned(),
+                    expected: "arrow for this result type".to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Use --format arrow with redirected stdout; keep the same SQL, authorization, table bindings, and snapshot versions.",
                 });
             }
             _ => return None,
@@ -433,6 +547,16 @@ impl Error {
             source_kind,
         } = self.classification();
         let (recovery, retryable) = match source_kind {
+            Some("resource_exhausted")
+                if matches!(
+                    self,
+                    Self::OutputLimit {
+                        reason: "preview_schema_limit_exceeded"
+                    }
+                ) =>
+            {
+                ("change_request", Some(false))
+            }
             Some("resource_exhausted") => ("adjust_budget", Some(false)),
             Some("unauthenticated") => ("authorize", Some(false)),
             Some("permission_denied") => ("request_access", Some(false)),
@@ -503,11 +627,15 @@ impl Error {
             | Self::InputIo { .. }
             | Self::StorageAuthorization { .. }
             | Self::Configuration { .. } => 2,
-            Self::Runtime { .. } | Self::Reader { .. } | Self::ArrowIpc { .. } => 1,
+            Self::Runtime { .. }
+            | Self::Reader { .. }
+            | Self::ArrowIpc { .. }
+            | Self::JsonOutput { .. }
+            | Self::UnsupportedJsonType { .. } => 1,
             Self::Output { .. } => 3,
             Self::UnityCatalog { source } => source.exit_status(),
             Self::Query { source } => source.exit_status(),
-            Self::OutputLimit { .. } => 1,
+            Self::OutputLimit { .. } | Self::DeadlineExceeded => 1,
             Self::Cancelled { status } => *status,
         })
     }
@@ -588,7 +716,39 @@ fn build_completion_record(
 }
 
 fn run_table_command(command: Command) -> Result<Value, Error> {
-    if matches!(command, Command::Scan { .. } | Command::Query(_)) {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context(RuntimeSnafu {
+            reason: "runtime_build_failed",
+        })?;
+    let result = runtime.block_on(execute_table_command(command));
+    runtime.shutdown_background();
+    result
+}
+
+fn build_json_read_completion(
+    command: &'static str,
+    bindings: Vec<Value>,
+    stdout_stats: StdoutStats,
+) -> Value {
+    json!({
+        "format_version": 2,
+        "kind": "completion",
+        "command": command,
+        "bindings": bindings,
+        "rows": stdout_stats.rows_written.to_string(),
+        "output_bytes": stdout_stats.bytes_written.to_string(),
+    })
+}
+
+async fn execute_table_command(command: Command) -> Result<Value, Error> {
+    let arrow_stdout = match &command {
+        Command::Scan { .. } => true,
+        Command::Query(args) => args.output_format == query::QueryOutputFormat::Arrow,
+        _ => false,
+    };
+    if arrow_stdout {
         ensure!(!io::stdout().is_terminal(), TerminalOutputSnafu);
     }
     if let Command::Inspect { inspection, .. } = &command {
@@ -602,34 +762,36 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
             table,
             databricks_profile,
             ..
-        }
-        | Command::Scan {
-            table,
-            databricks_profile,
-            ..
         } => unity_catalog::UnityCatalogTableTarget::parse(
             &table.table,
             databricks_profile.as_deref(),
         )
         .context(UnityCatalogSnafu)?,
+        Command::Scan { read, .. } | Command::Preview(preview::PreviewArgs { read, .. }) => {
+            unity_catalog::UnityCatalogTableTarget::parse(
+                &read.table.table,
+                read.databricks_profile.as_deref(),
+            )
+            .context(UnityCatalogSnafu)?
+        }
         Command::Query(_) => None,
     };
     let mut uses_unity_catalog = uc_target.is_some();
-    let predicate = match &command {
-        Command::Scan {
-            predicate_file: Some(path),
-            ..
-        } => Some(
+    let row_read = match &command {
+        Command::Scan { read, .. } | Command::Preview(preview::PreviewArgs { read, .. }) => {
+            Some(read)
+        }
+        _ => None,
+    };
+    let predicate = match row_read.and_then(|read| read.predicate_file.as_deref()) {
+        Some(path) => Some(
             input::read_json_file::<input::PredicateInput>(path, JsonInputKind::Predicate)?
                 .into_predicate()?,
         ),
         _ => None,
     };
-    let execution_options = match &command {
-        Command::Scan {
-            execution_options_file: Some(path),
-            ..
-        } => {
+    let execution_options = match row_read.and_then(|read| read.execution_options_file.as_deref()) {
+        Some(path) => {
             let options = input::read_json_file::<input::JsonObject<input::ExecutionOptionsInput>>(
                 path,
                 JsonInputKind::ExecutionOptions,
@@ -679,22 +841,20 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
             ))
         }
         .boxed_local(),
-        Command::Scan {
-            table,
-            columns,
-            no_columns,
-            limit,
-            target_partitions,
-            ..
-        } => async move {
-            let (table, authorized_access) = table.load_table(uc_target).await?;
+        Command::Scan { read, .. } | Command::Preview(preview::PreviewArgs { read, .. }) => async {
+            let (table, authorized_access) = read.table.load_table(uc_target).await?;
             let version = table.version();
+            let limit = match &command {
+                Command::Scan { limit, .. } => *limit,
+                Command::Preview(args) => Some(args.limit),
+                _ => unreachable!("row reader command"),
+            };
             let mut builder = table.scan();
-            if *no_columns || !columns.is_empty() {
-                builder = builder.with_projection(columns.iter().cloned());
+            if read.no_columns || !read.columns.is_empty() {
+                builder = builder.with_projection(read.columns.iter().cloned());
             }
             if let Some(limit) = limit {
-                builder = builder.with_limit(*limit);
+                builder = builder.with_limit(limit);
             }
             if let Some(predicate) = predicate {
                 builder = builder.with_predicate(predicate);
@@ -702,70 +862,71 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
             if let Some(execution_options) = execution_options {
                 builder = builder.with_execution_options(execution_options);
             }
-            if let Some(target_partitions) = target_partitions {
+            if let Some(target_partitions) = read.target_partitions {
                 builder = builder
                     .with_target_partitions(target_partitions.get())
                     .context(ConfigurationSnafu)?;
             }
             let scan_result = async {
                 let scan = builder.build().await.context(ReaderSnafu)?;
-                arrow_output::write_arrow_stream_to_stdout(
-                    scan.schema(),
-                    scan.into_stream()
-                        .map_err(|source| Error::Reader { source }),
-                    None,
-                )
-                .await
+                let schema = scan.schema();
+                let stream = scan
+                    .into_stream()
+                    .map_err(|source| Error::Reader { source });
+                if let Command::Preview(args) = &command {
+                    let stats = output::json::write_preview_to_stdout(
+                        schema,
+                        stream,
+                        version,
+                        output::OutputLimits {
+                            max_rows: args.limit as u64,
+                            max_bytes: args.max_output_bytes.get() as u64,
+                        },
+                    )
+                    .await?;
+                    Ok(build_json_read_completion(
+                        "preview",
+                        vec![json!({"alias": "t", "table_version": version.to_string()})],
+                        stats,
+                    ))
+                } else {
+                    let stats =
+                        output::arrow::write_arrow_stream_to_stdout(schema, stream, None).await?;
+                    Ok(build_completion_record("scan", Some(version), stats, limit))
+                }
             }
             .await;
-            let stdout_stats = match (scan_result, &authorized_access) {
+            match (scan_result, &authorized_access) {
                 (Err(error @ Error::Reader { .. }), Some(access)) => {
                     return Err(access.map_read_error(error).await);
                 }
-                (result, _) => result?,
-            };
-            Ok(build_completion_record(
-                "scan",
-                Some(version),
-                stdout_stats,
-                *limit,
-            ))
+                (result, _) => result,
+            }
         }
         .boxed_local(),
     };
-    // Drive async work on the calling thread. A dedicated Tokio worker can
-    // occupy the last OS thread and leave blocking loads queued forever.
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .context(RuntimeSnafu {
-            reason: "runtime_build_failed",
-        })?;
-    let result = if uses_unity_catalog || matches!(command, Command::Query(_)) {
-        runtime.block_on(async {
-            tokio::select! {
-                // Install listeners before polling work; cancellation drops any pending child.
-                biased;
-                exit_status = signals::wait_for_cancellation() => {
-                    let status = exit_status?;
-                    if uses_unity_catalog {
-                        Err(Error::UnityCatalog { source: unity_catalog::Error::Cancelled { status } })
-                    } else {
-                        Err(Error::Cancelled { status })
-                    }
-                },
-                source = stdout_monitor::wait_for_disconnect(), if matches!(command, Command::Scan { .. } | Command::Query(_)) => {
-                    Err(Error::Output { source })
-                },
-                result = work => result,
-            }
-        })
+    if (uses_unity_catalog && !matches!(command, Command::Preview(_)))
+        || matches!(command, Command::Query(_))
+    {
+        tokio::select! {
+            // Install listeners before polling work; cancellation drops any pending child.
+            biased;
+            exit_status = signals::wait_for_cancellation() => {
+                let status = exit_status?;
+                if uses_unity_catalog {
+                    Err(Error::UnityCatalog { source: unity_catalog::Error::Cancelled { status } })
+                } else {
+                    Err(Error::Cancelled { status })
+                }
+            },
+            source = stdout_monitor::wait_for_disconnect(), if matches!(command, Command::Scan { .. } | Command::Query(_) | Command::Preview(_)) => {
+                Err(Error::Output { source })
+            },
+            result = work => result,
+        }
     } else {
-        runtime.block_on(work)
-    };
-    // Blocking core work must not delay process shutdown after this command finishes.
-    runtime.shutdown_background();
-    result
+        work.await
+    }
 }
 
 fn write_stdout(output: &[u8]) -> Result<(), Error> {
@@ -821,6 +982,12 @@ fn main() -> ExitCode {
             ..
         }) => {
             return capabilities::run_capabilities(options, diagnostic_format);
+        }
+        Ok(Cli {
+            command: Command::Preview(args),
+            ..
+        }) => {
+            return preview::run(args, diagnostic_format);
         }
         Ok(cli) => {
             diagnostics::init_tracing(diagnostic_format);
@@ -960,8 +1127,12 @@ mod tests {
             ])
             .unwrap();
             let Command::Scan {
-                columns,
-                no_columns,
+                read:
+                    RowReadArgs {
+                        columns,
+                        no_columns,
+                        ..
+                    },
                 limit: parsed_limit,
                 ..
             } = cli.command
@@ -987,7 +1158,10 @@ mod tests {
                 args.extend(["--target-partitions", text]);
             }
             let Command::Scan {
-                target_partitions, ..
+                read: RowReadArgs {
+                    target_partitions, ..
+                },
+                ..
             } = Cli::try_parse_from(args).unwrap().command
             else {
                 panic!("expected scan command");
@@ -1140,6 +1314,11 @@ mod tests {
         .to_json_diagnostic();
         assert_eq!(record["recovery"], "change_request");
         assert_eq!(record["retryable"], false);
+
+        let record = Error::UnsupportedJsonType { command: "preview" }.to_json_diagnostic();
+        assert_eq!(record["recovery"], "change_request");
+        assert_eq!(record["argument"], "--column");
+        assert!(record["hint"].as_str().unwrap().contains("Use scan"));
 
         for (source, source_kind, recovery) in [
             (

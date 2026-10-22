@@ -86,7 +86,7 @@ fn assert_container_credential_requests(requests: &[Value], endpoint: &str) -> V
 fn all_reads_refresh_the_selected_container_reference() -> TestResult {
     for endpoint in [ECS_RELATIVE_URI, EKS_HTTP_URI, EKS_HTTPS_URI] {
         for references in ["json", "env"] {
-            for operation in ["inspect", "scan", "query"] {
+            for operation in ["inspect", "scan", "preview", "query"] {
                 let proxy = MockCredentialProxy::new(CredentialService::AwsContainer, "refresh")?;
                 let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
                 let token_path = fixture.directory.path().join("pod-token");

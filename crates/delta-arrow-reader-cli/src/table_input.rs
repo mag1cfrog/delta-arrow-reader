@@ -50,7 +50,7 @@ impl TableLoadRequest {
     }
 }
 
-/// Required location and settings for inspect and scan.
+/// Required location and settings for inspect, scan, and preview.
 #[derive(Args)]
 pub(crate) struct TableArgs {
     /// UTF-8 local path or storage URL. Relative paths use the working directory.

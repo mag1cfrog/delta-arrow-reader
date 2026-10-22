@@ -99,7 +99,7 @@ fn assert_metadata_requests(
 fn all_reads_refresh_only_the_selected_managed_identity() -> TestResult {
     for references in ["json", "env"] {
         for (option, variable, query_key, identity) in IDENTITY_SELECTORS {
-            for operation in ["inspect", "scan", "query"] {
+            for operation in ["inspect", "scan", "preview", "query"] {
                 let metadata = MockAzureTokenServer::new(usize::MAX)?;
                 let mut fixture = DirectStorageFixture::new(CloudStorageProtocol::AzureBlob)?;
                 let options_path = fixture.directory.path().join("options.json");

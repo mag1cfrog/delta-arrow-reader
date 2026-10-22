@@ -14,8 +14,8 @@ use arrow::{
 use serde_json::{Value, json};
 
 use super::{
-    CredentialRefreshFailure, DatabricksCliFixture, MockCloudStorageServer, StorageCredentialKind,
-    TestResult, run_with_timeout,
+    CredentialRefreshFailure, DatabricksCliFixture, MockCloudStorageServer, PROFILE,
+    StorageCredentialKind, TestResult, run_with_timeout,
 };
 use crate::{
     diagnostics::assert_single_terminal_record,
@@ -23,8 +23,55 @@ use crate::{
         append_west_partition_removal_commit, expected_partitioned_rows, partitioned_objects,
         partitioned_objects_with_large_parquet_footers, requested_object_path,
     },
-    query::decode_query_result,
+    query::{decode_query_result, fixture_path, json::decode_json},
 };
+
+#[test]
+fn json_queries_preserve_uc_and_local_bindings_with_complete_receipts() -> TestResult {
+    let kind = StorageCredentialKind::S3;
+    let fixture = DatabricksCliFixture::new(kind)?;
+    let server = MockCloudStorageServer::with_objects(
+        kind.storage_protocol(),
+        partitioned_objects()?,
+        |_, _| {},
+    )?;
+    fixture.use_storage_endpoint(kind, &server.endpoint)?;
+    for (tables, sql, expected_bindings, expected_rows) in [
+        (
+            None,
+            "SELECT id FROM t WHERE id <= 2 ORDER BY id",
+            json!([{"alias":"t", "table_version":"0"}]),
+            json!([["1"], ["2"]]),
+        ),
+        (
+            Some(json!([
+                {"alias":"orders", "location":"uc://main.sales.orders", "table_version":"0",
+                 "authorization":{"source":"databricks", "databricks_profile":PROFILE,
+                                  "storage_options_file":"../options.json"}},
+                {"alias":"local_rows", "location":fixture_path("partitioned").join("table"), "table_version":"0"}
+            ])),
+            "SELECT o.id, l.id FROM orders o JOIN local_rows l ON o.id = l.id WHERE o.id <= 2 ORDER BY o.id",
+            json!([{"alias":"orders", "table_version":"0"}, {"alias":"local_rows", "table_version":"0"}]),
+            json!([["1", "1"], ["2", "2"]]),
+        ),
+    ] {
+        let mut command = match tables {
+            Some(tables) => fixture.manifest_query(tables, sql)?,
+            None => fixture.query(sql)?,
+        };
+        let output = run_with_timeout(command.args(["--format", "json", "--diagnostics=json"]))?;
+        let result = decode_json(&output)?;
+        assert_eq!(result["bindings"], expected_bindings);
+        assert_eq!(result["rows"], expected_rows);
+        for field in result["schema"]["fields"].as_array().unwrap() {
+            assert_eq!(field["name"], "id");
+            assert_eq!(field["data_type"], "Int32");
+        }
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("secret"));
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
+    }
+    Ok(())
+}
 
 #[test]
 fn single_table_queries_preserve_values_versions_and_vended_credentials() -> TestResult {
@@ -300,34 +347,46 @@ fn concurrent_sql_reads_renew_once_and_keep_the_original_snapshot_for_every_clou
 
 #[test]
 fn failed_sql_renewals_keep_uc_errors_and_never_complete_the_result() -> TestResult {
-    for (kind, failure) in [
+    for (kind, failure, format) in [
         (
             StorageCredentialKind::S3,
             CredentialRefreshFailure::PermissionDenied,
+            "json",
+        ),
+        (
+            StorageCredentialKind::S3,
+            CredentialRefreshFailure::PermissionDenied,
+            "arrow",
         ),
         (
             StorageCredentialKind::S3,
             CredentialRefreshFailure::MissingDatabricksCli,
+            "arrow",
         ),
         (
             StorageCredentialKind::R2,
             CredentialRefreshFailure::ChangedStorageRoot,
+            "arrow",
         ),
         (
             StorageCredentialKind::Gcs,
             CredentialRefreshFailure::ExpiredCredentials,
+            "arrow",
         ),
         (
             StorageCredentialKind::Gcs,
             CredentialRefreshFailure::InvalidBearerToken,
+            "arrow",
         ),
         (
             StorageCredentialKind::AzureBlobSas,
             CredentialRefreshFailure::ChangedCredentialKind,
+            "arrow",
         ),
         (
             StorageCredentialKind::AzureBlobBearer,
             CredentialRefreshFailure::PermissionDenied,
+            "arrow",
         ),
     ] {
         let fixture = DatabricksCliFixture::new(kind)?;
@@ -337,9 +396,13 @@ fn failed_sql_renewals_keep_uc_errors_and_never_complete_the_result() -> TestRes
             })?;
         let output = run_with_timeout(
             command
+                .args(["--format", format])
                 .env("DAR_TEST_REFRESH", failure.cli_refresh_behavior())
                 .env("RUST_LOG", "trace"),
         )?;
+        if format == "json" {
+            assert!(output.stdout.is_empty());
+        }
         let cli_missing = matches!(failure, CredentialRefreshFailure::MissingDatabricksCli);
         assert_query_failure(
             &output,

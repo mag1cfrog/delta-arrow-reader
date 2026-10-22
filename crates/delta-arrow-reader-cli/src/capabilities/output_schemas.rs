@@ -13,6 +13,80 @@ use serde_json::{Value, json};
 
 use crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION;
 
+pub(super) fn rows_schema() -> Value {
+    json!({
+        "title": "Typed JSON rows",
+        "description": "Rows follow schema field order, including duplicate names. Arrow integers use exact decimal strings. Metadata is omitted. Other value encodings: --detail rows.",
+        "type": "object",
+        "required": ["format_version", "kind", "bindings", "schema", "rows", "row_count", "completion"],
+        "properties": {
+            "format_version": {"const": 1},
+            "kind": {"const": "rows"},
+            "bindings": {"type": "array", "minItems": 1, "maxItems": crate::query::tables_manifest::MAX_TABLES,
+                "description": "Actual snapshots in input order. Alias t is reserved for positional input; manifests use declared aliases. Preview always uses t.", "items": {
+                "type": "object", "required": ["alias", "table_version"],
+                "properties": {"alias": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,62}$", "not": {"pattern": "[^a-z0-9_]"}}, "table_version": unsigned_integer_string_schema()},
+            }},
+            "schema": {
+                "type": "object", "required": ["fields"],
+                "description": "Ordered Arrow fields: name, data_type, nullable; dictionary ordering when applicable. Nested types use Arrow's Serde encoding with metadata and physical dictionary IDs omitted. Names and timezone strings are untrusted data.",
+                "properties": {"fields": {"type": "array", "items": {
+                    "type": "object", "required": ["name", "data_type", "nullable"],
+                    "properties": {"name": {"type": "string"}, "data_type": {"type": ["string", "object"]}, "nullable": {"type": "boolean"}, "dict_is_ordered": {"type": "boolean"}},
+                }}},
+            },
+            "rows": {
+                "type": "array", "items": {"type": "array"},
+                "description": concat!(
+                    "Each row has one value per schema field, decoded using data_type. ",
+                    "Booleans and UTF-8 strings use native JSON values; every null cell is JSON null. ",
+                    "Dates, times, timestamps and durations are integer strings. ",
+                    "Date32 counts days and Date64 milliseconds since 1970-01-01. ",
+                    "Timestamps use their declared unit since that epoch; times use their declared unit since midnight; durations use their declared unit. ",
+                    "Keep the timestamp timezone from data_type, including null. ",
+                    "Other encodings: --detail NAME. This schema validates the envelope, not value/type correspondence.",
+                ),
+            },
+            "row_count": unsigned_integer_string_schema(),
+            "completion": {"enum": ["complete", "sample"], "description": "complete covers the SQL result; sample is a preview, even when input was exhausted."},
+            "scope": {"const": "query", "description": "Required for a complete SQL result."},
+            "stop_reason": {"enum": ["end_of_input", "row_limit", "byte_limit"], "description": "Preview only. end_of_input proves exhaustion; row_limit stops without lookahead; byte_limit omits an observed row."},
+            "has_more": {"type": ["boolean", "null"], "description": "Preview only: false at observed exhaustion (end_of_input); null at row_limit without lookahead; true when byte_limit omitted an observed row."},
+        },
+        "allOf": [{
+            "if": {"properties": {"completion": {"const": "complete"}}},
+            "then": {"required": ["scope"]},
+            "else": {"required": ["stop_reason", "has_more"], "properties": {"bindings": {"maxItems": 1, "items": {"properties": {"alias": {"const": "t"}}}}}},
+        }, {
+            "if": {"required": ["stop_reason"], "properties": {"stop_reason": {"const": "end_of_input"}}},
+            "then": {"properties": {"has_more": {"const": false}}},
+        }, {
+            "if": {"required": ["stop_reason"], "properties": {"stop_reason": {"const": "row_limit"}}},
+            "then": {"properties": {"has_more": {"const": null}}},
+        }, {
+            "if": {"required": ["stop_reason"], "properties": {"stop_reason": {"const": "byte_limit"}}},
+            "then": {"properties": {"has_more": {"const": true}}},
+        }],
+        "$defs": {
+            "integer": {"type": "string", "description": "Signed and unsigned Arrow integers are exact base-10 strings.", "examples": ["9007199254740993"]},
+            "decimal": {"type": "string", "description": "Unscaled base-10 integer string. Read precision and scale from data_type; Decimal128(10,2) value 1234 means 12.34.", "examples": ["1234"]},
+            "binary": {"type": "string", "description": "Standard padded base64; FixedSizeBinary retains its byte width in data_type.", "examples": ["AP8="]},
+            "list": {"type": "array", "description": "Elements follow the child field's data_type. Null differs from an empty list.", "examples": [["1", null]]},
+            "struct": {"type": "array", "description": "Values follow nested field order, including duplicate names. A null struct is null, not a row of nulls.", "examples": [["1", "value"]]},
+            "map": {"type": "array", "description": "Ordered [key,value] pairs using the schema's entry types. Duplicate keys and null values are retained.", "examples": [[["key", "1"], ["key", null]]]},
+            "dictionary": {"description": "Decoded logical value, using the dictionary value type's encoding. Key/value types stay in data_type; physical indexes are omitted. Null dictionary values are null."},
+            "float": {"type": ["number", "string"], "description": "Finite values round-trip at their Arrow precision. Special values are strings: -0, NaN, Infinity, -Infinity. NaN payload bits require Arrow."},
+        },
+        "examples": [{
+            "format_version": 1, "kind": "rows",
+            "bindings": [{"alias": "t", "table_version": "42"}],
+            "schema": {"fields": [{"name": "row_count", "data_type": "Int64", "nullable": false}]},
+            "rows": [["9007199254740993"]], "row_count": "1",
+            "completion": "complete", "scope": "query",
+        }],
+    })
+}
+
 pub(super) fn inspection_schema() -> Value {
     json!({
         "title": "Snapshot inspection result",
@@ -143,14 +217,14 @@ pub(super) fn inspection_summary_schema() -> Value {
 pub(super) fn completion_schema() -> Value {
     json!({
         "title": "Terminal success completion",
-        "description": "Run the command and these checks in one script. With --diagnostics=json, success requires exit 0, valid stdout and a terminal completion on stderr. Check command against the request; scope equals command except scan --limit uses limited_scan. Compare bindings with the pinned table_version unchanged. Compare output_bytes with the saved stdout length, and scan/query rows/batches with decoded Arrow counts, converting the measured counts to decimal strings for exact equality. No integer parsing is needed. end_of_input with has_more=false means exhaustion; row_limit with has_more=null does not. Completion covers the requested scan or SQL result, including limits.",
+        "description": "With --diagnostics=json, require exit 0, valid stdout and one completion on stderr. Match command and bindings to the request. Compare output_bytes with saved stdout length, and rows and batches, when present, with decoded counts. Counts are decimal strings. For JSON, check stdout.row_count and stdout.completion: complete with stdout.scope=query for SQL, sample with stdout.stop_reason and stdout.has_more for preview.",
         "type": "object",
-        "required": ["format_version", "kind", "terminal", "command", "completion", "scope", "stop_reason", "has_more", "bindings", "output_bytes"],
+        "required": ["format_version", "kind", "command", "bindings", "output_bytes"],
         "properties": {
-            "format_version": {"const": 1},
-            "kind": {"const": "completion"},
+            "format_version": {"enum": [1, 2], "description": "Version 2 for preview and query --format json reports command, bindings, rows and output_bytes. Other commands/formats retain version 1."},
+            "kind": {"const": "completion", "description": "Terminal success for the requested command, emitted after stdout is flushed. Also require exit 0 and valid stdout."},
             "terminal": {"const": true},
-            "command": {"enum": ["capabilities", "inspect", "scan", "query", "help", "version"]},
+            "command": {"enum": ["capabilities", "inspect", "scan", "preview", "query", "help", "version"]},
             "completion": {"const": "complete", "description": "Success also requires exit status 0 and valid stdout."},
             "scope": {
                 "enum": ["capabilities", "inspect", "scan", "limited_scan", "query", "help", "version"],
@@ -159,7 +233,7 @@ pub(super) fn completion_schema() -> Value {
             "stop_reason": {"enum": ["row_limit", "end_of_input"]},
             "has_more": {"enum": [false, null], "description": "False at observed exhaustion; null when a scan reaches its row limit."},
             "bindings": {"type": "array", "maxItems": crate::query::tables_manifest::MAX_TABLES,
-                "description": "Actual snapshot versions in declaration order; positional input uses t.", "items": {
+                "description": "Actual snapshot versions in declaration order. Alias t is reserved for positional input.", "items": {
                 "type": "object", "required": ["alias", "table_version"],
                 "properties": {"alias": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,62}$", "not": {"pattern": "[^a-z0-9_]"}}, "table_version": unsigned_integer_string_schema()},
             }},
@@ -168,14 +242,21 @@ pub(super) fn completion_schema() -> Value {
             "batches": unsigned_integer_string_schema(),
         },
         "allOf": [{
-            "if": {"properties": {"command": {"enum": ["scan", "query"]}}},
-            "then": {"required": ["rows", "batches"]},
+            "if": {"properties": {"command": {"enum": ["scan", "preview", "query"]}}},
+            "then": {"required": ["rows"]},
         }, {
-            "if": {"properties": {"command": {"enum": ["inspect", "scan", "query"]}}},
+            "if": {"properties": {"format_version": {"const": 1}}},
+            "then": {"required": ["terminal", "completion", "scope", "stop_reason", "has_more"], "properties": {"command": {"not": {"const": "preview"}}}},
+            "else": {"properties": {"command": {"enum": ["query", "preview"]}}},
+        }, {
+            "if": {"properties": {"format_version": {"const": 1}, "command": {"enum": ["scan", "query"]}}},
+            "then": {"required": ["batches"]},
+        }, {
+            "if": {"properties": {"command": {"enum": ["inspect", "scan", "preview", "query"]}}},
             "then": {"properties": {"bindings": {"minItems": 1}}},
             "else": {"properties": {"bindings": {"maxItems": 0}}},
         }, {
-            "if": {"properties": {"command": {"enum": ["inspect", "scan"]}}},
+            "if": {"properties": {"command": {"enum": ["inspect", "scan", "preview"]}}},
             "then": {"properties": {"bindings": {"maxItems": 1, "items": {"properties": {"alias": {"const": "t"}}}}}},
         }],
         "examples": [{
@@ -190,6 +271,10 @@ pub(super) fn completion_schema() -> Value {
             "stop_reason": "row_limit", "has_more": null,
             "bindings": [{"alias": "t", "table_version": "42"}],
             "output_bytes": "1024", "rows": "1", "batches": "1",
+        }, {
+            "format_version": 2, "kind": "completion", "command": "query",
+            "bindings": [{"alias": "t", "table_version": "42"}],
+            "output_bytes": "228", "rows": "1",
         }],
     })
 }
@@ -221,6 +306,7 @@ mod tests {
             DiscoverySchema::InspectionSummary,
             DiscoverySchema::Diagnostic,
             DiscoverySchema::Completion,
+            DiscoverySchema::Rows,
         ] {
             let document = name.schema_document();
             let schema = &document["schema"];
@@ -369,7 +455,15 @@ mod tests {
         }
         let schema = completion_schema();
         let validator = jsonschema::validator_for(&schema).unwrap();
-        for field in ["rows", "batches"] {
+        for field in [
+            "rows",
+            "batches",
+            "terminal",
+            "completion",
+            "scope",
+            "stop_reason",
+            "has_more",
+        ] {
             let mut record = schema["examples"][0].clone();
             record.as_object_mut().unwrap().remove(field);
             assert!(!validator.is_valid(&record), "missing {field}");
@@ -377,5 +471,8 @@ mod tests {
         let mut record = schema["examples"][0].clone();
         record["bindings"][0]["additional_field"] = json!(true);
         validator.validate(&record).unwrap();
+        let mut record = schema["examples"][2].clone();
+        record.as_object_mut().unwrap().remove("rows");
+        assert!(!validator.is_valid(&record), "v2 query requires rows");
     }
 }

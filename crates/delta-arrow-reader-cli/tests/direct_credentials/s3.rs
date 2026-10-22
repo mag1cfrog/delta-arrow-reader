@@ -112,7 +112,7 @@ fn selected_credentials_sign_inspection_scan_and_sql_requests() -> TestResult {
     ] {
         let fixture = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
         fixture.write_options(options)?;
-        for operation in ["inspect", "scan", "query"] {
+        for operation in ["inspect", "scan", "preview", "query"] {
             let mut command = fixture.command(operation);
             command
                 .args(["--auth-source", source, "--diagnostics=json"])

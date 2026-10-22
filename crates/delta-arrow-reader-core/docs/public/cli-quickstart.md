@@ -33,6 +33,21 @@ table. The first lookup returns matching names; the second returns the selected
 column's type. If the response is too large, narrow the prefix or select fewer
 columns.
 
+## Preview selected rows
+
+```sh
+dar preview /path/to/table --table-version 0 --column id --limit 3
+```
+
+Use the version and column from inspection. This prints up to three rows as
+JSON, with the column type and actual snapshot version. Integer values are
+strings so large values remain exact. The result is marked `sample`; reaching
+three rows does not prove that the table has no more rows.
+
+Preview defaults to an 8 KiB response budget and a 30-second deadline. Choose
+only the columns and rows you need. See [preview limits](cli.md#preview-rows)
+for byte-limit behavior and overrides.
+
 ## Save a small result
 
 ```sh
