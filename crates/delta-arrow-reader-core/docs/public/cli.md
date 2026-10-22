@@ -605,7 +605,9 @@ types fail with `unsupported_json_type`; use Arrow for these or for NaN payloads
 
 Look up the envelope with `dar capabilities --schema rows`. For a particular
 encoding, use `--detail rows` to list choices, then `--detail decimal`, for
-example. These lookups do not read the table.
+example. `--detail timestamp` explains its unit, epoch and timezone;
+`--detail null` explains null cells across supported types. These lookups do
+not read the table.
 
 The default 8 KiB budget covers the entire response. If the complete JSON cannot
 fit, explicitly increase `--max-output-bytes`, or redirect Arrow to a file with
