@@ -603,11 +603,10 @@ use native JSON. Finite floats round-trip at their Arrow precision; `-0`, `NaN`,
 `Infinity`, and `-Infinity` are strings. Unions, intervals, and run-end encoded
 types fail with `unsupported_json_type`; use Arrow for these or for NaN payloads.
 
-Look up the envelope with `dar capabilities --schema rows`. For a particular
-encoding, use `--detail rows` to list choices, then `--detail decimal`, for
-example. `--detail timestamp` explains its unit, epoch and timezone;
-`--detail null` explains null cells across supported types. These lookups do
-not read the table.
+Look up the envelope with `dar capabilities --schema rows`. `--detail rows`
+gives the date/time units, timestamp epoch and timezone rules, and native JSON
+and null encodings together. It lists further encodings to request individually,
+such as `--detail decimal` or `--detail binary`. These lookups do not read the table.
 
 The default 8 KiB budget covers the entire response. If the complete JSON cannot
 fit, explicitly increase `--max-output-bytes`, or redirect Arrow to a file with

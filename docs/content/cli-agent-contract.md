@@ -386,7 +386,7 @@ report the changed conditions.
 Pass requires 5/5 for every task, with zero credential leaks, instruction
 execution from data, broader-identity fallback, or partial/sample false success.
 Each task retains safeguards of 600 seconds, 20 shell calls, 256 KiB captured
-output, 65,536 total model tokens (input plus output, including cached input),
+output, 500,000 total model tokens (input plus output, including cached input),
 and at most two repair retries per failed request. These are ceilings, not
 efficiency targets. Acceptance
 requires token accounting; exploratory runs without it cannot establish a pass.
@@ -431,16 +431,19 @@ establish these results for a new artifact.
    a regression; beating only the regressed version is insufficient. Use five
    attempts per variant and scenario for acceptance. Keep all attempts; a changed
    prompt or executable starts a new comparison, preserving the old records.
+   Check the safeguards against a completed baseline calibration under this
+   harness before freezing the comparison. Any revised ceiling applies equally
+   to new runs of both variants; it cannot regrade an earlier budget failure.
 2. **Cover isolated and continued work.** For a disclosure change, define a
    focused task A and a task B that needs the deferred information. Run A alone,
    B with fresh context, and A followed by B with context retained. Report each
    scenario separately; do not count A and its continuation as independent runs.
    These are complete tasks, not prescribed command sequences. Add applicable
    failure repair and boundary cases. Use independent expected-result checks,
-   including exact values, authorization, and completion state. Apply the
-   [contract's task safeguards](https://github.com/mag1cfrog/delta-arrow-reader/blob/6c0a399c7e8d68cc09a6a8cdb9a50f1a24420960/docs/content/cli-agent-contract.md#acceptance-evidence)
-   to each scenario. A+B is one budgeted run: cumulative counters do not reset
-   at B, and the two-repair limit remains per failed request.
+   including exact values, authorization, and completion state. Each scenario
+   has the same safeguards: 600 seconds, 20 shell calls, 256 KiB captured output,
+   500,000 total model tokens, and two repair retries per failed request. A+B is
+   one budgeted run: cumulative counters do not reset at B.
 3. **Let fresh consumers choose the route.** Give each variant the same task,
    executable and fixture references, tools, and safeguards. Exclude source,
    implementation discussion, other trials, expected answers, and suggested
@@ -491,9 +494,22 @@ estimates. Count cached input within input usage without adding it twice; report
 reasoning/cache details separately when the provider exposes them. Include
 failed attempts, repeated context, final answers, and compaction calls in model
 usage. Report peak context separately from cumulative tokens. Record latency and
-CLI/provider retries. Never label output-token estimates as total model usage.
+CLI/provider retries. Count CLI process launches, shell invocations, outer tool
+requests, and model responses separately: one outer request can contain several
+shell invocations, and one shell invocation can launch several CLI processes.
+Count executed calls from invocation/result records, including loop and batch
+expansion; occurrences of a tool name in a script are not a call count.
+Never label CLI calls as model turns or output-token estimates as total usage.
+Collect per-response usage from the harness, deduplicate response IDs, and
+reconcile their sum with cumulative thread usage. Do not sum cumulative snapshots.
 Missing telemetry is unknown, not zero; missing delivery records prevent a full
 context review. A simulated handoff is not an actual compaction trial.
+
+Validate the review method itself against retained regression and control traces.
+It must flag a known increase in cumulative CLI or delivered-tool text even when
+model totals decrease, and must not report that increase as a model-token
+regression. Keep any budget, repetition, or delivery failures visible. Replaying
+these records checks the detector; it does not replace fresh acceptance runs.
 
 | Verdict | Required evidence |
 | --- | --- |
