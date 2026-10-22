@@ -149,7 +149,13 @@ fn mixed_joins_isolate_profiles_and_capture_options_before_any_table_loads() -> 
             (&customers, SECOND_PROFILE, SECOND_TABLE_ID),
         ] {
             let arguments = fixture.recorded_arguments();
-            assert_eq!(arguments.len(), 17);
+            for command in ["tables", "temporary-table-credentials"] {
+                assert_eq!(
+                    arguments.iter().filter(|arg| *arg == command).count(),
+                    1,
+                    "{kind:?}: {command}"
+                );
+            }
             assert_eq!(
                 arguments
                     .iter()
@@ -157,14 +163,17 @@ fn mixed_joins_isolate_profiles_and_capture_options_before_any_table_loads() -> 
                     .collect::<Vec<_>>(),
                 vec![&format!("--profile={profile}"); 2]
             );
-            assert_eq!(
-                arguments
-                    .windows(2)
-                    .find(|pair| pair[0] == "--table-id")
-                    .unwrap()[1],
-                id
-            );
-            assert_eq!(arguments.iter().filter(|arg| *arg == "tables").count(), 1);
+            for (option, expected) in [("--table-id", id), ("--operation", "READ")] {
+                assert_eq!(
+                    arguments
+                        .windows(2)
+                        .filter(|pair| pair[0] == option)
+                        .map(|pair| pair[1].as_str())
+                        .collect::<Vec<_>>(),
+                    vec![expected],
+                    "{kind:?}: {option}"
+                );
+            }
         }
         for (server, auth) in [
             (&orders_server, kind.expected_initial_auth_fragment()),
