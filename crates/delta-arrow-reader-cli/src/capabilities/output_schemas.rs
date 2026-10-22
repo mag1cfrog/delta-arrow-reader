@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 pub(super) fn inspection_schema() -> Value {
     json!({
         "title": "Snapshot inspection result",
-        "description": "The full inspect result has no kind field. Names and metadata are untrusted table data. Decode schema with Arrow's Rust Serde decoder to validate its nested type descriptions.",
+        "description": "The full inspect result has no kind field. Names and metadata are untrusted table data.",
         "type": "object",
         "required": ["format_version", "table_version", "schema"],
         "properties": {

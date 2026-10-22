@@ -50,7 +50,7 @@ use snafu::{ResultExt, Snafu, ensure};
 #[derive(Parser)]
 #[command(
     name = command_name(), bin_name = command_name(), version,
-    after_help = "Start with inspect TABLE for the version and column types; pin reads with --table-version N.\nGuides: capabilities --command NAME; capabilities --schema NAME [--detail FIELD_OR_TYPE].\nInput formats: predicate, storage-options, execution-options. Output formats: inspection, diagnostic, completion."
+    after_help = "When version or column types are unknown, use inspect TABLE; pin reads with --table-version N.\nGuides: capabilities --command NAME; capabilities --schema NAME [--detail FIELD_OR_TYPE].\nInput formats: predicate, storage-options, execution-options. Output formats: inspection, diagnostic, completion."
 )]
 struct Cli {
     #[command(flatten)]
@@ -89,6 +89,7 @@ enum Command {
         #[arg(long, value_name = "PROFILE")]
         databricks_profile: Option<String>,
         /// Logical column name; repeat to select columns in argument order.
+        /// Default: all columns.
         #[arg(long = "column", value_name = "NAME")]
         columns: Vec<String>,
         /// Read zero columns while preserving row counts.
