@@ -18,7 +18,7 @@
 use std::{
     io::{self, Write},
     process::ExitCode,
-    sync::{Mutex, TryLockError, mpsc},
+    sync::{Arc, Mutex, TryLockError, mpsc},
     time::Duration,
 };
 
@@ -34,6 +34,7 @@ use tracing_subscriber::{
     prelude::*,
 };
 
+mod fallback;
 mod stderr_capacity;
 
 pub(crate) const FAILURE_DIAGNOSTIC_TIMEOUT: Duration = Duration::from_secs(1);
@@ -99,18 +100,22 @@ impl DiagnosticFormat {
 
     pub(crate) fn report_failure_with_timeout(self, error: crate::Error) -> ExitCode {
         let status = error.exit_code();
+        let error = Arc::new(error);
+        let worker_error = Arc::clone(&error);
         let (finished, receiver) = mpsc::channel();
         // This path must work even when constructing a Tokio runtime failed.
         if std::thread::Builder::new()
             .name("dar-diagnostic".into())
             .spawn(move || {
                 init_tracing(self);
-                self.report_failure(&error);
+                self.report_failure(&worker_error);
                 let _ = finished.send(());
             })
             .is_ok()
         {
             let _ = receiver.recv_timeout(FAILURE_DIAGNOSTIC_TIMEOUT);
+        } else {
+            self.report_failure_without_thread(&error);
         }
         status
     }
@@ -297,14 +302,7 @@ pub(crate) fn init_tracing(diagnostic_format: DiagnosticFormat) {
         // Machine mode emits terminal records directly, never formatted trace fields.
         return;
     }
-    let (targets, invalid) = match std::env::var("RUST_LOG") {
-        Ok(value) if !value.trim().is_empty() => match value.parse::<Targets>() {
-            Ok(targets) => (targets, false),
-            Err(_) => (Targets::new(), true),
-        },
-        Err(std::env::VarError::NotUnicode(_)) => (Targets::new(), true),
-        _ => (Targets::new(), false),
-    };
+    let (targets, invalid) = log_targets();
     // Failure reporting can reach this after command setup already installed tracing.
     if subscriber(targets, io::stderr).try_init().is_ok() && invalid {
         tracing::warn!(target: "delta_arrow_reader_cli",
@@ -312,6 +310,17 @@ pub(crate) fn init_tracing(diagnostic_format: DiagnosticFormat) {
             reason = "invalid_rust_log",
             "Invalid RUST_LOG; using WARN"
         );
+    }
+}
+
+fn log_targets() -> (Targets, bool) {
+    match std::env::var("RUST_LOG") {
+        Ok(value) if !value.trim().is_empty() => match value.parse::<Targets>() {
+            Ok(targets) => (targets, false),
+            Err(_) => (Targets::new(), true),
+        },
+        Err(std::env::VarError::NotUnicode(_)) => (Targets::new(), true),
+        _ => (Targets::new(), false),
     }
 }
 
@@ -338,6 +347,8 @@ where
             tracing_subscriber::fmt::layer()
                 .without_time()
                 .with_ansi(false)
+                // Retrying a failed diagnostic through stderr could block the fallback writer.
+                .log_internal_errors(false)
                 .with_writer(writer),
         )
 }

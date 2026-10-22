@@ -7,10 +7,13 @@ use std::{
     fs,
     os::unix::fs::PermissionsExt,
     path::PathBuf,
-    process::{Command, Stdio},
+    process::Command,
     thread,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
+
+#[cfg(target_os = "linux")]
+use std::{process::Stdio, time::Instant};
 
 use arrow::ipc::reader::FileReader;
 use serde_json::{Value, json};
@@ -167,9 +170,7 @@ impl DatabricksCliFixture {
                 "data_source_format": "DELTA",
                 "storage_location": location,
                 "securable_kind_manifest": {
-                    "securable_type": "TABLE",
-                    "securable_kind": "TABLE_DELTA_EXTERNAL",
-                    "capabilities": []
+                    "capabilities": ["HAS_DIRECT_EXTERNAL_ENGINE_READ_SUPPORT", "HAS_STORAGE"]
                 },
                 "columns": [{"name": "not_the_delta_schema", "type_name": "STRING"}]
             }))?,

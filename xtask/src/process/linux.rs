@@ -55,6 +55,10 @@ pub(super) fn run(binary: &Path, version: &str, repository: &Path) -> Result<()>
             ProcessFixture::check_thread_start_failures,
         ),
         (
+            "failure reporting without a diagnostic thread",
+            ProcessFixture::check_failure_reporting_without_threads,
+        ),
+        (
             "relative paths, file URLs, and literal dash",
             ProcessFixture::check_table_locations,
         ),

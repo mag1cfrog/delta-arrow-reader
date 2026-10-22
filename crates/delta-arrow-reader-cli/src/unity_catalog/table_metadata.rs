@@ -12,8 +12,8 @@ use super::Error;
 /// Object kind and capability names returned in `securable_kind_manifest`.
 #[derive(Deserialize)]
 struct TableKindManifest {
-    securable_type: String,
-    securable_kind: String,
+    securable_type: Option<String>,
+    securable_kind: Option<String>,
     #[serde(default)]
     capabilities: Vec<String>,
 }
@@ -70,13 +70,23 @@ impl TableMetadataResponse {
             return Err(Error::InvalidDatabricksResponse);
         }
         let manifest = &self.securable_kind_manifest.0;
+        // Some workspaces return capabilities without the optional kind fields.
+        let has_kind_evidence = manifest.securable_kind.is_some()
+            || manifest
+                .capabilities
+                .iter()
+                .any(|capability| capability == "HAS_DIRECT_EXTERNAL_ENGINE_READ_SUPPORT");
         let is_supported_table_kind = matches!(self.table_type.as_str(), "MANAGED" | "EXTERNAL")
             && self.data_source_format == "DELTA"
-            && manifest.securable_type == "TABLE"
-            && matches!(
-                manifest.securable_kind.as_str(),
-                "TABLE_DELTA" | "TABLE_DELTA_EXTERNAL"
-            );
+            && has_kind_evidence
+            && manifest
+                .securable_type
+                .as_deref()
+                .is_none_or(|kind| kind == "TABLE")
+            && manifest
+                .securable_kind
+                .as_deref()
+                .is_none_or(|kind| matches!(kind, "TABLE_DELTA" | "TABLE_DELTA_EXTERNAL"));
         let has_invalid_capability = manifest
             .capabilities
             .iter()
@@ -177,6 +187,56 @@ mod tests {
                 TableMetadataResponse::parse(
                     &serde_json::to_vec(&value).unwrap(),
                     "main.sales.orders",
+                )
+                .is_err(),
+                "{field}"
+            );
+        }
+    }
+
+    #[test]
+    fn capability_only_manifests_require_direct_read_support_and_preserve_policy_checks() {
+        let mut value = table_metadata_response();
+        value["securable_kind_manifest"] = json!({
+            "capabilities": ["HAS_DIRECT_EXTERNAL_ENGINE_READ_SUPPORT", "HAS_STORAGE"]
+        });
+        TableMetadataResponse::parse(&serde_json::to_vec(&value).unwrap(), "main.sales.orders")
+            .unwrap();
+        for (field, invalid) in [
+            ("table_type", json!("VIEW")),
+            ("table_type", json!("MANAGED_SHALLOW_CLONE")),
+            ("row_filter", json!({})),
+            ("columns", json!([{"mask": {}}])),
+            (
+                "properties",
+                json!({"delta.feature.catalogManaged": "supported"}),
+            ),
+            (
+                "securable_kind_manifest",
+                json!({"capabilities": ["HAS_STORAGE"]}),
+            ),
+            ("securable_kind_manifest", json!({"capabilities": []})),
+            (
+                "securable_kind_manifest",
+                json!({
+                    "securable_type": "VIEW",
+                    "capabilities": ["HAS_DIRECT_EXTERNAL_ENGINE_READ_SUPPORT"]
+                }),
+            ),
+            (
+                "securable_kind_manifest",
+                json!({
+                    "securable_kind": "TABLE_VIEW",
+                    "capabilities": ["HAS_DIRECT_EXTERNAL_ENGINE_READ_SUPPORT"]
+                }),
+            ),
+        ] {
+            let mut invalid_response = value.clone();
+            invalid_response[field] = invalid;
+            assert!(
+                TableMetadataResponse::parse(
+                    &serde_json::to_vec(&invalid_response).unwrap(),
+                    "main.sales.orders"
                 )
                 .is_err(),
                 "{field}"

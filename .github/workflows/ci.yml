@@ -102,7 +102,7 @@ jobs:
   platform-tests:
     name: Platform Tests / ${{ matrix.name }}
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' || needs.changes.outputs.tooling == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -143,7 +143,15 @@ jobs:
         shell: bash
         run: |
           rustc -vV | grep -F "host: ${{ matrix.target }}"
-      - run: cargo test --locked --all-features
+      - name: Test core
+        if: needs.changes.outputs.code == 'true'
+        run: cargo test --locked --all-features
+      - name: Test offline Unity Catalog validation
+        if: needs.changes.outputs.tooling == 'true'
+        shell: bash
+        run: &test-uc-validation |
+          cargo test --locked --package xtask --bin xtask scan::ipc::
+          cargo test --locked --package xtask --test unity_catalog_live
 
   checks:
     name: ${{ matrix.task }}
@@ -271,7 +279,9 @@ jobs:
         uses: docker://rhysd/actionlint:1.7.12
         with:
           args: .github/workflows/ci.yml .github/workflows/cli-build.yml .github/workflows/cli-images.yml .github/workflows/cli-release.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml .github/workflows/release-cache-warm.yml .github/workflows/benchmark-fixtures.yml
-      - run: cargo fmt --package xtask -- --check
+      - run: |
+          cargo fmt --package xtask -- --check
+          rustfmt --edition 2024 --check xtask/tests/unity_catalog_live/mock_cli.rs
       - name: Test CI workflows, Python, and cache tasks
         run: |
           cargo clippy --locked --package xtask --all-targets -- -D warnings
@@ -292,6 +302,8 @@ jobs:
           cargo test --locked --package xtask \
             --test ci --test cli_workflow --test cli_images_workflow --test cli_validation_workflow --test cli_release_selection --test images --test python_release --test python_upload --test python_wheels \
             --test python_wheel_reuse --test python_workflow --test python_build --test release_plz --test scan_scheduling --test selective_read_build --test selective_read -- --include-ignored
+      - name: Test offline Unity Catalog validation
+        run: *test-uc-validation
       - name: Report cache read failures
         continue-on-error: true
         run: cargo xtask report-cache-reads
@@ -548,6 +560,14 @@ jobs:
             exit 1
           fi
 
+          if [ "${{ needs.changes.outputs.code }}" = "true" ] || \
+             [ "${{ needs.changes.outputs.tooling }}" = "true" ]; then
+            if [ "${{ needs.platform-tests.result }}" != "success" ]; then
+              echo "Platform Tests did not pass: ${{ needs.platform-tests.result }}"
+              exit 1
+            fi
+          fi
+
           if [ "${{ needs.changes.outputs.python }}" = "true" ]; then
             if [ "${{ needs.python-package.result }}" != "success" ]; then
               echo "Python Package did not pass: ${{ needs.python-package.result }}"
@@ -622,11 +642,6 @@ jobs:
 
           if [ "${{ needs.feature-tests.result }}" != "success" ]; then
             echo "Feature Tests did not pass: ${{ needs.feature-tests.result }}"
-            exit 1
-          fi
-
-          if [ "${{ needs.platform-tests.result }}" != "success" ]; then
-            echo "Platform Tests did not pass: ${{ needs.platform-tests.result }}"
             exit 1
           fi
 
