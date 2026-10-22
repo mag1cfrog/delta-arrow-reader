@@ -138,10 +138,16 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
                 "example": "SELECT count(*) AS row_count FROM t",
                 "max_file_bytes": crate::query::MAX_SQL_BYTES,
             },
+            "join": {
+                "example": [executable, "--diagnostics=json", "query", "--tables-file", "tables.json", "--sql-file", "query.sql"],
+                "sql": "SELECT o.id, c.id FROM orders o LEFT JOIN customers c ON o.id = c.id WHERE o.id <= 5 ORDER BY o.id, c.id",
+            },
             "notes": [
-                "One read-only SQL statement in a UTF-8 file, over one direct table as t. Unity Catalog targets are unsupported.",
+                "One read-only SQL statement in a UTF-8 file. Choose TABLE as t or named tables from --tables-file. Unity Catalog targets are unsupported.",
                 "Redirect stdout to a file or pipe. Resource ceilings fail the query; SQL LIMIT selects a smaller result.",
                 "No total deadline. Memory is limited to the DataFusion pool, not process RSS; disk spill is disabled.",
+                read_support::QUERY_SNAPSHOT_SELECTION,
+                read_support::QUERY_ROW_ORDERING,
             ],
         }),
         _ => json!({
@@ -154,7 +160,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
         .filter(|argument| {
             matches!(
                 argument.get_id().as_str(),
-                "table" | "table_version" | "columns" | "limit"
+                "table" | "tables_file" | "table_version" | "columns" | "limit"
             )
         })
         .map(|argument| {
@@ -168,6 +174,16 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
         guide["options"] = json!(options);
     }
     if name == "query" {
+        if let Some(argument) = command
+            .get_arguments()
+            .find(|argument| argument.get_id() == "tables_file")
+        {
+            guide["join"]["conflicts_with"] = command
+                .get_arg_conflicts_with(argument)
+                .into_iter()
+                .map(|argument| json!(argument_name(argument)))
+                .collect();
+        }
         let ceilings: serde_json::Map<_, _> = command
             .get_arguments()
             .filter(|argument| {
@@ -712,7 +728,6 @@ mod tests {
             let error = Cli::try_parse_from(["dar", name]).err().unwrap();
             assert_eq!(error.kind(), clap::error::ErrorKind::InvalidSubcommand);
         }
-        assert!(Cli::try_parse_from(["dar", "capabilities", "--schema", "tables"]).is_err());
     }
 
     #[test]
@@ -825,6 +840,7 @@ mod tests {
                 json!("storage-options"),
                 json!("predicate"),
                 json!("execution-options"),
+                json!("tables"),
                 json!("inspection"),
                 json!("inspection-summary"),
                 json!("diagnostic"),

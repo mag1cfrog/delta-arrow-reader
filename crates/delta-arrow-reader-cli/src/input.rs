@@ -41,6 +41,7 @@ pub(crate) enum JsonInputKind {
     StorageOptions,
     Predicate,
     ExecutionOptions,
+    Tables,
 }
 
 impl JsonInputKind {
@@ -49,6 +50,7 @@ impl JsonInputKind {
             Self::StorageOptions => "--storage-options-file",
             Self::Predicate => "--predicate-file",
             Self::ExecutionOptions => "--execution-options-file",
+            Self::Tables => "--tables-file",
         }
     }
 
@@ -57,6 +59,7 @@ impl JsonInputKind {
             Self::StorageOptions => "a JSON object with unique keys and string values",
             Self::Predicate => "a predicate object with an 'op' tag and typed comparison values",
             Self::ExecutionOptions => "a JSON object containing supported execution options",
+            Self::Tables => "a versioned JSON object with a nonempty tables array",
         };
         InputCorrection {
             argument: self.argument().to_owned(),
@@ -77,6 +80,9 @@ impl JsonInputKind {
             }
             Self::ExecutionOptions => {
                 "Use only documented execution-option fields, once each, with their declared types."
+            }
+            Self::Tables => {
+                "Use format_version 1 and a tables array; each object has alias, location, and optional table_version and authorization. Authorization requires a source name and may reference a storage_options_file; inline credentials are invalid. Do not repeat fields."
             }
         }
     }
@@ -121,6 +127,15 @@ pub(crate) fn parse_json<T: DeserializeOwned>(
             correction,
         }
     })
+}
+
+// The outer Option records presence, keeping omission separate from explicit null.
+pub(crate) fn deserialize_present_field<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
 }
 
 // Serde also accepts arrays for structs and tagged enums; require objects.

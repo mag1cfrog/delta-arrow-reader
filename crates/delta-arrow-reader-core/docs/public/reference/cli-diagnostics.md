@@ -126,8 +126,10 @@ Query output and memory exhaustion use `adjust_budget` and `retryable: false`.
 A successful command emits `format_version: 1`, `kind: "completion"`, `terminal: true`, and
 `completion: "complete"` after stdout has been flushed. It includes `command`,
 `scope`, `stop_reason`, `has_more`, and `output_bytes`. Inspect, scan, and query include
-the actual snapshot in `bindings`, for example
-`[{"alias":"t","table_version":"42"}]`; help and version use an empty array.
+the actual snapshots in `bindings`, for example
+`[{"alias":"t","table_version":"42"}]`. Queries using `--tables-file` include
+each manifest alias and its resolved version in declaration order. Help and
+version use an empty array.
 Scan and query also report `rows` and `batches`. Versions and counts are decimal strings.
 
 Scope is `inspect`, `scan`, `query`, `help`, or `version`, except that any scan with

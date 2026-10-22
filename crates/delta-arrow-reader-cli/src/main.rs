@@ -27,6 +27,7 @@ mod inspection;
 mod query;
 mod signals;
 mod stdout_monitor;
+mod table_input;
 mod unity_catalog;
 
 use std::{
@@ -39,15 +40,14 @@ use std::{
 };
 
 use arrow_schema::{ArrowError, Schema};
-use clap::{Args, Parser, Subcommand, error::ErrorKind};
-use delta_arrow_reader::{
-    DeltaReaderError, DeltaSnapshotSelection, DeltaTableBuilder, WarmupMode, error_source_kind,
-};
+use clap::{Parser, Subcommand, error::ErrorKind};
+use delta_arrow_reader::{DeltaReaderError, error_source_kind};
 use diagnostics::{DiagnosticFormat, ErrorClassification, InputCorrection};
 use futures_util::{FutureExt, TryStreamExt, future::LocalBoxFuture};
 use input::JsonInputKind;
 use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu, ensure};
+use table_input::TableArgs;
 
 /// Read Delta Lake snapshots as JSON metadata or Arrow IPC streams.
 #[derive(Parser)]
@@ -80,7 +80,7 @@ enum Command {
         #[command(flatten)]
         inspection: inspection::InspectionArgs,
     },
-    /// Run one read-only SQL query over a Delta snapshot, registered as t.
+    /// Run one read-only SQL query over explicitly selected Delta snapshots.
     ///
     /// Results stream as Arrow IPC. Redirect stdout to a file or pipe.
     Query(query::QueryArgs),
@@ -115,25 +115,6 @@ enum Command {
         #[arg(long, value_name = "PATH")]
         execution_options_file: Option<String>,
     },
-}
-
-/// Table location, snapshot selection, and storage configuration shared by all commands.
-#[derive(Args)]
-struct TableArgs {
-    /// UTF-8 local path or storage URL.
-    /// Relative paths use the working directory.
-    /// Use '--' before a table path beginning with '-'.
-    table: String,
-    /// Unsigned decimal snapshot version; default: latest.
-    #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<u64>)]
-    table_version: Option<u64>,
-    /// Local JSON object of string keys and string values.
-    /// At most 1 MiB; '-' is a filename, not stdin.
-    #[arg(long, value_name = "PATH")]
-    storage_options_file: Option<String>,
-    /// Explicit S3, Azure Blob, or GCS credential source. Without it, existing storage behavior applies.
-    #[arg(long, value_enum)]
-    auth_source: Option<direct_credentials::CredentialSource>,
 }
 
 #[derive(Snafu)]
@@ -610,7 +591,10 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
     if matches!(command, Command::Scan { .. } | Command::Query(_)) {
         ensure!(!io::stdout().is_terminal(), TerminalOutputSnafu);
     }
-    let (table_args, databricks_profile) = match &command {
+    if let Command::Inspect { inspection, .. } = &command {
+        inspection.validate()?;
+    }
+    let uc_target = match &command {
         Command::Capabilities(_) => {
             unreachable!("main handles discovery and its terminal reporting separately")
         }
@@ -623,49 +607,12 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
             table,
             databricks_profile,
             ..
-        } => (table, databricks_profile.as_deref()),
-        Command::Query(args) => {
-            if args
-                .table
-                .table
-                .get(..5)
-                .is_some_and(|scheme| scheme.eq_ignore_ascii_case("uc://"))
-            {
-                return Err(query::QueryError::UnsupportedUnityCatalogQuery).context(QuerySnafu);
-            }
-            (&args.table, None)
-        }
-    };
-    if let Command::Inspect { inspection, .. } = &command {
-        inspection.validate()?;
-    }
-    let uc_target =
-        unity_catalog::UnityCatalogTableTarget::parse(&table_args.table, databricks_profile)
-            .context(UnityCatalogSnafu)?;
-    ensure!(
-        uc_target.is_none() || table_args.auth_source.is_none(),
-        StorageAuthorizationSnafu {
-            reason: "auth_source_conflicts_with_unity_catalog"
-        }
-    );
-    ensure!(
-        !matches!(
-            table_args.auth_source,
-            Some(direct_credentials::CredentialSource::Json)
-        ) || table_args.storage_options_file.is_some(),
-        StorageAuthorizationSnafu {
-            reason: "auth_source_requires_storage_options_file"
-        }
-    );
-    let storage_options = match &table_args.storage_options_file {
-        Some(path) => {
-            input::read_json_file::<input::StorageOptionsInput>(
-                path,
-                JsonInputKind::StorageOptions,
-            )?
-            .0
-        }
-        None => Default::default(),
+        } => unity_catalog::UnityCatalogTableTarget::parse(
+            &table.table,
+            databricks_profile.as_deref(),
+        )
+        .context(UnityCatalogSnafu)?,
+        Command::Query(_) => None,
     };
     let predicate = match &command {
         Command::Scan {
@@ -695,73 +642,13 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
         }
         _ => None,
     };
-    let load_table = async {
-        let snapshot_selection = table_args.table_version.map_or(
-            DeltaSnapshotSelection::Latest,
-            DeltaSnapshotSelection::Version,
-        );
-        let mut authorized_access = None;
-        let table = match uc_target {
-            Some(target) => {
-                let access = target
-                    .request_read_access(storage_options)
-                    .await
-                    .context(UnityCatalogSnafu)?;
-                let table = access.load_table(snapshot_selection).await?;
-                authorized_access = Some(access);
-                table
-            }
-            None => {
-                // Each command plans its own reads after the snapshot is loaded.
-                let builder = DeltaTableBuilder::new(&table_args.table)
-                    .with_warmup(WarmupMode::None)
-                    .with_snapshot_selection(snapshot_selection);
-                let builder = match table_args.auth_source {
-                    Some(source) => source.configure_table_credentials(
-                        builder,
-                        &table_args.table,
-                        storage_options,
-                    )?,
-                    None => builder.with_storage_options(storage_options),
-                };
-                builder.load_table().await.context(ReaderSnafu)?
-            }
-        };
-        Ok::<_, Error>((table, authorized_access))
-    };
     let work: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
         Command::Capabilities(_) => unreachable!("capabilities returned before table loading"),
-        Command::Query(args) => {
-            let sql_query = query::ReadOnlySqlQuery::read_file(&args.sql_file)?;
-            async move {
-                let (table, _) = load_table.await?;
-                let version = table.version();
-                let stream = sql_query
-                    .execute_stream(table, args.memory_limit_bytes.get())
-                    .await?;
-                let schema = stream.schema();
-                let stdout_stats = arrow_output::write_arrow_stream_to_stdout(
-                    schema,
-                    stream.map_err(|source| Error::Query {
-                        source: query::QueryError::Execution { source },
-                    }),
-                    Some(arrow_output::ArrowOutputLimits {
-                        max_rows: args.max_rows as u64,
-                        max_bytes: args.max_output_bytes.get() as u64,
-                    }),
-                )
-                .await?;
-                Ok(build_completion_record(
-                    "query",
-                    Some(version),
-                    stdout_stats,
-                    None,
-                ))
-            }
-            .boxed_local()
-        }
-        Command::Inspect { inspection, .. } => async move {
-            let (table, _authorized_access) = load_table.await?;
+        Command::Query(args) => args.prepare_execution()?,
+        Command::Inspect {
+            table, inspection, ..
+        } => async move {
+            let (table, _authorized_access) = table.load_table(uc_target).await?;
             let version = table.version();
             let output = inspection.encode(&table)?;
             let stdout_stats = StdoutStats {
@@ -788,13 +675,14 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
         }
         .boxed_local(),
         Command::Scan {
+            table,
             columns,
             no_columns,
             limit,
             target_partitions,
             ..
         } => async move {
-            let (table, authorized_access) = load_table.await?;
+            let (table, authorized_access) = table.load_table(uc_target).await?;
             let version = table.version();
             let mut builder = table.scan();
             if *no_columns || !columns.is_empty() {
@@ -1053,7 +941,7 @@ mod tests {
             let cli =
                 Cli::try_parse_from(["dar", "inspect", "--table-version", text, "table"]).unwrap();
             assert!(
-                matches!(cli.command, Command::Inspect { table: TableArgs {table_version: Some(version), ..}, .. } if version == text.parse::<u64>().unwrap())
+                matches!(cli.command, Command::Inspect { table: TableArgs {options: table_input::TableOptions { table_version: Some(version), .. }, ..}, .. } if version == text.parse::<u64>().unwrap())
             );
         }
     }

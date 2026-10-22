@@ -9,6 +9,7 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | See the table's columns and version | [`dar inspect`](#inspect-a-snapshot) |
 | Save selected rows as Arrow | [`dar scan`](#scan-rows) |
 | Aggregate, group, or sort rows with SQL | [`dar query`](#query-a-snapshot) |
+| Join named table snapshots | [Tables manifest](#join-table-snapshots) |
 | Select rows by a condition | [Filter rows](#filter-rows) |
 | Connect to remote storage | [Storage options file](#storage-options-file) |
 | Select S3 credentials from a file or environment | [S3 credential sources](#s3-credential-sources) |
@@ -81,6 +82,14 @@ for all options or `full_command` for their machine-readable definitions. Fetch
 credentials. To recover these details later, repeat the same discovery commands;
 discovery does not depend on previous invocations.
 
+For a local JOIN, the query guide's `join.example` uses `--tables-file` instead
+of a positional table, and `join.sql` names the aliases to declare. Fetch
+`--schema tables` for the manifest example and relative-path rules. This takes
+three lookups from the directory to a runnable JOIN. The manifest guide's
+`detail_syntax` explains how to select nested fields; `other_fields` lists the
+optional authorization reference omitted from the example. Select
+`--detail 'tables[].authorization'` for credential references and service guides.
+
 Authorization guide names are `s3`, `azure-blob`, `gcs`, and
 `unity-catalog`. The first three describe direct storage access; Unity Catalog
 describes access through a Databricks profile. Command guides list the applicable
@@ -123,15 +132,18 @@ arguments. `output_schemas` lists result schema names and their streams. The
 `inspect` entry in `stdout_formats` and the JSON entry in `diagnostics` identify which
 output schemas apply.
 
-In full metadata, `authorization` describes local access, a direct-storage JSON
-file, and the Databricks profile reference, including the commands that accept each. The
-direct-storage section lists aliases for static credentials and GCS credential
-files. It also describes the backend's default credential lookup. Discovery
+In full metadata, `authorization` describes local access, direct-storage sources
+and configuration files, and Databricks profiles, including the commands that
+accept each. Direct storage supports explicit source selection per command or
+manifest table. Its authorization guide lists supported sources, credential inputs,
+and the backend lookup used when source selection is omitted. Discovery
 does not inspect the caller's credentials or check provider availability.
+The authorization guide's `full_command` returns complete metadata for the
+selected service, including credential option aliases.
 
 `read_support` describes each command's scope and limits. For example, `query`
-registers one Delta table as `t` and supports self-joins, but cannot open a
-second table or use a UC target. Its memory ceiling applies to DataFusion's
+registers positional `TABLE` as `t`, or up to 64 named snapshots from a manifest.
+UC targets are not supported for SQL. Its memory ceiling applies to DataFusion's
 execution pool, and disk spill is disabled. The SQL examples that use `id`
 assume the selected table has that column. A null limit or deadline means that
 the command has no ceiling for that resource; it does not mean zero.
@@ -153,11 +165,15 @@ Input schema responses also include `argument` and `parser_constraints`:
 | `storage-options` | `--storage-options-file` | A map of option names to string values. The selected backend checks their meanings. |
 | `execution-options` | `--execution-options-file` | Optional scan settings with their defaults, accepted nulls, and integer bounds for this build. |
 | `predicate` | `--predicate-file` | Row-filter operators and typed literals, including nested boolean groups. |
+| `tables` | `--tables-file` | Named snapshots, requested versions, and per-table authorization references. |
 
 Schema validation checks the JSON structure. `parser_constraints` records the
 additional file and value rules: files may contain at most 1 MiB, object keys
 must be unique, and integer fields reject fractions, exponents, and negative
 zero.
+Tables also require unique, non-reserved aliases, versions in the u64 range,
+valid locations, and compatible authorization references. Those checks run
+before table IO; JSON Schema validation alone does not replace them.
 
 Predicate trees allow 1,024 nodes and 32 levels, counting the root.
 Integer strings must fit their declared width, floats must remain finite after
@@ -434,8 +450,9 @@ partial files after failure; discard those files.
 ## Query a snapshot
 
 `query` runs SQL locally through the Core DataFusion table provider. It opens
-one Delta snapshot and registers it as `t`. Use a local path or direct storage
-URL for `TABLE`; Unity Catalog targets are not yet supported by this command.
+one Delta snapshot as `t` when given `TABLE`, or registers the aliases in a
+[tables manifest](#join-table-snapshots). Use local paths or direct storage
+URLs; Unity Catalog targets are not yet supported by this command.
 
 ```sh
 cat > query.sql <<'SQL'
@@ -460,15 +477,16 @@ The SQL file must contain one read-only query in UTF-8, at most 64 KiB, with
 a parser and expression-depth limit of 128, including chains of set operations
 such as `UNION`. Paths use the working directory; `-` names a
 literal file. SQL is not read from stdin. Malformed input is rejected before
-opening the table. Projections, predicates, aggregations, grouping, ordering,
+opening any table. Projections, predicates, joins, aggregations, grouping, ordering,
 subqueries, and nonrecursive CTEs are supported. DDL, DML, COPY, session changes,
 EXPLAIN, recursive CTEs, and table functions are rejected. SQL cannot discover
 additional tables from file paths or URLs.
 
 Results use Arrow IPC stream framing on stdout, which must be a file or pipe.
 The command streams the complete SQL result, including empty results and
-`COUNT(*)`. Use SQL `LIMIT` to select a smaller result. Queries use the same
-snapshot selection and storage options as `inspect`, and skip table warmup.
+`COUNT(*)`. Use SQL `LIMIT` to select a smaller result. Positional table queries
+use the same snapshot selection and storage options as `inspect`. All queries
+skip table warmup.
 
 | Option | Default | Behavior |
 | --- | --- | --- |
@@ -486,8 +504,102 @@ Exceeding a ceiling fails with status 1 and leaves incomplete output. The CLI
 does not turn a query into a successful sample or write an IPC end marker after
 failure. As with `scan`, require valid Arrow output and status 0, and discard
 partial files after failure. With `--diagnostics=json`, query completion has
-`scope: "query"`, the selected version, and row, batch, and output-byte counts.
+`scope: "query"`, each alias and its actual version in `bindings`, and row,
+batch, and output-byte counts.
 This option controls stderr diagnostics; query results remain Arrow.
+
+## Join table snapshots
+
+Declare the tables in a UTF-8 JSON file, then use their aliases in SQL. For a
+`tables.json` beside the `orders/` and `customers/` Delta directories:
+
+```json
+{"format_version":1,"tables":[
+  {"alias":"orders","location":"./orders","table_version":"42"},
+  {"alias":"customers","location":"./customers"}
+]}
+```
+
+```sql
+SELECT o.order_id, c.name
+FROM orders o LEFT JOIN customers c ON o.customer_id = c.customer_id
+ORDER BY o.order_id, c.customer_id
+```
+
+Save the query as `join.sql` and run:
+
+```sh
+dar query --tables-file tables.json --sql-file join.sql --diagnostics=json > joined.arrow
+```
+
+`--tables-file` conflicts with positional `TABLE`, `--table-version`,
+`--storage-options-file`, and `--auth-source`. Command-line file paths use the
+working directory. Locations inside the manifest use the manifest's directory.
+The complete manifest is validated before any table is opened.
+
+<details markdown="1">
+<summary>Tables manifest fields and limits</summary>
+
+| Field | Accepted value |
+| --- | --- |
+| `format_version` | Required JSON integer `1` |
+| `tables` | Required array of 1-64 table objects |
+| `tables[].alias` | Unique name matching `[a-z][a-z0-9_]{0,62}` |
+| `tables[].location` | Nonempty local path or direct storage URL, without control characters or embedded credentials |
+| `tables[].table_version` | Optional decimal string from `"0"` to `"18446744073709551615"`; omit to select latest |
+| `tables[].authorization` | Optional object selecting one explicit credential source |
+| `tables[].authorization.source` | Required when `authorization` is present; an installed `--auth-source` name |
+| `tables[].authorization.storage_options_file` | Local JSON storage-options file reference; required for source `json`, optional for other sources |
+
+The file is limited to 1 MiB. Unknown and repeated fields are errors. Versions
+must use canonical digits without signs or leading zeros; JSON numbers and
+`null` are rejected. The Core version-loading limits described under
+[snapshot selection](#inspect-a-snapshot) still apply.
+
+Aliases cannot be `t`, `datafusion`, `public`, `information_schema`, `pg_catalog`,
+`system`, or a SQL keyword recognized by the parser. URLs cannot contain a
+password, query string, or fragment. Azure Blob's `container@account` URL form
+is accepted. Omitting `authorization` uses default storage authentication.
+An explicit authorization must be an object; `null` is invalid.
+
+</details>
+
+<details markdown="1">
+<summary>Per-table authorization and credential file paths</summary>
+
+Each table can select a separate source and storage-options file. For example,
+this entry uses S3 credentials from a referenced JSON file:
+
+```json
+{"alias":"orders","location":"s3://example-bucket/orders",
+ "authorization":{"source":"json","storage_options_file":"./credentials/orders.json"}}
+```
+
+The available sources and their provider restrictions are the same as
+[`--auth-source`](#explicit-credential-sources): `json`, `env`, `aws-web-identity`,
+`aws-container`, `azure-workload-identity`, and `azure-managed-identity`.
+The manifest accepts references only; put credential values in the selected
+storage-options file or inherited environment. `env_file` references are not
+yet supported.
+
+`storage_options_file` is relative to the manifest directory. Credential file
+paths inside that JSON, such as `google_application_credentials` or
+`aws_web_identity_token_file`, are relative to the options file's directory.
+Absolute paths stay absolute. Paths inherited from environment variables use
+the process working directory, as they do for positional table commands.
+
+The CLI reads every referenced options file before loading any table. Each
+binding retains its selected provider; changing an options file during the
+query cannot switch its identity. Native providers can still renew credentials
+and reread rotating identity-token files under their existing rules.
+
+</details>
+
+Each table loads once and retains that snapshot for the query. Completion
+reports the actual version even when latest was requested. These are independent
+snapshots and do not form a transaction across tables. For repeatable row
+ordering, use `ORDER BY` with columns that resolve ties. Volatile functions and
+floating-point aggregation can still produce different values between runs.
 
 ## Filter rows
 

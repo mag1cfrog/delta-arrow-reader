@@ -17,6 +17,7 @@ pub(crate) enum DiscoverySchema {
     StorageOptions,
     Predicate,
     ExecutionOptions,
+    Tables,
     Inspection,
     InspectionSummary,
     Diagnostic,
@@ -71,6 +72,15 @@ impl DiscoverySchema {
                 }
             } else if matches!(self, Self::Inspection) && name == "schema" {
                 guide["definition"]["$defs"] = schema["$defs"].clone();
+            } else if matches!(self, Self::Tables) {
+                if name == "tables" {
+                    guide["definition"]["items"] = json!({
+                        "type": "object", "required": ["alias", "location"],
+                        "description": "Only alias, location, table_version and authorization are accepted. Select tables[].FIELD with detail_command.",
+                    });
+                } else if name == "tables[].authorization" {
+                    guide["definition"] = schema["$defs"]["authorization"].clone();
+                }
             }
             let conditions: Vec<_> = schema["allOf"]
                 .as_array()
@@ -141,10 +151,19 @@ impl DiscoverySchema {
                     guide["other_fields"] = json!(other_fields);
                 }
             }
+            if matches!(self, Self::Tables) {
+                guide["max_tables"] = schema["properties"]["tables"]["maxItems"].clone();
+                guide["other_fields"] = json!(["tables[].authorization"]);
+                guide["detail_syntax"] = json!(
+                    "Use tables[].FIELD for fields within each table entry, and tables[].authorization.FIELD for credential references."
+                );
+            }
         }
         if (detail.is_none() && properties.is_some())
             || guide.get("operators").is_some()
             || guide.get("scalar_types").is_some()
+            || (matches!(self, Self::Tables)
+                && matches!(detail, Some("tables" | "tables[].authorization")))
         {
             guide["detail_command"] = json!([
                 executable,
@@ -155,7 +174,10 @@ impl DiscoverySchema {
                 "NAME"
             ]);
         }
-        if matches!(self, Self::StorageOptions) {
+        if matches!(self, Self::StorageOptions)
+            || (matches!(self, Self::Tables)
+                && detail.is_some_and(|name| name.starts_with("tables[].authorization")))
+        {
             guide["authorization_command"] =
                 json!([executable, "capabilities", "--authorization", "NAME"]);
             guide["authorization_guides"] = json!(["s3", "azure-blob", "gcs"]);
@@ -168,6 +190,7 @@ impl DiscoverySchema {
             Self::StorageOptions => return JsonInputKind::StorageOptions.schema_document(),
             Self::Predicate => return JsonInputKind::Predicate.schema_document(),
             Self::ExecutionOptions => return JsonInputKind::ExecutionOptions.schema_document(),
+            Self::Tables => return JsonInputKind::Tables.schema_document(),
             Self::Inspection => (output_schemas::inspection_schema(), "stdout"),
             Self::InspectionSummary => (output_schemas::inspection_summary_schema(), "stdout"),
             Self::Diagnostic => (output_schemas::diagnostic_schema(), "stderr"),
@@ -188,6 +211,14 @@ impl DiscoverySchema {
 fn find_field_or_variant<'a>(schema: &'a Value, name: &str) -> Option<&'a Value> {
     if let Some(field) = schema["properties"].get(name) {
         return Some(field);
+    }
+    for (prefix, definition) in [
+        ("tables[].authorization.", "authorization"),
+        ("tables[].", "table"),
+    ] {
+        if let Some(field) = name.strip_prefix(prefix) {
+            return schema["$defs"][definition]["properties"].get(field);
+        }
     }
     for (definition, tag) in [("predicate", "op"), ("scalar", "type")] {
         let Some(variants) = schema["$defs"][definition]["oneOf"].as_array() else {
@@ -287,7 +318,7 @@ mod tests {
         let bindings = DiscoverySchema::Completion
             .guide_document(Some("bindings"))
             .unwrap();
-        assert_eq!(bindings["conditions"].as_array().unwrap().len(), 1);
+        assert_eq!(bindings["conditions"].as_array().unwrap().len(), 2);
         let schema = json!({"allOf": bindings["conditions"]});
         assert!(jsonschema::is_valid(
             &schema,
@@ -301,6 +332,18 @@ mod tests {
             &schema,
             &json!({"command":"scan", "bindings":[{"alias":"t", "table_version":"1"}]})
         ));
+        let mut completion = json!({
+            "command": "query",
+            "bindings": [
+                {"alias": "orders", "table_version": "1"},
+                {"alias": "customers", "table_version": "2"}
+            ]
+        });
+        assert!(jsonschema::is_valid(&schema, &completion));
+        for command in ["scan", "inspect"] {
+            completion["command"] = json!(command);
+            assert!(!jsonschema::is_valid(&schema, &completion));
+        }
         for field in [
             "prefetch_files_per_partition",
             "parquet_metadata_size_hint_bytes",

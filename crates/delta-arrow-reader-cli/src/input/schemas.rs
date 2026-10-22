@@ -23,6 +23,7 @@ impl JsonInputKind {
             }),
             Self::ExecutionOptions => execution_options_schema(),
             Self::Predicate => predicate::predicate_schema(),
+            Self::Tables => crate::query::tables_manifest::tables_manifest_schema(),
         };
         schema["$schema"] = json!("https://json-schema.org/draft/2020-12/schema");
         let mut parser_constraints = json!({
@@ -36,6 +37,13 @@ impl JsonInputKind {
             parser_constraints["predicate_rules"] = json!([
                 "Node count and depth include the root.",
                 "Column resolution, type compatibility, and decimal precision/scale checks require the selected table.",
+            ]);
+        }
+        if matches!(self, Self::Tables) {
+            parser_constraints["table_rules"] = json!([
+                "Aliases must be unique and not reserved names or SQL keywords.",
+                "Version strings must fit u64; schema validation alone does not check that range.",
+                "Paths, URLs, credential references and source compatibility are validated before table IO.",
             ]);
         }
         json!({
@@ -127,6 +135,12 @@ mod tests {
             }
             JsonInputKind::Predicate => parse_json::<PredicateInput>(text.as_bytes(), kind)
                 .is_ok_and(|input| input.into_predicate().is_ok()),
+            JsonInputKind::Tables => {
+                let directory = tempfile::tempdir().unwrap();
+                let path = directory.path().join("tables.json");
+                std::fs::write(&path, text).unwrap();
+                crate::query::tables_manifest::read_table_builders(path.to_str().unwrap()).is_ok()
+            }
         }
     }
 
@@ -312,6 +326,14 @@ mod tests {
             (
                 JsonInputKind::Predicate,
                 r#"{"op":"eq","column":"id","value":{"type":"fixed_size_binary","size":2,"value":[0]}}"#,
+            ),
+            (
+                JsonInputKind::Tables,
+                r#"{"format_version":1,"tables":[{"alias":"orders","location":"./orders","table_version":"18446744073709551616"}]}"#,
+            ),
+            (
+                JsonInputKind::Tables,
+                r#"{"format_version":1,"tables":[{"alias":"select","location":"./orders"}]}"#,
             ),
         ] {
             let document = kind.schema_document();
