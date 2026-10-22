@@ -68,6 +68,44 @@ fn diagnostics_require_one_redacted_error_with_safe_fields_and_status() -> Resul
 }
 
 #[test]
+fn diagnostics_accept_only_one_matching_correction_after_a_core_failure() -> Result<()> {
+    let failure = "ERROR delta_arrow_reader: event=\"scan_planning.failed\" outcome=\"failed\" error_phase=\"scan_planning\" error_code=\"invalid_projection\" error_reason=\"column_not_found\"\n";
+    let correction = "ERROR delta_arrow_reader_cli: Correct the command input event=\"cli.input_correction\" error_phase=\"scan_planning\" error_code=\"invalid_projection\" error_reason=\"column_not_found\" argument=\"--column\" expected=\"a logical column name\" hint=\"Use inspect\"\n";
+    let text = format!("{failure}{correction}");
+    check_diagnostic(text.as_bytes(), "scan_planning", "invalid_projection")?;
+    for invalid in [
+        correction.to_owned(),
+        format!("{correction}{failure}"),
+        format!("{text}{correction}"),
+        format!("{text}\n"),
+        format!("{text}INFO delta_arrow_reader_cli: extra\n"),
+        text.replace("ERROR delta_arrow_reader:", "ERROR delta_arrow_reader_cli:"),
+    ]
+    .into_iter()
+    .chain(
+        [
+            correction.replace("error_phase=\"scan_planning\"", "error_phase=\"snapshot\""),
+            correction.replace("invalid_projection", "other"),
+            correction.replace("column_not_found", "other"),
+            correction.replace("cli.input_correction", "cli.failed"),
+            correction.replace("argument=", "missing="),
+            correction.replace("expected=", "missing="),
+            correction.replace("hint=", "missing="),
+            correction.replace("Use inspect", "secret-value"),
+            correction.replace("\n", " outcome=\"failed\"\n"),
+        ]
+        .into_iter()
+        .map(|invalid| format!("{failure}{invalid}")),
+    ) {
+        assert!(
+            check_diagnostic(invalid.as_bytes(), "scan_planning", "invalid_projection").is_err(),
+            "{invalid}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn inspection_requires_a_single_line_and_exact_public_fields() -> Result<()> {
     let valid = json!({"format_version": 1, "table_version": "0", "schema": {"fields": []}});
     let text = format!("{valid}\n");

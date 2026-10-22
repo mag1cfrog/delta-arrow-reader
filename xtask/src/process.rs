@@ -61,15 +61,20 @@ pub(crate) fn check_diagnostic<'a>(stderr: &'a [u8], phase: &str, code: &str) ->
         }
         .build()
     })?;
+    let mut lines = text.lines();
+    let failure = lines.next().unwrap_or_default();
+    let correction = lines.next();
     ensure!(
         text.ends_with('\n')
-            && text.lines().count() == 1
-            && (text.starts_with("ERROR delta_arrow_reader: ")
-                || text.starts_with("ERROR delta_arrow_reader_cli: "))
+            && lines.next().is_none()
+            && (failure.starts_with("ERROR delta_arrow_reader: ")
+                || failure.starts_with("ERROR delta_arrow_reader_cli: "))
             && !text.contains("secret")
             && !text.contains('\x1b'),
         InvalidInputSnafu {
-            message: format!("expected one redacted ERROR: {text:?}")
+            message: format!(
+                "expected one redacted failure and optional input correction: {text:?}"
+            )
         }
     );
     for field in [
@@ -78,20 +83,58 @@ pub(crate) fn check_diagnostic<'a>(stderr: &'a [u8], phase: &str, code: &str) ->
         "outcome=\"failed\"".into(),
     ] {
         ensure!(
-            text.split_whitespace().any(|token| token == field),
+            failure.split_whitespace().any(|token| token == field),
             InvalidInputSnafu {
                 message: format!("expected {field}: {text}")
             }
         );
     }
-    ensure!(
-        text.split_whitespace()
-            .any(|token| token.starts_with("error_reason=\"")
-                && token.ends_with('"')
-                && token.len() > "error_reason=\"\"".len()),
+    let reason = failure.split_whitespace().find(|token| {
+        token.starts_with("error_reason=\"")
+            && token.ends_with('"')
+            && token.len() > "error_reason=\"\"".len()
+    });
+    let reason = reason.ok_or_else(|| {
         InvalidInputSnafu {
-            message: format!("missing failure reason: {text}")
+            message: format!("missing failure reason: {text}"),
         }
-    );
+        .build()
+    })?;
+    if let Some(correction) = correction {
+        // Core owns the failure; CLI guidance may follow with the same classification.
+        ensure!(
+            failure.starts_with("ERROR delta_arrow_reader: ")
+                && correction.starts_with("ERROR delta_arrow_reader_cli: ")
+                && !correction
+                    .split_whitespace()
+                    .any(|token| token.starts_with("outcome=")),
+            InvalidInputSnafu {
+                message: format!("unexpected input correction after the failure: {text}")
+            }
+        );
+        for field in [
+            format!("error_phase=\"{phase}\""),
+            format!("error_code=\"{code}\""),
+            reason.to_owned(),
+            "event=\"cli.input_correction\"".to_owned(),
+        ] {
+            ensure!(
+                correction.split_whitespace().any(|token| token == field),
+                InvalidInputSnafu {
+                    message: format!("input correction does not match {field}: {text}")
+                }
+            );
+        }
+        for field in ["argument=\"", "expected=\"", "hint=\""] {
+            ensure!(
+                correction
+                    .split_whitespace()
+                    .any(|token| token.starts_with(field)),
+                InvalidInputSnafu {
+                    message: format!("input correction is missing {field}: {text}")
+                }
+            );
+        }
+    }
     Ok(text)
 }
