@@ -12,6 +12,8 @@ Contributor instructions and development records are kept in this repository:
 - [Python wheel publication and recovery](content/python-releases.md)
 - [CLI release approval, publication, and recovery](content/cli-release.md)
 - [CLI agent workflow contract](content/cli-agent-contract.md)
+- [Unity Catalog validation](content/unity-catalog-validation.md)
+- [Azure Unity Catalog validation record](../crates/delta-arrow-reader-cli/release/uc-azure-validation-2026-10-22.md)
 - [Project direction and language support](content/project-direction.md)
 - [Frozen Spark SQL experiment](content/spark-sql-experiment.md)
 - [Extraction provenance](content/provenance.md)
@@ -23,6 +25,9 @@ Edit the Markdown in `crates/delta-arrow-reader-core/docs/public/` and the navig
 in `crates/delta-arrow-reader-core/docs/mkdocs.yml`.
 Keep benchmark results under Performance. Setup instructions, execution
 contracts, capacity checks, and issue histories belong in repository docs.
+Unity Catalog usage starts in `public/unity-catalog.md`; its exact access rules
+are in `public/reference/unity-catalog.md`. Fixture setup and dated validation
+records are maintainer material and stay outside the published directory.
 
 `crates/delta-arrow-reader-core/docs/public/` is the only directory published by the
 site build. Keep repository-only material in `docs/content/`, where existing benchmark documents

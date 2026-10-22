@@ -3,6 +3,9 @@
 Use the CLI to see a Delta table's columns or save some of its rows to a file.
 This quickstart starts with a local table and reads at most ten rows.
 
+To use an existing Databricks login instead of a storage path, follow
+[Read Unity Catalog tables](unity-catalog.md).
+
 ## Before you start
 
 [Install the CLI](installation.md#cli-binaries-and-container-images) and have a
@@ -20,23 +23,24 @@ Both commands accept the same arguments.
 dar inspect /path/to/table --view summary
 ```
 
-The command prints `table_version` and checks scan protocol support. It does not test access to row or deletion-vector data.
-To find columns, search by a prefix and pin the reported version:
+The command prints `table_version` and checks scan protocol support. It does not
+test access to row or deletion-vector data. Set `version` to the reported number,
+replacing `0` below, and use it for column lookups and later reads:
 
 ```sh
-dar inspect /path/to/table --view summary --table-version 0 --column-prefix id
-dar inspect /path/to/table --view summary --table-version 0 --column id
+version=0
+dar inspect /path/to/table --view summary --table-version "$version" --column-prefix id
+dar inspect /path/to/table --view summary --table-version "$version" --column id
 ```
 
-Replace `0` with the reported version, and `id` with a prefix or name from your
-table. The first lookup returns matching names; the second returns the selected
-column's type. If the response is too large, narrow the prefix or select fewer
-columns.
+Replace `id` with a prefix or name from your table. The first lookup returns
+matching names; the second returns the selected column's type. If the response
+is too large, narrow the prefix or select fewer columns.
 
 ## Preview selected rows
 
 ```sh
-dar preview /path/to/table --table-version 0 --column id --limit 3
+dar preview /path/to/table --table-version "$version" --column id --limit 3
 ```
 
 Use the version and column from inspection. This prints up to three rows as
@@ -51,7 +55,7 @@ for byte-limit behavior and overrides.
 ## Save a small result
 
 ```sh
-dar scan --limit 10 /path/to/table > sample.arrow
+dar scan --table-version "$version" --limit 10 /path/to/table > sample.arrow
 ```
 
 This saves up to ten rows, with all columns, to `sample.arrow`. The limit keeps
@@ -66,15 +70,24 @@ file: a failed scan can leave an incomplete result.
 
 ## Read the saved result
 
-Open the file with an Arrow IPC stream reader in your application. For example,
-if you have Python and PyArrow installed:
+Open the file with an Arrow IPC stream reader in your application. To display
+this small sample in the terminal, [install uv](https://docs.astral.sh/uv/getting-started/installation/)
+if needed, then run the command below in Bash. uv supplies Python and PyArrow
+in an isolated environment.
 
-```python
+```sh
+uv run --no-project --with pyarrow python - sample.arrow <<'PY'
+import sys
 import pyarrow.ipc as ipc
 
-with ipc.open_stream("sample.arrow") as reader:
+with ipc.open_stream(sys.argv[1]) as reader:
     print(reader.read_all().to_pydict())
+PY
 ```
+
+Replace `sample.arrow` in the first line with the file you saved. If your active
+Python environment already has PyArrow, replace
+`uv run --no-project --with pyarrow python` with `python`.
 
 This prints the saved rows as a dictionary of columns. Collecting the result
 in memory is convenient for this small sample. For larger results, process
@@ -85,7 +98,8 @@ one batch at a time.
 Once the first scan works, repeat `--column` to select the columns you need:
 
 ```sh
-dar scan --column id --column region --limit 10 /path/to/table > selected.arrow
+dar scan --table-version "$version" --column id --column region --limit 10 \
+  /path/to/table > selected.arrow
 ```
 
 Replace `id` and `region` with names from your table. The output contains those
@@ -96,6 +110,7 @@ rows.
 
 - [Diagnose a failed command](cli.md#errors-and-process-status) or save a log for investigation.
 - [Filter rows](cli.md#filter-rows) when you only need rows matching a condition.
+- [Read a Unity Catalog table](unity-catalog.md) with a Databricks profile, including local SQL.
 - [Read a table from storage such as S3](cli.md#inspect-a-snapshot), with
   [storage options](cli.md#storage-options-file) when your environment needs them.
 - [Use a container or call the CLI from Go](cli.md#use-a-container-or-a-go-service)

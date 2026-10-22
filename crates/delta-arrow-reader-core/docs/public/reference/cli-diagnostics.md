@@ -3,6 +3,8 @@
 Use this reference when integrating the CLI into a service or configuring
 specific log targets. For ordinary troubleshooting, see
 [Errors and process status](../cli.md#errors-and-process-status).
+For a failed Databricks-backed read, start with
+[Unity Catalog troubleshooting](../unity-catalog.md#if-a-command-fails).
 
 ## Machine diagnostics
 
