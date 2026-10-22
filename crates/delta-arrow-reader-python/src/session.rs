@@ -189,3 +189,6 @@ fn sql_error(py: Python<'_>, code: &'static str) -> PyErr {
         code,
     )
 }
+
+#[cfg(test)]
+mod tests;

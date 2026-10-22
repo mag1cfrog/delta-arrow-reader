@@ -1,17 +1,11 @@
 mod scans;
 
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::BTreeMap,
     fs,
-    io::{Read, Write},
-    net::TcpListener,
     os::unix::fs::PermissionsExt,
     path::PathBuf,
     process::{Command, Stdio},
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
-    },
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -20,7 +14,11 @@ use arrow::ipc::reader::FileReader;
 use serde_json::{Value, json};
 use url::Url;
 
-use super::{check_failure, run_with_timeout};
+use super::{
+    check_failure,
+    mock_cloud_storage::{CloudStorageProtocol, MockCloudStorageServer},
+    run_with_timeout,
+};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 const TABLE_ID: &str = "12345678-1234-1234-1234-123456789abc";
@@ -32,12 +30,20 @@ const PROFILE: &str = "secret profile $(do-not-run)";
 enum StorageCredentialKind {
     S3,
     R2,
-    AzureSas,
-    AzureBearer,
+    AzureBlobSas,
+    AzureBlobBearer,
     Gcs,
 }
 
 impl StorageCredentialKind {
+    fn storage_protocol(self) -> CloudStorageProtocol {
+        match self {
+            Self::AzureBlobSas | Self::AzureBlobBearer => CloudStorageProtocol::AzureBlob,
+            Self::S3 | Self::R2 => CloudStorageProtocol::S3,
+            Self::Gcs => CloudStorageProtocol::Gcs,
+        }
+    }
+
     fn rotate_credentials(self, response: &mut Value) {
         match self {
             Self::S3 | Self::R2 => {
@@ -50,11 +56,13 @@ impl StorageCredentialKind {
                     "access_key_id": "renewed-key", "secret_access_key": "renewed-secret", "session_token": "renewed-session"
                 });
             }
-            Self::AzureSas => {
+            Self::AzureBlobSas => {
                 response["azure_user_delegation_sas"] =
                     json!({"sas_token":"sig=renewed%2Bsignature"})
             }
-            Self::AzureBearer => response["azure_aad"] = json!({"aad_token":"renewed-azure-token"}),
+            Self::AzureBlobBearer => {
+                response["azure_aad"] = json!({"aad_token":"renewed-azure-token"})
+            }
             Self::Gcs => response["gcp_oauth_token"] = json!({"oauth_token":"renewed-gcp-token"}),
         }
     }
@@ -63,8 +71,8 @@ impl StorageCredentialKind {
     fn expected_renewed_auth_fragment(self) -> &'static str {
         match self {
             Self::S3 | Self::R2 => "credential=renewed-key/",
-            Self::AzureSas => "sig=renewed%2bsignature",
-            Self::AzureBearer => "authorization: bearer renewed-azure-token",
+            Self::AzureBlobSas => "sig=renewed%2bsignature",
+            Self::AzureBlobBearer => "authorization: bearer renewed-azure-token",
             Self::Gcs => "authorization: bearer renewed-gcp-token",
         }
     }
@@ -133,7 +141,7 @@ impl DatabricksCliFixture {
         let location = match credential_kind {
             StorageCredentialKind::S3 => "s3://bucket/table/",
             StorageCredentialKind::R2 => "r2://bucket@account.r2.cloudflarestorage.com/table/",
-            StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer => {
+            StorageCredentialKind::AzureBlobSas | StorageCredentialKind::AzureBlobBearer => {
                 "abfss://container@account.dfs.core.windows.net/table/"
             }
             StorageCredentialKind::Gcs => "gs://bucket/table/",
@@ -177,11 +185,11 @@ impl DatabricksCliFixture {
                     "session_token": "test-session"
                 });
             }
-            StorageCredentialKind::AzureSas => {
+            StorageCredentialKind::AzureBlobSas => {
                 credentials["azure_user_delegation_sas"] =
                     json!({"sas_token":"sv=test&sp=rl&sig=test%2Bsignature"});
             }
-            StorageCredentialKind::AzureBearer => {
+            StorageCredentialKind::AzureBlobBearer => {
                 credentials["azure_aad"] = json!({"aad_token":"secret-bearer-token"});
             }
             StorageCredentialKind::Gcs => {
@@ -285,7 +293,7 @@ esac
             StorageCredentialKind::R2 => json!({
                 "aws_endpoint_url_s3": endpoint, "aws_allow_http": "true"
             }),
-            StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer => json!({
+            StorageCredentialKind::AzureBlobSas | StorageCredentialKind::AzureBlobBearer => json!({
                 "azure_endpoint": endpoint, "azure_allow_http": "true"
             }),
             StorageCredentialKind::Gcs => json!({
@@ -331,19 +339,20 @@ esac
         ))?;
         let mut first_request = true;
         let metadata_path = self.directory.path().join("metadata.json");
-        let server = MockCloudStorageServer::with_request_hook(kind, log, move |_| {
-            if first_request {
-                first_request = false;
-                // Re-resolving the table name after authorization must not be part of renewal.
-                fs::write(&metadata_path, "secret-table-was-replaced").unwrap();
-                thread::sleep(
-                    expires_at
-                        .duration_since(SystemTime::now())
-                        .unwrap_or_default()
-                        + Duration::from_millis(20),
-                );
-            }
-        })?;
+        let server =
+            MockCloudStorageServer::with_request_hook(kind.storage_protocol(), log, move |_| {
+                if first_request {
+                    first_request = false;
+                    // Re-resolving the table name after authorization must not be part of renewal.
+                    fs::write(&metadata_path, "secret-table-was-replaced").unwrap();
+                    thread::sleep(
+                        expires_at
+                            .duration_since(SystemTime::now())
+                            .unwrap_or_default()
+                            + Duration::from_millis(20),
+                    );
+                }
+            })?;
         self.use_storage_endpoint(kind, &server.endpoint)?;
         Ok(server)
     }
@@ -369,12 +378,12 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
     for credential_kind in [
         StorageCredentialKind::S3,
         StorageCredentialKind::R2,
-        StorageCredentialKind::AzureSas,
-        StorageCredentialKind::AzureBearer,
+        StorageCredentialKind::AzureBlobSas,
+        StorageCredentialKind::AzureBlobBearer,
         StorageCredentialKind::Gcs,
     ] {
         let fixture = DatabricksCliFixture::new(credential_kind)?;
-        let server = MockCloudStorageServer::new(credential_kind, log.clone())?;
+        let server = MockCloudStorageServer::new(credential_kind.storage_protocol(), log.clone())?;
         fixture.use_storage_endpoint(credential_kind, &server.endpoint)?;
         let discovery = run_with_timeout(&mut fixture.command(&[
             "capabilities",
@@ -398,7 +407,7 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
             (false, "off", true),
             (true, "trace", true),
         ] {
-            if credential_kind == StorageCredentialKind::AzureSas && historical {
+            if credential_kind == StorageCredentialKind::AzureBlobSas && historical {
                 // Raw '+' and percent-encoded '+' must produce the same SAS signature.
                 let path = fixture.directory.path().join("credentials.json");
                 let mut credentials: Value = serde_json::from_slice(&fs::read(&path)?)?;
@@ -547,7 +556,7 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
                     );
                     assert!(!first.contains("sig="), "unexpected SAS credential");
                 }
-                StorageCredentialKind::AzureBearer => {
+                StorageCredentialKind::AzureBlobBearer => {
                     assert!(
                         request
                             .to_ascii_lowercase()
@@ -556,7 +565,7 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
                     );
                     assert!(!first.contains("sig="), "unexpected SAS credential");
                 }
-                StorageCredentialKind::AzureSas => {
+                StorageCredentialKind::AzureBlobSas => {
                     assert!(first.contains("sig=test%2Bsignature"), "{first}");
                 }
                 StorageCredentialKind::S3 | StorageCredentialKind::R2 => {
@@ -598,7 +607,7 @@ fn summary_checks_and_lookups_never_read_parquet_or_deletion_vectors() -> TestRe
         })
         .collect::<std::io::Result<BTreeMap<_, _>>>()?;
     let server =
-        MockCloudStorageServer::with_objects(StorageCredentialKind::S3, objects, |_, _| {})?;
+        MockCloudStorageServer::with_objects(CloudStorageProtocol::S3, objects, |_, _| {})?;
     let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
     fixture.use_storage_endpoint(StorageCredentialKind::S3, &server.endpoint)?;
     for selection in [
@@ -753,8 +762,8 @@ fn inspection_renews_expired_grants_without_resolving_the_table_name_again() -> 
     for kind in [
         StorageCredentialKind::S3,
         StorageCredentialKind::R2,
-        StorageCredentialKind::AzureSas,
-        StorageCredentialKind::AzureBearer,
+        StorageCredentialKind::AzureBlobSas,
+        StorageCredentialKind::AzureBlobBearer,
         StorageCredentialKind::Gcs,
     ] {
         let fixture = DatabricksCliFixture::new(kind)?;
@@ -848,7 +857,7 @@ fn refresh_failures_preserve_redacted_uc_categories_and_stop_inspection() -> Tes
             CredentialRefreshFailure::InvalidBearerToken,
         ),
         (
-            StorageCredentialKind::AzureSas,
+            StorageCredentialKind::AzureBlobSas,
             CredentialRefreshFailure::ChangedCredentialKind,
         ),
     ] {
@@ -987,7 +996,10 @@ fn uc_admission_preserves_direct_path_inspection_of_unsupported_protocols() -> T
             &log,
         )?;
         let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
-        let server = MockCloudStorageServer::new(StorageCredentialKind::S3, log.into_bytes())?;
+        let server = MockCloudStorageServer::new(
+            StorageCredentialKind::S3.storage_protocol(),
+            log.into_bytes(),
+        )?;
         fs::write(
             fixture.directory.path().join("options.json"),
             serde_json::to_vec(&json!({
@@ -1050,7 +1062,10 @@ fn uc_cancellation_remains_responsive_with_blocked_stdout() -> TestResult {
             }
         })
     );
-    let server = MockCloudStorageServer::new(StorageCredentialKind::S3, log.into_bytes())?;
+    let server = MockCloudStorageServer::new(
+        StorageCredentialKind::S3.storage_protocol(),
+        log.into_bytes(),
+    )?;
     fs::write(
         fixture.directory.path().join("options.json"),
         serde_json::to_vec(&json!({
@@ -1221,174 +1236,4 @@ fn pid_one_cancellation_preserves_uc_diagnostic() -> TestResult {
         check_cancellation(&output.stderr, status);
     }
     Ok(())
-}
-
-/// A local S3/Azure/GCS server for log listings and ranged object reads.
-struct MockCloudStorageServer {
-    endpoint: String,
-    requests: Arc<Mutex<Vec<String>>>,
-    stop: Arc<AtomicBool>,
-    thread: Option<thread::JoinHandle<()>>,
-}
-
-impl MockCloudStorageServer {
-    fn new(credential_kind: StorageCredentialKind, log: Vec<u8>) -> std::io::Result<Self> {
-        Self::with_request_hook(credential_kind, log, |_| {})
-    }
-
-    fn with_request_hook(
-        credential_kind: StorageCredentialKind,
-        log: Vec<u8>,
-        mut on_request: impl FnMut(&str) + Send + 'static,
-    ) -> std::io::Result<Self> {
-        Self::with_objects(
-            credential_kind,
-            BTreeMap::from([("table/_delta_log/00000000000000000000.json".into(), log)]),
-            move |request, _| on_request(request),
-        )
-    }
-
-    fn with_objects(
-        credential_kind: StorageCredentialKind,
-        mut objects: BTreeMap<String, Vec<u8>>,
-        mut on_request: impl FnMut(&str, &mut BTreeMap<String, Vec<u8>>) + Send + 'static,
-    ) -> std::io::Result<Self> {
-        let is_azure = matches!(
-            credential_kind,
-            StorageCredentialKind::AzureSas | StorageCredentialKind::AzureBearer
-        );
-        let listener = TcpListener::bind("127.0.0.1:0")?;
-        listener.set_nonblocking(true)?;
-        let endpoint = format!("http://{}", listener.local_addr()?);
-        let requests = Arc::new(Mutex::new(Vec::new()));
-        let recorded = Arc::clone(&requests);
-        let stop = Arc::new(AtomicBool::new(false));
-        let stopping = Arc::clone(&stop);
-        let thread = thread::spawn(move || {
-            while !stopping.load(Ordering::Relaxed) {
-                let Ok((mut socket, _)) = listener.accept() else {
-                    thread::sleep(Duration::from_millis(5));
-                    continue;
-                };
-                socket
-                    .set_read_timeout(Some(Duration::from_secs(2)))
-                    .unwrap();
-                let mut request = Vec::new();
-                let mut byte = [0];
-                while request.len() < 16 * 1024 && !request.ends_with(b"\r\n\r\n") {
-                    if socket.read_exact(&mut byte).is_err() {
-                        break;
-                    }
-                    request.push(byte[0]);
-                }
-                let request = String::from_utf8(request).unwrap();
-                recorded.lock().unwrap().push(request.clone());
-                on_request(&request, &mut objects);
-                let Some(target) = request.split_whitespace().nth(1) else {
-                    continue;
-                };
-                let url = Url::parse(&format!("http://localhost{target}")).unwrap();
-                // GCS encodes slashes in object keys, unlike the S3 and Azure clients.
-                let request_path = object_store::path::Path::from_url_path(url.path()).unwrap();
-                let query = url.query_pairs().collect::<HashMap<_, _>>();
-                let listing = query.contains_key("list-type")
-                    || query.get("comp").is_some_and(|v| v == "list");
-                let (mut status, mut body) = if listing {
-                    let mut entries = String::new();
-                    for (key, bytes) in &objects {
-                        if !key.starts_with(query.get("prefix").map_or("", |v| v.as_ref()))
-                            || key.as_str() <= query.get("start-after").map_or("", |v| v.as_ref())
-                        {
-                            continue;
-                        }
-                        let entry = if is_azure {
-                            format!(
-                                "<Blob><Name>{key}</Name><Properties><Last-Modified>Wed, 01 Jan 2020 00:00:00 GMT</Last-Modified><Etag>test</Etag><Content-Length>{}</Content-Length><Content-Type>application/octet-stream</Content-Type><BlobType>BlockBlob</BlobType></Properties></Blob>",
-                                bytes.len()
-                            )
-                        } else {
-                            format!(
-                                "<Contents><Key>{key}</Key><LastModified>2020-01-01T00:00:00Z</LastModified><Size>{}</Size></Contents>",
-                                bytes.len()
-                            )
-                        };
-                        entries.push_str(&entry);
-                    }
-                    let xml = if is_azure {
-                        format!(
-                            "<EnumerationResults><Blobs>{entries}</Blobs><NextMarker /></EnumerationResults>"
-                        )
-                    } else {
-                        format!(
-                            "<ListBucketResult><IsTruncated>false</IsTruncated>{entries}</ListBucketResult>"
-                        )
-                    };
-                    (200, xml.into_bytes())
-                } else if let Some(bytes) = request_path
-                    .as_ref()
-                    .strip_prefix(if is_azure { "container/" } else { "bucket/" })
-                    .and_then(|key| objects.get(key))
-                {
-                    (200, bytes.clone())
-                } else {
-                    (404, Vec::new())
-                };
-                let mut content_range = String::new();
-                if status == 200 && !listing && !request.starts_with("HEAD ") {
-                    let range = request.lines().find_map(|line| {
-                        let (name, value) = line.split_once(':')?;
-                        (name.eq_ignore_ascii_case("range")
-                            || name.eq_ignore_ascii_case("x-ms-range"))
-                        .then(|| value.trim().strip_prefix("bytes="))
-                        .flatten()
-                    });
-                    if let Some(range) = range {
-                        let (start, end) = range.split_once('-').unwrap();
-                        let start: usize = start.parse().unwrap();
-                        let end = if end.is_empty() {
-                            body.len() - 1
-                        } else {
-                            end.parse().unwrap()
-                        };
-                        assert!(
-                            start <= end && end < body.len(),
-                            "invalid fixture range {range}"
-                        );
-                        content_range =
-                            format!("Content-Range: bytes {start}-{end}/{}\r\n", body.len());
-                        body = body[start..=end].to_vec();
-                        status = 206;
-                    }
-                }
-                let length = body.len();
-                if request.starts_with("HEAD ") {
-                    body.clear();
-                }
-                let headers = format!(
-                    "HTTP/1.1 {status} OK\r\n{content_range}Content-Length: {length}\r\nContent-Type: {}\r\nLast-Modified: Wed, 01 Jan 2020 00:00:00 GMT\r\nETag: test\r\nConnection: close\r\n\r\n",
-                    if listing {
-                        "application/xml"
-                    } else {
-                        "application/octet-stream"
-                    }
-                );
-                let _ = socket
-                    .write_all(headers.as_bytes())
-                    .and_then(|()| socket.write_all(&body));
-            }
-        });
-        Ok(Self {
-            endpoint,
-            requests,
-            stop,
-            thread: Some(thread),
-        })
-    }
-}
-
-impl Drop for MockCloudStorageServer {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        self.thread.take().unwrap().join().unwrap();
-    }
 }

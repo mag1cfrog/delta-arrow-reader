@@ -4,7 +4,6 @@ use std::{
     collections::{BTreeMap, HashSet},
     fs,
     io::Cursor,
-    path::PathBuf,
     process::Command,
     thread,
     time::{Duration, SystemTime},
@@ -13,7 +12,7 @@ use std::{
 use arrow::{
     array::{BooleanArray, Int32Array, StringArray},
     compute::{concat_batches, filter_record_batch},
-    ipc::reader::{FileReader, StreamReader},
+    ipc::reader::StreamReader,
     record_batch::RecordBatch,
 };
 use serde_json::{Value, json};
@@ -22,6 +21,8 @@ use super::{
     CredentialRefreshFailure, DatabricksCliFixture, MockCloudStorageServer, StorageCredentialKind,
     TestResult, run_with_timeout,
 };
+
+use super::super::mock_cloud_storage::{expected_partitioned_rows, partitioned_objects};
 
 const IPC_END: &[u8] = &[255, 255, 255, 255, 0, 0, 0, 0];
 
@@ -42,28 +43,6 @@ fn requested_path(request: &str) -> String {
         .to_string()
 }
 
-fn partitioned_corpus() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned")
-}
-
-fn partitioned_objects() -> Result<BTreeMap<String, Vec<u8>>, Box<dyn std::error::Error>> {
-    let table = partitioned_corpus().join("table");
-    let log = fs::read(table.join("_delta_log/00000000000000000000.json"))?;
-    let mut objects = BTreeMap::new();
-    for line in log
-        .split(|byte| *byte == b'\n')
-        .filter(|line| !line.is_empty())
-    {
-        let action: Value = serde_json::from_slice(line)?;
-        if let Some(path) = action["add"]["path"].as_str() {
-            objects.insert(format!("table/{path}"), fs::read(table.join(path))?);
-        }
-    }
-    objects.insert("table/_delta_log/00000000000000000000.json".into(), log);
-    Ok(objects)
-}
-
 /// A second snapshot drops one partition so a version-selection regression changes the rows.
 fn append_west_partition_removal_commit(objects: &mut BTreeMap<String, Vec<u8>>) {
     let path = objects
@@ -77,17 +56,6 @@ fn append_west_partition_removal_commit(objects: &mut BTreeMap<String, Vec<u8>>)
         "table/_delta_log/00000000000000000001.json".into(),
         format!("{action}\n").into_bytes(),
     );
-}
-
-fn expected_partitioned_rows() -> Result<RecordBatch, Box<dyn std::error::Error>> {
-    let reader = FileReader::try_new(
-        fs::File::open(partitioned_corpus().join("expected.arrow"))?,
-        None,
-    )?;
-    Ok(concat_batches(
-        &reader.schema(),
-        &reader.collect::<Result<Vec<_>, _>>()?,
-    )?)
 }
 
 fn decode_stream(bytes: &[u8]) -> Result<RecordBatch, Box<dyn std::error::Error>> {
@@ -137,12 +105,16 @@ fn scans_preserve_values_options_and_snapshot_selection_for_every_cloud() -> Tes
     for kind in [
         StorageCredentialKind::S3,
         StorageCredentialKind::R2,
-        StorageCredentialKind::AzureSas,
-        StorageCredentialKind::AzureBearer,
+        StorageCredentialKind::AzureBlobSas,
+        StorageCredentialKind::AzureBlobBearer,
         StorageCredentialKind::Gcs,
     ] {
         let fixture = DatabricksCliFixture::new(kind)?;
-        let server = MockCloudStorageServer::with_objects(kind, objects.clone(), |_, _| {})?;
+        let server = MockCloudStorageServer::with_objects(
+            kind.storage_protocol(),
+            objects.clone(),
+            |_, _| {},
+        )?;
         fixture.use_storage_endpoint(kind, &server.endpoint)?;
         let predicate_file = fixture.directory.path().join("predicate.json");
         fs::write(
@@ -282,7 +254,7 @@ fn scan_with_credential_expiry_and_table_changes(
     let mut first_file = None;
     let mut delayed = false;
     let server = MockCloudStorageServer::with_objects(
-        kind,
+        kind.storage_protocol(),
         partitioned_objects()?,
         move |request, objects| {
             let path = requested_path(request);
@@ -335,8 +307,8 @@ fn renewal_during_scans_keeps_the_original_snapshot_and_emits_each_row_once() ->
     for kind in [
         StorageCredentialKind::S3,
         StorageCredentialKind::R2,
-        StorageCredentialKind::AzureSas,
-        StorageCredentialKind::AzureBearer,
+        StorageCredentialKind::AzureBlobSas,
+        StorageCredentialKind::AzureBlobBearer,
         StorageCredentialKind::Gcs,
     ] {
         for parquet_backend in ["direct", "delta_kernel"] {
@@ -454,7 +426,7 @@ fn failed_renewal_after_rows_never_finishes_the_arrow_stream() -> TestResult {
             CredentialRefreshFailure::ExpiredCredentials,
         ),
         (
-            StorageCredentialKind::AzureSas,
+            StorageCredentialKind::AzureBlobSas,
             "direct",
             CredentialRefreshFailure::ChangedCredentialKind,
         ),

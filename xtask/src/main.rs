@@ -8,6 +8,7 @@ mod binary;
 mod build;
 mod command;
 mod error;
+mod external_fixtures;
 #[cfg(target_os = "linux")]
 mod http_fixture;
 mod image;
@@ -17,6 +18,7 @@ mod notices;
 mod platform;
 mod process;
 mod python_cli;
+mod python_cli_acceptance;
 mod python_cli_audit;
 mod python_release;
 mod python_sdist;
@@ -68,6 +70,8 @@ struct Arguments {
 
 #[derive(Subcommand)]
 enum Task {
+    /// Validate Spark-produced fixtures and finish their corpus manifest.
+    FinalizeExternalFixtures { directory: PathBuf },
     /// Test core HTTPS certificate verification and proxy routing on Linux.
     #[cfg(target_os = "linux")]
     TestHttps(test_https::Arguments),
@@ -139,6 +143,8 @@ enum Task {
     },
     /// Audit an installed wheel CLI's native dependencies and platform baseline.
     AuditPythonCli(python_cli_audit::AuditPythonCliArgs),
+    /// Exercise the CLI installed by a Python wheel, without build-time library paths.
+    CheckInstalledPythonCli(python_cli_acceptance::Arguments),
     /// Validate the complete set of Python wheel artifacts.
     CheckPythonArtifacts {
         directory: PathBuf,
@@ -218,6 +224,7 @@ fn main() -> ExitCode {
 
 fn run_task(task: Task) -> Result<()> {
     match task {
+        Task::FinalizeExternalFixtures { directory } => external_fixtures::run(&directory),
         #[cfg(target_os = "linux")]
         Task::TestHttps(args) => args.run(),
         #[cfg(target_os = "linux")]
@@ -260,6 +267,7 @@ fn run_task(task: Task) -> Result<()> {
             platform_tag,
         } => python_wheels::check_wheel(&path, &expected_version, &platform_tag),
         Task::AuditPythonCli(args) => args.run().map_err(Into::into),
+        Task::CheckInstalledPythonCli(args) => args.run(),
         Task::CheckPythonArtifacts {
             directory,
             expected_version,

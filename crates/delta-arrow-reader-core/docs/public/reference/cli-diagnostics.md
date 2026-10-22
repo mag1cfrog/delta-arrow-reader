@@ -184,6 +184,7 @@ interface; scripts should use machine diagnostics and the exit status.
 | `configuration` | `invalid_cli_argument` | Invalid command, argument, or option value |
 | `configuration` | `invalid_input_json` | Invalid JSON structure, encoding, duplicate key, or size |
 | `configuration` | `input_file_io` | Input file could not be opened or read |
+| `configuration` | `invalid_storage_authorization` | Explicit credential source is incomplete, conflicting, or unsupported |
 | `configuration` | `invalid_configuration` | A native execution setting is outside its allowed range |
 | `execution` | `runtime_initialization` | Runtime creation failed or reader execution panicked |
 | `execution` | `output_write` | stdout could not be written or flushed |

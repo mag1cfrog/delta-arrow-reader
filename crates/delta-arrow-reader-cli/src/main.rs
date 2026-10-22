@@ -18,8 +18,10 @@
 #![cfg_attr(test, allow(clippy::panic))]
 
 mod arrow_output;
+mod azure_sas;
 mod capabilities;
 mod diagnostics;
+mod direct_credentials;
 mod input;
 mod inspection;
 mod query;
@@ -129,6 +131,9 @@ struct TableArgs {
     /// At most 1 MiB; '-' is a filename, not stdin.
     #[arg(long, value_name = "PATH")]
     storage_options_file: Option<String>,
+    /// Explicit S3, Azure Blob, or GCS credential source. Without it, existing storage behavior applies.
+    #[arg(long, value_enum)]
+    auth_source: Option<direct_credentials::CredentialSource>,
 }
 
 #[derive(Snafu)]
@@ -159,6 +164,8 @@ enum Error {
         source: io::Error,
         argument: &'static str,
     },
+    #[snafu(display("Invalid storage authorization (reason={reason})."))]
+    StorageAuthorization { reason: &'static str },
     #[snafu(display("The reader runtime failed."))]
     Runtime {
         source: io::Error,
@@ -244,6 +251,12 @@ impl Error {
                 code: "input_file_io",
                 reason: "input_file_read_failed",
                 source_kind: Some(error_source_kind(source)),
+            },
+            Self::StorageAuthorization { reason } => ErrorClassification {
+                phase: "configuration",
+                code: "invalid_storage_authorization",
+                reason,
+                source_kind: None,
             },
             Self::Runtime { source, reason } => ErrorClassification {
                 phase: "execution",
@@ -419,6 +432,7 @@ impl Error {
         let message: &dyn fmt::Display = match self {
             Self::UnityCatalog { source } => source,
             Self::Query { source } => source,
+            Self::StorageAuthorization { .. } => self,
             _ => &"CLI command failed",
         };
         tracing::error!(target: "delta_arrow_reader_cli",
@@ -506,6 +520,7 @@ impl Error {
             | Self::InputJson { .. }
             | Self::InputValidation { .. }
             | Self::InputIo { .. }
+            | Self::StorageAuthorization { .. }
             | Self::Configuration { .. } => 2,
             Self::Runtime { .. } | Self::Reader { .. } | Self::ArrowIpc { .. } => 1,
             Self::Output { .. } => 3,
@@ -627,6 +642,21 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
     let uc_target =
         unity_catalog::UnityCatalogTableTarget::parse(&table_args.table, databricks_profile)
             .context(UnityCatalogSnafu)?;
+    ensure!(
+        uc_target.is_none() || table_args.auth_source.is_none(),
+        StorageAuthorizationSnafu {
+            reason: "auth_source_conflicts_with_unity_catalog"
+        }
+    );
+    ensure!(
+        !matches!(
+            table_args.auth_source,
+            Some(direct_credentials::CredentialSource::Json)
+        ) || table_args.storage_options_file.is_some(),
+        StorageAuthorizationSnafu {
+            reason: "auth_source_requires_storage_options_file"
+        }
+    );
     let storage_options = match &table_args.storage_options_file {
         Some(path) => {
             input::read_json_file::<input::StorageOptionsInput>(
@@ -683,13 +713,18 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
             }
             None => {
                 // Each command plans its own reads after the snapshot is loaded.
-                DeltaTableBuilder::new(&table_args.table)
+                let builder = DeltaTableBuilder::new(&table_args.table)
                     .with_warmup(WarmupMode::None)
-                    .with_snapshot_selection(snapshot_selection)
-                    .with_storage_options(storage_options)
-                    .load_table()
-                    .await
-                    .context(ReaderSnafu)?
+                    .with_snapshot_selection(snapshot_selection);
+                let builder = match table_args.auth_source {
+                    Some(source) => source.configure_table_credentials(
+                        builder,
+                        &table_args.table,
+                        storage_options,
+                    )?,
+                    None => builder.with_storage_options(storage_options),
+                };
+                builder.load_table().await.context(ReaderSnafu)?
             }
         };
         Ok::<_, Error>((table, authorized_access))

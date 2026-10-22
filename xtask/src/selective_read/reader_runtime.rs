@@ -127,7 +127,12 @@ pub(super) fn run(request: Request) -> Result<Value> {
                 json!({"status":"passed","path":path,"artifact_sha256":hashes.digest(path)?,"expected_output_rows":rows}),
             )
         }
-        Request::Observation { request } => observation(&request),
+        Request::Observation { request } => {
+            contract::run(contract::Operation::Validate {
+                value: request.clone(),
+            })?;
+            observation(&request)
+        }
         Request::Finish { output, mut record } => {
             finish(&mut record)?;
             save(&output.join("record.json"), &record)?;
@@ -279,10 +284,40 @@ fn observation(request: &Value) -> Result<Value> {
     if request["validation_diagnostics"] == true {
         record["validation_diagnostics"] = json!(true);
     }
+    record["_query_count"] = json!(progress::count(request)?);
     Ok(record)
 }
 
 fn finish(record: &mut Value) -> Result<()> {
+    record
+        .as_object_mut()
+        .ok_or("invalid observation")?
+        .remove("_query_count");
+    if record["phase"] == "correctness_gate" && record["status"] != "success" {
+        record["status"] = json!("validation_failed");
+    }
+    let timed = record["purpose"] == "timing";
+    let collected = record["settings"]["output_delivery"] == "collected";
+    if let Some(queries) = record.get_mut("queries").and_then(Value::as_array_mut) {
+        for query in queries {
+            let reason = if collected {
+                json!("collected API; no streaming first-batch clock")
+            } else if !timed {
+                json!("untimed invocation")
+            } else if query["output_rows"] == 0 {
+                json!("empty result")
+            } else {
+                Value::Null
+            };
+            let fields = query.as_object_mut().ok_or("invalid query observation")?;
+            fields
+                .entry("first_batch_unavailable_reason")
+                .or_insert(reason);
+            for name in ["result", "identity", "physical_plan"] {
+                fields.entry(name).or_insert(Value::Null);
+            }
+        }
+    }
     if record["purpose"] == "timing" && record["capability"]["status"] == "supported" {
         let queries = array(&record["queries"])?;
         let durations = queries

@@ -1,10 +1,12 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
+    env,
     ffi::OsStr,
     fs::{self, OpenOptions},
     io::Write,
     path::{Component, Path, PathBuf},
     process::Command,
+    time::Instant,
 };
 
 use clap::Args;
@@ -148,6 +150,7 @@ pub(crate) fn dependency_notices(
     target: &str,
     tool_command: impl Fn(&str) -> Command,
 ) -> Result<String> {
+    let started = Instant::now();
     let manifest: WorkspaceManifest = read_toml(&repository.join("Cargo.toml"))?;
     let about_version = &manifest.workspace.metadata.cli_release.cargo_about_version;
     let release = repository.join("crates/delta-arrow-reader-cli/release");
@@ -158,15 +161,60 @@ pub(crate) fn dependency_notices(
             message: format!("expected cargo-about {about_version}, got {version:?}")
         }
     );
-    let report = command_output(
-        tool_command("cargo")
-            .args(["about", "generate", "--locked", "--fail", "--manifest-path"])
-            .arg(package_manifest)
-            .arg("--config")
-            .arg(release.join("about.toml"))
-            .args(["--target", target, "--format", "json"]),
-    )?;
-    let report: LicenseReport = serde_json::from_str(&report).context(JsonSnafu {
+    // CI restores pristine dependency sources; local builds keep the full source scan.
+    let cache_path = env::var_os("DAR_CI_LICENSE_REPORTS")
+        .map(|directory| {
+            let metadata = command_output(
+                tool_command("cargo")
+                    .args([
+                        "metadata",
+                        "--locked",
+                        "--format-version",
+                        "1",
+                        "--manifest-path",
+                    ])
+                    .arg(package_manifest),
+            )?;
+            report_cache_path(
+                &PathBuf::from(directory),
+                repository,
+                package_manifest,
+                target,
+                about_version,
+                &metadata,
+            )
+        })
+        .transpose()?
+        .flatten();
+    let cached_report = cache_path.as_ref().and_then(|path| {
+        fs::read_to_string(path)
+            .ok()
+            .filter(|text| serde_json::from_str::<LicenseReport>(text).is_ok())
+    });
+    let scan_started = Instant::now();
+    let report_json = if let Some(report) = &cached_report {
+        report.clone()
+    } else {
+        command_output(
+            tool_command("cargo")
+                .args(["about", "generate", "--locked", "--fail", "--manifest-path"])
+                .arg(package_manifest)
+                .arg("--config")
+                .arg(release.join("about.toml"))
+                .args(["--target", target, "--format", "json"]),
+        )?
+    };
+    eprintln!(
+        "License scan for {}: {} ({:.2}s)",
+        package_manifest.display(),
+        if cached_report.is_some() {
+            "cached"
+        } else {
+            "generated"
+        },
+        scan_started.elapsed().as_secs_f64(),
+    );
+    let report: LicenseReport = serde_json::from_str(&report_json).context(JsonSnafu {
         subject: "cargo-about report",
     })?;
     let config: ExtraNoticesConfig = read_toml(&release.join("extra-notices.toml"))?;
@@ -178,12 +226,132 @@ pub(crate) fn dependency_notices(
         download_notice,
     )?;
     let sysroot = command_output(tool_command("rustc").args(["--print", "sysroot"]))?;
-    render_notices(
+    let output = render_notices(
         &report,
         &Path::new(sysroot.trim()).join("share/doc/rust"),
         &extra,
         about_version,
-    )
+    )?;
+    if let Some(path) = cache_path.filter(|_| cached_report.is_none()) {
+        let directory = path.parent().ok_or_else(|| {
+            InvalidInputSnafu {
+                message: "license cache path has no parent directory",
+            }
+            .build()
+        })?;
+        fs::create_dir_all(directory).context(FileSnafu { path: directory })?;
+        let mut temporary =
+            tempfile::NamedTempFile::new_in(directory).context(FileSnafu { path: directory })?;
+        temporary
+            .write_all(report_json.as_bytes())
+            .context(FileSnafu { path: &path })?;
+        temporary
+            .persist(&path)
+            .map_err(|error| error.error)
+            .context(FileSnafu { path: &path })?;
+    }
+    eprintln!(
+        "Dependency notices completed in {:.2}s",
+        started.elapsed().as_secs_f64()
+    );
+    Ok(output)
+}
+
+fn report_cache_path(
+    directory: &Path,
+    repository: &Path,
+    package_manifest: &Path,
+    target: &str,
+    about_version: &str,
+    metadata_json: &str,
+) -> Result<Option<PathBuf>> {
+    #[derive(Deserialize)]
+    struct Metadata {
+        packages: Vec<DependencyPackage>,
+        resolve: Resolution,
+    }
+    #[derive(Deserialize)]
+    struct Resolution {
+        root: Option<String>,
+        nodes: Vec<Node>,
+    }
+    #[derive(Deserialize)]
+    struct Node {
+        id: String,
+        dependencies: Vec<String>,
+    }
+    let metadata: Metadata = serde_json::from_str(metadata_json).context(JsonSnafu {
+        subject: "license dependency metadata",
+    })?;
+    let config_path = repository.join("crates/delta-arrow-reader-cli/release/about.toml");
+    let config_text = fs::read_to_string(&config_path).context(FileSnafu { path: &config_path })?;
+    let config: toml::Value = read_toml(&config_path)?;
+    let lock_path = repository.join("Cargo.lock");
+    let lock = fs::read_to_string(&lock_path).context(FileSnafu { path: &lock_path })?;
+    let mut inputs = vec![
+        metadata_json.to_owned(),
+        config_text,
+        lock,
+        target.to_owned(),
+        about_version.to_owned(),
+        package_manifest.to_string_lossy().into_owned(),
+    ];
+    let Some(root) = metadata.resolve.root else {
+        return Ok(None);
+    };
+    let nodes: BTreeMap<_, _> = metadata
+        .resolve
+        .nodes
+        .into_iter()
+        .map(|node| (node.id, node.dependencies))
+        .collect();
+    let mut reachable = BTreeSet::new();
+    let mut pending = vec![root];
+    while let Some(id) = pending.pop() {
+        if reachable.insert(id.clone())
+            && let Some(dependencies) = nodes.get(&id)
+        {
+            pending.extend(dependencies.iter().cloned());
+        }
+    }
+    for package in metadata.packages {
+        if !reachable.contains(&package.id) {
+            continue;
+        }
+        // Only explicit license files make local source edits safe to exclude from the scan key.
+        let files = config
+            .get(&package.name)
+            .and_then(|entry| entry.get("clarify"))
+            .and_then(|entry| entry.get("files"))
+            .and_then(toml::Value::as_array);
+        let Some(files) = files.filter(|files| !files.is_empty()) else {
+            if package.source.is_none() {
+                return Ok(None);
+            }
+            continue;
+        };
+        let root = package.manifest_path.parent().ok_or_else(|| {
+            InvalidInputSnafu {
+                message: "dependency manifest has no parent directory",
+            }
+            .build()
+        })?;
+        for file in files {
+            let Some(relative) = file.get("path").and_then(toml::Value::as_str) else {
+                return Ok(None);
+            };
+            let path = root.join(relative);
+            inputs.push(fs::read_to_string(&path).context(FileSnafu { path: &path })?);
+        }
+    }
+    let mut digest = Sha256::new();
+    for input in inputs {
+        digest.update((input.len() as u64).to_le_bytes());
+        digest.update(input.as_bytes());
+    }
+    Ok(Some(
+        directory.join(format!("{:x}.json", digest.finalize())),
+    ))
 }
 
 fn read_notice(path: &Path) -> Result<String> {

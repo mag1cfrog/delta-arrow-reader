@@ -29,9 +29,3 @@ def load_adapter(binary):
             sys.modules.pop(name, None)
             if module is not None:
                 sys.modules[name] = module
-
-
-def query_count(value):
-    if value["execution_mode"] == "open":
-        return 1
-    return 2 if value.get("comparison_revision", 2) >= 4 else 10

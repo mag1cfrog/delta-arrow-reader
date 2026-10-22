@@ -44,6 +44,8 @@ jobs:
       publish-to: ${{ steps.request.outputs.publish-to }}
       artifact-id: ${{ steps.wheels.outputs.artifact-id }}
       artifact-sha256: ${{ steps.wheels.outputs.artifact-sha256 }}
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
     steps:
       - uses: actions/checkout@v5
         with:
@@ -155,6 +157,7 @@ jobs:
       contents: read
       id-token: write
     env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
       EXPECTED_VERSION: ${{ needs.prepare.outputs.expected-version }}
     steps:
       - uses: actions/checkout@v5
@@ -217,6 +220,7 @@ jobs:
       actions: read
       id-token: write
     env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
       EXPECTED_VERSION: ${{ needs.prepare.outputs.expected-version }}
       ARTIFACT_ID: ${{ needs.prepare.outputs.artifact-id }}
       ARTIFACT_SHA256: ${{ needs.prepare.outputs.artifact-sha256 }}

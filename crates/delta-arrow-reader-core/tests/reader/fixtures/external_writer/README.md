@@ -14,14 +14,14 @@ license](../../../../../../LICENSE).
 | `deletion_vectors` | 1 | 9 / 12 | 1 file, 1 row group | Spark DELETE marks IDs 2, 5, and 12 in an external deletion vector |
 
 The corpus budget is **256 KiB**, including the manifest and Arrow oracles.
-The checked-in corpus occupies **41,631 bytes** across 15 files. Generator
+The checked-in corpus occupies **40,399 bytes** across 15 files. Generator
 source and this README are outside that data budget.
 
 [manifest.json](corpus/manifest.json) records tool/runtime versions, the
 generation command, Delta protocols and features, schemas, snapshot versions,
-row counts, row-group counts, deletion-vector descriptors, and file sizes and
-SHA-256 hashes. Each `expected_schema_and_rows` entry points to the Arrow IPC
-file containing that table's complete Spark oracle.
+row counts, row-group counts, deletion-vector descriptors, and file sizes.
+Each `expected_schema_and_rows` entry points to the Arrow IPC file containing
+that table's complete Spark oracle.
 
 ## Run the tests
 
@@ -51,7 +51,7 @@ actual Parquet row groups, mapped physical names/IDs, and retained DV rows.
 
 ## Regenerate
 
-Use a Java 21 runtime and `uv`. From the repository root, choose a new output
+Use a Java 21 runtime, `uv`, and the repository Rust toolchain. From the repository root, choose a new output
 directory; the generator refuses to overwrite an existing one:
 
 ```sh
@@ -61,8 +61,11 @@ JAVA_HOME=/path/to/java-21 SPARK_LOCAL_IP=127.0.0.1 \
   /tmp/new-external-writer-corpus
 ```
 
-The script pins Spark, Delta, PyArrow, and pandas. The recorded run used
-CPython 3.13.12 and Temurin 21.0.12.1+1. First use downloads the Python packages
+The script pins Spark, Delta, PyArrow, and pandas. After Spark exports the
+reference results, `xtask finalize-external-fixtures` checks the physical features
+and size budget, removes Hadoop checksum sidecars, and writes the manifest.
+The recorded run used CPython 3.13.12 and Temurin 21.0.12.1+1.
+First use downloads the Python packages
 and Delta's Maven artifacts. [Delta's compatibility table](https://docs.delta.io/releases/)
 lists the Spark/Delta version pairing.
 
