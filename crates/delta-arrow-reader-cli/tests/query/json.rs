@@ -141,9 +141,9 @@ fn json_limits_accept_exact_results_and_never_return_successful_prefixes() -> Te
         assert!(output.stdout.is_empty());
         let diagnostic = assert_single_terminal_record(&output.stderr, "diagnostic");
         assert_eq!(diagnostic["reason"], reason);
+        assert_eq!(diagnostic["recovery"], "adjust_budget");
+        assert_eq!(diagnostic["argument"], flag);
         if reason == "json_output_limit_exceeded" {
-            assert_eq!(diagnostic["recovery"], "adjust_budget");
-            assert_eq!(diagnostic["argument"], "--max-output-bytes");
             let hint = diagnostic["hint"].as_str().unwrap();
             assert!(hint.contains("--format arrow"));
             assert!(hint.contains("Explicitly increase --max-output-bytes for the complete JSON"));
@@ -152,6 +152,23 @@ fn json_limits_accept_exact_results_and_never_return_successful_prefixes() -> Te
                 hint.contains("same SQL, authorization, table bindings, and snapshot versions")
             );
             assert!(!hint.contains("aggregate"));
+        } else {
+            let hint = diagnostic["hint"].as_str().unwrap();
+            assert!(hint.contains("Explicitly increase --max-rows"));
+            assert!(
+                hint.contains("same SQL, authorization, table bindings, and snapshot versions")
+            );
+            assert!(!hint.contains("LIMIT"));
+            let recovered = run_with_timeout(fixture.command().args([
+                "--format",
+                "json",
+                diagnostic["argument"].as_str().unwrap(),
+                "3",
+            ]))?;
+            assert_eq!(
+                decode_json(&recovered)?["rows"],
+                json!([["1"], ["2"], ["3"]])
+            );
         }
     }
     let empty = SqlCommandFixture::new(

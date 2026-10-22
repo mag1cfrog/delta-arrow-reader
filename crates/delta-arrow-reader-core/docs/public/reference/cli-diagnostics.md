@@ -121,12 +121,20 @@ sources, `request_access` for permission failures, `retry` for known transient
 I/O failures, or `change_request` for unsupported operations. Unclassified
 failures use `unknown` and `retryable: null`. A true `retryable` value means
 starting a new command, after discarding any output from the failed invocation.
-JSON query byte exhaustion uses `change_request`: save the complete result as
-Arrow with the same SQL, authorization, table bindings, and snapshot versions.
-An explicit `--max-output-bytes` survives a format change; choose an appropriate
-budget for the saved Arrow stream. Arrow byte exhaustion identifies that budget
-argument for an explicit adjustment. Preview schema/first-row byte exhaustion also uses `change_request`.
-Preview deadlines and other query output or memory exhaustion use `adjust_budget`. These resource failures set `retryable: false`.
+
+Query byte and row exhaustion use `adjust_budget`, identifying
+`--max-output-bytes` or `--max-rows`. Explicitly increase the applicable budget
+and keep the same SQL, authorization, table bindings, and snapshot versions.
+For JSON byte exhaustion, another option is Arrow with redirected stdout and an
+explicit byte budget. Adding SQL `LIMIT` changes the result and is not a repair
+for the same request.
+
+Preview schema exhaustion uses `change_request`: narrow the selected columns
+or explicitly increase the byte budget. First-row exhaustion uses
+`adjust_budget` and identifies `--max-output-bytes`; keep the projection,
+predicate, row limit, authorization, snapshot, and deadline when retrying.
+Preview deadlines and query memory exhaustion also use `adjust_budget`.
+These resource failures set `retryable: false`.
 
 A successful command emits `kind: "completion"` after stdout has been flushed.
 It includes `command` and `output_bytes`. Inspect, scan, preview, and query include the actual snapshot

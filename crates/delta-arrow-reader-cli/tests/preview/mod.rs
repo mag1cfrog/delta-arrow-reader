@@ -207,3 +207,44 @@ fn whole_response_budget_preserves_exact_boundaries_and_labels_shortened_samples
     }
     Ok(())
 }
+
+#[test]
+fn first_row_byte_failure_can_be_repaired_without_changing_the_read() -> TestResult {
+    let read = || {
+        let mut invocation = command();
+        invocation.args([
+            "--table-version",
+            "0",
+            "--column",
+            "id",
+            "--limit",
+            "1",
+            "--target-partitions",
+            "1",
+        ]);
+        invocation
+    };
+    let complete = run_with_timeout(&mut read())?;
+    let sample = decode_sample(&complete)?;
+    let exact_bytes = complete.stdout.len();
+    let failed =
+        run_with_timeout(read().args(["--max-output-bytes", &(exact_bytes - 1).to_string()]))?;
+    assert_eq!(failed.status.code(), Some(1));
+    assert!(failed.stdout.is_empty());
+    let diagnostic = assert_single_terminal_record(&failed.stderr, "diagnostic");
+    assert_eq!(diagnostic["reason"], "preview_row_too_large");
+    assert_eq!(diagnostic["recovery"], "adjust_budget");
+    assert_eq!(diagnostic["argument"], "--max-output-bytes");
+    let hint = diagnostic["hint"].as_str().unwrap();
+    assert!(hint.contains("Explicitly increase --max-output-bytes"));
+    assert!(hint.contains("same projection, predicate, row limit, authorization"));
+    assert!(hint.contains("--table-version N") && hint.contains("--deadline-ms"));
+    assert!(!hint.contains("scan"));
+    let recovered = run_with_timeout(read().args([
+        diagnostic["argument"].as_str().unwrap(),
+        &exact_bytes.to_string(),
+    ]))?;
+    assert_eq!(decode_sample(&recovered)?, sample);
+    assert_eq!(recovered.stdout, complete.stdout);
+    Ok(())
+}

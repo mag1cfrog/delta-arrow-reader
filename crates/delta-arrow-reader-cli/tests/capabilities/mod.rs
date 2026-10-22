@@ -561,9 +561,31 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
             jsonschema::validate(&full["schema"], &guide["example"])
                 .map_err(|error| io::Error::other(error.to_string()))?;
             let mut detail_names = std::collections::BTreeSet::new();
-            for field in ["other_fields", "operators", "scalar_types"] {
+            for field in [
+                "other_fields",
+                "version_1_fields",
+                "operators",
+                "scalar_types",
+            ] {
                 for name in guide[field].as_array().into_iter().flatten() {
                     assert!(detail_names.insert(name.as_str().unwrap().to_owned()));
+                }
+            }
+            if name == "completion" {
+                assert_eq!(guide["example"]["format_version"], 2);
+                assert!(guide.get("other_fields").is_none());
+                let legacy_fields = guide["version_1_fields"].as_array().unwrap();
+                assert_eq!(legacy_fields.len(), 6);
+                for field in [
+                    "terminal",
+                    "batches",
+                    "scope",
+                    "completion",
+                    "stop_reason",
+                    "has_more",
+                ] {
+                    assert!(legacy_fields.iter().any(|name| name == field));
+                    assert!(guide["example"].get(field).is_none());
                 }
             }
             if let Some(properties) = full["schema"]["properties"].as_object() {

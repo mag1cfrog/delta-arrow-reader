@@ -400,9 +400,28 @@ impl Error {
                 });
             }
             Self::OutputLimit {
-                reason: "preview_row_too_large",
+                reason: "output_row_limit_exceeded",
+            } => {
+                return Some(InputCorrection {
+                    argument: "--max-rows".to_owned(),
+                    expected: "enough rows for the complete SQL result".to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Explicitly increase --max-rows; keep the same SQL, authorization, table bindings, and snapshot versions.",
+                });
             }
-            | Self::UnsupportedJsonType { command: "preview" } => {
+            Self::OutputLimit {
+                reason: "preview_row_too_large",
+            } => {
+                return Some(InputCorrection {
+                    argument: "--max-output-bytes".to_owned(),
+                    expected: "enough bytes for the selected schema and first row".to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Explicitly increase --max-output-bytes; keep the same projection, predicate, row limit, authorization, --table-version N, and --deadline-ms.",
+                });
+            }
+            Self::UnsupportedJsonType { command: "preview" } => {
                 return Some(InputCorrection {
                     argument: "--column".to_owned(),
                     expected: "selected values that fit typed JSON".to_owned(),
@@ -532,7 +551,7 @@ impl Error {
                 if matches!(
                     self,
                     Self::OutputLimit {
-                        reason: "preview_schema_limit_exceeded" | "preview_row_too_large"
+                        reason: "preview_schema_limit_exceeded"
                     }
                 ) =>
             {
@@ -1295,6 +1314,11 @@ mod tests {
         .to_json_diagnostic();
         assert_eq!(record["recovery"], "change_request");
         assert_eq!(record["retryable"], false);
+
+        let record = Error::UnsupportedJsonType { command: "preview" }.to_json_diagnostic();
+        assert_eq!(record["recovery"], "change_request");
+        assert_eq!(record["argument"], "--column");
+        assert!(record["hint"].as_str().unwrap().contains("Use scan"));
 
         for (source, source_kind, recovery) in [
             (

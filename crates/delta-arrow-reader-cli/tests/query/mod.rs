@@ -320,6 +320,7 @@ fn query_ceilings_fail_instead_of_returning_a_successful_sample() -> TestResult 
         assert_eq!(record["code"], "output_limit");
         assert_eq!(record["reason"], reason);
         assert_eq!(record["recovery"], "adjust_budget");
+        assert_eq!(record["argument"], flag);
     }
     let fixture = SqlCommandFixture::new(
         fixture_path("partitioned").join("table"),

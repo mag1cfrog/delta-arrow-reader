@@ -69,6 +69,8 @@ For text help, use `dar query --help` or the corresponding command's help.
 For output and execution-option schemas, `--detail` accepts the example's
 top-level field names and any names in `other_fields`. The latter lists only
 fields absent from the example; it is omitted when the example shows them all.
+The completion guide instead uses `version_1_fields` for the v1 fields absent
+from its v2 example.
 
 For example, after finding `query` in the directory, run
 `dar capabilities --command query`. Its `example` is an argument array with
@@ -494,9 +496,11 @@ reports `completion: "sample"`, including an empty or exhausted result:
 
 The schema or first row must fit; otherwise stdout stays empty and the command
 fails with `preview_schema_limit_exceeded` or `preview_row_too_large`. A later
-byte overflow returns only whole rows. For a needed value too large for a small
-JSON response, use `scan` with redirected stdout and the same projection,
-predicate, row limit, authorization, and snapshot.
+byte overflow returns only whole rows. If the required first row cannot fit,
+explicitly increase `--max-output-bytes` while keeping the projection, predicate,
+row limit, authorization, snapshot, and deadline. To save an Arrow sample
+instead, use `scan` with redirected stdout and the same read inputs; scan has
+no byte ceiling or total deadline.
 
 After a deadline or cancellation, cleanup has at most one additional second,
 and failure reporting has at most one more. A blocked consumer can leave partial

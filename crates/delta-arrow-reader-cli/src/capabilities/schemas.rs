@@ -188,7 +188,12 @@ impl DiscoverySchema {
                     .filter(|name| guide["example"].get(name.as_str()).is_none())
                     .collect();
                 if !other_fields.is_empty() {
-                    guide["other_fields"] = json!(other_fields);
+                    let field_list = if matches!(self, Self::Completion) {
+                        "version_1_fields"
+                    } else {
+                        "other_fields"
+                    };
+                    guide[field_list] = json!(other_fields);
                 }
             }
             if matches!(self, Self::Tables) {
