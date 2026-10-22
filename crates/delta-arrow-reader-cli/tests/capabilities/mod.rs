@@ -11,12 +11,15 @@ pub(super) fn assert_output_matches_schema(name: &str, output: &Value) {
 
     static INSPECTION: LazyLock<jsonschema::Validator> =
         LazyLock::new(|| output_schema_validator("inspection"));
+    static INSPECTION_SUMMARY: LazyLock<jsonschema::Validator> =
+        LazyLock::new(|| output_schema_validator("inspection-summary"));
     static DIAGNOSTIC: LazyLock<jsonschema::Validator> =
         LazyLock::new(|| output_schema_validator("diagnostic"));
     static COMPLETION: LazyLock<jsonschema::Validator> =
         LazyLock::new(|| output_schema_validator("completion"));
     let validator = match name {
         "inspection" => &*INSPECTION,
+        "inspection-summary" => &*INSPECTION_SUMMARY,
         "diagnostic" => &*DIAGNOSTIC,
         "completion" => &*COMPLETION,
         _ => panic!("unknown output schema: {name}"),
@@ -48,6 +51,7 @@ fn named_schemas_are_offline_deterministic_and_use_the_same_diagnostics()
         ("execution-options", "input_schema"),
         ("predicate", "input_schema"),
         ("inspection", "output_schema"),
+        ("inspection-summary", "output_schema"),
         ("diagnostic", "output_schema"),
         ("completion", "output_schema"),
     ] {
@@ -394,7 +398,12 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                 .map(|schema| schema["name"].as_str().unwrap())
                 .collect();
             let expected_outputs = match name {
-                "inspect" => vec!["inspection", "diagnostic", "completion"],
+                "inspect" => vec![
+                    "inspection",
+                    "inspection-summary",
+                    "diagnostic",
+                    "completion",
+                ],
                 "help" => vec!["diagnostic"],
                 _ => vec!["diagnostic", "completion"],
             };

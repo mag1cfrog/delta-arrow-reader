@@ -4,6 +4,7 @@
 
 mod capabilities;
 mod diagnostics;
+mod inspection;
 mod predicates;
 mod query;
 #[cfg(unix)]

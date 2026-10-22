@@ -39,7 +39,7 @@ through DataFusion. Catalog integrations and writes are separate work.
 | Step | Target interface |
 | --- | --- |
 | Discover | `dar capabilities` returns a minimal directory; `--command NAME` and `--schema NAME` return focused usage guides. `--detail NAME` selects a schema field or type, `--authorization NAME` selects an authorization guide, and complete definitions are explicit lookups. `--all` returns the inventory. All are offline. |
-| Inspect | `dar inspect TABLE --view summary`; `--column NAME` selects fields, `--include-metadata` opts into metadata. |
+| Inspect | `dar inspect TABLE --view summary` reports scoped checks; `--column-prefix PREFIX` finds names, `--column NAME` selects types, and `--include-metadata` opts into field metadata. |
 | Preview | `dar preview TABLE`; reuse scan projection, predicate, version, and execution options. |
 | Query | `dar query TABLE --sql-file PATH`; single-table alias is `t`. `--format arrow` is the default; `--format json` returns a small complete result within its stdout budget. Save larger results to a file. |
 | Join | `dar query --tables-file PATH --sql-file PATH`; bind each table explicitly. |

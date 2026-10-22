@@ -168,6 +168,7 @@ result appears. The schema response itself always goes to stdout.
 | Schema name | Result stream | Contents |
 | --- | --- | --- |
 | `inspection` | stdout | The full `inspect` JSON, including the snapshot version and Arrow schema. |
+| `inspection-summary` | stdout | Read checks, matching column names, or selected column types. |
 | `diagnostic` | stderr | A terminal failure record with `--diagnostics=json`, including optional correction fields. |
 | `completion` | stderr | A terminal success record with `--diagnostics=json`, including snapshot bindings and output counts. |
 
@@ -213,18 +214,35 @@ the discovery envelope or `format_version` to them.
 
 ## Inspect a snapshot
 
-`inspect` returns the table version and column schema as JSON. It reads Delta
+`inspect --view summary` returns the table version and scoped read checks as JSON. It reads Delta
 metadata without reading row data or deletion-vector files. For a direct path or
 storage URL, a table whose scan protocol is unsupported can still be inspected
 if its snapshot and schema load. Unity Catalog targets require a supported read
 protocol.
 
 ```sh
-dar inspect /data/orders
-dar inspect --table-version 0 /data/orders
-dar inspect --storage-options-file ./storage.json s3://example-bucket/orders
-dar inspect -- './-table with spaces, and commas'
+dar inspect /data/orders --view summary
+dar inspect /data/orders --view summary --table-version 0 --column-prefix ord
+dar inspect /data/orders --view summary --table-version 0 --column order_id
+dar inspect --view summary --storage-options-file ./storage.json s3://example-bucket/orders
+dar inspect --view summary -- './-table with spaces, and commas'
 ```
+
+Use the reported `table_version` for follow-up lookups. `--column-prefix` returns
+only matching top-level names, in schema order. Matching is case-sensitive; an
+empty prefix matches every name. `--column` returns the exact name, type, and
+nullability of each selected top-level column, in request order. Repeat it for
+multiple columns. Name and type lookups omit checks. Add `--include-metadata`
+to include nonempty metadata on selected columns and their nested fields.
+
+Summary stdout defaults to 4 KiB, including its final newline. If a selection
+cannot fit, the command exits 1 before writing stdout. Narrow the prefix, select
+fewer columns, omit metadata, or explicitly increase `--max-output-bytes N`.
+Names and types are never truncated. There is no total command deadline.
+
+Omitting `--view`, or choosing `--view full`, preserves the complete Arrow schema
+for existing consumers. Full inspection has no output ceiling; redirect it to a
+file. Selection, metadata, and budget options require the summary view.
 
 The command accepts exactly one UTF-8 local path or URL. Relative paths use
 the process working directory. Quote paths and option values that contain
@@ -233,13 +251,15 @@ parsing and allows a table name beginning with `-`.
 
 ```text
 dar inspect [--table-version N] [--storage-options-file PATH]
-            [--databricks-profile PROFILE] [--] TABLE
+            [--databricks-profile PROFILE] [--view full|summary]
+            [--column NAME ... | --column-prefix PREFIX]
+            [--include-metadata] [--max-output-bytes N] [--] TABLE
 ```
 
 <details markdown="1">
 <summary>Version bounds and argument parsing</summary>
 
-Each option may appear once. Omit `--table-version` to select the latest
+Each option except `--column` may appear once. Omit `--table-version` to select the latest
 snapshot, or pass unsigned decimal digits from `0` through
 `18446744073709551615`. Signs, whitespace, fractions, exponents, and overflow
 are rejected. Missing values, unknown options, and extra arguments are errors.
@@ -258,14 +278,14 @@ Discovery does not search numeric version gaps.
 
 Use an existing Databricks CLI workspace profile to resolve a table name and
 obtain temporary cloud credentials. DAR reads the Delta log and data files from
-S3, Azure, GCS, or R2 using local compute. `inspect` returns the snapshot's schema
+S3, Azure, GCS, or R2 using local compute. `inspect` reports snapshot metadata
 and version; `scan` streams its rows as Arrow IPC. Unity Catalog column metadata
 does not determine the output schema. Neither command submits SQL or starts a
 cluster or SQL warehouse.
 
 ```sh
-dar inspect uc://main.sales.orders --databricks-profile work
-dar inspect uc://main.sales.orders --databricks-profile work --table-version 0
+dar inspect uc://main.sales.orders --view summary --databricks-profile work
+dar inspect uc://main.sales.orders --view summary --databricks-profile work --table-version 0
 dar scan uc://main.sales.orders --databricks-profile work \
   --column customer_id --limit 100 > orders.arrow
 ```
@@ -293,7 +313,7 @@ The credential response does not include it, and DAR does not assume a default:
 ```
 
 ```sh
-dar inspect uc://main.sales.orders --databricks-profile work \
+dar inspect uc://main.sales.orders --view summary --databricks-profile work \
   --storage-options-file ./storage.json
 ```
 
@@ -590,7 +610,7 @@ Add credentials or provider settings to the file when needed, then pass its
 path when opening the table:
 
 ```sh
-dar inspect --storage-options-file storage.json s3://example-bucket/orders
+dar inspect --view summary --storage-options-file storage.json s3://example-bucket/orders
 ```
 
 Use the same option with `dar scan` or `dar query`. The
@@ -715,7 +735,31 @@ loading. Their failures also exit 2, preserving the core's redacted
 
 A successful inspection writes one UTF-8 JSON object followed by a newline to
 stdout. Diagnostic logging uses stderr and does not change this JSON.
-This example represents an empty schema:
+With `--view summary`, the default result is:
+
+```json
+{"format_version":1,"kind":"inspection_summary","table_version":"0","checks":{"scan_protocol":"passed","data_files":"not_checked"}}
+```
+
+`scan_protocol` is `passed` or `failed` according to Core's reader-protocol
+validation for the loaded snapshot.
+`data_files` is always `not_checked`: neither Parquet nor deletion-vector access
+was tested. These checks do not establish authorization for a subsequent scan.
+
+With `--column id`, `fields` replaces `checks`:
+
+```json
+{"format_version":1,"kind":"inspection_summary","table_version":"0","fields":[{"name":"id","data_type":"Int32","nullable":true}]}
+```
+
+Types use Arrow's Serde encoding. Nested fields use the same reduced fields;
+`dict_is_ordered` appears only for dictionary fields. Dictionary IDs are omitted.
+Metadata is absent unless explicitly requested, and empty metadata is always
+omitted. This selected representation is not a serialized `arrow_schema::Schema`.
+With `--column-prefix i`, `column_names: ["id"]` replaces `checks` instead.
+Names, timezone text, and metadata are untrusted table content.
+
+The legacy full view represents an empty schema as:
 
 ```json
 {"format_version":1,"table_version":"0","schema":{"fields":[],"metadata":{}}}
@@ -769,7 +813,7 @@ For scripts and agents, add the global option `--diagnostics=json` before or
 after the command:
 
 ```sh
-dar inspect /path/to/table --diagnostics=json > snapshot.json 2> diagnostics.jsonl
+dar inspect /path/to/table --view summary --diagnostics=json > snapshot.json 2> diagnostics.jsonl
 ```
 
 Place the option before `--`, which marks the end of options. Stderr contains
@@ -784,13 +828,13 @@ for fields and completion checks.
 In the default human mode, set `RUST_LOG=debug` before your command to show more detail:
 
 ```sh
-RUST_LOG=debug dar inspect /path/to/table
+RUST_LOG=debug dar inspect /path/to/table --view summary
 ```
 
 To save that detail in `dar.log`, use `2>`:
 
 ```sh
-RUST_LOG=debug dar inspect /path/to/table > snapshot.json 2> dar.log
+RUST_LOG=debug dar inspect /path/to/table --view summary > snapshot.json 2> dar.log
 RUST_LOG=debug dar scan --limit 10 /path/to/table > rows.arrow 2> dar.log
 ```
 
@@ -842,7 +886,7 @@ Use the full command name for wheel installations:
 
 ```sh
 delta-arrow-reader --version
-delta-arrow-reader inspect /data/orders
+delta-arrow-reader inspect /data/orders --view summary
 delta-arrow-reader scan --column id --limit 100 /data/orders > sample.arrow
 ```
 
@@ -893,7 +937,7 @@ dar_image='ghcr.io/mag1cfrog/delta-arrow-reader@sha256:RELEASE_INDEX_HASH'
 docker run --rm --read-only "$dar_image" --version
 docker run --rm --read-only \
   --mount type=bind,src=/absolute/path/to/table,dst=/table,readonly \
-  "$dar_image" inspect /table
+  "$dar_image" inspect /table --view summary
 docker run --rm --read-only \
   --mount type=bind,src=/absolute/path/to/table,dst=/table,readonly \
   "$dar_image" scan --column id --limit 100 /table > sample.arrow

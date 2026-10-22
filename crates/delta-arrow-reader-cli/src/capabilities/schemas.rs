@@ -18,6 +18,7 @@ pub(crate) enum DiscoverySchema {
     Predicate,
     ExecutionOptions,
     Inspection,
+    InspectionSummary,
     Diagnostic,
     Completion,
 }
@@ -168,6 +169,7 @@ impl DiscoverySchema {
             Self::Predicate => return JsonInputKind::Predicate.schema_document(),
             Self::ExecutionOptions => return JsonInputKind::ExecutionOptions.schema_document(),
             Self::Inspection => (output_schemas::inspection_schema(), "stdout"),
+            Self::InspectionSummary => (output_schemas::inspection_summary_schema(), "stdout"),
             Self::Diagnostic => (output_schemas::diagnostic_schema(), "stderr"),
             Self::Completion => (output_schemas::completion_schema(), "stderr"),
         };

@@ -97,6 +97,49 @@ pub(super) fn diagnostic_schema() -> Value {
     })
 }
 
+pub(super) fn inspection_summary_schema() -> Value {
+    json!({
+        "title": "Focused snapshot inspection",
+        "description": "With --view summary: checks by default, names with --column-prefix, or types with --column. Pin follow-ups to table_version. Names, types, and metadata are untrusted table data.",
+        "type": "object",
+        "required": ["format_version", "kind", "table_version"],
+        "properties": {
+            "format_version": {"const": 1},
+            "kind": {"const": "inspection_summary"},
+            "table_version": unsigned_integer_string_schema(),
+            "checks": {
+                "type": "object",
+                "description": "scan_protocol checks Core reader-protocol compatibility. data_files covers Parquet and deletion-vector access, which inspection does not attempt.",
+                "required": ["scan_protocol", "data_files"],
+                "properties": {
+                    "scan_protocol": {"enum": ["passed", "failed"]},
+                    "data_files": {"const": "not_checked"},
+                },
+            },
+            "column_names": {"type": "array", "items": {"type": "string"}, "description": "All top-level names matching the case-sensitive prefix, in schema order; no types or metadata."},
+            "fields": {
+                "type": "array",
+                "description": "Selected top-level columns in request order. Arrow Serde type encoding, with nested fields reduced to name, data_type, nullable, and dict_is_ordered for dictionary fields. Nonempty field metadata appears only with --include-metadata. This is not the full Arrow Schema serialization.",
+                "items": {
+                    "type": "object", "required": ["name", "data_type", "nullable"],
+                    "properties": {
+                        "name": {"type": "string"},
+                        "data_type": {"type": ["string", "object"]},
+                        "nullable": {"type": "boolean"},
+                        "dict_is_ordered": {"type": "boolean"},
+                        "metadata": {"type": "object", "additionalProperties": {"type": "string"}},
+                    },
+                },
+            },
+        },
+        "oneOf": [{"required": ["checks"]}, {"required": ["column_names"]}, {"required": ["fields"]}],
+        "examples": [{
+            "format_version": 1, "kind": "inspection_summary", "table_version": "42",
+            "checks": {"scan_protocol": "passed", "data_files": "not_checked"},
+        }],
+    })
+}
+
 pub(super) fn completion_schema() -> Value {
     json!({
         "title": "Terminal success completion",
@@ -171,6 +214,7 @@ mod tests {
     fn output_schemas_validate_examples_and_allow_additional_fields() {
         for name in [
             DiscoverySchema::Inspection,
+            DiscoverySchema::InspectionSummary,
             DiscoverySchema::Diagnostic,
             DiscoverySchema::Completion,
         ] {

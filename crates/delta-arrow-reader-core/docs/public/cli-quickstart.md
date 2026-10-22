@@ -14,15 +14,24 @@ The examples use the standalone command, `dar`. If you installed the
 [Python package](installation.md#python), use `delta-arrow-reader` in its place.
 Both commands accept the same arguments.
 
-## See the table's columns
+## Inspect the snapshot
 
 ```sh
-dar inspect /path/to/table
+dar inspect /path/to/table --view summary
 ```
 
-The command prints JSON with the table's version in `table_version` and its
-columns in `schema.fields`. It reads the table's metadata without reading its
-rows. Use the column names from this output when selecting columns later.
+The command prints `table_version` and checks scan protocol support. It does not test access to row or deletion-vector data.
+To find columns, search by a prefix and pin the reported version:
+
+```sh
+dar inspect /path/to/table --view summary --table-version 0 --column-prefix id
+dar inspect /path/to/table --view summary --table-version 0 --column id
+```
+
+Replace `0` with the reported version, and `id` with a prefix or name from your
+table. The first lookup returns matching names; the second returns the selected
+column's type. If the response is too large, narrow the prefix or select fewer
+columns.
 
 ## Save a small result
 
