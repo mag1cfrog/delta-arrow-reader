@@ -11,6 +11,9 @@ read, use the [CLI quickstart](cli-quickstart.md). The shell examples use Bash.
 | Aggregate, group, or sort rows with SQL | [`dar query`](#query-a-snapshot) |
 | Select rows by a condition | [Filter rows](#filter-rows) |
 | Connect to remote storage | [Storage options file](#storage-options-file) |
+| Select S3 credentials from a file or environment | [S3 credential sources](#s3-credential-sources) |
+| Select Azure credentials from a file or environment | [Azure credential sources](#azure-credential-sources) |
+| Select a GCS credentials file | [GCS credential sources](#gcs-credential-sources) |
 | Read a Unity Catalog table by name | [Databricks profile](#read-a-unity-catalog-table) |
 | Change parallel reads or buffering | [Execution options](#execution-options) |
 | Handle a command's result in a script | [Inspection JSON](#inspection-json) and [exit statuses](#exit-statuses-for-scripts) |
@@ -233,7 +236,7 @@ parsing and allows a table name beginning with `-`.
 
 ```text
 dar inspect [--table-version N] [--storage-options-file PATH]
-            [--databricks-profile PROFILE] [--] TABLE
+            [--auth-source SOURCE] [--databricks-profile PROFILE] [--] TABLE
 ```
 
 <details markdown="1">
@@ -258,7 +261,7 @@ Discovery does not search numeric version gaps.
 
 Use an existing Databricks CLI workspace profile to resolve a table name and
 obtain temporary cloud credentials. DAR reads the Delta log and data files from
-S3, Azure, GCS, or R2 using local compute. `inspect` returns the snapshot's schema
+S3, Azure Blob, GCS, or R2 using local compute. `inspect` returns the snapshot's schema
 and version; `scan` streams its rows as Arrow IPC. Unity Catalog column metadata
 does not determine the output schema. Neither command submits SQL or starts a
 cluster or SQL warehouse.
@@ -311,11 +314,11 @@ These rules apply to Unity Catalog targets:
   from the environment.
 - Supported credentials are S3/R2 temporary key/secret/session-token credentials,
   Azure user-delegation SAS or Azure AD bearer tokens, and GCS OAuth bearer tokens.
-  GCS locations use `gs://bucket/path`. Azure locations must
+  GCS locations use `gs://bucket/path`. Azure Blob locations must
   identify the account and container using `abfss://` or an Azure Blob/DFS HTTPS
   URL. R2 locations use `r2://bucket@account.r2.cloudflarestorage.com/path`
   or the equivalent `https://account.r2.cloudflarestorage.com/bucket/path`.
-  Other credential types, S3 access points, and other Azure/R2 endpoints are
+  Other credential types, S3 access points, and other Azure Blob/R2 endpoints are
   unsupported.
 - Storage options may supply supported region and transport settings, including
   endpoints, timeouts, and proxies. Credential, bucket, account, container,
@@ -359,7 +362,7 @@ before table loading, including for `--limit 0`.
 
 ```text
 dar scan [--table-version N] [--storage-options-file PATH]
-         [--databricks-profile PROFILE]
+         [--auth-source SOURCE] [--databricks-profile PROFILE]
          [--predicate-file PATH] [--column NAME ... | --no-columns]
          [--execution-options-file PATH] [--target-partitions N] [--limit N] [--] TABLE
 ```
@@ -428,6 +431,7 @@ dar query /data/orders --table-version 0 --sql-file query.sql > original.arrow
 
 ```text
 dar query [--table-version N] [--storage-options-file PATH]
+          [--auth-source SOURCE]
           --sql-file PATH [--max-rows N] [--max-output-bytes BYTES]
           [--memory-limit-bytes BYTES] [--] TABLE
 ```
@@ -580,33 +584,28 @@ and leave stdout empty.
 
 `--storage-options-file` accepts a local UTF-8 JSON file containing an object
 of string keys and string values. For example, save this as `storage.json`
-to select an S3 region:
+to select an S3 region while using explicitly selected environment credentials:
 
 ```json
 {"aws_region":"us-west-2"}
 ```
 
-Add credentials or provider settings to the file when needed, then pass its
-path when opening the table:
+Then pass the file when opening the table:
 
 ```sh
-dar inspect --storage-options-file storage.json s3://example-bucket/orders
+dar inspect --auth-source env --storage-options-file storage.json s3://example-bucket/orders
 ```
 
 Use the same option with `dar scan` or `dar query`. The
 [storage guide](configuration.md#read-from-s3) explains table URLs and credentials,
-including [Azure](configuration.md#read-from-azure). Use its storage keys as JSON
+including [Azure Blob](configuration.md#read-from-azure). Use its storage keys as JSON
 keys here. Keep files containing credentials out of source control.
 
-The CLI forwards keys and values unchanged, including case, spaces, and
-commas. The core reader interprets provider options. Omitting the file supplies
-an empty explicit map and keeps the backend's default credential lookup.
-An empty object is also valid. The CLI does not import cloud configuration
-variables into that map: setting `AWS_ACCESS_KEY_ID` and
-`AWS_SECRET_ACCESS_KEY` in the environment alone does not supply S3 credentials.
-Without explicit credential settings, S3 uses instance metadata, Azure uses
-managed identity, and GCS checks the well-known ADC file before using metadata
-credentials. The current CLI has no `--auth-source` or `--env-file` selector.
+Without `--auth-source`, the CLI forwards keys and values unchanged, including
+case, spaces, and commas. The core reader interprets provider options. Omitting
+the file supplies an empty map; an empty object is also valid. This path does
+not automatically read AWS access keys from the environment. Use
+`--auth-source env` to select them.
 
 For a local HTTP test endpoint, `{"allow_http":"true"}` enables plain HTTP.
 
@@ -621,6 +620,425 @@ against the working directory. A path of `-` names a local file; it does not
 read standard input.
 
 </details>
+
+## Explicit credential sources
+
+`--auth-source` selects authorization for direct cloud reads. The same sources
+are available to `inspect`, `scan`, and `query`. Help lists the installed
+selectors without reading input files or resolving credentials.
+
+| Backend | Source | Credentials | Renewal |
+| --- | --- | --- | --- |
+| S3 | [`json` or `env`](#s3-credential-sources) | Access-key pair, with an optional session token | Supply new credentials for another command |
+| S3 | [`aws-web-identity`](#s3-web-identity) | Role ARN and web identity token file | Refreshes temporary credentials; rereads the token file |
+| S3 | [`aws-container`](#s3-container-credentials) | ECS relative URI, or EKS full URI and token file | Refreshes at the selected endpoint; rereads the EKS token file |
+| Azure Blob | [`json` or `env`](#azure-credential-sources) | Account key, SAS token, or bearer token | Supply new credentials for another command |
+| Azure Blob | [`json` or `env`](#azure-credential-sources) | Client ID, client secret, and tenant ID | Refreshes access tokens for the loaded principal |
+| Azure Blob | [`azure-workload-identity`](#azure-workload-identity) | Client ID, tenant ID, and federated token file | Refreshes access tokens; rereads the token file |
+| Azure Blob | [`azure-managed-identity`](#azure-managed-identity) | One explicit client, object, or resource ID | Refreshes access tokens for that identity |
+| GCS | [`json` or `env`](#gcs-credential-sources) | Explicit service-account or authorized-user ADC file | Renews using the identity loaded from the file |
+
+Local paths do not accept `--auth-source`. Unity Catalog uses
+`--databricks-profile` and rejects it. Omitting `--auth-source` preserves the
+existing storage-options behavior, including any native provider defaults.
+The explicit sources above do not fall back to other credential sources after
+configuration, acquisition, renewal, or permission failures.
+
+### Provider limits
+
+The CLI exposes the mechanisms it can select through the installed
+`object_store` provider. It does not implement a full cloud SDK credential
+chain, AWS profiles or SSO, automatic home-directory ADC discovery, or an
+anonymous source selector.
+
+These candidate selectors are not accepted by `--auth-source`:
+
+| Candidate | Why it is not exposed |
+| --- | --- |
+| `aws-imds` | The native provider queries the instance's current role on every refresh, so it cannot retain an explicitly selected role. |
+| `azure-cli` | The native provider follows the current CLI account and invokes a blocking subprocess without a timeout or bounded output. |
+| `gcp-metadata` | Native construction checks home-directory ADC first. Its metadata provider selects the default service account and retries a second address after failure. |
+
+Explicit GCS ADC files already use `json` or `env`; there is no separate
+`gcp-adc` selector. The sections below list accepted keys, aliases, environment
+variables, precedence, and limits for each supported source.
+
+## S3 credential sources
+
+`inspect`, `scan`, and `query` accept `--auth-source json|env` for explicit S3
+access-key credentials. The key ID and secret key must both be present; a
+session token is optional. The source is loaded once per command. Expired or
+denied credentials fail the read without selecting another identity. Supply
+updated credentials when starting another command.
+
+`--auth-source json` requires `--storage-options-file`. That file supplies the
+credentials and storage configuration; AWS environment credentials are ignored.
+For example, provision a protected `storage.json` file with this shape:
+
+```json
+{
+  "aws_access_key_id": "<access-key-id>",
+  "aws_secret_access_key": "<secret-access-key>",
+  "aws_region": "eu-west-1"
+}
+```
+
+```sh
+dar inspect s3://example-bucket/orders --auth-source json --storage-options-file storage.json
+```
+
+`--auth-source env` reads only `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+`AWS_SESSION_TOKEN`, `AWS_REGION`, and `AWS_DEFAULT_REGION`. Provision these in
+the command's environment. An optional storage-options file may supply
+noncredential settings, but credential fields in that file are rejected.
+
+```sh
+dar query s3://example-bucket/orders --auth-source env --sql-file count.sql > count.arrow
+```
+
+JSON region settings take precedence over both environment region settings.
+Within either source, `aws_region`/`AWS_REGION` takes precedence over
+`aws_default_region`/`AWS_DEFAULT_REGION`. Without a region, the native S3
+builder uses `us-east-1`; set the bucket's region explicitly for other regions.
+
+JSON keys use the native S3 aliases and are case-insensitive. For example,
+`access_key_id` and `AWS_ACCESS_KEY_ID` refer to the same setting, as do
+`token`, `session_token`, `aws_token`, and `aws_session_token`. Supplying two
+aliases for the same setting is an error, even if their values match.
+Credentials must be nonempty and contain no control characters.
+
+The `json` and `env` sources accept region, endpoint, HTTP client, virtual-hosted
+request, unsigned-payload, checksum, and requester-pays settings. They reject
+unknown keys, bucket overrides, unsigned requests, and provider-selection
+settings. They do not select AWS profiles, SSO, web identity, container
+credentials, or instance metadata. Unity Catalog uses `--databricks-profile`
+and rejects `--auth-source`.
+
+Invalid source configuration exits with status 2 and diagnostic code
+`invalid_storage_authorization`. Storage failures retain the reader's normal
+diagnostics. Credential values and file contents are omitted from both text
+and JSON diagnostics. Keep credential files out of source control and restrict
+access, for example with `chmod 600 storage.json` on Unix. A file reference does
+not isolate credentials from an agent or process that can read that file.
+
+### S3 web identity
+
+Use `--auth-source aws-web-identity` with `inspect`, `scan`, or `query` to assume
+an AWS role using a web identity token file. The role ARN and token file path
+are required. Each JSON field takes precedence over its environment variable;
+fields absent from JSON are read from the environment.
+
+| Setting | Canonical JSON key | Environment variable |
+| --- | --- | --- |
+| Role ARN | `aws_role_arn` | `AWS_ROLE_ARN` |
+| Token file path | `aws_web_identity_token_file` | `AWS_WEB_IDENTITY_TOKEN_FILE` |
+| Session name | `aws_role_session_name` | `AWS_ROLE_SESSION_NAME` |
+| STS endpoint | `aws_endpoint_url_sts` | `AWS_ENDPOINT_URL_STS` |
+
+For example, with `AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`, and `AWS_REGION`
+set by the workload environment:
+
+```sh
+dar query s3://example-bucket/orders --auth-source aws-web-identity \
+  --sql-file count.sql > count.arrow
+```
+
+An optional `--storage-options-file` can supply the fields above and the S3
+storage settings described earlier. The same region precedence applies: JSON
+over environment, then `aws_region` over `aws_default_region`. The default
+region is `us-east-1`, the default session name is `WebIdentitySession`, and
+the default STS endpoint is `https://sts.<region>.amazonaws.com`. STS requires
+HTTPS even when `allow_http` enables HTTP for storage requests.
+
+The command fixes the role, session name, token file path, and endpoint when
+it starts. The native provider obtains temporary credentials and rereads that
+token file when credentials need refreshing. Your workload must provision and
+rotate the token file. Changing the options file during a command does not
+change the selected identity.
+
+Missing references, duplicate aliases, empty values, and control characters
+are rejected. JSON access keys and alternative provider settings are also
+rejected. Ambient access keys, profiles, SSO, container credentials, and
+instance metadata are not selected. An unreadable token file, failed STS
+request, or storage permission denial fails the read without switching
+identities. This source supports S3 tables only.
+
+### S3 container credentials
+
+Use `--auth-source aws-container` with `inspect`, `scan`, or `query` for
+[ECS task roles or EKS Pod Identity](https://docs.aws.amazon.com/sdkref/latest/guide/feature-container-credentials.html).
+Configure exactly one of these references:
+
+- ECS: a relative credentials URI. It is appended to `http://169.254.170.2`.
+- EKS: a full credentials URI and an authorization token file path.
+
+| Setting | Canonical JSON key | Environment variable |
+| --- | --- | --- |
+| Relative URI | `aws_container_credentials_relative_uri` | `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` |
+| Full URI | `aws_container_credentials_full_uri` | `AWS_CONTAINER_CREDENTIALS_FULL_URI` |
+| Token file path | `aws_container_authorization_token_file` | `AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE` |
+
+For example, when the container runtime supplies the environment reference:
+
+```sh
+dar query s3://example-bucket/orders --auth-source aws-container \
+  --sql-file count.sql > count.arrow
+```
+
+If `--storage-options-file` contains any container reference field, it must
+contain the complete reference. All container environment references are then
+ignored. Otherwise, the command reads the three environment variables above.
+It rejects mixed ECS/EKS references and incomplete EKS references, including
+a full URI without a token file. Region and other S3 storage settings follow
+the rules described earlier.
+
+Relative URIs must begin with a single `/` and contain no backslashes. Full
+URIs must use HTTP or HTTPS. Both forms may include a query string; embedded
+user credentials and URL fragments are rejected. The native provider allows
+HTTP for container credential endpoints independently of storage `allow_http`.
+
+The endpoint and token file path are fixed when the command starts. The native
+provider refreshes temporary credentials from that endpoint. For EKS, it
+rereads the token file and sends its contents in the `Authorization` header;
+the container runtime must provision and rotate this file. The CLI does not
+use `AWS_CONTAINER_AUTHORIZATION_TOKEN` or support a full URI without a token
+file. These limits reflect the installed provider's supported mechanisms.
+
+Unreadable token files, failed credential requests, malformed responses, and
+storage permission denials fail the read. The command does not switch to
+ambient access keys, web identity, profiles, or instance metadata. JSON fields
+selecting those other sources are rejected. This source supports S3 only.
+
+## Azure credential sources
+
+`inspect`, `scan`, and `query` accept `--auth-source json|env` for Azure account
+keys, SAS tokens, bearer tokens, and service principals using a client secret.
+Select exactly one credential family. A service principal requires all three
+fields: client ID, client secret, and tenant ID. Partial or mixed families are
+rejected before reading the table.
+
+The identity is loaded once per command. Client-secret authorization uses the
+native Azure provider to obtain and refresh access tokens for that identity.
+An authorization or refresh failure fails the read without switching identities.
+Account keys, SAS tokens, and supplied bearer tokens are not refreshed.
+
+| Credential | Canonical JSON key | Environment variable |
+| --- | --- | --- |
+| Account key | `azure_storage_account_key` | `AZURE_STORAGE_ACCOUNT_KEY` |
+| SAS token | `azure_storage_sas_key` | `AZURE_STORAGE_SAS_KEY` |
+| Bearer token | `azure_storage_token` | `AZURE_STORAGE_TOKEN` |
+| Client ID | `azure_storage_client_id` | `AZURE_CLIENT_ID` |
+| Client secret | `azure_storage_client_secret` | `AZURE_CLIENT_SECRET` |
+| Tenant ID | `azure_storage_tenant_id` | `AZURE_TENANT_ID` |
+
+`--auth-source json` requires `--storage-options-file` and ignores environment
+credentials. For example, provision a protected `storage.json` file:
+
+```json
+{
+  "azure_storage_account_name": "exampleaccount",
+  "azure_storage_sas_key": "<sas-token>"
+}
+```
+
+```sh
+dar inspect az://orders/table --auth-source json --storage-options-file storage.json
+```
+
+For a service principal, replace the SAS field with the complete client-secret
+family:
+
+```json
+{
+  "azure_storage_account_name": "exampleaccount",
+  "azure_storage_client_id": "<application-id>",
+  "azure_storage_client_secret": "<client-secret>",
+  "azure_storage_tenant_id": "<tenant-id>"
+}
+```
+
+`--auth-source env` reads only the six credential variables above and
+`AZURE_STORAGE_ACCOUNT_NAME`. A storage-options file may supply noncredential
+settings, but credential fields in that file are rejected.
+
+```sh
+dar query abfss://orders@exampleaccount.dfs.core.windows.net/table \
+  --auth-source env --sql-file count.sql > count.arrow
+```
+
+An account embedded in an `abfss://container@account...` or native HTTPS storage
+URL takes precedence, as in the native Azure builder. Otherwise, supply
+`azure_storage_account_name` in JSON or, with `--auth-source env`,
+`AZURE_STORAGE_ACCOUNT_NAME`. JSON takes precedence over the environment.
+
+JSON accepts the native Azure aliases, case-insensitively. Examples include
+`access_key`/`account_key`, `sas_key`/`sas_token`, `bearer_token`/`token`,
+`client_id`, `client_secret`, and `tenant_id`/`authority_id`.
+Duplicate aliases are rejected, even with identical values. Account keys must
+be base64-encoded. SAS tokens may start with `?` and must include a nonempty
+`sig`; literal and percent-encoded `+` characters are preserved. Bearer tokens
+must contain only visible ASCII characters.
+
+Explicit selection accepts account, endpoint, HTTP client, and Fabric endpoint
+settings. Client-secret authorization uses the native provider's public Azure
+authority by default; set `azure_storage_authority_host` in JSON to override it.
+The `authority_host` alias is also accepted. The `json` and `env` sources do not
+read `AZURE_AUTHORITY_HOST`.
+
+Unknown keys, container overrides, emulator mode, unsigned requests, and
+provider-selection options are rejected. Workload and managed identities require
+their own source selectors, described below. Azure CLI is not offered by
+`--auth-source`. Invalid source configuration exits with status 2 and code
+`invalid_storage_authorization`.
+
+Keep credential files out of source control and restrict access, for example
+with `chmod 600 storage.json` on Unix. File references do not isolate credentials
+from a process that can read the file. Credential values and file contents are
+omitted from text and JSON diagnostics.
+
+### Azure workload identity
+
+Use `--auth-source azure-workload-identity` with an Azure service principal
+configured to trust the issuer of a federated token file. It is available for
+tables in Azure Blob Storage with `inspect`, `scan`, and `query`.
+
+```sh
+dar query abfss://orders@exampleaccount.dfs.core.windows.net/table \
+  --auth-source azure-workload-identity --sql-file count.sql > count.arrow
+```
+
+Provision all three required references in the environment or a protected
+storage-options file:
+
+| Reference | Canonical JSON key | Environment variable |
+| --- | --- | --- |
+| Client ID | `azure_storage_client_id` | `AZURE_CLIENT_ID` |
+| Tenant ID | `azure_storage_tenant_id` | `AZURE_TENANT_ID` |
+| Token file path | `azure_federated_token_file` | `AZURE_FEDERATED_TOKEN_FILE` |
+
+JSON accepts native aliases such as `client_id`, `tenant_id`, and
+`federated_token_file`. Each JSON field takes precedence over its environment
+counterpart. Missing, empty, and duplicate references are rejected before
+reading the table. Account names follow the same URL, JSON, and environment
+precedence as the other Azure sources.
+
+The optional `azure_storage_authority_host` JSON setting takes precedence over
+`AZURE_AUTHORITY_HOST`. If both are absent, the native provider uses the public
+Azure authority. Endpoint and HTTP client settings remain in the storage-options
+file.
+
+The native provider fixes the client ID, tenant ID, authority, and token file
+path for the command. When an access token needs renewal, it rereads the same
+file, so the workload issuer can rotate its contents. Unreadable files, rejected
+assertions, and refresh failures fail the read without selecting another
+identity. The CLI does not create the file or manage its rotation.
+
+Other credential families in JSON are rejected. Ambient account keys, SAS
+tokens, bearer tokens, and client secrets are ignored by this source. Token
+contents are not passed in command arguments or included in diagnostics.
+
+### Azure managed identity
+
+Use `--auth-source azure-managed-identity` on a host that provides Azure managed
+identity tokens. Select exactly one identity by client ID, object ID, or managed
+identity resource ID. This source requires an explicit ID; it does not select
+the host's default identity when the ID is missing or rejected.
+
+| Identity selector | Canonical JSON key | Environment variable |
+| --- | --- | --- |
+| Client ID | `azure_storage_client_id` | `AZURE_CLIENT_ID` |
+| Object ID | `azure_object_id` | `AZURE_OBJECT_ID` |
+| Resource ID | `azure_msi_resource_id` | `AZURE_MSI_RESOURCE_ID` |
+
+JSON accepts native aliases such as `client_id`, `object_id`, and
+`msi_resource_id`. One selector in JSON takes precedence over all three
+environment selectors. Without a JSON selector, set exactly one of the listed
+environment variables. Missing IDs, empty values, duplicate aliases, and
+multiple selectors fail before table access.
+
+For example, provision a `storage.json` file containing the selected client ID:
+
+```json
+{
+  "azure_storage_client_id": "<managed-identity-client-id>"
+}
+```
+
+```sh
+dar inspect abfss://orders@exampleaccount.dfs.core.windows.net/table \
+  --auth-source azure-managed-identity --storage-options-file storage.json
+```
+
+The source also works with `scan` and `query`. Account names follow the same
+URL, JSON, and environment precedence as the other Azure sources.
+
+The token endpoint comes from `azure_msi_endpoint` in JSON, then
+`IDENTITY_ENDPOINT`, then the native Azure IMDS endpoint. JSON aliases include
+`msi_endpoint` and `identity_endpoint`. If the host supplies `IDENTITY_HEADER`,
+the native provider sends it as `x-identity-header` on token requests only.
+That secret stays in the environment; it is not a JSON field or command argument.
+`AZURE_MSI_ENDPOINT` is not read by this source.
+
+The native provider obtains and refreshes tokens with the same identity
+selector and endpoint throughout the command. Token acquisition, refresh, and
+storage permission failures stop the read without selecting another identity.
+Other credential families in JSON are rejected; ambient storage credentials,
+client secrets, workload tokens, and Azure CLI sessions are ignored.
+
+## GCS credential sources
+
+`inspect`, `scan`, and `query` accept `--auth-source json|env` to select an
+explicit Application Default Credentials (ADC) file for GCS. The installed
+native provider supports these file types:
+
+| ADC `type` | Authorization |
+| --- | --- |
+| `service_account` | Signs JWT bearer tokens with the file's RSA private key |
+| `authorized_user` | Exchanges the file's refresh token for OAuth access tokens |
+
+`--auth-source json` requires `--storage-options-file`. Use that file to point
+to the separately provisioned credentials file:
+
+```json
+{"google_application_credentials":"/run/secrets/gcs-credentials.json"}
+```
+
+```sh
+dar inspect gs://example-bucket/orders --auth-source json --storage-options-file storage.json
+```
+
+`--auth-source env` reads only `GOOGLE_APPLICATION_CREDENTIALS`, which must
+contain a nonempty file path. An optional storage-options file may contain
+noncredential settings, but an ADC reference in that file is rejected.
+
+```sh
+dar query gs://example-bucket/orders --auth-source env --sql-file count.sql > count.arrow
+```
+
+Relative credential paths use the command's working directory. The provider
+loads the selected file once and retains that identity for token renewal.
+Changing the file during a command does not change the identity. Missing,
+invalid, expired, or denied credentials never trigger home-directory ADC
+lookup, a metadata request, or selection of another source. Authorized-user
+token renewal requires access to Google's OAuth endpoint.
+
+JSON keys are case-insensitive. `application_credentials` is an alias for
+`google_application_credentials`; supplying both is an error. Storage endpoint
+(`google_base_url`/`base_url`) and HTTP client settings are accepted. Bucket
+overrides, unsigned requests, and unknown keys are rejected. Explicit source
+selection uses ADC files; it rejects the legacy `google_service_account` and
+`google_service_account_key` settings. Standard service-account files with
+`"type":"service_account"` use the ADC reference shown above. Other ADC types,
+including external-account and impersonated-service-account files, are not
+supported by the installed provider.
+
+Invalid source configuration or an unreadable or malformed ADC file exits with
+status 2 and code `invalid_storage_authorization`. Token-fetch, renewal, and
+storage failures retain the reader's normal diagnostics. Credential values and
+file contents are omitted from text and JSON diagnostics. Protect both files
+with appropriate filesystem permissions and keep credentials out of source
+control. A file reference does not prevent a process with read access from
+reading the credentials.
 
 ## Execution options
 

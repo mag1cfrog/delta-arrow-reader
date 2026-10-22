@@ -114,11 +114,11 @@ impl TableCredentialCache {
             StorageBackend::S3 | StorageBackend::R2 => DeltaStorageCredentialProvider::Aws(
                 Arc::new(AwsTableCredentialProvider(Arc::clone(self))),
             ),
-            StorageBackend::Azure => DeltaStorageCredentialProvider::Azure(Arc::new(
+            StorageBackend::AzureBlob => DeltaStorageCredentialProvider::Azure(Arc::new(
                 AzureTableCredentialProvider(Arc::clone(self)),
             )),
             StorageBackend::Gcs => DeltaStorageCredentialProvider::Gcp(Arc::new(
-                GcsTableCredentialProvider(Arc::clone(self)),
+                GcpTableCredentialProvider(Arc::clone(self)),
             )),
         }
     }
@@ -207,10 +207,10 @@ impl CredentialProvider for AzureTableCredentialProvider {
 
 /// GCS bearer authorization through the shared UC cache.
 #[derive(Debug)]
-struct GcsTableCredentialProvider(Arc<TableCredentialCache>);
+struct GcpTableCredentialProvider(Arc<TableCredentialCache>);
 
 #[async_trait]
-impl CredentialProvider for GcsTableCredentialProvider {
+impl CredentialProvider for GcpTableCredentialProvider {
     type Credential = GcpCredential;
 
     async fn get_credential(&self) -> object_store::Result<Arc<GcpCredential>> {

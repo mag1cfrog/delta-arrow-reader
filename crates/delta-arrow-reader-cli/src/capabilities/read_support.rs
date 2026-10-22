@@ -47,9 +47,14 @@ impl AuthorizationGuide {
                     .as_object()
                     .into_iter()
                     .flat_map(|keys| keys.keys())
+                    .filter(|key| {
+                        !matches!(self, Self::Gcs) || *key == "google_application_credentials"
+                    })
                     .collect();
                 json!({
                     "commands": storage["commands"],
+                    "source_argument": storage["source_argument"],
+                    "sources": storage["sources"][self.name()],
                     "storage_options_argument": storage["storage_options_argument"],
                     "credential_keys": keys,
                     "notes": storage["backend_notes"][self.name()],
@@ -82,7 +87,7 @@ impl AuthorizationGuide {
                 "Pass an existing Databricks profile name; never put credential values in arguments."
             }
             _ => {
-                "For explicit credentials, pass an existing storage-options file path; never put credential values in arguments."
+                "Use json with an existing storage-options file path, or env with provisioned variables and no credential keys in that file. Explicit sources never fall back to another identity; never put credential values in arguments."
             }
         }
     }
@@ -94,6 +99,7 @@ impl AuthorizationGuide {
         } else {
             let name = self.name();
             let mut storage = sources["direct_storage"].clone();
+            storage["sources"] = storage["sources"][name].clone();
             storage["schema_command"] = json!([
                 crate::command_name(),
                 "capabilities",
@@ -141,12 +147,18 @@ pub(super) fn authorization_sources() -> Value {
             "commands": ["inspect", "scan", "query"],
             "storage_options_argument": "--storage-options-file",
             "storage_options_schema": "storage-options",
-            "credential_selection": "storage_backend",
-            "explicit_source_selection": false,
+            "credential_selection": "explicit_source_or_storage_backend_default",
+            "explicit_source_selection": true,
+            "source_argument": "--auth-source",
+            "sources": {
+                "s3": ["json", "env", "aws-web-identity", "aws-container"],
+                "azure-blob": ["json", "env", "azure-workload-identity", "azure-managed-identity"],
+                "gcs": ["json", "env"],
+            },
             "env_file_input": false,
-            "imports_storage_options_from_environment": false,
+            "imports_storage_options_from_environment": true,
             "option_names_case_sensitive": false,
-            "unknown_options": "ignored_by_backend",
+            "unknown_options": {"with_auth_source": "rejected", "without_auth_source": "ignored_by_backend"},
             "credential_option_aliases": {
                 "s3": {
                     "aws_access_key_id": ["access_key_id"],
@@ -168,21 +180,21 @@ pub(super) fn authorization_sources() -> Value {
                 },
             },
             "notes": [
-                "Cloud reads use the selected backend's existing credential resolution.",
-                "The listed keys cover authentication inputs. Backend provider and transport settings are also accepted through the JSON file.",
+                "Explicit sources reject duplicate aliases and conflicting credential families. Local and Unity Catalog targets reject --auth-source.",
+                "Without --auth-source, native backend precedence and credential defaults apply; environment options are not imported.",
             ],
             "backend_notes": {
                 "s3": [
-                    "Static credentials require an access key and secret key; a session token is optional. AWS environment variables and profile/SSO files are not imported as storage options.",
-                    "Without explicit credential settings, the backend uses instance metadata during table access.",
+                    "json/env require an access key and secret key; a session token is optional. env uses AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, optional AWS_SESSION_TOKEN, AWS_REGION and AWS_DEFAULT_REGION.",
+                    "Workload sources use provisioned role/token-file or container endpoint references. AWS profiles/SSO are unsupported. Omitting --auth-source uses backend defaults.",
                 ],
                 "azure-blob": [
-                    "Accepts an account key, SAS token, bearer token, or client ID/client secret/tenant ID settings. Backend precedence applies if several credential families are supplied.",
-                    "Without explicit credential settings, the backend uses managed identity during table access.",
+                    "json/env require exactly one complete credential family. env accepts AZURE_STORAGE_ACCOUNT_KEY, AZURE_STORAGE_SAS_KEY or AZURE_STORAGE_TOKEN, or AZURE_CLIENT_ID + AZURE_CLIENT_SECRET + AZURE_TENANT_ID. If the URL omits the account, supply azure_storage_account_name in JSON or AZURE_STORAGE_ACCOUNT_NAME with env.",
+                    "Workload identity requires a client ID, tenant ID and token file; managed identity requires one client, object or resource ID. Omitting --auth-source uses backend defaults.",
                 ],
                 "gcs": [
-                    "Accepts a service-account file path, service-account JSON string, or application-credentials file path. The two service-account forms cannot be combined.",
-                    "Without explicit credential settings, the backend checks the well-known ADC file before using metadata credentials during table access.",
+                    "env reads GOOGLE_APPLICATION_CREDENTIALS. json/env select an explicit service-account or authorized-user ADC file without home-directory or metadata fallback.",
+                    "Service-account path/key aliases apply only without --auth-source, which uses backend defaults.",
                 ],
             },
         },
@@ -280,7 +292,7 @@ mod tests {
         let credential_keys = [
             "aws_access_key_id",
             "azure_storage_account_key",
-            "google_service_account",
+            "google_application_credentials",
         ];
         for (guide, expected_key) in [
             (AuthorizationGuide::S3, credential_keys[0]),
@@ -303,6 +315,8 @@ mod tests {
             assert!(handling.contains("storage-options file path"));
             assert!(!handling.contains("profile"));
             assert!(handling.contains("never put credential values in arguments"));
+            assert!(handling.contains("no credential keys in that file"));
+            assert!(handling.contains("never fall back to another identity"));
             assert!(
                 selected["credential_keys"]
                     .as_array()
@@ -339,6 +353,8 @@ mod tests {
             assert!(authorization.get("backend_notes").is_none());
             assert!(authorization.get("profile_argument").is_none());
             assert_eq!(authorization["storage_options_schema"], "storage-options");
+            assert_eq!(selected["source_argument"], "--auth-source");
+            assert_eq!(selected["sources"], authorization["sources"]);
         }
         let document = AuthorizationGuide::UnityCatalog.full_document();
         let concise = AuthorizationGuide::UnityCatalog.guide_document();
@@ -463,18 +479,41 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_source_output_and_deadline_options_are_not_accepted() {
+    fn advertised_sources_match_clap_and_unsupported_options_stay_rejected() {
         let authorization = authorization_sources();
         assert_eq!(
             authorization["direct_storage"]["explicit_source_selection"],
-            false
+            true
         );
         assert_eq!(authorization["direct_storage"]["env_file_input"], false);
+        let advertised_sources: std::collections::BTreeSet<_> =
+            authorization["direct_storage"]["sources"]
+                .as_object()
+                .unwrap()
+                .values()
+                .flat_map(|sources| sources.as_array().unwrap())
+                .map(|source| source.as_str().unwrap())
+                .collect();
+        let installed_sources: std::collections::BTreeSet<_> =
+            crate::direct_credentials::CredentialSource::value_variants()
+                .iter()
+                .map(|source| source.to_possible_value().unwrap().get_name().to_owned())
+                .collect();
+        assert_eq!(
+            advertised_sources,
+            installed_sources.iter().map(String::as_str).collect()
+        );
         let support = command_read_support();
         for name in ["inspect", "scan", "query"] {
             assert!(support[name]["deadline_ms"].is_null());
+            for source in &advertised_sources {
+                let mut args = vec!["dar", name, "s3://bucket/table", "--auth-source", source];
+                if name == "query" {
+                    args.extend(["--sql-file", "query.sql"]);
+                }
+                assert!(Cli::try_parse_from(args).is_ok());
+            }
             for (option, value) in [
-                ("--auth-source", "env"),
                 ("--env-file", "credentials.env"),
                 ("--output", "result.arrow"),
                 ("--format", "json"),

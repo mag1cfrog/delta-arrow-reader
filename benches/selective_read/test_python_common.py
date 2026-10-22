@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "runners"))
 import python_common as common
@@ -16,25 +16,35 @@ import run
 
 
 class ReaderBookkeeping(unittest.TestCase):
-    def test_native_bridge_preserves_exports_and_failures(self):
+    def test_cleanup_preserves_failure_precedence_and_records_its_clock(self):
+        for failed in (False, True):
+            record = {"purpose": "timing", "status": "validation_failed", "phase": "correctness_gate"}
+            close = Mock(side_effect=RuntimeError("close failed") if failed else None)
+            with patch.object(common, "checkpoint") as checkpoint, patch.object(common, "clock", return_value=19):
+                record["_cleanup_start"] = 7
+                common.cleanup(record, close, "Spark cleanup failed: ")
+            close.assert_called_once_with()
+            checkpoint.assert_called_once_with(record, "cleanup")
+            self.assertEqual((record["phase"], record["status"]),
+                             ("cleanup", "operational_failure") if failed else ("correctness_gate", "validation_failed"))
+            self.assertEqual(record["cleanup_ns"], 12)
+            self.assertNotIn("_cleanup_start", record)
+            if failed:
+                self.assertEqual(record["failure_reason"], "Spark cleanup failed: close failed")
+
+    def test_native_bridge_preserves_validation_and_exclusive_records(self):
         request = json.loads((Path(__file__).parent / "runners/contract-cases.json").read_text())["request"]
-        common.validate(request)
+        self.assertEqual(common.observation(request)["_query_count"], 2)
         with self.assertRaises(ValueError):
-            common.validate(request | {"surprise": True})
+            common.observation(request | {"surprise": True})
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)
-            (output / "query-0.arrow").write_bytes(b"export")
-            exported = common.export_result(output, 0, {"case_id": "case"})
-            self.assertEqual(exported, {"result": "query-0.arrow", "identity": "query-0.identity.json"})
-            self.assertEqual(json.loads((output / exported["identity"]).read_text())["result_sha256"], run.digest(output / exported["result"]))
             with redirect_stdout(io.StringIO()) as stdout:
                 self.assertEqual(common.write_observation(output, {"status": "success"}), 0)
             self.assertEqual(json.loads(stdout.getvalue()), {"status": "success"})
             with self.assertRaises(ValueError):
                 common.write_observation(output, {"status": "validation_failed"})
             self.assertEqual(json.loads((output / "record.json").read_text()), {"status": "success"})
-
-
 
     def test_adapter_probes_use_bundled_helpers_and_restore_controller_imports(self):
         previous_path = sys.path.copy()

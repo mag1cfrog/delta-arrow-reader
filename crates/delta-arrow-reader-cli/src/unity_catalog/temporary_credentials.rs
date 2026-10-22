@@ -146,7 +146,7 @@ pub(super) fn parse_temporary_credentials(
             }))
         }
         (
-            StorageBackend::Azure,
+            StorageBackend::AzureBlob,
             TemporaryCredentialsResponse {
                 aws_temp_credentials: None,
                 r2_temp_credentials: None,
@@ -156,34 +156,12 @@ pub(super) fn parse_temporary_credentials(
                 ..
             },
         ) => {
-            let sas = sas_credentials
-                .sas_token
-                .strip_prefix('?')
-                .unwrap_or(&sas_credentials.sas_token);
-            // SAS signatures use literal '+', which form decoding would otherwise turn into a space.
-            let query_pairs: Vec<_> =
-                url::form_urlencoded::parse(sas.replace('+', "%2B").as_bytes())
-                    .into_owned()
-                    .collect();
-            // Form decoding is lossy for invalid UTF-8, so reject replacement characters too.
-            if sas.contains('#')
-                || sas.chars().any(char::is_control)
-                || sas
-                    .split('&')
-                    .any(|part| !part.trim().is_empty() && !part.contains('='))
-                || query_pairs
-                    .iter()
-                    .any(|(key, value)| key.contains('\u{fffd}') || value.contains('\u{fffd}'))
-                || !query_pairs
-                    .iter()
-                    .any(|(key, value)| key == "sig" && !value.is_empty())
-            {
-                return Err(Error::InvalidDatabricksResponse);
-            }
+            let query_pairs = crate::azure_sas::parse_query_pairs(&sas_credentials.sas_token)
+                .ok_or(Error::InvalidDatabricksResponse)?;
             CloudCredentials::Azure(Arc::new(AzureCredential::SASToken(query_pairs)))
         }
         (
-            StorageBackend::Azure,
+            StorageBackend::AzureBlob,
             TemporaryCredentialsResponse {
                 aws_temp_credentials: None,
                 r2_temp_credentials: None,
@@ -371,16 +349,17 @@ mod tests {
             invalid_value[field] = invalid;
             assert!(parse_grant(&invalid_value).is_err(), "{field}");
         }
-        let mut azure = value;
-        azure
+        let mut azure_blob_response = value;
+        azure_blob_response
             .as_object_mut()
             .unwrap()
             .remove("aws_temp_credentials");
-        azure["url"] = json!("https://account.blob.core.windows.net/container/a%20b/%252F");
-        azure["azure_user_delegation_sas"] =
+        azure_blob_response["url"] =
+            json!("https://account.blob.core.windows.net/container/a%20b/%252F");
+        azure_blob_response["azure_user_delegation_sas"] =
             json!({"sas_token": "?sv=test&sig=test%2Bsignature&sp=rl"});
         let result = parse_temporary_credentials(
-            &serde_json::to_vec(&azure).unwrap(),
+            &serde_json::to_vec(&azure_blob_response).unwrap(),
             &TableStorageLocation::parse(
                 "abfss://container@account.dfs.core.windows.net/a%20b/%252F/",
             )
@@ -388,7 +367,7 @@ mod tests {
         )
         .unwrap();
         let CloudCredentials::Azure(credentials) = result.credentials else {
-            panic!("Azure must use Azure credentials");
+            panic!("Azure Blob must use Azure credentials");
         };
         let AzureCredential::SASToken(query_pairs) = credentials.as_ref() else {
             panic!("expected SAS credentials");
@@ -409,7 +388,7 @@ mod tests {
             "sig=secret\nvalue",
             "sig=%FF",
         ] {
-            let mut response = azure.clone();
+            let mut response = azure_blob_response.clone();
             response["azure_user_delegation_sas"] = json!({"sas_token": sas});
             assert!(matches!(
                 parse_temporary_credentials(
@@ -430,7 +409,7 @@ mod tests {
             ),
             ("azure_aad", json!({"aad_token": "secret-bearer-token"})),
         ] {
-            let mut response = azure.clone();
+            let mut response = azure_blob_response.clone();
             response[field] = conflicting;
             assert!(matches!(
                 parse_temporary_credentials(
@@ -534,7 +513,7 @@ mod tests {
     }
 
     #[test]
-    fn azure_bearer_credentials_require_one_valid_token_for_azure_storage() {
+    fn azure_bearer_credentials_require_one_valid_token_for_azure_blob_storage() {
         let mut response = aws_credentials_response();
         response
             .as_object_mut()
@@ -550,7 +529,7 @@ mod tests {
         };
         let grant = parse_grant(&response).unwrap();
         let CloudCredentials::Azure(credentials) = grant.credentials else {
-            panic!("Azure must use Azure credentials");
+            panic!("Azure Blob must use Azure credentials");
         };
         assert!(matches!(
             credentials.as_ref(),

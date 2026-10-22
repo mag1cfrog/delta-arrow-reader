@@ -141,6 +141,7 @@ fn upload_reuses_artifacts_and_only_sends_missing_files() -> Result<()> {
             })
         );
         let mut expected_env = json!({
+            "RUSTUP_HOME": "${{ github.workspace }}/../rustup",
             "EXPECTED_VERSION": "${{ needs.prepare.outputs.expected-version }}",
         });
         if target == "pypi" {
@@ -851,11 +852,23 @@ fn linux_runtime_acceptance_uses_the_baseline_and_propagates_failures() -> Resul
             );
         }
         assert_eq!(
-            &arguments[14..20],
+            &arguments[18..24],
             ["--entrypoint", "/bin/bash", image, "-euo", "pipefail", "-c"]
         );
-        assert_eq!(arguments.len(), 21);
-        container_script = arguments[20].to_owned();
+        assert_eq!(arguments[14], "--volume");
+        assert_eq!(
+            arguments[15],
+            format!(
+                "{}/.python-sdist-source/target/wheel-tools/debug/xtask:/acceptance/xtask:ro",
+                workspace.display()
+            )
+        );
+        assert_eq!(
+            &arguments[16..18],
+            ["--env", "DELTA_ARROW_READER_XTASK=/acceptance/xtask"]
+        );
+        assert_eq!(arguments.len(), 25);
+        container_script = arguments[24].to_owned();
     }
     // Keep the actual shell control flow while replacing the container's interpreters.
     let script = container_script
@@ -1083,6 +1096,7 @@ fn builder_reports_validation_only_after_successful_builds_and_complete_artifact
     assert_eq!(
         validation["env"],
         json!({
+            "RUSTUP_HOME": "${{ github.workspace }}/../rustup",
             "BUILD_RESULT": "${{ needs.build.result }}",
             "EXPECTED_VERSION": "${{ inputs.expected-version }}",
         })

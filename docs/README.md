@@ -55,10 +55,11 @@ installing the Python package from this checkout, regenerate the API file with
 the same Python environment:
 
 ```console
-python crates/delta-arrow-reader-python/generate_api_docs.py
-python crates/delta-arrow-reader-python/generate_api_docs.py --check
+cargo run --locked -p delta-arrow-reader-python --example generate-api-docs -- --python python
+cargo run --locked -p delta-arrow-reader-python --example generate-api-docs -- --python python --check
 ```
 
 Commit the generated file with the source change. The existing `Python Package`
-CI job checks it against the bindings it already builds, so this check adds no
-second Rust build.
+CI job runs this Rust tool against the bindings it already installs. The tool uses
+Python's AST parser and compares syntax trees, so formatting differences do not
+invalidate the generated file. `--check` never rewrites it.

@@ -13,7 +13,8 @@ use super::Error;
 pub(super) enum StorageBackend {
     S3,
     R2,
-    Azure,
+    /// Azure Blob Storage, including ADLS Gen2 locations.
+    AzureBlob,
     Gcs,
 }
 
@@ -78,7 +79,7 @@ impl TableStorageLocation {
                         .host_str()
                         .is_some_and(|host| host.ends_with(".dfs.core.windows.net")) =>
             {
-                StorageBackend::Azure
+                StorageBackend::AzureBlob
             }
             "https" if url.username().is_empty() => {
                 let account = url
@@ -98,7 +99,7 @@ impl TableStorageLocation {
                     "abfss://{container}@{account}.dfs.core.windows.net/{path}"
                 ))
                 .map_err(|_| Error::InvalidDatabricksResponse)?;
-                StorageBackend::Azure
+                StorageBackend::AzureBlob
             }
             _ => return Err(Error::UnsupportedDirectRead),
         };
@@ -157,7 +158,7 @@ pub(super) fn validate_storage_options(
             Some(StorageBackend::R2) => {
                 aws_option_allowed && !matches!(aws_config_key, Ok(AmazonS3ConfigKey::Endpoint))
             }
-            Some(StorageBackend::Azure) => azure_option_allowed,
+            Some(StorageBackend::AzureBlob) => azure_option_allowed,
             Some(StorageBackend::Gcs) => gcp_option_allowed,
         };
         if !allowed_for_backend {
@@ -235,7 +236,8 @@ mod tests {
             validate_storage_options(&DeltaStorageOptions::new(), Some(StorageBackend::S3)),
             Err(Error::MissingS3Region)
         );
-        validate_storage_options(&DeltaStorageOptions::new(), Some(StorageBackend::Azure)).unwrap();
+        validate_storage_options(&DeltaStorageOptions::new(), Some(StorageBackend::AzureBlob))
+            .unwrap();
         let gcs_options = DeltaStorageOptions::from([
             ("GOOGLE_BASE_URL".into(), "http://127.0.0.1:1234".into()),
             ("google_allow_http".into(), "true".into()),
@@ -256,7 +258,7 @@ mod tests {
     }
 
     #[test]
-    fn azure_container_root_locations_are_equivalent() {
+    fn azure_blob_container_root_locations_are_equivalent() {
         let expected = "abfss://container@account.dfs.core.windows.net/";
         for location in [
             "https://account.blob.core.windows.net/container",

@@ -132,7 +132,9 @@ python -I -m unittest discover \
 
 The installed checks cover package metadata, Python Arrow streams, and the
 native CLI's version, scan results, diagnostics, closed stdout, and process
-termination. They use the executable installed in this environment. Record the
+termination. Build `xtask` in the checkout before running them, or set
+`DELTA_ARROW_READER_XTASK` to the acceptance tool's absolute path. The process
+checks use the CLI installed in this environment. Record the
 exact version, source commit, workflow URL, TestPyPI version URL, wheel hashes,
 and installation results in #101.
 
