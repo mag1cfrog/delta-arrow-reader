@@ -1379,6 +1379,7 @@ dependencies = [
  "libc",
  "num-traits",
  "object_store",
+ "parquet",
  "serde",
  "serde-value",
  "serde_json",

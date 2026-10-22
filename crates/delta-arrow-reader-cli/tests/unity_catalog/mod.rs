@@ -249,6 +249,7 @@ case "$1" in
           rotate) ;;
           *) exit 97 ;;
         esac
+        /bin/sleep "${DAR_TEST_REFRESH_DELAY:-0}"
         /bin/cat "$response_directory/credentials.next.json"
         exit 0
       fi
@@ -275,7 +276,11 @@ esac
     }
 
     fn command(&self, args: &[&str]) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
+        // The same UC fixtures can verify an extracted archive or installed wheel executable.
+        let executable = std::env::var_os("DAR_TEST_UC_BINARY")
+            .unwrap_or_else(|| env!("CARGO_BIN_EXE_dar").into());
+        assert!(std::path::Path::new(&executable).is_absolute());
+        let mut command = Command::new(executable);
         command
             .args(args)
             .env_remove("RUST_LOG")
@@ -1177,33 +1182,44 @@ fn cancellation_terminates_pending_databricks_process() -> TestResult {
         ("inspect", libc::SIGTERM, true, true),
         ("query", libc::SIGTERM, true, false),
         ("query", libc::SIGINT, true, true),
+        ("query_data", libc::SIGTERM, true, true),
         ("manifest", libc::SIGTERM, true, false),
         ("manifest", libc::SIGINT, true, true),
     ] {
         let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
-        let _server = if during_refresh {
-            Some(fixture.storage_with_credential_expiry_and_invalid_metadata(
+        let (_server, mut command) = if operation == "query_data" {
+            let (server, command) = queries::query_with_credential_expiry_and_table_changes(
+                &fixture,
                 StorageCredentialKind::S3,
                 |_| {},
-            )?)
+            )?;
+            (Some(server), command)
         } else {
-            None
+            let server = if during_refresh {
+                Some(fixture.storage_with_credential_expiry_and_invalid_metadata(
+                    StorageCredentialKind::S3,
+                    |_| {},
+                )?)
+            } else {
+                None
+            };
+            let mut command = match operation {
+                "query" => fixture.query("SELECT * FROM t")?,
+                "manifest" => fixture.manifest_query(
+                    json!([
+                        {"alias":"orders", "location":"uc://main.sales.orders",
+                         "authorization":{"source":"databricks", "databricks_profile":PROFILE,
+                                          "storage_options_file":"../options.json"}}
+                    ]),
+                    "SELECT * FROM orders",
+                )?,
+                _ => fixture.inspect(),
+            };
+            if machine {
+                command.arg("--diagnostics=json");
+            }
+            (server, command)
         };
-        let mut command = match operation {
-            "query" => fixture.query("SELECT * FROM t")?,
-            "manifest" => fixture.manifest_query(
-                json!([
-                    {"alias":"orders", "location":"uc://main.sales.orders",
-                     "authorization":{"source":"databricks", "databricks_profile":PROFILE,
-                                      "storage_options_file":"../options.json"}}
-                ]),
-                "SELECT * FROM orders",
-            )?,
-            _ => fixture.inspect(),
-        };
-        if machine {
-            command.arg("--diagnostics=json");
-        }
         let mut child = command
             .env("RUST_LOG", if machine { "off" } else { "info" })
             .env("DAR_TEST_HANG", if during_refresh { "0" } else { "1" })
@@ -1228,7 +1244,11 @@ fn cancellation_terminates_pending_databricks_process() -> TestResult {
         }
         let output = child.wait_with_output()?;
         assert_eq!(output.status.code(), Some(128 + signal));
-        assert!(output.stdout.is_empty());
+        if operation == "query_data" {
+            assert!(!output.stdout.ends_with(&[255, 255, 255, 255, 0, 0, 0, 0]));
+        } else {
+            assert!(output.stdout.is_empty());
+        }
         if machine {
             let record =
                 super::diagnostics::assert_single_terminal_record(&output.stderr, "diagnostic");

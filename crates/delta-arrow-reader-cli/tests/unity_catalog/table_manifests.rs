@@ -19,7 +19,7 @@ use crate::{
     diagnostics::assert_single_terminal_record,
     mock_cloud_storage::{
         CloudStorageProtocol, append_west_partition_removal_commit, expected_partitioned_rows,
-        partitioned_objects,
+        partitioned_objects, partitioned_objects_with_large_parquet_footers,
     },
     query::decode_query_result,
     sort_by_id,
@@ -288,7 +288,7 @@ fn renewal_failure_in_the_second_uc_binding_keeps_its_diagnostic() -> TestResult
     let mut delayed = false;
     let customers_server = MockCloudStorageServer::with_objects(
         kind.storage_protocol(),
-        partitioned_objects()?,
+        partitioned_objects_with_large_parquet_footers()?,
         move |request, _| {
             if !delayed && request.lines().next().unwrap().contains(".parquet") {
                 delayed = true;
