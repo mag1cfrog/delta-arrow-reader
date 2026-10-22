@@ -642,9 +642,10 @@ replace platform compatibility checks.
 
 ### Validate a prepared Unity Catalog fixture
 
-On Linux, the opt-in harness checks inspection and a filtered, projected scan
-against independent Arrow reference files. Run its offline tests without a
-Databricks installation or account:
+On Linux, the opt-in harness checks inspection, a filtered projection, a local
+SQL aggregate, and a join between UC and local Delta tables against independent
+Arrow reference files. Run its offline tests without a Databricks installation
+or account:
 
 ```sh
 cargo test --locked -p xtask --test unity_catalog_live
@@ -658,16 +659,20 @@ DAR_LOCAL_BINARY=/absolute/path/to/dar \
   harness_checks_a_real_cli_against_a_local_delta_fixture -- --ignored
 ```
 
-This self-check redirects table reads to a local Delta fixture and uses a fake
-Databricks version command. It does not validate cloud authorization. Repeat
+This self-check redirects UC reads to a local Delta fixture, joins a second
+local fixture at a different snapshot version, and uses a fake Databricks
+version command. It does not validate cloud authorization. Repeat
 with `DAR_LOCAL_BINARY` pointing to the wheel's installed `delta-arrow-reader`.
 
 For an authorized live run, have the fixture administrator prepare a synthetic
-UC table, a fixed snapshot, and two Arrow IPC **files** (not streams): the full
-table and the expected filtered projection. Produce the references independently
-of DAR, for example with Spark. Keep the table at 1,000 rows or fewer. The scan
-must return at least one row, fewer rows than the full table, and fewer columns
-than the full schema. Each input file must be at most 16 MiB.
+UC table and a local Delta table, each at a fixed snapshot. Prepare four Arrow
+IPC **files** (not streams): the full UC table, the filtered projection, the
+aggregate result, and the join result. Produce the references independently of
+DAR, for example with Spark. Keep both tables and each SQL result at 1,000 rows
+or fewer. The scan must return at least one row, fewer rows than the full UC
+table, and fewer columns than its full schema. Both SQL results must contain
+at least one row and one column. Each input file must be at most 16 MiB; SQL
+files must be UTF-8 and at most 64 KiB.
 
 Save a private configuration alongside those files:
 
@@ -682,6 +687,18 @@ Save a private configuration alongside those files:
     "predicate_file": "predicate.json",
     "expected_result": "filtered.arrow"
   },
+  "sql": {
+    "aggregate": {
+      "sql_file": "aggregate.sql",
+      "expected_result": "aggregate.arrow"
+    },
+    "join": {
+      "sql_file": "join.sql",
+      "expected_result": "join.arrow"
+    },
+    "local_table": "local-delta-table",
+    "local_table_version": 0
+  },
   "storage_options_file": "storage.json",
   "context": {
     "credential_form": "s3_session",
@@ -695,6 +712,25 @@ Save a private configuration alongside those files:
   }
 }
 ```
+
+Write the aggregate over `uc_rows`. Write the join over `uc_rows` and
+`local_rows`, and include values from both tables in the expected result. For
+tables with `id` and `value` columns, the SQL files could contain:
+
+```sql
+-- aggregate.sql
+SELECT COUNT(*) AS row_count, SUM(value) AS total FROM uc_rows;
+
+-- join.sql
+SELECT u.id, u.value AS uc_value, l.value AS local_value
+FROM uc_rows u JOIN local_rows l ON u.id = l.id;
+```
+
+Each file contains one read-only query. Choose queries and references that
+exercise the prepared fixture; the harness checks their output but does not
+classify the SQL as an aggregate or join. It creates table manifests using the
+configured profile, storage options, and snapshot versions. All SQL execution
+uses DAR's local compute. Reference preparation is a separate administrator step.
 
 Paths inside the configuration are relative to that file. `predicate_file` and
 `storage_options_file` use the ordinary CLI JSON formats. For an S3 fixture,
@@ -723,17 +759,20 @@ cargo xtask cli test-unity-catalog \
 
 Omitting all options emits a `skipped` report without invoking either CLI.
 Configured runs record the declared build commit, executable SHA256, Databricks
-CLI version, fixture context, snapshot, and check results. Failure returns a
+CLI version, fixture context, both snapshot versions, and check results. Failure returns a
 nonzero exit status and identifies the failed step. Reports omit profile names,
 table identifiers, schemas, row values, tokens, and subprocess output. Keep the
 private configuration and reference files out of published evidence.
 
-The current scope is `inspect_and_scan`. A passing report requires the expected
-schema and exact scan values, exit success, one matching completion record, and
-a complete Arrow stream. The scan stops at one more row than expected, so an
-overly broad predicate fails without returning the entire table. Passing requires
-exhaustion before that limit. SQL aggregate and join checks remain `not_run`; this
-report alone does not establish full UC acceptance or validate other fixtures.
+The report scope is `inspect_scan_and_sql`. A passing report requires the expected
+schemas and exact result rows, including duplicate and null values. Row and batch
+order may differ. Each command must exit successfully with one matching completion
+record; scan and query output must be complete Arrow streams with matching row,
+batch, byte, and snapshot fields. The scan stops at one more row than expected,
+and passing requires exhaustion before that limit. Each SQL query is capped at
+its expected row count and 16 MiB of IPC output; excess output fails the check.
+The first failure stops the run and leaves later checks as `not_run`. A passing
+report covers only that fixture and executable, not other clouds or auth modes.
 
 ## Build and test a complete platform archive locally
 

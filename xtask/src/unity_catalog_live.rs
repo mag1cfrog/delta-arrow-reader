@@ -1,7 +1,8 @@
-//! Opt-in inspection and scan checks using an existing Databricks CLI profile.
+//! Opt-in direct-read checks using an existing Databricks CLI profile.
 
 mod fixture;
 mod inspection;
+mod sql;
 
 use std::{
     fs,
@@ -41,7 +42,7 @@ pub(crate) struct TestUnityCatalogArgs {
 impl TestUnityCatalogArgs {
     pub(crate) fn run(self) -> Result<()> {
         let mut report = json!({
-            "format_version": 1, "scope": "inspect_and_scan", "status": "skipped",
+            "format_version": 1, "scope": "inspect_scan_and_sql", "status": "skipped",
             "checks": {"inspect": "not_run", "scan": "not_run", "sql_aggregate": "not_run", "sql_join": "not_run"},
         });
         let Some(path) = &self.fixture else {
@@ -95,9 +96,11 @@ impl TestUnityCatalogArgs {
         report["cloud"] = json!(config.context.credential_form.cloud());
         report["declared_fixture_context"] = json!(config.context);
         report["table_version"] = json!(config.table_version.to_string());
+        report["local_table_version"] = json!(config.sql.local_table_version.to_string());
 
         let (expected_table, expected_scan) = load_expected_outputs(&config)?;
         let inputs = capture_options(&config)?;
+        let sql_checks = sql::prepare_checks(&config, inputs.path())?;
         report["step"] = json!("databricks_version");
         report["databricks_cli_version"] = json!(databricks_cli_version()?);
         let table_command = |operation: &str| {
@@ -143,6 +146,12 @@ impl TestUnityCatalogArgs {
         check_completed_scan(&output, config.table_version, Some(row_limit))?
             .check_matches(&expected_scan, None)?;
         report["checks"]["scan"] = json!("passed");
+        for check in sql_checks {
+            report["step"] = json!(check.report_key);
+            report["checks"][check.report_key] = json!("failed");
+            check.run(&binary)?;
+            report["checks"][check.report_key] = json!("passed");
+        }
         Ok(())
     }
 }
@@ -217,7 +226,7 @@ fn load_expected_outputs(config: &LiveFixtureConfig) -> Result<(IpcTable, IpcTab
 }
 
 fn capture_options(config: &LiveFixtureConfig) -> Result<tempfile::TempDir> {
-    // Capture both option files once so inspection and scan use the same fixture inputs.
+    // Capture both option files once so every check uses the same fixture inputs.
     let inputs = tempfile::tempdir().context(FileSnafu {
         path: std::env::temp_dir(),
     })?;

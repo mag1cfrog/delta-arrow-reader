@@ -8,10 +8,10 @@ use snafu::ensure;
 use crate::error::{InvalidInputSnafu, Result};
 
 /// Validate the common completion fields; callers check scope and decoded stdout separately.
-pub(crate) fn read_single_table_completion(
+pub(crate) fn read_completion(
     output: &Output,
     command: &str,
-    table_version: u64,
+    expected_bindings: &[(&str, u64)],
 ) -> Result<Value> {
     ensure!(
         output.status.success(),
@@ -48,15 +48,20 @@ pub(crate) fn read_single_table_completion(
             }
         );
     }
-    let version = table_version.to_string();
     ensure!(
         completion["bindings"]
             .as_array()
-            .is_some_and(|bindings| bindings.len() == 1
-                && bindings[0]["alias"] == "t"
-                && bindings[0]["table_version"].as_str() == Some(version.as_str())),
+            .is_some_and(|bindings| bindings.len() == expected_bindings.len()
+                && bindings
+                    .iter()
+                    .zip(expected_bindings)
+                    .all(|(binding, (alias, version))| {
+                        binding["alias"] == *alias
+                            && binding["table_version"].as_str()
+                                == Some(version.to_string().as_str())
+                    })),
         InvalidInputSnafu {
-            message: "Completion does not match the requested snapshot binding"
+            message: "Completion does not match the requested snapshot bindings"
         }
     );
     Ok(completion)

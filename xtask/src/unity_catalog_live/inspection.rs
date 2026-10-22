@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use snafu::{ResultExt, ensure};
 
 use crate::{
-    cli_completion::read_single_table_completion,
+    cli_completion::read_completion,
     error::{InvalidInputSnafu, JsonSnafu, Result},
     scan::ipc::IpcTable,
 };
@@ -17,7 +17,7 @@ pub(super) fn check_inspection(
     table_version: u64,
     expected: &IpcTable,
 ) -> Result<()> {
-    let completion = read_single_table_completion(output, "inspect", table_version)?;
+    let completion = read_completion(output, "inspect", &[("t", table_version)])?;
     ensure!(
         output.stdout.ends_with(b"\n"),
         InvalidInputSnafu {

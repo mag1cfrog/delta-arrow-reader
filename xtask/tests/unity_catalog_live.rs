@@ -7,7 +7,7 @@ use std::{
     fs,
     io::Write,
     os::unix::fs::PermissionsExt,
-    path::{Path, PathBuf},
+    path::Path,
     process::{Command, Output},
     sync::Arc,
 };
@@ -17,6 +17,11 @@ use arrow_ipc::writer::{FileWriter, StreamWriter};
 use arrow_schema::{DataType, Field, Schema};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+
+#[path = "unity_catalog_live/local_cli.rs"]
+mod local_cli;
+#[path = "unity_catalog_live/sql.rs"]
+mod sql;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 const REVISION: &str = "0123456789abcdef0123456789abcdef01234567";
@@ -79,6 +84,7 @@ impl OfflineFixture {
             r#"{"op":"lt","column":"id","value":{"type":"int32","value":"3"}}"#,
         )?;
         fs::write(root.join("storage.json"), r#"{"region":"us-west-2"}"#)?;
+        sql::prepare_fixture(root)?;
         fs::write(root.join("databricks.version"), "Databricks CLI v0.300.0\n")?;
         write_script(
             &root.join("databricks"),
@@ -91,10 +97,30 @@ printf '%s\n' "$@" > "$UC_FIXTURE_DIR/databricks.args"
         write_script(
             &root.join("dar"),
             r#"#!/bin/sh
-case "$1" in inspect|scan) ;; *) exit 97;; esac
-printf '%s\n' "$@" > "$UC_FIXTURE_DIR/$1.args"
-/bin/cat "$UC_FIXTURE_DIR/$1.stdout"
-/bin/cat "$UC_FIXTURE_DIR/$1.stderr" >&2
+operation=$1
+case "$operation" in
+    inspect|scan) ;;
+    query)
+        previous=
+        for argument in "$@"; do
+            case "$previous" in
+                --sql-file) sql_file=$argument;;
+                --tables-file) tables_file=$argument;;
+            esac
+            previous=$argument
+        done
+        operation=${sql_file##*/}
+        operation=${operation%.sql}
+        case "$operation" in sql_aggregate|sql_join) ;; *) exit 97;; esac
+        /bin/cp "$tables_file" "$UC_FIXTURE_DIR/$operation.tables.json" || exit 97
+        /bin/cp "$sql_file" "$UC_FIXTURE_DIR/$operation.captured.sql" || exit 97
+        ;;
+    *) exit 97;;
+esac
+printf '%s\n' "$@" > "$UC_FIXTURE_DIR/$operation.args"
+/bin/cat "$UC_FIXTURE_DIR/$operation.stdout"
+/bin/cat "$UC_FIXTURE_DIR/$operation.stderr" >&2
+[ "$operation" != "${UC_FIXTURE_FAIL_AT:-}" ] || exit 1
 exit "${UC_FIXTURE_EXIT:-0}"
 "#,
         )?;
@@ -103,6 +129,11 @@ exit "${UC_FIXTURE_EXIT:-0}"
             "table": "uc://secret.catalog.table", "table_version": 7,
             "expected_table": "table.arrow",
             "scan": {"columns": ["secret_value"], "predicate_file": "predicate.json", "expected_result": "scan.arrow"},
+            "sql": {
+                "aggregate": {"sql_file": "aggregate.sql", "expected_result": "aggregate.arrow"},
+                "join": {"sql_file": "join.sql", "expected_result": "join.arrow"},
+                "local_table": "local-table", "local_table_version": 3,
+            },
             "storage_options_file": "storage.json",
             "context": {"credential_form": "s3_session", "auth_mode": "user_oauth", "table_kind": "external",
                 "protocol": {"min_reader_version": 1, "min_writer_version": 2, "reader_features": []}},
@@ -197,10 +228,10 @@ fn configured_harness_pins_commands_and_reports_only_declared_public_context() -
     assert!(output.status.success(), "{output:?}");
     let result = report(&output)?;
     assert_eq!(result["status"], "passed");
-    assert_eq!(result["scope"], "inspect_and_scan");
+    assert_eq!(result["scope"], "inspect_scan_and_sql");
     assert_eq!(
         result["checks"],
-        json!({"inspect": "passed", "scan": "passed", "sql_aggregate": "not_run", "sql_join": "not_run"})
+        json!({"inspect": "passed", "scan": "passed", "sql_aggregate": "passed", "sql_join": "passed"})
     );
     assert_eq!(result["dar_revision"], REVISION);
     assert_eq!(
@@ -213,6 +244,7 @@ fn configured_harness_pins_commands_and_reports_only_declared_public_context() -
     assert_eq!(result["databricks_cli_version"], "0.300.0");
     assert_eq!(result["cloud"], "aws");
     assert_eq!(result["table_version"], "7");
+    assert_eq!(result["local_table_version"], "3");
     assert_eq!(
         result["declared_fixture_context"],
         fixture.config["context"]
@@ -476,56 +508,5 @@ fn scan_rejects_wrong_values_truncated_ipc_and_inconsistent_completion() -> Test
     let output = fixture.command().env("UC_FIXTURE_EXIT", "1").output()?;
     assert!(!output.status.success());
     assert_eq!(report(&output)?["step"], "inspect");
-    Ok(())
-}
-
-#[test]
-#[ignore = "requires DAR_LOCAL_BINARY pointing to a built CLI; uses only local synthetic data"]
-fn harness_checks_a_real_cli_against_a_local_delta_fixture() -> TestResult {
-    let binary = PathBuf::from(std::env::var_os("DAR_LOCAL_BINARY").ok_or("set DAR_LOCAL_BINARY")?)
-        .canonicalize()?;
-    let corpus = Path::new(env!("CARGO_MANIFEST_DIR")).join("../crates/delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/partitioned").canonicalize()?;
-    let mut fixture = OfflineFixture::new()?;
-    let root = fixture.directory.path();
-    fs::copy(corpus.join("expected.arrow"), root.join("table.arrow"))?;
-    let schema = Arc::new(Schema::new(vec![Field::new(
-        "value",
-        DataType::Int32,
-        true,
-    )]));
-    write_arrow_file(
-        &root.join("scan.arrow"),
-        &RecordBatch::try_new(schema, vec![Arc::new(Int32Array::from(vec![30]))])?,
-    )?;
-    fs::write(
-        root.join("predicate.json"),
-        r#"{"op":"eq","column":"id","value":{"type":"int32","value":"10"}}"#,
-    )?;
-    fixture.config["table_version"] = json!(0);
-    fixture.config["scan"]["columns"] = json!(["value"]);
-    fixture.config["storage_options_file"] = Value::Null;
-    fixture.save_config()?;
-    // Only the target/auth arguments change; the real CLI emits both output contracts.
-    write_script(
-        &root.join("dar"),
-        r#"#!/bin/bash
-operation=$1
-shift 2
-arguments=()
-for argument in "$@"; do
-    case "$argument" in --databricks-profile=*) ;; *) arguments+=("$argument");; esac
-done
-exec "$DAR_LOCAL_BINARY" "$operation" "$DAR_LOCAL_TABLE" "${arguments[@]}"
-"#,
-    )?;
-    let output = fixture
-        .command()
-        .env("DAR_LOCAL_BINARY", binary)
-        .env("DAR_LOCAL_TABLE", corpus.join("table"))
-        .output()?;
-    assert!(output.status.success(), "{output:?}");
-    let result = report(&output)?;
-    assert_eq!(result["checks"]["inspect"], "passed");
-    assert_eq!(result["checks"]["scan"], "passed");
     Ok(())
 }

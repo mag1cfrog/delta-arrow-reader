@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use snafu::{ResultExt, ensure};
 
 use crate::{
-    cli_completion::read_single_table_completion,
+    cli_completion::read_completion,
     error::{ArrowSnafu, FileSnafu, InvalidInputSnafu, Result},
 };
 
@@ -38,13 +38,8 @@ pub(crate) fn check_completed_scan(
     table_version: u64,
     limit: Option<usize>,
 ) -> Result<IpcTable> {
-    let completion = read_single_table_completion(output, "scan", table_version)?;
-    let table = IpcTable::read_stream(&output.stdout, Path::new("Arrow stdout")).map_err(|_| {
-        InvalidInputSnafu {
-            message: "Scan stdout is not a complete Arrow IPC stream",
-        }
-        .build()
-    })?;
+    let completion = read_completion(output, "scan", &[("t", table_version)])?;
+    let table = read_completed_arrow_stream(output, &completion)?;
     let rows = table.row_count();
     ensure!(
         limit.is_none_or(|limit| rows <= limit),
@@ -78,13 +73,54 @@ pub(crate) fn check_completed_scan(
                 json!(false)
             },
         ),
-        ("rows", json!(rows.to_string())),
-        ("batches", json!(table.batches.len().to_string())),
     ] {
         ensure!(
             completion.get(field) == Some(&expected),
             InvalidInputSnafu {
                 message: format!("Scan completion has an unexpected {field}")
+            }
+        );
+    }
+    Ok(table)
+}
+
+/// A query completes its SQL result, including any SQL LIMIT, for every declared snapshot.
+pub(crate) fn check_completed_query(
+    output: &Output,
+    expected_bindings: &[(&str, u64)],
+) -> Result<IpcTable> {
+    let completion = read_completion(output, "query", expected_bindings)?;
+    let table = read_completed_arrow_stream(output, &completion)?;
+    for (field, expected) in [
+        ("scope", json!("query")),
+        ("stop_reason", json!("end_of_input")),
+        ("has_more", json!(false)),
+    ] {
+        ensure!(
+            completion.get(field) == Some(&expected),
+            InvalidInputSnafu {
+                message: format!("Query completion has an unexpected {field}")
+            }
+        );
+    }
+    Ok(table)
+}
+
+fn read_completed_arrow_stream(output: &Output, completion: &Value) -> Result<IpcTable> {
+    let table = IpcTable::read_stream(&output.stdout, Path::new("Arrow stdout")).map_err(|_| {
+        InvalidInputSnafu {
+            message: "Stdout is not a complete Arrow IPC stream",
+        }
+        .build()
+    })?;
+    for (field, expected) in [
+        ("rows", table.row_count()),
+        ("batches", table.batches.len()),
+    ] {
+        ensure!(
+            completion.get(field) == Some(&json!(expected.to_string())),
+            InvalidInputSnafu {
+                message: format!("Completion has an unexpected {field}")
             }
         );
     }

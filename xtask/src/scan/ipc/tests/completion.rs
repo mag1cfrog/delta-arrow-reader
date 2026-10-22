@@ -164,3 +164,46 @@ fn completed_scan_rejects_failed_processes_bad_framing_and_incomplete_ipc() -> T
     }
     Ok(())
 }
+
+#[test]
+fn completed_query_requires_all_aliases_and_exact_snapshot_versions() -> TestResult {
+    let mut output = scan_output()?;
+    let mut completion: Value = serde_json::from_slice(&output.stderr)?;
+    completion["command"] = json!("query");
+    completion["scope"] = json!("query");
+    completion["bindings"] = json!([
+        {"alias": "uc_rows", "table_version": "42"},
+        {"alias": "local_rows", "table_version": u64::MAX.to_string()},
+    ]);
+    output.stderr = format!("{completion}\n").into_bytes();
+    let bindings = [("uc_rows", 42), ("local_rows", u64::MAX)];
+    check_completed_query(&output, &bindings)?
+        .check_matches(&table(&[&[None, Some(2), Some(1)]])?, None)?;
+    for wrong in [
+        json!([{"alias": "uc_rows", "table_version": "42"}]),
+        json!([{"alias": "uc_rows", "table_version": "42"}, {"alias": "uc_rows", "table_version": "42"}]),
+        json!([{"alias": "uc_rows", "table_version": "42"}, {"alias": "local_rows", "table_version": u64::MAX}]),
+        json!([{"alias": "uc_rows", "table_version": "43"}, {"alias": "local_rows", "table_version": u64::MAX.to_string()}]),
+    ] {
+        let mut changed = completion.clone();
+        changed["bindings"] = wrong;
+        output.stderr = format!("{changed}\n").into_bytes();
+        assert!(check_completed_query(&output, &bindings).is_err());
+    }
+    for (field, wrong) in [
+        ("scope", json!("scan")),
+        ("stop_reason", json!("row_limit")),
+        ("has_more", Value::Null),
+        ("rows", json!("2")),
+        ("batches", json!("1")),
+    ] {
+        let mut changed = completion.clone();
+        changed[field] = wrong;
+        output.stderr = format!("{changed}\n").into_bytes();
+        assert!(
+            check_completed_query(&output, &bindings).is_err(),
+            "{field}"
+        );
+    }
+    Ok(())
+}

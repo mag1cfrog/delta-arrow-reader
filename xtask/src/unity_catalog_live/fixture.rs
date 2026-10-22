@@ -30,6 +30,7 @@ pub(super) struct LiveFixtureConfig {
     pub table_version: u64,
     pub expected_table: PathBuf,
     pub scan: ScanExpectation,
+    pub sql: SqlExpectations,
     pub storage_options_file: Option<PathBuf>,
     pub context: FixtureContext,
 }
@@ -40,6 +41,24 @@ pub(super) struct LiveFixtureConfig {
 pub(super) struct ScanExpectation {
     pub columns: Vec<String>,
     pub predicate_file: PathBuf,
+    pub expected_result: PathBuf,
+}
+
+/// Aggregate and join references, with a pinned local Delta table for the join.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct SqlExpectations {
+    pub aggregate: QueryExpectation,
+    pub join: QueryExpectation,
+    pub local_table: PathBuf,
+    pub local_table_version: u64,
+}
+
+/// Administrator-prepared SQL and its independently computed Arrow result.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct QueryExpectation {
+    pub sql_file: PathBuf,
     pub expected_result: PathBuf,
 }
 
@@ -156,6 +175,11 @@ impl LiveFixtureConfig {
             &mut fixture.expected_table,
             &mut fixture.scan.expected_result,
             &mut fixture.scan.predicate_file,
+            &mut fixture.sql.aggregate.sql_file,
+            &mut fixture.sql.aggregate.expected_result,
+            &mut fixture.sql.join.sql_file,
+            &mut fixture.sql.join.expected_result,
+            &mut fixture.sql.local_table,
         ]
         .into_iter()
         .chain(fixture.storage_options_file.iter_mut())
