@@ -642,9 +642,10 @@ replace platform compatibility checks.
 
 ### Validate a prepared Unity Catalog fixture
 
-On Linux and macOS, the opt-in harness checks inspection, a filtered projection,
+The opt-in harness checks inspection, a filtered projection,
 a local SQL aggregate, and a join between UC and local Delta tables against
-independent Arrow reference files. Run its offline tests without a Databricks
+independent Arrow reference files. CI runs the same offline validator and harness
+tests on Linux, macOS, and Windows. Run the harness tests without a Databricks
 installation or account:
 
 ```sh

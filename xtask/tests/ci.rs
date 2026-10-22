@@ -333,17 +333,16 @@ fn tooling_changes_run_separate_required_checks() -> Result<()> {
         jobs["changes"]["outputs"]["tooling"],
         "${{ steps.filter.outputs.tooling }}"
     );
-    assert_eq!(jobs["tooling-checks"]["needs"], "changes");
-    assert_eq!(
-        jobs["tooling-checks"]["if"],
-        "needs.changes.outputs.tooling == 'true'"
-    );
-    assert!(
-        jobs["ci"]["needs"]
-            .as_array()
-            .unwrap()
-            .contains(&json!("tooling-checks"))
-    );
+    for job in ["tooling-checks", "uc-validation-tests"] {
+        assert_eq!(jobs[job]["needs"], "changes");
+        assert_eq!(jobs[job]["if"], "needs.changes.outputs.tooling == 'true'");
+        assert!(
+            jobs["ci"]["needs"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(job))
+        );
+    }
     Ok(())
 }
 
@@ -711,20 +710,22 @@ fn summary_requires_benchmarks_independently_of_core_checks() -> Result<()> {
 fn summary_requires_tooling_independently_of_core_checks() -> Result<()> {
     for code in ["true", "false"] {
         for tooling in ["true", "false"] {
-            for result in ["success", "failure", "skipped", "cancelled", ""] {
-                let output = check_ci_results(&[
-                    ("changes.outputs.code", code),
-                    ("changes.outputs.python", "false"),
-                    ("changes.outputs.tooling", tooling),
-                    ("changes.outputs.selective_read", "false"),
-                    ("changes.outputs.release_pr", "false"),
-                    ("tooling-checks.result", result),
-                ])?;
-                assert_eq!(
-                    output.status.success(),
-                    tooling != "true" || result == "success",
-                    "code={code}, tooling={tooling}, result={result}: {output:?}"
-                );
+            for job in ["tooling-checks.result", "uc-validation-tests.result"] {
+                for result in ["success", "failure", "skipped", "cancelled", ""] {
+                    let output = check_ci_results(&[
+                        ("changes.outputs.code", code),
+                        ("changes.outputs.python", "false"),
+                        ("changes.outputs.tooling", tooling),
+                        ("changes.outputs.selective_read", "false"),
+                        ("changes.outputs.release_pr", "false"),
+                        (job, result),
+                    ])?;
+                    assert_eq!(
+                        output.status.success(),
+                        tooling != "true" || result == "success",
+                        "code={code}, tooling={tooling}, {job}={result}: {output:?}"
+                    );
+                }
             }
         }
     }

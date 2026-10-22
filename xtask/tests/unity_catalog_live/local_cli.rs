@@ -101,31 +101,6 @@ fn harness_checks_a_real_cli_against_a_local_delta_fixture() -> TestResult {
     }
     fixture.save_config()?;
     // Redirect UC access locally; the real CLI executes the captured SQL and emits both contracts.
-    write_script(
-        &root.join("dar"),
-        r#"#!/bin/bash
-operation=$1
-if [ "$operation" = query ]; then
-    arguments=()
-    previous=
-    for argument in "$@"; do
-        if [ "$previous" = --tables-file ]; then
-            name=${argument##*/}
-            argument="$UC_FIXTURE_DIR/${name%.tables.json}.local.json"
-        fi
-        arguments+=("$argument")
-        previous=$argument
-    done
-    exec "$DAR_LOCAL_BINARY" "${arguments[@]}"
-fi
-shift 2
-arguments=()
-for argument in "$@"; do
-    case "$argument" in --databricks-profile=*) ;; *) arguments+=("$argument");; esac
-done
-exec "$DAR_LOCAL_BINARY" "$operation" "$DAR_LOCAL_TABLE" "${arguments[@]}"
-"#,
-    )?;
     let output = fixture
         .command()
         .env("DAR_LOCAL_BINARY", binary)

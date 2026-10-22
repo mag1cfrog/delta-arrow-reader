@@ -144,8 +144,42 @@ jobs:
         run: |
           rustc -vV | grep -F "host: ${{ matrix.target }}"
       - run: cargo test --locked --all-features
-      - name: Test Unity Catalog validation on macOS
-        if: runner.os == 'macOS'
+
+  uc-validation-tests:
+    name: UC Validation / ${{ matrix.os }}
+    needs: changes
+    if: needs.changes.outputs.tooling == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-2022]
+    env:
+      RUSTUP_HOME: ${{ github.workspace }}/../rustup
+    steps:
+      - uses: actions/checkout@v5
+      - name: Read Rust version
+        id: rust-version
+        shell: bash
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci-targets
+          env-vars: CI_TARGET_CACHE_VERSION
+          cache-targets: true
+          cache-bin: false
+          save-if: false
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Test offline Unity Catalog validation
+        shell: bash
         run: |
           cargo test --locked -p xtask --bin xtask scan::ipc::
           cargo test --locked -p xtask --test unity_catalog_live
@@ -276,7 +310,9 @@ jobs:
         uses: docker://rhysd/actionlint:1.7.12
         with:
           args: .github/workflows/ci.yml .github/workflows/cli-build.yml .github/workflows/cli-images.yml .github/workflows/cli-release.yml .github/workflows/pypi.yml .github/workflows/pypi-build.yml .github/workflows/cache-warm.yml .github/workflows/release-cache-warm.yml .github/workflows/benchmark-fixtures.yml
-      - run: cargo fmt --package xtask -- --check
+      - run: |
+          cargo fmt --package xtask -- --check
+          rustfmt --edition 2024 --check xtask/tests/unity_catalog_live/mock_cli.rs
       - name: Test CI workflows, Python, and cache tasks
         run: |
           cargo clippy --locked --package xtask --all-targets -- -D warnings
@@ -535,7 +571,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [changes, feature-tests, platform-tests, checks, rust-docs, tooling-checks, python-package, cli-checks, release-approval, release-wheels, release-cli, release-cli-images, release-cli-record, selective-read-fixtures]
+    needs: [changes, feature-tests, platform-tests, checks, rust-docs, tooling-checks, uc-validation-tests, python-package, cli-checks, release-approval, release-wheels, release-cli, release-cli-images, release-cli-record, selective-read-fixtures]
     if: always()
     runs-on: ubuntu-latest
 
@@ -547,10 +583,15 @@ jobs:
             exit 1
           fi
 
-          if [ "${{ needs.changes.outputs.tooling }}" = "true" ] && \
-             [ "${{ needs.tooling-checks.result }}" != "success" ]; then
-            echo "CI Tools did not pass: ${{ needs.tooling-checks.result }}"
-            exit 1
+          if [ "${{ needs.changes.outputs.tooling }}" = "true" ]; then
+            if [ "${{ needs.tooling-checks.result }}" != "success" ]; then
+              echo "CI Tools did not pass: ${{ needs.tooling-checks.result }}"
+              exit 1
+            fi
+            if [ "${{ needs.uc-validation-tests.result }}" != "success" ]; then
+              echo "UC Validation did not pass: ${{ needs.uc-validation-tests.result }}"
+              exit 1
+            fi
           fi
 
           if [ "${{ needs.changes.outputs.python }}" = "true" ]; then

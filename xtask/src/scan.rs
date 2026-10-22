@@ -6,7 +6,6 @@ use crate::error::Result;
 
 #[cfg(target_os = "linux")]
 pub(crate) mod corpus;
-#[cfg(unix)]
 pub(crate) mod ipc;
 #[cfg(target_os = "linux")]
 mod linux;

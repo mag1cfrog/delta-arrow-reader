@@ -1,15 +1,13 @@
 //! Offline checks for the opt-in UC harness, including its report redaction boundary.
 
-#![cfg(unix)]
 #![allow(clippy::panic, clippy::unwrap_used)]
 
 use std::{
     fs,
     io::Write,
-    os::unix::fs::PermissionsExt,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Output},
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
 
 use arrow_array::{Int32Array, RecordBatch};
@@ -35,7 +33,7 @@ struct OfflineFixture {
 impl OfflineFixture {
     fn new() -> TestResult<Self> {
         let directory = tempfile::Builder::new()
-            .prefix("secret-uc-harness-")
+            .prefix("secret uc harness-")
             .tempdir()?;
         let root = directory.path();
         let schema = Arc::new(Schema::new(vec![
@@ -86,44 +84,9 @@ impl OfflineFixture {
         fs::write(root.join("storage.json"), r#"{"region":"us-west-2"}"#)?;
         sql::prepare_fixture(root)?;
         fs::write(root.join("databricks.version"), "Databricks CLI v0.300.0\n")?;
-        write_script(
-            &root.join("databricks"),
-            r#"#!/bin/sh
-printf '%s\n' "$@" > "$UC_FIXTURE_DIR/databricks.args"
-[ "$#" = 1 ] && [ "$1" = --version ] || exit 97
-/bin/cat "$UC_FIXTURE_DIR/databricks.version"
-"#,
-        )?;
-        write_script(
-            &root.join("dar"),
-            r#"#!/bin/sh
-operation=$1
-case "$operation" in
-    inspect|scan) ;;
-    query)
-        previous=
-        for argument in "$@"; do
-            case "$previous" in
-                --sql-file) sql_file=$argument;;
-                --tables-file) tables_file=$argument;;
-            esac
-            previous=$argument
-        done
-        operation=${sql_file##*/}
-        operation=${operation%.sql}
-        case "$operation" in sql_aggregate|sql_join) ;; *) exit 97;; esac
-        /bin/cp "$tables_file" "$UC_FIXTURE_DIR/$operation.tables.json" || exit 97
-        /bin/cp "$sql_file" "$UC_FIXTURE_DIR/$operation.captured.sql" || exit 97
-        ;;
-    *) exit 97;;
-esac
-printf '%s\n' "$@" > "$UC_FIXTURE_DIR/$operation.args"
-/bin/cat "$UC_FIXTURE_DIR/$operation.stdout"
-/bin/cat "$UC_FIXTURE_DIR/$operation.stderr" >&2
-[ "$operation" != "${UC_FIXTURE_FAIL_AT:-}" ] || exit 1
-exit "${UC_FIXTURE_EXIT:-0}"
-"#,
-        )?;
+        for name in ["databricks", "dar"] {
+            write_mock_cli(&executable_path(root, name))?;
+        }
         let config = json!({
             "databricks_profile": "secret profile $(do-not-execute)",
             "table": "uc://secret.catalog.table", "table_version": 7,
@@ -152,17 +115,15 @@ exit "${UC_FIXTURE_EXIT:-0}"
     }
 
     fn command(&self) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
+        let mut command = isolated_xtask(self.directory.path());
         command
-            .env_clear()
-            .env("PATH", self.directory.path())
             .env("UC_FIXTURE_DIR", self.directory.path())
             // Relative fixture paths must resolve against the configuration, not this directory.
-            .current_dir("/")
+            .current_dir(std::env::temp_dir())
             .args(["cli", "test-unity-catalog", "--fixture"])
             .arg(self.directory.path().join("fixture.json"))
             .arg("--binary")
-            .arg(self.directory.path().join("dar"))
+            .arg(executable_path(self.directory.path(), "dar"))
             .args(["--dar-revision", REVISION]);
         command
     }
@@ -176,10 +137,45 @@ exit "${UC_FIXTURE_EXIT:-0}"
     }
 }
 
-fn write_script(path: &Path, contents: &str) -> TestResult {
-    fs::write(path, contents)?;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o755))?;
+fn executable_path(directory: &Path, name: &str) -> PathBuf {
+    directory.join(format!("{name}{}", std::env::consts::EXE_SUFFIX))
+}
+
+fn write_mock_cli(path: &Path) -> TestResult {
+    static BINARY: OnceLock<Vec<u8>> = OnceLock::new();
+    let bytes = BINARY.get_or_init(|| {
+        let directory = tempfile::tempdir().unwrap();
+        let compiler = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+        // A native mock preserves argument boundaries and binary IPC output on every platform.
+        let output = Command::new(compiler)
+            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/unity_catalog_live/mock_cli.rs"))
+            .args(["--edition=2024", "--deny=warnings", "-o"])
+            .arg(executable_path(directory.path(), "mock_cli"))
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        fs::read(executable_path(directory.path(), "mock_cli")).unwrap()
+    });
+    fs::write(path, bytes)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755))?;
+    }
     Ok(())
+}
+
+fn isolated_xtask(directory: &Path) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
+    command.env_clear().env("PATH", directory);
+    // Windows needs its system directory and a writable temporary directory after env_clear.
+    if let Some(system_root) = std::env::var_os("SystemRoot") {
+        command.env("SystemRoot", system_root);
+    }
+    for variable in ["TMPDIR", "TMP", "TEMP"] {
+        command.env(variable, directory);
+    }
+    command
 }
 
 fn write_arrow_file(path: &Path, batch: &RecordBatch) -> TestResult {
@@ -201,9 +197,7 @@ fn report(output: &Output) -> TestResult<Value> {
 #[test]
 fn unconfigured_harness_skips_without_any_installed_cli() -> TestResult {
     let directory = tempfile::tempdir()?;
-    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
-        .env_clear()
-        .env("PATH", directory.path())
+    let output = isolated_xtask(directory.path())
         .args(["cli", "test-unity-catalog"])
         .output()?;
     assert!(output.status.success());
@@ -238,7 +232,7 @@ fn configured_harness_pins_commands_and_reports_only_declared_public_context() -
         result["dar_sha256"],
         format!(
             "{:x}",
-            Sha256::digest(fs::read(fixture.directory.path().join("dar"))?)
+            Sha256::digest(fs::read(executable_path(fixture.directory.path(), "dar"))?)
         )
     );
     assert_eq!(result["databricks_cli_version"], "0.300.0");
@@ -261,7 +255,7 @@ fn configured_harness_pins_commands_and_reports_only_declared_public_context() -
         assert!(
             args.windows(2)
                 .any(|pair| pair[0] == "--storage-options-file"
-                    && pair[1].ends_with("/storage.json"))
+                    && Path::new(pair[1]).ends_with("storage.json"))
         );
         if operation == "scan" {
             assert!(args.windows(2).any(|pair| pair == ["--limit", "3"]));
@@ -269,11 +263,8 @@ fn configured_harness_pins_commands_and_reports_only_declared_public_context() -
                 args.windows(2)
                     .any(|pair| pair == ["--column", "secret_value"])
             );
-            assert!(
-                args.windows(2)
-                    .any(|pair| pair[0] == "--predicate-file"
-                        && pair[1].ends_with("/predicate.json"))
-            );
+            assert!(args.windows(2).any(|pair| pair[0] == "--predicate-file"
+                && Path::new(pair[1]).ends_with("predicate.json")));
         }
     }
     assert_eq!(
@@ -288,13 +279,11 @@ fn relative_binary_executes_the_hashed_file_instead_of_a_path_shadow() -> TestRe
     let fixture = OfflineFixture::new()?;
     let shadow = tempfile::tempdir()?;
     fs::copy(
-        fixture.directory.path().join("databricks"),
-        shadow.path().join("databricks"),
+        executable_path(fixture.directory.path(), "databricks"),
+        executable_path(shadow.path(), "databricks"),
     )?;
-    write_script(&shadow.path().join("dar"), "#!/bin/sh\nexit 97\n")?;
-    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
-        .env_clear()
-        .env("PATH", shadow.path())
+    fs::write(executable_path(shadow.path(), "dar"), b"not an executable")?;
+    let output = isolated_xtask(shadow.path())
         .env("UC_FIXTURE_DIR", fixture.directory.path())
         .current_dir(fixture.directory.path())
         .args([
@@ -303,10 +292,9 @@ fn relative_binary_executes_the_hashed_file_instead_of_a_path_shadow() -> TestRe
             "--fixture",
             "fixture.json",
             "--binary",
-            "dar",
-            "--dar-revision",
-            REVISION,
         ])
+        .arg(executable_path(Path::new(""), "dar"))
+        .args(["--dar-revision", REVISION])
         .output()?;
     assert!(output.status.success(), "{output:?}");
     let result = report(&output)?;
@@ -314,7 +302,7 @@ fn relative_binary_executes_the_hashed_file_instead_of_a_path_shadow() -> TestRe
         result["dar_sha256"],
         format!(
             "{:x}",
-            Sha256::digest(fs::read(fixture.directory.path().join("dar"))?)
+            Sha256::digest(fs::read(executable_path(fixture.directory.path(), "dar"))?)
         )
     );
     Ok(())
