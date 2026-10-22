@@ -91,8 +91,9 @@ contains credential values or checks the caller's access.
 
 An input schema guide's `example` can be used as the file contents, subject to the
 listed constraints. For predicates, the example's column and literal type must
-match the table. `fields`, `operators`, and `scalar_types` list names accepted by
-`detail_command`; replace its `NAME` argument with the item needed. For example,
+match the table. Predicate guides list available `operators` and `scalar_types`.
+Replace the `NAME` argument in `detail_command` with the field, operator, or
+scalar type needed. For example,
 `--schema execution-options --detail prefetch_files_per_partition` gives one
 setting's default and bounds. `--schema predicate --detail timestamp_us` gives
 the timestamp unit, integer encoding, and required timezone field. Selected
