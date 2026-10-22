@@ -6,6 +6,7 @@ mod capabilities;
 mod diagnostics;
 #[cfg(unix)]
 mod direct_credentials;
+mod inspection;
 #[cfg(unix)]
 mod mock_cloud_storage;
 mod predicates;

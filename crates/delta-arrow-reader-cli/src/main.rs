@@ -1,6 +1,6 @@
 //! CLI commands for inspecting Delta snapshots and exporting their rows.
 //!
-//! `inspect` returns a snapshot's version and Arrow schema as JSON. `scan` and
+//! `inspect` returns a snapshot's version, read checks, or column types as JSON. `scan` and
 //! `query` return rows as Arrow IPC streams. Command results use stdout; diagnostics and
 //! completion records use stderr.
 //! `capabilities` describes the installed commands without opening a table.
@@ -8,11 +8,11 @@
 //! For a Delta table at `./table` with an `id` column:
 //!
 //! ```sh
-//! dar inspect ./table > snapshot.json
+//! dar inspect ./table --view summary --column id
 //! dar scan ./table --column id --limit 10 > rows.arrow
 //! ```
 //!
-//! The first command saves the snapshot metadata. The second saves an Arrow IPC
+//! The first command reports the version and `id` type. The second saves an Arrow IPC
 //! stream containing the `id` column from at most ten rows.
 
 #![cfg_attr(test, allow(clippy::panic))]
@@ -23,6 +23,7 @@ mod capabilities;
 mod diagnostics;
 mod direct_credentials;
 mod input;
+mod inspection;
 mod query;
 mod signals;
 mod stdout_monitor;
@@ -50,7 +51,10 @@ use table_input::TableArgs;
 
 /// Read Delta Lake snapshots as JSON metadata or Arrow IPC streams.
 #[derive(Parser)]
-#[command(name = command_name(), bin_name = command_name(), version)]
+#[command(
+    name = command_name(), bin_name = command_name(), version,
+    after_help = "When version or column types are unknown, use inspect TABLE --view summary [--column NAME]; pin reads with --table-version N.\nGuides: capabilities --command NAME; capabilities --schema NAME [--detail FIELD_OR_TYPE].\nInput formats: predicate, storage-options, execution-options. Output formats: inspection-summary, inspection, diagnostic, completion."
+)]
 struct Cli {
     #[command(flatten)]
     diagnostics: diagnostics::DiagnosticOptions,
@@ -64,7 +68,7 @@ enum Command {
     ///
     /// Offline; no table, input file, or authorization is loaded.
     Capabilities(capabilities::CapabilitiesArgs),
-    /// Print one Delta snapshot's version and full Arrow schema as JSON.
+    /// Inspect a snapshot's version, read checks, or selected column types as JSON.
     ///
     /// Only snapshot metadata is loaded; data files are not read.
     Inspect {
@@ -73,6 +77,8 @@ enum Command {
         /// Existing Databricks CLI profile; required for uc://catalog.schema.table targets.
         #[arg(long, value_name = "PROFILE")]
         databricks_profile: Option<String>,
+        #[command(flatten)]
+        inspection: inspection::InspectionArgs,
     },
     /// Run one read-only SQL query over explicitly selected Delta snapshots.
     ///
@@ -88,6 +94,7 @@ enum Command {
         #[arg(long, value_name = "PROFILE")]
         databricks_profile: Option<String>,
         /// Logical column name; repeat to select columns in argument order.
+        /// Default: all columns.
         #[arg(long = "column", value_name = "NAME")]
         columns: Vec<String>,
         /// Read zero columns while preserving row counts.
@@ -100,6 +107,8 @@ enum Command {
         #[arg(long, value_name = "N", value_parser = parse_unsigned_decimal::<NonZeroUsize>)]
         target_partitions: Option<NonZeroUsize>,
         /// Local typed JSON predicate; at most 1 MiB. '-' is a filename, not stdin.
+        /// Match literal types to inspected column types; integer values are strings.
+        /// Format: capabilities --schema predicate.
         #[arg(long, value_name = "PATH")]
         predicate_file: Option<String>,
         /// Local JSON execution options; at most 1 MiB. '-' is a filename, not stdin.
@@ -305,6 +314,7 @@ impl Error {
                     argument: (*argument).to_owned(),
                     field_path: None,
                     expected: "a readable local file".to_owned(),
+                    supplied: None,
                     hint,
                 });
             }
@@ -312,6 +322,18 @@ impl Error {
                 return input::execution_options_correction(source.reason());
             }
             Self::Reader { source } => return InputCorrection::from_reader(source),
+            Self::OutputLimit {
+                reason: "inspection_output_limit_exceeded",
+            } => {
+                return Some(InputCorrection {
+                    argument: "--max-output-bytes".to_owned(),
+                    expected: "a budget large enough for the complete selected inspection"
+                        .to_owned(),
+                    field_path: None,
+                    supplied: None,
+                    hint: "Narrow the selection or increase --max-output-bytes; keep the same authorization and --table-version N.",
+                });
+            }
             _ => return None,
         };
         Some(input_kind.correction(hint))
@@ -340,6 +362,9 @@ impl Error {
         let correction = self.input_correction();
         let argument = correction.as_ref().map(|value| value.argument.as_str());
         let expected = correction.as_ref().map(|value| value.expected.as_str());
+        let supplied = correction
+            .as_ref()
+            .and_then(|value| value.supplied.as_deref());
         let field_path = correction
             .as_ref()
             .and_then(|value| value.field_path.as_deref());
@@ -358,7 +383,7 @@ impl Error {
             if correction.is_some() {
                 tracing::error!(target: "delta_arrow_reader_cli",
                     event = "cli.input_correction", error_phase = phase, error_code = code,
-                    error_reason = reason, argument, expected, hint, field_path,
+                    error_reason = reason, argument, expected, supplied, hint, field_path,
                     "Correct the command input"
                 );
             }
@@ -394,7 +419,7 @@ impl Error {
         tracing::error!(target: "delta_arrow_reader_cli",
             event = "cli.failed", operation = "cli_command", outcome = "failed",
             error_phase = phase, error_code = code, error_reason = reason,
-            error_source_kind = source_kind, argument_kind, argument, expected, hint, field_path,
+            error_source_kind = source_kind, argument_kind, argument, expected, supplied, hint, field_path,
             json_kind, json_line, json_column, io_kind, os_error,
             "{message}"
         );
@@ -422,18 +447,22 @@ impl Error {
             _ => ("unknown", None),
         };
         let mut record = json!({
-            "format_version": 1,
+            "format_version": diagnostics::DIAGNOSTIC_FORMAT_VERSION,
             "kind": "diagnostic",
             "terminal": true,
             "phase": phase,
             "code": code,
             "reason": reason,
             "source_kind": source_kind,
-            "message": "CLI command failed.",
             "retryable": retryable,
             "recovery": recovery,
         });
         match self {
+            Self::UnityCatalog {
+                source: source @ unity_catalog::Error::DatabricksCliNotFound,
+            } => {
+                record["hint"] = source.to_string().into();
+            }
             Self::Argument { kind, .. } => {
                 record["argument_kind"] = format!("{kind:?}").into();
                 record["hint"] = diagnostics::argument_error_hint(*kind).into();
@@ -455,6 +484,9 @@ impl Error {
             record["argument"] = correction.argument.into();
             record["expected"] = correction.expected.into();
             record["hint"] = correction.hint.into();
+            if let Some(supplied) = correction.supplied {
+                record["supplied"] = supplied.into_string().into();
+            }
             if let Some(path) = correction.field_path {
                 record["field_path"] = path.into();
             }
@@ -559,6 +591,9 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
     if matches!(command, Command::Scan { .. } | Command::Query(_)) {
         ensure!(!io::stdout().is_terminal(), TerminalOutputSnafu);
     }
+    if let Command::Inspect { inspection, .. } = &command {
+        inspection.validate()?;
+    }
     let uc_target = match &command {
         Command::Capabilities(_) => {
             unreachable!("main handles discovery and its terminal reporting separately")
@@ -566,6 +601,7 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
         Command::Inspect {
             table,
             databricks_profile,
+            ..
         }
         | Command::Scan {
             table,
@@ -609,10 +645,12 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
     let work: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
         Command::Capabilities(_) => unreachable!("capabilities returned before table loading"),
         Command::Query(args) => args.prepare_execution()?,
-        Command::Inspect { table, .. } => async move {
+        Command::Inspect {
+            table, inspection, ..
+        } => async move {
             let (table, _authorized_access) = table.load_table(uc_target).await?;
             let version = table.version();
-            let output = encode_inspection_json(version, table.schema().as_ref());
+            let output = inspection.encode(&table)?;
             let stdout_stats = StdoutStats {
                 bytes_written: output.len() as u64,
                 ..Default::default()

@@ -27,7 +27,13 @@ pub(super) fn assert_single_terminal_record(stderr: &[u8], kind: &str) -> Value 
         .collect();
     assert_eq!(records.len(), 1, "{text}");
     let record = records.into_iter().next().unwrap();
-    assert_eq!(record["format_version"], 1);
+    assert_eq!(
+        record["format_version"],
+        if kind == "diagnostic" { 2 } else { 1 }
+    );
+    if kind == "diagnostic" {
+        assert!(record.get("message").is_none());
+    }
     assert_eq!(record["kind"], kind);
     assert_eq!(record["terminal"], true);
     assert!(stderr.len() <= 8192);
@@ -38,7 +44,7 @@ pub(super) fn assert_single_terminal_record(stderr: &[u8], kind: &str) -> Value 
 #[test]
 fn argument_errors_include_safe_corrections() -> Result<(), Box<dyn std::error::Error>> {
     let limit_range = format!("unsigned decimal integer from 0 to {}", usize::MAX);
-    let partition_range = format!("unsigned decimal integer from 1 to {}", usize::MAX);
+    let positive_integer_range = format!("unsigned decimal integer from 1 to {}", usize::MAX);
     let version_range = format!("unsigned decimal integer from 0 to {}", u64::MAX);
     for (args, kind, argument, expected, hint) in [
         (
@@ -52,7 +58,35 @@ fn argument_errors_include_safe_corrections() -> Result<(), Box<dyn std::error::
             vec!["scan", "secret-table", "--target-partitions", "0"],
             "ValueValidation",
             "--target-partitions",
-            partition_range.as_str(),
+            positive_integer_range.as_str(),
+            "Supply a value",
+        ),
+        (
+            vec![
+                "inspect",
+                "secret-table",
+                "--view",
+                "summary",
+                "--max-output-bytes",
+                "0",
+            ],
+            "ValueValidation",
+            "--max-output-bytes",
+            positive_integer_range.as_str(),
+            "Supply a value",
+        ),
+        (
+            vec![
+                "query",
+                "secret-table",
+                "--sql-file",
+                "secret.sql",
+                "--max-output-bytes",
+                "0",
+            ],
+            "ValueValidation",
+            "--max-output-bytes",
+            positive_integer_range.as_str(),
             "Supply a value",
         ),
         (
@@ -239,7 +273,7 @@ fn input_schema_corrections_omit_unknown_keys_and_values() -> Result<(), Box<dyn
                     r#"{"op":"eq","column":"secret-column","value":{"type":"int32","value":"secret-value"}}"#,
                     "/value/value",
                     "canonical decimal integer string",
-                    "allowed range",
+                    "Int32 uses int32",
                 ),
                 (
                     r#"{"op":"constant","value":true,"value":false}"#,
@@ -501,7 +535,7 @@ fn reader_input_errors_include_safe_corrections() -> Result<(), Box<dyn std::err
             "column_not_found",
             "--column",
             "logical column",
-            "schema.fields",
+            "--view summary --column-prefix PREFIX",
         ),
         (
             vec!["--column", "id", "--column", "id"],
@@ -519,7 +553,7 @@ fn reader_input_errors_include_safe_corrections() -> Result<(), Box<dyn std::err
             "column_not_found",
             "--predicate-file",
             "unambiguous",
-            "schema.fields",
+            "--view summary --column-prefix PREFIX",
         ),
         (
             vec!["--predicate-file", path.to_str().unwrap()],
@@ -528,7 +562,7 @@ fn reader_input_errors_include_safe_corrections() -> Result<(), Box<dyn std::err
             "invalid_column_reference",
             "--predicate-file",
             "without dots",
-            "top-level column",
+            "top-level names without dots",
         ),
         (
             vec!["--predicate-file", path.to_str().unwrap()],
@@ -536,8 +570,8 @@ fn reader_input_errors_include_safe_corrections() -> Result<(), Box<dyn std::err
             "unsupported_predicate",
             "scalar_type_mismatch",
             "--predicate-file",
-            "Arrow type",
-            "same table and snapshot",
+            "int32",
+            "Match the scalar type",
         ),
         (
             vec!["--predicate-file", path.to_str().unwrap()],
@@ -577,7 +611,13 @@ fn reader_input_errors_include_safe_corrections() -> Result<(), Box<dyn std::err
                 "{record}"
             );
             assert!(record["hint"].as_str().unwrap().contains(hint), "{record}");
-            assert!(record.get("field_path").is_none(), "{record}");
+            if reason == "scalar_type_mismatch" {
+                assert_eq!(record["field_path"], "/value/type");
+                assert_eq!(record["supplied"], "utf8");
+            } else {
+                assert!(record.get("field_path").is_none(), "{record}");
+                assert!(record.get("supplied").is_none(), "{record}");
+            }
             assert!(!record.to_string().contains("123456789123456789"));
         }
         let output = run_with_timeout(
@@ -608,9 +648,114 @@ fn reader_input_errors_include_safe_corrections() -> Result<(), Box<dyn std::err
         );
         assert!(corrections[0].contains(expected), "{text}");
         assert!(corrections[0].contains(hint), "{text}");
+        if reason == "scalar_type_mismatch" {
+            assert!(corrections[0].contains("supplied=\"utf8\""), "{text}");
+            assert!(
+                corrections[0].contains("field_path=\"/value/type\""),
+                "{text}"
+            );
+        }
         assert!(!text.contains("secret"), "{text}");
         assert!(!text.contains("123456789123456789"), "{text}");
         assert!(!text.contains("cli.failed"), "{text}");
+    }
+    Ok(())
+}
+
+#[test]
+fn scalar_type_diagnostics_allow_root_and_nested_predicates_to_be_repaired()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("secret-predicate.json");
+    let comparison =
+        serde_json::json!({"op":"ge","column":"id","value":{"type":"int64","value":"5"}});
+    for (mut predicate, field_path) in [
+        (comparison.clone(), "/value/type"),
+        (
+            serde_json::json!({"op":"and","args":[{"op":"constant","value":true},
+            {"op":"or","args":[{"op":"constant","value":false},
+                {"op":"not","arg":{"op":"not","arg":comparison}}]}]}),
+            "/args/1/args/1/arg/arg/value/type",
+        ),
+    ] {
+        let run = || {
+            run_with_timeout(
+                Command::new(env!("CARGO_BIN_EXE_dar"))
+                    .arg("scan")
+                    .arg(partitioned_table_path())
+                    .args(["--table-version", "0", "--column", "id", "--predicate-file"])
+                    .arg(&path)
+                    .arg("--diagnostics=json")
+                    .env("RUST_LOG", "off"),
+            )
+        };
+        fs::write(&path, serde_json::to_vec(&predicate)?)?;
+        let rejected = run()?;
+        assert_eq!(rejected.status.code(), Some(1));
+        assert!(rejected.stdout.is_empty());
+        let error = assert_single_terminal_record(&rejected.stderr, "diagnostic");
+        assert_eq!(error["field_path"], field_path);
+        assert_eq!(error["expected"], "int32");
+        assert_eq!(error["supplied"], "int64");
+        *predicate
+            .pointer_mut(error["field_path"].as_str().unwrap())
+            .unwrap() = error["expected"].clone();
+        fs::write(&path, serde_json::to_vec(&predicate)?)?;
+        let repaired = run()?;
+        assert!(repaired.status.success(), "{repaired:?}");
+        let completion = assert_single_terminal_record(&repaired.stderr, "completion");
+        assert_eq!(completion["bindings"][0]["table_version"], "0");
+        assert_eq!(completion["has_more"], false);
+        assert_eq!(completion["rows"], "356");
+        let mut ids = Vec::new();
+        for batch in StreamReader::try_new(Cursor::new(repaired.stdout), None)? {
+            let batch = batch?;
+            let column = batch
+                .column(0)
+                .as_any()
+                .downcast_ref::<arrow::array::Int32Array>()
+                .unwrap();
+            ids.extend(column.values().iter().copied());
+        }
+        ids.sort_unstable();
+        assert_eq!(ids, (5..=360).collect::<Vec<_>>());
+    }
+    Ok(())
+}
+
+#[test]
+fn missing_databricks_executable_has_a_safe_json_recovery_hint()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    for args in [
+        vec!["inspect", "uc://secret_catalog.secret_schema.secret_table"],
+        vec!["scan", "uc://secret_catalog.secret_schema.secret_table"],
+    ] {
+        for filter in ["off", "trace"] {
+            let output = run_with_timeout(
+                Command::new(env!("CARGO_BIN_EXE_dar"))
+                    .args(&args)
+                    .args([
+                        "--databricks-profile",
+                        "secret-profile",
+                        "--diagnostics=json",
+                    ])
+                    .env("PATH", directory.path())
+                    .env("RUST_LOG", filter),
+            )?;
+            assert_eq!(output.status.code(), Some(2));
+            assert!(output.stdout.is_empty());
+            let record = assert_single_terminal_record(&output.stderr, "diagnostic");
+            assert_eq!(record["code"], "databricks_cli_missing");
+            assert_eq!(record["recovery"], "fix_input");
+            assert_eq!(record["retryable"], false);
+            let hint = record["hint"].as_str().unwrap();
+            assert!(
+                hint.contains("databricks executable available on PATH"),
+                "{record}"
+            );
+            assert!(hint.contains("same --databricks-profile"), "{record}");
+        }
     }
     Ok(())
 }

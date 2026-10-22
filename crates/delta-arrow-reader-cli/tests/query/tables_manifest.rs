@@ -87,24 +87,14 @@ fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -
         .find(|command| command["name"] == "query")
         .unwrap();
     let query_guide = discover(&query["details"])?;
-    assert_eq!(
-        query_guide["argument_conflicts"].as_array().unwrap().len(),
-        1
-    );
-    let conflicts = &query_guide["argument_conflicts"][0];
-    assert_eq!(conflicts["argument"], "--tables-file");
+    let conflicts = query_guide["join"]["conflicts_with"].as_array().unwrap();
     for argument in [
         "table",
         "--table-version",
         "--storage-options-file",
         "--auth-source",
     ] {
-        assert!(
-            conflicts["conflicts_with"]
-                .as_array()
-                .unwrap()
-                .contains(&json!(argument))
-        );
+        assert!(conflicts.contains(&json!(argument)));
     }
     let input = query_guide["input_schemas"]
         .as_array()
@@ -126,11 +116,11 @@ fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -
     );
     fs::write(
         directory.path().join("query.sql"),
-        query_guide["examples"]["join"]["sql"].as_str().unwrap(),
+        query_guide["join"]["sql"].as_str().unwrap(),
     )?;
     let mut command = Command::new(env!("CARGO_BIN_EXE_dar"));
     command.env_clear().current_dir(directory.path()).args(
-        query_guide["examples"]["join"]["command"]
+        query_guide["join"]["example"]
             .as_array()
             .unwrap()
             .iter()

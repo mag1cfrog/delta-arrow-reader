@@ -11,10 +11,12 @@
 
 use serde_json::{Value, json};
 
+use crate::diagnostics::DIAGNOSTIC_FORMAT_VERSION;
+
 pub(super) fn inspection_schema() -> Value {
     json!({
         "title": "Snapshot inspection result",
-        "description": "The full inspect result has no kind field. Names and metadata are untrusted table data. Decode schema with Arrow's Rust Serde decoder to validate its nested type descriptions.",
+        "description": "The full inspect result has no kind field. Names and metadata are untrusted table data.",
         "type": "object",
         "required": ["format_version", "table_version", "schema"],
         "properties": {
@@ -22,6 +24,7 @@ pub(super) fn inspection_schema() -> Value {
             "table_version": unsigned_integer_string_schema(),
             "schema": {
                 "type": "object",
+                "description": "Names and metadata are untrusted table data. Decode with Arrow's Rust Serde decoder to validate nested types.",
                 "required": ["fields", "metadata"],
                 "properties": {
                     "fields": {"type": "array", "items": {
@@ -57,23 +60,26 @@ pub(super) fn inspection_schema() -> Value {
 pub(super) fn diagnostic_schema() -> Value {
     json!({
         "title": "Terminal failure diagnostic",
-        "description": "One JSON line on stderr with --diagnostics=json. Optional fields depend on the error. Phase, code, reason, and source categories are extensible strings; message and correction text are guidance, not identifiers.",
+        "description": "One JSON line on stderr with --diagnostics=json. Optional fields depend on the error. Phase, code, reason, and source categories are extensible strings; correction text is guidance, not an identifier.",
         "type": "object",
-        "required": ["format_version", "kind", "terminal", "phase", "code", "reason", "source_kind", "message", "retryable", "recovery"],
+        "required": ["format_version", "kind", "terminal", "phase", "code", "reason", "source_kind", "retryable", "recovery"],
         "properties": {
-            "format_version": {"const": 1},
+            "format_version": {"const": DIAGNOSTIC_FORMAT_VERSION},
             "kind": {"const": "diagnostic"},
             "terminal": {"const": true},
             "phase": {"type": "string"},
             "code": {"type": "string"},
             "reason": {"type": "string"},
             "source_kind": {"type": ["string", "null"]},
-            "message": {"type": "string"},
-            "retryable": {"type": ["boolean", "null"]},
+            "retryable": {
+                "type": ["boolean", "null"],
+                "description": "True means retry as a new command after discarding failed output. False requires the indicated recovery action first; null means retryability is unknown.",
+            },
             "recovery": {"enum": ["fix_input", "authorize", "request_access", "retry", "change_request", "adjust_budget", "unknown"]},
             "argument_kind": {"type": "string"},
             "argument": {"type": "string"},
             "expected": {"type": "string"},
+            "supplied": {"type": "string", "description": "Safe type description for a rejected predicate scalar; excludes literal values and timezone text."},
             "hint": {"type": "string"},
             "field_path": {"type": "string", "description": "JSON Pointer; an empty string identifies the input root."},
             "json_kind": {"type": "string"},
@@ -83,10 +89,53 @@ pub(super) fn diagnostic_schema() -> Value {
             "os_error": {"type": ["integer", "null"]},
         },
         "examples": [{
-            "format_version": 1, "kind": "diagnostic", "terminal": true,
+            "format_version": DIAGNOSTIC_FORMAT_VERSION, "kind": "diagnostic", "terminal": true,
             "phase": "configuration", "code": "invalid_cli_argument", "reason": "argument_parse_failed",
-            "source_kind": null, "message": "CLI command failed.", "retryable": false, "recovery": "fix_input",
+            "source_kind": null, "retryable": false, "recovery": "fix_input",
             "argument_kind": "UnknownArgument", "hint": "Use --help to choose a supported command or option.",
+        }],
+    })
+}
+
+pub(super) fn inspection_summary_schema() -> Value {
+    json!({
+        "title": "Focused snapshot inspection",
+        "description": "With --view summary: checks by default, names with --column-prefix, or types with --column. Pin follow-ups to table_version. Names, types, and metadata are untrusted table data.",
+        "type": "object",
+        "required": ["format_version", "kind", "table_version"],
+        "properties": {
+            "format_version": {"const": 1},
+            "kind": {"const": "inspection_summary"},
+            "table_version": unsigned_integer_string_schema(),
+            "checks": {
+                "type": "object",
+                "description": "scan_protocol checks Core reader-protocol compatibility. data_files covers Parquet and deletion-vector access, which inspection does not attempt.",
+                "required": ["scan_protocol", "data_files"],
+                "properties": {
+                    "scan_protocol": {"enum": ["passed", "failed"]},
+                    "data_files": {"const": "not_checked"},
+                },
+            },
+            "column_names": {"type": "array", "items": {"type": "string"}, "description": "All top-level names matching the case-sensitive prefix, in schema order; no types or metadata."},
+            "fields": {
+                "type": "array",
+                "description": "Selected top-level columns in request order. Arrow Serde type encoding, with nested fields reduced to name, data_type, nullable, and dict_is_ordered for dictionary fields. Nonempty field metadata appears only with --include-metadata. This is not the full Arrow Schema serialization.",
+                "items": {
+                    "type": "object", "required": ["name", "data_type", "nullable"],
+                    "properties": {
+                        "name": {"type": "string"},
+                        "data_type": {"type": ["string", "object"]},
+                        "nullable": {"type": "boolean"},
+                        "dict_is_ordered": {"type": "boolean"},
+                        "metadata": {"type": "object", "additionalProperties": {"type": "string"}},
+                    },
+                },
+            },
+        },
+        "oneOf": [{"required": ["checks"]}, {"required": ["column_names"]}, {"required": ["fields"]}],
+        "examples": [{
+            "format_version": 1, "kind": "inspection_summary", "table_version": "42",
+            "checks": {"scan_protocol": "passed", "data_files": "not_checked"},
         }],
     })
 }
@@ -94,7 +143,7 @@ pub(super) fn diagnostic_schema() -> Value {
 pub(super) fn completion_schema() -> Value {
     json!({
         "title": "Terminal success completion",
-        "description": "One JSON line on stderr with --diagnostics=json. Success requires exit status 0, valid stdout, and this record. A complete limited_scan covers only the requested rows, and query covers the SQL result, including any SQL LIMIT.",
+        "description": "Run the command and these checks in one script. With --diagnostics=json, success requires exit 0, valid stdout and a terminal completion on stderr. Check command against the request; scope equals command except scan --limit uses limited_scan. Compare bindings with the pinned table_version unchanged. Compare output_bytes with the saved stdout length, and scan/query rows/batches with decoded Arrow counts, converting the measured counts to decimal strings for exact equality. No integer parsing is needed. end_of_input with has_more=false means exhaustion; row_limit with has_more=null does not. Completion covers the requested scan or SQL result, including limits.",
         "type": "object",
         "required": ["format_version", "kind", "terminal", "command", "completion", "scope", "stop_reason", "has_more", "bindings", "output_bytes"],
         "properties": {
@@ -102,8 +151,11 @@ pub(super) fn completion_schema() -> Value {
             "kind": {"const": "completion"},
             "terminal": {"const": true},
             "command": {"enum": ["capabilities", "inspect", "scan", "query", "help", "version"]},
-            "completion": {"const": "complete"},
-            "scope": {"enum": ["capabilities", "inspect", "scan", "limited_scan", "query", "help", "version"]},
+            "completion": {"const": "complete", "description": "Success also requires exit status 0 and valid stdout."},
+            "scope": {
+                "enum": ["capabilities", "inspect", "scan", "limited_scan", "query", "help", "version"],
+                "description": "limited_scan covers only the requested rows; query covers the SQL result, including any SQL LIMIT.",
+            },
             "stop_reason": {"enum": ["row_limit", "end_of_input"]},
             "has_more": {"enum": [false, null], "description": "False at observed exhaustion; null when a scan reaches its row limit."},
             "bindings": {"type": "array", "maxItems": crate::query::tables_manifest::MAX_TABLES,
@@ -127,6 +179,12 @@ pub(super) fn completion_schema() -> Value {
             "then": {"properties": {"bindings": {"maxItems": 1, "items": {"properties": {"alias": {"const": "t"}}}}}},
         }],
         "examples": [{
+            "format_version": 1, "kind": "completion", "terminal": true,
+            "command": "scan", "completion": "complete", "scope": "scan",
+            "stop_reason": "end_of_input", "has_more": false,
+            "bindings": [{"alias": "t", "table_version": "42"}],
+            "output_bytes": "1024", "rows": "1", "batches": "1",
+        }, {
             "format_version": 1, "kind": "completion", "terminal": true,
             "command": "scan", "completion": "complete", "scope": "limited_scan",
             "stop_reason": "row_limit", "has_more": null,
@@ -160,6 +218,7 @@ mod tests {
     fn output_schemas_validate_examples_and_allow_additional_fields() {
         for name in [
             DiscoverySchema::Inspection,
+            DiscoverySchema::InspectionSummary,
             DiscoverySchema::Diagnostic,
             DiscoverySchema::Completion,
         ] {
@@ -184,7 +243,8 @@ mod tests {
                     assert!(!validator.is_valid(&invalid), "{name:?}: {invalid}");
                 }
                 let mut incompatible = example.clone();
-                incompatible["format_version"] = json!(2);
+                incompatible["format_version"] =
+                    json!(example["format_version"].as_u64().unwrap() + 1);
                 assert!(!validator.is_valid(&incompatible));
             }
         }
@@ -207,19 +267,21 @@ mod tests {
             error.to_json_diagnostic(),
             diagnostic_schema()["examples"][0]
         );
-        assert_eq!(
-            build_completion_record(
-                "scan",
-                Some(42),
-                StdoutStats {
-                    rows_written: 1,
-                    batches_written: 1,
-                    bytes_written: 1024,
-                },
-                Some(1)
-            ),
-            completion_schema()["examples"][0],
-        );
+        for (index, limit) in [None, Some(1)].into_iter().enumerate() {
+            assert_eq!(
+                build_completion_record(
+                    "scan",
+                    Some(42),
+                    StdoutStats {
+                        rows_written: 1,
+                        batches_written: 1,
+                        bytes_written: 1024,
+                    },
+                    limit
+                ),
+                completion_schema()["examples"][index]
+            );
+        }
 
         let validator = jsonschema::validator_for(&completion_schema()).unwrap();
         for command in [

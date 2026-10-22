@@ -1,6 +1,7 @@
 mod scans;
 
 use std::{
+    collections::BTreeMap,
     fs,
     os::unix::fs::PermissionsExt,
     path::PathBuf,
@@ -384,6 +385,21 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
         let fixture = DatabricksCliFixture::new(credential_kind)?;
         let server = MockCloudStorageServer::new(credential_kind.storage_protocol(), log.clone())?;
         fixture.use_storage_endpoint(credential_kind, &server.endpoint)?;
+        let discovery = run_with_timeout(&mut fixture.command(&[
+            "capabilities",
+            "--authorization",
+            "unity-catalog",
+        ]))?;
+        assert!(discovery.status.success());
+        assert!(discovery.stderr.is_empty());
+        assert!(fixture.recorded_arguments().is_empty());
+        let guide: Value = serde_json::from_slice(&discovery.stdout)?;
+        let authorization = &guide["authorization"];
+        assert_eq!(authorization["fallback_to_other_identity"], false);
+        let target = authorization["target"]
+            .as_str()
+            .unwrap()
+            .replace("catalog.schema.table", TABLE_NAME);
         for (historical, verbosity, machine) in [
             (false, "", false),
             (true, "", false),
@@ -399,7 +415,15 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
                     json!({"sas_token":"?sv=test&sp=rl&sig=test+signature"});
                 fs::write(path, serde_json::to_vec(&credentials)?)?;
             }
-            let mut command = fixture.inspect();
+            let mut command = fixture.command(&[
+                "inspect",
+                &target,
+                authorization["profile_argument"].as_str().unwrap(),
+                PROFILE,
+            ]);
+            command
+                .arg("--storage-options-file")
+                .arg(fixture.directory.path().join("options.json"));
             command
                 .env("AWS_ACCESS_KEY_ID", "ambient-key")
                 .env("AZURE_STORAGE_ACCOUNT_KEY", "invalid-ambient-secret")
@@ -471,6 +495,19 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
                 })
             );
         }
+        let summary =
+            run_with_timeout(
+                fixture
+                    .inspect()
+                    .args(["--view", "summary", "--diagnostics=json"]),
+            )?;
+        assert!(summary.status.success(), "{summary:?}");
+        assert!(summary.stdout.len() <= 4096);
+        let result: Value = serde_json::from_slice(&summary.stdout)?;
+        super::capabilities::assert_output_matches_schema("inspection-summary", &result);
+        assert_eq!(result["checks"]["scan_protocol"], "passed");
+        assert_eq!(result["checks"]["data_files"], "not_checked");
+        super::diagnostics::assert_single_terminal_record(&summary.stderr, "completion");
         let profile = format!("--profile={PROFILE}");
         let expected = [
             "tables",
@@ -491,7 +528,7 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
             "--output",
             "json",
         ];
-        assert_eq!(fixture.recorded_arguments(), expected.repeat(5));
+        assert_eq!(fixture.recorded_arguments(), expected.repeat(6));
         let requests = server.requests.lock().unwrap();
         assert!(!requests.is_empty());
         for request in requests.iter() {
@@ -555,6 +592,87 @@ fn inspection_uses_vended_cloud_credentials_and_actual_delta_schema() -> TestRes
 }
 
 #[test]
+fn summary_checks_and_lookups_never_read_parquet_or_deletion_vectors() -> TestResult {
+    let logs = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+        "../delta-arrow-reader-core/tests/reader/fixtures/external_writer/corpus/deletion_vectors/table/_delta_log",
+    );
+    let objects = [0, 1]
+        .into_iter()
+        .map(|version| {
+            let name = format!("{version:020}.json");
+            Ok((
+                format!("table/_delta_log/{name}"),
+                fs::read(logs.join(name))?,
+            ))
+        })
+        .collect::<std::io::Result<BTreeMap<_, _>>>()?;
+    let server =
+        MockCloudStorageServer::with_objects(CloudStorageProtocol::S3, objects, |_, _| {})?;
+    let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
+    fixture.use_storage_endpoint(StorageCredentialKind::S3, &server.endpoint)?;
+    for selection in [
+        vec![],
+        vec!["--column-prefix", "id"],
+        vec!["--column", "id"],
+    ] {
+        let output = run_with_timeout(
+            fixture
+                .inspect()
+                .args([
+                    "--diagnostics=json",
+                    "--view",
+                    "summary",
+                    "--table-version",
+                    "1",
+                ])
+                .args(&selection),
+        )?;
+        assert!(output.status.success(), "{output:?}");
+        assert!(output.stdout.len() <= 4096);
+        let result: Value = serde_json::from_slice(&output.stdout)?;
+        assert_eq!(result["table_version"], "1");
+        super::capabilities::assert_output_matches_schema("inspection-summary", &result);
+        if selection.is_empty() {
+            assert_eq!(result["checks"]["scan_protocol"], "passed");
+            assert_eq!(result["checks"]["data_files"], "not_checked");
+        }
+        super::diagnostics::assert_single_terminal_record(&output.stderr, "completion");
+    }
+    let requests = server.requests.lock().unwrap().clone();
+    assert!(!requests.is_empty());
+    for request in requests {
+        let target = request.split_whitespace().nth(1).unwrap();
+        let url = Url::parse(&format!("http://localhost{target}"))?;
+        assert!(
+            !url.path().ends_with(".parquet") && !url.path().ends_with(".bin"),
+            "{target}"
+        );
+    }
+    let scan = run_with_timeout(fixture.scan().args([
+        "--diagnostics=json",
+        "--table-version",
+        "1",
+        "--limit",
+        "1",
+    ]))?;
+    assert_eq!(
+        scan.status.code(),
+        Some(1),
+        "data files must remain unavailable"
+    );
+    super::diagnostics::assert_single_terminal_record(&scan.stderr, "diagnostic");
+    assert!(
+        server
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|request| request.contains(".parquet") || request.contains(".bin"))
+    );
+    Ok(())
+}
+
+#[test]
 fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResult {
     let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
     for args in [
@@ -568,6 +686,8 @@ fn help_malformed_input_and_direct_paths_do_not_invoke_databricks() -> TestResul
         vec!["capabilities", "--command", "scan", "--full"],
         vec!["capabilities", "--authorization", "unity-catalog"],
         vec!["capabilities", "--authorization", "s3"],
+        vec!["capabilities", "--authorization", "unity-catalog", "--full"],
+        vec!["capabilities", "--authorization", "s3", "--full"],
         vec!["capabilities", "--schema", "storage-options"],
         vec!["capabilities", "--schema", "execution-options"],
         vec!["capabilities", "--schema", "predicate"],

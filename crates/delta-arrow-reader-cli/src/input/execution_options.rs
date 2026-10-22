@@ -98,6 +98,7 @@ pub(crate) fn execution_options_correction(reason: &str) -> Option<InputCorrecti
         argument: JsonInputKind::ExecutionOptions.argument().to_owned(),
         field_path: Some(format!("/{field}")),
         expected: describe_integer_requirement(field)?,
+        supplied: None,
         hint: "Set this field within the accepted range, or omit it to use the default.",
     })
 }

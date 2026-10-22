@@ -235,6 +235,7 @@ fn manifest_error(field_path: &str, reason: &'static str, expected: &'static str
         correction: InputCorrection {
             argument: JsonInputKind::Tables.argument().to_owned(),
             field_path: Some(field_path.to_owned()),
+            supplied: None,
             expected: expected.to_owned(),
             hint: "Correct this manifest field; locations are relative to the manifest directory.",
         },

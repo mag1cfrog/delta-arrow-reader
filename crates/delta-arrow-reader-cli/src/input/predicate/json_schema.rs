@@ -10,7 +10,7 @@ use serde_json::{Map, Value, json};
 pub(in crate::input) fn predicate_schema() -> Value {
     json!({
         "title": "Row predicate file",
-        "description": "Match column names and literal types to the selected table. Integer literals use decimal strings.",
+        "description": "eq/ne/lt/le/gt/ge all use the comparison shape shown in the example. Match column names and literal types to the inspected table. Integer literals use decimal strings.",
         "$ref": "#/$defs/predicate",
         "$defs": {
             "predicate": {"oneOf": [

@@ -4,7 +4,19 @@ pub use source::source_kind;
 
 use std::{error::Error as _, fmt};
 
+use arrow::datatypes::DataType;
 use snafu::Snafu;
+
+/// A step from the root predicate to a rejected comparison.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeltaPredicatePathStep {
+    /// Zero-based child of an `And` predicate.
+    AndChild(usize),
+    /// Zero-based child of an `Or` predicate.
+    OrChild(usize),
+    /// The child of a `Not` predicate.
+    NotChild,
+}
 
 /// Reader operation phase associated with an error.
 #[non_exhaustive]
@@ -138,6 +150,19 @@ pub enum DeltaReaderError {
         /// Fixed redacted reason category.
         reason: &'static str,
     },
+    /// A comparison's scalar type does not match its column.
+    #[non_exhaustive]
+    #[snafu(display(
+        "delta reader error: phase=scan_planning code=unsupported_predicate reason=scalar_type_mismatch"
+    ))]
+    PredicateTypeMismatch {
+        /// Column type. Nested names and timezone strings may contain private data.
+        expected: DataType,
+        /// Scalar type, without the literal value. Timezone strings may contain private data.
+        supplied: DataType,
+        /// Steps from the root to the comparison, in root-to-leaf order.
+        path: Vec<DeltaPredicatePathStep>,
+    },
     /// Delta scan planning failed.
     #[non_exhaustive]
     #[snafu(display("delta reader error: phase=scan_planning code=scan_planning reason={reason}"))]
@@ -239,7 +264,9 @@ impl DeltaReaderError {
             Self::UnsupportedProtocol { .. } => "unsupported_protocol",
             Self::SchemaConversion { .. } => "schema_conversion",
             Self::InvalidProjection { .. } => "invalid_projection",
-            Self::UnsupportedPredicate { .. } => "unsupported_predicate",
+            Self::UnsupportedPredicate { .. } | Self::PredicateTypeMismatch { .. } => {
+                "unsupported_predicate"
+            }
             Self::ScanPlanning { .. } => "scan_planning",
             Self::ScanPartitionPlanning { .. } => "scan_partition_planning",
             Self::DataFileRead { .. } => "data_file_read",
@@ -262,6 +289,7 @@ impl DeltaReaderError {
             Self::SchemaConversion { .. } => DeltaReaderPhase::Schema,
             Self::InvalidProjection { .. }
             | Self::UnsupportedPredicate { .. }
+            | Self::PredicateTypeMismatch { .. }
             | Self::ScanPlanning { .. }
             | Self::ScanPartitionPlanning { .. } => DeltaReaderPhase::ScanPlanning,
             Self::Cancelled { .. } | Self::ExecutionTaskFailed { .. } => {
@@ -278,6 +306,7 @@ impl DeltaReaderError {
     /// Returns the fixed, redacted reason supplied by the reader.
     pub const fn reason(&self) -> &'static str {
         match self {
+            Self::PredicateTypeMismatch { .. } => "scalar_type_mismatch",
             Self::InvalidConfiguration { reason }
             | Self::InvalidTableLocation { reason }
             | Self::StorageInitialization { reason, .. }
