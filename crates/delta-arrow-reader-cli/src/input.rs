@@ -82,7 +82,7 @@ impl JsonInputKind {
                 "Use only documented execution-option fields, once each, with their declared types."
             }
             Self::Tables => {
-                "Use format_version 1 and a tables array; each object has alias, location, and optional table_version and authorization. Authorization requires a source name and may reference a storage_options_file; inline credentials are invalid. Do not repeat fields."
+                "Use format_version 1 and a tables array; each object has alias, location, and optional table_version and authorization. Authorization requires source and may reference storage_options_file or databricks_profile; inline credentials are invalid. Do not repeat fields."
             }
         }
     }

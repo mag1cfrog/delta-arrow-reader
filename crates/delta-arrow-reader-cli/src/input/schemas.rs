@@ -44,6 +44,7 @@ impl JsonInputKind {
                 "Aliases must be unique and not reserved names or SQL keywords.",
                 "Version strings must fit u64; schema validation alone does not check that range.",
                 "Paths, URLs, credential references and source compatibility are validated before table IO.",
+                "uc://catalog.schema.table requires source databricks and a nonblank profile without control characters. Direct locations reject databricks profiles.",
             ]);
         }
         json!({
@@ -139,7 +140,7 @@ mod tests {
                 let directory = tempfile::tempdir().unwrap();
                 let path = directory.path().join("tables.json");
                 std::fs::write(&path, text).unwrap();
-                crate::query::tables_manifest::read_table_builders(path.to_str().unwrap()).is_ok()
+                crate::query::tables_manifest::read_table_requests(path.to_str().unwrap()).is_ok()
             }
         }
     }

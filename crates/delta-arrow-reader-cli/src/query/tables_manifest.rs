@@ -8,18 +8,18 @@ use std::{collections::HashSet, path::Path};
 
 use clap::ValueEnum;
 use datafusion::sql::sqlparser::keywords::ALL_KEYWORDS;
-use delta_arrow_reader::DeltaTableBuilder;
 use object_store::ObjectStoreScheme;
 use serde::{Deserialize, Deserializer, de};
 use snafu::ResultExt;
 use url::Url;
 
 use crate::{
-    Error, InputIoSnafu,
+    Error, InputIoSnafu, UnityCatalogSnafu,
     diagnostics::InputCorrection,
     direct_credentials::{CredentialSource, validate_table_url},
     input::{self, JsonInputKind, JsonObject},
-    table_input::TableOptions,
+    table_input::{TableLoadRequest, TableOptions},
+    unity_catalog::UnityCatalogTableTarget,
 };
 
 // Even with 63-byte aliases and full u64 versions, provenance fits one 8 KiB completion record.
@@ -49,14 +49,15 @@ struct ManifestTable {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ManifestAuthorization {
-    #[serde(deserialize_with = "deserialize_credential_source")]
-    source: CredentialSource,
+    source: String,
     #[serde(default, deserialize_with = "input::deserialize_present_field")]
     storage_options_file: Option<String>,
+    #[serde(default, deserialize_with = "input::deserialize_present_field")]
+    databricks_profile: Option<String>,
 }
 
 /// Prepares every binding without opening any table, including when a later entry is invalid.
-pub(crate) fn read_table_builders(path: &str) -> Result<Vec<(String, DeltaTableBuilder)>, Error> {
+pub(crate) fn read_table_requests(path: &str) -> Result<Vec<(String, TableLoadRequest)>, Error> {
     let manifest =
         input::read_json_file::<JsonObject<TablesManifest>>(path, JsonInputKind::Tables)?.0;
     if manifest.format_version != 1 {
@@ -133,19 +134,50 @@ pub(crate) fn read_table_builders(path: &str) -> Result<Vec<(String, DeltaTableB
                 table_version: table.table_version,
                 ..Default::default()
             };
+            let mut databricks_profile = None;
             if let Some(JsonObject(authorization)) = table.authorization {
-                options.auth_source = Some(authorization.source);
+                let profile_path = format!("/tables/{index}/authorization/databricks_profile");
+                if authorization.source == "databricks" {
+                    databricks_profile =
+                        Some(authorization.databricks_profile.ok_or_else(|| {
+                            manifest_error(
+                                &profile_path,
+                                "missing_databricks_profile",
+                                "an existing Databricks CLI profile name",
+                            )
+                        })?);
+                } else {
+                    if authorization.databricks_profile.is_some() {
+                        return Err(manifest_error(
+                            &profile_path,
+                            "databricks_profile_requires_databricks_source",
+                            "databricks_profile only with source databricks",
+                        ));
+                    }
+                    options.auth_source = Some(
+                        CredentialSource::from_str(&authorization.source, false).map_err(|_| {
+                            manifest_error(
+                                &format!("/tables/{index}/authorization/source"),
+                                "invalid_authorization_source",
+                                "an installed direct-storage source or databricks",
+                            )
+                        })?,
+                    );
+                }
                 options.storage_options_file = authorization
                     .storage_options_file
                     .map(|path| resolve_options_file(&path, directory, index))
                     .transpose()?;
             }
+            let uc_target =
+                UnityCatalogTableTarget::parse(&location, databricks_profile.as_deref())
+                    .context(UnityCatalogSnafu)?;
             let credential_file_directory = options
                 .storage_options_file
                 .as_deref()
                 .and_then(|path| Path::new(path).parent());
-            let builder = options.direct_table_builder(&location, credential_file_directory)?;
-            Ok((table.alias, builder))
+            let request = options.prepare_load(&location, uc_target, credential_file_directory)?;
+            Ok((table.alias, request))
         })
         .collect()
 }
@@ -175,14 +207,6 @@ fn resolve_options_file(path: &str, directory: &Path, index: usize) -> Result<St
         .map_err(|_| invalid_path())
 }
 
-fn deserialize_credential_source<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<CredentialSource, D::Error> {
-    let source = String::deserialize(deserializer)?;
-    CredentialSource::from_str(&source, false)
-        .map_err(|_| de::Error::custom("an installed --auth-source name"))
-}
-
 fn resolve_location(location: &str, directory: &Path, index: usize) -> Result<String, Error> {
     let invalid_location = || {
         manifest_error(
@@ -194,7 +218,10 @@ fn resolve_location(location: &str, directory: &Path, index: usize) -> Result<St
     if location.trim().is_empty() || location.chars().any(char::is_control) {
         return Err(invalid_location());
     }
-    super::reject_unity_catalog_query(location)?;
+    if location.starts_with("uc://") {
+        // UC names and their profile are validated together after authorization is decoded.
+        return Ok(location.to_owned());
+    }
     if !Path::new(location).is_absolute() {
         match Url::parse(location) {
             Ok(url) => {

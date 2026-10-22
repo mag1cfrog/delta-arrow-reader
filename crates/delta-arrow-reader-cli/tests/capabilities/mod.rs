@@ -366,8 +366,7 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                     .all(|key| key == name)
             );
             let expected_sources = match name {
-                "inspect" | "scan" => vec!["direct_storage", "local", "unity_catalog"],
-                "query" => vec!["direct_storage", "local"],
+                "inspect" | "scan" | "query" => vec!["direct_storage", "local", "unity_catalog"],
                 _ => vec![],
             };
             assert_eq!(
@@ -478,7 +477,7 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                     assert!(guide["example"]["tables"][0].get(field).is_some());
                     detail_names.insert(format!("tables[].{field}"));
                 }
-                for field in ["source", "storage_options_file"] {
+                for field in ["source", "storage_options_file", "databricks_profile"] {
                     detail_names.insert(format!("tables[].authorization.{field}"));
                 }
             }

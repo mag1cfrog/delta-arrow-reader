@@ -14,7 +14,11 @@ use std::{
     time::Duration,
 };
 
-use arrow::{compute::concat_batches, ipc::reader::FileReader, record_batch::RecordBatch};
+use arrow::{
+    compute::concat_batches,
+    ipc::reader::FileReader,
+    record_batch::{RecordBatch, RecordBatchReader},
+};
 use serde_json::{Value, json};
 use url::Url;
 
@@ -24,6 +28,15 @@ pub(super) enum CloudStorageProtocol {
     S3,
     AzureBlob,
     Gcs,
+}
+
+/// Decodes URL escapes before fixtures inspect an object path.
+pub(super) fn requested_object_path(request: &str) -> String {
+    let target = request.split_whitespace().nth(1).unwrap();
+    let url = url::Url::parse(&format!("http://localhost{target}")).unwrap();
+    object_store::path::Path::from_url_path(url.path())
+        .unwrap()
+        .to_string()
 }
 
 /// A local S3/Azure Blob/GCS server for log listings and ranged object reads.
@@ -227,6 +240,56 @@ pub(super) fn partitioned_objects() -> Result<BTreeMap<String, Vec<u8>>, Box<dyn
         }
     }
     objects.insert("table/_delta_log/00000000000000000000.json".into(), log);
+    Ok(objects)
+}
+
+/// Keeps fixture rows intact but forces a second range request after the initial footer read.
+pub(super) fn partitioned_objects_with_large_parquet_footers()
+-> Result<BTreeMap<String, Vec<u8>>, Box<dyn std::error::Error>> {
+    use parquet::{
+        arrow::{ArrowWriter, arrow_reader::ParquetRecordBatchReaderBuilder},
+        file::metadata::KeyValue,
+    };
+
+    let mut objects = partitioned_objects()?;
+    let log_path = "table/_delta_log/00000000000000000000.json";
+    let mut actions = Vec::new();
+    let padding_length = delta_arrow_reader::DeltaScanExecutionOptions::new()
+        .parquet_metadata_size_hint_bytes()
+        .unwrap_or(8)
+        * 2;
+    for line in objects[log_path]
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+    {
+        actions.push(serde_json::from_slice::<Value>(line)?);
+    }
+    for action in &mut actions {
+        if let Some(path) = action["add"]["path"].as_str() {
+            let reader = ParquetRecordBatchReaderBuilder::try_new(fs::File::open(
+                partitioned_corpus().join("table").join(path),
+            )?)?
+            .build()?;
+            let mut writer = ArrowWriter::try_new(Vec::new(), reader.schema(), None)?;
+            writer.append_key_value_metadata(KeyValue::new(
+                "fixture_padding".to_owned(),
+                "x".repeat(padding_length),
+            ));
+            for batch in reader {
+                writer.write(&batch?)?;
+            }
+            let bytes = writer.into_inner()?;
+            let size = bytes.len();
+            objects.insert(format!("table/{path}"), bytes);
+            action["add"]["size"] = json!(size);
+        }
+    }
+    let mut log = Vec::new();
+    for action in actions {
+        serde_json::to_writer(&mut log, &action)?;
+        log.push(b'\n');
+    }
+    objects.insert(log_path.to_owned(), log);
     Ok(objects)
 }
 

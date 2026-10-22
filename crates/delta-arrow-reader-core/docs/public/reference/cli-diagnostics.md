@@ -192,7 +192,6 @@ interface; scripts should use machine diagnostics and the exit status.
 | `execution` | `output_write` | stdout could not be written or flushed |
 | `execution` | `arrow_ipc` | Arrow IPC encoding failed |
 | `configuration` | `invalid_sql_input` | SQL file is malformed, oversized, or contains a disallowed statement |
-| `configuration` | `unsupported_uc_query` | Unity Catalog SQL queries are not yet supported |
 | `datafusion` | `sql_initialization`, `sql_planning`, `sql_execution` | SQL runtime, planning, or execution failed |
 | `execution` | `output_limit` | Complete query result exceeds its row or serialized-byte ceiling |
 | `execution` | `command_cancelled` | A local SQL query was interrupted |

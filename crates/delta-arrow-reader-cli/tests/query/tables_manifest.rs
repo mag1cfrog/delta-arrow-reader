@@ -93,6 +93,7 @@ fn discovered_manifest_joins_use_relative_locations_and_independent_versions() -
         "--table-version",
         "--storage-options-file",
         "--auth-source",
+        "--databricks-profile",
     ] {
         assert!(conflicts.contains(&json!(argument)));
     }
@@ -237,6 +238,12 @@ fn invalid_later_bindings_fail_before_opening_the_first_table() -> TestResult {
             "location",
         ),
         ("customers", "", "invalid_table_location", "location"),
+        (
+            "customers",
+            "uc://main.sales.orders\n",
+            "invalid_table_location",
+            "location",
+        ),
     ] {
         // The first missing table would fail with status 1 if loading began before validation finished.
         let manifest = json!({"format_version":1,"tables":[
@@ -303,6 +310,7 @@ fn manifest_conflicts_are_rejected_before_reading_input_files() -> TestResult {
         vec!["--table-version", "0"],
         vec!["--storage-options-file", "secret-missing.json"],
         vec!["--auth-source", "env"],
+        vec!["--databricks-profile", "secret-profile"],
     ] {
         let output = run_with_timeout(manifest_command(directory.path()).args(arguments))?;
         assert_eq!(output.status.code(), Some(2));

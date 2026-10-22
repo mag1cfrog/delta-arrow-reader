@@ -24,6 +24,7 @@ use super::{
 
 use super::super::mock_cloud_storage::{
     append_west_partition_removal_commit, expected_partitioned_rows, partitioned_objects,
+    requested_object_path,
 };
 
 const IPC_END: &[u8] = &[255, 255, 255, 255, 0, 0, 0, 0];
@@ -35,14 +36,6 @@ enum ScanCase {
     FilteredProjection,
     NoColumns,
     ZeroLimit,
-}
-
-fn requested_path(request: &str) -> String {
-    let target = request.split_whitespace().nth(1).unwrap();
-    let url = url::Url::parse(&format!("http://localhost{target}")).unwrap();
-    object_store::path::Path::from_url_path(url.path())
-        .unwrap()
-        .to_string()
 }
 
 fn decode_stream(bytes: &[u8]) -> Result<RecordBatch, Box<dyn std::error::Error>> {
@@ -213,7 +206,7 @@ fn scans_preserve_values_options_and_snapshot_selection_for_every_cloud() -> Tes
                 .lock()
                 .unwrap()
                 .iter()
-                .any(|request| requested_path(request).ends_with(".parquet"))
+                .any(|request| requested_object_path(request).ends_with(".parquet"))
         );
         assert_eq!(
             fixture
@@ -244,7 +237,7 @@ fn scan_with_credential_expiry_and_table_changes(
         kind.storage_protocol(),
         partitioned_objects()?,
         move |request, objects| {
-            let path = requested_path(request);
+            let path = requested_object_path(request);
             if !path.ends_with(".parquet") {
                 return;
             }
@@ -344,7 +337,7 @@ fn renewal_during_scans_keeps_the_original_snapshot_and_emits_each_row_once() ->
             assert!(
                 requests
                     .iter()
-                    .filter(|request| requested_path(request).ends_with(".parquet"))
+                    .filter(|request| requested_object_path(request).ends_with(".parquet"))
                     .any(|request| request
                         .to_ascii_lowercase()
                         .contains(kind.expected_renewed_auth_fragment()))
