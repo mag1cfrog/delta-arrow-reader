@@ -32,8 +32,9 @@ use serde_json::{Value, json};
 use snafu::{ResultExt, Snafu};
 
 use crate::{
-    Error, InputIoSnafu, QuerySnafu, ReaderSnafu, arrow_output, build_completion_record,
-    diagnostics::ErrorClassification, parse_unsigned_decimal, table_input::TableOptions,
+    Error, InputIoSnafu, QuerySnafu, ReaderSnafu, UnityCatalogSnafu, arrow_output,
+    build_completion_record, diagnostics::ErrorClassification, parse_unsigned_decimal,
+    table_input::TableOptions, unity_catalog::UnityCatalogTableTarget,
 };
 
 pub(crate) const MAX_SQL_BYTES: u64 = 64 * 1024;
@@ -43,15 +44,19 @@ pub(crate) const SQL_RECURSION_LIMIT: usize = 128;
 #[derive(Args)]
 pub(crate) struct QueryArgs {
     /// UTF-8 local path or storage URL, registered as t. Relative paths use the working directory.
+    /// UC targets use uc://catalog.schema.table and require --databricks-profile.
     /// Use '--' before a table path beginning with '-'.
     #[arg(required_unless_present = "tables_file")]
     table: Option<String>,
     /// Local JSON manifest of 1-64 named tables; at most 1 MiB. Relative locations use its directory.
-    /// Conflicts with TABLE, --table-version, --storage-options-file, and --auth-source.
-    #[arg(long, value_name = "PATH", conflicts_with_all = ["table", "table_version", "storage_options_file", "auth_source"])]
+    /// Conflicts with TABLE, --table-version, --storage-options-file, --auth-source, and --databricks-profile.
+    #[arg(long, value_name = "PATH", conflicts_with_all = ["table", "table_version", "storage_options_file", "auth_source", "databricks_profile"])]
     tables_file: Option<String>,
     #[command(flatten)]
     table_options: TableOptions,
+    /// Existing Databricks CLI profile for positional uc:// TABLE; login must already be configured.
+    #[arg(long, value_name = "PROFILE")]
+    databricks_profile: Option<String>,
     /// UTF-8 file containing one read-only SQL query over the selected aliases; at most 64 KiB.
     #[arg(long, value_name = "PATH")]
     pub(crate) sql_file: String,
@@ -67,18 +72,30 @@ pub(crate) struct QueryArgs {
 }
 
 impl QueryArgs {
-    /// Admits all input before any table IO; execution loads each snapshot exactly once.
-    pub(crate) fn prepare_execution(
+    pub(crate) fn unity_catalog_target(
         &self,
-    ) -> Result<LocalBoxFuture<'_, Result<Value, Error>>, Error> {
-        let builders = if let Some(path) = &self.tables_file {
+    ) -> Result<Option<UnityCatalogTableTarget<'_>>, Error> {
+        let Some(location) = &self.table else {
+            return Ok(None);
+        };
+        UnityCatalogTableTarget::parse(location, self.databricks_profile.as_deref())
+            .context(UnityCatalogSnafu)
+    }
+
+    /// Admits all input before any table IO; execution loads each snapshot exactly once.
+    pub(crate) fn prepare_execution<'a>(
+        &'a self,
+        uc_target: Option<UnityCatalogTableTarget<'a>>,
+    ) -> Result<LocalBoxFuture<'a, Result<Value, Error>>, Error> {
+        let direct_table_builders = if let Some(path) = &self.tables_file {
             tables_manifest::read_table_builders(path)?
+        } else if uc_target.is_some() {
+            Vec::new()
         } else {
             let location = self.table.as_deref().ok_or(Error::Argument {
                 kind: clap::error::ErrorKind::MissingRequiredArgument,
                 correction: None,
             })?;
-            reject_unity_catalog_query(location)?;
             vec![(
                 "t".to_owned(),
                 self.table_options.direct_table_builder(location, None)?,
@@ -86,44 +103,50 @@ impl QueryArgs {
         };
         let sql_query = ReadOnlySqlQuery::read_file(&self.sql_file)?;
         Ok(async move {
-            let mut tables = Vec::with_capacity(builders.len());
-            let mut bindings = Vec::with_capacity(builders.len());
-            for (alias, builder) in builders {
+            let mut tables = Vec::with_capacity(direct_table_builders.len());
+            let mut authorized_access = None;
+            if let Some(target) = uc_target {
+                let (table, access) = self.table_options.load_unity_catalog_table(target).await?;
+                authorized_access = Some(access);
+                tables.push(("t".to_owned(), table));
+            }
+            for (alias, builder) in direct_table_builders {
                 let table = builder.load_table().await.context(ReaderSnafu)?;
-                bindings
-                    .push(json!({"alias": alias, "table_version": table.version().to_string()}));
                 tables.push((alias, table));
             }
-            let stream = sql_query
-                .execute_stream(tables, self.memory_limit_bytes.get())
-                .await?;
-            let stdout_stats = arrow_output::write_arrow_stream_to_stdout(
-                stream.schema(),
-                stream.map_err(|source| Error::Query {
-                    source: QueryError::Execution { source },
-                }),
-                Some(arrow_output::ArrowOutputLimits {
-                    max_rows: self.max_rows as u64,
-                    max_bytes: self.max_output_bytes.get() as u64,
-                }),
-            )
-            .await?;
+            let bindings: Vec<_> = tables
+                .iter()
+                .map(|(alias, table)| json!({"alias": alias, "table_version": table.version().to_string()}))
+                .collect();
+            let query_result = async {
+                let stream = sql_query
+                    .execute_stream(tables, self.memory_limit_bytes.get())
+                    .await?;
+                arrow_output::write_arrow_stream_to_stdout(
+                    stream.schema(),
+                    stream.map_err(|source| Error::Query {
+                        source: QueryError::Execution { source },
+                    }),
+                    Some(arrow_output::ArrowOutputLimits {
+                        max_rows: self.max_rows as u64,
+                        max_bytes: self.max_output_bytes.get() as u64,
+                    }),
+                )
+                .await
+            }
+            .await;
+            let stdout_stats = match (query_result, &authorized_access) {
+                (Err(error @ (Error::Reader { .. } | Error::Query { .. })), Some(access)) => {
+                    return Err(access.map_read_error(error).await);
+                }
+                (result, _) => result?,
+            };
             let mut completion = build_completion_record("query", None, stdout_stats, None);
             completion["bindings"] = bindings.into();
             Ok(completion)
         }
         .boxed_local())
     }
-}
-
-fn reject_unity_catalog_query(location: &str) -> Result<(), Error> {
-    if location
-        .get(..5)
-        .is_some_and(|scheme| scheme.eq_ignore_ascii_case("uc://"))
-    {
-        return Err(QueryError::UnsupportedUnityCatalogQuery).context(QuerySnafu);
-    }
-    Ok(())
 }
 
 /// SQL failures retain typed sources without printing query text or dependency messages.
@@ -133,8 +156,6 @@ pub(crate) enum QueryError {
         "Invalid SQL input (reason={reason}). Use one read-only query over the selected tables."
     ))]
     Input { reason: &'static str },
-    #[snafu(display("Unity Catalog SQL queries are not supported yet."))]
-    UnsupportedUnityCatalogQuery,
     #[snafu(display("Could not initialize the SQL runtime."))]
     Initialization { source: DataFusionError },
     #[snafu(display("Could not plan the SQL query."))]
@@ -156,12 +177,6 @@ impl QueryError {
                 phase: "configuration",
                 code: "invalid_sql_input",
                 reason,
-                source_kind: None,
-            },
-            Self::UnsupportedUnityCatalogQuery => ErrorClassification {
-                phase: "configuration",
-                code: "unsupported_uc_query",
-                reason: "unsupported_uc_query",
                 source_kind: None,
             },
             Self::Initialization { source }
@@ -190,7 +205,7 @@ impl QueryError {
 
     pub(crate) fn exit_status(&self) -> u8 {
         match self {
-            Self::Input { .. } | Self::UnsupportedUnityCatalogQuery => 2,
+            Self::Input { .. } => 2,
             _ => 1,
         }
     }

@@ -1,3 +1,4 @@
+mod queries;
 mod scans;
 
 use std::{
@@ -270,6 +271,14 @@ esac
 
     fn scan(&self) -> Command {
         self.table_command("scan")
+    }
+
+    fn query(&self, sql: &str) -> Result<Command, Box<dyn std::error::Error>> {
+        let path = self.directory.path().join("query.sql");
+        fs::write(&path, sql)?;
+        let mut command = self.table_command("query");
+        command.arg("--sql-file").arg(path);
+        Ok(command)
     }
 
     fn table_command(&self, operation: &str) -> Command {
@@ -1118,13 +1127,15 @@ fn uc_cancellation_remains_responsive_with_blocked_stdout() -> TestResult {
 #[cfg(target_os = "linux")]
 #[test]
 fn cancellation_terminates_pending_databricks_process() -> TestResult {
-    for (signal, machine, during_refresh) in [
-        (libc::SIGINT, false, false),
-        (libc::SIGTERM, false, false),
-        (libc::SIGINT, true, false),
-        (libc::SIGTERM, true, false),
-        (libc::SIGINT, false, true),
-        (libc::SIGTERM, true, true),
+    for (operation, signal, machine, during_refresh) in [
+        ("inspect", libc::SIGINT, false, false),
+        ("inspect", libc::SIGTERM, false, false),
+        ("inspect", libc::SIGINT, true, false),
+        ("inspect", libc::SIGTERM, true, false),
+        ("inspect", libc::SIGINT, false, true),
+        ("inspect", libc::SIGTERM, true, true),
+        ("query", libc::SIGTERM, true, false),
+        ("query", libc::SIGINT, true, true),
     ] {
         let fixture = DatabricksCliFixture::new(StorageCredentialKind::S3)?;
         let _server = if during_refresh {
@@ -1135,7 +1146,11 @@ fn cancellation_terminates_pending_databricks_process() -> TestResult {
         } else {
             None
         };
-        let mut command = fixture.inspect();
+        let mut command = if operation == "query" {
+            fixture.query("SELECT * FROM t")?
+        } else {
+            fixture.inspect()
+        };
         if machine {
             command.arg("--diagnostics=json");
         }

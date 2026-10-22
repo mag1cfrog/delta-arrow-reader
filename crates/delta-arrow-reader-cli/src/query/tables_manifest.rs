@@ -194,7 +194,6 @@ fn resolve_location(location: &str, directory: &Path, index: usize) -> Result<St
     if location.trim().is_empty() || location.chars().any(char::is_control) {
         return Err(invalid_location());
     }
-    super::reject_unity_catalog_query(location)?;
     if !Path::new(location).is_absolute() {
         match Url::parse(location) {
             Ok(url) => {

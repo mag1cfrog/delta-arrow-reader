@@ -143,8 +143,9 @@ selected service, including credential option aliases.
 
 `read_support` describes each command's scope and limits. For example, `query`
 registers positional `TABLE` as `t`, or up to 64 named snapshots from a manifest.
-UC targets are not supported for SQL. Its memory ceiling applies to DataFusion's
-execution pool, and disk spill is disabled. The SQL examples that use `id`
+UC SQL accepts a positional table and an explicit Databricks profile; manifests
+currently accept only local paths and direct storage URLs. The memory ceiling
+applies to DataFusion's execution pool, and disk spill is disabled. The SQL examples that use `id`
 assume the selected table has that column. A null limit or deadline means that
 the command has no ceiling for that resource; it does not mean zero.
 
@@ -298,9 +299,9 @@ Discovery does not search numeric version gaps.
 Use an existing Databricks CLI workspace profile to resolve a table name and
 obtain temporary cloud credentials. DAR reads the Delta log and data files from
 S3, Azure Blob, GCS, or R2 using local compute. `inspect` reports snapshot metadata
-and version; `scan` streams its rows as Arrow IPC. Unity Catalog column metadata
-does not determine the output schema. Neither command submits SQL or starts a
-cluster or SQL warehouse.
+and version; `scan` streams its rows as Arrow IPC, and `query` runs local SQL.
+Unity Catalog column metadata does not determine the output schema. These commands
+do not submit SQL to Databricks or start a cluster or SQL warehouse.
 
 ```sh
 dar inspect uc://main.sales.orders --view summary --databricks-profile work
@@ -451,8 +452,11 @@ partial files after failure; discard those files.
 
 `query` runs SQL locally through the Core DataFusion table provider. It opens
 one Delta snapshot as `t` when given `TABLE`, or registers the aliases in a
-[tables manifest](#join-table-snapshots). Use local paths or direct storage
-URLs; Unity Catalog targets are not yet supported by this command.
+[tables manifest](#join-table-snapshots). Positional `TABLE` accepts a local path,
+direct storage URL, or `uc://catalog.schema.table` with `--databricks-profile`.
+UC queries use the same [authorization prerequisites](#read-a-unity-catalog-table)
+and credential renewal as scans. Databricks supplies metadata and READ credentials;
+SQL executes locally without a Databricks cluster or warehouse.
 
 ```sh
 cat > query.sql <<'SQL'
@@ -464,11 +468,13 @@ LIMIT 100
 SQL
 dar query /data/orders --sql-file query.sql > totals.arrow
 dar query /data/orders --table-version 0 --sql-file query.sql > original.arrow
+dar query uc://main.sales.orders --databricks-profile work \
+  --storage-options-file storage.json --sql-file query.sql > totals.arrow
 ```
 
 ```text
 dar query [--table-version N] [--storage-options-file PATH]
-          [--auth-source SOURCE]
+          [--auth-source SOURCE] [--databricks-profile PROFILE]
           --sql-file PATH [--max-rows N] [--max-output-bytes BYTES]
           [--memory-limit-bytes BYTES] [--] TABLE
 ```
@@ -533,8 +539,10 @@ dar query --tables-file tables.json --sql-file join.sql --diagnostics=json > joi
 ```
 
 `--tables-file` conflicts with positional `TABLE`, `--table-version`,
-`--storage-options-file`, and `--auth-source`. Command-line file paths use the
-working directory. Locations inside the manifest use the manifest's directory.
+`--storage-options-file`, `--auth-source`, and `--databricks-profile`.
+Manifests currently accept only local paths and direct storage URLs.
+Command-line file paths use the working directory. Locations inside the manifest
+use the manifest's directory.
 The complete manifest is validated before any table is opened.
 
 <details markdown="1">

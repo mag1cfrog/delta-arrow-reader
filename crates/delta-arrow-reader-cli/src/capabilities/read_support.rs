@@ -203,7 +203,7 @@ pub(super) fn authorization_sources() -> Value {
             },
         },
         "unity_catalog": {
-            "commands": ["inspect", "scan"],
+            "commands": ["inspect", "scan", "query"],
             "target": "uc://catalog.schema.table",
             "profile_argument": "--databricks-profile",
             "profile_required": true,
@@ -252,7 +252,8 @@ pub(super) fn command_read_support() -> Value {
             "deadline_ms": null,
         },
         "query": {
-            "authorization": ["local", "direct_storage"],
+            "authorization": ["local", "direct_storage", "unity_catalog"],
+            "unity_catalog_input": "positional_table_only",
             "scope": "complete_sql_result",
             "positional_alias": "t",
             "required_table_input": {"one_of": ["TABLE", "--tables-file"]},

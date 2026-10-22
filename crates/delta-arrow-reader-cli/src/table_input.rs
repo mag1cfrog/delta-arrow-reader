@@ -89,6 +89,25 @@ impl TableOptions {
             None => Ok(builder.with_storage_options(options)),
         }
     }
+
+    /// Loads one UC snapshot and retains its authorization for subsequent reads.
+    pub(crate) async fn load_unity_catalog_table(
+        &self,
+        target: UnityCatalogTableTarget<'_>,
+    ) -> Result<(DeltaTable, AuthorizedTableAccess), Error> {
+        ensure!(
+            self.auth_source.is_none(),
+            StorageAuthorizationSnafu {
+                reason: "auth_source_conflicts_with_unity_catalog"
+            }
+        );
+        let access = target
+            .request_read_access(self.read_storage_options()?)
+            .await
+            .context(UnityCatalogSnafu)?;
+        let table = access.load_table(self.snapshot_selection()).await?;
+        Ok((table, access))
+    }
 }
 
 impl TableArgs {
@@ -99,17 +118,7 @@ impl TableArgs {
     ) -> Result<(DeltaTable, Option<AuthorizedTableAccess>), Error> {
         match uc_target {
             Some(target) => {
-                ensure!(
-                    self.options.auth_source.is_none(),
-                    StorageAuthorizationSnafu {
-                        reason: "auth_source_conflicts_with_unity_catalog"
-                    }
-                );
-                let access = target
-                    .request_read_access(self.options.read_storage_options()?)
-                    .await
-                    .context(UnityCatalogSnafu)?;
-                let table = access.load_table(self.options.snapshot_selection()).await?;
+                let (table, access) = self.options.load_unity_catalog_table(target).await?;
                 Ok((table, Some(access)))
             }
             None => {

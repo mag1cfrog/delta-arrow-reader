@@ -612,7 +612,7 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
             databricks_profile.as_deref(),
         )
         .context(UnityCatalogSnafu)?,
-        Command::Query(_) => None,
+        Command::Query(args) => args.unity_catalog_target()?,
     };
     let predicate = match &command {
         Command::Scan {
@@ -644,7 +644,7 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
     };
     let work: LocalBoxFuture<'_, Result<Value, Error>> = match &command {
         Command::Capabilities(_) => unreachable!("capabilities returned before table loading"),
-        Command::Query(args) => args.prepare_execution()?,
+        Command::Query(args) => args.prepare_execution(uc_target)?,
         Command::Inspect {
             table, inspection, ..
         } => async move {
@@ -714,8 +714,8 @@ fn run_table_command(command: Command) -> Result<Value, Error> {
             }
             .await;
             let stdout_stats = match (scan_result, &authorized_access) {
-                (Err(Error::Reader { source }), Some(access)) => {
-                    return Err(access.map_reader_error(source).await);
+                (Err(error @ Error::Reader { .. }), Some(access)) => {
+                    return Err(access.map_read_error(error).await);
                 }
                 (result, _) => result?,
             };
