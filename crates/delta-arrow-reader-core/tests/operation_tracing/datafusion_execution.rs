@@ -36,7 +36,7 @@ fn task_context_subscribers_follow_concurrent_queries_through_datafusion_tasks()
         let first = TraceCollector::new(Level::DEBUG);
         let second = TraceCollector::new(Level::DEBUG);
         let unrelated = TraceCollector::new(Level::DEBUG);
-        let task = |collector: &TraceCollector| {
+        let query_task_context = |collector: &TraceCollector| {
             let config = context
                 .task_ctx()
                 .session_config()
@@ -49,8 +49,8 @@ fn task_context_subscribers_follow_concurrent_queries_through_datafusion_tasks()
         };
         let (a, b) = runtime.block_on(
             futures_util::future::join(
-                collect(Arc::clone(&plan), task(&first)),
-                collect(Arc::clone(&plan), task(&second)),
+                collect(Arc::clone(&plan), query_task_context(&first)),
+                collect(Arc::clone(&plan), query_task_context(&second)),
             )
             .with_subscriber(unrelated.clone()),
         );
