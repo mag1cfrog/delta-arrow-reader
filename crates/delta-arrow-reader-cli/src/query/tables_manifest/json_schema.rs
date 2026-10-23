@@ -11,7 +11,7 @@ pub(crate) fn tables_manifest_schema() -> Value {
         .filter_map(|source| source.to_possible_value())
         .map(|value| value.get_name().to_owned())
         .collect();
-    sources.push("databricks".to_owned());
+    sources.extend(["env-file".to_owned(), "databricks".to_owned()]);
     json!({
         "title": "Named table snapshots",
         "description": "Relative locations use the manifest directory. Omit table_version for latest at load time; updates and credential refresh never retarget a loaded snapshot. Snapshots do not form a cross-table transaction.",
@@ -52,15 +52,19 @@ pub(crate) fn tables_manifest_schema() -> Value {
             },
             "authorization": {
                 "type": "object", "additionalProperties": false, "required": ["source"],
-                "description": "References only; no inline credentials or env_file. Omit for direct-storage defaults. UC requires databricks. Null is invalid.",
+                "description": "References only; no inline credentials. Omit for direct-storage defaults. UC requires databricks. Null is invalid.",
                 "properties": {
                     "source": {
                         "type": "string", "enum": sources,
-                        "description": "An --auth-source name for direct storage, or databricks for UC. No identity fallback.",
+                        "description": "An --auth-source name or env-file for direct storage, or databricks for UC. No identity fallback.",
                     },
                     "storage_options_file": {
                         "type": "string", "minLength": 1,
-                        "description": "Local JSON path relative to the manifest; required for json. UC allows transport/region only. Nested credential paths use this file's directory; environment paths use cwd. No blanks, control characters or URLs.",
+                        "description": "Local JSON path relative to the manifest; required for json. With env-file, accepts noncredential configuration only. UC allows transport/region only. Nested credential paths use this file's directory; environment paths use cwd. No blanks, control characters or URLs.",
+                    },
+                    "env_file": {
+                        "type": "string", "minLength": 1,
+                        "description": "Credential env-file path relative to the manifest. Required only for source env-file; invalid for other sources. Nested credential references use the env file's directory. No blanks, control characters or URLs.",
                     },
                     "databricks_profile": {
                         "type": "string", "minLength": 1,
@@ -70,6 +74,10 @@ pub(crate) fn tables_manifest_schema() -> Value {
                 "allOf": [{
                     "if": {"properties": {"source": {"const": "json"}}},
                     "then": {"required": ["storage_options_file"]},
+                }, {
+                    "if": {"properties": {"source": {"const": "env-file"}}},
+                    "then": {"required": ["env_file"]},
+                    "else": {"not": {"required": ["env_file"]}},
                 }, {
                     "if": {"properties": {"source": {"const": "databricks"}}},
                     "then": {"required": ["databricks_profile"]},
@@ -103,6 +111,25 @@ mod tests {
         uc_manifest["tables"][0]["authorization"] =
             json!({"source":"databricks", "databricks_profile":"work"});
         cases.push((uc_manifest, true));
+        std::fs::write(
+            directory.path().join("credentials.env"),
+            "AWS_ACCESS_KEY_ID=secret-key\nAWS_SECRET_ACCESS_KEY=secret-password\nAWS_REGION=eu-west-1",
+        )?;
+        for reference in [
+            "credentials.env".to_owned(),
+            directory
+                .path()
+                .join("credentials.env")
+                .to_str()
+                .unwrap()
+                .to_owned(),
+        ] {
+            let mut manifest = baseline.clone();
+            manifest["tables"][0]["location"] = json!("s3://bucket/table");
+            manifest["tables"][0]["authorization"] =
+                json!({"source":"env-file", "env_file":reference});
+            cases.push((manifest, true));
+        }
         for version in ["0", "18446744073709551615"] {
             let mut manifest = baseline.clone();
             manifest["tables"][0]["table_version"] = json!(version);
@@ -121,6 +148,29 @@ mod tests {
             ("authorization", json!({"source":"unknown"})),
             ("authorization", json!({"source":"json"})),
             ("authorization", json!({"source":"databricks"})),
+            ("authorization", json!({"source":"env-file"})),
+            (
+                "authorization",
+                json!({"source":"env-file", "env_file":null}),
+            ),
+            ("authorization", json!({"source":"env-file", "env_file":""})),
+            ("authorization", json!({"source":"env-file", "env_file":[]})),
+            (
+                "authorization",
+                json!({"source":"env-file", "env_file":"credentials.env", "databricks_profile":"work"}),
+            ),
+            (
+                "authorization",
+                json!({"source":"env", "env_file":"credentials.env"}),
+            ),
+            (
+                "authorization",
+                json!({"source":"json", "env_file":"credentials.env", "storage_options_file":"options.json"}),
+            ),
+            (
+                "authorization",
+                json!({"source":"databricks", "env_file":"credentials.env", "databricks_profile":"work"}),
+            ),
             (
                 "authorization",
                 json!({"source":"databricks", "databricks_profile":null}),

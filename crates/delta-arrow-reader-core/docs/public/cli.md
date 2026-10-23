@@ -670,7 +670,7 @@ dar query --tables-file tables.json --sql-file join.sql --diagnostics=json > joi
 ```
 
 `--tables-file` conflicts with positional `TABLE`, `--table-version`,
-`--storage-options-file`, `--auth-source`, and `--databricks-profile`.
+`--storage-options-file`, `--env-file`, `--auth-source`, and `--databricks-profile`.
 Manifests accept local paths, direct storage URLs, and Unity Catalog table names.
 Command-line file paths use the working directory. Locations inside the manifest
 use the manifest's directory.
@@ -687,8 +687,9 @@ The complete manifest is validated before any table is opened.
 | `tables[].location` | Nonempty local path, direct storage URL, or `uc://catalog.schema.table`, without control characters or embedded credentials |
 | `tables[].table_version` | Optional decimal string from `"0"` to `"18446744073709551615"`; omit to select latest |
 | `tables[].authorization` | Optional object selecting one explicit credential source |
-| `tables[].authorization.source` | Required when `authorization` is present; an installed `--auth-source` name for direct storage, or `databricks` for UC |
+| `tables[].authorization.source` | Required when `authorization` is present; an installed `--auth-source` name or `env-file` for direct storage, or `databricks` for UC |
 | `tables[].authorization.storage_options_file` | Local JSON storage-options file reference; required for source `json`, optional for other sources |
+| `tables[].authorization.env_file` | Local credential env-file reference; required for source `env-file`, invalid for other sources |
 | `tables[].authorization.databricks_profile` | Existing Databricks CLI profile name; required for source `databricks`, invalid for other sources |
 
 The file is limited to 1 MiB. Unknown and repeated fields are errors. Versions
@@ -720,18 +721,30 @@ The direct-storage sources and their provider restrictions are the same as
 [`--auth-source`](#explicit-credential-sources): `json`, `env`, `aws-web-identity`,
 `aws-container`, `azure-workload-identity`, and `azure-managed-identity`.
 The manifest accepts references only; put credential values in the selected
-storage-options file or inherited environment. `env_file` references are not
-yet supported.
+storage-options file, env file, or inherited environment. To select a provisioned
+env file, use source `env-file`:
 
-`storage_options_file` is relative to the manifest directory. Credential file
-paths inside that JSON, such as `google_application_credentials` or
-`aws_web_identity_token_file`, are relative to the options file's directory.
+```json
+{"alias":"orders","location":"s3://example-bucket/orders",
+ "authorization":{"source":"env-file","env_file":"./credentials/orders.env"}}
+```
+
+An optional `storage_options_file` can supply noncredential settings, such as
+region or endpoint, alongside `env_file`. JSON settings take precedence over
+the env file's configuration. Credential values in that JSON file are rejected.
+`env_file` cannot accompany another source or a Databricks profile.
+
+`storage_options_file` and `env_file` are relative to the manifest directory.
+Credential file paths inside either file use its directory. For example,
+`GOOGLE_APPLICATION_CREDENTIALS=adc.json` in `credentials/orders.env` refers to
+`credentials/adc.json`. JSON references such as `google_application_credentials`
+or `aws_web_identity_token_file` use the options file's directory.
 Absolute paths stay absolute. Paths inherited from environment variables use
 the process working directory, as they do for positional table commands.
 
-The CLI reads every referenced options file before loading any table. Each
-binding retains its selected provider; changing an options file during the
-query cannot switch its identity. Native providers can still renew credentials
+The CLI reads the options and env files for every binding before loading any
+table. Each binding retains its selected provider; changing those files during
+the query cannot switch its identity. Native providers can still renew credentials
 and reread rotating identity-token files under their existing rules.
 
 </details>

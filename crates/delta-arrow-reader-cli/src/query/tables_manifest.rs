@@ -53,6 +53,8 @@ struct ManifestAuthorization {
     #[serde(default, deserialize_with = "input::deserialize_present_field")]
     storage_options_file: Option<String>,
     #[serde(default, deserialize_with = "input::deserialize_present_field")]
+    env_file: Option<String>,
+    #[serde(default, deserialize_with = "input::deserialize_present_field")]
     databricks_profile: Option<String>,
 }
 
@@ -137,36 +139,62 @@ pub(crate) fn read_table_requests(path: &str) -> Result<Vec<(String, TableLoadRe
             let mut databricks_profile = None;
             if let Some(JsonObject(authorization)) = table.authorization {
                 let profile_path = format!("/tables/{index}/authorization/databricks_profile");
-                if authorization.source == "databricks" {
-                    databricks_profile =
-                        Some(authorization.databricks_profile.ok_or_else(|| {
-                            manifest_error(
-                                &profile_path,
-                                "missing_databricks_profile",
-                                "an existing Databricks CLI profile name",
-                            )
-                        })?);
-                } else {
-                    if authorization.databricks_profile.is_some() {
-                        return Err(manifest_error(
-                            &profile_path,
-                            "databricks_profile_requires_databricks_source",
-                            "databricks_profile only with source databricks",
-                        ));
+                let env_file_path = format!("/tables/{index}/authorization/env_file");
+                if authorization.source != "env-file" && authorization.env_file.is_some() {
+                    return Err(manifest_error(
+                        &env_file_path,
+                        "env_file_requires_env_file_source",
+                        "env_file only with source env-file",
+                    ));
+                }
+                if authorization.source != "databricks"
+                    && authorization.databricks_profile.is_some()
+                {
+                    return Err(manifest_error(
+                        &profile_path,
+                        "databricks_profile_requires_databricks_source",
+                        "databricks_profile only with source databricks",
+                    ));
+                }
+                match authorization.source.as_str() {
+                    "databricks" => {
+                        databricks_profile =
+                            Some(authorization.databricks_profile.ok_or_else(|| {
+                                manifest_error(
+                                    &profile_path,
+                                    "missing_databricks_profile",
+                                    "an existing Databricks CLI profile name",
+                                )
+                            })?);
                     }
-                    options.auth_source = Some(
-                        CredentialSource::from_str(&authorization.source, false).map_err(|_| {
+                    "env-file" => {
+                        let path = authorization.env_file.ok_or_else(|| {
                             manifest_error(
-                                &format!("/tables/{index}/authorization/source"),
-                                "invalid_authorization_source",
-                                "an installed direct-storage source or databricks",
+                                &env_file_path,
+                                "missing_env_file",
+                                "an env_file path with source env-file",
                             )
-                        })?,
-                    );
+                        })?;
+                        options.env_file = Some(resolve_authorization_file(
+                            &path, directory, index, "env_file",
+                        )?);
+                    }
+                    source => {
+                        options.auth_source =
+                            Some(CredentialSource::from_str(source, false).map_err(|_| {
+                                manifest_error(
+                                    &format!("/tables/{index}/authorization/source"),
+                                    "invalid_authorization_source",
+                                    "an installed direct-storage source, env-file, or databricks",
+                                )
+                            })?);
+                    }
                 }
                 options.storage_options_file = authorization
                     .storage_options_file
-                    .map(|path| resolve_options_file(&path, directory, index))
+                    .map(|path| {
+                        resolve_authorization_file(&path, directory, index, "storage_options_file")
+                    })
                     .transpose()?;
             }
             let uc_target =
@@ -182,10 +210,15 @@ pub(crate) fn read_table_requests(path: &str) -> Result<Vec<(String, TableLoadRe
         .collect()
 }
 
-fn resolve_options_file(path: &str, directory: &Path, index: usize) -> Result<String, Error> {
+fn resolve_authorization_file(
+    path: &str,
+    directory: &Path,
+    index: usize,
+    field: &str,
+) -> Result<String, Error> {
     let invalid_path = || {
         manifest_error(
-            &format!("/tables/{index}/authorization/storage_options_file"),
+            &format!("/tables/{index}/authorization/{field}"),
             "invalid_authorization_reference",
             "a nonempty UTF-8 local file path without control characters",
         )

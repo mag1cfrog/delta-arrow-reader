@@ -55,23 +55,50 @@ fn manifest_command(
 #[test]
 fn each_manifest_table_uses_its_selected_identity_even_after_reference_files_change() -> TestResult
 {
-    for customers_source in ["json", "env"] {
+    for (orders_source, customers_source) in [
+        ("json", "json"),
+        ("json", "env"),
+        ("json", "env-file"),
+        ("env-file", "env-file"),
+    ] {
         let directory = tempfile::tempdir()?;
         fs::create_dir(directory.path().join("authorization"))?;
         let orders_options = directory.path().join("authorization/orders.json");
         let customers_options = directory.path().join("authorization/customers.json");
+        let orders_env_file = directory.path().join("authorization/orders.env");
+        let customers_env_file = directory.path().join("authorization/customers.env");
+        for (path, identity) in [
+            (&orders_env_file, "orders"),
+            (&customers_env_file, "customers"),
+        ] {
+            fs::write(
+                path,
+                format!(
+                    "AWS_ACCESS_KEY_ID=secret-{identity}-key\nAWS_SECRET_ACCESS_KEY=secret-{identity}-password\nAWS_SESSION_TOKEN=secret-{identity}-session"
+                ),
+            )?;
+        }
         let mut orders = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
         let customers = DirectStorageFixture::new(CloudStorageProtocol::S3)?;
-        let replaced_files = [orders_options.clone(), customers_options.clone()];
+        let replaced_files = [
+            orders_options.clone(),
+            customers_options.clone(),
+            orders_env_file,
+            customers_env_file,
+        ];
         orders.restart_storage_with_request_hook(move |_| {
             for path in &replaced_files {
                 fs::write(path, "secret-replaced-options").unwrap();
             }
         })?;
-        orders.write_options(json!({
-            "access_key_id":"secret-orders-key", "secret_access_key":"secret-orders-password",
-            "session_token":"secret-orders-session", "region":"eu-west-1"
-        }))?;
+        orders.write_options(if orders_source == "json" {
+            json!({
+                "access_key_id":"secret-orders-key", "secret_access_key":"secret-orders-password",
+                "session_token":"secret-orders-session", "region":"eu-west-1"
+            })
+        } else {
+            json!({"region":"eu-west-1"})
+        })?;
         customers.write_options(if customers_source == "json" { json!({
             "access_key_id":"secret-customers-key", "secret_access_key":"secret-customers-password",
             "session_token":"secret-customers-session", "region":"eu-west-1"
@@ -84,15 +111,38 @@ fn each_manifest_table_uses_its_selected_identity_even_after_reference_files_cha
             customers.directory.path().join("options.json"),
             &customers_options,
         )?;
-        let tables = json!([
-            {"alias":"orders","location":"s3://bucket/table","authorization":{"source":"json","storage_options_file":"../authorization/orders.json"}},
+        let mut tables = json!([
+            {"alias":"orders","location":"s3://bucket/table","authorization":{"source":orders_source,"storage_options_file":"../authorization/orders.json"}},
             {"alias":"customers","location":"s3://bucket/table","authorization":{"source":customers_source,"storage_options_file":"../authorization/customers.json"}}
         ]);
+        for (index, source, alias) in [
+            (0, orders_source, "orders"),
+            (1, customers_source, "customers"),
+        ] {
+            if source == "env-file" {
+                tables[index]["authorization"]["env_file"] =
+                    json!(format!("../authorization/{alias}.env"));
+            }
+        }
+        let inherited_identity = if customers_source == "env" {
+            "customers"
+        } else {
+            "unused"
+        };
         let output = run_with_timeout(
             manifest_command(directory.path(), tables)?
-                .env("AWS_ACCESS_KEY_ID", "secret-customers-key")
-                .env("AWS_SECRET_ACCESS_KEY", "secret-customers-password")
-                .env("AWS_SESSION_TOKEN", "secret-customers-session"),
+                .env(
+                    "AWS_ACCESS_KEY_ID",
+                    format!("secret-{inherited_identity}-key"),
+                )
+                .env(
+                    "AWS_SECRET_ACCESS_KEY",
+                    format!("secret-{inherited_identity}-password"),
+                )
+                .env(
+                    "AWS_SESSION_TOKEN",
+                    format!("secret-{inherited_identity}-session"),
+                ),
         )?;
         assert!(!String::from_utf8_lossy(&output.stderr).contains("secret"));
         assert_eq!(
@@ -227,6 +277,14 @@ fn invalid_later_authorization_prevents_all_storage_reads() -> TestResult {
     fs::write(directory.path().join("duplicate.json"), json!({
         "access_key_id":"secret-one", "AWS_ACCESS_KEY_ID":"secret-two", "secret_access_key":"secret-password"
     }).to_string())?;
+    fs::write(
+        directory.path().join("incomplete.env"),
+        "AWS_ACCESS_KEY_ID=secret-key",
+    )?;
+    fs::write(
+        directory.path().join("malformed.env"),
+        "AWS_ACCESS_KEY_ID='secret-key' trailing",
+    )?;
     for (authorization, code, reason) in [
         (
             json!({"source":"json"}),
@@ -252,6 +310,31 @@ fn invalid_later_authorization_prevents_all_storage_reads() -> TestResult {
             json!({"source":"env"}),
             "invalid_storage_authorization",
             "auth_source_incomplete_credentials",
+        ),
+        (
+            json!({"source":"env-file"}),
+            "invalid_input_json",
+            "missing_env_file",
+        ),
+        (
+            json!({"source":"env-file","env_file":"../secret-missing.env"}),
+            "input_file_io",
+            "input_file_read_failed",
+        ),
+        (
+            json!({"source":"env-file","env_file":"../incomplete.env"}),
+            "invalid_storage_authorization",
+            "auth_source_incomplete_credentials",
+        ),
+        (
+            json!({"source":"env-file","env_file":"../malformed.env"}),
+            "invalid_input_env",
+            "env_file_invalid_record",
+        ),
+        (
+            json!({"source":"env-file","env_file":"../incomplete.env", "storage_options_file":orders.directory.path().join("options.json")}),
+            "invalid_storage_authorization",
+            "auth_source_conflicting_credentials",
         ),
     ] {
         let tables = json!([

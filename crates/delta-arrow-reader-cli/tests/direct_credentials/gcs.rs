@@ -146,9 +146,9 @@ fn env_file_adc_reference_belongs_to_the_env_files_directory() -> TestResult {
 }
 
 #[test]
-fn manifest_adc_references_use_the_options_directory_and_environment_keeps_the_working_directory()
+fn manifest_adc_references_use_the_containing_file_and_environment_keeps_the_working_directory()
 -> TestResult {
-    for source in ["json", "env"] {
+    for source in ["json", "env", "env-file"] {
         let fixture = DirectStorageFixture::new(CloudStorageProtocol::Gcs)?;
         let directory = fixture.directory.path();
         fs::create_dir_all(directory.join("config/identities"))?;
@@ -167,11 +167,21 @@ fn manifest_adc_references_use_the_options_directory_and_environment_keeps_the_w
             directory.join("options.json"),
             directory.join("config/storage.json"),
         )?;
+        let mut authorization =
+            json!({"source":source,"storage_options_file":"../config/storage.json"});
+        if source == "env-file" {
+            fs::create_dir_all(directory.join("env/nested"))?;
+            fs::write(
+                directory.join("env/nested/selected.env"),
+                "GOOGLE_APPLICATION_CREDENTIALS=../../config/identities/secret-adc.json",
+            )?;
+            authorization["env_file"] = json!("../env/nested/selected.env");
+        }
         fs::write(
             directory.join("manifests/tables.json"),
             json!({"format_version":1,"tables":[{
                 "alias":"orders", "location":"gs://bucket/table",
-                "authorization":{"source":source,"storage_options_file":"../config/storage.json"}
+                "authorization":authorization
             }]})
             .to_string(),
         )?;

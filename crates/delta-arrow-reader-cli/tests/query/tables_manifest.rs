@@ -399,6 +399,7 @@ fn manifest_conflicts_are_rejected_before_reading_input_files() -> TestResult {
         vec!["--table-version", "0"],
         vec!["--storage-options-file", "secret-missing.json"],
         vec!["--auth-source", "env"],
+        vec!["--env-file", "secret-missing.env"],
         vec!["--databricks-profile", "secret-profile"],
     ] {
         let output = run_with_timeout(manifest_command(directory.path()).args(arguments))?;
@@ -430,6 +431,11 @@ fn authorization_requires_a_named_source_and_file_references() -> TestResult {
         json!({"source":"json","storage_options_file":{"secret-key":"secret-value"}}),
         json!({"source":"json","aws_access_key_id":"secret-key"}),
         json!({"source":"env","env_file":"secret-file.env"}),
+        json!({"source":"env-file"}),
+        json!({"source":"env-file","env_file":null}),
+        json!({"source":"env-file","env_file":{"secret-key":"secret-value"}}),
+        json!({"source":"env-file","env_file":"secret-file.env","databricks_profile":"work"}),
+        json!({"source":"databricks","env_file":"secret-file.env","databricks_profile":"work"}),
     ] {
         assert_manifest_rejected(
             directory.path(),
@@ -446,20 +452,28 @@ fn authorization_requires_a_named_source_and_file_references() -> TestResult {
         {"alias":"orders","location":"s3://bucket/table","authorization":{"source":"json","source":"env"}}
     ]}"#,
     )?;
+    assert_manifest_rejected(
+        directory.path(),
+        r#"{"format_version":1,"tables":[
+        {"alias":"orders","location":"s3://bucket/table","authorization":{"source":"env-file","env_file":"secret-one.env","env_file":"secret-two.env"}}
+    ]}"#,
+    )?;
     for path in [
         "",
         " ",
         "secret\0file",
         "https://secret.example/options.json",
     ] {
-        let record = assert_manifest_rejected(directory.path(), json!({"format_version":1,"tables":[
-            {"alias":"orders","location":"s3://bucket/table","authorization":{"source":"json","storage_options_file":path}}
-        ]}).to_string())?;
-        assert_eq!(record["reason"], "invalid_authorization_reference");
-        assert_eq!(
-            record["field_path"],
-            "/tables/0/authorization/storage_options_file"
-        );
+        for (source, field) in [("json", "storage_options_file"), ("env-file", "env_file")] {
+            let record = assert_manifest_rejected(directory.path(), json!({"format_version":1,"tables":[
+                {"alias":"orders","location":"s3://bucket/table","authorization":{"source":source,field:path}}
+            ]}).to_string())?;
+            assert_eq!(record["reason"], "invalid_authorization_reference");
+            assert_eq!(
+                record["field_path"],
+                format!("/tables/0/authorization/{field}")
+            );
+        }
     }
     Ok(())
 }
