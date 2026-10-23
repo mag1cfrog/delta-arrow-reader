@@ -106,6 +106,32 @@ fn discovered_completion_versions_match_each_command_and_query_format()
         assert!(output.status.success(), "{output:?}");
         let receipt = assert_single_terminal_record(&output.stderr, "completion");
         assert_output_matches_schema("completion", &receipt);
+        let guide = run_with_timeout(Command::new(env!("CARGO_BIN_EXE_dar")).args([
+            "capabilities",
+            "--command",
+            name,
+        ]))?;
+        assert!(guide.status.success());
+        let guide: Value = serde_json::from_slice(&guide.stdout)?;
+        assert!(
+            guide["output_schemas"]
+                .as_array()
+                .unwrap()
+                .contains(&receipt["kind"])
+        );
+        assert!(
+            metadata["diagnostics"]["json"]["schemas"]
+                .as_array()
+                .unwrap()
+                .contains(&receipt["kind"])
+        );
+        assert!(
+            metadata["output_schemas"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|schema| schema["name"] == receipt["kind"])
+        );
         assert_eq!(receipt["format_version"], expected_version);
         if format.is_none() {
             assert_eq!(
@@ -579,7 +605,6 @@ fn discovery_routes_from_guides_to_selected_details_and_full_definitions()
                     "diagnostic",
                     "completion",
                 ],
-                "help" => vec!["diagnostic"],
                 "query" | "preview" => vec!["diagnostic", "completion", "rows"],
                 _ => vec!["diagnostic", "completion"],
             };

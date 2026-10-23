@@ -1041,10 +1041,10 @@ fn write_help_or_version(error: clap::Error) -> Result<Value, Error> {
 }
 
 fn install_panic_hook(diagnostic_format: DiagnosticFormat) {
-    // Kernel workers can panic without waking their caller. Report synchronously
-    // and exit without unwinding into a blocking join; never format the payload.
+    // Kernel workers can panic without waking their caller. Bound the report and
+    // exit without unwinding into a blocking join; never format the payload.
     std::panic::set_hook(Box::new(move |_| {
-        diagnostic_format.report_failure(&Error::Runtime {
+        diagnostic_format.report_failure_with_timeout(Error::Runtime {
             source: io::Error::other("process panicked"),
             reason: "process_panicked",
         });

@@ -249,10 +249,7 @@ fn build_command_guide(name: &str) -> Result<Value, Error> {
             "usage": "For a direct cloud TABLE, pass a provisioned credential file without reading or expanding its values. Selected-file failures never fall back to another identity.",
         });
     }
-    let mut output_schemas = vec![DiscoverySchema::Diagnostic];
-    if name != "help" {
-        output_schemas.push(DiscoverySchema::Completion);
-    }
+    let mut output_schemas = vec![DiscoverySchema::Diagnostic, DiscoverySchema::Completion];
     if name == "inspect" {
         output_schemas.push(DiscoverySchema::InspectionSummary);
     } else if matches!(name, "query" | "preview") {
@@ -292,10 +289,7 @@ fn build_capability_details(selected_command: Option<&str>) -> Result<Value, Err
         })
         .map(|kind| json!({"name": kind, "argument": kind.argument()}))
         .collect();
-    let mut terminal_schemas = vec![DiscoverySchema::Diagnostic];
-    if selected_command != Some("help") {
-        terminal_schemas.push(DiscoverySchema::Completion);
-    }
+    let terminal_schemas = [DiscoverySchema::Diagnostic, DiscoverySchema::Completion];
     let mut output_schemas: Vec<_> = terminal_schemas
         .iter()
         .map(|schema| json!({"name": schema, "stream": "stderr"}))
