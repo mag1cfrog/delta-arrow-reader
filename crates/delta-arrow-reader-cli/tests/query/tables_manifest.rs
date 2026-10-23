@@ -481,6 +481,11 @@ fn manifest_schema_limits_and_duplicate_fields_are_enforced() -> TestResult {
             "/tables/0/authorization",
             "object fields: source, storage_options_file, env_file, databricks_profile",
         ),
+        (
+            json!({"alias": "orders", "location": "secret-table", "authorization": {"source": "env", "alias": "secret-value"}}),
+            "/tables/0/authorization",
+            "object fields: source, storage_options_file, env_file, databricks_profile",
+        ),
     ] {
         let record = assert_manifest_rejected(
             directory.path(),

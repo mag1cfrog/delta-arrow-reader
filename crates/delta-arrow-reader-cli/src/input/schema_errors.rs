@@ -118,7 +118,16 @@ fn correction_from_serde_error(
     }
 
     let nested_location = if matches!(location.input_kind, JsonInputKind::Tables) {
-        location.with_relative_serde_path(error.path())
+        // UnknownField includes the rejected key; the correction belongs to its object.
+        let known_path_len = error
+            .path()
+            .iter()
+            .count()
+            .saturating_sub(usize::from(matches!(
+                error.inner(),
+                DeserializerError::UnknownField(..)
+            )));
+        location.with_relative_serde_path(error.path().iter().take(known_path_len))
     } else {
         None
     };
@@ -238,33 +247,16 @@ impl InputFieldLocation {
         }
     }
 
-    fn with_relative_serde_path(&self, relative_path: &serde_path_to_error::Path) -> Option<Self> {
+    fn with_relative_serde_path<'a>(
+        &self,
+        relative_path: impl IntoIterator<Item = &'a serde_path_to_error::Segment>,
+    ) -> Option<Self> {
         use serde_path_to_error::Segment;
 
         let mut json_pointer = self.json_pointer.clone();
         for segment in relative_path {
             match segment {
-                Segment::Map { key } => {
-                    if matches!(self.input_kind, JsonInputKind::Tables)
-                        && !matches!(
-                            key.as_str(),
-                            "format_version"
-                                | "tables"
-                                | "alias"
-                                | "location"
-                                | "table_version"
-                                | "authorization"
-                                | "source"
-                                | "storage_options_file"
-                                | "env_file"
-                                | "databricks_profile"
-                        )
-                    {
-                        // Unknown keys identify their containing object, never the key itself.
-                        break;
-                    }
-                    json_pointer.push_str(&format!("/{key}"));
-                }
+                Segment::Map { key } => json_pointer.push_str(&format!("/{key}")),
                 Segment::Seq { index } => json_pointer.push_str(&format!("/{index}")),
                 _ => return None,
             }
