@@ -14,7 +14,10 @@ fn rejected_children_preserve_native_errors_and_the_original_plan() -> TestResul
         ParquetReaderBackend::DeltaKernel,
     ] {
         let fixture = LogTable::new()?;
-        fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+        fixture.write_commit(
+            1,
+            &[fixture.write_parquet_and_build_add_action("secret-data.parquet", &[1, 2])?],
+        )?;
         let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 1))?;
         let mut identities = std::collections::HashSet::new();
         for level in [Level::WARN, Level::ERROR, Level::DEBUG] {
@@ -75,8 +78,8 @@ fn callback_milestones_keep_plan_identity_and_capability_results() -> TestResult
         fixture.write_commit(
             1,
             &[
-                fixture.parquet("secret-first.parquet", &[1, 2])?,
-                fixture.parquet("secret-second.parquet", &[3, 4])?,
+                fixture.write_parquet_and_build_add_action("secret-first.parquet", &[1, 2])?,
+                fixture.write_parquet_and_build_add_action("secret-second.parquet", &[3, 4])?,
             ],
         )?;
         let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 4))?;

@@ -1,7 +1,7 @@
 //! Terminal diagnostics owned by public reader operations.
 
 mod stream;
-pub(crate) use stream::{StreamOperation, StreamOutcome};
+pub(crate) use stream::{StreamOutcome, StreamTrace};
 
 use std::sync::{
     Arc, Mutex,

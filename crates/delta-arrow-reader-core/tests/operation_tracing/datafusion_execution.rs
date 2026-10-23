@@ -27,8 +27,8 @@ fn task_context_subscribers_follow_concurrent_queries_through_datafusion_tasks()
         fixture.write_commit(
             1,
             &[
-                fixture.parquet("secret-a.parquet", &[1, 2])?,
-                fixture.parquet("secret-b.parquet", &[3, 4])?,
+                fixture.write_parquet_and_build_add_action("secret-a.parquet", &[1, 2])?,
+                fixture.write_parquet_and_build_add_action("secret-b.parquet", &[3, 4])?,
             ],
         )?;
         let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 2))?;
@@ -169,7 +169,11 @@ fn empty_eof_and_drop_have_distinct_partition_outcomes() -> TestResult {
                 }
                 let fixture = LogTable::new()?;
                 if !empty {
-                    fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+                    fixture.write_commit(
+                        1,
+                        &[fixture
+                            .write_parquet_and_build_add_action("secret-data.parquet", &[1, 2])?],
+                    )?;
                 }
                 let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 1))?;
                 let collector = TraceCollector::new(Level::INFO);
@@ -222,7 +226,10 @@ fn upstream_limit_drops_the_partition_without_claiming_eof() -> TestResult {
         ParquetReaderBackend::DeltaKernel,
     ] {
         let fixture = LogTable::new()?;
-        fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2, 3, 4])?])?;
+        fixture.write_commit(
+            1,
+            &[fixture.write_parquet_and_build_add_action("secret-data.parquet", &[1, 2, 3, 4])?],
+        )?;
         let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 1))?;
         let limited: Arc<dyn ExecutionPlan> = Arc::new(GlobalLimitExec::new(plan, 0, Some(1)));
         let collector = TraceCollector::new(Level::INFO);
@@ -241,7 +248,10 @@ fn upstream_limit_drops_the_partition_without_claiming_eof() -> TestResult {
 fn dropping_a_pending_partition_cannot_become_late_success() -> TestResult {
     let runtime = runtime()?;
     let fixture = LogTable::new()?;
-    fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+    fixture.write_commit(
+        1,
+        &[fixture.write_parquet_and_build_add_action("secret-data.parquet", &[1, 2])?],
+    )?;
     let (context, plan, plan_id) =
         runtime.block_on(plan(&fixture, ParquetReaderBackend::Direct, 1))?;
     let owner = TraceCollector::new(Level::INFO);
@@ -296,8 +306,10 @@ fn data_and_deletion_vector_failures_after_output_keep_typed_causes() -> TestRes
         ] {
             for cause in ["missing", "corrupt", "deletion_vector"] {
                 let fixture = LogTable::new()?;
-                let first = fixture.parquet("secret-first.parquet", &[1, 2])?;
-                let mut second = fixture.parquet("secret-second.parquet", &[3])?;
+                let first =
+                    fixture.write_parquet_and_build_add_action("secret-first.parquet", &[1, 2])?;
+                let mut second =
+                    fixture.write_parquet_and_build_add_action("secret-second.parquet", &[3])?;
                 if cause == "deletion_vector" {
                     fixture.write_commit(0, &[json!({"protocol": {
                         "minReaderVersion": 3, "minWriterVersion": 7,
@@ -370,8 +382,8 @@ fn repeated_and_concurrent_executions_report_independent_failures() -> TestResul
         fixture.write_commit(
             1,
             &[
-                fixture.parquet("secret-first.parquet", &[1, 2])?,
-                fixture.parquet("secret-second.parquet", &[3, 4])?,
+                fixture.write_parquet_and_build_add_action("secret-first.parquet", &[1, 2])?,
+                fixture.write_parquet_and_build_add_action("secret-second.parquet", &[3, 4])?,
             ],
         )?;
         let (context, plan, plan_id) = runtime.block_on(plan(&fixture, backend, 2))?;
@@ -458,7 +470,10 @@ fn invalid_partition_reports_setup_failure_without_reading() -> TestResult {
 fn partition_task_panic_is_an_error_not_normal_cancellation() -> TestResult {
     let runtime = runtime()?;
     let fixture = LogTable::new()?;
-    fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+    fixture.write_commit(
+        1,
+        &[fixture.write_parquet_and_build_add_action("secret-data.parquet", &[1, 2])?],
+    )?;
     let (context, plan, plan_id) =
         runtime.block_on(plan(&fixture, ParquetReaderBackend::Direct, 1))?;
     let owner = TraceCollector::new(Level::ERROR);
@@ -509,8 +524,8 @@ fn repartitioned_and_cloned_plans_keep_plan_identity_but_start_new_executions() 
     fixture.write_commit(
         1,
         &[
-            fixture.parquet("secret-first.parquet", &[1, 2])?,
-            fixture.parquet("secret-second.parquet", &[3, 4])?,
+            fixture.write_parquet_and_build_add_action("secret-first.parquet", &[1, 2])?,
+            fixture.write_parquet_and_build_add_action("secret-second.parquet", &[3, 4])?,
         ],
     )?;
     let (context, plan, plan_id) =
@@ -572,8 +587,8 @@ fn disabled_and_warn_datafusion_tracing_preserve_rows_and_read_metrics() -> Test
         fixture.write_commit(
             1,
             &[
-                fixture.parquet("secret-first.parquet", &[1, 2])?,
-                fixture.parquet("secret-second.parquet", &[3, 4])?,
+                fixture.write_parquet_and_build_add_action("secret-first.parquet", &[1, 2])?,
+                fixture.write_parquet_and_build_add_action("secret-second.parquet", &[3, 4])?,
             ],
         )?;
         let collector = TraceCollector::new(Level::WARN);

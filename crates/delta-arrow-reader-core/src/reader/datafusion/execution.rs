@@ -64,7 +64,7 @@ use crate::{
     DeltaReaderError, DeltaScanMetrics, DeltaScanMetricsSnapshot, ParquetReaderBackend,
     delta::kernel::DeltaKernelPredicate,
     operation_tracing::{
-        OperationFields, OperationKind, OperationTrace, StreamOperation, StreamOutcome,
+        OperationFields, OperationKind, OperationTrace, StreamOutcome, StreamTrace,
     },
     reader::{
         delta_kernel_executor,
@@ -675,7 +675,7 @@ impl ExecutionPlan for DeltaScanExec {
             .session_config()
             .get_extension::<tracing::Dispatch>();
         let _guard = dispatch.as_deref().map(tracing::dispatcher::set_default);
-        let operation = StreamOperation::start_partition(
+        let operation = StreamTrace::start_partition(
             self.plan_id,
             self.reader_plan.snapshot_version,
             self.reader_plan.execution_options.parquet_backend(),

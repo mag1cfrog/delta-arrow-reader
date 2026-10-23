@@ -73,7 +73,7 @@ impl LogTable {
             )]))
     }
 
-    fn parquet(&self, name: &str, values: &[i32]) -> TestResult<Value> {
+    fn write_parquet_and_build_add_action(&self, name: &str, values: &[i32]) -> TestResult<Value> {
         use arrow::{
             array::Int32Array,
             datatypes::{DataType, Field, Schema},
@@ -398,7 +398,11 @@ fn stream_completion_distinguishes_eof_and_limits_without_duplicate_terminals() 
         ] {
             let fixture = LogTable::new()?;
             if !empty {
-                fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+                fixture.write_commit(
+                    1,
+                    &[fixture
+                        .write_parquet_and_build_add_action("secret-data.parquet", &[1, 2])?],
+                )?;
             }
             let collector = TraceCollector::new(Level::INFO);
             with_default(collector.clone(), || -> TestResult {
@@ -459,7 +463,10 @@ fn stream_drop_distinguishes_unpolled_and_partially_consumed_scans() -> TestResu
         ParquetReaderBackend::DeltaKernel,
     ] {
         let fixture = LogTable::new()?;
-        fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+        fixture.write_commit(
+            1,
+            &[fixture.write_parquet_and_build_add_action("secret-data.parquet", &[1, 2])?],
+        )?;
         let collector = TraceCollector::new(Level::INFO);
         with_default(collector.clone(), || -> TestResult {
             let table = runtime.block_on(fixture.builder(backend).load_table())?;
@@ -503,8 +510,10 @@ fn stream_failures_after_output_are_self_contained_and_terminal() -> TestResult 
             ParquetReaderBackend::DeltaKernel,
         ] {
             let fixture = LogTable::new()?;
-            let first = fixture.parquet("secret-first.parquet", &[1, 2])?;
-            let second = fixture.parquet("secret-second.parquet", &[3])?;
+            let first =
+                fixture.write_parquet_and_build_add_action("secret-first.parquet", &[1, 2])?;
+            let second =
+                fixture.write_parquet_and_build_add_action("secret-second.parquet", &[3])?;
             fixture.write_commit(1, &[first, second])?;
             fs::remove_file(fixture.0.join("secret-second.parquet"))?;
             let collector = TraceCollector::new(level);
@@ -545,8 +554,8 @@ fn disabled_and_warn_tracing_preserve_rows_and_read_metrics() -> TestResult {
         fixture.write_commit(
             1,
             &[
-                fixture.parquet("secret-first.parquet", &[1, 2])?,
-                fixture.parquet("secret-second.parquet", &[3, 4])?,
+                fixture.write_parquet_and_build_add_action("secret-first.parquet", &[1, 2])?,
+                fixture.write_parquet_and_build_add_action("secret-second.parquet", &[3, 4])?,
             ],
         )?;
         let collector = TraceCollector::new(Level::WARN);

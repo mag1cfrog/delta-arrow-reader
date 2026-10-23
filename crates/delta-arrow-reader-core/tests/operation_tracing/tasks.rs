@@ -52,7 +52,10 @@ fn public_operations_propagate_dispatch_and_parent_to_workers() -> TestResult {
                 .build()?
         };
         let fixture = LogTable::new()?;
-        fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+        fixture.write_commit(
+            1,
+            &[fixture.write_parquet_and_build_add_action("secret-data.parquet", &[1, 2])?],
+        )?;
         let collector = TraceCollector::new(Level::TRACE);
         let span = caller(&collector);
         let parent = span.id().unwrap().into_u64();
@@ -150,7 +153,10 @@ fn streams_use_the_polling_caller_for_both_backends() -> TestResult {
         for complete in [false, true] {
             let runtime = runtime()?;
             let fixture = LogTable::new()?;
-            fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+            fixture.write_commit(
+                1,
+                &[fixture.write_parquet_and_build_add_action("secret-data.parquet", &[1, 2])?],
+            )?;
             let table = runtime.block_on(fixture.builder(backend).load_table())?;
             let plan = runtime.block_on(table.scan().build())?;
             let collector = TraceCollector::new(Level::TRACE);
@@ -290,7 +296,10 @@ fn filtered_spans_keep_failures_visible_and_terminal_streams_release_resources()
                 .unwrap_err();
             assert_and_take_failure_event(&owner, "load_table", &error);
             let fixture = LogTable::new()?;
-            fixture.write_commit(1, &[fixture.parquet("secret-missing.parquet", &[1])?])?;
+            fixture.write_commit(
+                1,
+                &[fixture.write_parquet_and_build_add_action("secret-missing.parquet", &[1])?],
+            )?;
             let table = runtime.block_on(fixture.builder(backend).load_table())?;
             let plan = runtime.block_on(table.scan().build())?;
             fs::remove_file(fixture.0.join("secret-missing.parquet"))?;
@@ -418,7 +427,13 @@ fn datafusion_terminal_error_releases_resources_without_an_extra_poll() -> TestR
         for level in [Level::TRACE, Level::ERROR] {
             let runtime = runtime()?;
             let fixture = LogTable::new()?;
-            fixture.write_commit(1, &[fixture.parquet("secret-missing.parquet", &[1, 2])?])?;
+            fixture.write_commit(
+                1,
+                &[
+                    fixture
+                        .write_parquet_and_build_add_action("secret-missing.parquet", &[1, 2])?,
+                ],
+            )?;
             let table = runtime.block_on(fixture.builder(backend).load_table())?;
             let provider = DeltaTableProvider::try_new(
                 table,
@@ -472,7 +487,10 @@ fn task_context_subscribers_are_released_at_the_terminal_poll() -> TestResult {
         for missing_file in [false, true] {
             let runtime = runtime()?;
             let fixture = LogTable::new()?;
-            fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+            fixture.write_commit(
+                1,
+                &[fixture.write_parquet_and_build_add_action("secret-data.parquet", &[1, 2])?],
+            )?;
             let (session, plan, _) =
                 runtime.block_on(super::datafusion_execution::plan(&fixture, backend, 1))?;
             if missing_file {
@@ -525,7 +543,10 @@ fn reusable_datafusion_plan_uses_each_polling_caller() -> TestResult {
         ParquetReaderBackend::DeltaKernel,
     ] {
         let fixture = LogTable::new()?;
-        fixture.write_commit(1, &[fixture.parquet("secret-data.parquet", &[1, 2])?])?;
+        fixture.write_commit(
+            1,
+            &[fixture.write_parquet_and_build_add_action("secret-data.parquet", &[1, 2])?],
+        )?;
         let table = runtime.block_on(fixture.builder(backend).load_table())?;
         let provider = DeltaTableProvider::try_new(
             table,

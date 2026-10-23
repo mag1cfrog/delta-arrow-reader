@@ -71,7 +71,7 @@ use crate::{
     },
     error::{DataFileReadSnafu, InvalidConfigurationSnafu, ScanPlanningSnafu, SnapshotLoadSnafu},
     operation_tracing::{
-        OperationFields, OperationKind, OperationTrace, StreamOperation, StreamOutcome,
+        OperationFields, OperationKind, OperationTrace, StreamOutcome, StreamTrace,
     },
 };
 
@@ -927,7 +927,7 @@ pub struct DeltaBatchStream {
     snapshot_version: u64,
     backend: ParquetReaderBackend,
     partition_count: usize,
-    operation: Option<StreamOperation>,
+    operation: Option<StreamTrace>,
     done: bool,
 }
 
@@ -951,11 +951,11 @@ impl DeltaBatchStream {
         self.metrics.clone()
     }
 
-    fn start(&mut self) {
+    fn start_trace(&mut self) {
         if self.operation.is_some() {
             return;
         }
-        self.operation = Some(StreamOperation::start(
+        self.operation = Some(StreamTrace::start(
             self.plan_id,
             self.snapshot_version,
             self.backend,
@@ -1005,7 +1005,7 @@ impl Stream for DeltaBatchStream {
         if this.done {
             return Poll::Ready(None);
         }
-        this.start();
+        this.start_trace();
         if this.remaining == Some(0) {
             this.finish(StreamOutcome::RowLimit);
             return Poll::Ready(None);
@@ -1100,7 +1100,7 @@ mod tests {
     };
 
     use super::{DeltaBatchStream, DeltaTable};
-    use crate::operation_tracing::{StreamOperation, StreamOutcome};
+    use crate::operation_tracing::{StreamOutcome, StreamTrace};
     use crate::{
         DeltaScanExecutionOptions, DeltaScanMetrics, DeltaSnapshotSelection, DeltaStorageOptions,
         ParquetReaderBackend,
@@ -1461,7 +1461,7 @@ mod tests {
             source: Box::new(SourceProbe),
         };
         with_default(tracing::subscriber::NoSubscriber::default(), || {
-            StreamOperation::start(1, 0, ParquetReaderBackend::Direct, 1)
+            StreamTrace::start(1, 0, ParquetReaderBackend::Direct, 1)
                 .finish(StreamOutcome::Failed(&error), Some(0));
         });
     }

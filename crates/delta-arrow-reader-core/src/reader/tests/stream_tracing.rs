@@ -5,7 +5,7 @@ use tracing::instrument::WithSubscriber;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-fn terminal(collector: &TraceCollector, outcome: &str) -> CapturedTraceRecord {
+fn assert_terminal_event(collector: &TraceCollector, outcome: &str) -> CapturedTraceRecord {
     let events = collector.events();
     assert_eq!(events.len(), 2, "{events:?}");
     assert_eq!(events[0].fields["event"], "scan_execution.started");
@@ -47,7 +47,7 @@ async fn pending_batch_wait_can_resume_drop_or_cancel_without_false_completion()
                         assert_eq!(ids, [2, 10, 20]);
                         assert!(!cancellation.is_cancelled());
                         assert_eq!(
-                            terminal(&collector, "completed").fields["completion_reason"],
+                            assert_terminal_event(&collector, "completed").fields["completion_reason"],
                             "eof"
                         );
                         drop(stream);
@@ -57,12 +57,12 @@ async fn pending_batch_wait_can_resume_drop_or_cancel_without_false_completion()
                         while stream.next_batch().await?.is_some() {}
                         assert!(stream.next_batch().await?.is_none());
                         drop(stream);
-                        assert_eq!(terminal(&collector, "cancelled").level, Level::INFO);
+                        assert_eq!(assert_terminal_event(&collector, "cancelled").level, Level::INFO);
                     }
                     _ => {
                         with_default(unrelated.clone(), || drop(stream));
                         assert!(cancellation.is_cancelled());
-                        let event = terminal(&collector, "dropped");
+                        let event = assert_terminal_event(&collector, "dropped");
                         assert_eq!(event.level, Level::INFO);
                         assert_eq!(event.fields["output_started"], true);
                     }
@@ -102,7 +102,7 @@ async fn cancellation_before_first_poll_is_not_eof() -> TestResult {
             .is_none()
     );
     drop(stream);
-    let event = terminal(&collector, "cancelled");
+    let event = assert_terminal_event(&collector, "cancelled");
     assert_eq!(event.fields["output_started"], false);
     assert_eq!(metrics.snapshot().file_tasks_started, 0);
     Ok(())
@@ -136,11 +136,11 @@ async fn cancellation_error_reason_does_not_hide_internal_failures() -> TestResu
         assert!(stream.next_batch().await?.is_none());
         drop(stream);
         let event = if reason == "scan_execution_cancelled" {
-            let event = terminal(&collector, "cancelled");
+            let event = assert_terminal_event(&collector, "cancelled");
             assert_eq!(event.level, Level::INFO);
             event
         } else {
-            let event = terminal(&collector, "failed");
+            let event = assert_terminal_event(&collector, "failed");
             assert_eq!(event.level, Level::ERROR);
             assert_eq!(event.fields["error_reason"], reason);
             assert_eq!(event.fields["partition"], 0);
@@ -213,7 +213,7 @@ fn terminal_subscriber_panic_never_reports_another_outcome() -> TestResult {
     drop(stream);
     assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
     assert_eq!(
-        terminal(&collector, "completed").fields["completion_reason"],
+        assert_terminal_event(&collector, "completed").fields["completion_reason"],
         json!("eof")
     );
     Ok(())
